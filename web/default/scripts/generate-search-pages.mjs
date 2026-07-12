@@ -93,9 +93,9 @@ function renderPage({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/svg+xml" href="/code-go-logo.svg" />
-    <link rel="shortcut icon" type="image/svg+xml" href="/code-go-logo.svg" />
-    <link rel="apple-touch-icon" href="/code-go-logo.svg" />
+    <link rel="icon" type="image/svg+xml" href="/code-go-logo.svg?v=2" />
+    <link rel="shortcut icon" type="image/svg+xml" href="/code-go-logo.svg?v=2" />
+    <link rel="apple-touch-icon" href="/code-go-logo.svg?v=2" />
     <title>${escapeHtml(title)}</title>
     <meta name="title" content="${escapeHtml(title)}" />
     <meta name="description" content="${escapeHtml(description)}" />

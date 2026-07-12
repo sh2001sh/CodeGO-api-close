@@ -22,7 +22,7 @@ func TestThemeAssetsServeStaticFilesAndPublicPages(t *testing.T) {
 		wantBody   string
 		wantTarget string
 	}{
-		{path: "/favicon.ico", wantStatus: http.StatusOK, wantType: "image/x-icon"},
+		{path: "/code-go-logo.svg", wantStatus: http.StatusOK, wantType: "image/svg+xml"},
 		{path: "/pricing", wantStatus: http.StatusOK, wantType: "text/html", wantBody: "Public SEO Page"},
 		{path: "/pricing/", wantStatus: http.StatusPermanentRedirect, wantTarget: "/pricing"},
 	}

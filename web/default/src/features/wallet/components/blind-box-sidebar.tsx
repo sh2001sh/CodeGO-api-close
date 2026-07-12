@@ -1,9 +1,9 @@
-import { motion, useReducedMotion } from 'motion/react'
-import type { Variants } from 'motion/react'
 import { Info, Sparkles, Wallet } from 'lucide-react'
+import { motion, useReducedMotion, type Variants } from 'motion/react'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { BlindBoxRecord } from '../types'
+import type { BlindBoxProp, BlindBoxRecord } from '../types'
+import { BlindBoxPropInventory } from './blind-box-prop-inventory'
 import { DropRecordList } from './blind-box-view-parts'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
@@ -34,6 +34,8 @@ export function BlindBoxSidebar(props: {
   availableBoxes: number
   pendingBoxes: number
   records: BlindBoxRecord[]
+  props: BlindBoxProp[]
+  onActivateProp: (prop: BlindBoxProp) => void
 }) {
   const reduced = useReducedMotion()
 
@@ -58,10 +60,19 @@ export function BlindBoxSidebar(props: {
       </motion.div>
 
       <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
+        <BlindBoxPropInventory
+          props={props.props}
+          onActivate={props.onActivateProp}
+        />
+      </motion.div>
+
+      <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
         <div className='app-subtle-panel p-4'>
           <div className='mb-3 flex items-center gap-2'>
             <Sparkles className='text-muted-foreground size-4' />
-            <div className='text-foreground text-sm font-semibold'>最近抽取</div>
+            <div className='text-foreground text-sm font-semibold'>
+              最近抽取
+            </div>
           </div>
           <DropRecordList records={props.records} />
         </div>

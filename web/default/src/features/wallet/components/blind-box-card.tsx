@@ -7,11 +7,12 @@ import {
   isApiSuccess,
   openBlindBoxes,
   requestBlindBoxPayment,
-  useBlindBoxProp,
+  activateBlindBoxProp,
 } from '../api'
 import { submitPaymentForm } from '../lib'
 import type {
   BlindBoxOrderStatus,
+  BlindBoxProp,
   BlindBoxRecord,
   BlindBoxSelfData,
   PaymentMethod,
@@ -25,8 +26,8 @@ import {
   type PrizeDialogState,
 } from './blind-box-dialogs'
 import { BlindBoxPaymentDialog } from './blind-box-payment-dialog'
-import { BlindBoxCardView } from './blind-box-view'
 import { BlindBoxSidebar } from './blind-box-sidebar'
+import { BlindBoxCardView } from './blind-box-view'
 
 interface BlindBoxCardProps {
   onSubscriptionRefresh: () => Promise<void>
@@ -50,7 +51,8 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   const [showPrizeNotice, setShowPrizeNotice] = useState(false)
   const [paymentState, setPaymentState] =
     useState<BlindBoxPaymentState>(EMPTY_PAYMENT_STATE)
-  const [prizeState, setPrizeState] = useState<PrizeDialogState>(EMPTY_PRIZE_STATE)
+  const [prizeState, setPrizeState] =
+    useState<PrizeDialogState>(EMPTY_PRIZE_STATE)
 
   const fetchSelf = useCallback(async () => {
     try {
@@ -63,7 +65,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
       setSelectedPaymentMethod((current) => {
         if (
           current &&
-          response.data?.pay_methods?.some((method) => method.type === current.type)
+          response.data?.pay_methods?.some(
+            (method) => method.type === current.type
+          )
         ) {
           return current
         }
@@ -92,7 +96,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     if (selectedQuantity <= 0) return
 
     const loadAmount = async () => {
-      const response = await calculateBlindBoxAmount({ quantity: selectedQuantity })
+      const response = await calculateBlindBoxAmount({
+        quantity: selectedQuantity,
+      })
       if (isApiSuccess(response) && response.data) {
         setAmountDue(parseFloat(response.data))
       } else {
@@ -175,19 +181,23 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
             setData(refreshed.data)
             const openCount = Math.max(
               1,
-              Number(order.opened_count || order.quantity || paymentState.quantity)
+              Number(
+                order.opened_count || order.quantity || paymentState.quantity
+              )
             )
-            const resultRecords = (refreshed.data.overview?.recent_records || []).slice(
-              0,
-              openCount
-            )
+            const resultRecords = (
+              refreshed.data.overview?.recent_records || []
+            ).slice(0, openCount)
             setPrizeState({
               open: resultRecords.length > 0,
               records: resultRecords,
               openCount,
             })
           }
-          await Promise.all([props.onSubscriptionRefresh(), props.onUserRefresh()])
+          await Promise.all([
+            props.onSubscriptionRefresh(),
+            props.onUserRefresh(),
+          ])
           setPaymentState(EMPTY_PAYMENT_STATE)
           return
         }
@@ -243,7 +253,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
       formFields?: Record<string, unknown> | null
       retryPayload?: { quantity: number; paymentMethod: string }
     }) => {
-        setPaymentState({
+      setPaymentState({
         open: true,
         stage: 'pending',
         orderId: args.orderId,
@@ -278,7 +288,10 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
         const errorMsg = response.message || '发起支付失败'
         let userFriendlyMsg = errorMsg
 
-        if (errorMsg.includes('余额不足') || errorMsg.includes('insufficient')) {
+        if (
+          errorMsg.includes('余额不足') ||
+          errorMsg.includes('insufficient')
+        ) {
           userFriendlyMsg = '余额不足，请先充值'
         } else if (errorMsg.includes('超时') || errorMsg.includes('timeout')) {
           userFriendlyMsg = '网络超时，请检查网络连接后重试'
@@ -356,29 +369,42 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     [refreshAll]
   )
 
-  const handleUseReward = useCallback((record: BlindBoxRecord) => {
-    if (
-      record.reward_type !== 'prop' ||
-      !record.prop_id ||
-      !['consume_discount_95', 'consume_discount_90'].includes(
-        record.prop_type || ''
-      )
-    ) {
-      return
-    }
-    void (async () => {
-      try {
-        const response = await useBlindBoxProp(record.prop_id as number)
-        if (!isApiSuccess(response)) {
-          throw new Error(response.message || '启用失败')
+  const activateProp = useCallback(
+    (prop: Pick<BlindBoxProp, 'id' | 'title'>) => {
+      void (async () => {
+        try {
+          const response = await activateBlindBoxProp(prop.id)
+          if (!isApiSuccess(response)) {
+            throw new Error(response.message || '启用失败')
+          }
+          toast.success(`${prop.title} 已启用，24 小时后自动失效。`)
+          await refreshAll()
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : '启用失败')
         }
-        toast.success(`${record.reward_title} 已启用，24 小时后自动失效。`)
-        await refreshAll()
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : '启用失败')
+      })()
+    },
+    [refreshAll]
+  )
+
+  const handleUseReward = useCallback(
+    (record: BlindBoxRecord) => {
+      if (
+        record.reward_type !== 'prop' ||
+        !record.prop_id ||
+        !['consume_discount_95', 'consume_discount_90'].includes(
+          record.prop_type || ''
+        )
+      ) {
+        return
       }
-    })()
-  }, [refreshAll])
+      activateProp({
+        id: record.prop_id,
+        title: record.reward_title,
+      })
+    },
+    [activateProp]
+  )
 
   const handleOpenExternal = useCallback(() => {
     if (paymentState.formUrl && paymentState.formFields) {
@@ -432,7 +458,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
             onPaymentMethodChange={setSelectedPaymentMethod}
             onPay={() => void handlePay()}
             onManualOpen={(count) => void handleManualOpen(count)}
-            onTogglePrizeNotice={() => setShowPrizeNotice((current) => !current)}
+            onTogglePrizeNotice={() =>
+              setShowPrizeNotice((current) => !current)
+            }
             onClosePrizeNotice={() => setShowPrizeNotice(false)}
           />
         </div>
@@ -443,13 +471,17 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           availableBoxes={availableBoxes}
           pendingBoxes={pendingBoxes}
           records={data?.overview?.recent_records || []}
+          props={data?.props || []}
+          onActivateProp={activateProp}
         />
       </div>
 
       <BlindBoxPaymentDialog
         state={paymentState}
         onOpenChange={(open) => {
-          setPaymentState(open ? { ...paymentState, open } : EMPTY_PAYMENT_STATE)
+          setPaymentState(
+            open ? { ...paymentState, open } : EMPTY_PAYMENT_STATE
+          )
         }}
         onOpenExternal={handleOpenExternal}
         onContinueInBackground={() => {

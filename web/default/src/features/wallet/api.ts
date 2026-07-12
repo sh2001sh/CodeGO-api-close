@@ -275,7 +275,7 @@ export async function openBlindBoxes(
   return res.data
 }
 
-export async function useBlindBoxProp(
+export async function activateBlindBoxProp(
   propId: number
 ): Promise<ApiResponse<{ prop: BlindBoxProp }>> {
   const res = await api.post(`/api/blind-box/props/${propId}/use`)

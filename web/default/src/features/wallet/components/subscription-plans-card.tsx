@@ -11,7 +11,6 @@ import {
   CardStaggerItem,
 } from '@/components/page-transition'
 import { PackagePlanCard } from '@/features/packages/package-plan-card'
-import { SubscriptionBoosterDialog } from '@/features/subscriptions/components/dialogs/subscription-booster-dialog'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
 import {
   formatSubscriptionQuotaAmount,
@@ -75,9 +74,6 @@ export function SubscriptionPlansCard({
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
   const [selectedPurchaseType, setSelectedPurchaseType] =
     useState<SubscriptionPurchaseType>('normal')
-  const [boosterSubscription, setBoosterSubscription] =
-    useState<UserSubscriptionRecord | null>(null)
-  const [boosterTitle, setBoosterTitle] = useState('')
 
   const enableStripe = !!topupInfo?.enable_stripe_topup
   const enableCreem = !!topupInfo?.enable_creem_topup
@@ -355,15 +351,6 @@ export function SubscriptionPlansCard({
                             <div className='flex flex-wrap gap-2 border-t pt-3'>
                               <Button
                                 size='sm'
-                                onClick={() => {
-                                  setBoosterSubscription(record)
-                                  setBoosterTitle(title)
-                                }}
-                              >
-                                续量
-                              </Button>
-                              <Button
-                                size='sm'
                                 variant='outline'
                                 onClick={() => {
                                   const planRecord =
@@ -378,9 +365,6 @@ export function SubscriptionPlansCard({
                               >
                                 提前续费
                               </Button>
-                              <span className='text-muted-foreground self-center text-xs'>
-                                续量不延长到期时间
-                              </span>
                             </div>
                           ) : null}
                         </CardContent>
@@ -419,16 +403,6 @@ export function SubscriptionPlansCard({
             : undefined
         }
         purchaseType={selectedPurchaseType}
-      />
-      <SubscriptionBoosterDialog
-        open={boosterSubscription != null}
-        onOpenChange={(open) => {
-          if (!open) setBoosterSubscription(null)
-        }}
-        subscription={boosterSubscription?.subscription ?? null}
-        title={boosterTitle}
-        paymentMethod={enableStripe ? 'stripe' : (epayMethods[0]?.type ?? '')}
-        onCompleted={onSubscriptionRefresh}
       />
     </>
   )

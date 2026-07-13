@@ -62,21 +62,6 @@ function OAuthCallback() {
     ;(async () => {
       const safeNavigate = (target: string) => {
         navigate({ to: target as never, replace: true })
-        if (typeof window !== 'undefined') {
-          setTimeout(() => {
-            const normalizedTarget = target.startsWith('/')
-              ? target
-              : `/${target}`
-            const currentPath =
-              window.location.pathname + window.location.search
-            if (
-              currentPath !== normalizedTarget &&
-              currentPath !== `${normalizedTarget}/`
-            ) {
-              window.location.replace(target)
-            }
-          }, 100)
-        }
       }
 
       const isBindingFlow =

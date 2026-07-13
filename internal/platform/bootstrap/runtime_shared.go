@@ -122,7 +122,10 @@ func buildSessionStore() sessions.Store {
 		MaxAge:   2592000,
 		HttpOnly: true,
 		Secure:   platformconfig.SessionCookieSecure(),
-		SameSite: http.SameSiteStrictMode,
+		// OAuth providers redirect the browser back from another site. Lax keeps the
+		// session available for that top-level GET callback while retaining CSRF
+		// protection for cross-site subrequests.
+		SameSite: http.SameSiteLaxMode,
 	})
 	return store
 }

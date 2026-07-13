@@ -111,8 +111,25 @@ export function PackagesPage() {
     }
     return map
   }, [workspace.subscriptionData?.all_subscriptions])
-  const currentSubscription = workspace.subscriptionData?.subscriptions[0]
-  const shouldPrioritizeMonthlyPlans = Boolean(currentSubscription)
+  const activeSubscriptions = useMemo(
+    () => workspace.subscriptionData?.subscriptions || [],
+    [workspace.subscriptionData?.subscriptions]
+  )
+  const activeMonthlyPlanIDs = useMemo(
+    () =>
+      new Set(
+        activeSubscriptions
+          .filter((item) => {
+            const plan = workspace.publicPlans.find(
+              (record) => record.plan.id === item.subscription.plan_id
+            )?.plan
+            return plan?.plan_type === 'monthly'
+          })
+          .map((item) => item.subscription.plan_id)
+      ),
+    [activeSubscriptions, workspace.publicPlans]
+  )
+  const shouldPrioritizeMonthlyPlans = activeMonthlyPlanIDs.size > 0
   const primaryPlanZones: Array<{
     id: 'starter' | 'monthly'
     title: string
@@ -185,7 +202,7 @@ export function PackagesPage() {
           <CardStaggerContainer className='space-y-4'>
             <CardStaggerItem>
               <CurrentPackagePanel
-                subscriptions={workspace.subscriptionData?.subscriptions || []}
+                subscriptions={activeSubscriptions}
                 plans={workspace.publicPlans}
                 loading={workspace.subscriptionLoading}
                 onFuel={openFuel}
@@ -228,7 +245,7 @@ export function PackagesPage() {
                       loading={workspace.publicPlansLoading}
                       onPurchase={openPurchase}
                       purchaseCountMap={purchaseCountMap}
-                      currentSubscription={currentSubscription}
+                      currentSubscriptions={activeSubscriptions}
                       onFuel={openFuel}
                     />
                   )
@@ -241,7 +258,7 @@ export function PackagesPage() {
                     loading={workspace.publicPlansLoading}
                     onPurchase={openPurchase}
                     purchaseCountMap={purchaseCountMap}
-                    currentSubscription={currentSubscription}
+                    currentSubscriptions={activeSubscriptions}
                     onFuel={openFuel}
                   />
                 )}

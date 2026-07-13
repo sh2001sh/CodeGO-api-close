@@ -24,7 +24,7 @@ export function PackagePlanCard(props: {
   record: PlanRecord
   purchaseCount: number
   onPurchase: (purchaseType?: SubscriptionPurchaseType) => void
-  currentSubscription?: UserSubscriptionRecord
+  currentSubscriptions?: UserSubscriptionRecord[]
   onFuel?: (
     subscription: UserSubscriptionRecord,
     title: string,
@@ -46,11 +46,14 @@ export function PackagePlanCard(props: {
     getSubscriptionDisabledReasonText(props.record.disabled_reason) ||
     '当前还有更高档且未用完的生效套餐，暂不支持直接降级。'
   const tierRows = buildPackageQuotaTiers(plan)
-  const isCurrentPlan =
-    props.currentSubscription?.subscription.plan_id === plan.id
+  const currentSubscription = props.currentSubscriptions?.find(
+    (item) =>
+      item.subscription.plan_id === plan.id &&
+      item.subscription.status === 'active'
+  )
+  const isCurrentPlan = Boolean(currentSubscription)
   const canFuel =
     isCurrentPlan &&
-    props.currentSubscription?.subscription.status === 'active' &&
     plan.fuel_enabled === true &&
     Number(plan.fuel_min_quota || 0) > 0 &&
     Number(plan.fuel_quota_step || 0) > 0
@@ -180,11 +183,11 @@ export function PackagePlanCard(props: {
         </button>
 
         <div className='mt-auto space-y-2'>
-          {canFuel && props.currentSubscription && props.onFuel && (
+          {canFuel && currentSubscription && props.onFuel && (
             <Button
               className='w-full'
               onClick={() =>
-                props.onFuel?.(props.currentSubscription!, title, {
+                props.onFuel?.(currentSubscription, title, {
                   minimumQuota: Number(plan.fuel_min_quota || 0),
                   quotaStep: Number(plan.fuel_quota_step || 0),
                 })

@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
-import { Link } from '@tanstack/react-router'
 import { Crown, Fuel } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -45,7 +44,7 @@ export function PlanZone(props: {
     record: PlanRecord,
     purchaseType?: SubscriptionPurchaseType
   ) => void
-  currentSubscription?: UserSubscriptionRecord
+  currentSubscriptions: UserSubscriptionRecord[]
   onFuel?: (
     subscription: UserSubscriptionRecord,
     title: string,
@@ -78,7 +77,7 @@ export function PlanZone(props: {
               onPurchase={(purchaseType) =>
                 props.onPurchase(record, purchaseType)
               }
-              currentSubscription={props.currentSubscription}
+              currentSubscriptions={props.currentSubscriptions}
               onFuel={props.onFuel}
             />
           ))}
@@ -107,76 +106,105 @@ export function CurrentPackagePanel(props: {
     for (const item of props.plans) map.set(item.plan.id, item.plan)
     return map
   }, [props.plans])
-  const current = props.subscriptions[0]
-  const currentPlan = current
-    ? planMap.get(current.subscription.plan_id)
-    : undefined
-  const currentTitle =
-    formatSubscriptionPlanTitle(currentPlan?.title) ||
-    (current ? `套餐 #${current.subscription.plan_id}` : '')
-  const canFuel =
-    Boolean(current) &&
-    current?.subscription.status === 'active' &&
-    currentPlan?.fuel_enabled === true &&
-    (currentPlan?.fuel_min_quota || 0) > 0 &&
-    (currentPlan?.fuel_quota_step || 0) > 0
-  if (!props.loading && !current) {
+  const currentSubscriptions = useMemo(() => {
+    return props.subscriptions
+      .filter((item) => item.subscription.status === 'active')
+      .sort((left, right) => {
+        const leftPlan = planMap.get(left.subscription.plan_id)
+        const rightPlan = planMap.get(right.subscription.plan_id)
+        const leftFuel = leftPlan?.fuel_enabled ? 1 : 0
+        const rightFuel = rightPlan?.fuel_enabled ? 1 : 0
+        if (leftFuel !== rightFuel) return rightFuel - leftFuel
+        return right.subscription.end_time - left.subscription.end_time
+      })
+  }, [planMap, props.subscriptions])
+  if (!props.loading && currentSubscriptions.length === 0) {
     return null
   }
 
   return (
-    <section className='border-border bg-card flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border px-4 py-3'>
+    <section className='border-border bg-card rounded-lg border px-4 py-3'>
       {props.loading ? (
         <Skeleton className='h-8 w-full sm:w-96' />
-      ) : current ? (
+      ) : (
         <>
-          <div className='flex min-w-0 items-center gap-2'>
+          <div className='mb-3 flex items-center gap-2'>
             <Crown className='text-primary size-4 shrink-0' />
-            <span className='text-foreground truncate text-sm font-semibold'>
-              当前：{currentTitle}
+            <span className='text-foreground text-sm font-semibold'>
+              当前生效套餐
+            </span>
+            <span className='text-muted-foreground text-xs'>
+              {currentSubscriptions.length} 个
             </span>
           </div>
-          <div className='text-muted-foreground text-sm tabular-nums'>
-            剩余 $
-            {Math.max(
-              0,
-              subscriptionQuotaUnitsToUSD(
+          <div className='grid gap-2.5 lg:grid-cols-2'>
+            {currentSubscriptions.map((current) => {
+              const currentPlan = planMap.get(current.subscription.plan_id)
+              const currentTitle =
+                formatSubscriptionPlanTitle(currentPlan?.title) ||
+                `套餐 #${current.subscription.plan_id}`
+              const minimumQuota = currentPlan?.fuel_min_quota || 0
+              const quotaStep = currentPlan?.fuel_quota_step || 0
+              const canFuel =
+                currentPlan?.fuel_enabled === true &&
+                minimumQuota > 0 &&
+                quotaStep > 0
+              const remaining = Math.max(
+                0,
                 current.subscription.amount_total - current.subscription.amount_used
               )
-            ).toFixed(2)}
-            /${subscriptionQuotaUnitsToUSD(current.subscription.amount_total).toFixed(2)}
-          </div>
-          <Progress
-            className='order-last w-full sm:order-none sm:min-w-32 sm:flex-1'
-            value={
-              current.subscription.amount_total > 0
-                ? Math.round(
-                    (current.subscription.amount_used / current.subscription.amount_total) * 100
-                  )
-                : 0
-            }
-          />
-          <div className='ml-auto flex gap-2'>
-            {canFuel ? (
-              <Button
-                size='sm'
-                onClick={() =>
-                  props.onFuel(current, currentTitle, {
-                    minimumQuota: currentPlan?.fuel_min_quota || 0,
-                    quotaStep: currentPlan?.fuel_quota_step || 0,
-                  })
-                }
-              >
-                <Fuel className='mr-1 size-4' />
-                加油
-              </Button>
-            ) : null}
-            <Button size='sm' variant='outline' render={<Link to='/packages' />}>
-              续费
-            </Button>
+
+              return (
+                <div
+                  key={current.subscription.id}
+                  className='border-border/70 bg-background/60 rounded-md border px-3 py-2.5'
+                >
+                  <div className='flex flex-wrap items-center justify-between gap-2'>
+                    <div className='text-foreground text-sm font-semibold'>
+                      {currentTitle}
+                    </div>
+                    {canFuel ? (
+                      <Button
+                        size='sm'
+                        onClick={() =>
+                          props.onFuel(current, currentTitle, {
+                            minimumQuota,
+                            quotaStep,
+                          })
+                        }
+                      >
+                        <Fuel className='mr-1 size-4' />
+                        加油包
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className='text-muted-foreground mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums'>
+                    <span>
+                      剩余 ${subscriptionQuotaUnitsToUSD(remaining).toFixed(2)}
+                      /${subscriptionQuotaUnitsToUSD(current.subscription.amount_total).toFixed(2)}
+                    </span>
+                    <span>
+                      到期 {new Date(current.subscription.end_time * 1000).toLocaleString()}
+                    </span>
+                  </div>
+                  <Progress
+                    className='mt-2 h-1.5'
+                    value={
+                      current.subscription.amount_total > 0
+                        ? Math.round(
+                            (current.subscription.amount_used /
+                              current.subscription.amount_total) *
+                              100
+                          )
+                        : 0
+                    }
+                  />
+                </div>
+              )
+            })}
           </div>
         </>
-      ) : null}
+      )}
     </section>
   )
 }

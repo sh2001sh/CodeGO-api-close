@@ -1,8 +1,11 @@
 package http
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
+	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
+	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +18,43 @@ type relayErrorEnvelope struct {
 		Type    string `json:"type"`
 		Code    string `json:"code"`
 	} `json:"error"`
+}
+
+func TestFinalizeRelayErrorMasksChineseUpstreamQuotaLeak(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	apiErr := types.NewOpenAIError(
+		errors.New("用户额度不足, 剩余额度: -＄0.038392 (request id: upstream)"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusForbidden,
+	)
+
+	finalizeRelayError(ctx, types.RelayFormatOpenAI, nil, apiErr, "downstream")
+
+	var response relayErrorEnvelope
+	require.NoError(t, platformencoding.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, platformtext.UpstreamQuotaGenericMessage, response.Error.Message)
+}
+
+func TestFinalizeRelayErrorKeepsLocalQuotaMessage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	apiErr := types.NewErrorWithStatusCode(
+		errors.New("用户额度不足, 剩余额度: ＄0.002290"),
+		types.ErrorCodeInsufficientUserQuota,
+		http.StatusForbidden,
+	)
+
+	finalizeRelayError(ctx, types.RelayFormatOpenAI, nil, apiErr, "downstream")
+
+	var response relayErrorEnvelope
+	require.NoError(t, platformencoding.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Contains(t, response.Error.Message, "用户额度不足, 剩余额度: ＄0.002290")
+	require.NotEqual(t, platformtext.UpstreamQuotaGenericMessage, response.Error.Message)
 }
 
 func TestRelayNotImplementedReturnsOpenAIStyleError(t *testing.T) {

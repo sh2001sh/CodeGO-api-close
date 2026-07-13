@@ -177,7 +177,9 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 	if taskErr.StatusCode == http.StatusTooManyRequests {
 		taskErr.Message = "status_code=429"
 	}
-	taskErr.Message = platformtext.SanitizeUpstreamQuotaErrorMessage(taskErr.Message)
+	if !taskErr.LocalError {
+		taskErr.Message = platformtext.SanitizeUpstreamQuotaErrorMessage(taskErr.Message)
+	}
 	c.JSON(taskErr.StatusCode, taskErr)
 }
 

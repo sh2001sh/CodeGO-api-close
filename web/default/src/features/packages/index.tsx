@@ -17,8 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
-import { Crown, RefreshCw } from 'lucide-react'
+import { CircleAlert, Crown, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { TitledCard } from '@/components/ui/titled-card'
 import {
@@ -195,7 +200,7 @@ export function PackagesPage() {
     <>
       <WalletWorkspaceShell
         title='套餐'
-        description='按使用节奏选择新人体验卡、月卡或短期补量卡。支持拼团的套餐会直接展示 2/3/5 人成团后的最终额度。'
+        description='套餐额度仅适用于非 Claude 模型。按使用节奏选择新人体验卡、月卡或短期补量卡。'
         canonicalPath='/packages'
         framedMain={false}
         main={
@@ -232,6 +237,14 @@ export function PackagesPage() {
                 }
                 contentClassName='space-y-5'
               >
+                <Alert className='border-amber-200 bg-amber-50/70 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100'>
+                  <CircleAlert className='text-amber-600 dark:text-amber-300' />
+                  <AlertTitle>套餐使用范围</AlertTitle>
+                  <AlertDescription className='text-amber-900/80 dark:text-amber-100/75'>
+                    套餐额度仅可用于非 Claude 模型。调用 Claude 模型请使用独立 Claude
+                    额度，不会直接扣减套餐额度。
+                  </AlertDescription>
+                </Alert>
                 {primaryPlanZones.map((zone) => {
                   if (zone.id === 'monthly' && groupedPlans.monthly.length === 0) {
                     return null

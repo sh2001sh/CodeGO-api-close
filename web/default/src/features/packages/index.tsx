@@ -201,7 +201,6 @@ export function PackagesPage() {
       <WalletWorkspaceShell
         title='套餐'
         description='套餐额度仅适用于非 Claude 模型。按使用节奏选择新人体验卡、月卡或短期补量卡。'
-        canonicalPath='/packages'
         framedMain={false}
         main={
           <CardStaggerContainer className='space-y-4'>

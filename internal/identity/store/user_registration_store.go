@@ -27,7 +27,9 @@ func CreateUser(user *identityschema.User, inviterID int) error {
 	if err := prepareNewUser(user, inviterID); err != nil {
 		return err
 	}
-	if err := platformdb.DB.Create(user).Error; err != nil {
+	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		return createPreparedUser(tx, user)
+	}); err != nil {
 		return err
 	}
 	return FinalizeCreatedUser(user.Id)
@@ -43,7 +45,7 @@ func CreateUserWithTx(tx *gorm.DB, user *identityschema.User, inviterID int) err
 	if err := prepareNewUser(user, inviterID); err != nil {
 		return err
 	}
-	return tx.Create(user).Error
+	return createPreparedUser(tx, user)
 }
 
 func FinalizeCreatedUser(userID int) error {
@@ -99,6 +101,13 @@ func prepareNewUser(user *identityschema.User, inviterID int) error {
 	}
 	user.Quota = platformconfig.QuotaForNewUser
 	user.AffCode = platformruntime.GetRandomString(4)
+	if user.ExternalId == "" {
+		externalID, err := identityschema.GenerateExternalUserID()
+		if err != nil {
+			return fmt.Errorf("generate external user id: %w", err)
+		}
+		user.ExternalId = externalID
+	}
 	if inviterID > 0 && user.InviterId == 0 {
 		user.InviterId = inviterID
 	}
@@ -107,6 +116,40 @@ func prepareNewUser(user *identityschema.User, inviterID int) error {
 		identitydomain.SetSetting(user, defaultSetting)
 	}
 	return nil
+}
+
+func createPreparedUser(db *gorm.DB, user *identityschema.User) error {
+	const maxExternalIDAttempts = 5
+	for attempt := 0; attempt < maxExternalIDAttempts; attempt++ {
+		savePointName := fmt.Sprintf("external_user_id_%d", attempt)
+		if err := db.SavePoint(savePointName).Error; err != nil {
+			return err
+		}
+		err := db.Create(user).Error
+		if err == nil {
+			return nil
+		}
+		if !isExternalIDConflict(err) {
+			return err
+		}
+		if err := db.RollbackTo(savePointName).Error; err != nil {
+			return err
+		}
+		externalID, generateErr := identityschema.GenerateExternalUserID()
+		if generateErr != nil {
+			return fmt.Errorf("generate external user id: %w", generateErr)
+		}
+		user.Id = 0
+		user.ExternalId = externalID
+	}
+	return errors.New("could not allocate a unique external user id")
+}
+
+func isExternalIDConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "external_id")
 }
 
 func persistUserSettingUpdate(user *identityschema.User) error {

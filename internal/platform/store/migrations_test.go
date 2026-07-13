@@ -7,11 +7,22 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+type legacyUserForExternalIDMigration struct {
+	Id        int `gorm:"primaryKey"`
+	Username  string
+	DeletedAt gorm.DeletedAt
+}
+
+func (legacyUserForExternalIDMigration) TableName() string {
+	return "users"
+}
 
 func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -129,4 +140,23 @@ func TestBootstrapPrimarySchemaThenApplyV2Migrations(t *testing.T) {
 	} {
 		require.True(t, db.Migrator().HasTable(table), table)
 	}
+}
+
+func TestMigrateUserExternalIDsBackfillsExistingUsers(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&legacyUserForExternalIDMigration{}))
+	require.NoError(t, db.Create(&legacyUserForExternalIDMigration{Id: 1, Username: "legacy-one"}).Error)
+	require.NoError(t, db.Create(&legacyUserForExternalIDMigration{Id: 2, Username: "legacy-two"}).Error)
+
+	require.NoError(t, migrateUserExternalIDs(db))
+	require.True(t, db.Migrator().HasColumn(&identityschema.User{}, "ExternalId"))
+	require.True(t, db.Migrator().HasIndex(&identityschema.User{}, "idx_users_external_id"))
+
+	var users []identityschema.User
+	require.NoError(t, db.Order("id asc").Find(&users).Error)
+	require.Len(t, users, 2)
+	require.Len(t, users[0].ExternalId, identityschema.ExternalUserIDLength)
+	require.Len(t, users[1].ExternalId, identityschema.ExternalUserIDLength)
+	require.NotEqual(t, users[0].ExternalId, users[1].ExternalId)
 }

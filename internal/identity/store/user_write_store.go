@@ -27,6 +27,7 @@ func UpdateUser(user *identityschema.User, updatePassword bool) error {
 	if err := platformdb.DB.First(&storedUser, user.Id).Error; err != nil {
 		return err
 	}
+	newUser.ExternalId = storedUser.ExternalId
 	if err := platformdb.DB.Model(&storedUser).Updates(newUser).Error; err != nil {
 		return err
 	}

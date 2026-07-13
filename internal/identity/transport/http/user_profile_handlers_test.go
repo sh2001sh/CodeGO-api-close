@@ -1,13 +1,13 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	"testing"
 )
@@ -17,6 +17,7 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 
 	user := &identityschema.User{
 		Id:             1,
+		ExternalId:     "7KM4QZ",
 		Username:       "profile-user",
 		Password:       "password123",
 		DisplayName:    "Profile User",
@@ -48,6 +49,7 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 
 	var payload struct {
 		Id             int            `json:"id"`
+		ExternalId     string         `json:"external_id"`
 		Username       string         `json:"username"`
 		DisplayName    string         `json:"display_name"`
 		SidebarModules string         `json:"sidebar_modules"`
@@ -61,6 +63,9 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 
 	if payload.Id != user.Id || payload.Username != user.Username || payload.DisplayName != user.DisplayName {
 		t.Fatalf("unexpected self profile payload: %#v", payload)
+	}
+	if payload.ExternalId != user.ExternalId {
+		t.Fatalf("expected public user ID %q, got %q", user.ExternalId, payload.ExternalId)
 	}
 	if payload.SidebarModules != `{"chat":{"enabled":true}}` {
 		t.Fatalf("expected sidebar modules to be extracted, got %q", payload.SidebarModules)

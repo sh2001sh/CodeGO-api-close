@@ -13,6 +13,7 @@ import (
 
 type SelfProfileResponse struct {
 	Id              int            `json:"id"`
+	ExternalId      string         `json:"external_id"`
 	Username        string         `json:"username"`
 	DisplayName     string         `json:"display_name"`
 	Role            int            `json:"role"`
@@ -57,6 +58,7 @@ func GetSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 
 	return &SelfProfileResponse{
 		Id:              user.Id,
+		ExternalId:      user.ExternalId,
 		Username:        user.Username,
 		DisplayName:     user.DisplayName,
 		Role:            user.Role,

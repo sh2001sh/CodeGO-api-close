@@ -66,24 +66,24 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*identi
 		total int64
 	)
 	query := tx.Unscoped().Model(&identityschema.User{})
-	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ?"
+	likeCondition := "external_id LIKE ? OR username LIKE ? OR email LIKE ? OR display_name LIKE ?"
 	keywordInt, err := strconv.Atoi(keyword)
 	if err == nil {
 		likeCondition = "id = ? OR " + likeCondition
 		if group != "" {
 			query = query.Where("("+likeCondition+") AND "+userGroupColumn()+" = ?",
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
+				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
 		} else {
 			query = query.Where(likeCondition,
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 		}
 	} else {
 		if group != "" {
 			query = query.Where("("+likeCondition+") AND "+userGroupColumn()+" = ?",
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
+				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
 		} else {
 			query = query.Where(likeCondition,
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 		}
 	}
 

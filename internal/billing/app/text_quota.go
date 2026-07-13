@@ -504,7 +504,6 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
-	archiveConversation(ctx, relayInfo)
 	gopool.Go(func() {
 		auditprojection.RecordRelaySample(relayInfo, true, int64(summary.CompletionTokens))
 	})

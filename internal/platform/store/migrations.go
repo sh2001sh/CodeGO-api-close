@@ -8,6 +8,7 @@ import (
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	workflowschema "github.com/sh2001sh/new-api/internal/workflow/schema"
 	"gorm.io/gorm"
@@ -41,6 +42,7 @@ func V2MigrationIDs() []string {
 		"20260711_gateway_execution_core",
 		"20260711_gateway_execution_trace",
 		"20260712_remove_pet_gamification",
+		"20260713_user_external_id",
 	}
 }
 
@@ -106,6 +108,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			}
 			return nil
 		}},
+		{ID: "20260713_user_external_id", Run: migrateUserExternalIDs},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -129,6 +132,49 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}
 	}
 	return nil
+}
+
+func migrateUserExternalIDs(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&identityschema.User{}) {
+		return nil
+	}
+	if !tx.Migrator().HasColumn(&identityschema.User{}, "ExternalId") {
+		if err := tx.Migrator().AddColumn(&identityschema.User{}, "ExternalId"); err != nil {
+			return err
+		}
+	}
+
+	var users []identityschema.User
+	if err := tx.Unscoped().Where("external_id IS NULL OR external_id = ''").Find(&users).Error; err != nil {
+		return err
+	}
+	for _, user := range users {
+		var externalID string
+		for attempt := 0; attempt < 5; attempt++ {
+			generatedID, err := identityschema.GenerateExternalUserID()
+			if err != nil {
+				return err
+			}
+			var existing int64
+			if err := tx.Unscoped().Model(&identityschema.User{}).Where("external_id = ?", generatedID).Count(&existing).Error; err != nil {
+				return err
+			}
+			if existing == 0 {
+				externalID = generatedID
+				break
+			}
+		}
+		if externalID == "" {
+			return fmt.Errorf("could not allocate a unique external user id")
+		}
+		if err := tx.Unscoped().Model(&identityschema.User{}).Where("id = ?", user.Id).Update("external_id", externalID).Error; err != nil {
+			return err
+		}
+	}
+	if tx.Migrator().HasIndex(&identityschema.User{}, "idx_users_external_id") {
+		return nil
+	}
+	return tx.Migrator().CreateIndex(&identityschema.User{}, "idx_users_external_id")
 }
 
 func migrateSubscriptionCore(tx *gorm.DB) error {

@@ -62,14 +62,23 @@ export function useUsersColumns(): ColumnDef<User>[] {
       meta: { label: t('Select') },
     },
     {
-      accessorKey: 'id',
+      accessorKey: 'external_id',
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='ID' />
+        <DataTableColumnHeader column={column} title='用户 ID' />
       ),
       cell: ({ row }) => {
-        return <div className='w-[60px]'>{row.getValue('id')}</div>
+        const externalID = row.getValue('external_id') as string
+        return (
+          <StatusBadge
+            label={externalID}
+            variant='neutral'
+            showDot={false}
+            copyText={externalID}
+            className='w-[72px] font-mono tabular-nums'
+          />
+        )
       },
-      meta: { label: t('ID'), mobileHidden: true },
+      meta: { label: '用户 ID', mobileHidden: true },
     },
     {
       accessorKey: 'username',

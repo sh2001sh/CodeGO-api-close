@@ -141,6 +141,7 @@ export function UsersTable() {
     globalFilterFn: (row, _columnId, filterValue) => {
       const searchValue = String(filterValue).toLowerCase()
       const fields = [
+        row.original.external_id,
         row.getValue('username'),
         row.original.display_name,
         row.original.email,
@@ -181,7 +182,7 @@ export function UsersTable() {
       )}
       skeletonKeyPrefix='users-skeleton'
       toolbarProps={{
-        searchPlaceholder: t('Filter by username, name or email...'),
+        searchPlaceholder: '搜索用户 ID、用户名、昵称或邮箱',
         filters: [
           {
             columnId: 'status',

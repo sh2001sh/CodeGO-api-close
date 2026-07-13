@@ -30,6 +30,18 @@ func TestTaskErrorWrapperSanitizesUpstreamBalanceLeak(t *testing.T) {
 	require.Equal(t, platformtext.UpstreamQuotaGenericMessage, taskErr.Message)
 }
 
+func TestTaskErrorWrapperSanitizesChineseUpstreamBalanceLeak(t *testing.T) {
+	t.Parallel()
+
+	taskErr := TaskErrorWrapper(
+		fmt.Errorf("用户额度不足, 剩余额度: -0.038392 (request id: abc)"),
+		"bad_response_status_code",
+		http.StatusForbidden,
+	)
+
+	require.Equal(t, platformtext.UpstreamQuotaGenericMessage, taskErr.Message)
+}
+
 func TestTaskErrorFromAPIErrorKeepsLocalQuotaMessage(t *testing.T) {
 	t.Parallel()
 
@@ -43,6 +55,7 @@ func TestTaskErrorFromAPIErrorKeepsLocalQuotaMessage(t *testing.T) {
 
 	require.NotNil(t, taskErr)
 	require.Equal(t, "用户额度不足, 剩余额度: 0.000750", taskErr.Message)
+	require.True(t, taskErr.LocalError)
 }
 
 func TestTaskErrorFromAPIErrorKeepsLocalQuotaMessageWithRequestID(t *testing.T) {

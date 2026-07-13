@@ -22,15 +22,27 @@ func TestNewAPIErrorStatusStringsSanitizeUpstreamQuotaLeak(t *testing.T) {
 	require.Equal(t, platformtext.UpstreamQuotaGenericMessage, apiErr.MaskSensitiveErrorWithStatusCode())
 }
 
+func TestNewAPIErrorStatusStringsSanitizeChineseUpstreamQuotaLeak(t *testing.T) {
+	t.Parallel()
+
+	apiErr := NewOpenAIError(
+		fmt.Errorf("用户额度不足, 剩余额度: -＄0.038392 (request id: abc)"),
+		ErrorCodeBadResponseStatusCode,
+		http.StatusForbidden,
+	)
+
+	require.Equal(t, platformtext.UpstreamQuotaGenericMessage, apiErr.ToOpenAIError().Message)
+}
+
 func TestNewAPIErrorStatusStringsKeepLocalQuotaMessage(t *testing.T) {
 	t.Parallel()
 
 	apiErr := NewErrorWithStatusCode(
-		fmt.Errorf("站内余额不足, 当前余额: ＄0.002290, 本次所需: ＄0.005418"),
+		fmt.Errorf("用户额度不足, 剩余额度: ＄0.002290"),
 		ErrorCodeInsufficientUserQuota,
 		http.StatusForbidden,
 	)
 
-	require.Equal(t, "status_code=403, 站内余额不足, 当前余额: ＄0.002290, 本次所需: ＄0.005418", apiErr.ErrorWithStatusCode())
-	require.Equal(t, "status_code=403, 站内余额不足, 当前余额: ＄0.002290, 本次所需: ＄0.005418", apiErr.MaskSensitiveErrorWithStatusCode())
+	require.Equal(t, "status_code=403, 用户额度不足, 剩余额度: ＄0.002290", apiErr.ErrorWithStatusCode())
+	require.Equal(t, "status_code=403, 用户额度不足, 剩余额度: ＄0.002290", apiErr.MaskSensitiveErrorWithStatusCode())
 }

@@ -138,12 +138,12 @@ func (e *NewAPIError) ErrorWithStatusCode() string {
 	}
 	msg := e.Error()
 	if e.StatusCode == 0 {
-		return platformtext.SanitizeUpstreamQuotaErrorMessage(msg)
+		return e.sanitizeUpstreamQuotaErrorMessage(msg)
 	}
 	if msg == "" {
 		return fmt.Sprintf("status_code=%d", e.StatusCode)
 	}
-	return platformtext.SanitizeUpstreamQuotaErrorMessage(fmt.Sprintf("status_code=%d, %s", e.StatusCode, msg))
+	return e.sanitizeUpstreamQuotaErrorMessage(fmt.Sprintf("status_code=%d, %s", e.StatusCode, msg))
 }
 
 func (e *NewAPIError) MaskSensitiveError() string {
@@ -157,7 +157,7 @@ func (e *NewAPIError) MaskSensitiveError() string {
 	if e.errorCode == ErrorCodeCountTokenFailed {
 		return errStr
 	}
-	return platformtext.SanitizeUpstreamQuotaErrorMessage(platformtext.MaskSensitiveInfo(errStr))
+	return e.sanitizeUpstreamQuotaErrorMessage(platformtext.MaskSensitiveInfo(errStr))
 }
 
 func (e *NewAPIError) MaskSensitiveErrorWithStatusCode() string {
@@ -174,11 +174,18 @@ func (e *NewAPIError) MaskSensitiveErrorWithStatusCode() string {
 	if msg == platformtext.UpstreamQuotaGenericMessage {
 		return msg
 	}
-	return platformtext.SanitizeUpstreamQuotaErrorMessage(fmt.Sprintf("status_code=%d, %s", e.StatusCode, msg))
+	return e.sanitizeUpstreamQuotaErrorMessage(fmt.Sprintf("status_code=%d, %s", e.StatusCode, msg))
 }
 
 func (e *NewAPIError) SetMessage(message string) {
 	e.Err = errors.New(message)
+}
+
+func (e *NewAPIError) sanitizeUpstreamQuotaErrorMessage(message string) string {
+	if !IsUpstreamError(e) {
+		return message
+	}
+	return platformtext.SanitizeUpstreamQuotaErrorMessage(message)
 }
 
 func (e *NewAPIError) ToOpenAIError() OpenAIError {
@@ -208,7 +215,7 @@ func (e *NewAPIError) ToOpenAIError() OpenAIError {
 	if e.errorCode != ErrorCodeCountTokenFailed {
 		result.Message = platformtext.MaskSensitiveInfo(result.Message)
 	}
-	result.Message = platformtext.SanitizeUpstreamQuotaErrorMessage(result.Message)
+	result.Message = e.sanitizeUpstreamQuotaErrorMessage(result.Message)
 	if result.Message == "" {
 		result.Message = string(e.errorType)
 	}
@@ -238,7 +245,7 @@ func (e *NewAPIError) ToClaudeError() ClaudeError {
 	if e.errorCode != ErrorCodeCountTokenFailed {
 		result.Message = platformtext.MaskSensitiveInfo(result.Message)
 	}
-	result.Message = platformtext.SanitizeUpstreamQuotaErrorMessage(result.Message)
+	result.Message = e.sanitizeUpstreamQuotaErrorMessage(result.Message)
 	if result.Message == "" {
 		result.Message = string(e.errorType)
 	}
@@ -374,6 +381,14 @@ func IsChannelError(err *NewAPIError) bool {
 		return false
 	}
 	return strings.HasPrefix(string(err.errorCode), "channel:")
+}
+
+// IsUpstreamError reports whether an error originated from a channel or its provider.
+func IsUpstreamError(err *NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return IsChannelError(err) || err.errorType == ErrorTypeOpenAIError || err.errorType == ErrorTypeClaudeError
 }
 
 func IsSkipRetryError(err *NewAPIError) bool {

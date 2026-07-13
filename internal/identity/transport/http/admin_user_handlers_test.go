@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -27,6 +28,15 @@ func TestGetAllUsersReturnsPagedAdminList(t *testing.T) {
 	response := decodeAPIResponse(t, recorder)
 	if !response.Success {
 		t.Fatalf("expected success response, got %#v", response)
+	}
+	var page struct {
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal(response.Data, &page); err != nil {
+		t.Fatalf("decode paged response data: %v", err)
+	}
+	if page.Total != 2 {
+		t.Fatalf("expected total=2, got %d", page.Total)
 	}
 }
 

@@ -4,6 +4,9 @@ import (
 	"errors"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -82,10 +85,47 @@ func HandleOAuth(c *gin.Context) {
 		return
 	}
 
+	if shouldRedirectOAuthBrowser(c) {
+		if err := saveAuthenticatedSession(c, session, user); err != nil {
+			handleAuthError(c, err)
+			return
+		}
+		c.Redirect(http.StatusFound, oauthLoginRedirectURL(c, c.Param("provider"), user.ID))
+		return
+	}
+
 	if err := establishAuthenticatedSession(c, session, user); err != nil {
 		handleAuthError(c, err)
 		return
 	}
+}
+
+func shouldRedirectOAuthBrowser(c *gin.Context) bool {
+	return strings.Contains(c.GetHeader("Accept"), "text/html")
+}
+
+func oauthLoginRedirectURL(c *gin.Context, provider string, userID int) string {
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if forwardedProto := c.GetHeader("X-Forwarded-Proto"); forwardedProto != "" {
+		candidate := strings.ToLower(strings.TrimSpace(strings.Split(forwardedProto, ",")[0]))
+		if candidate == "http" || candidate == "https" {
+			scheme = candidate
+		}
+	}
+
+	redirectURL := url.URL{
+		Scheme: scheme,
+		Host:   c.Request.Host,
+		Path:   "/oauth/" + provider,
+	}
+	query := redirectURL.Query()
+	query.Set("authenticated", "1")
+	query.Set("uid", strconv.Itoa(userID))
+	redirectURL.RawQuery = query.Encode()
+	return redirectURL.String()
 }
 
 func handleStandardOAuthError(c *gin.Context, err error) {

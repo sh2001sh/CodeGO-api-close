@@ -1,9 +1,9 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"encoding/json"
 	"errors"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	"net/http"
 
@@ -85,18 +85,8 @@ func Register(c *gin.Context) {
 }
 
 func establishAuthenticatedSession(c *gin.Context, session sessions.Session, user *identityapp.AuthenticatedSessionUser) error {
-	if user == nil {
-		return identityapp.ErrInvalidParams
-	}
-	if err := sessionstate.SaveAuthenticatedSession(c, &identityschema.User{
-		Id:          user.ID,
-		Username:    user.Username,
-		DisplayName: user.DisplayName,
-		Role:        user.Role,
-		Status:      user.Status,
-		Group:       user.Group,
-	}); err != nil {
-		return identityapp.ErrSessionSaveFailed
+	if err := saveAuthenticatedSession(c, session, user); err != nil {
+		return err
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -111,6 +101,23 @@ func establishAuthenticatedSession(c *gin.Context, session sessions.Session, use
 			"group":        user.Group,
 		},
 	})
+	return nil
+}
+
+func saveAuthenticatedSession(c *gin.Context, session sessions.Session, user *identityapp.AuthenticatedSessionUser) error {
+	if user == nil {
+		return identityapp.ErrInvalidParams
+	}
+	if err := sessionstate.SaveAuthenticatedSession(c, &identityschema.User{
+		Id:          user.ID,
+		Username:    user.Username,
+		DisplayName: user.DisplayName,
+		Role:        user.Role,
+		Status:      user.Status,
+		Group:       user.Group,
+	}); err != nil {
+		return identityapp.ErrSessionSaveFailed
+	}
 	return nil
 }
 

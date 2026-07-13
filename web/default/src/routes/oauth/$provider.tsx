@@ -44,6 +44,8 @@ function OAuthCallback() {
     code?: string
     state?: string
     redirect?: string
+    authenticated?: string
+    uid?: string
   }
   const [mode, setMode] = useState<'login' | 'bind'>(() => {
     if (typeof window === 'undefined') return 'login'
@@ -77,11 +79,6 @@ function OAuthCallback() {
         }
       }
 
-      if (!search?.code) {
-        toast.error(i18next.t('Missing code'))
-        safeNavigate('/sign-in')
-        return
-      }
       const isBindingFlow =
         typeof window !== 'undefined' ? Boolean(window.opener) : mode === 'bind'
       if (isBindingFlow && mode !== 'bind') {
@@ -146,6 +143,33 @@ function OAuthCallback() {
         const to = target || search?.redirect || '/dashboard'
         safeNavigate(to)
         toast.success(i18next.t('Signed in successfully!'))
+      }
+
+      if (search.authenticated === '1') {
+        const userID = Number(search.uid)
+        if (!Number.isInteger(userID) || userID <= 0) {
+          toast.error(i18next.t('OAuth failed'))
+          safeNavigate('/sign-in')
+          return
+        }
+        try {
+          window.localStorage.setItem('uid', String(userID))
+        } catch (_error) {
+          void _error
+        }
+        if (await finalizeLogin()) {
+          redirectAfterLogin()
+          return
+        }
+        toast.error(i18next.t('OAuth failed'))
+        safeNavigate('/sign-in')
+        return
+      }
+
+      if (!search?.code) {
+        toast.error(i18next.t('Missing code'))
+        safeNavigate('/sign-in')
+        return
       }
 
       const handleBindingFailure = (message: string) => {

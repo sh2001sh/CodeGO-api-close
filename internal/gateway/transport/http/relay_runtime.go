@@ -159,7 +159,10 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 		return
 	}
 	rawMessageWithRequestID := platformtext.MessageWithRequestID(apiErr.Error(), requestID)
-	apiErr.SetMessage(platformtext.SanitizeUpstreamQuotaErrorMessage(rawMessageWithRequestID))
+	if types.IsUpstreamError(apiErr) {
+		rawMessageWithRequestID = platformtext.SanitizeUpstreamQuotaErrorMessage(rawMessageWithRequestID)
+	}
+	apiErr.SetMessage(rawMessageWithRequestID)
 	switch relayFormat {
 	case types.RelayFormatOpenAIRealtime:
 		relaycommon.WssError(c, ws, apiErr.ToOpenAIError())

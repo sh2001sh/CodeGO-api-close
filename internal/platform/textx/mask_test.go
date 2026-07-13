@@ -26,9 +26,9 @@ func TestSanitizeUpstreamQuotaErrorMessage(t *testing.T) {
 			expected: UpstreamQuotaGenericMessage,
 		},
 		{
-			name:     "keep local user arrears message",
-			input:    "用户额度不足, 剩余额度: 0.000750",
-			expected: "用户额度不足, 剩余额度: 0.000750",
+			name:     "sanitize upstream Chinese quota leak",
+			input:    "用户额度不足, 剩余额度: -0.038392 (request id: abc)",
+			expected: UpstreamQuotaGenericMessage,
 		},
 		{
 			name:     "keep local site balance message",
@@ -64,6 +64,9 @@ func TestIsUpstreamQuotaLeakMessage(t *testing.T) {
 	}
 	if !IsUpstreamQuotaLeakMessage("insufficient balance") {
 		t.Fatal("expected plain upstream balance message to be detected")
+	}
+	if !IsUpstreamQuotaLeakMessage("用户额度不足, 剩余额度: -0.038392 (request id: abc)") {
+		t.Fatal("expected Chinese upstream balance message to be detected")
 	}
 	if IsUpstreamQuotaLeakMessage("用户额度不足, 剩余额度: 0.000750") {
 		t.Fatal("expected local user quota message not to be treated as upstream leak")

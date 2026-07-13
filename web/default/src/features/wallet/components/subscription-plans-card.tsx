@@ -40,10 +40,16 @@ interface SubscriptionPlansCardProps {
 export function getEpayMethods(
   payMethods: PaymentMethod[] = []
 ): PaymentMethod[] {
-  return payMethods.filter(
-    (method) =>
-      method?.type && method.type !== 'stripe' && method.type !== 'creem'
-  )
+  return payMethods
+    .filter(
+      (method) =>
+        method?.type && method.type !== 'stripe' && method.type !== 'creem'
+    )
+    .map((method) =>
+      method.type === 'xunhu' || method.type === 'wxpay'
+        ? { ...method, name: '微信支付' }
+        : method
+    )
 }
 
 function getRemainingDays(sub: UserSubscriptionRecord) {

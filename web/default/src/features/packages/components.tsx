@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo } from 'react'
-import { Crown, Fuel } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ChevronDown, Crown, Fuel } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -101,6 +101,7 @@ export function CurrentPackagePanel(props: {
     config: FuelConfig
   ) => void
 }) {
+  const [showAllSubscriptions, setShowAllSubscriptions] = useState(false)
   const planMap = useMemo(() => {
     const map = new Map<number, PlanRecord['plan']>()
     for (const item of props.plans) map.set(item.plan.id, item.plan)
@@ -112,15 +113,19 @@ export function CurrentPackagePanel(props: {
       .sort((left, right) => {
         const leftPlan = planMap.get(left.subscription.plan_id)
         const rightPlan = planMap.get(right.subscription.plan_id)
-        const leftFuel = leftPlan?.fuel_enabled ? 1 : 0
-        const rightFuel = rightPlan?.fuel_enabled ? 1 : 0
-        if (leftFuel !== rightFuel) return rightFuel - leftFuel
+        const priceDifference =
+          Number(rightPlan?.price_amount || 0) -
+          Number(leftPlan?.price_amount || 0)
+        if (priceDifference !== 0) return priceDifference
         return right.subscription.end_time - left.subscription.end_time
       })
   }, [planMap, props.subscriptions])
   if (!props.loading && currentSubscriptions.length === 0) {
     return null
   }
+  const visibleSubscriptions = showAllSubscriptions
+    ? currentSubscriptions
+    : currentSubscriptions.slice(0, 1)
 
   return (
     <section className='border-border bg-card rounded-lg border px-4 py-3'>
@@ -137,8 +142,14 @@ export function CurrentPackagePanel(props: {
               {currentSubscriptions.length} 个
             </span>
           </div>
-          <div className='grid gap-2.5 lg:grid-cols-2'>
-            {currentSubscriptions.map((current) => {
+          <div
+            className={
+              showAllSubscriptions && currentSubscriptions.length > 1
+                ? 'grid gap-2.5 lg:grid-cols-2'
+                : 'grid gap-2.5'
+            }
+          >
+            {visibleSubscriptions.map((current) => {
               const currentPlan = planMap.get(current.subscription.plan_id)
               const currentTitle =
                 formatSubscriptionPlanTitle(currentPlan?.title) ||
@@ -203,6 +214,25 @@ export function CurrentPackagePanel(props: {
               )
             })}
           </div>
+          {currentSubscriptions.length > 1 ? (
+            <Button
+              size='sm'
+              variant='ghost'
+              className='mt-2.5 w-full'
+              onClick={() => setShowAllSubscriptions((current) => !current)}
+            >
+              {showAllSubscriptions
+                ? '收起其他套餐'
+                : `查看其他 ${currentSubscriptions.length - 1} 个套餐`}
+              <ChevronDown
+                className={
+                  showAllSubscriptions
+                    ? 'ml-1 size-4 rotate-180 transition-transform'
+                    : 'ml-1 size-4 transition-transform'
+                }
+              />
+            </Button>
+          ) : null}
         </>
       )}
     </section>

@@ -1,11 +1,11 @@
 package oauth
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -55,12 +55,7 @@ func (p *LinuxDOProvider) ExchangeToken(ctx context.Context, code string, c *gin
 	credentials := platformconfig.LinuxDOClientId + ":" + platformconfig.LinuxDOClientSecret
 	basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(credentials))
 
-	// Get redirect URI from request
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
-	}
-	redirectURI := fmt.Sprintf("%s://%s/api/oauth/linuxdo", scheme, c.Request.Host)
+	redirectURI := linuxDORedirectURI(c.Request)
 
 	logger.LogDebug(ctx, "[OAuth-LinuxDO] ExchangeToken: token_endpoint=%s, redirect_uri=%s", tokenEndpoint, redirectURI)
 
@@ -106,6 +101,20 @@ func (p *LinuxDOProvider) ExchangeToken(ctx context.Context, code string, c *gin
 	return &OAuthToken{
 		AccessToken: tokenRes.AccessToken,
 	}, nil
+}
+
+func linuxDORedirectURI(request *http.Request) string {
+	scheme := "http"
+	if request.TLS != nil {
+		scheme = "https"
+	}
+	if forwardedProto := request.Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
+		candidate := strings.ToLower(strings.TrimSpace(strings.Split(forwardedProto, ",")[0]))
+		if candidate == "http" || candidate == "https" {
+			scheme = candidate
+		}
+	}
+	return fmt.Sprintf("%s://%s/api/oauth/linuxdo", scheme, request.Host)
 }
 
 func (p *LinuxDOProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*OAuthUser, error) {

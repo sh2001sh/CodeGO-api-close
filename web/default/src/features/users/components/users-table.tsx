@@ -176,6 +176,7 @@ export function UsersTable() {
       columns={columns}
       isLoading={isLoading}
       isFetching={isFetching}
+      totalItems={data?.total}
       emptyTitle={t('No Users Found')}
       emptyDescription={t(
         'No users available. Try adjusting your search or filters.'

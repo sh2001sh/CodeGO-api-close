@@ -37,10 +37,12 @@ import {
 
 type DataTablePaginationProps<TData> = {
   table: Table<TData>
+  totalItems?: number
 }
 
 export function DataTablePagination<TData>({
   table,
+  totalItems,
 }: DataTablePaginationProps<TData>) {
   const { t } = useTranslation()
   const currentPage = table.getState().pagination.pageIndex + 1
@@ -56,11 +58,16 @@ export function DataTablePagination<TData>({
       style={{ overflowClipMargin: 1 }}
     >
       <div className='flex w-full items-center justify-between gap-2'>
-        <div className='flex min-w-0 items-center text-xs font-medium whitespace-nowrap sm:min-w-[130px] sm:text-sm @2xl/content:hidden'>
-          {t('Page {{current}} of {{total}}', {
-            current: currentPage,
-            total: totalPages,
-          })}
+        <div className='flex min-w-0 items-center gap-2 text-xs font-medium whitespace-nowrap sm:min-w-[130px] sm:text-sm @2xl/content:hidden'>
+          {totalItems !== undefined && (
+            <span>{t('Total: {{count}}', { count: totalItems })}</span>
+          )}
+          <span>
+            {t('Page {{current}} of {{total}}', {
+              current: currentPage,
+              total: totalPages,
+            })}
+          </span>
         </div>
         <div className='flex items-center gap-2 @max-2xl/content:flex-row-reverse'>
           <Select
@@ -95,11 +102,16 @@ export function DataTablePagination<TData>({
       </div>
 
       <div className='flex items-center sm:space-x-6 lg:space-x-8'>
-        <div className='flex min-w-[130px] items-center text-sm font-medium whitespace-nowrap @max-3xl/content:hidden'>
-          {t('Page {{current}} of {{total}}', {
-            current: currentPage,
-            total: totalPages,
-          })}
+        <div className='flex min-w-[130px] items-center gap-2 text-sm font-medium whitespace-nowrap @max-3xl/content:hidden'>
+          {totalItems !== undefined && (
+            <span>{t('Total: {{count}}', { count: totalItems })}</span>
+          )}
+          <span>
+            {t('Page {{current}} of {{total}}', {
+              current: currentPage,
+              total: totalPages,
+            })}
+          </span>
         </div>
         <div className='flex items-center space-x-1.5 sm:space-x-2'>
           <Button

@@ -166,6 +166,11 @@ export type DataTablePageProps<TData> = {
   showPagination?: boolean
 
   /**
+   * Optional server-provided item count displayed by the pagination control.
+   */
+  totalItems?: number
+
+  /**
    * Render pagination via `PageFooterPortal` (sticks to page footer).
    * Defaults to `true`. Set `false` to render inline below the table.
    */
@@ -239,11 +244,17 @@ export function DataTablePage<TData>(props: DataTablePageProps<TData>) {
       {props.showPagination !== false &&
         (props.paginationInFooter !== false ? (
           <PageFooterPortal>
-            <DataTablePagination table={props.table} />
+            <DataTablePagination
+              table={props.table}
+              totalItems={props.totalItems}
+            />
           </PageFooterPortal>
         ) : (
           <div className='pt-2'>
-            <DataTablePagination table={props.table} />
+            <DataTablePagination
+              table={props.table}
+              totalItems={props.totalItems}
+            />
           </div>
         ))}
     </>

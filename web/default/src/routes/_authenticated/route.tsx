@@ -28,8 +28,16 @@ export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ location }) => {
     const { auth } = useAuthStore.getState()
 
-    // 如果本地没有用户信息，直接跳转登录页
+    // OAuth callbacks establish the server session before the SPA can persist
+    // its local profile. Restore that profile from the session before deciding
+    // that the user must sign in again.
     if (!auth.user) {
+      const res = await getSelf().catch(() => null)
+      if (res?.success && res.data) {
+        auth.setUser(res.data)
+        sessionVerified = true
+        return
+      }
       throw redirect({
         to: '/sign-in',
         search: { redirect: location.href },

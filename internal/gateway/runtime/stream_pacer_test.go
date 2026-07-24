@@ -63,6 +63,9 @@ func TestStreamPacer_TracksReleasedVisibleTokens(t *testing.T) {
 	}
 
 	require.Equal(t, expectedTokens, pacer.OutputTokens())
+	duration, measured := pacer.OutputDuration()
+	require.True(t, measured)
+	require.Positive(t, duration)
 }
 
 func TestStreamPacer_SkipsNonGPTModels(t *testing.T) {

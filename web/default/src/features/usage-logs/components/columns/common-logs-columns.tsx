@@ -549,8 +549,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const frt = other?.frt
         const recordedGenerationTime = other?.generation_time_ms
         const streamOutputTokens = other?.stream_output_tokens
+        const streamOutputTime = other?.stream_output_time_ms
         const generationTime =
-          recordedGenerationTime != null && recordedGenerationTime > 0
+          streamOutputTime != null && streamOutputTime > 0
+            ? streamOutputTime / 1000
+            : recordedGenerationTime != null && recordedGenerationTime > 0
             ? recordedGenerationTime / 1000
             : log.is_stream && frt != null && frt > 0
               ? Math.max(useTime - frt / 1000, 0)
@@ -630,6 +633,14 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       {Math.round(tokensPerSecond)}
                     </span>
                     {' t/s'}
+                    {streamOutputTime != null && streamOutputTime > 0 && (
+                      <>
+                        {' · '}
+                        <span className='font-mono tabular-nums'>
+                          {formatUseTime(streamOutputTime / 1000)}
+                        </span>
+                      </>
+                    )}
                   </>
                 )}
               </span>

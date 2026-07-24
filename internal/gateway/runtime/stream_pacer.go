@@ -68,6 +68,15 @@ func (p *StreamPacer) OutputTokens() int {
 	return p.estimatedTokens
 }
 
+// OutputDuration measures the interval from the first visible text fragment
+// through the final fragment released to the client.
+func (p *StreamPacer) OutputDuration() (time.Duration, bool) {
+	if p == nil || !p.started {
+		return 0, false
+	}
+	return time.Since(p.firstContentAt), true
+}
+
 // SplitText breaks oversized text deltas into small, protocol-safe fragments.
 // The first fragment is emitted immediately; later fragments are paced by Pace.
 func (p *StreamPacer) SplitText(text string) []string {

@@ -547,14 +547,17 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
         const frt = other?.frt
+        const recordedGenerationTime = other?.generation_time_ms
+        const generationTime =
+          recordedGenerationTime != null && recordedGenerationTime > 0
+            ? recordedGenerationTime / 1000
+            : log.is_stream && frt != null && frt > 0
+              ? Math.max(useTime - frt / 1000, 0)
+              : useTime
         const tokensPerSecond =
-          useTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / useTime
+          generationTime > 0 && log.completion_tokens > 0
+            ? log.completion_tokens / generationTime
             : null
-        const displayedTokensPerSecond =
-          tokensPerSecond != null && /gpt/i.test(log.model_name) && tokensPerSecond > 55
-            ? 50 + (Number(log.id) % 21)
-            : tokensPerSecond
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null
 
@@ -613,11 +616,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <div className='flex items-center gap-1 text-[11px]'>
               <span className='text-muted-foreground/60'>
                 {log.is_stream ? t('Stream') : t('Non-stream')}
-                {displayedTokensPerSecond != null && (
+                {tokensPerSecond != null && (
                   <>
                     {' · '}
                     <span className='font-mono tabular-nums'>
-                      {Math.round(displayedTokensPerSecond)}
+                      {Math.round(tokensPerSecond)}
                     </span>
                     {' t/s'}
                   </>

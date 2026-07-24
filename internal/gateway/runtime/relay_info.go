@@ -97,6 +97,7 @@ type RelayInfo struct {
 	StartTime         time.Time
 	FirstResponseTime time.Time
 	isFirstResponse   bool
+	StreamPacer       *StreamPacer
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool
@@ -492,6 +493,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 
 		StartTime:         startTime,
 		FirstResponseTime: startTime.Add(-time.Second),
+		StreamPacer:       NewStreamPacer(httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel)),
 		ThinkingContentInfo: ThinkingContentInfo{
 			IsFirstThinkingContent:  true,
 			SendLastThinkingContent: false,

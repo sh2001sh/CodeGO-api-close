@@ -34,6 +34,23 @@ func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, fo
 		return nil
 	}
 
+	parts, err := splitChatStreamData(info, data)
+	if err != nil {
+		return err
+	}
+	for _, part := range parts {
+		if err := sendStreamDataPart(c, info, part, forceFormat, thinkToContent); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sendStreamDataPart(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
+	if err := paceChatStream(c, info, data); err != nil {
+		return err
+	}
+
 	if !forceFormat && !thinkToContent {
 		return helper.StringData(c, data)
 	}
@@ -108,6 +125,82 @@ func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, fo
 	}
 
 	return helper.ObjectData(c, lastStreamResponse)
+}
+
+func paceChatStream(c *gin.Context, info *relaycommon.RelayInfo, data string) error {
+	if info == nil || info.StreamPacer == nil {
+		return nil
+	}
+	var response dto.ChatCompletionsStreamResponse
+	if err := platformencoding.UnmarshalString(data, &response); err != nil {
+		return nil
+	}
+	var text strings.Builder
+	for _, choice := range response.Choices {
+		text.WriteString(choice.Delta.GetContentString())
+		text.WriteString(choice.Delta.GetReasoningContent())
+	}
+	return info.StreamPacer.Pace(c.Request.Context(), text.String())
+}
+
+func splitChatStreamData(info *relaycommon.RelayInfo, data string) ([]string, error) {
+	if info == nil || info.StreamPacer == nil {
+		return []string{data}, nil
+	}
+	var response dto.ChatCompletionsStreamResponse
+	if err := platformencoding.UnmarshalString(data, &response); err != nil {
+		return []string{data}, nil
+	}
+	if len(response.Choices) != 1 || response.Usage != nil || response.Choices[0].FinishReason != nil || len(response.Choices[0].Delta.ToolCalls) > 0 {
+		return []string{data}, nil
+	}
+	choice := response.Choices[0]
+	contentParts := info.StreamPacer.SplitText(choice.Delta.GetContentString())
+	reasoningParts := info.StreamPacer.SplitText(choice.Delta.GetReasoningContent())
+	if len(contentParts) <= 1 && len(reasoningParts) <= 1 {
+		return []string{data}, nil
+	}
+
+	parts := make([]string, 0, len(contentParts)+len(reasoningParts))
+	for _, content := range contentParts {
+		part := cloneChatStreamResponse(&response)
+		part.Choices[0].Delta.ReasoningContent = nil
+		part.Choices[0].Delta.Reasoning = nil
+		part.Choices[0].Delta.SetContentString(content)
+		if len(parts) > 0 {
+			part.Choices[0].Delta.Role = ""
+		}
+		encoded, err := platformencoding.Marshal(part)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, string(encoded))
+	}
+	for _, reasoning := range reasoningParts {
+		part := cloneChatStreamResponse(&response)
+		part.Choices[0].Delta.Content = nil
+		part.Choices[0].Delta.SetReasoningContent(reasoning)
+		if len(parts) > 0 {
+			part.Choices[0].Delta.Role = ""
+		}
+		encoded, err := platformencoding.Marshal(part)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, string(encoded))
+	}
+	return parts, nil
+}
+
+func cloneChatStreamResponse(response *dto.ChatCompletionsStreamResponse) *dto.ChatCompletionsStreamResponse {
+	clone := *response
+	clone.Choices = append([]dto.ChatCompletionsStreamResponseChoice(nil), response.Choices...)
+	if len(response.Choices) > 0 {
+		delta := response.Choices[0].Delta
+		delta.ToolCalls = append([]dto.ToolCallResponse(nil), delta.ToolCalls...)
+		clone.Choices[0].Delta = delta
+	}
+	return &clone
 }
 
 func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {

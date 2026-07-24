@@ -10,6 +10,7 @@ import (
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,7 +44,13 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	other["cache_ratio"] = cacheRatio
 	other["model_price"] = modelPrice
 	other["user_group_ratio"] = userGroupRatio
-	other["frt"] = float64(relayInfo.FirstResponseTime.UnixMilli() - relayInfo.StartTime.UnixMilli())
+	if relayInfo.HasSendResponse() {
+		other["frt"] = float64(relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds())
+	}
+	other["generation_time_ms"] = time.Since(relayInfo.StartTime).Milliseconds()
+	if relayInfo.HasSendResponse() {
+		other["generation_time_ms"] = time.Since(relayInfo.FirstResponseTime).Milliseconds()
+	}
 	if relayInfo.ReasoningEffort != "" {
 		other["reasoning_effort"] = relayInfo.ReasoningEffort
 	}

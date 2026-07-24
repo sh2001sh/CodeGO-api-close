@@ -60,6 +60,14 @@ func (p *StreamPacer) Pace(ctx context.Context, text string) error {
 	return nil
 }
 
+// OutputTokens returns the estimated visible text tokens released to the client.
+func (p *StreamPacer) OutputTokens() int {
+	if p == nil {
+		return 0
+	}
+	return p.estimatedTokens
+}
+
 // SplitText breaks oversized text deltas into small, protocol-safe fragments.
 // The first fragment is emitted immediately; later fragments are paced by Pace.
 func (p *StreamPacer) SplitText(text string) []string {

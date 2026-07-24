@@ -52,6 +52,19 @@ func TestStreamPacer_SplitsLargeFirstDeltaWithoutChangingText(t *testing.T) {
 	require.LessOrEqual(t, estimateStreamTokens(parts[0]), firstStreamChunkTokenBudget)
 }
 
+func TestStreamPacer_TracksReleasedVisibleTokens(t *testing.T) {
+	pacer := NewStreamPacer("gpt-5.6-sol")
+	text := "one two three four five six seven eight nine ten"
+	parts := pacer.SplitText(text)
+	expectedTokens := 0
+	for _, part := range parts {
+		require.NoError(t, pacer.Pace(context.Background(), part))
+		expectedTokens += estimateStreamTokens(part)
+	}
+
+	require.Equal(t, expectedTokens, pacer.OutputTokens())
+}
+
 func TestStreamPacer_SkipsNonGPTModels(t *testing.T) {
 	require.Nil(t, NewStreamPacer("claude-sonnet-4"))
 }

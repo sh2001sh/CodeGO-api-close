@@ -51,6 +51,9 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	if relayInfo.HasSendResponse() {
 		other["generation_time_ms"] = time.Since(relayInfo.FirstResponseTime).Milliseconds()
 	}
+	if visibleTokens := relayInfo.StreamPacer.OutputTokens(); visibleTokens > 0 {
+		other["stream_output_tokens"] = visibleTokens
+	}
 	if relayInfo.ReasoningEffort != "" {
 		other["reasoning_effort"] = relayInfo.ReasoningEffort
 	}

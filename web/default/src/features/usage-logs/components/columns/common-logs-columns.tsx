@@ -548,15 +548,22 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const other = parseLogOther(log.other)
         const frt = other?.frt
         const recordedGenerationTime = other?.generation_time_ms
+        const streamOutputTokens = other?.stream_output_tokens
         const generationTime =
           recordedGenerationTime != null && recordedGenerationTime > 0
             ? recordedGenerationTime / 1000
             : log.is_stream && frt != null && frt > 0
               ? Math.max(useTime - frt / 1000, 0)
               : useTime
+        const throughputTokens =
+          log.is_stream && streamOutputTokens != null && streamOutputTokens > 0
+            ? streamOutputTokens
+            : log.completion_tokens
         const tokensPerSecond =
-          generationTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / generationTime
+          generationTime > 0 &&
+          throughputTokens > 0 &&
+          (!log.is_stream || streamOutputTokens != null || !/^gpt/i.test(log.model_name))
+            ? throughputTokens / generationTime
             : null
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null

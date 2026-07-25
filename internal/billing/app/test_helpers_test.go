@@ -50,6 +50,7 @@ func TestMain(m *testing.M) {
 		&billingschema.BillingReservation{},
 		&billingschema.BillingSettlement{},
 		&billingschema.BillingOutboxEvent{},
+		&billingschema.RequestEconomics{},
 		&commerceschema.SubscriptionPlan{},
 		&commerceschema.UserSubscription{},
 		&commerceschema.BlindBoxOpenRecord{},
@@ -76,6 +77,7 @@ func truncate(t *testing.T) {
 		platformdb.DB.Exec("DELETE FROM billing_ledger_entries")
 		platformdb.DB.Exec("DELETE FROM billing_balance_snapshots")
 		platformdb.DB.Exec("DELETE FROM billing_accounts")
+		platformdb.DB.Exec("DELETE FROM billing_request_economics")
 		platformdb.DB.Exec("DELETE FROM subscription_plans")
 		platformdb.DB.Exec("DELETE FROM user_subscriptions")
 		platformdb.DB.Exec("DELETE FROM blind_box_open_records")

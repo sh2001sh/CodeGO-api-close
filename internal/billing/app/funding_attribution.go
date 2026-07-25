@@ -53,7 +53,8 @@ func RecordRequestEconomics(relayInfo *gatewayruntime.RelayInfo, amount int) err
 			return err
 		}
 	}
-	return platformdb.DB.Where("request_id = ?", relayInfo.RequestId).Assign(billingschema.RequestEconomics{
+	record := billingschema.RequestEconomics{
+		RequestID:                 relayInfo.RequestId,
 		ChannelID:                 channelID,
 		RoutePoolID:               relayInfo.RoutePoolID,
 		ActualAmount:              int64(amount),
@@ -62,7 +63,20 @@ func RecordRequestEconomics(relayInfo *gatewayruntime.RelayInfo, amount int) err
 		ProcurementCostMultiplier: relayInfo.ProcurementCostMultiplier,
 		RevenueMultiplier:         revenueMultiplier,
 		SettledAt:                 time.Now().UTC(),
-	}).FirstOrCreate(&billingschema.RequestEconomics{}).Error
+	}
+	return platformdb.DB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "request_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"channel_id",
+			"route_pool_id",
+			"actual_amount",
+			"billing_source",
+			"subscription_id",
+			"procurement_cost_multiplier",
+			"revenue_multiplier",
+			"settled_at",
+		}),
+	}).Create(&record).Error
 }
 
 // FundingAttributionPolicies returns root-managed source multipliers. A zero

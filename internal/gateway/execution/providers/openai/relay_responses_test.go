@@ -101,6 +101,41 @@ func TestOaiResponsesStreamHandlerSucceedsAfterResponseCompleted(t *testing.T) {
 	require.Equal(t, "hello", info.ConversationResponseText)
 }
 
+func TestIsPaceableResponsesTextDelta(t *testing.T) {
+	testCases := []struct {
+		name string
+		resp dto.ResponsesStreamResponse
+		want bool
+	}{
+		{
+			name: "output text",
+			resp: dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "hello"},
+			want: true,
+		},
+		{
+			name: "reasoning summary",
+			resp: dto.ResponsesStreamResponse{Type: "response.reasoning_summary_text.delta", Delta: "summary"},
+			want: true,
+		},
+		{
+			name: "function arguments",
+			resp: dto.ResponsesStreamResponse{Type: "response.function_call_arguments.delta", Delta: "{}"},
+			want: false,
+		},
+		{
+			name: "completed event",
+			resp: dto.ResponsesStreamResponse{Type: "response.completed", Delta: "text"},
+			want: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			require.Equal(t, testCase.want, isPaceableResponsesTextDelta(testCase.resp))
+		})
+	}
+}
+
 func TestOaiResponsesHandlerPreservesCacheWriteTokens(t *testing.T) {
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)

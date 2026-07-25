@@ -258,7 +258,7 @@ func sendResponsesStreamData(c *gin.Context, info *relaycommon.RelayInfo, stream
 	if data == "" {
 		return nil
 	}
-	if streamResponse.Type != "response.output_text.delta" || info == nil || info.StreamPacer == nil {
+	if !isPaceableResponsesTextDelta(streamResponse) || info == nil || info.StreamPacer == nil {
 		return helper.ResponseChunkData(c, streamResponse, data)
 	}
 
@@ -277,4 +277,11 @@ func sendResponsesStreamData(c *gin.Context, info *relaycommon.RelayInfo, stream
 		}
 	}
 	return nil
+}
+
+func isPaceableResponsesTextDelta(streamResponse dto.ResponsesStreamResponse) bool {
+	if streamResponse.Delta == "" || !strings.HasSuffix(streamResponse.Type, ".delta") {
+		return false
+	}
+	return streamResponse.Type != "response.function_call_arguments.delta"
 }

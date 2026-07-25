@@ -17,9 +17,12 @@ import (
 )
 
 const (
-	routePoolExploreRate = 0.025
-	routePoolProbeRate   = 0.02
-	routePoolContextKey  = "automatic_route_pool_selection"
+	routePoolExploreRate           = 0.025
+	routePoolProbeRate             = 0.02
+	routePoolCostRecoveryProbeRate = 0.12
+	routePoolCostRecoveryGap       = 0.33
+	routePoolFallbackCostThreshold = 0.12
+	routePoolContextKey            = "automatic_route_pool_selection"
 
 	routePoolAffinityContextKey = "automatic_route_pool_affinity"
 	routePoolAffinityTTL        = 3 * time.Minute
@@ -76,15 +79,23 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 
 	applyRoutePoolTTFTPenalty(healthy, modelName)
 	applyRoutePoolTTFTPenalty(probes, modelName)
+	primaryHealthy := routePoolPrimaryCostCandidates(healthy)
+	primaryProbes := routePoolPrimaryCostCandidates(probes)
+	if len(primaryHealthy) > 0 {
+		healthy = primaryHealthy
+		probes = primaryProbes
+	} else if len(primaryProbes) > 0 {
+		probes = primaryProbes
+	}
 	prepareRoutePoolAffinity(c, detail.Pool.ID, group, modelName)
 	if len(healthy) == 0 {
 		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseLowestRoutePoolCandidate(probes)), true, nil
 	}
+	if len(probes) > 0 && rand.Float64() < routePoolRecoveryProbeRate(healthy, probes) {
+		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseLowestRoutePoolCandidate(probes)), true, nil
+	}
 	if sticky := getRoutePoolStickyCandidate(c, healthy, modelName); sticky != nil {
 		return selectRoutePoolCandidate(c, detail.Pool.ID, sticky), true, nil
-	}
-	if len(probes) > 0 && rand.Float64() < routePoolProbeRate {
-		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseLowestRoutePoolCandidate(probes)), true, nil
 	}
 	return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy)), true, nil
 }
@@ -207,6 +218,35 @@ func chooseRoutePoolHealthyCandidate(candidates []scoredRoutePoolCandidate) *sco
 	}
 	selected := explorable[rand.Intn(len(explorable))]
 	return &selected
+}
+
+// routePoolPrimaryCostCandidates keeps costly routes as an explicit fallback.
+// They are eligible only after no affordable healthy route remains.
+func routePoolPrimaryCostCandidates(candidates []scoredRoutePoolCandidate) []scoredRoutePoolCandidate {
+	primary := make([]scoredRoutePoolCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.cost <= routePoolFallbackCostThreshold {
+			primary = append(primary, candidate)
+		}
+	}
+	return primary
+}
+
+// routePoolRecoveryProbeRate lets a clearly cheaper model route demonstrate
+// recovery sooner, while retaining a stable fallback for the remaining traffic.
+func routePoolRecoveryProbeRate(healthy, probes []scoredRoutePoolCandidate) float64 {
+	if len(healthy) == 0 || len(probes) == 0 {
+		return routePoolProbeRate
+	}
+	cheapestHealthy := chooseLowestRoutePoolCandidate(healthy)
+	cheapestProbe := chooseLowestRoutePoolCandidate(probes)
+	if cheapestHealthy == nil || cheapestProbe == nil || cheapestHealthy.cost <= 0 || cheapestProbe.cost <= 0 {
+		return routePoolProbeRate
+	}
+	if cheapestProbe.cost <= cheapestHealthy.cost*(1-routePoolCostRecoveryGap) {
+		return routePoolCostRecoveryProbeRate
+	}
+	return routePoolProbeRate
 }
 
 func prepareRoutePoolAffinity(c *gin.Context, poolID int64, group, modelName string) {

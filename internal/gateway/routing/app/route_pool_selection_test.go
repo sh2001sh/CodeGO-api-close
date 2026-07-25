@@ -64,3 +64,31 @@ func TestRoutePoolReliabilityPenaltyDifferentiatesUnstableChannels(t *testing.T)
 	assert.Greater(t, routePoolReliabilityPenalty(75), routePoolReliabilityPenalty(89))
 	assert.Greater(t, routePoolReliabilityPenalty(89), routePoolReliabilityPenalty(95))
 }
+
+func TestRoutePoolRecoveryProbeRateBoostsClearlyCheaperCandidate(t *testing.T) {
+	rate := routePoolRecoveryProbeRate(
+		[]scoredRoutePoolCandidate{{cost: 0.15, score: 0.15}},
+		[]scoredRoutePoolCandidate{{cost: 0.08, score: 0.3}},
+	)
+	assert.Equal(t, routePoolCostRecoveryProbeRate, rate)
+}
+
+func TestRoutePoolRecoveryProbeRateKeepsBaseRateForSimilarCost(t *testing.T) {
+	rate := routePoolRecoveryProbeRate(
+		[]scoredRoutePoolCandidate{{cost: 0.15, score: 0.15}},
+		[]scoredRoutePoolCandidate{{cost: 0.12, score: 0.3}},
+	)
+	assert.Equal(t, routePoolProbeRate, rate)
+}
+
+func TestRoutePoolPrimaryCostCandidatesReserveCostlyFallback(t *testing.T) {
+	candidates := routePoolPrimaryCostCandidates([]scoredRoutePoolCandidate{
+		{channel: &gatewayschema.Channel{Id: 39}, cost: 0.08},
+		{channel: &gatewayschema.Channel{Id: 51}, cost: 0.15},
+		{channel: &gatewayschema.Channel{Id: 44}, cost: 0.12},
+	})
+
+	assert.Len(t, candidates, 2)
+	assert.Equal(t, 39, candidates[0].channel.Id)
+	assert.Equal(t, 44, candidates[1].channel.Id)
+}

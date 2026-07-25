@@ -33,6 +33,7 @@ import {
   RefreshCw,
   Loader2,
   RotateCcw,
+  Ban,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
@@ -56,6 +57,7 @@ import { CHANNEL_STATUS, MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   channelsQueryKeys,
   handleDeleteChannel,
+  handleDisableChannel,
   handleEnableChannel,
   handleTestChannel,
   isMultiKeyChannel,
@@ -74,6 +76,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow, upstream } = useChannels()
   const queryClient = useQueryClient()
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [disableConfirmOpen, setDisableConfirmOpen] = useState(false)
   const [recoverConfirmOpen, setRecoverConfirmOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const isMultiKey = isMultiKeyChannel(channel)
@@ -247,6 +250,21 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
+          {isSuperAdmin && channel.status === CHANNEL_STATUS.ENABLED && (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault()
+                setDisableConfirmOpen(true)
+              }}
+              className='text-destructive focus:text-destructive'
+            >
+              全局禁用
+              <DropdownMenuShortcut>
+                <Ban size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+
           <DropdownMenuSeparator />
 
           {/* Copy Channel */}
@@ -295,6 +313,18 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         handleConfirm={() => {
           handleDeleteChannel(channel.id, queryClient)
           setDeleteConfirmOpen(false)
+        }}
+      />
+      <ConfirmDialog
+        open={disableConfirmOpen}
+        onOpenChange={setDisableConfirmOpen}
+        title='全局禁用'
+        desc={`停止“${channel.name}”的所有新请求。该操作不会改变分组内自动路由开关或成本倍率。`}
+        confirmText='确认禁用'
+        destructive
+        handleConfirm={() => {
+          void handleDisableChannel(channel.id, queryClient)
+          setDisableConfirmOpen(false)
         }}
       />
       <ConfirmDialog

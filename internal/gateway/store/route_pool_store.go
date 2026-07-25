@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -20,9 +21,16 @@ type RoutePoolDetail struct {
 	Members []gatewayschema.RoutePoolMember `json:"members"`
 }
 
+const routePoolCacheTTL = 15 * time.Second
+
+type routePoolCacheEntry struct {
+	detail    *RoutePoolDetail
+	expiresAt time.Time
+}
+
 var routePoolCache struct {
 	sync.RWMutex
-	byGroup map[string]*RoutePoolDetail
+	byGroup map[string]routePoolCacheEntry
 }
 
 func ListRoutePools() ([]RoutePoolDetail, error) {
@@ -46,11 +54,12 @@ func LoadEnabledRoutePool(group string) (*RoutePoolDetail, error) {
 	if group == "" || platformdb.DB == nil {
 		return nil, nil
 	}
+	now := time.Now()
 	routePoolCache.RLock()
-	cached := routePoolCache.byGroup[group]
+	cached, found := routePoolCache.byGroup[group]
 	routePoolCache.RUnlock()
-	if cached != nil {
-		return cloneRoutePoolDetail(cached), nil
+	if found && cached.detail != nil && now.Before(cached.expiresAt) {
+		return cloneRoutePoolDetail(cached.detail), nil
 	}
 
 	var pool gatewayschema.RoutePool
@@ -68,9 +77,12 @@ func LoadEnabledRoutePool(group string) (*RoutePoolDetail, error) {
 	detail := &RoutePoolDetail{Pool: pool, Members: members}
 	routePoolCache.Lock()
 	if routePoolCache.byGroup == nil {
-		routePoolCache.byGroup = make(map[string]*RoutePoolDetail)
+		routePoolCache.byGroup = make(map[string]routePoolCacheEntry)
 	}
-	routePoolCache.byGroup[group] = detail
+	routePoolCache.byGroup[group] = routePoolCacheEntry{
+		detail:    detail,
+		expiresAt: now.Add(routePoolCacheTTL),
+	}
 	routePoolCache.Unlock()
 	return cloneRoutePoolDetail(detail), nil
 }

@@ -696,6 +696,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const cacheReadTokens = other?.cache_tokens || 0
         const cacheWrite5m = other?.cache_creation_tokens_5m || 0
         const cacheWrite1h = other?.cache_creation_tokens_1h || 0
+        const streamOutputTokens = other?.stream_output_tokens || 0
         const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
         const cacheWriteTokens = hasSplitCache
           ? cacheWrite5m + cacheWrite1h
@@ -707,6 +708,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               {promptTokens.toLocaleString()} /{' '}
               {completionTokens.toLocaleString()}
             </span>
+            {streamOutputTokens > 0 && (
+              <span className='text-muted-foreground/70 font-mono text-[11px] tabular-nums'>
+                {t('Stream')} {streamOutputTokens.toLocaleString()}
+              </span>
+            )}
             {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
               <div className='flex items-center gap-1 text-[11px]'>
                 {cacheReadTokens > 0 && (

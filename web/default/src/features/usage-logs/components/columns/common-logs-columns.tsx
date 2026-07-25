@@ -547,6 +547,27 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
         const frt = other?.frt
+        const recordedGenerationTime = other?.generation_time_ms
+        const streamOutputTokens = other?.stream_output_tokens
+        const streamOutputTime = other?.stream_output_time_ms
+        const generationTime =
+          streamOutputTime != null && streamOutputTime > 0
+            ? streamOutputTime / 1000
+            : recordedGenerationTime != null && recordedGenerationTime > 0
+            ? recordedGenerationTime / 1000
+            : log.is_stream && frt != null && frt > 0
+              ? Math.max(useTime - frt / 1000, 0)
+              : useTime
+        const throughputTokens =
+          log.is_stream && streamOutputTokens != null && streamOutputTokens > 0
+            ? streamOutputTokens
+            : log.completion_tokens
+        const tokensPerSecond =
+          generationTime > 0 &&
+          throughputTokens > 0 &&
+          (!log.is_stream || streamOutputTokens != null || !/^gpt/i.test(log.model_name))
+            ? throughputTokens / generationTime
+            : null
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null
 
@@ -605,6 +626,23 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <div className='flex items-center gap-1 text-[11px]'>
               <span className='text-muted-foreground/60'>
                 {log.is_stream ? t('Stream') : t('Non-stream')}
+                {tokensPerSecond != null && (
+                  <>
+                    {' · '}
+                    <span className='font-mono tabular-nums'>
+                      {Math.round(tokensPerSecond)}
+                    </span>
+                    {' t/s'}
+                    {streamOutputTime != null && streamOutputTime > 0 && (
+                      <>
+                        {' · '}
+                        <span className='font-mono tabular-nums'>
+                          {formatUseTime(streamOutputTime / 1000)}
+                        </span>
+                      </>
+                    )}
+                  </>
+                )}
               </span>
               {log.is_stream &&
                 other?.stream_status &&
@@ -658,7 +696,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const cacheReadTokens = other?.cache_tokens || 0
         const cacheWrite5m = other?.cache_creation_tokens_5m || 0
         const cacheWrite1h = other?.cache_creation_tokens_1h || 0
-        const streamOutputTokens = other?.stream_output_tokens || 0
         const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
         const cacheWriteTokens = hasSplitCache
           ? cacheWrite5m + cacheWrite1h
@@ -670,11 +707,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               {promptTokens.toLocaleString()} /{' '}
               {completionTokens.toLocaleString()}
             </span>
-            {streamOutputTokens > 0 && (
-              <span className='text-muted-foreground/70 font-mono text-[11px] tabular-nums'>
-                {t('Stream')} {streamOutputTokens.toLocaleString()}
-              </span>
-            )}
             {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
               <div className='flex items-center gap-1 text-[11px]'>
                 {cacheReadTokens > 0 && (

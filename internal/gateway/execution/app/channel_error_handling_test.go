@@ -64,7 +64,12 @@ func TestClassifyUpstreamFailure(t *testing.T) {
 		{
 			name:     "closed upstream stream",
 			err:      types.NewOpenAIError(errors.New("responses stream closed before response.completed"), types.ErrorCodeBadResponseStatusCode, http.StatusInternalServerError),
-			expected: upstreamFailureTransient,
+			expected: upstreamFailureIncompleteStream,
+		},
+		{
+			name:     "terminated upstream stream",
+			err:      types.NewOpenAIError(errors.New("responses stream terminated before response.completed"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway),
+			expected: upstreamFailureIncompleteStream,
 		},
 	}
 

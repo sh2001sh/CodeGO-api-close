@@ -70,6 +70,17 @@ func TestChannelHealthUsesShortCooldownBeforeLongCircuit(t *testing.T) {
 	require.WithinDuration(t, time.Now().Add(15*time.Second), state.CoolingUntil, time.Second)
 }
 
+func TestChannelHealthUsesLongerShortCooldownForIncompleteStreams(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	RecordChannelRetryableFailureWithCooldown(42, "gpt-incomplete-stream", IncompleteStreamCooldown())
+	state, found := GetChannelHealth(42, "gpt-incomplete-stream")
+	require.True(t, found)
+	require.Equal(t, ChannelHealthCooling, state.State)
+	require.WithinDuration(t, time.Now().Add(30*time.Second), state.CoolingUntil, time.Second)
+}
+
 func TestChannelHealthShortCooldownEscalatesAfterRepeatedFailures(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })

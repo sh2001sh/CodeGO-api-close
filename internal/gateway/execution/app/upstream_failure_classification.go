@@ -13,6 +13,7 @@ const (
 	upstreamFailureUnknown          upstreamFailureClass = "unknown"
 	upstreamFailureModelUnavailable upstreamFailureClass = "model_unavailable"
 	upstreamFailureAccountExhausted upstreamFailureClass = "account_exhausted"
+	upstreamFailureIncompleteStream upstreamFailureClass = "incomplete_stream"
 	upstreamFailureTransient        upstreamFailureClass = "transient"
 )
 
@@ -28,6 +29,9 @@ func classifyUpstreamFailure(err *types.NewAPIError) upstreamFailureClass {
 	if containsAny(message, "insufficient", "quota", "balance", "billing", "payment required") || err.StatusCode == http.StatusPaymentRequired {
 		return upstreamFailureAccountExhausted
 	}
+	if isIncompleteResponsesStreamMessage(message) {
+		return upstreamFailureIncompleteStream
+	}
 	if err.GetErrorCode() == types.ErrorCodeChannelResponseTimeExceeded ||
 		err.StatusCode == http.StatusRequestTimeout ||
 		err.StatusCode == http.StatusTooManyRequests ||
@@ -38,6 +42,16 @@ func classifyUpstreamFailure(err *types.NewAPIError) upstreamFailureClass {
 		return upstreamFailureTransient
 	}
 	return upstreamFailureUnknown
+}
+
+// isIncompleteResponsesStreamMessage identifies a Responses API stream that
+// ended after headers or deltas were sent but before its terminal event.
+func isIncompleteResponsesStreamMessage(message string) bool {
+	return containsAny(message,
+		"stream closed before response.completed",
+		"stream ended before response.completed",
+		"stream terminated before response.completed",
+	)
 }
 
 func containsAny(message string, terms ...string) bool {
@@ -74,7 +88,8 @@ func isRetryableChannelFailure(err *types.NewAPIError) bool {
 	if err == nil || types.IsSkipRetryError(err) {
 		return false
 	}
-	if classifyUpstreamFailure(err) == upstreamFailureTransient {
+	failureClass := classifyUpstreamFailure(err)
+	if failureClass == upstreamFailureIncompleteStream || failureClass == upstreamFailureTransient {
 		return true
 	}
 	return types.IsChannelError(err) || err.StatusCode == http.StatusTooManyRequests || err.StatusCode >= http.StatusInternalServerError

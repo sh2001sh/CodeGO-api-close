@@ -45,7 +45,13 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
 	}
-	if isRetryableChannelFailure(err) && !modelScopedFailure {
+	// A partial Responses stream must never be retried in the current request:
+	// clients may have already received output. It still needs model-level
+	// cooling so subsequent requests choose another healthy route.
+	if failureClass == upstreamFailureIncompleteStream {
+		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, modelName, gatewayruntime.IncompleteStreamCooldown())
+		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
 		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, c.GetString("original_model"), gatewayruntime.RetryableFailureCooldown(err.StatusCode))
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}

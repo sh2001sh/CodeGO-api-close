@@ -16,20 +16,21 @@ const (
 	ChannelHealthDegraded = "degraded"
 	ChannelHealthCooling  = "cooling"
 
-	channelHealthFailureThreshold  = 5
-	channelHealthShortCooldown     = 15 * time.Second
-	channelHealthRateLimitCooldown = 30 * time.Second
-	channelHealthCooldownDuration  = 2 * time.Minute
-	channelHealthTTL               = 20 * time.Minute
-	channelModelUnavailableTTL     = 5 * time.Minute
-	channelModelUpstreamFailureTTL = 2 * time.Minute
-	channelHealthShortWindow       = 2 * time.Minute
-	channelHealthShortMinRequests  = 5
-	channelHealthShortMaxSuccess   = 40.0
-	channelHealthSlowTTFTSamples   = 3
-	channelHealthSlowTTFTThreshold = 12 * time.Second
-	channelHealthTTFTWindow        = 20
-	channelHealthSlowTTFTP95       = 15 * time.Second
+	channelHealthFailureThreshold         = 5
+	channelHealthShortCooldown            = 15 * time.Second
+	channelHealthIncompleteStreamCooldown = 30 * time.Second
+	channelHealthRateLimitCooldown        = 30 * time.Second
+	channelHealthCooldownDuration         = 2 * time.Minute
+	channelHealthTTL                      = 20 * time.Minute
+	channelModelUnavailableTTL            = 5 * time.Minute
+	channelModelUpstreamFailureTTL        = 2 * time.Minute
+	channelHealthShortWindow              = 2 * time.Minute
+	channelHealthShortMinRequests         = 5
+	channelHealthShortMaxSuccess          = 40.0
+	channelHealthSlowTTFTSamples          = 3
+	channelHealthSlowTTFTThreshold        = 12 * time.Second
+	channelHealthTTFTWindow               = 20
+	channelHealthSlowTTFTP95              = 15 * time.Second
 )
 
 // ChannelHealth captures the shared routing health for one channel/model pair.
@@ -230,6 +231,13 @@ func RetryableFailureCooldown(statusCode int) time.Duration {
 	default:
 		return channelHealthShortCooldown
 	}
+}
+
+// IncompleteStreamCooldown is longer than a generic transient cooldown because
+// a stream missing its terminal event indicates the upstream stream relay is
+// currently unstable. It remains short enough to permit prompt recovery.
+func IncompleteStreamCooldown() time.Duration {
+	return channelHealthIncompleteStreamCooldown
 }
 
 func shouldCoolForShortTermFailureRate(state ChannelHealth) bool {

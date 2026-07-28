@@ -60,7 +60,7 @@ func getOrCreateSubscriptionResetOpportunityAccountTx(tx *gorm.DB, userID int) (
 	return account, nil
 }
 
-func countSuccessfulPaidPurchasesTx(tx *gorm.DB, userID int) (int64, error) {
+func countSuccessfulPaidPurchasesTx(tx *gorm.DB, userID int, excludedSubscriptionTradeNo string) (int64, error) {
 	if tx == nil {
 		tx = platformdb.DB
 	}
@@ -68,9 +68,12 @@ func countSuccessfulPaidPurchasesTx(tx *gorm.DB, userID int) (int64, error) {
 		return 0, nil
 	}
 	var subscriptionCount int64
-	if err := tx.Model(&commerceschema.SubscriptionOrder{}).
-		Where("user_id = ? AND status = ? AND money > 0", userID, constant.TopUpStatusSuccess).
-		Count(&subscriptionCount).Error; err != nil {
+	subscriptionQuery := tx.Model(&commerceschema.SubscriptionOrder{}).
+		Where("user_id = ? AND status = ? AND money > 0", userID, constant.TopUpStatusSuccess)
+	if excludedSubscriptionTradeNo = strings.TrimSpace(excludedSubscriptionTradeNo); excludedSubscriptionTradeNo != "" {
+		subscriptionQuery = subscriptionQuery.Where("trade_no <> ?", excludedSubscriptionTradeNo)
+	}
+	if err := subscriptionQuery.Count(&subscriptionCount).Error; err != nil {
 		return 0, err
 	}
 	var blindBoxCount int64
@@ -114,7 +117,7 @@ func AwardReferralSubscriptionResetOpportunityTx(tx *gorm.DB, inviteeID int, pur
 	if err != nil || inviterID <= 0 {
 		return err
 	}
-	previousPaidCount, err := countSuccessfulPaidPurchasesTx(tx, inviteeID)
+	previousPaidCount, err := countSuccessfulPaidPurchasesTx(tx, inviteeID, orderSourceID)
 	if err != nil {
 		return err
 	}

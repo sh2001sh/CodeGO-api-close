@@ -439,6 +439,9 @@ func BuildDesktopImportConfigDeepLink(userID int, req DesktopImportCreateRequest
 		params.Set("tokenId", strconv.Itoa(req.TokenID))
 	} else {
 		params.Set("apiKey", payload.APIKey)
+		params.Set("usageEnabled", "true")
+		params.Set("usageScript", platformtext.EncodeBase64(ccSwitchBalanceUsageScript))
+		params.Set("usageAutoInterval", "10")
 	}
 	if payload.Model != "" {
 		params.Set("model", payload.Model)
@@ -470,6 +473,37 @@ func BuildDesktopImportConfigDeepLink(userID int, req DesktopImportCreateRequest
 		Provider:  payload.Name,
 	}, nil
 }
+
+const ccSwitchBalanceUsageScript = `({
+  request: {
+    url: "{{baseUrl}}/dashboard/balance",
+    method: "GET",
+    headers: {
+      "Authorization": "Bearer {{apiKey}}"
+    }
+  },
+  extractor: function(response) {
+    if (!response.success || !response.data) {
+      return {
+        isValid: false,
+        invalidMessage: response.message || "Balance query failed"
+      };
+    }
+    var balance = response.data;
+    var subscriptionText = (balance.subscriptions || []).map(function(item) {
+      return item.name + ": $" + Number(item.remaining_usd || 0).toFixed(2);
+    }).join(" | ");
+    return {
+      isValid: true,
+      planName: balance.subscription_available_usd > 0 ? "Code Go wallet + plans" : "Code Go wallet",
+      remaining: Number(balance.available_usd || 0),
+      total: Number(balance.account_available_usd || 0),
+      used: 0,
+      unit: balance.currency || "USD",
+      extra: subscriptionText
+    };
+  }
+})`
 
 // ResolveDesktopImportConfig resolves and consumes a one-time desktop import code.
 func ResolveDesktopImportConfig(code string) (*DesktopImportConfigPayload, error) {

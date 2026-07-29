@@ -70,7 +70,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	adaptor.Init(info)
 
 	var requestBody io.Reader
-	if gatewaystore.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
+	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
+		body, size, err := buildRemoteCompactionV2Body(c, responsesReq.Model, request.Model)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		info.UpstreamRequestBodySize = size
+		requestBody = body
+	} else if gatewaystore.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
 		storage, err := platformhttpx.GetBodyStorage(c)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())

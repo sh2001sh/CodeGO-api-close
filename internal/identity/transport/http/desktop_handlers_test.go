@@ -729,6 +729,16 @@ func TestCreateCCSwitchImportUsesOfficialDirectParameterContract(t *testing.T) {
 	if params.Get("apiKey") != token.GetFullKey() {
 		t.Fatalf("expected direct API key parameter")
 	}
+	if params.Get("usageEnabled") != "true" || params.Get("usageAutoInterval") != "10" {
+		t.Fatalf("expected enabled CC Switch balance query configuration")
+	}
+	usageScript, err := base64.StdEncoding.DecodeString(params.Get("usageScript"))
+	if err != nil {
+		t.Fatalf("failed to decode CC Switch balance usage script: %v", err)
+	}
+	if !strings.Contains(string(usageScript), "{{baseUrl}}/dashboard/balance") || !strings.Contains(string(usageScript), "{{apiKey}}") {
+		t.Fatalf("unexpected CC Switch balance usage script: %s", usageScript)
+	}
 	if params.Get("endpoint") != "https://shu26.cfd/v1" {
 		t.Fatalf("unexpected endpoint %q", params.Get("endpoint"))
 	}
@@ -743,6 +753,62 @@ func TestCreateCCSwitchImportUsesOfficialDirectParameterContract(t *testing.T) {
 	}
 	if created.Code != "" || created.ConfigURL != "" || created.ExpiresIn != 0 {
 		t.Fatalf("CC Switch direct import must not create a one-time config: %+v", created)
+	}
+}
+
+func TestGetTokenAccountBalanceAppliesTokenLimit(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	user := &identityschema.User{
+		Id:       1,
+		Username: "balance-user",
+		Password: "password123",
+		Role:     constant.RoleCommonUser,
+		Status:   constant.UserStatusEnabled,
+		Group:    "default",
+		Quota:    int(platformruntime.QuotaPerUnit * 3),
+	}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	token := &identityschema.Token{
+		UserId:         user.Id,
+		Name:           "limited-balance-key",
+		Key:            "balancekey1234567890",
+		Status:         constant.TokenStatusEnabled,
+		CreatedTime:    1,
+		AccessedTime:   1,
+		ExpiredTime:    -1,
+		RemainQuota:    int(platformruntime.QuotaPerUnit * 2),
+		UnlimitedQuota: false,
+		Group:          "default",
+	}
+	if err := db.Create(token).Error; err != nil {
+		t.Fatalf("failed to seed token: %v", err)
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/v1/dashboard/balance", nil, user.Id)
+	ctx.Set("token_id", token.Id)
+	GetTokenAccountBalance(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected balance query success, got %s", response.Message)
+	}
+	var payload struct {
+		AvailableUSD        float64  `json:"available_usd"`
+		AccountAvailableUSD float64  `json:"account_available_usd"`
+		WalletAvailableUSD  float64  `json:"wallet_available_usd"`
+		TokenAvailableUSD   *float64 `json:"token_available_usd"`
+		TokenUnlimited      bool     `json:"token_unlimited"`
+	}
+	if err := platformencoding.Unmarshal(response.Data, &payload); err != nil {
+		t.Fatalf("failed to decode balance payload: %v", err)
+	}
+	if payload.AccountAvailableUSD != 3 || payload.WalletAvailableUSD != 3 || payload.AvailableUSD != 2 {
+		t.Fatalf("unexpected balance payload: %+v", payload)
+	}
+	if payload.TokenAvailableUSD == nil || *payload.TokenAvailableUSD != 2 || payload.TokenUnlimited {
+		t.Fatalf("expected finite token limit in payload: %+v", payload)
 	}
 }
 

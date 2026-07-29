@@ -39,6 +39,9 @@ func SetupAPIRequestHeader(info *relaycommon.RelayInfo, c *gin.Context, req *htt
 	}
 	req.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 	req.Set("Accept", c.Request.Header.Get("Accept"))
+	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
+		req.Set("X-Codex-Beta-Features", c.Request.Header.Get("X-Codex-Beta-Features"))
+	}
 	if info.IsStream && c.Request.Header.Get("Accept") == "" {
 		req.Set("Accept", "text/event-stream")
 	}

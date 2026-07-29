@@ -154,6 +154,16 @@ func GetTokenUsage(c *gin.Context) {
 	})
 }
 
+// GetTokenAccountBalance returns wallet and subscription balance for one valid API key.
+func GetTokenAccountBalance(c *gin.Context) {
+	payload, err := identityapp.BuildTokenBalanceSummary(c.GetInt("id"), c.GetInt("token_id"))
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, payload)
+}
+
 func AddToken(c *gin.Context) {
 	token := identityschema.Token{}
 	err := c.ShouldBindJSON(&token)

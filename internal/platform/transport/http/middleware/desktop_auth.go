@@ -10,7 +10,6 @@ import (
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	"gorm.io/gorm"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -55,8 +54,16 @@ func DesktopAuth() func(c *gin.Context) {
 			c.Abort()
 			return
 		}
-		apiUserID, err := strconv.Atoi(apiUserIDStr)
-		if err != nil || apiUserID != device.UserID {
+		userIdentifierMatches, err := matchesAuthenticatedNewAPIUser(apiUserIDStr, device.UserID)
+		if err != nil && !errors.Is(err, errInvalidNewAPIUserIdentifier) {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": httpapi.TranslateMessage(c, i18n.MsgDatabaseError),
+			})
+			c.Abort()
+			return
+		}
+		if errors.Is(err, errInvalidNewAPIUserIdentifier) || !userIdentifierMatches {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"success": false,
 				"message": httpapi.TranslateMessage(c, i18n.MsgAuthUserIdMismatch),

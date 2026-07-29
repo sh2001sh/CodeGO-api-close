@@ -23,7 +23,6 @@ import (
 	"gorm.io/gorm"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -167,17 +166,25 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	apiUserId, err := strconv.Atoi(apiUserIdStr)
-	if err != nil {
+	userIdentifierMatches, err := matchesAuthenticatedNewAPIUser(apiUserIdStr, currentUserID)
+	if errors.Is(err, errInvalidNewAPIUserIdentifier) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": httpapi.TranslateMessage(c, i18n.MsgAuthUserIdFormatError),
 		})
 		c.Abort()
 		return
-
 	}
-	if currentUserID != apiUserId {
+	if err != nil {
+		platformobservability.SysLog("authHelper failed to resolve New-Api-User: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": httpapi.TranslateMessage(c, i18n.MsgDatabaseError),
+		})
+		c.Abort()
+		return
+	}
+	if !userIdentifierMatches {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": httpapi.TranslateMessage(c, i18n.MsgAuthUserIdMismatch),

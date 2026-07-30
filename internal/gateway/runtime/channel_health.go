@@ -20,6 +20,7 @@ const (
 	channelHealthShortCooldown            = 15 * time.Second
 	channelHealthIncompleteStreamCooldown = 30 * time.Second
 	channelHealthRateLimitCooldown        = 30 * time.Second
+	channelHealthLongContextTimeout       = 2 * time.Minute
 	channelHealthCooldownDuration         = 2 * time.Minute
 	channelHealthTTL                      = 20 * time.Minute
 	channelModelUnavailableTTL            = 5 * time.Minute
@@ -238,6 +239,12 @@ func RetryableFailureCooldown(statusCode int) time.Duration {
 // currently unstable. It remains short enough to permit prompt recovery.
 func IncompleteStreamCooldown() time.Duration {
 	return channelHealthIncompleteStreamCooldown
+}
+
+// LongContextTimeoutCooldown avoids repeatedly selecting an upstream that did
+// not produce a first byte for a large GPT context within its extended budget.
+func LongContextTimeoutCooldown() time.Duration {
+	return channelHealthLongContextTimeout
 }
 
 func shouldCoolForShortTermFailureRate(state ChannelHealth) bool {

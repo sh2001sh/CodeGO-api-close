@@ -4,7 +4,10 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/gin-gonic/gin"
+	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
@@ -22,6 +25,16 @@ func TestIsModelUnavailableError(t *testing.T) {
 	require.False(t, IsModelUnavailableError(types.NewOpenAIError(
 		errors.New("resource not found"), types.ErrorCodeBadResponseStatusCode, http.StatusNotFound,
 	)))
+}
+
+func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	timeout := types.NewErrorWithStatusCode(errors.New("timeout awaiting response headers"), types.ErrorCodeChannelResponseTimeExceeded, http.StatusGatewayTimeout)
+
+	require.Equal(t, 2*time.Minute, retryableFailureCooldown(context, timeout))
+	require.Equal(t, 30*time.Second, retryableFailureCooldown(nil, timeout))
 }
 
 func TestIsModelScopedUpstreamFailure(t *testing.T) {

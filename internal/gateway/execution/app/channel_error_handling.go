@@ -52,7 +52,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, modelName, gatewayruntime.IncompleteStreamCooldown())
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
-		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, c.GetString("original_model"), gatewayruntime.RetryableFailureCooldown(err.StatusCode))
+		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, c.GetString("original_model"), retryableFailureCooldown(c, err))
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
 
@@ -106,6 +106,16 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			other,
 		)
 	}
+}
+
+func retryableFailureCooldown(c *gin.Context, err *types.NewAPIError) time.Duration {
+	if gatewayruntime.IsLongContextRequest(c) && err != nil && err.GetErrorCode() == types.ErrorCodeChannelResponseTimeExceeded {
+		return gatewayruntime.LongContextTimeoutCooldown()
+	}
+	if err == nil {
+		return gatewayruntime.RetryableFailureCooldown(0)
+	}
+	return gatewayruntime.RetryableFailureCooldown(err.StatusCode)
 }
 
 func coolModelScopedUpstreamFailure(channelID int, modelName string, requestID string, err *types.NewAPIError) bool {

@@ -63,6 +63,33 @@ func TestResponseHeaderTimeoutStopsStalledUpstreamBeforeStreamDelivery(t *testin
 	require.Less(t, time.Since(startedAt), 1500*time.Millisecond)
 }
 
+func TestRequestSpecificResponseHeaderTimeoutUsesDedicatedSharedClient(t *testing.T) {
+	previousHeaderTimeout := platformconfig.RelayResponseHeaderTimeout
+	previousRelayTimeout := platformconfig.RelayTimeout
+	t.Cleanup(func() {
+		platformconfig.RelayResponseHeaderTimeout = previousHeaderTimeout
+		platformconfig.RelayTimeout = previousRelayTimeout
+		ResetProxyClientCache()
+		InitHTTPClient()
+	})
+
+	platformconfig.RelayResponseHeaderTimeout = 45
+	platformconfig.RelayTimeout = 0
+	ResetProxyClientCache()
+	InitHTTPClient()
+
+	standard := GetHTTPClientWithResponseHeaderTimeout(45 * time.Second)
+	adaptive := GetHTTPClientWithResponseHeaderTimeout(90 * time.Second)
+	require.Same(t, GetHTTPClient(), standard)
+	require.NotSame(t, standard, adaptive)
+	require.Same(t, adaptive, GetHTTPClientWithResponseHeaderTimeout(90*time.Second))
+
+	transport, ok := adaptive.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.Equal(t, 90*time.Second, transport.ResponseHeaderTimeout)
+	require.Equal(t, 90*time.Second, transport.TLSHandshakeTimeout)
+}
+
 func assertClientResponseHeaderTimeout(t *testing.T, client *http.Client) {
 	t.Helper()
 	require.NotNil(t, client)

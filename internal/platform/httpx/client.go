@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	httpClient      *http.Client
-	proxyClientLock sync.Mutex
-	proxyClients    = make(map[string]*http.Client)
+	httpClient                    *http.Client
+	proxyClientLock               sync.Mutex
+	proxyClients                  = make(map[string]*http.Client)
+	responseHeaderTimeoutClients  = make(map[time.Duration]*http.Client)
+	responseHeaderTimeoutClientMu sync.Mutex
 )
 
 func relayResponseHeaderTimeout() time.Duration {
@@ -29,6 +31,10 @@ func relayResponseHeaderTimeout() time.Duration {
 }
 
 func newOutboundTransport(proxyFunc func(*http.Request) (*url.URL, error), dialContext func(context.Context, string, string) (net.Conn, error)) *http.Transport {
+	return newOutboundTransportWithResponseHeaderTimeout(proxyFunc, dialContext, relayResponseHeaderTimeout())
+}
+
+func newOutboundTransportWithResponseHeaderTimeout(proxyFunc func(*http.Request) (*url.URL, error), dialContext func(context.Context, string, string) (net.Conn, error), responseHeaderTimeout time.Duration) *http.Transport {
 	transport := &http.Transport{
 		MaxIdleConns:        platformconfig.RelayMaxIdleConns,
 		MaxIdleConnsPerHost: platformconfig.RelayMaxIdleConnsPerHost,
@@ -36,17 +42,25 @@ func newOutboundTransport(proxyFunc func(*http.Request) (*url.URL, error), dialC
 		Proxy:               proxyFunc,
 		DialContext:         dialContext,
 	}
-	if timeout := relayResponseHeaderTimeout(); timeout > 0 {
-		transport.ResponseHeaderTimeout = timeout
-		transport.TLSHandshakeTimeout = timeout
+	if responseHeaderTimeout > 0 {
+		transport.ResponseHeaderTimeout = responseHeaderTimeout
+		transport.TLSHandshakeTimeout = responseHeaderTimeout
 		if transport.DialContext == nil {
-			transport.DialContext = (&net.Dialer{Timeout: timeout}).DialContext
+			transport.DialContext = (&net.Dialer{Timeout: responseHeaderTimeout}).DialContext
 		}
 	}
 	if platformconfig.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = platformconfig.InsecureTLSConfig
 	}
 	return transport
+}
+
+func newOutboundHTTPClient(transport *http.Transport) *http.Client {
+	client := &http.Client{Transport: transport, CheckRedirect: checkRedirect}
+	if platformconfig.RelayTimeout > 0 {
+		client.Timeout = time.Duration(platformconfig.RelayTimeout) * time.Second
+	}
+	return client
 }
 
 func checkRedirect(req *http.Request, via []*http.Request) error {
@@ -63,21 +77,10 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 
 // InitHTTPClient initializes the shared outbound HTTP client.
 func InitHTTPClient() {
-	transport := newOutboundTransport(http.ProxyFromEnvironment, nil)
-
-	if platformconfig.RelayTimeout == 0 {
-		httpClient = &http.Client{
-			Transport:     transport,
-			CheckRedirect: checkRedirect,
-		}
-		return
-	}
-
-	httpClient = &http.Client{
-		Transport:     transport,
-		Timeout:       time.Duration(platformconfig.RelayTimeout) * time.Second,
-		CheckRedirect: checkRedirect,
-	}
+	responseHeaderTimeoutClientMu.Lock()
+	responseHeaderTimeoutClients = make(map[time.Duration]*http.Client)
+	responseHeaderTimeoutClientMu.Unlock()
+	httpClient = newOutboundHTTPClient(newOutboundTransport(http.ProxyFromEnvironment, nil))
 }
 
 // GetHTTPClient returns the shared outbound HTTP client.
@@ -85,10 +88,33 @@ func GetHTTPClient() *http.Client {
 	return httpClient
 }
 
+func sharedHTTPClientOrDefault() *http.Client {
+	if client := GetHTTPClient(); client != nil {
+		return client
+	}
+	return http.DefaultClient
+}
+
+// GetHTTPClientWithResponseHeaderTimeout returns a shared client for a
+// request-specific first-byte budget. The global client remains unchanged.
+func GetHTTPClientWithResponseHeaderTimeout(responseHeaderTimeout time.Duration) *http.Client {
+	if responseHeaderTimeout <= relayResponseHeaderTimeout() {
+		return sharedHTTPClientOrDefault()
+	}
+	responseHeaderTimeoutClientMu.Lock()
+	defer responseHeaderTimeoutClientMu.Unlock()
+	if client := responseHeaderTimeoutClients[responseHeaderTimeout]; client != nil {
+		return client
+	}
+	client := newOutboundHTTPClient(newOutboundTransportWithResponseHeaderTimeout(http.ProxyFromEnvironment, nil, responseHeaderTimeout))
+	responseHeaderTimeoutClients[responseHeaderTimeout] = client
+	return client
+}
+
 // GetHTTPClientWithProxy returns the shared client or a proxy-enabled client.
 func GetHTTPClientWithProxy(proxyURL string) (*http.Client, error) {
 	if proxyURL == "" {
-		return GetHTTPClient(), nil
+		return sharedHTTPClientOrDefault(), nil
 	}
 	return NewProxyHTTPClient(proxyURL)
 }
@@ -103,19 +129,38 @@ func ResetProxyClientCache() {
 		}
 	}
 	proxyClients = make(map[string]*http.Client)
+	responseHeaderTimeoutClientMu.Lock()
+	for _, client := range responseHeaderTimeoutClients {
+		if transport, ok := client.Transport.(*http.Transport); ok && transport != nil {
+			transport.CloseIdleConnections()
+		}
+	}
+	responseHeaderTimeoutClients = make(map[time.Duration]*http.Client)
+	responseHeaderTimeoutClientMu.Unlock()
 }
 
 // NewProxyHTTPClient creates or reuses a proxy-specific HTTP client.
 func NewProxyHTTPClient(proxyURL string) (*http.Client, error) {
+	return newProxyHTTPClient(proxyURL, relayResponseHeaderTimeout())
+}
+
+// NewProxyHTTPClientWithResponseHeaderTimeout applies a request-specific
+// first-byte budget while retaining proxy connection reuse.
+func NewProxyHTTPClientWithResponseHeaderTimeout(proxyURL string, responseHeaderTimeout time.Duration) (*http.Client, error) {
+	if responseHeaderTimeout <= relayResponseHeaderTimeout() {
+		return NewProxyHTTPClient(proxyURL)
+	}
+	return newProxyHTTPClient(proxyURL, responseHeaderTimeout)
+}
+
+func newProxyHTTPClient(proxyURL string, responseHeaderTimeout time.Duration) (*http.Client, error) {
 	if proxyURL == "" {
-		if client := GetHTTPClient(); client != nil {
-			return client, nil
-		}
-		return http.DefaultClient, nil
+		return GetHTTPClientWithResponseHeaderTimeout(responseHeaderTimeout), nil
 	}
 
+	cacheKey := proxyURL + "\x00" + responseHeaderTimeout.String()
 	proxyClientLock.Lock()
-	if client, ok := proxyClients[proxyURL]; ok {
+	if client, ok := proxyClients[cacheKey]; ok {
 		proxyClientLock.Unlock()
 		return client, nil
 	}
@@ -128,14 +173,10 @@ func NewProxyHTTPClient(proxyURL string) (*http.Client, error) {
 
 	switch parsedURL.Scheme {
 	case "http", "https":
-		transport := newOutboundTransport(http.ProxyURL(parsedURL), nil)
-		client := &http.Client{
-			Transport:     transport,
-			CheckRedirect: checkRedirect,
-		}
-		client.Timeout = time.Duration(platformconfig.RelayTimeout) * time.Second
+		transport := newOutboundTransportWithResponseHeaderTimeout(http.ProxyURL(parsedURL), nil, responseHeaderTimeout)
+		client := newOutboundHTTPClient(transport)
 		proxyClientLock.Lock()
-		proxyClients[proxyURL] = client
+		proxyClients[cacheKey] = client
 		proxyClientLock.Unlock()
 		return client, nil
 
@@ -156,14 +197,13 @@ func NewProxyHTTPClient(proxyURL string) (*http.Client, error) {
 			return nil, err
 		}
 
-		transport := newOutboundTransport(nil, func(ctx context.Context, network, addr string) (net.Conn, error) {
+		transport := newOutboundTransportWithResponseHeaderTimeout(nil, func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return dialer.Dial(network, addr)
-		})
+		}, responseHeaderTimeout)
 
-		client := &http.Client{Transport: transport, CheckRedirect: checkRedirect}
-		client.Timeout = time.Duration(platformconfig.RelayTimeout) * time.Second
+		client := newOutboundHTTPClient(transport)
 		proxyClientLock.Lock()
-		proxyClients[proxyURL] = client
+		proxyClients[cacheKey] = client
 		proxyClientLock.Unlock()
 		return client, nil
 

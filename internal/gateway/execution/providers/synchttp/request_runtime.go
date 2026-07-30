@@ -120,13 +120,14 @@ func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
 func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (*http.Response, error) {
 	var client *http.Client
 	var err error
+	responseHeaderTimeout := responseHeaderTimeoutForRequest(info)
 	if info.ChannelSetting.Proxy != "" {
-		client, err = platformhttpx.NewProxyHTTPClient(info.ChannelSetting.Proxy)
+		client, err = platformhttpx.NewProxyHTTPClientWithResponseHeaderTimeout(info.ChannelSetting.Proxy, responseHeaderTimeout)
 		if err != nil {
 			return nil, fmt.Errorf("new proxy http client failed: %w", err)
 		}
 	} else {
-		client = platformhttpx.GetHTTPClient()
+		client = platformhttpx.GetHTTPClientWithResponseHeaderTimeout(responseHeaderTimeout)
 	}
 
 	var stopPinger context.CancelFunc
@@ -168,6 +169,24 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	_ = req.Body.Close()
 	_ = c.Request.Body.Close()
 	return resp, nil
+}
+
+func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration {
+	baseTimeout := time.Duration(platformconfig.RelayResponseHeaderTimeout) * time.Second
+	if baseTimeout <= 0 || info == nil || !relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
+		return baseTimeout
+	}
+	if info.GetEstimatePromptTokens() >= relaycommon.VeryLongContextPromptTokens {
+		return maxDuration(baseTimeout, 90*time.Second)
+	}
+	return maxDuration(baseTimeout, 75*time.Second)
+}
+
+func maxDuration(left, right time.Duration) time.Duration {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func isUpstreamResponseTimeout(err error) bool {

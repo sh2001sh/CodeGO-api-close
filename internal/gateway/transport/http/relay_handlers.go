@@ -215,6 +215,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 	relayInfo.SetEstimatePromptTokens(tokens)
+	relaycommon.MarkLongContextRequest(c, relayInfo.OriginModelName, tokens)
 
 	priceData, err := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
 	if err != nil {

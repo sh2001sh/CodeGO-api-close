@@ -132,7 +132,8 @@ export function ConversionHistory(props: {
 }
 
 export function formatInputAmount(value: number) {
-  return value.toFixed(2).replace(/\.00$/, '')
+  if (!Number.isFinite(value)) return ''
+  return value.toFixed(6).replace(/\.?0+$/, '')
 }
 
 export function formatUSD(value: number) {

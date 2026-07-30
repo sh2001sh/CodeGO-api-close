@@ -49,6 +49,9 @@ export function WalletQuotaConversionCard(props: {
   const [direction, setDirection] =
     useState<WalletQuotaConversionDirection>(STANDARD_TO_CLAUDE)
   const [amount, setAmount] = useState('')
+  const [selectedMaxSourceQuota, setSelectedMaxSourceQuota] = useState<
+    number | null
+  >(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -90,8 +93,10 @@ export function WalletQuotaConversionCard(props: {
     direction === STANDARD_TO_CLAUDE
       ? sourceBalance - (sourceBalance % standardPerClaude)
       : sourceBalance
-  const sourceAmountUSD = Number(amount || 0)
-  const sourceQuota = Math.round(sourceAmountUSD * quotaPerUSD)
+  const enteredSourceAmountUSD = Number(amount || 0)
+  const sourceQuota =
+    selectedMaxSourceQuota ?? Math.round(enteredSourceAmountUSD * quotaPerUSD)
+  const sourceAmountUSD = sourceQuota / quotaPerUSD
   const targetQuota =
     direction === STANDARD_TO_CLAUDE
       ? Math.floor(sourceQuota / standardPerClaude)
@@ -101,7 +106,7 @@ export function WalletQuotaConversionCard(props: {
   const canSubmit =
     !loading &&
     !submitting &&
-    Number.isFinite(sourceAmountUSD) &&
+    Number.isFinite(enteredSourceAmountUSD) &&
     sourceAmountUSD > 0 &&
     sourceQuota <= convertibleSourceBalance &&
     targetQuota > 0 &&
@@ -121,6 +126,7 @@ export function WalletQuotaConversionCard(props: {
   const switchDirection = (next: WalletQuotaConversionDirection) => {
     setDirection(next)
     setAmount('')
+    setSelectedMaxSourceQuota(null)
   }
 
   const submit = async () => {
@@ -137,6 +143,7 @@ export function WalletQuotaConversionCard(props: {
       }
       toast.success(t('Quota conversion completed.'))
       setAmount('')
+      setSelectedMaxSourceQuota(null)
       setConfirmOpen(false)
       await Promise.all([loadOverview(), props.onUserRefresh?.()])
     } catch (reason) {
@@ -222,8 +229,14 @@ export function WalletQuotaConversionCard(props: {
               balance={sourceBalance / quotaPerUSD}
               input={amount}
               max={maxAmountUSD}
-              onInput={setAmount}
-              onMax={() => setAmount(formatInputAmount(maxAmountUSD))}
+              onInput={(value) => {
+                setAmount(value)
+                setSelectedMaxSourceQuota(null)
+              }}
+              onMax={() => {
+                setAmount(formatInputAmount(maxAmountUSD))
+                setSelectedMaxSourceQuota(convertibleSourceBalance)
+              }}
             />
             <button
               type='button'

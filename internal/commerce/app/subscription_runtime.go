@@ -174,8 +174,10 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 		if err := awardReferralFirstPurchaseBonusTx(tx, order.UserId, purchaseType, "subscription_order", order.TradeNo); err != nil {
 			return err
 		}
-		if err := AwardReferralSubscriptionResetOpportunityTx(tx, order.UserId, purchaseType, "subscription_order", order.TradeNo); err != nil {
-			return err
+		if commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) == commerceschema.SubscriptionPlanTypeMonthly {
+			if err := AwardReferralSubscriptionResetOpportunityTx(tx, order.UserId, commercedomain.ReferralPurchaseTypeMonthCard, "subscription_order", order.TradeNo); err != nil {
+				return err
+			}
 		}
 		if err := ConsumeReservedBlindBoxPropByTradeNoTx(tx, tradeNo, commerceschema.BlindBoxPropOrderTypeSubscription); err != nil {
 			return err

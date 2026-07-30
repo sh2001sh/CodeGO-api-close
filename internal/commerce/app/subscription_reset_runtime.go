@@ -60,29 +60,25 @@ func getOrCreateSubscriptionResetOpportunityAccountTx(tx *gorm.DB, userID int) (
 	return account, nil
 }
 
-func countSuccessfulPaidPurchasesTx(tx *gorm.DB, userID int, excludedSubscriptionTradeNo string) (int64, error) {
+func countSuccessfulPaidMonthCardPurchasesTx(tx *gorm.DB, userID int, excludedSubscriptionTradeNo string) (int64, error) {
 	if tx == nil {
 		tx = platformdb.DB
 	}
 	if userID <= 0 {
 		return 0, nil
 	}
-	var subscriptionCount int64
-	subscriptionQuery := tx.Model(&commerceschema.SubscriptionOrder{}).
-		Where("user_id = ? AND status = ? AND money > 0", userID, constant.TopUpStatusSuccess)
+	var monthCardCount int64
+	monthCardQuery := tx.Model(&commerceschema.SubscriptionOrder{}).
+		Joins("JOIN subscription_plans ON subscription_plans.id = subscription_orders.plan_id").
+		Where("subscription_orders.user_id = ? AND subscription_orders.status = ? AND subscription_orders.money > 0", userID, constant.TopUpStatusSuccess).
+		Where("subscription_plans.plan_type = ?", commerceschema.SubscriptionPlanTypeMonthly)
 	if excludedSubscriptionTradeNo = strings.TrimSpace(excludedSubscriptionTradeNo); excludedSubscriptionTradeNo != "" {
-		subscriptionQuery = subscriptionQuery.Where("trade_no <> ?", excludedSubscriptionTradeNo)
+		monthCardQuery = monthCardQuery.Where("subscription_orders.trade_no <> ?", excludedSubscriptionTradeNo)
 	}
-	if err := subscriptionQuery.Count(&subscriptionCount).Error; err != nil {
+	if err := monthCardQuery.Count(&monthCardCount).Error; err != nil {
 		return 0, err
 	}
-	var blindBoxCount int64
-	if err := tx.Model(&commerceschema.BlindBoxOrder{}).
-		Where("user_id = ? AND status = ? AND money > 0", userID, constant.TopUpStatusSuccess).
-		Count(&blindBoxCount).Error; err != nil {
-		return 0, err
-	}
-	return subscriptionCount + blindBoxCount, nil
+	return monthCardCount, nil
 }
 
 // GetUserSubscriptionResetOpportunity returns the current reset-opportunity summary.
@@ -117,11 +113,11 @@ func AwardReferralSubscriptionResetOpportunityTx(tx *gorm.DB, inviteeID int, pur
 	if err != nil || inviterID <= 0 {
 		return err
 	}
-	previousPaidCount, err := countSuccessfulPaidPurchasesTx(tx, inviteeID, orderSourceID)
+	previousMonthCardCount, err := countSuccessfulPaidMonthCardPurchasesTx(tx, inviteeID, orderSourceID)
 	if err != nil {
 		return err
 	}
-	if previousPaidCount > 0 {
+	if previousMonthCardCount > 0 {
 		return nil
 	}
 

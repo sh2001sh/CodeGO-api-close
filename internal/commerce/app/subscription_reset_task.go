@@ -13,15 +13,17 @@ import (
 )
 
 const (
-	subscriptionMaintenanceTickInterval = 1 * time.Minute
-	subscriptionMaintenanceBatchSize    = 300
-	subscriptionCleanupInterval         = 30 * time.Minute
+	subscriptionMaintenanceTickInterval     = 1 * time.Minute
+	subscriptionMaintenanceBatchSize        = 300
+	subscriptionCleanupInterval             = 30 * time.Minute
+	subscriptionProjectionReconcileInterval = 15 * time.Minute
 )
 
 var (
-	subscriptionMaintenanceOnce    sync.Once
-	subscriptionMaintenanceRunning atomic.Bool
-	subscriptionCleanupLast        atomic.Int64
+	subscriptionMaintenanceOnce         sync.Once
+	subscriptionMaintenanceRunning      atomic.Bool
+	subscriptionCleanupLast             atomic.Int64
+	subscriptionProjectionReconcileLast atomic.Int64
 )
 
 // StartSubscriptionMaintenanceTask owns non-workflow subscription maintenance.
@@ -70,6 +72,17 @@ func runSubscriptionMaintenanceOnce() {
 	if time.Since(lastCleanup) >= subscriptionCleanupInterval {
 		if _, err := CleanupSubscriptionPreConsumeRecords(7 * 24 * 3600); err == nil {
 			subscriptionCleanupLast.Store(time.Now().Unix())
+		}
+	}
+	lastProjectionReconcile := time.Unix(subscriptionProjectionReconcileLast.Load(), 0)
+	if time.Since(lastProjectionReconcile) >= subscriptionProjectionReconcileInterval {
+		if reconciled, err := ReconcileActiveSubscriptionLedgerProjections(subscriptionMaintenanceBatchSize); err == nil {
+			subscriptionProjectionReconcileLast.Store(time.Now().Unix())
+			if platformconfig.DebugEnabled && reconciled > 0 {
+				logger.LogDebug(ctx, "subscription projection reconciliation: updated_count=%d", reconciled)
+			}
+		} else {
+			logger.LogWarn(ctx, fmt.Sprintf("subscription projection reconciliation failed: %v", err))
 		}
 	}
 	if platformconfig.DebugEnabled && totalExpired > 0 {

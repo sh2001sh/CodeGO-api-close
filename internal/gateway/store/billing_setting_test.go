@@ -1,6 +1,7 @@
 package store
 
 import (
+	"math"
 	"testing"
 
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
@@ -16,8 +17,8 @@ func TestDefaultGPTPricingExpressions(t *testing.T) {
 		longPriced bool
 	}{
 		{model: "gpt-5.6-sol", shortCost: 41.75, longCost: 68.5, longPriced: true},
-		{model: "gpt-5.6-terra", shortCost: 16.7, longCost: 27.4, longPriced: true},
-		{model: "gpt-5.6-luna", shortCost: 1.67, longCost: 2.74, longPriced: true},
+		{model: "gpt-5.6-terra", shortCost: 18.5, longCost: 31, longPriced: true},
+		{model: "gpt-5.6-luna", shortCost: 1.85, longCost: 3.1, longPriced: true},
 		{model: "gpt-5.5", shortCost: 35.5, longCost: 56, longPriced: true},
 		{model: "gpt-5.5-pro", shortCost: 210, longCost: 330, longPriced: true},
 		{model: "gpt-5.4", shortCost: 17.75, longCost: 28, longPriced: true},
@@ -40,7 +41,7 @@ func TestDefaultGPTPricingExpressions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("short context expression failed: %v", err)
 			}
-			if shortCost != tt.shortCost || shortTrace.MatchedTier != "short_context" {
+			if math.Abs(shortCost-tt.shortCost) > 1e-9 || shortTrace.MatchedTier != "short_context" {
 				t.Fatalf("short context = %g (%s), want %g (short_context)", shortCost, shortTrace.MatchedTier, tt.shortCost)
 			}
 
@@ -49,12 +50,12 @@ func TestDefaultGPTPricingExpressions(t *testing.T) {
 				t.Fatalf("long context expression failed: %v", err)
 			}
 			if tt.longPriced {
-				if longCost != tt.longCost || longTrace.MatchedTier != "long_context" {
+				if math.Abs(longCost-tt.longCost) > 1e-9 || longTrace.MatchedTier != "long_context" {
 					t.Fatalf("long context = %g (%s), want %g (long_context)", longCost, longTrace.MatchedTier, tt.longCost)
 				}
 				return
 			}
-			if longCost != tt.shortCost || longTrace.MatchedTier != "short_context" {
+			if math.Abs(longCost-tt.shortCost) > 1e-9 || longTrace.MatchedTier != "short_context" {
 				t.Fatalf("flat price = %g (%s), want %g (short_context)", longCost, longTrace.MatchedTier, tt.shortCost)
 			}
 		})

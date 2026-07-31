@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -167,6 +168,62 @@ func InvalidateRoutePoolCache() {
 	routePoolCache.Lock()
 	routePoolCache.byGroup = nil
 	routePoolCache.Unlock()
+}
+
+// UpdateRoutePoolMemberCostMultipliers updates explicitly configured member costs
+// without changing their enabled state or model-specific manual overrides.
+// Missing channels are returned so external cost synchronizers cannot silently
+// report a successful update for an unconfigured route-pool member.
+func UpdateRoutePoolMemberCostMultipliers(updates map[int]float64, epsilon float64) (int, []int, error) {
+	if len(updates) == 0 {
+		return 0, nil, nil
+	}
+	if epsilon < 0 {
+		epsilon = 0
+	}
+
+	channelIDs := make([]int, 0, len(updates))
+	for channelID, multiplier := range updates {
+		if channelID <= 0 || multiplier <= 0 {
+			return 0, nil, errors.New("route pool cost updates require positive channel ids and multipliers")
+		}
+		channelIDs = append(channelIDs, channelID)
+	}
+	sort.Ints(channelIDs)
+
+	changed := 0
+	missing := make([]int, 0)
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		for _, channelID := range channelIDs {
+			var members []gatewayschema.RoutePoolMember
+			if err := tx.Where("channel_id = ?", channelID).Find(&members).Error; err != nil {
+				return err
+			}
+			if len(members) == 0 {
+				missing = append(missing, channelID)
+				continue
+			}
+			for _, member := range members {
+				if math.Abs(member.CostMultiplier-updates[channelID]) <= epsilon {
+					continue
+				}
+				if err := tx.Model(&gatewayschema.RoutePoolMember{}).
+					Where("id = ?", member.ID).
+					Update("cost_multiplier", updates[channelID]).Error; err != nil {
+					return err
+				}
+				changed++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+	if changed > 0 {
+		InvalidateRoutePoolCache()
+	}
+	return changed, missing, nil
 }
 
 func listRoutePoolMembers(poolID int64) ([]gatewayschema.RoutePoolMember, error) {

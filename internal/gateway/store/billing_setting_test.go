@@ -16,8 +16,8 @@ func TestDefaultGPTPricingExpressions(t *testing.T) {
 		longPriced bool
 	}{
 		{model: "gpt-5.6-sol", shortCost: 41.75, longCost: 68.5, longPriced: true},
-		{model: "gpt-5.6-terra", shortCost: 20.875, longCost: 34.25, longPriced: true},
-		{model: "gpt-5.6-luna", shortCost: 8.35, longCost: 13.7, longPriced: true},
+		{model: "gpt-5.6-terra", shortCost: 16.7, longCost: 27.4, longPriced: true},
+		{model: "gpt-5.6-luna", shortCost: 1.67, longCost: 2.74, longPriced: true},
 		{model: "gpt-5.5", shortCost: 35.5, longCost: 56, longPriced: true},
 		{model: "gpt-5.5-pro", shortCost: 210, longCost: 330, longPriced: true},
 		{model: "gpt-5.4", shortCost: 17.75, longCost: 28, longPriced: true},

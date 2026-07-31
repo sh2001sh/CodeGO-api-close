@@ -34,8 +34,8 @@ var defaultBillingMode = map[string]string{
 
 var defaultBillingExpr = map[string]string{
 	"gpt-5.6-sol":   `len <= 272000 ? tier("short_context", p * 5 + c * 30 + cr * 0.5 + cc * 6.25) : tier("long_context", p * 10 + c * 45 + cr * 1 + cc * 12.5)`,
-	"gpt-5.6-terra": `len <= 272000 ? tier("short_context", p * 2.5 + c * 15 + cr * 0.25 + cc * 3.125) : tier("long_context", p * 5 + c * 22.5 + cr * 0.5 + cc * 6.25)`,
-	"gpt-5.6-luna":  `len <= 272000 ? tier("short_context", p * 1 + c * 6 + cr * 0.1 + cc * 1.25) : tier("long_context", p * 2 + c * 9 + cr * 0.2 + cc * 2.5)`,
+	"gpt-5.6-terra": `len <= 272000 ? tier("short_context", p * 2 + c * 12 + cr * 0.2 + cc * 2.5) : tier("long_context", p * 4 + c * 18 + cr * 0.4 + cc * 5)`,
+	"gpt-5.6-luna":  `len <= 272000 ? tier("short_context", p * 0.2 + c * 1.2 + cr * 0.02 + cc * 0.25) : tier("long_context", p * 0.4 + c * 1.8 + cr * 0.04 + cc * 0.5)`,
 	"gpt-5.5":       `len <= 272000 ? tier("short_context", p * 5 + c * 30 + cr * 0.5) : tier("long_context", p * 10 + c * 45 + cr * 1)`,
 	"gpt-5.5-pro":   `len <= 272000 ? tier("short_context", p * 30 + c * 180) : tier("long_context", p * 60 + c * 270)`,
 	"gpt-5.4":       `len <= 272000 ? tier("short_context", p * 2.5 + c * 15 + cr * 0.25) : tier("long_context", p * 5 + c * 22.5 + cr * 0.5)`,

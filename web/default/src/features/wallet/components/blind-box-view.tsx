@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type {
   BlindBoxProp,
+  BlindBoxRewardStatistics,
   BlindBoxSelfData,
   BlindBoxTier,
   PaymentMethod,
@@ -14,6 +15,24 @@ import { PaymentMethodSelector, PityStatusCard } from './blind-box-view-parts'
 const STACK: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
+}
+
+function getRewardStatistics(
+  statistics: BlindBoxRewardStatistics[] | undefined,
+  rewardType: string
+) {
+  return statistics?.find((reward) => reward.reward_type === rewardType)
+}
+
+function formatRewardSummary(
+  reward: BlindBoxRewardStatistics | undefined,
+  includeAmount: boolean
+) {
+  if (!reward || reward.opened_count === 0) return '0 次'
+  if (!includeAmount || reward.reward_usd <= 0) {
+    return `${reward.opened_count} 次`
+  }
+  return `${reward.opened_count} 次 · $${reward.reward_usd.toFixed(2)}`
 }
 
 interface BlindBoxCardViewProps {
@@ -84,6 +103,14 @@ export function BlindBoxCardView(props: BlindBoxCardViewProps) {
   const firstPurchaseEligible =
     props.data?.first_purchase_guarantee_eligible ?? false
   const groupedTiers = groupBlindBoxTiers(props.data?.tiers || [])
+  const statistics = props.data?.statistics
+  const standardRewards = getRewardStatistics(statistics?.rewards, 'quota')
+  const claudeRewards = getRewardStatistics(statistics?.rewards, 'claude_quota')
+  const propRewards = getRewardStatistics(statistics?.rewards, 'prop')
+  const subscriptionRewards = getRewardStatistics(
+    statistics?.rewards,
+    'subscription'
+  )
 
   return (
     <motion.div
@@ -126,6 +153,36 @@ export function BlindBoxCardView(props: BlindBoxCardViewProps) {
         pityThreshold={props.effectivePityThreshold}
         remainingPity={props.remainingPity}
       />
+
+      <div className='app-subtle-panel p-4'>
+        <div className='flex flex-wrap items-baseline justify-between gap-2'>
+          <div className='text-foreground text-sm font-semibold'>
+            我的开盒统计
+          </div>
+          <div className='text-foreground text-sm font-semibold tabular-nums'>
+            累计 {statistics?.total_opened || 0} 个
+            {statistics?.pity_wins ? ` · 保底 ${statistics.pity_wins} 次` : ''}
+          </div>
+        </div>
+        <div className='mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4'>
+          <RewardStatistic
+            label='普通额度'
+            value={formatRewardSummary(standardRewards, true)}
+          />
+          <RewardStatistic
+            label='Claude 额度'
+            value={formatRewardSummary(claudeRewards, true)}
+          />
+          <RewardStatistic
+            label='道具'
+            value={formatRewardSummary(propRewards, false)}
+          />
+          <RewardStatistic
+            label='套餐'
+            value={formatRewardSummary(subscriptionRewards, false)}
+          />
+        </div>
+      </div>
 
       <div>
         <div className='flex items-center justify-between gap-3'>
@@ -396,6 +453,17 @@ export function BlindBoxCardView(props: BlindBoxCardViewProps) {
         </div>
       ) : null}
     </motion.div>
+  )
+}
+
+function RewardStatistic(props: { label: string; value: string }) {
+  return (
+    <div className='min-w-0'>
+      <div className='text-muted-foreground'>{props.label}</div>
+      <div className='text-foreground mt-0.5 truncate font-medium tabular-nums'>
+        {props.value}
+      </div>
+    </div>
   )
 }
 

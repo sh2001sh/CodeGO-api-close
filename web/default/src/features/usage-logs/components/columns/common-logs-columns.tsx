@@ -742,26 +742,18 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         if (isSubscription) {
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span className='inline-flex items-center gap-1 rounded-md border border-success/30 bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success' />
-                  }
-                >
-                  <span
-                    className='size-1.5 rounded-full bg-success'
-                    aria-hidden='true'
-                  />
-                  {t('Subscription')}
-                </TooltipTrigger>
-                <TooltipContent>
-                  <span>
-                    {t('Deducted by subscription')}: {formatLogQuota(quota)}
-                  </span>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div className='flex flex-col items-start gap-1'>
+              <span className='border-success/30 bg-success/10 text-success inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium'>
+                <span
+                  className='bg-success size-1.5 rounded-full'
+                  aria-hidden='true'
+                />
+                {t('Subscription')}
+              </span>
+              <span className='text-success font-mono text-xs font-semibold tabular-nums'>
+                {formatLogQuota(quota)}
+              </span>
+            </div>
           )
         }
 

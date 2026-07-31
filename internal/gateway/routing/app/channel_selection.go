@@ -67,7 +67,9 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 			return nil, selectGroup, errors.New("auto groups is not enabled")
 		}
 		autoGroups := OrderAutoGroups(userGroup, param.ModelName)
-		gatewayruntime.UpdateRouteDecisionCandidates(param.Ctx, len(autoGroups))
+		fallbackGroups := OrderAutoFallbackGroups(userGroup, param.ModelName, autoGroups)
+		candidateGroups := append(append([]string{}, autoGroups...), fallbackGroups...)
+		gatewayruntime.UpdateRouteDecisionCandidates(param.Ctx, len(candidateGroups))
 
 		startGroupIndex := 0
 		crossGroupRetry := httpctx.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
@@ -78,8 +80,8 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 			}
 		}
 
-		for i := startGroupIndex; i < len(autoGroups); i++ {
-			autoGroup := autoGroups[i]
+		for i := startGroupIndex; i < len(candidateGroups); i++ {
+			autoGroup := candidateGroups[i]
 			priorityRetry := param.GetRetry()
 			if i > startGroupIndex {
 				priorityRetry = 0

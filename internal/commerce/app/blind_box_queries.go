@@ -109,6 +109,47 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 	return overview, nil
 }
 
+// GetBlindBoxStatistics returns all-time, user-scoped blind-box totals without
+// loading the complete opening history into memory.
+func GetBlindBoxStatistics(userID int) (*commercedomain.BlindBoxStatistics, error) {
+	if userID <= 0 {
+		return nil, errors.New("invalid userId")
+	}
+
+	type statisticRow struct {
+		RewardType   string
+		OpenedCount  int64
+		RewardUSD    float64
+		CreditAmount int64
+		PityWins     int64
+	}
+
+	var rows []statisticRow
+	if err := platformdb.DB.Model(&commerceschema.BlindBoxOpenRecord{}).
+		Select(`reward_type, COUNT(*) AS opened_count, COALESCE(SUM(reward_usd), 0) AS reward_usd, COALESCE(SUM(credit_amount), 0) AS credit_amount, COALESCE(SUM(CASE WHEN is_pity THEN 1 ELSE 0 END), 0) AS pity_wins`).
+		Where("user_id = ?", userID).
+		Group("reward_type").
+		Order("reward_type asc").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	statistics := &commercedomain.BlindBoxStatistics{
+		Rewards: make([]commercedomain.BlindBoxRewardStatistics, 0, len(rows)),
+	}
+	for _, row := range rows {
+		statistics.TotalOpened += row.OpenedCount
+		statistics.PityWins += row.PityWins
+		statistics.Rewards = append(statistics.Rewards, commercedomain.BlindBoxRewardStatistics{
+			RewardType:   row.RewardType,
+			OpenedCount:  row.OpenedCount,
+			RewardUSD:    row.RewardUSD,
+			CreditAmount: row.CreditAmount,
+		})
+	}
+	return statistics, nil
+}
+
 // ListBlindBoxHistory returns one page of the user's opening records from the last 30 days.
 func ListBlindBoxHistory(userID int, page int, pageSize int) (*BlindBoxHistoryPage, error) {
 	if userID <= 0 {

@@ -104,3 +104,36 @@ func TestOrderAutoGroupsPrefersLowerRateUntilCooldown(t *testing.T) {
 	recordAutoGroupSuccess("low", "gpt-test")
 	assert.Equal(t, []string{"low", "high"}, OrderAutoGroups("default", "gpt-test"))
 }
+
+func TestAutoSelectionFallsBackToPermittedModelSpecificGroup(t *testing.T) {
+	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
+	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()
+	originalSelector := selectRandomSatisfiedChannel
+	t.Cleanup(func() {
+		require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(originalAutoGroups))
+		require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		selectRandomSatisfiedChannel = originalSelector
+	})
+
+	require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(`["default","free"]`))
+	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"default":"默认","free":"免费","claude":"Claude"}`))
+	priority := int64(1)
+	selectRandomSatisfiedChannel = func(group string, model string, _ int) (*gatewayschema.Channel, error) {
+		if group == "claude" && model == "claude-test" {
+			return &gatewayschema.Channel{Id: 99, Priority: &priority}, nil
+		}
+		return nil, nil
+	}
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	channel, group, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        context,
+		TokenGroup: AutoGroupName,
+		ModelName:  "claude-test",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, 99, channel.Id)
+	assert.Equal(t, "claude", group)
+}

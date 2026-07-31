@@ -41,6 +41,10 @@ func BuildBlindBoxSelfPayload(userID int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	statistics, err := GetBlindBoxStatistics(userID)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"enabled":                           enabled,
 		"unit_price":                        setting.UnitPrice,
@@ -60,6 +64,7 @@ func BuildBlindBoxSelfPayload(userID int) (map[string]any, error) {
 		"overview":                          overview,
 		"props":                             props,
 		"zero_hour":                         zeroHour,
+		"statistics":                        statistics,
 	}, nil
 }
 

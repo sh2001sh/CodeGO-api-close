@@ -458,6 +458,19 @@ export interface BlindBoxZeroHourOverview {
   active_until?: number
 }
 
+export interface BlindBoxRewardStatistics {
+  reward_type: string
+  opened_count: number
+  reward_usd: number
+  credit_amount: number
+}
+
+export interface BlindBoxStatistics {
+  total_opened: number
+  pity_wins: number
+  rewards: BlindBoxRewardStatistics[]
+}
+
 export interface BlindBoxSelfData {
   enabled: boolean
   unit_price: number
@@ -477,6 +490,7 @@ export interface BlindBoxSelfData {
   overview: BlindBoxOverview
   props: BlindBoxProp[]
   zero_hour?: BlindBoxZeroHourOverview
+  statistics?: BlindBoxStatistics
   grants?: BlindBoxGrant[]
 }
 

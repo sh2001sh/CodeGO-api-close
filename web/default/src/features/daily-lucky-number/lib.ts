@@ -1,5 +1,25 @@
 import type { TFunction } from 'i18next'
-import type { MembershipTier } from './types'
+import type { LuckyNumberRules, MembershipTier } from './types'
+
+export const DEFAULT_LUCKY_NUMBER_RULES: LuckyNumberRules = {
+  base_reward_1_usd: 1,
+  base_reward_2_usd: 10,
+  base_reward_3_usd: 50,
+  base_reward_4_usd: 100,
+  multiplier_lite: 1,
+  multiplier_standard: 1.1,
+  multiplier_pro: 1.2,
+  multiplier_ultra: 1.3,
+  jackpot_initial_usd: 100,
+  jackpot_increment_usd: 20,
+  jackpot_cap_usd: 1000,
+}
+
+export function normalizeLuckyNumberRules(
+  value?: Partial<LuckyNumberRules> | null
+): LuckyNumberRules {
+  return { ...DEFAULT_LUCKY_NUMBER_RULES, ...(value ?? {}) }
+}
 
 export const MEMBERSHIP_TIER_META: Record<
   MembershipTier,
@@ -51,14 +71,20 @@ export function getMembershipTierLabel(
   return t(MEMBERSHIP_TIER_META[normalizeMembershipTier(tier)].labelKey)
 }
 
-export function getMembershipTierMultiplier(tier?: string | null): number {
+export function getMembershipTierMultiplier(
+  tier?: string | null,
+  rules?: Partial<LuckyNumberRules> | null
+): number {
+  const configured = normalizeLuckyNumberRules(rules)
   switch (normalizeMembershipTier(tier)) {
+    case 'lite':
+      return configured.multiplier_lite
     case 'standard':
-      return 1.1
+      return configured.multiplier_standard
     case 'pro':
-      return 1.2
+      return configured.multiplier_pro
     case 'ultra':
-      return 1.3
+      return configured.multiplier_ultra
     default:
       return 1
   }

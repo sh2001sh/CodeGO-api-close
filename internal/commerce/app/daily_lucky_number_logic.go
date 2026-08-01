@@ -145,13 +145,3 @@ func validateLuckyNumber(number string) error {
 	}
 	return nil
 }
-
-func luckyBenefitCount(plan *commerceschema.SubscriptionPlan) int {
-	if plan == nil || commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) != commerceschema.SubscriptionPlanTypeMonthly {
-		return 0
-	}
-	if plan.BlindBoxBenefitCount < 0 {
-		return 0
-	}
-	return plan.BlindBoxBenefitCount
-}

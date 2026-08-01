@@ -3,15 +3,18 @@ import { Ticket } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
-import { Card } from '@/components/ui/card'
-import type { LuckyNumberSubscription, LuckyDrawView, LuckyRewardView } from '../types'
+import type { LuckyDrawView, LuckyNumberRules, LuckyNumberSubscription, LuckyRewardView } from '../types'
+import { normalizeLuckyNumberRules } from '../lib'
 import { SubscriptionLuckySummary } from './subscription-lucky-summary'
 
 export function LuckySubscriptionList(props: {
   subscriptions: LuckyNumberSubscription[]
   draw?: LuckyDrawView
   rewards: LuckyRewardView[]
+  rules?: Partial<LuckyNumberRules> | null
 }) {
+  const rules = normalizeLuckyNumberRules(props.rules)
+
   return (
     <section className='space-y-3'>
       <div className='flex flex-wrap items-end justify-between gap-2'>
@@ -29,7 +32,7 @@ export function LuckySubscriptionList(props: {
       </div>
 
       {props.subscriptions.length === 0 ? (
-        <Card className='shadow-none'>
+        <div className='app-page-shell'>
           <Empty className='border-0'>
             <EmptyHeader>
               <EmptyMedia variant='icon'>
@@ -42,7 +45,7 @@ export function LuckySubscriptionList(props: {
             </EmptyHeader>
             <Button render={<Link to='/packages' />}>查看套餐</Button>
           </Empty>
-        </Card>
+        </div>
       ) : (
         <div className='divide-border app-page-shell divide-y overflow-hidden'>
           {props.subscriptions.map((item) => (
@@ -55,6 +58,7 @@ export function LuckySubscriptionList(props: {
                 plan={item.plan}
                 draw={props.draw}
                 rewards={props.rewards}
+                tierRules={rules}
                 showLink={false}
               />
             </div>

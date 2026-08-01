@@ -16,6 +16,20 @@ export interface LuckyNumberSubscription {
   number?: SubscriptionLuckyNumber
 }
 
+export interface LuckyNumberRules {
+  base_reward_1_usd: number
+  base_reward_2_usd: number
+  base_reward_3_usd: number
+  base_reward_4_usd: number
+  multiplier_lite: number
+  multiplier_standard: number
+  multiplier_pro: number
+  multiplier_ultra: number
+  jackpot_initial_usd: number
+  jackpot_increment_usd: number
+  jackpot_cap_usd: number
+}
+
 export interface LuckyDrawView {
   id: number
   draw_date: string
@@ -69,6 +83,7 @@ export interface LuckyNumberSelfPayload {
   previous_draw?: LuckyDrawView
   jackpot_usd: number
   jackpot_cap_usd: number
+  rules?: LuckyNumberRules
   subscriptions: LuckyNumberSubscription[]
   recent_rewards: LuckyRewardView[]
 }

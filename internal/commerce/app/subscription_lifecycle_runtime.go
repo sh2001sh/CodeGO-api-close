@@ -204,10 +204,6 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userID int, plan *commercesch
 	if err := tx.Create(sub).Error; err != nil {
 		return nil, err
 	}
-	setNewSubscriptionBenefitCycle(sub)
-	if err := tx.Model(sub).Update("lucky_benefit_cycle", sub.LuckyBenefitCycle).Error; err != nil {
-		return nil, err
-	}
 	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
 		return nil, err
 	}
@@ -278,8 +274,8 @@ func renewUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubscr
 	if err := tx.Save(sub).Error; err != nil {
 		return nil, err
 	}
-	setNewSubscriptionBenefitCycle(sub)
-	if err := tx.Model(sub).Update("lucky_benefit_cycle", sub.LuckyBenefitCycle).Error; err != nil {
+	sub.LuckyBenefitCycle = ""
+	if err := tx.Model(sub).Update("lucky_benefit_cycle", "").Error; err != nil {
 		return nil, err
 	}
 	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
@@ -295,7 +291,6 @@ func upgradeUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubs
 	if tx == nil || sub == nil || plan == nil {
 		return nil, errors.New("invalid upgrade args")
 	}
-	previousCycle := sub.LuckyBenefitCycle
 	sub.PlanId = plan.Id
 	sub.Status = "active"
 	sub.Source = source
@@ -330,12 +325,8 @@ func upgradeUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubs
 	if err := tx.Save(sub).Error; err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(previousCycle) == "" {
-		sub.LuckyBenefitCycle = fmt.Sprintf("subscription-cycle:%d:%d:%d", sub.Id, nowUnix, endUnix)
-	} else {
-		sub.LuckyBenefitCycle = previousCycle
-	}
-	if err := tx.Model(sub).Update("lucky_benefit_cycle", sub.LuckyBenefitCycle).Error; err != nil {
+	sub.LuckyBenefitCycle = ""
+	if err := tx.Model(sub).Update("lucky_benefit_cycle", "").Error; err != nil {
 		return nil, err
 	}
 	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
@@ -361,7 +352,6 @@ func ApplySubscriptionPurchaseTx(tx *gorm.DB, userID int, plan *commerceschema.S
 		return nil, nil, err
 	}
 	var sub *commerceschema.UserSubscription
-	var previousPlan *commerceschema.SubscriptionPlan
 	switch preview.Action {
 	case commerceschema.SubscriptionPurchaseActionDisabled:
 		if strings.TrimSpace(preview.DisabledReason) != "" {
@@ -378,7 +368,6 @@ func ApplySubscriptionPurchaseTx(tx *gorm.DB, userID int, plan *commerceschema.S
 		}
 	case commerceschema.SubscriptionPurchaseActionUpgrade:
 		if preview.CurrentSubscription != nil {
-			previousPlan = preview.CurrentPlan
 			var err error
 			sub, err = upgradeUserSubscriptionWithPlanTx(tx, preview.CurrentSubscription, plan, source)
 			if err != nil {
@@ -390,11 +379,6 @@ func ApplySubscriptionPurchaseTx(tx *gorm.DB, userID int, plan *commerceschema.S
 		var err error
 		sub, err = CreateUserSubscriptionFromPlanTx(tx, userID, plan, source)
 		if err != nil {
-			return nil, preview, err
-		}
-	}
-	if source == "order" {
-		if err := grantSubscriptionBlindBoxBenefitsTx(tx, sub, plan, preview.Action, previousPlan); err != nil {
 			return nil, preview, err
 		}
 	}

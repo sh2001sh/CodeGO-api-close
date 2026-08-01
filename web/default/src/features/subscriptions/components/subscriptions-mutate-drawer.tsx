@@ -460,7 +460,7 @@ export function SubscriptionsMutateDrawer({
                     </h3>
                     <p className='text-muted-foreground mt-1 text-xs leading-5'>
                       {t(
-                        'Set the membership tier, daily lucky-number eligibility, and blind boxes granted for each billing cycle.'
+                        'Daily lucky-number eligibility and membership tier are active. Subscription blind-box gifts are currently paused.'
                       )}
                     </p>
                   </div>
@@ -510,32 +510,6 @@ export function SubscriptionsMutateDrawer({
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name='blind_box_benefit_count'
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t('Blind boxes per cycle')}</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type='number'
-                            min={0}
-                            max={100}
-                            onChange={(event) =>
-                              field.onChange(
-                                Number.parseInt(event.target.value, 10) || 0
-                              )
-                            }
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          {t('Granted once per paid subscription cycle.')}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
 
                 <FormField

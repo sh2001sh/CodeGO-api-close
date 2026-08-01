@@ -54,7 +54,6 @@ export function getPlanFormSchema(t: TFunction) {
     max_purchase_per_user: z.coerce.number().min(0),
     membership_tier: z.enum(['none', 'lite', 'standard', 'pro', 'ultra']),
     lucky_draw_enabled: z.boolean(),
-    blind_box_benefit_count: z.coerce.number().min(0).max(100),
     total_amount: z.coerce.number().min(0),
     period_amount: z.coerce.number().min(0),
     model_limits: z.string().optional(),
@@ -86,7 +85,6 @@ export const PLAN_FORM_DEFAULTS: PlanFormValues = {
   max_purchase_per_user: 0,
   membership_tier: 'none',
   lucky_draw_enabled: false,
-  blind_box_benefit_count: 0,
   total_amount: 0,
   period_amount: 0,
   model_limits: '',
@@ -116,7 +114,6 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     max_purchase_per_user: Number(plan.max_purchase_per_user || 0),
     membership_tier: plan.membership_tier || 'none',
     lucky_draw_enabled: plan.lucky_draw_enabled === true,
-    blind_box_benefit_count: Number(plan.blind_box_benefit_count || 0),
     total_amount: subscriptionQuotaUnitsToUSD(plan.total_amount),
     period_amount: subscriptionQuotaUnitsToUSD(plan.period_amount),
     model_limits: plan.model_limits || '',
@@ -164,9 +161,8 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
       membership_tier: values.membership_tier,
       lucky_draw_enabled:
         isMonthlyCard && values.lucky_draw_enabled && values.membership_tier !== 'none',
-      blind_box_benefit_count: isMonthlyCard
-        ? Number(values.blind_box_benefit_count || 0)
-        : 0,
+      // Kept in the API payload for older servers; subscription gifts are paused.
+      blind_box_benefit_count: 0,
       total_amount: totalAmount,
       period_amount: periodAmount,
       model_limits: values.model_limits || '',

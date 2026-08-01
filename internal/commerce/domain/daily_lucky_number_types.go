@@ -8,6 +8,22 @@ type LuckyNumberSubscription struct {
 	Number       *commerceschema.SubscriptionLuckyNumber `json:"number,omitempty"`
 }
 
+// LuckyNumberRules is the public, non-operational rule snapshot used by the activity page.
+// Cost and budget controls remain admin-only fields.
+type LuckyNumberRules struct {
+	BaseReward1USD      float64 `json:"base_reward_1_usd"`
+	BaseReward2USD      float64 `json:"base_reward_2_usd"`
+	BaseReward3USD      float64 `json:"base_reward_3_usd"`
+	BaseReward4USD      float64 `json:"base_reward_4_usd"`
+	MultiplierLite      float64 `json:"multiplier_lite"`
+	MultiplierStandard  float64 `json:"multiplier_standard"`
+	MultiplierPro       float64 `json:"multiplier_pro"`
+	MultiplierUltra     float64 `json:"multiplier_ultra"`
+	JackpotInitialUSD   float64 `json:"jackpot_initial_usd"`
+	JackpotIncrementUSD float64 `json:"jackpot_increment_usd"`
+	JackpotCapUSD       float64 `json:"jackpot_cap_usd"`
+}
+
 // LuckyDrawView is the user-facing projection of a draw. Configuration and
 // operational cost snapshots remain admin-only fields on the schema model.
 type LuckyDrawView struct {
@@ -32,6 +48,7 @@ type LuckyNumberSelfPayload struct {
 	PreviousDraw  *LuckyDrawView            `json:"previous_draw,omitempty"`
 	JackpotUSD    float64                   `json:"jackpot_usd"`
 	JackpotCapUSD float64                   `json:"jackpot_cap_usd"`
+	Rules         LuckyNumberRules          `json:"rules"`
 	Subscriptions []LuckyNumberSubscription `json:"subscriptions"`
 	RecentRewards []LuckyRewardView         `json:"recent_rewards"`
 }

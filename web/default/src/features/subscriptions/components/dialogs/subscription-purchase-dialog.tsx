@@ -5,7 +5,6 @@ import {
   CircleSlash,
   Crown,
   ExternalLink,
-  Gift,
   Layers3,
   Loader2,
   Percent,
@@ -58,9 +57,6 @@ import type {
   SubscriptionPayResponse,
   SubscriptionPurchaseType,
 } from '../../types'
-import { formatLuckyDateTime } from '@/features/daily-lucky-number/lib'
-import { LuckyNumberCode } from '@/features/daily-lucky-number/components/lucky-number-code'
-import { TierBadge } from '@/features/daily-lucky-number/components/tier-badge'
 import { PackageModelScopeNotice } from '../package-model-scope-notice'
 
 interface PaymentMethod {
@@ -175,54 +171,6 @@ function StatusItem(props: { label: string; value: ReactNode }) {
   )
 }
 
-function PurchaseBenefitReveal(props: { order: SubscriptionOrderStatus }) {
-  const { t } = useTranslation()
-  const luckyNumber = props.order.lucky_number
-  const benefit = props.order.blind_box_benefit
-  if (!luckyNumber && !benefit) return null
-
-  return (
-    <div className='border-success/20 space-y-3 border-t pt-4'>
-      <div className='flex items-center gap-2'>
-        <CheckCircle2 className='text-success size-4' aria-hidden='true' />
-        <span className='text-foreground text-sm font-semibold'>
-          {t('Subscription benefits delivered')}
-        </span>
-      </div>
-      {luckyNumber ? (
-        <div className='flex min-w-0 flex-wrap items-center gap-2'>
-          <TierBadge tier={luckyNumber.membership_tier} compact />
-          <LuckyNumberCode
-            cardCode={luckyNumber.card_code}
-            luckySuffix={luckyNumber.lucky_suffix}
-          />
-        </div>
-      ) : null}
-      {benefit && benefit.expected_count > 0 ? (
-        <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
-          <Gift className='text-primary size-3.5' aria-hidden='true' />
-          <span>
-            {t('{{count}} blind boxes granted', {
-              count: benefit.granted_count || benefit.expected_count,
-            })}
-          </span>
-          {benefit.ends_at > 0 ? (
-            <span>
-              {t('Expires {{time}}', {
-                time: formatLuckyDateTime(
-                  benefit.ends_at,
-                  'Asia/Shanghai',
-                  undefined
-                ),
-              })}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
   const [paying, setPaying] = useState(false)
@@ -302,7 +250,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
             ...current,
             stage: 'pending',
             orderStatus: order,
-            message: '支付已确认，正在发放月卡编号和盲盒权益。',
+            message: '支付已确认，正在发放月卡编号并同步每日幸运号权益。',
           }))
           return
         }
@@ -644,10 +592,6 @@ export function SubscriptionPurchaseDialog(props: Props) {
             </p>
           </div>
         </div>
-
-        {paymentTracker.stage === 'success' && paymentTracker.orderStatus ? (
-          <PurchaseBenefitReveal order={paymentTracker.orderStatus} />
-        ) : null}
 
         <div className='grid gap-2 sm:grid-cols-2'>
           <StatusItem label='操作类型' value={paymentTracker.actionLabel} />

@@ -9,12 +9,13 @@ import type {
 } from '@/features/subscriptions/types'
 import {
   formatLuckyUsd,
+  getMembershipTierMultiplier,
   getMatchedDigits,
   getRemainingDays,
   normalizeMembershipTier,
   normalizeLuckyNumber,
 } from '../lib'
-import type { LuckyDrawView, LuckyRewardView } from '../types'
+import type { LuckyDrawView, LuckyNumberRules, LuckyRewardView } from '../types'
 import { LuckyNumberCode } from './lucky-number-code'
 import { TierBadge } from './tier-badge'
 
@@ -42,6 +43,7 @@ export function SubscriptionLuckySummary(props: {
   plan?: SubscriptionPlan | PlanRecord | null
   draw?: LuckyDrawView
   rewards?: LuckyRewardView[]
+  tierRules?: Partial<LuckyNumberRules> | null
   compact?: boolean
   showLink?: boolean
   className?: string
@@ -51,6 +53,7 @@ export function SubscriptionLuckySummary(props: {
   const tier = normalizeMembershipTier(
     subscription.membership_tier || plan?.membership_tier
   )
+  const tierMultiplier = getMembershipTierMultiplier(tier, props.tierRules)
   const number = subscription.lucky_number
   const suffix = normalizeLuckyNumber(number?.lucky_suffix)
   const todayReward = getTodayReward(
@@ -68,6 +71,7 @@ export function SubscriptionLuckySummary(props: {
     return (
       <div className={cn('flex min-w-0 items-center gap-2', props.className)}>
         <TierBadge tier={tier} compact />
+        <span className='text-primary text-[11px] font-semibold tabular-nums'>{tierMultiplier.toFixed(1)}x</span>
         <span className='text-foreground font-mono text-xs font-semibold tabular-nums'>
           {suffix || '----'}
         </span>
@@ -101,6 +105,8 @@ export function SubscriptionLuckySummary(props: {
               <span>剩余 {getRemainingDays(subscription.end_time)} 天</span>
               <span aria-hidden='true'>·</span>
               <span>幸运尾号 {suffix || '----'}</span>
+              <span aria-hidden='true'>·</span>
+              <span className='text-primary font-medium'>{tierMultiplier.toFixed(1)}x 奖励倍率</span>
             </div>
           </div>
         </div>

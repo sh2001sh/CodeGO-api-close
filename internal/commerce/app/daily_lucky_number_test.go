@@ -186,31 +186,55 @@ func TestDailyLuckyRewardSettlementWritesLedgerOnce(t *testing.T) {
 	require.Equal(t, int64(1), ledgerCount)
 }
 
-func TestSubscriptionBlindBoxBenefitUsesCycleAndGrantDelta(t *testing.T) {
+func TestSubscriptionPurchaseDoesNotGrantBlindBoxBenefits(t *testing.T) {
 	prepareDailyLuckyNumberTestDB(t)
 	db := platformDBForDailyLuckyTest(t)
 	user := &identityschema.User{Id: 9931, Username: "lucky-benefit-user", Status: constant.UserStatusEnabled}
-	plan := &commerceschema.SubscriptionPlan{Id: 9932, Title: "Standard monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierStandard, BlindBoxBenefitCount: 2}
-	higherPlan := &commerceschema.SubscriptionPlan{Id: 9933, Title: "Pro monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro, BlindBoxBenefitCount: 3}
-	subscription := &commerceschema.UserSubscription{Id: 9934, UserId: user.Id, PlanId: plan.Id, StartTime: 100, EndTime: 200, Status: "active", Source: "order", LuckyBenefitCycle: "subscription-cycle:9934:100:200"}
+	plan := &commerceschema.SubscriptionPlan{
+		Id:                   9932,
+		Title:                "Lite monthly",
+		PlanType:             commerceschema.SubscriptionPlanTypeMonthly,
+		DurationUnit:         commerceschema.SubscriptionDurationMonth,
+		DurationValue:        1,
+		PriceAmount:          49,
+		TotalAmount:          quotaUnitsFromUSD(300),
+		MembershipTier:       commerceschema.SubscriptionMembershipTierLite,
+		BlindBoxBenefitCount: 1,
+	}
+	higherPlan := &commerceschema.SubscriptionPlan{
+		Id:                   9933,
+		Title:                "Standard monthly",
+		PlanType:             commerceschema.SubscriptionPlanTypeMonthly,
+		DurationUnit:         commerceschema.SubscriptionDurationMonth,
+		DurationValue:        1,
+		PriceAmount:          89,
+		TotalAmount:          quotaUnitsFromUSD(620),
+		MembershipTier:       commerceschema.SubscriptionMembershipTierStandard,
+		BlindBoxBenefitCount: 2,
+	}
 	require.NoError(t, db.Create(user).Error)
 	require.NoError(t, db.Create(plan).Error)
 	require.NoError(t, db.Create(higherPlan).Error)
-	require.NoError(t, db.Create(subscription).Error)
 
-	require.NoError(t, grantSubscriptionBlindBoxBenefitsTx(db, subscription, plan, commerceschema.SubscriptionPurchaseActionSubscribe, nil))
-	require.NoError(t, grantSubscriptionBlindBoxBenefitsTx(db, subscription, plan, commerceschema.SubscriptionPurchaseActionSubscribe, nil))
-	require.NoError(t, grantSubscriptionBlindBoxBenefitsTx(db, subscription, higherPlan, commerceschema.SubscriptionPurchaseActionUpgrade, plan))
+	subscription, preview, err := ApplySubscriptionPurchaseTx(db, user.Id, plan, "order")
+	require.NoError(t, err)
+	require.NotNil(t, subscription)
+	require.Equal(t, commerceschema.SubscriptionPurchaseActionSubscribe, preview.Action)
+	require.NoError(t, db.Model(&commerceschema.UserSubscription{}).Where("id = ?", subscription.Id).Update("amount_used", plan.TotalAmount/2).Error)
 
-	var benefits []commerceschema.SubscriptionBlindBoxBenefitCycle
-	require.NoError(t, db.Find(&benefits).Error)
-	require.Len(t, benefits, 1)
-	require.Equal(t, 3, benefits[0].ExpectedCount)
-	require.Equal(t, 3, benefits[0].GrantedCount)
-	var orders []commerceschema.BlindBoxOrder
-	require.NoError(t, db.Where("source = ?", commerceschema.BlindBoxOrderSourceSubscriptionBenefit).Find(&orders).Error)
-	require.Len(t, orders, 2)
-	require.Equal(t, 3, orders[0].Quantity+orders[1].Quantity)
+	_, preview, err = ApplySubscriptionPurchaseTx(db, user.Id, plan, "order")
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.SubscriptionPurchaseActionRenew, preview.Action)
+	_, preview, err = ApplySubscriptionPurchaseTx(db, user.Id, higherPlan, "order")
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.SubscriptionPurchaseActionUpgrade, preview.Action)
+
+	var benefits int64
+	require.NoError(t, db.Model(&commerceschema.SubscriptionBlindBoxBenefitCycle{}).Count(&benefits).Error)
+	require.Zero(t, benefits)
+	var orders int64
+	require.NoError(t, db.Model(&commerceschema.BlindBoxOrder{}).Where("source = ?", commerceschema.BlindBoxOrderSourceSubscriptionBenefit).Count(&orders).Error)
+	require.Zero(t, orders)
 }
 
 func platformDBForDailyLuckyTest(t *testing.T) *gorm.DB {

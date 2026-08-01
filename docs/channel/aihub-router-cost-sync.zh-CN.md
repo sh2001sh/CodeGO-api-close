@@ -14,7 +14,7 @@
 AIHUB_ROUTER_COST_SYNC_SOURCES=[{"channel_id":50,"log_file":"/var/run/aihub-router/key11016.jsonl"},{"channel_id":52,"log_file":"/var/run/aihub-router/key11239.jsonl"},{"channel_id":53,"log_file":"/var/run/aihub-router/key11240.jsonl"},{"channel_id":54,"log_file":"/var/run/aihub-router/key11422.jsonl"}]
 AIHUB_ROUTER_COST_SYNC_INTERVAL_SECONDS=60
 AIHUB_ROUTER_COST_SYNC_MAX_AGE_SECONDS=180
-AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER=0.15
+AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER=0.10
 ```
 
 上例中的渠道与 Key 映射仅为格式示例。部署前必须以实际渠道 Key 对应的 AIHub Key ID 为准，不能依赖渠道名称或创建顺序。
@@ -27,7 +27,8 @@ AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER=0.15
 
 ## 安全行为
 
-- 日志中最新周期是 dry-run、缺少目标分组、倍率不在 `(0, max]`，或超过最大年龄时，该渠道保持原有倍率。
+- 日志中最新周期是 dry-run、缺少目标分组、倍率不在 `(0, 0.10]`，或超过最大年龄时，该渠道保持原有倍率。
+- `AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER` 不能超过 `0.10`；超过该值会回退到 `0.10`。这是可同步倍率的上限，不会修改已有渠道倍率。
 - 每个渠道独立校验，单个 AIHubRouter 实例异常不会覆盖其他渠道的有效成本。
 - 只更新 `route_pool_members.cost_multiplier`，不改成员启用状态和手工配置的模型覆盖倍率。
 - 更新在一个数据库事务内执行，并清除自动池缓存；网关最多在其现有缓存周期后使用新倍率。

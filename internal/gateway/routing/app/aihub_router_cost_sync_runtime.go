@@ -23,7 +23,9 @@ const (
 	aiHubRouterCostSyncSourcesEnv      = "AIHUB_ROUTER_COST_SYNC_SOURCES"
 	aiHubRouterCostSyncDefaultInterval = time.Minute
 	aiHubRouterCostSyncDefaultMaxAge   = 3 * time.Minute
-	aiHubRouterCostSyncDefaultMaxCost  = 0.15
+	// This is a validation ceiling for future AIHubRouter sync snapshots.
+	// It does not rewrite existing route-pool member multipliers.
+	aiHubRouterCostSyncDefaultMaxCost  = 0.10
 	aiHubRouterCostSyncMaxLogTailBytes = 256 * 1024
 	aiHubRouterCostSyncFutureClockSkew = time.Minute
 	aiHubRouterCostSyncChangeEpsilon   = 0.000001
@@ -256,7 +258,7 @@ func aiHubRouterCostSyncMaxMultiplier() float64 {
 		return aiHubRouterCostSyncDefaultMaxCost
 	}
 	value, err := strconv.ParseFloat(raw, 64)
-	if err != nil || value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+	if err != nil || value <= 0 || value > aiHubRouterCostSyncDefaultMaxCost || math.IsNaN(value) || math.IsInf(value, 0) {
 		platformobservability.SysLog(fmt.Sprintf("invalid AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER=%q; using %.4f", raw, aiHubRouterCostSyncDefaultMaxCost))
 		return aiHubRouterCostSyncDefaultMaxCost
 	}

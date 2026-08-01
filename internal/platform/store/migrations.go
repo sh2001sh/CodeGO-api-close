@@ -331,10 +331,10 @@ func migrateUserSubscription(tx *gorm.DB) error {
 
 func migrateDailyLuckyNumber(tx *gorm.DB) error {
 	if !platformdb.UsingSQLite {
+		if err := addDailyLuckyNumberColumns(tx); err != nil {
+			return err
+		}
 		return tx.AutoMigrate(
-			&commerceschema.SubscriptionPlan{},
-			&commerceschema.UserSubscription{},
-			&commerceschema.BlindBoxOrder{},
 			&commerceschema.SubscriptionLuckyNumber{},
 			&commerceschema.SubscriptionLuckyDraw{},
 			&commerceschema.SubscriptionLuckyReward{},
@@ -356,4 +356,41 @@ func migrateDailyLuckyNumber(tx *gorm.DB) error {
 		&commerceschema.SubscriptionLuckyReward{},
 		&commerceschema.SubscriptionBlindBoxBenefitCycle{},
 	)
+}
+
+// addDailyLuckyNumberColumns only appends the fields introduced by this
+// migration. Running AutoMigrate on established PostgreSQL tables can issue
+// type-changing DDL and then reuse an invalid prepared SELECT plan.
+func addDailyLuckyNumberColumns(tx *gorm.DB) error {
+	columns := []struct {
+		model  interface{}
+		fields []string
+	}{
+		{&commerceschema.SubscriptionPlan{}, []string{"MembershipTier", "LuckyDrawEnabled", "BlindBoxBenefitCount"}},
+		{&commerceschema.UserSubscription{}, []string{"LuckyBenefitCycle"}},
+		{&commerceschema.BlindBoxOrder{}, []string{"UserSubscriptionId", "BenefitCycle", "ExpiresAt"}},
+	}
+	for _, entry := range columns {
+		for _, field := range entry.fields {
+			if tx.Migrator().HasColumn(entry.model, field) {
+				continue
+			}
+			if err := tx.Migrator().AddColumn(entry.model, field); err != nil {
+				return err
+			}
+		}
+	}
+	for _, statement := range []string{
+		"CREATE INDEX IF NOT EXISTS idx_subscription_plans_membership_tier ON subscription_plans (membership_tier)",
+		"CREATE INDEX IF NOT EXISTS idx_subscription_plans_lucky_draw_enabled ON subscription_plans (lucky_draw_enabled)",
+		"CREATE INDEX IF NOT EXISTS idx_user_subscriptions_lucky_benefit_cycle ON user_subscriptions (lucky_benefit_cycle)",
+		"CREATE INDEX IF NOT EXISTS idx_blind_box_orders_user_subscription_id ON blind_box_orders (user_subscription_id)",
+		"CREATE INDEX IF NOT EXISTS idx_blind_box_orders_benefit_cycle ON blind_box_orders (benefit_cycle)",
+		"CREATE INDEX IF NOT EXISTS idx_blind_box_orders_expires_at ON blind_box_orders (expires_at)",
+	} {
+		if err := tx.Exec(statement).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

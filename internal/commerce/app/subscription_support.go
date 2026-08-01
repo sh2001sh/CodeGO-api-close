@@ -110,6 +110,17 @@ func validateSubscriptionPlanInput(plan *commerceschema.SubscriptionPlan) error 
 		return errors.New("max_purchase_per_user must be >= 0")
 	}
 	plan.PlanType = commercedomain.NormalizeSubscriptionPlanType(plan.PlanType)
+	plan.MembershipTier = commercedomain.NormalizeSubscriptionMembershipTier(plan.MembershipTier)
+	if plan.PlanType != commerceschema.SubscriptionPlanTypeMonthly {
+		plan.LuckyDrawEnabled = false
+		plan.BlindBoxBenefitCount = 0
+	}
+	if plan.BlindBoxBenefitCount < 0 || plan.BlindBoxBenefitCount > 100 {
+		return errors.New("blind_box_benefit_count must be between 0 and 100")
+	}
+	if plan.LuckyDrawEnabled && plan.MembershipTier == commerceschema.SubscriptionMembershipTierNone {
+		return errors.New("lucky draw requires an explicit membership tier")
+	}
 	if plan.PlanType == commerceschema.SubscriptionPlanTypeStarter && plan.MaxPurchasePerUser == 0 {
 		plan.MaxPurchasePerUser = 1
 	}

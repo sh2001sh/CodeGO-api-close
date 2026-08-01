@@ -62,6 +62,7 @@ import { Route as AuthenticatedImagesIndexRouteImport } from './routes/_authenti
 import { Route as AuthenticatedGroupStatusIndexRouteImport } from './routes/_authenticated/group-status/index'
 import { Route as AuthenticatedGroupBuyIndexRouteImport } from './routes/_authenticated/group-buy/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
+import { Route as AuthenticatedDailyLuckyNumberIndexRouteImport } from './routes/_authenticated/daily-lucky-number/index'
 import { Route as AuthenticatedCommunityResourcesIndexRouteImport } from './routes/_authenticated/community-resources/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedBlindBoxIndexRouteImport } from './routes/_authenticated/blind-box/index'
@@ -367,6 +368,12 @@ const AuthenticatedDashboardIndexRoute =
     path: '/dashboard/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDailyLuckyNumberIndexRoute =
+  AuthenticatedDailyLuckyNumberIndexRouteImport.update({
+    id: '/daily-lucky-number/',
+    path: '/daily-lucky-number/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCommunityResourcesIndexRoute =
   AuthenticatedCommunityResourcesIndexRouteImport.update({
     id: '/community-resources/',
@@ -553,6 +560,7 @@ export interface FileRoutesByFullPath {
   '/blind-box/': typeof AuthenticatedBlindBoxIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/community-resources/': typeof AuthenticatedCommunityResourcesIndexRoute
+  '/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/group-buy/': typeof AuthenticatedGroupBuyIndexRoute
   '/group-status/': typeof AuthenticatedGroupStatusIndexRoute
@@ -629,6 +637,7 @@ export interface FileRoutesByTo {
   '/blind-box': typeof AuthenticatedBlindBoxIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/community-resources': typeof AuthenticatedCommunityResourcesIndexRoute
+  '/daily-lucky-number': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/group-buy': typeof AuthenticatedGroupBuyIndexRoute
   '/group-status': typeof AuthenticatedGroupStatusIndexRoute
@@ -709,6 +718,7 @@ export interface FileRoutesById {
   '/_authenticated/blind-box/': typeof AuthenticatedBlindBoxIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/community-resources/': typeof AuthenticatedCommunityResourcesIndexRoute
+  '/_authenticated/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/group-buy/': typeof AuthenticatedGroupBuyIndexRoute
   '/_authenticated/group-status/': typeof AuthenticatedGroupStatusIndexRoute
@@ -788,6 +798,7 @@ export interface FileRouteTypes {
     | '/blind-box/'
     | '/channels/'
     | '/community-resources/'
+    | '/daily-lucky-number/'
     | '/dashboard/'
     | '/group-buy/'
     | '/group-status/'
@@ -864,6 +875,7 @@ export interface FileRouteTypes {
     | '/blind-box'
     | '/channels'
     | '/community-resources'
+    | '/daily-lucky-number'
     | '/dashboard'
     | '/group-buy'
     | '/group-status'
@@ -943,6 +955,7 @@ export interface FileRouteTypes {
     | '/_authenticated/blind-box/'
     | '/_authenticated/channels/'
     | '/_authenticated/community-resources/'
+    | '/_authenticated/daily-lucky-number/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/group-buy/'
     | '/_authenticated/group-status/'
@@ -1381,6 +1394,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/daily-lucky-number/': {
+      id: '/_authenticated/daily-lucky-number/'
+      path: '/daily-lucky-number'
+      fullPath: '/daily-lucky-number/'
+      preLoaderRoute: typeof AuthenticatedDailyLuckyNumberIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/community-resources/': {
       id: '/_authenticated/community-resources/'
       path: '/community-resources'
@@ -1645,6 +1665,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBlindBoxIndexRoute: typeof AuthenticatedBlindBoxIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedCommunityResourcesIndexRoute: typeof AuthenticatedCommunityResourcesIndexRoute
+  AuthenticatedDailyLuckyNumberIndexRoute: typeof AuthenticatedDailyLuckyNumberIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedGroupBuyIndexRoute: typeof AuthenticatedGroupBuyIndexRoute
   AuthenticatedGroupStatusIndexRoute: typeof AuthenticatedGroupStatusIndexRoute
@@ -1678,6 +1699,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedCommunityResourcesIndexRoute:
     AuthenticatedCommunityResourcesIndexRoute,
+  AuthenticatedDailyLuckyNumberIndexRoute:
+    AuthenticatedDailyLuckyNumberIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedGroupBuyIndexRoute: AuthenticatedGroupBuyIndexRoute,
   AuthenticatedGroupStatusIndexRoute: AuthenticatedGroupStatusIndexRoute,

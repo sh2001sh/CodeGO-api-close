@@ -5,6 +5,7 @@ import {
   CircleSlash,
   Crown,
   ExternalLink,
+  Gift,
   Layers3,
   Loader2,
   Percent,
@@ -57,6 +58,9 @@ import type {
   SubscriptionPayResponse,
   SubscriptionPurchaseType,
 } from '../../types'
+import { formatLuckyDateTime } from '@/features/daily-lucky-number/lib'
+import { LuckyNumberCode } from '@/features/daily-lucky-number/components/lucky-number-code'
+import { TierBadge } from '@/features/daily-lucky-number/components/tier-badge'
 import { PackageModelScopeNotice } from '../package-model-scope-notice'
 
 interface PaymentMethod {
@@ -89,6 +93,7 @@ interface PaymentTracker {
   methodLabel: string
   actionLabel: string
   message: string
+  orderStatus?: SubscriptionOrderStatus
 }
 
 const EMPTY_PAYMENT_TRACKER: PaymentTracker = {
@@ -170,6 +175,54 @@ function StatusItem(props: { label: string; value: ReactNode }) {
   )
 }
 
+function PurchaseBenefitReveal(props: { order: SubscriptionOrderStatus }) {
+  const { t } = useTranslation()
+  const luckyNumber = props.order.lucky_number
+  const benefit = props.order.blind_box_benefit
+  if (!luckyNumber && !benefit) return null
+
+  return (
+    <div className='border-success/20 space-y-3 border-t pt-4'>
+      <div className='flex items-center gap-2'>
+        <CheckCircle2 className='text-success size-4' aria-hidden='true' />
+        <span className='text-foreground text-sm font-semibold'>
+          {t('Subscription benefits delivered')}
+        </span>
+      </div>
+      {luckyNumber ? (
+        <div className='flex min-w-0 flex-wrap items-center gap-2'>
+          <TierBadge tier={luckyNumber.membership_tier} compact />
+          <LuckyNumberCode
+            cardCode={luckyNumber.card_code}
+            luckySuffix={luckyNumber.lucky_suffix}
+          />
+        </div>
+      ) : null}
+      {benefit && benefit.expected_count > 0 ? (
+        <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
+          <Gift className='text-primary size-3.5' aria-hidden='true' />
+          <span>
+            {t('{{count}} blind boxes granted', {
+              count: benefit.granted_count || benefit.expected_count,
+            })}
+          </span>
+          {benefit.ends_at > 0 ? (
+            <span>
+              {t('Expires {{time}}', {
+                time: formatLuckyDateTime(
+                  benefit.ends_at,
+                  'Asia/Shanghai',
+                  undefined
+                ),
+              })}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
   const [paying, setPaying] = useState(false)
@@ -218,16 +271,39 @@ export function SubscriptionPurchaseDialog(props: Props) {
         if (!active || !response.success || !response.data) return
 
         const order = response.data as SubscriptionOrderStatus
-        if (order.status === 'success') {
+        if (
+          order.status === 'success' &&
+          order.fulfillment_status === 'completed'
+        ) {
           setPaymentTracker((current) => ({
             ...current,
             stage: 'success',
-            message: '支付成功，套餐已经生效。',
+            orderStatus: order,
+            message: '支付成功，套餐权益已经发放。',
           }))
           if (!hasTriggeredSuccessRef.current) {
             hasTriggeredSuccessRef.current = true
             window.dispatchEvent(new Event('subscription:changed'))
           }
+          return
+        }
+
+        if (order.status === 'success') {
+          if (order.fulfillment_status === 'failed') {
+            setPaymentTracker((current) => ({
+              ...current,
+              stage: 'failed',
+              orderStatus: order,
+              message: '支付已确认，但套餐权益发放失败，请联系管理员处理。',
+            }))
+            return
+          }
+          setPaymentTracker((current) => ({
+            ...current,
+            stage: 'pending',
+            orderStatus: order,
+            message: '支付已确认，正在发放月卡编号和盲盒权益。',
+          }))
           return
         }
 
@@ -261,7 +337,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
 
 	const cancelPendingPayment = () => {
 		const orderId = paymentTracker.orderId
-		if (orderId) void cancelSubscriptionOrder(orderId)
+		if (orderId && paymentTracker.orderStatus?.status !== 'success') {
+      void cancelSubscriptionOrder(orderId)
+		}
 		setPaymentTracker((current) => ({
 			...current,
 			stage: 'cancelled',
@@ -270,7 +348,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
 	}
 
 	const handleOpenChange = (open: boolean) => {
-		if (!open && paymentTracker.stage === 'pending') {
+		if (
+      !open &&
+      paymentTracker.stage === 'pending' &&
+      paymentTracker.orderStatus?.status !== 'success'
+    ) {
 			cancelPendingPayment()
 		}
 		props.onOpenChange(open)
@@ -541,6 +623,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
         tone: '',
       },
     }[paymentTracker.stage]
+    const isFulfilling =
+      paymentTracker.stage === 'pending' &&
+      paymentTracker.orderStatus?.status === 'success'
 
     return (
       <div
@@ -552,13 +637,17 @@ export function SubscriptionPurchaseDialog(props: Props) {
           </div>
           <div className='min-w-0'>
             <div className='text-foreground text-sm font-semibold'>
-              {statusConfig.title}
+            {isFulfilling ? '正在发放套餐权益' : statusConfig.title}
             </div>
             <p className='text-muted-foreground mt-1 text-sm leading-6'>
               {paymentTracker.message}
             </p>
           </div>
         </div>
+
+        {paymentTracker.stage === 'success' && paymentTracker.orderStatus ? (
+          <PurchaseBenefitReveal order={paymentTracker.orderStatus} />
+        ) : null}
 
         <div className='grid gap-2 sm:grid-cols-2'>
           <StatusItem label='操作类型' value={paymentTracker.actionLabel} />

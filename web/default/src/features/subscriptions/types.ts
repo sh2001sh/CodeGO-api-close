@@ -41,6 +41,12 @@ export const subscriptionPlanSchema = z.object({
     .enum(['monthly', 'weekly', 'daily', 'starter'])
     .default('monthly')
     .optional(),
+  membership_tier: z
+    .enum(['none', 'lite', 'standard', 'pro', 'ultra'])
+    .default('none')
+    .optional(),
+  lucky_draw_enabled: z.boolean().default(false).optional(),
+  blind_box_benefit_count: z.number().default(0).optional(),
   group_buy_enabled: z.boolean().default(false).optional(),
   group_buy_bonus_2: z.number().default(0).optional(),
   group_buy_bonus_3: z.number().default(0).optional(),
@@ -58,6 +64,21 @@ export const subscriptionPlanSchema = z.object({
 })
 
 export type SubscriptionPlan = z.infer<typeof subscriptionPlanSchema>
+
+export const subscriptionLuckyNumberSchema = z.object({
+  id: z.number(),
+  user_subscription_id: z.number(),
+  user_id: z.number(),
+  card_code: z.string(),
+  lucky_suffix: z.string(),
+  assigned_at: z.number(),
+  created_at: z.number(),
+  updated_at: z.number(),
+})
+
+export type SubscriptionLuckyNumber = z.infer<
+  typeof subscriptionLuckyNumberSchema
+>
 
 export interface PlanRecord {
   plan: SubscriptionPlan
@@ -94,6 +115,10 @@ export const userSubscriptionSchema = z.object({
       max_source_quota: z.number(),
       preview_claude_quota: z.number(),
     })
+    .optional(),
+  lucky_number: subscriptionLuckyNumberSchema.optional(),
+  membership_tier: z
+    .enum(['none', 'lite', 'standard', 'pro', 'ultra'])
     .optional(),
 })
 
@@ -219,6 +244,19 @@ export interface SubscriptionOrderStatus {
   payment_provider?: string
   create_time?: number
   complete_time?: number
+  fulfillment_status?: 'pending' | 'completed' | string
+  target_subscription_id?: number
+  lucky_number?: SubscriptionLuckyNumber & {
+    membership_tier?: string
+  }
+  blind_box_benefit?: {
+    expected_count: number
+    granted_count: number
+    membership_tier: string
+    starts_at: number
+    ends_at: number
+    status: string
+  }
 }
 
 export interface CreateUserSubscriptionRequest {

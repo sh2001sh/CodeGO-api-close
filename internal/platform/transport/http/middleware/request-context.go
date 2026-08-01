@@ -53,6 +53,7 @@ func isAuthenticatedAPIRoute(method, path string) bool {
 		strings.HasPrefix(path, "/api/subscription") ||
 		strings.HasPrefix(path, "/api/packages") ||
 		strings.HasPrefix(path, "/api/group-buy") ||
+		strings.HasPrefix(path, "/api/daily-lucky-number") ||
 		strings.HasPrefix(path, "/api/blind-box/admin") ||
 		strings.HasPrefix(path, "/api/admin/") ||
 		strings.HasPrefix(path, "/api/log") {

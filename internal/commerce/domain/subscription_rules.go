@@ -19,6 +19,36 @@ func NormalizeSubscriptionPlanType(planType string) string {
 	}
 }
 
+func NormalizeSubscriptionMembershipTier(tier string) string {
+	switch strings.TrimSpace(strings.ToLower(tier)) {
+	case commerceschema.SubscriptionMembershipTierLite:
+		return commerceschema.SubscriptionMembershipTierLite
+	case commerceschema.SubscriptionMembershipTierStandard:
+		return commerceschema.SubscriptionMembershipTierStandard
+	case commerceschema.SubscriptionMembershipTierPro:
+		return commerceschema.SubscriptionMembershipTierPro
+	case commerceschema.SubscriptionMembershipTierUltra:
+		return commerceschema.SubscriptionMembershipTierUltra
+	default:
+		return commerceschema.SubscriptionMembershipTierNone
+	}
+}
+
+func SubscriptionMembershipTierRank(tier string) int {
+	switch NormalizeSubscriptionMembershipTier(tier) {
+	case commerceschema.SubscriptionMembershipTierLite:
+		return 1
+	case commerceschema.SubscriptionMembershipTierStandard:
+		return 2
+	case commerceschema.SubscriptionMembershipTierPro:
+		return 3
+	case commerceschema.SubscriptionMembershipTierUltra:
+		return 4
+	default:
+		return 0
+	}
+}
+
 func NormalizeSubscriptionPurchaseType(purchaseType string) string {
 	switch strings.TrimSpace(strings.ToLower(purchaseType)) {
 	case commerceschema.SubscriptionPurchaseTypeGroupBuy:

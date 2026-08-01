@@ -86,7 +86,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 		return nil, commercedomain.ErrBlindBoxSiteOpenLimitReached
 	}
 
-	orders, available, err := getOpenableBlindBoxOrdersTx(tx, userID, orderID)
+	orders, available, err := getOpenableBlindBoxOrdersTx(tx, userID, orderID, now)
 	if err != nil {
 		return nil, err
 	}
@@ -379,9 +379,10 @@ func getOrCreateBlindBoxPityStateTx(tx *gorm.DB, userID int) (*commerceschema.Bl
 	return &state, nil
 }
 
-func getOpenableBlindBoxOrdersTx(tx *gorm.DB, userID int, orderID *int) ([]commerceschema.BlindBoxOrder, int, error) {
+func getOpenableBlindBoxOrdersTx(tx *gorm.DB, userID int, orderID *int, now int64) ([]commerceschema.BlindBoxOrder, int, error) {
 	query := tx.Set("gorm:query_option", "FOR UPDATE").
-		Where("user_id = ? AND status = ? AND opened_count < quantity", userID, constant.TopUpStatusSuccess)
+		Where("user_id = ? AND status = ? AND opened_count < quantity", userID, constant.TopUpStatusSuccess).
+		Where("source <> ? OR expires_at = 0 OR expires_at > ?", commerceschema.BlindBoxOrderSourceSubscriptionBenefit, now)
 	if orderID != nil {
 		query = query.Where("id = ?", *orderID)
 	}

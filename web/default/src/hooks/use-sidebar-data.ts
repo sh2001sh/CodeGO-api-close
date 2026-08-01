@@ -15,6 +15,7 @@ import {
   RefreshCcw,
   ScrollText,
   Settings,
+  Sparkles,
   Ticket,
   User,
   Users,
@@ -105,6 +106,11 @@ export function useSidebarData(): SidebarData {
             icon: Package,
           },
           {
+            title: t('Daily Lucky Number'),
+            url: '/daily-lucky-number',
+            icon: Sparkles,
+          },
+          {
             title: t('Bounties'),
             url: '/bounties',
             icon: HandCoins,
@@ -171,6 +177,13 @@ export function useSidebarData(): SidebarData {
             activeUrls: ['/subscriptions'],
             configUrls: ['/blind-box-admin'],
             icon: Egg,
+          },
+          {
+            title: t('Daily Lucky Number'),
+            url: '/subscriptions#daily-lucky-admin',
+            activeUrls: ['/subscriptions'],
+            configUrls: ['/daily-lucky-admin'],
+            icon: Sparkles,
           },
           {
             title: t('System settings'),

@@ -32,6 +32,8 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { SubscriptionLuckySummary } from '@/features/daily-lucky-number/components/subscription-lucky-summary'
+import { useDailyLuckyNumberSelf } from '@/features/daily-lucky-number/hooks/use-daily-lucky-number'
 import { updateBillingPreference } from '@/features/subscriptions/api'
 import {
   getBillingPreferenceFromFundingSourceOrder,
@@ -155,6 +157,7 @@ export function SubscriptionUsagePanel() {
 
   const activeSubscriptions = subscriptionData?.subscriptions ?? []
   const hasActiveSubscriptions = activeSubscriptions.length > 0
+  const dailyLuckyQuery = useDailyLuckyNumberSelf(hasActiveSubscriptions)
 
   useEffect(() => {
     if (!subscriptionData) return
@@ -575,6 +578,9 @@ export function SubscriptionUsagePanel() {
                   periodRemain={periodRemain}
                   periodPercent={periodPercent}
                   isMonthlyPlan={isMonthlyPlan}
+                  plan={planMeta?.plan}
+                  luckyDraw={dailyLuckyQuery.data?.today_draw}
+                  luckyRewards={dailyLuckyQuery.data?.recent_rewards ?? []}
                 />
               )
             })}
@@ -599,6 +605,9 @@ function SubscriptionCard(props: {
   periodRemain: number
   periodPercent: number
   isMonthlyPlan: boolean
+  plan?: PlanRecord['plan']
+  luckyDraw?: import('@/features/daily-lucky-number/types').LuckyDrawView
+  luckyRewards: import('@/features/daily-lucky-number/types').LuckyRewardView[]
 }) {
   const subscription = props.record.subscription
   const usageStatus = getSubscriptionUsageStatus(
@@ -627,6 +636,16 @@ function SubscriptionCard(props: {
       </div>
       {usageStatus.note ? (
         <div className='text-warning mt-2 text-xs'>{usageStatus.note}</div>
+      ) : null}
+      {props.isMonthlyPlan && subscription.lucky_number ? (
+        <SubscriptionLuckySummary
+          className='border-border/70 mt-3 border-t pt-3'
+          compact
+          record={props.record}
+          plan={props.plan}
+          draw={props.luckyDraw}
+          rewards={props.luckyRewards}
+        />
       ) : null}
 
       <div className='mt-4 space-y-3'>

@@ -11,8 +11,9 @@ const (
 	BlindBoxRewardTypeProp         = "prop"
 	BlindBoxRewardTypeSubscription = "subscription"
 
-	BlindBoxOrderSourcePurchase   = "purchase"
-	BlindBoxOrderSourceAdminGrant = "admin_grant"
+	BlindBoxOrderSourcePurchase            = "purchase"
+	BlindBoxOrderSourceAdminGrant          = "admin_grant"
+	BlindBoxOrderSourceSubscriptionBenefit = "subscription_benefit"
 
 	BlindBoxCreditStatusActive    = "active"
 	BlindBoxCreditStatusExhausted = "exhausted"
@@ -26,13 +27,16 @@ type BlindBoxOrder struct {
 	OpenedCount int     `json:"opened_count"`
 	Money       float64 `json:"money"`
 
-	TradeNo         string `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod   string `json:"payment_method" gorm:"type:varchar(50)"`
-	PaymentProvider string `json:"payment_provider" gorm:"type:varchar(50);default:''"`
-	Source          string `json:"source" gorm:"type:varchar(32);default:'purchase';index"`
-	Status          string `json:"status" gorm:"type:varchar(32);index"`
-	CreateTime      int64  `json:"create_time" gorm:"index"`
-	CompleteTime    int64  `json:"complete_time"`
+	TradeNo            string `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod      string `json:"payment_method" gorm:"type:varchar(50)"`
+	PaymentProvider    string `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	Source             string `json:"source" gorm:"type:varchar(32);default:'purchase';index"`
+	UserSubscriptionId int    `json:"user_subscription_id" gorm:"index"`
+	BenefitCycle       string `json:"benefit_cycle" gorm:"type:varchar(128);index"`
+	ExpiresAt          int64  `json:"expires_at" gorm:"bigint;index"`
+	Status             string `json:"status" gorm:"type:varchar(32);index"`
+	CreateTime         int64  `json:"create_time" gorm:"index"`
+	CompleteTime       int64  `json:"complete_time"`
 
 	ProviderPayload string `json:"provider_payload" gorm:"type:text"`
 }

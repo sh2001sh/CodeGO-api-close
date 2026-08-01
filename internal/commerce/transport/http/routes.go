@@ -89,6 +89,24 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.POST("/props/:id/use", middleware.CriticalRateLimit(), useBlindBoxProp)
 	}
 
+	dailyLuckyNumberRoute := apiRouter.Group("/daily-lucky-number")
+	dailyLuckyNumberRoute.Use(middleware.UserAuth())
+	{
+		dailyLuckyNumberRoute.GET("/self", getDailyLuckyNumberSelf)
+		dailyLuckyNumberRoute.GET("/history", getDailyLuckyNumberHistory)
+		dailyLuckyNumberRoute.GET("/public-wins", getDailyLuckyNumberPublicWins)
+	}
+
+	dailyLuckyNumberAdminRoute := apiRouter.Group("/daily-lucky-number/admin")
+	dailyLuckyNumberAdminRoute.Use(middleware.AdminAuth())
+	{
+		dailyLuckyNumberAdminRoute.GET("/config", getAdminDailyLuckyNumberConfig)
+		dailyLuckyNumberAdminRoute.PUT("/config", updateAdminDailyLuckyNumberConfig)
+		dailyLuckyNumberAdminRoute.GET("/draws", listAdminDailyLuckyNumberDraws)
+		dailyLuckyNumberAdminRoute.POST("/draws/:id/retry", retryAdminDailyLuckyNumberDraw)
+		dailyLuckyNumberAdminRoute.POST("/backfill", backfillAdminDailyLuckyNumbers)
+	}
+
 	blindBoxAdminRoute := apiRouter.Group("/blind-box/admin")
 	blindBoxAdminRoute.Use(middleware.AdminAuth())
 	{

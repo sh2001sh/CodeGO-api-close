@@ -3,6 +3,7 @@ package store
 import (
 	toolpricing "github.com/sh2001sh/new-api/internal/billing/toolpricing"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
+	luckysettings "github.com/sh2001sh/new-api/internal/commerce/luckysettings"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
@@ -23,8 +24,8 @@ func applyOptionValue(key string, value string) (err error) {
 	defer platformconfig.OptionMapRWMutex.Unlock()
 	platformconfig.OptionMap[key] = value
 
-	if handleConfigUpdate(key, value) {
-		return nil
+	if handled, configErr := handleConfigUpdate(key, value); handled {
+		return configErr
 	}
 
 	if strings.HasSuffix(key, "Permission") {
@@ -344,22 +345,25 @@ func applyOptionValue(key string, value string) (err error) {
 	return err
 }
 
-func handleConfigUpdate(key, value string) bool {
+func handleConfigUpdate(key, value string) (bool, error) {
 	parts := strings.SplitN(key, ".", 2)
 	if len(parts) != 2 {
-		return false
+		return false, nil
 	}
 
 	configName := parts[0]
 	configKey := parts[1]
 	cfg := config.GlobalConfig.Get(configName)
 	if cfg == nil {
-		return false
+		return false, nil
 	}
 
-	config.UpdateConfigFromMap(cfg, map[string]string{
-		configKey: value,
-	})
+	if configName == "daily_lucky_number_setting" {
+		return true, luckysettings.ApplyField(configKey, value)
+	}
+	if err := config.UpdateConfigFromMap(cfg, map[string]string{configKey: value}); err != nil {
+		return true, err
+	}
 
 	switch configName {
 	case "performance_setting":
@@ -374,5 +378,5 @@ func handleConfigUpdate(key, value string) bool {
 		UpdateAndSyncTheme()
 	}
 
-	return true
+	return true, nil
 }

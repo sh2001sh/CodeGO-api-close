@@ -58,6 +58,7 @@ func V2MigrationIDs() []string {
 		"20260724_gateway_route_pools",
 		"20260724_gateway_route_pool_auto_discovery",
 		"20260724_billing_funding_attribution",
+		"20260801_daily_lucky_number",
 	}
 }
 
@@ -169,6 +170,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260724_billing_funding_attribution", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&billingschema.FundingSourcePolicy{}, &billingschema.FundingLot{}, &billingschema.FundingAllocation{}, &billingschema.RequestEconomics{})
 		}},
+		{ID: "20260801_daily_lucky_number", Run: migrateDailyLuckyNumber},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -325,4 +327,33 @@ func migrateUserSubscription(tx *gorm.DB) error {
 		return tx.AutoMigrate(&commerceschema.UserSubscription{})
 	}
 	return ensureUserSubscriptionTableSQLiteTx(tx)
+}
+
+func migrateDailyLuckyNumber(tx *gorm.DB) error {
+	if !platformdb.UsingSQLite {
+		return tx.AutoMigrate(
+			&commerceschema.SubscriptionPlan{},
+			&commerceschema.UserSubscription{},
+			&commerceschema.BlindBoxOrder{},
+			&commerceschema.SubscriptionLuckyNumber{},
+			&commerceschema.SubscriptionLuckyDraw{},
+			&commerceschema.SubscriptionLuckyReward{},
+			&commerceschema.SubscriptionBlindBoxBenefitCycle{},
+		)
+	}
+	if err := migrateSubscriptionPlan(tx); err != nil {
+		return err
+	}
+	if err := migrateUserSubscription(tx); err != nil {
+		return err
+	}
+	if err := tx.AutoMigrate(&commerceschema.BlindBoxOrder{}); err != nil {
+		return err
+	}
+	return tx.AutoMigrate(
+		&commerceschema.SubscriptionLuckyNumber{},
+		&commerceschema.SubscriptionLuckyDraw{},
+		&commerceschema.SubscriptionLuckyReward{},
+		&commerceschema.SubscriptionBlindBoxBenefitCycle{},
+	)
 }

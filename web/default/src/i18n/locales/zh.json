@@ -1,5 +1,8 @@
 {
   "translation": {
+    "360": "360",
+    "1000": "1000",
+    "10000": "10000",
     "Community resources": "社区资源",
     "Discover and share scripts, skills, and tools built around shu26.cfd.": "发现并分享围绕 shu26.cfd 构建的脚本、Skill 和工具。",
     "Download practical GitHub resources or submit your own work for review.": "下载实用的 GitHub 资源，或提交你的作品等待审核。",
@@ -73,9 +76,6 @@
     "Save campaign": "保存活动",
     "First purchase campaign updated": "首购活动已更新",
     "Ends {{time}}": "结束时间：{{time}}",
-    "360": "360",
-    "1000": "1000",
-    "10000": "10000",
     "Apply your tools": "配置本地工具",
     "Authorize in browser": "在浏览器中授权",
     "Browse all release assets": "查看全部发行文件",

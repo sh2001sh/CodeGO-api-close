@@ -189,6 +189,7 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 			return err
 		}
 
+		order.TargetSubscriptionId = sub.Id
 		order.FulfillmentStatus = commerceschema.SubscriptionOrderFulfillmentCompleted
 		if err := tx.Save(order).Error; err != nil {
 			return err

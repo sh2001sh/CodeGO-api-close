@@ -23,6 +23,8 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SubscriptionLuckySummary } from '@/features/daily-lucky-number/components/subscription-lucky-summary'
+import { useDailyLuckyNumberSelf } from '@/features/daily-lucky-number/hooks/use-daily-lucky-number'
 import {
   getSubscriptionDisabledReasonText,
   subscriptionQuotaUnitsToUSD,
@@ -107,6 +109,7 @@ export function CurrentPackagePanel(props: {
   ) => void
 }) {
   const { t } = useTranslation()
+  const dailyLuckyQuery = useDailyLuckyNumberSelf(Boolean(props.subscriptions[0]))
   const planMap = useMemo(() => {
     const map = new Map<number, PlanRecord>()
     for (const item of props.plans) map.set(item.plan.id, item)
@@ -172,6 +175,17 @@ export function CurrentPackagePanel(props: {
                 : 0
             }
           />
+          {current.subscription.lucky_number ? (
+            <div className='order-last basis-full border-t pt-3'>
+              <SubscriptionLuckySummary
+                record={current}
+                plan={currentPlanRecord}
+                draw={dailyLuckyQuery.data?.today_draw}
+                rewards={dailyLuckyQuery.data?.recent_rewards ?? []}
+                showLink
+              />
+            </div>
+          ) : null}
           <div className='ml-auto flex gap-2'>
             {canFuel ? (
               <Button

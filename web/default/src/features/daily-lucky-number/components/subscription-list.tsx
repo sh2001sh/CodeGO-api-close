@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 import { Ticket } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
@@ -13,20 +12,19 @@ export function LuckySubscriptionList(props: {
   draw?: LuckyDrawView
   rewards: LuckyRewardView[]
 }) {
-  const { t } = useTranslation()
   return (
     <section className='space-y-3'>
       <div className='flex flex-wrap items-end justify-between gap-2'>
         <div>
           <h2 className='text-foreground text-base font-semibold tracking-tight'>
-            {t('My monthly card numbers')}
+            我的月卡号码
           </h2>
           <p className='text-muted-foreground mt-1 text-sm'>
-            {t('Numbers remain yours after expiry, while only active eligible cards enter future draws.')}
+            号码永久保留，只有有效期内的月卡会参与后续开奖。
           </p>
         </div>
         <span className='text-muted-foreground text-xs tabular-nums'>
-          {t('{{count}} eligible cards', { count: props.subscriptions.length })}
+          {props.subscriptions.length} 个有效号码
         </span>
       </div>
 
@@ -37,12 +35,12 @@ export function LuckySubscriptionList(props: {
               <EmptyMedia variant='icon'>
                 <Ticket aria-hidden='true' />
               </EmptyMedia>
-              <EmptyTitle>{t('No eligible monthly card')}</EmptyTitle>
+            <EmptyTitle>暂时没有可参与的月卡</EmptyTitle>
               <EmptyDescription>
-                {t('Buy an eligible monthly plan to receive a permanent number and join the next draw automatically.')}
+                购买符合条件的月卡即可获得专属号码，并自动参与下一期开奖。
               </EmptyDescription>
             </EmptyHeader>
-            <Button render={<Link to='/packages' />}>{t('Browse plans')}</Button>
+            <Button render={<Link to='/packages' />}>查看套餐</Button>
           </Empty>
         </Card>
       ) : (

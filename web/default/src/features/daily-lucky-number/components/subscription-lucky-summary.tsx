@@ -1,6 +1,5 @@
 import { ArrowUpRight, CalendarDays } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type {
@@ -47,7 +46,6 @@ export function SubscriptionLuckySummary(props: {
   showLink?: boolean
   className?: string
 }) {
-  const { t } = useTranslation()
   const subscription = props.record.subscription
   const plan = isPlanRecord(props.plan) ? props.plan.plan : props.plan
   const tier = normalizeMembershipTier(
@@ -81,11 +79,8 @@ export function SubscriptionLuckySummary(props: {
             )}
           >
             {matchedDigits > 0
-              ? t('{{digits}} digits · +{{amount}}', {
-                  digits: matchedDigits,
-                  amount: formatLuckyUsd(rewardUsd),
-                })
-              : t('No match today')}
+              ? `命中 ${matchedDigits} 位 · +${formatLuckyUsd(rewardUsd)}`
+              : '今日未命中'}
           </span>
         ) : null}
       </div>
@@ -99,13 +94,13 @@ export function SubscriptionLuckySummary(props: {
           <TierBadge tier={tier} />
           <div className='min-w-0'>
             <div className='text-foreground truncate text-sm font-semibold'>
-              {plan?.title || t('Monthly subscription')}
+              {plan?.title || '月卡套餐'}
             </div>
             <div className='text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
               <CalendarDays className='size-3.5' aria-hidden='true' />
-              <span>{t('{{count}} days left', { count: getRemainingDays(subscription.end_time) })}</span>
+              <span>剩余 {getRemainingDays(subscription.end_time)} 天</span>
               <span aria-hidden='true'>·</span>
-              <span>{t('Lucky suffix')} {suffix || '----'}</span>
+              <span>幸运尾号 {suffix || '----'}</span>
             </div>
           </div>
         </div>
@@ -115,7 +110,7 @@ export function SubscriptionLuckySummary(props: {
             size='sm'
             render={<Link to='/daily-lucky-number' />}
           >
-            {t('View activity')}
+            查看活动
             <ArrowUpRight data-icon='inline-end' />
           </Button>
         ) : null}
@@ -126,7 +121,7 @@ export function SubscriptionLuckySummary(props: {
           cardCode={number?.card_code}
           luckySuffix={number?.lucky_suffix}
         />
-        <span
+          <span
           className={cn(
             'text-muted-foreground text-xs',
             matchedDigits > 0 && 'text-success font-medium'
@@ -134,12 +129,9 @@ export function SubscriptionLuckySummary(props: {
         >
           {props.draw
             ? matchedDigits > 0
-              ? t('Today: {{digits}}-digit match · +{{amount}}', {
-                  digits: matchedDigits,
-                  amount: formatLuckyUsd(rewardUsd),
-                })
-              : t('No match today')
-            : t('Enters from the next draw')}
+              ? `今日命中 ${matchedDigits} 位 · +${formatLuckyUsd(rewardUsd)}`
+              : '今日未命中'
+            : '将从下一期开奖开始参与'}
         </span>
       </div>
     </div>

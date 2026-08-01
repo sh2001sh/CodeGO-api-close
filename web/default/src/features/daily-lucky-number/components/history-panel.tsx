@@ -1,5 +1,4 @@
 import { AlertCircle, ArrowLeft, ArrowRight, History, Trophy } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -26,7 +25,6 @@ export function HistoryPanel(props: {
   publicWinsError?: boolean
   onRetry: () => void
 }) {
-  const { t, i18n } = useTranslation()
   const page = props.tab === 'mine' ? props.history : props.publicWins
   const currentPage = props.tab === 'mine' ? props.historyPage : props.publicPage
   const loading = props.tab === 'mine' ? props.historyLoading : props.publicWinsLoading
@@ -38,9 +36,9 @@ export function HistoryPanel(props: {
       <div className='border-border/70 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5'>
         <div className='flex items-center gap-2'>
           <History className='text-primary size-4' aria-hidden='true' />
-          <h2 className='text-foreground text-base font-semibold'>{t('Draw history')}</h2>
+          <h2 className='text-foreground text-base font-semibold'>中奖记录</h2>
         </div>
-        <div className='bg-muted inline-flex rounded-lg p-1' role='tablist' aria-label={t('Draw history views')}>
+        <div className='bg-muted inline-flex rounded-lg p-1' role='tablist' aria-label='中奖记录视图'>
           <button
             type='button'
             role='tab'
@@ -49,7 +47,7 @@ export function HistoryPanel(props: {
             className={cn('rounded-md px-3 py-1.5 text-xs font-medium transition-colors', props.tab === 'mine' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
             onClick={() => props.onTabChange('mine')}
           >
-            {t('My records')}
+            我的中奖记录
           </button>
           <button
             type='button'
@@ -59,19 +57,19 @@ export function HistoryPanel(props: {
             className={cn('rounded-md px-3 py-1.5 text-xs font-medium transition-colors', props.tab === 'public' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
             onClick={() => props.onTabChange('public')}
           >
-            {t('Public wins')}
+            历史中奖名单
           </button>
         </div>
       </div>
 
-      <div id='daily-lucky-history-panel' role='tabpanel' aria-label={props.tab === 'mine' ? t('My records') : t('Public wins')}>
+      <div id='daily-lucky-history-panel' role='tabpanel' aria-label={props.tab === 'mine' ? '我的中奖记录' : '历史中奖名单'}>
       {error ? (
         <Alert variant='destructive' className='m-4 sm:m-5'>
           <AlertCircle aria-hidden='true' />
           <AlertDescription className='flex flex-wrap items-center justify-between gap-3'>
-            <span>{props.tab === 'mine' ? t('Unable to load your draw history.') : t('Unable to load public wins.')}</span>
+            <span>{props.tab === 'mine' ? '个人中奖记录加载失败。' : '历史中奖名单加载失败。'}</span>
             <Button variant='outline' size='sm' onClick={props.onRetry}>
-              {t('Try again')}
+              重试
             </Button>
           </AlertDescription>
         </Alert>
@@ -86,11 +84,11 @@ export function HistoryPanel(props: {
             <EmptyMedia variant='icon'>
               {props.tab === 'mine' ? <History aria-hidden='true' /> : <Trophy aria-hidden='true' />}
             </EmptyMedia>
-            <EmptyTitle>{props.tab === 'mine' ? t('No winning records yet') : t('No public wins yet')}</EmptyTitle>
+            <EmptyTitle>{props.tab === 'mine' ? '暂时没有中奖记录' : '暂时没有公开中奖名单'}</EmptyTitle>
             <EmptyDescription>
               {props.tab === 'mine'
-                ? t('Only matching draws are listed here. Participation and quota settlement happen automatically.')
-                : t('Large wins appear here after their quota settlement is complete.')}
+                ? '命中的开奖记录会显示在这里，参与和额度结算均由系统自动完成。'
+                : '中奖记录完成额度结算后会在这里公开展示。'}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -99,11 +97,11 @@ export function HistoryPanel(props: {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('Date')}</TableHead>
-                <TableHead>{t('Winning number')}</TableHead>
-                <TableHead>{props.tab === 'mine' ? t('Your suffix') : t('Card suffix')}</TableHead>
-                <TableHead>{t('Result')}</TableHead>
-                <TableHead className='text-right'>{t('Reward')}</TableHead>
+                <TableHead>日期</TableHead>
+                <TableHead>中奖号码</TableHead>
+                <TableHead>{props.tab === 'mine' ? '我的尾号' : '中奖尾号'}</TableHead>
+                <TableHead>结果</TableHead>
+                <TableHead className='text-right'>奖励</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -111,13 +109,13 @@ export function HistoryPanel(props: {
                 ? props.history?.records.map((item) => (
                     <TableRow key={item.reward.id}>
                       <TableCell className='text-muted-foreground text-xs'>
-                        {formatLuckyDate(item.draw_date, props.timezone, i18n.language)}
+                        {formatLuckyDate(item.draw_date, props.timezone, 'zh-CN')}
                       </TableCell>
                       <TableCell><LuckyDigits value={item.winning_number} /></TableCell>
                       <TableCell className='font-mono text-sm tabular-nums'>{item.reward.lucky_number}</TableCell>
                       <TableCell>
                         <span className='text-success text-xs font-medium'>
-                          {t('{{count}} digits', { count: item.reward.matched_digits })}
+                        命中 {item.reward.matched_digits} 位
                         </span>
                       </TableCell>
                       <TableCell className='text-right font-mono text-sm font-semibold tabular-nums'>
@@ -128,14 +126,14 @@ export function HistoryPanel(props: {
                 : props.publicWins?.records.map((item, index) => (
                     <TableRow key={`${item.draw_date}-${item.lucky_suffix}-${index}`}>
                       <TableCell className='text-muted-foreground text-xs'>
-                        {formatLuckyDate(item.draw_date, props.timezone, i18n.language)}
+                        {formatLuckyDate(item.draw_date, props.timezone, 'zh-CN')}
                       </TableCell>
                       <TableCell><LuckyDigits value={item.winning_number} /></TableCell>
                       <TableCell className='font-mono text-sm tabular-nums'>{item.lucky_suffix}</TableCell>
                       <TableCell className='text-xs'>
                         <div className='flex items-center gap-2'>
                           <TierBadge tier={item.membership_tier} compact />
-                          <span>{t('{{count}} digits', { count: item.matched_digits })}</span>
+                          <span>命中 {item.matched_digits} 位</span>
                         </div>
                       </TableCell>
                       <TableCell className='text-right font-mono text-sm font-semibold tabular-nums'>
@@ -147,7 +145,7 @@ export function HistoryPanel(props: {
           </Table>
           <div className='border-border/70 flex items-center justify-between border-t px-4 py-3 sm:px-5'>
             <span className='text-muted-foreground text-xs tabular-nums'>
-              {t('Page {{page}} of {{total}}', { page: currentPage, total: totalPages })}
+              第 {currentPage} / {totalPages} 页
             </span>
             <div className='flex items-center gap-2'>
               <Button
@@ -155,7 +153,7 @@ export function HistoryPanel(props: {
                 size='icon-sm'
                 onClick={() => props.onPageChange(currentPage - 1)}
                 disabled={currentPage <= 1}
-                aria-label={t('Previous page')}
+                aria-label='上一页'
               >
                 <ArrowLeft aria-hidden='true' />
               </Button>
@@ -164,7 +162,7 @@ export function HistoryPanel(props: {
                 size='icon-sm'
                 onClick={() => props.onPageChange(currentPage + 1)}
                 disabled={currentPage >= totalPages}
-                aria-label={t('Next page')}
+                aria-label='下一页'
               >
                 <ArrowRight aria-hidden='true' />
               </Button>

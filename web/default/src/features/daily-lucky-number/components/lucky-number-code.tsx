@@ -1,5 +1,4 @@
 import { Check, Copy } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
@@ -17,14 +16,13 @@ export function LuckyNumberCode(props: {
   compact?: boolean
   className?: string
 }) {
-  const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard()
   const code = props.cardCode?.trim() || ''
   const suffix = normalizeLuckyNumber(props.luckySuffix)
   const copied = code !== '' && copiedText === code
 
   if (!code) {
-    return <span className='text-muted-foreground text-xs'>{t('Number pending')}</span>
+    return <span className='text-muted-foreground text-xs'>号码待生成</span>
   }
 
   return (
@@ -49,14 +47,14 @@ export function LuckyNumberCode(props: {
               <Button
                 variant='ghost'
                 size='icon-xs'
-                aria-label={copied ? t('Copied') : t('Copy number')}
+                aria-label={copied ? '已复制' : '复制号码'}
                 onClick={() => void copyToClipboard(code)}
               />
             }
           >
             {copied ? <Check className='text-success' /> : <Copy />}
           </TooltipTrigger>
-          <TooltipContent>{copied ? t('Copied') : t('Copy number')}</TooltipContent>
+          <TooltipContent>{copied ? '已复制' : '复制号码'}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
     </span>

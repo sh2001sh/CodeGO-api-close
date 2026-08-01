@@ -1,33 +1,41 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { AlertCircle, RefreshCw } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { AlertCircle, BookOpen, Info, RefreshCw } from 'lucide-react'
 import { SectionPageLayout } from '@/components/layout'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getDailyLuckyNumberHistory, getDailyLuckyNumberPublicWins } from './api'
 import { DailyLuckyOverview } from './components/daily-lucky-overview'
 import { HistoryPanel } from './components/history-panel'
 import { LuckySubscriptionList } from './components/subscription-list'
+import { TodayWinnersPanel } from './components/today-winners-panel'
 import { useDailyLuckyNumberSelf } from './hooks/use-daily-lucky-number'
 import type { LuckyPublicWinPage, LuckyRewardPage } from './types'
 
 export function DailyLuckyNumberPage() {
-  const { t } = useTranslation()
   const selfQuery = useDailyLuckyNumberSelf()
   const [historyTab, setHistoryTab] = useState<'mine' | 'public'>('mine')
   const [historyPage, setHistoryPage] = useState(1)
   const [publicPage, setPublicPage] = useState(1)
   const [now, setNow] = useState(() => Date.now())
+  const [rulesOpen, setRulesOpen] = useState(false)
 
   const historyQuery = useQuery({
     queryKey: ['daily-lucky-number', 'history', historyPage],
     queryFn: async (): Promise<LuckyRewardPage> => {
       const response = await getDailyLuckyNumberHistory(historyPage)
       if (!response.success || !response.data) {
-        throw new Error(response.message || 'Unable to load draw history.')
+        throw new Error(response.message || '无法加载中奖记录。')
       }
       return response.data
     },
@@ -39,7 +47,7 @@ export function DailyLuckyNumberPage() {
     queryFn: async (): Promise<LuckyPublicWinPage> => {
       const response = await getDailyLuckyNumberPublicWins(publicPage)
       if (!response.success || !response.data) {
-        throw new Error(response.message || 'Unable to load public wins.')
+        throw new Error(response.message || '无法加载公开中奖名单。')
       }
       return response.data
     },
@@ -65,14 +73,18 @@ export function DailyLuckyNumberPage() {
 
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>{t('Daily Lucky Number')}</SectionPageLayout.Title>
+      <SectionPageLayout.Title>每日幸运号码</SectionPageLayout.Title>
       <SectionPageLayout.Description>
-        {t('A quiet daily benefit for eligible monthly subscriptions: one shared draw, automatic settlement, and a permanent card number.')}
+        月卡用户自动参与每日开奖，号码永久保留，中奖奖励直接计入对应套餐额度。
       </SectionPageLayout.Description>
       <SectionPageLayout.Actions>
+        <Button variant='outline' size='sm' onClick={() => setRulesOpen(true)}>
+          <Info data-icon='inline-start' />
+          查看规则
+        </Button>
         <Button variant='outline' size='sm' onClick={refresh} disabled={selfQuery.isFetching}>
           <RefreshCw className={selfQuery.isFetching ? 'animate-spin' : undefined} data-icon='inline-start' />
-          {t('Refresh')}
+          刷新
         </Button>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
@@ -86,9 +98,9 @@ export function DailyLuckyNumberPage() {
             <Alert variant='destructive'>
               <AlertCircle aria-hidden='true' />
               <AlertDescription className='flex flex-wrap items-center justify-between gap-3'>
-                <span>{t('Unable to load the daily lucky number activity.')}</span>
+                <span>每日幸运号码活动加载失败。</span>
                 <Button variant='outline' size='sm' onClick={() => void selfQuery.refetch()}>
-                  {t('Try again')}
+                  重试
                 </Button>
               </AlertDescription>
             </Alert>
@@ -99,6 +111,14 @@ export function DailyLuckyNumberPage() {
                 countdownSeconds={countdownSeconds}
                 onRefresh={refresh}
                 refreshing={selfQuery.isFetching}
+              />
+              <TodayWinnersPanel
+                records={publicWinsQuery.data?.records}
+                drawDate={payload.today_draw?.draw_date}
+                timezone={payload.timezone}
+                loading={publicWinsQuery.isLoading}
+                error={publicWinsQuery.isError}
+                onRetry={() => void publicWinsQuery.refetch()}
               />
               <LuckySubscriptionList
                 subscriptions={payload.subscriptions}
@@ -127,15 +147,43 @@ export function DailyLuckyNumberPage() {
                 timezone={payload.timezone}
               />
               <div className='text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs leading-5'>
-                <span>{t('No purchase of extra draw entries is available. Rewards cannot be withdrawn, traded, or transferred.')}</span>
+                <span>无需额外购买抽奖次数，奖励不可提现、交易或转让。</span>
                 <Button variant='link' size='sm' render={<Link to='/packages' />}>
-                  {t('View plans')}
+                  查看套餐
                 </Button>
               </div>
             </>
           ) : null}
         </div>
       </SectionPageLayout.Content>
+      <Dialog open={rulesOpen} onOpenChange={setRulesOpen}>
+        <DialogContent className='max-h-[min(700px,calc(100vh-2rem))] max-w-lg overflow-y-auto'>
+          <DialogHeader className='text-left'>
+            <DialogTitle className='flex items-center gap-2 text-lg'>
+              <BookOpen className='text-primary size-5' aria-hidden='true' />
+              每日幸运号码规则
+            </DialogTitle>
+            <DialogDescription>请以页面显示的活动状态和开奖时间为准。</DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4 text-sm leading-6'>
+            <RuleItem title='1. 自动参与'>月卡套餐会自动获得一个专属号码，无需额外购买抽奖次数。只有处于有效期内的月卡参与后续开奖。</RuleItem>
+            <RuleItem title='2. 每日开奖'>系统按照页面显示的时区和时间每日开奖。开奖完成并结算后，中奖号码和当日名单会公开展示。</RuleItem>
+            <RuleItem title='3. 命中方式'>从号码最右侧开始连续匹配，匹配位数越多，奖励档位越高；同一号码每期只按最高命中档位结算一次。</RuleItem>
+            <RuleItem title='4. 奖励发放'>奖励直接增加到命中的月卡套餐额度，不进入钱包余额，不能提现、交易或转让。</RuleItem>
+            <RuleItem title='5. 号码与记录'>号码一经生成会永久保留；套餐过期后仍可查看历史记录，但不会继续参与新的开奖。</RuleItem>
+          </div>
+          <DialogFooter showCloseButton />
+        </DialogContent>
+      </Dialog>
     </SectionPageLayout>
+  )
+}
+
+function RuleItem(props: { title: string; children: ReactNode }) {
+  return (
+    <div className='bg-muted/35 rounded-lg border px-3.5 py-3'>
+      <div className='text-foreground font-semibold'>{props.title}</div>
+      <p className='text-muted-foreground mt-1'>{props.children}</p>
+    </div>
   )
 }

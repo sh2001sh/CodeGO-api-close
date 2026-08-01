@@ -6,31 +6,31 @@ export const MEMBERSHIP_TIER_META: Record<
   { labelKey: string; color: string; softColor: string; borderColor: string }
 > = {
   none: {
-    labelKey: 'No membership tier',
+    labelKey: '普通',
     color: '#64748B',
     softColor: '#F1F5F9',
     borderColor: '#CBD5E1',
   },
   lite: {
-    labelKey: 'Lite',
+    labelKey: '轻享',
     color: '#64748B',
     softColor: '#F1F5F9',
     borderColor: '#CBD5E1',
   },
   standard: {
-    labelKey: 'Standard',
+    labelKey: '标准',
     color: '#2563EB',
     softColor: '#EFF6FF',
     borderColor: '#BFDBFE',
   },
   pro: {
-    labelKey: 'Pro',
+    labelKey: '专业',
     color: '#7C3AED',
     softColor: '#F5F3FF',
     borderColor: '#DDD6FE',
   },
   ultra: {
-    labelKey: 'Ultra',
+    labelKey: '旗舰',
     color: '#B7791F',
     softColor: '#FFFBEB',
     borderColor: '#FDE68A',

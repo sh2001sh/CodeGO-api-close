@@ -8,8 +8,8 @@
 - Lite、Standard、Pro、Ultra 月卡倍率分别展示，并说明倍率应用顺序、奖励去向及四位全中奖池规则。
 - 购买、续费和升级月卡当前不会自动赠送盲盒；旧的规则面板已移除。
 - 弹窗已增加视口高度约束和 `min-h-0`，正文独立滚动，底部关闭按钮在 390px 和 320px 下保持可用。
-- 当前分支为 `v2-refactor-20260711`，发布目标 tag `v2.0.0-rc.34` 尚未创建。
-- 当前改动未提交；`artifacts/` 与 `scripts/audit-upstream-api.ps1` 为明确排除的未跟踪文件。
+- 提交 `f94ba47f1` 已推送到 `v2-refactor-20260711`，annotated tag `v2.0.0-rc.34` 已推送。
+- `artifacts/` 与 `scripts/audit-upstream-api.ps1` 仍为明确排除的未跟踪文件。
 - 每日幸运号奖励已改为进入用户普通钱包，并保留账本幂等和到账日志；对应回归测试已同步验证钱包余额与日志。
 - 规则弹窗按登录用户的 `uid` 持久化首次访问标记，只在第一次进入时自动打开；后续通过内容首屏的高可见规则入口手动打开。
 - 规则入口已从页面右上角操作区移至标题下方的规则提示条，右上角仅保留刷新操作。
@@ -24,10 +24,12 @@
 - 本地真实登录代理当前返回 `504`，因此浏览器交互验收使用了仅限测试上下文的接口模拟；未修改应用运行时逻辑。
 - 本次目标文件类型检查、Prettier、JSON.parse 和 `git diff --check` 通过；目标 ESLint 已无重复导入错误，仅保留 React Hooks/快速刷新警告。
 - 全量 commerce 包测试仍有两条既有 group-buy 断言失败，单独运行同样失败，与本次改动无交集。
+- GitHub Actions Docker run `30732013165` 成功完成 amd64/arm64、7 个服务镜像、manifest 创建和 cosign 签名；Release run `30732013174` 也已成功。
+- GHCR 版本根标签与 `latest` digest 为 `sha256:4bb4de47f3cd2851756b2bb746b65b8054401f64428c5537c564c488d6701d46`，根标签及 7 个服务标签均核验为 linux/amd64 + linux/arm64。
 - Playwright 模拟接口验收通过：首次自动弹出、刷新后不再弹出、规则入口可重新打开、390px 下正文滚动/关闭按钮可用、桌面布局入口清晰、无横向溢出且无控制台错误。
 
 # Next Step
-- 完成全量 lint 复核，暂存并提交项目改动，创建 `v2.0.0-rc.34`，推送分支和 tag，轮询 GitHub Actions 后核验 GHCR 多架构镜像。
+- `v2.0.0-rc.34` 已完成提交、推送、Actions 构建、签名和 GHCR 多架构核验；当前等待后续需求。
 
 # Blockers
-- 无发布链路阻塞；全量 commerce 测试的两条 group-buy 既有失败需在发布记录中保留，前端真实登录代理 `504` 仅影响浏览器实账号验收。
+- 无发布链路阻塞；全量 commerce 测试的两条 group-buy 既有失败已保留记录，GHCR Registry API 直连因未提供凭据返回 `UNAUTHORIZED`，但本机 Docker 凭据核验已成功。

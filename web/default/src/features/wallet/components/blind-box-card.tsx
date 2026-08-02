@@ -3,6 +3,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   calculateBlindBoxAmount,
   getBlindBoxOrderStatus,
   getBlindBoxSelf,
@@ -19,6 +25,7 @@ import type {
   BlindBoxSelfData,
   PaymentMethod,
 } from '../types'
+import { BlindBoxContent } from './blind-box-content'
 import {
   BlindBoxPrizeDialog,
   EMPTY_PAYMENT_STATE,
@@ -30,14 +37,7 @@ import {
 import { BlindBoxHistorySheet } from './blind-box-history-sheet'
 import { BlindBoxPaymentDialog } from './blind-box-payment-dialog'
 import { BlindBoxSidebar } from './blind-box-sidebar'
-import { BlindBoxCardView } from './blind-box-view'
 import { BlindBoxPropsList } from './blind-box-view-parts'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 
 interface BlindBoxCardProps {
   onSubscriptionRefresh: () => Promise<void>
@@ -60,7 +60,6 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   const [amountDue, setAmountDue] = useState(0)
   const [paying, setPaying] = useState(false)
   const [openingCount, setOpeningCount] = useState<number | null>(null)
-  const [showPrizeNotice, setShowPrizeNotice] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showProps, setShowProps] = useState(false)
   const [paymentState, setPaymentState] =
@@ -392,9 +391,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           'consume_discount_95',
           'consume_discount_90',
           'zero_hour_multiplier',
-        ].includes(
-          record.prop_type || ''
-        )
+        ].includes(record.prop_type || '')
       ) {
         return
       }
@@ -473,8 +470,8 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   return (
     <>
       <div className='grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]'>
-        <div className='app-page-shell min-w-0 p-5 sm:p-6'>
-          <BlindBoxCardView
+        <div className='min-w-0'>
+          <BlindBoxContent
             data={data}
             loading={loading}
             selectedQuantity={selectedQuantity}
@@ -486,17 +483,11 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
             effectivePityThreshold={effectivePityThreshold}
             pityProgress={pityProgress}
             remainingPity={remainingPity}
-            showPrizeNotice={showPrizeNotice}
             onQuantityChange={setSelectedQuantity}
             onPaymentMethodChange={setSelectedPaymentMethod}
             onPay={() => void handlePay()}
             onManualOpen={(count) => void handleManualOpen(count)}
-            onUseProp={(prop) => void handleUseProp(prop)}
             onOpenProps={() => setShowProps(true)}
-            onTogglePrizeNotice={() =>
-              setShowPrizeNotice((current) => !current)
-            }
-            onClosePrizeNotice={() => setShowPrizeNotice(false)}
           />
         </div>
 
@@ -506,7 +497,10 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           availableBoxes={availableBoxes}
           pendingBoxes={pendingBoxes}
           records={data?.overview?.recent_records || []}
+          props={data?.props || []}
+          statistics={data?.statistics}
           onOpenHistory={() => setShowHistory(true)}
+          onOpenProps={() => setShowProps(true)}
         />
       </div>
 

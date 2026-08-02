@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
-	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -59,6 +61,9 @@ func settleDailyLuckyDraw(drawID int) error {
 	}).Error
 }
 
+// settleDailyLuckyReward credits the reward into the user's ordinary wallet.
+// Rewards are wallet balance, not subscription balance, so they survive the
+// subscription period and stay usable after the plan expires.
 func settleDailyLuckyReward(rewardID int) error {
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var reward commerceschema.SubscriptionLuckyReward
@@ -74,39 +79,22 @@ func settleDailyLuckyReward(rewardID int) error {
 			reward.CreditedAt = platformruntime.GetTimestamp()
 			return tx.Save(&reward).Error
 		}
-		var sub commerceschema.UserSubscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", reward.UserSubscriptionId).First(&sub).Error; err != nil {
+		userID := reward.UserId
+		if userID <= 0 {
+			var sub commerceschema.UserSubscription
+			if err := tx.Where("id = ?", reward.UserSubscriptionId).First(&sub).Error; err != nil {
+				return err
+			}
+			userID = sub.UserId
+		}
+		if userID <= 0 {
+			return fmt.Errorf("lucky reward %d has no owner user", reward.Id)
+		}
+		idempotencyKey := fmt.Sprintf("lucky-draw:%s:%d", drawDateForRewardTx(tx, reward.DrawId), reward.UserSubscriptionId)
+		if err := billingapp.CreditWalletQuotaTx(tx, userID, int(reward.FinalRewardQuota), idempotencyKey, "subscription_lucky_draw"); err != nil {
 			return err
 		}
-		account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
-			AccountType: "subscription",
-			OwnerType:   "user_subscription",
-			OwnerID:     int64(sub.Id),
-			QuotaUnit:   "quota",
-		})
-		if err != nil {
-			return err
-		}
-		if err := bootstrapLuckySubscriptionLedgerTx(tx, account, &sub, reward.Id); err != nil {
-			return err
-		}
-		if _, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
-			AccountID:      account.AccountID,
-			Amount:         reward.FinalRewardQuota,
-			IdempotencyKey: fmt.Sprintf("lucky-draw:%s:%d", drawDateForRewardTx(tx, reward.DrawId), reward.UserSubscriptionId),
-			ReasonCode:     "subscription_lucky_draw",
-			ReferenceType:  "subscription_lucky_reward",
-			ReferenceID:    fmt.Sprintf("%d", reward.Id),
-			OperatorType:   "commerce",
-			OperatorID:     fmt.Sprintf("%d", reward.DrawId),
-		}); err != nil {
-			return err
-		}
-		sub.AmountTotal += reward.FinalRewardQuota
-		if sub.PeriodAmount > 0 {
-			sub.PeriodAmount += reward.FinalRewardQuota
-		}
-		if err := tx.Save(&sub).Error; err != nil {
+		if err := recordLuckyRewardLogTx(tx, userID, &reward); err != nil {
 			return err
 		}
 		reward.CreditStatus = commerceschema.SubscriptionLuckyRewardCreditCredited
@@ -116,40 +104,26 @@ func settleDailyLuckyReward(rewardID int) error {
 	})
 }
 
+func recordLuckyRewardLogTx(tx *gorm.DB, userID int, reward *commerceschema.SubscriptionLuckyReward) error {
+	if tx == nil || userID <= 0 || reward == nil {
+		return errors.New("invalid lucky reward log params")
+	}
+	content := fmt.Sprintf(
+		"每日幸运号中奖到账，钱包：额度，到账额度：%s，命中位数：%d，幸运号：%s，奖励记录ID：%d",
+		logger.LogQuota(int(reward.FinalRewardQuota)),
+		reward.MatchedDigits,
+		reward.LuckyNumber,
+		reward.Id,
+	)
+	return auditapp.RecordLogTx(tx, userID, auditschema.LogTypeTopup, content)
+}
+
 func drawDateForRewardTx(tx *gorm.DB, drawID int) string {
 	var draw commerceschema.SubscriptionLuckyDraw
 	if tx != nil && tx.Where("id = ?", drawID).First(&draw).Error == nil {
 		return draw.DrawDate
 	}
 	return "unknown"
-}
-
-func bootstrapLuckySubscriptionLedgerTx(tx *gorm.DB, account *billingschema.BillingAccount, sub *commerceschema.UserSubscription, rewardID int) error {
-	if tx == nil || account == nil || sub == nil {
-		return errors.New("invalid lucky subscription ledger arguments")
-	}
-	var count int64
-	if err := tx.Model(&billingschema.BillingLedgerEntry{}).Where("account_id = ?", account.AccountID).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	available := sub.AmountTotal - sub.AmountUsed
-	if available <= 0 {
-		return nil
-	}
-	_, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
-		AccountID:      account.AccountID,
-		Amount:         available,
-		IdempotencyKey: fmt.Sprintf("subscription-bootstrap:%d", sub.Id),
-		ReasonCode:     "subscription_balance_bootstrap",
-		ReferenceType:  "user_subscription",
-		ReferenceID:    fmt.Sprintf("%d", sub.Id),
-		OperatorType:   "subscription_projection",
-		OperatorID:     fmt.Sprintf("lucky-reward:%d", rewardID),
-	})
-	return err
 }
 
 func markLuckyDrawFailed(drawID int, cause error) error {

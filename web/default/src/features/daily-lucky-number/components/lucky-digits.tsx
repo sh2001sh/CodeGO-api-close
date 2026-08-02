@@ -1,35 +1,158 @@
+import { motion, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { normalizeLuckyNumber } from '../lib'
+import { DIGIT_ITEM, DIGIT_STACK, EASE_OUT_QUINT } from '../motion'
+
+type DigitSize = 'sm' | 'md' | 'lg'
+
+const SIZE_BOX: Record<DigitSize, string> = {
+  sm: 'w-8 rounded-lg text-base',
+  md: 'w-10 rounded-lg text-xl sm:w-11 sm:text-2xl',
+  lg: 'w-12 rounded-xl text-2xl sm:w-16 sm:text-4xl',
+}
+
+/**
+ * Matches are counted right-to-left, so matchedDigits lights up the trailing
+ * N boxes rather than the leading ones.
+ */
+function isMatched(index: number, total: number, matchedDigits: number) {
+  return matchedDigits > 0 && index >= total - matchedDigits
+}
 
 export function LuckyDigits(props: {
   value?: string | number
   placeholder?: string
-  size?: 'sm' | 'lg'
+  size?: DigitSize
+  matchedDigits?: number
+  dimUnmatched?: boolean
+  pending?: boolean
+  rolling?: boolean
+  animateReveal?: boolean
   className?: string
 }) {
+  const reduced = Boolean(useReducedMotion())
+  const size = props.size ?? 'sm'
   const value = normalizeLuckyNumber(props.value)
   const placeholder = props.placeholder ?? '----'
   const digits = (value || placeholder).slice(-4).split('')
+  const matchedDigits = props.matchedDigits ?? 0
+  const revealing = Boolean(props.animateReveal && value && !reduced)
+
   return (
-    <div
+    <motion.div
       className={cn(
         'flex items-center gap-1.5 font-mono font-semibold tabular-nums',
-        props.size === 'lg' ? 'text-2xl sm:text-3xl' : 'text-base',
+        size === 'lg' && 'gap-2 sm:gap-2.5',
         props.className
       )}
       aria-label={value || placeholder}
+      variants={revealing ? DIGIT_STACK : undefined}
+      initial={revealing ? 'initial' : false}
+      animate={revealing ? 'animate' : undefined}
+      style={revealing ? { perspective: 600 } : undefined}
     >
       {digits.map((digit, index) => (
-        <span
-          key={`${digit}-${index}`}
-          className={cn(
-            'bg-muted/65 text-foreground inline-flex aspect-square w-8 items-center justify-center rounded-lg border',
-            props.size === 'lg' && 'w-11 rounded-xl sm:w-12'
-          )}
-        >
-          {digit}
-        </span>
+        <DigitBox
+          key={`${index}-${digit}`}
+          digit={digit}
+          size={size}
+          revealing={revealing}
+          matched={isMatched(index, digits.length, matchedDigits)}
+          dimmed={
+            Boolean(props.dimUnmatched) &&
+            !isMatched(index, digits.length, matchedDigits)
+          }
+          pending={Boolean(props.pending) && !value}
+          rolling={Boolean(props.rolling) && !reduced}
+          delayIndex={digits.length - 1 - index}
+        />
       ))}
-    </div>
+    </motion.div>
   )
+}
+
+function DigitBox(props: {
+  digit: string
+  size: DigitSize
+  revealing: boolean
+  matched: boolean
+  dimmed: boolean
+  pending: boolean
+  rolling: boolean
+  delayIndex: number
+}) {
+  const base = cn(
+    'relative inline-flex aspect-square items-center justify-center overflow-hidden border',
+    SIZE_BOX[props.size],
+    props.matched
+      ? 'border-primary/60 bg-primary/12 text-primary shadow-[0_0_18px_-6px_color-mix(in_oklch,var(--primary)_65%,transparent)]'
+      : props.dimmed
+        ? 'border-border/60 bg-muted/40 text-muted-foreground/60'
+        : 'border-border bg-muted/65 text-foreground'
+  )
+
+  if (props.rolling) {
+    return (
+      <span className={base}>
+        <motion.span
+          className='absolute inset-0 flex flex-col'
+          animate={{ y: ['0%', '-900%'] }}
+          transition={{
+            duration: 1.1 + props.delayIndex * 0.12,
+            repeat: Infinity,
+            ease: 'linear',
+          }}
+        >
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+            <span
+              key={n}
+              className='flex h-full w-full shrink-0 items-center justify-center'
+            >
+              {n}
+            </span>
+          ))}
+        </motion.span>
+      </span>
+    )
+  }
+
+  if (props.pending) {
+    return (
+      <motion.span
+        className={base}
+        animate={{ opacity: [0.45, 0.95, 0.45] }}
+        transition={{
+          duration: 1.8,
+          repeat: Infinity,
+          ease: 'easeInOut',
+          delay: props.delayIndex * 0.16,
+        }}
+      >
+        <span className='bg-muted-foreground/50 size-1.5 rounded-full' />
+      </motion.span>
+    )
+  }
+
+  if (props.revealing) {
+    return (
+      <motion.span className={base} variants={DIGIT_ITEM}>
+        {props.digit}
+      </motion.span>
+    )
+  }
+
+  if (props.matched) {
+    return (
+      <motion.span
+        className={base}
+        initial={{ scale: 0.88 }}
+        animate={{ scale: 1 }}
+        transition={{ duration: 0.34, ease: EASE_OUT_QUINT }}
+      >
+        {props.digit}
+      </motion.span>
+    )
+  }
+
+  return <span className={base}>{props.digit}</span>
 }

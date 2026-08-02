@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { AlertCircle, BookOpen, RefreshCw } from 'lucide-react'
+import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -11,13 +11,52 @@ import {
   getDailyLuckyNumberHistory,
   getDailyLuckyNumberPublicWins,
 } from './api'
-import { DailyLuckyOverview } from './components/daily-lucky-overview'
+import { DrawStage } from './components/draw-stage'
 import { HistoryPanel } from './components/history-panel'
+import { HowItWorks } from './components/how-it-works'
+import { LuckyMatchBoard } from './components/lucky-match-board'
+import { RewardLadder } from './components/reward-ladder'
 import { DailyLuckyRulesDialog } from './components/rules-dialog'
-import { LuckySubscriptionList } from './components/subscription-list'
 import { TodayWinnersPanel } from './components/today-winners-panel'
 import { useDailyLuckyNumberSelf } from './hooks/use-daily-lucky-number'
-import type { LuckyPublicWinPage, LuckyRewardPage } from './types'
+import { useDailyLuckyRulesDialog } from './hooks/use-daily-lucky-rules-dialog'
+import {
+  getMatchedDigits,
+  getMembershipTierRank,
+  normalizeLuckyNumber,
+  normalizeMembershipTier,
+} from './lib'
+import type {
+  LuckyNumberSelfPayload,
+  LuckyPublicWinPage,
+  LuckyRewardPage,
+  MembershipTier,
+} from './types'
+
+/** Ladder amounts are shown for the user's strongest active card. */
+function resolveTopTier(payload?: LuckyNumberSelfPayload): MembershipTier {
+  if (!payload) return 'none'
+  return payload.subscriptions.reduce<MembershipTier>((best, entry) => {
+    const tier = normalizeMembershipTier(
+      entry.subscription.membership_tier || entry.plan?.membership_tier
+    )
+    return getMembershipTierRank(tier) > getMembershipTierRank(best)
+      ? tier
+      : best
+  }, 'none')
+}
+
+function resolveBestMatch(payload?: LuckyNumberSelfPayload): number {
+  const winning = payload?.today_draw?.winning_number
+  if (!payload || !winning) return 0
+  return payload.subscriptions.reduce((best, entry) => {
+    const suffix = normalizeLuckyNumber(
+      entry.subscription.lucky_number?.lucky_suffix ??
+        entry.number?.lucky_suffix
+    )
+    return Math.max(best, getMatchedDigits(suffix, winning))
+  }, 0)
+}
 
 export function DailyLuckyNumberPage() {
   const { t } = useTranslation()
@@ -26,7 +65,11 @@ export function DailyLuckyNumberPage() {
   const [historyPage, setHistoryPage] = useState(1)
   const [publicPage, setPublicPage] = useState(1)
   const [now, setNow] = useState(() => Date.now())
-  const [rulesOpen, setRulesOpen] = useState(true)
+  const {
+    open: rulesOpen,
+    onOpenChange: setRulesOpen,
+    openRules,
+  } = useDailyLuckyRulesDialog()
 
   const historyQuery = useQuery({
     queryKey: ['daily-lucky-number', 'history', historyPage],
@@ -80,6 +123,9 @@ export function DailyLuckyNumberPage() {
     historyQuery.isFetching ||
     publicWinsQuery.isFetching
 
+  const topTier = useMemo(() => resolveTopTier(payload), [payload])
+  const bestMatch = useMemo(() => resolveBestMatch(payload), [payload])
+
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
@@ -91,14 +137,6 @@ export function DailyLuckyNumberPage() {
         )}
       </SectionPageLayout.Description>
       <SectionPageLayout.Actions>
-        <Button
-          size='sm'
-          onClick={() => setRulesOpen(true)}
-          aria-haspopup='dialog'
-        >
-          <BookOpen data-icon='inline-start' />
-          {t('View full rules')}
-        </Button>
         <Button
           variant='outline'
           size='sm'
@@ -145,25 +183,39 @@ export function DailyLuckyNumberPage() {
             </Alert>
           ) : payload ? (
             <>
-              <DailyLuckyOverview
+              <DrawStage
                 payload={payload}
                 countdownSeconds={countdownSeconds}
+                onOpenRules={openRules}
+              />
+              <HowItWorks
+                drawHour={payload.draw_hour}
+                drawMinute={payload.draw_minute}
+                timezone={payload.timezone}
               />
               <div className='grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]'>
-                <LuckySubscriptionList
+                <LuckyMatchBoard
                   subscriptions={payload.subscriptions}
                   draw={payload.today_draw}
                   rewards={payload.recent_rewards}
                   rules={payload.rules}
                 />
-                <TodayWinnersPanel
-                  records={publicWinsQuery.data?.records}
-                  drawDate={payload.today_draw?.draw_date}
-                  timezone={payload.timezone}
-                  loading={publicWinsQuery.isLoading}
-                  error={publicWinsQuery.isError}
-                  onRetry={() => void publicWinsQuery.refetch()}
-                />
+                <div className='flex flex-col gap-5'>
+                  <RewardLadder
+                    rules={payload.rules}
+                    tier={topTier}
+                    matchedDigits={bestMatch}
+                    onOpenRules={openRules}
+                  />
+                  <TodayWinnersPanel
+                    records={publicWinsQuery.data?.records}
+                    drawDate={payload.today_draw?.draw_date}
+                    timezone={payload.timezone}
+                    loading={publicWinsQuery.isLoading}
+                    error={publicWinsQuery.isError}
+                    onRetry={() => void publicWinsQuery.refetch()}
+                  />
+                </div>
               </div>
               <HistoryPanel
                 tab={historyTab}
@@ -176,6 +228,7 @@ export function DailyLuckyNumberPage() {
                 publicWinsLoading={publicWinsQuery.isLoading}
                 historyError={historyQuery.isError}
                 publicWinsError={publicWinsQuery.isError}
+                previousDraw={payload.previous_draw}
                 onRetry={() => {
                   if (historyTab === 'mine') void historyQuery.refetch()
                   else void publicWinsQuery.refetch()

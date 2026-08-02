@@ -101,24 +101,14 @@ export function useSidebarData(): SidebarData {
             icon: Gem,
           },
           {
+            title: t('Blind box'),
+            url: '/blind-box',
+            icon: Ticket,
+          },
+          {
             title: t('Plans'),
             url: '/packages',
             icon: Package,
-          },
-          {
-            title: t('Daily Lucky Number'),
-            url: '/daily-lucky-number',
-            icon: Sparkles,
-          },
-          {
-            title: t('Bounties'),
-            url: '/bounties',
-            icon: HandCoins,
-          },
-          {
-            title: t('Community resources'),
-            url: '/community-resources',
-            icon: LibraryBig,
           },
           {
             title: t('Collective benefit plan'),
@@ -126,9 +116,9 @@ export function useSidebarData(): SidebarData {
             icon: Users,
           },
           {
-            title: t('Blind box'),
-            url: '/blind-box',
-            icon: Ticket,
+            title: t('Daily Lucky Number'),
+            url: '/daily-lucky-number',
+            icon: Sparkles,
           },
           {
             title: t('Invites'),
@@ -139,6 +129,16 @@ export function useSidebarData(): SidebarData {
             title: t('Profile'),
             url: '/profile',
             icon: User,
+          },
+          {
+            title: t('Bounties'),
+            url: '/bounties',
+            icon: HandCoins,
+          },
+          {
+            title: t('Community resources'),
+            url: '/community-resources',
+            icon: LibraryBig,
           },
         ],
       },

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/constant"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	luckysettings "github.com/sh2001sh/new-api/internal/commerce/luckysettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
@@ -173,7 +174,12 @@ func TestDailyLuckyRewardSettlementWritesLedgerOnce(t *testing.T) {
 
 	var savedSubscription commerceschema.UserSubscription
 	require.NoError(t, db.First(&savedSubscription, subscription.Id).Error)
-	require.Equal(t, subscription.AmountTotal+reward.FinalRewardQuota, savedSubscription.AmountTotal)
+	require.Equal(t, subscription.AmountTotal, savedSubscription.AmountTotal)
+	var savedUser identityschema.User
+	require.NoError(t, db.First(&savedUser, user.Id).Error)
+	require.Equal(t, int(reward.FinalRewardQuota), savedUser.Quota)
+	snapshot := loadCommerceBillingSnapshot(t, user.Id, "wallet")
+	require.Equal(t, reward.FinalRewardQuota, snapshot.AvailableBalance)
 	var savedReward commerceschema.SubscriptionLuckyReward
 	require.NoError(t, db.First(&savedReward, reward.Id).Error)
 	require.Equal(t, commerceschema.SubscriptionLuckyRewardCreditCredited, savedReward.CreditStatus)
@@ -184,6 +190,10 @@ func TestDailyLuckyRewardSettlementWritesLedgerOnce(t *testing.T) {
 	var ledgerCount int64
 	require.NoError(t, db.Model(&billingschema.BillingLedgerEntry{}).Where("reason_code = ?", "subscription_lucky_draw").Count(&ledgerCount).Error)
 	require.Equal(t, int64(1), ledgerCount)
+	var logs []auditschema.Log
+	require.NoError(t, db.Where("user_id = ? AND type = ?", user.Id, auditschema.LogTypeTopup).Find(&logs).Error)
+	require.Len(t, logs, 1)
+	require.Contains(t, logs[0].Content, "每日幸运号中奖到账")
 }
 
 func TestSubscriptionPurchaseDoesNotGrantBlindBoxBenefits(t *testing.T) {

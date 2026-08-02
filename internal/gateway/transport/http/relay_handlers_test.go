@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 type relayErrorEnvelope struct {
@@ -31,6 +32,38 @@ func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {
 	require.True(t, shouldRetry(ctx, err, 1))
 	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
 	require.False(t, shouldRetry(ctx, err, 1))
+}
+
+func TestShouldRetryGPTFailureOnlyWithinInitialWindow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	err := types.NewOpenAIError(errors.New("upstream timeout"), types.ErrorCodeBadResponseStatusCode, http.StatusGatewayTimeout)
+
+	t.Run("retries an early GPT failure", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		ctx.Set("original_model", "gpt-5.6-sol")
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-gptRetryFailureWindow+time.Second))
+
+		require.True(t, shouldRetry(ctx, err, 1))
+	})
+
+	t.Run("does not restart a late GPT failure", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		ctx.Set("original_model", "gpt-5.6-sol")
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-gptRetryFailureWindow-time.Second))
+
+		require.False(t, shouldRetry(ctx, err, 1))
+	})
+
+	t.Run("does not change non GPT retry behavior", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		ctx.Set("original_model", "claude-opus-5")
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-gptRetryFailureWindow-time.Second))
+
+		require.True(t, shouldRetry(ctx, err, 1))
+	})
 }
 
 func TestShouldRetryResponsesStreamBeforeContentDespiteLifecycleEvent(t *testing.T) {

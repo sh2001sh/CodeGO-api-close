@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -27,6 +28,8 @@ import (
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"github.com/sh2001sh/new-api/types"
 )
+
+const gptRetryFailureWindow = 30 * time.Second
 
 func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
 	return gatewayexecutionapp.ExecuteRelay(c, info)
@@ -136,6 +139,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		!canRetryResponsesStreamBeforeContent(c) {
 		return false
 	}
+	if !withinGPTRetryFailureWindow(c) {
+		return false
+	}
 	if types.IsChannelError(openaiErr) {
 		return true
 	}
@@ -156,6 +162,20 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		return false
 	}
 	return gatewaystore.ShouldRetryByStatusCode(code)
+}
+
+// withinGPTRetryFailureWindow only permits a GPT request to change upstreams
+// shortly after it starts. A healthy but slow connection is never interrupted;
+// the window is consulted only after an upstream error has already occurred.
+func withinGPTRetryFailureWindow(c *gin.Context) bool {
+	if c == nil || !strings.HasPrefix(strings.ToLower(c.GetString("original_model")), "gpt-") {
+		return true
+	}
+	startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+	if startTime.IsZero() {
+		return true
+	}
+	return time.Since(startTime) <= gptRetryFailureWindow
 }
 
 func canRetryResponsesStreamBeforeContent(c *gin.Context) bool {

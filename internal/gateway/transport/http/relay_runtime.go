@@ -132,7 +132,8 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
-	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) &&
+		!canRetryResponsesStreamBeforeContent(c) {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {
@@ -155,6 +156,11 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		return false
 	}
 	return gatewaystore.ShouldRetryByStatusCode(code)
+}
+
+func canRetryResponsesStreamBeforeContent(c *gin.Context) bool {
+	return c.GetBool(string(constant.ContextKeyResponsesStreamRetrySafe)) &&
+		!c.GetBool(string(constant.ContextKeyStreamContentDelivered))
 }
 
 func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *websocket.Conn, apiErr *types.NewAPIError, requestID string) {

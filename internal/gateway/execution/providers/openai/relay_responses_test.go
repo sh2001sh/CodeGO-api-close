@@ -54,6 +54,32 @@ func TestOaiResponsesStreamHandlerReturnsErrorWithoutResponseCompleted(t *testin
 	require.Contains(t, recorder.Body.String(), `"type":"response.output_text.delta"`)
 }
 
+func TestOaiResponsesStreamHandlerAllowsRetryBeforeContent(t *testing.T) {
+	oldMode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(oldMode) })
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_123"}}`,
+		``,
+	}, "\n")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{IsStream: true}, resp)
+	require.Nil(t, usage)
+	require.NotNil(t, err)
+	require.False(t, types.IsSkipRetryError(err))
+	require.True(t, c.GetBool(string(constant.ContextKeyResponsesStreamRetrySafe)))
+	require.False(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
+}
+
 func TestOaiResponsesStreamHandlerSucceedsAfterResponseCompleted(t *testing.T) {
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)

@@ -3,6 +3,7 @@ package openai
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	helper "github.com/sh2001sh/new-api/internal/gateway/stream"
@@ -76,6 +77,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	defer platformhttpx.CloseResponseBodyGracefully(resp)
+	// Responses streams often begin with lifecycle events before model content.
+	// A disconnect in that phase can be retried without duplicating output.
+	c.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
 
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
@@ -94,6 +98,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			logger.LogError(c, "failed to write responses stream response: "+err.Error())
 			sr.Stop(err)
 			return
+		}
+		if hasResponsesStreamContent(streamResponse) {
+			c.Set(string(constant.ContextKeyStreamContentDelivered), true)
 		}
 		switch streamResponse.Type {
 		case "response.completed":
@@ -140,11 +147,15 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	})
 
 	if !sawResponseCompleted {
+		options := make([]types.NewAPIErrorOptions, 0, 1)
+		if c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+			options = append(options, types.ErrOptionWithSkipRetry())
+		}
 		return nil, types.NewOpenAIError(
 			fmt.Errorf("responses stream closed before response.completed"),
 			types.ErrorCodeBadResponse,
 			http.StatusBadGateway,
-			types.ErrOptionWithSkipRetry(),
+			options...,
 		)
 	}
 
@@ -166,6 +177,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	info.ConversationResponseText = responseTextBuilder.String()
 
 	return usage, nil
+}
+
+func hasResponsesStreamContent(streamResponse dto.ResponsesStreamResponse) bool {
+	return streamResponse.Delta != "" && strings.HasSuffix(streamResponse.Type, ".delta")
 }
 
 func responsesOutputText(response *dto.OpenAIResponsesResponse) string {

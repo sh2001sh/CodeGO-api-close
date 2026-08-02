@@ -67,6 +67,12 @@ const (
 	// ContextKeyResponseBodyDelivered indicates at least one business response payload
 	// has been successfully written to the downstream client for the current request.
 	ContextKeyResponseBodyDelivered ContextKey = "response_body_delivered"
+	// ContextKeyResponsesStreamRetrySafe marks a Responses API stream whose
+	// protocol events may have started before any meaningful model output.
+	ContextKeyResponsesStreamRetrySafe ContextKey = "responses_stream_retry_safe"
+	// ContextKeyStreamContentDelivered is set once retrying would duplicate text
+	// or tool arguments already delivered to the client.
+	ContextKeyStreamContentDelivered ContextKey = "stream_content_delivered"
 
 	// ContextKeyImageWorkspaceCaptureResponse indicates the current request should
 	// capture the JSON response body for image workspace persistence.

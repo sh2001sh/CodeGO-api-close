@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,16 @@ func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {
 
 	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
 	require.False(t, shouldRecordFaultDomainFailure(context))
+}
+
+func TestIncompleteStreamWithoutContentCoolsLongContextFaultDomain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+
+	require.True(t, shouldRecordIncompleteStreamFaultDomainFailure(context))
+	context.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	require.False(t, shouldRecordIncompleteStreamFaultDomainFailure(context))
 }
 
 func TestIsModelScopedUpstreamFailure(t *testing.T) {

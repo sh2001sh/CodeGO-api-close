@@ -51,7 +51,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	if failureClass == upstreamFailureIncompleteStream {
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, modelName, gatewayruntime.IncompleteStreamCooldown())
-		if shouldRecordFaultDomainFailure(c) {
+		if shouldRecordIncompleteStreamFaultDomainFailure(c) {
 			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), modelName, c.GetString(constant.RequestIdKey), gatewayruntime.IncompleteStreamCooldown())
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
@@ -131,6 +131,16 @@ func retryableFailureCooldown(c *gin.Context, err *types.NewAPIError) time.Durat
 
 func shouldRecordFaultDomainFailure(c *gin.Context) bool {
 	return !gatewayruntime.IsLongContextRequest(c)
+}
+
+func shouldRecordIncompleteStreamFaultDomainFailure(c *gin.Context) bool {
+	if !gatewayruntime.IsLongContextRequest(c) {
+		return true
+	}
+	// A long prompt can fail for input-specific reasons after generation has
+	// started. Before any content is sent, however, repeated disconnects are an
+	// upstream-path failure and should protect the shared fault domain.
+	return !c.GetBool(string(constant.ContextKeyStreamContentDelivered))
 }
 
 func coolModelScopedUpstreamFailure(channelID int, modelName string, requestID string, err *types.NewAPIError) bool {

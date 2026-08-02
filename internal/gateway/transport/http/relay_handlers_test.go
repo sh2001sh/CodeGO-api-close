@@ -33,6 +33,20 @@ func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldRetryResponsesStreamBeforeContentDespiteLifecycleEvent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	err := types.NewOpenAIError(errors.New("responses stream closed before response.completed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	require.True(t, shouldRetry(ctx, err, 1))
+
+	ctx.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
 func TestFinalizeRelayErrorMasksChineseUpstreamQuotaLeak(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

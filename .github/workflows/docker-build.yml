@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - v2-refactor-20260711
     tags:
       - '*'
       - '!nightly*'
@@ -54,7 +55,7 @@ jobs:
               echo "::error::Tag '$TAG' does not exist"
               exit 1
             fi
-          elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+          elif [[ "${GITHUB_REF}" = refs/heads/* ]]; then
             TAG="sha-$(git rev-parse --short HEAD)"
           else
             TAG=${GITHUB_REF#refs/tags/}

@@ -160,13 +160,13 @@ func ListDailyLuckyNumberHistory(userID, page, pageSize int) (*commercedomain.Lu
 	return &commercedomain.LuckyRewardPage{Page: page, PageSize: pageSize, Total: total, Records: records}, nil
 }
 
-// ListDailyLuckyNumberPublicWins returns masked high-value public wins.
+// ListDailyLuckyNumberPublicWins returns masked, settled public wins.
 func ListDailyLuckyNumberPublicWins(page, pageSize int) (*commercedomain.LuckyPublicWinPage, error) {
 	page, pageSize = normalizeLuckyPage(page, pageSize)
 	if !subscriptionLuckyNumberTableReady() {
 		return &commercedomain.LuckyPublicWinPage{Page: page, PageSize: pageSize, Records: []commercedomain.LuckyPublicWin{}}, nil
 	}
-	query := platformdb.DB.Model(&commerceschema.SubscriptionLuckyReward{}).Where("matched_digits >= ? AND credit_status = ?", 3, commerceschema.SubscriptionLuckyRewardCreditCredited)
+	query := platformdb.DB.Model(&commerceschema.SubscriptionLuckyReward{}).Where("matched_digits > ? AND credit_status = ?", 0, commerceschema.SubscriptionLuckyRewardCreditCredited)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err

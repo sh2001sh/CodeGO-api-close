@@ -1,273 +1,265 @@
 import {
   BookOpen,
   Clock3,
-  Info,
+  Gift,
   ShieldCheck,
   Sparkles,
   Trophy,
 } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { formatCountdown, formatLuckyDate, formatLuckyUsd } from '../lib'
 import { formatDrawTime, resolveDrawStatus } from '../lib-status'
-import { EASE_OUT_QUINT, stackVariants } from '../motion'
+import { EASE_OUT_QUINT } from '../motion'
 import type { LuckyNumberSelfPayload } from '../types'
 import { LuckyDigits } from './lucky-digits'
 
-export function DrawStage(props: {
+interface DrawStageProps {
   payload: LuckyNumberSelfPayload
   countdownSeconds: number
   onOpenRules: () => void
-}) {
+}
+
+type DrawStatus = ReturnType<typeof resolveDrawStatus>
+
+export function DrawStage(props: DrawStageProps) {
   const reduced = Boolean(useReducedMotion())
-  const { container, item } = stackVariants(reduced)
-  const payload = props.payload
-  const today = payload.today_draw
-  const status = resolveDrawStatus(payload)
-  const drawTime = formatDrawTime(payload.draw_hour, payload.draw_minute)
-  const jackpotRatio =
-    payload.jackpot_cap_usd > 0
-      ? Math.min(100, (payload.jackpot_usd / payload.jackpot_cap_usd) * 100)
+  const status = resolveDrawStatus(props.payload)
+
+  return (
+    <section className='overflow-hidden rounded-2xl bg-[oklch(0.235_0.035_42)] text-white shadow-[0_8px_24px_rgba(45,29,18,0.16)]'>
+      <StageHeader
+        status={status}
+        reduced={reduced}
+        onOpenRules={props.onOpenRules}
+      />
+      <div className='grid lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]'>
+        <StageMain
+          payload={props.payload}
+          status={status}
+          countdownSeconds={props.countdownSeconds}
+        />
+        <JackpotAside payload={props.payload} reduced={reduced} />
+      </div>
+    </section>
+  )
+}
+
+function StageHeader(props: {
+  status: DrawStatus
+  reduced: boolean
+  onOpenRules: () => void
+}) {
+  return (
+    <div className='flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6'>
+      <div className='flex items-center gap-2 text-xs text-white/70'>
+        <span className='bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-lg'>
+          <Sparkles className='size-3.5' aria-hidden='true' />
+        </span>
+        <span className='font-semibold text-white'>每日幸运数字</span>
+        <span aria-hidden='true'>/</span>
+        <span>有效月卡自动参与</span>
+      </div>
+      <div className='flex items-center gap-2'>
+        <span className='inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white'>
+          <motion.span
+            className={cn('size-1.5 rounded-full', props.status.dotTone)}
+            animate={
+              props.reduced || props.status.phase === 'disabled'
+                ? undefined
+                : { opacity: [1, 0.4, 1] }
+            }
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          {props.status.label}
+        </span>
+        <Button
+          variant='ghost'
+          size='sm'
+          className='text-white hover:bg-white/10 hover:text-white'
+          onClick={props.onOpenRules}
+          aria-haspopup='dialog'
+        >
+          <BookOpen data-icon='inline-start' />
+          活动规则
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function StageMain(props: {
+  payload: LuckyNumberSelfPayload
+  status: DrawStatus
+  countdownSeconds: number
+}) {
+  const today = props.payload.today_draw
+  const drawTime = formatDrawTime(
+    props.payload.draw_hour,
+    props.payload.draw_minute
+  )
+  const title = {
+    waiting: '下一组幸运数字，即将揭晓',
+    settling: '幸运数字已锁定，正在结算',
+    completed: '今日幸运数字已经揭晓',
+    failed: '今日号码已保留，系统正在重试',
+    disabled: '活动暂时暂停',
+  }[props.status.phase]
+  const primaryFact = getPrimaryFact(
+    props.status,
+    props.countdownSeconds,
+    today?.full_match_count ?? 0
+  )
+
+  return (
+    <div className='px-4 py-7 sm:px-8 sm:py-9'>
+      <div className='max-w-xl'>
+        <div className='flex flex-wrap items-center gap-2 text-xs text-white/70'>
+          <span className='inline-flex items-center gap-1.5'>
+            <Clock3 className='size-3.5' aria-hidden='true' />
+            每日 {drawTime} · {props.payload.timezone}
+          </span>
+          {today ? (
+            <>
+              <span aria-hidden='true'>·</span>
+              <span>
+                {formatLuckyDate(
+                  today.draw_date,
+                  props.payload.timezone,
+                  'zh-CN'
+                )}
+              </span>
+            </>
+          ) : null}
+        </div>
+        <h2 className='mt-4 text-2xl font-semibold tracking-tight text-balance sm:text-3xl'>
+          {title}
+        </h2>
+        <p className='mt-2 max-w-lg text-sm leading-6 text-white/70'>
+          {props.status.phase === 'disabled'
+            ? '现有月卡号码和历史记录不受影响，活动恢复后将继续自动开奖。'
+            : '系统自动对齐你的月卡尾号，从右向左连续匹配。无需签到，也不用提交任何表单。'}
+        </p>
+        <div className='mt-7 flex justify-start'>
+          <LuckyDigits
+            size='lg'
+            tone='stage'
+            value={today?.winning_number}
+            placeholder='0000'
+            pending={props.status.phase === 'waiting'}
+            rolling={props.status.phase === 'settling'}
+            animateReveal={
+              props.status.phase === 'completed' ||
+              props.status.phase === 'failed'
+            }
+          />
+        </div>
+        <div className='mt-7 flex flex-wrap gap-x-7 gap-y-3'>
+          <StageFact {...primaryFact} />
+          <StageFact label='奖励去向' value='钱包余额' />
+          <StageFact label='参与方式' value='月卡自动加入' />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function JackpotAside(props: {
+  payload: LuckyNumberSelfPayload
+  reduced: boolean
+}) {
+  const ratio =
+    props.payload.jackpot_cap_usd > 0
+      ? Math.min(
+          100,
+          (props.payload.jackpot_usd / props.payload.jackpot_cap_usd) * 100
+        )
       : 0
 
   return (
-    <motion.section
-      className='app-page-shell overflow-hidden'
-      variants={container}
-      initial='initial'
-      animate='animate'
-    >
-      <div className='border-border/70 flex flex-wrap items-start justify-between gap-4 border-b px-4 py-4 sm:px-6'>
-        <div className='flex min-w-0 items-start gap-3'>
-          <StageIcon phase={status.phase} reduced={reduced} />
-          <div className='min-w-0'>
-            <div className='app-section-kicker uppercase'>
-              每日一次 · 自动参与
-            </div>
-            <h2 className='text-foreground mt-1 text-lg font-semibold tracking-tight sm:text-xl'>
-              今日开奖
-            </h2>
-            <p className='text-muted-foreground mt-1 text-xs leading-5'>
-              {status.headline}
-            </p>
-          </div>
-        </div>
-        <div className='flex flex-wrap items-center gap-2'>
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium',
-              status.tone
-            )}
-          >
-            <motion.span
-              className={cn('size-1.5 rounded-full', status.dotTone)}
-              animate={
-                reduced || status.phase === 'disabled'
-                  ? undefined
-                  : { opacity: [1, 0.35, 1], scale: [1, 0.82, 1] }
-              }
-              transition={{
-                duration: 1.9,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-            />
-            {status.label}
-          </span>
-          <Button
-            variant='outline'
-            size='sm'
-            onClick={props.onOpenRules}
-            aria-haspopup='dialog'
-          >
-            <BookOpen data-icon='inline-start' />
-            规则说明
-          </Button>
+    <aside className='border-t border-white/10 bg-black/10 px-4 py-6 sm:px-6 lg:border-t-0 lg:border-l'>
+      <div className='flex items-center gap-2.5'>
+        <span className='flex size-9 items-center justify-center rounded-lg bg-[oklch(0.79_0.15_78)] text-[oklch(0.25_0.04_45)]'>
+          <Trophy className='size-4' aria-hidden='true' />
+        </span>
+        <div>
+          <div className='text-sm font-semibold'>本期累计奖池</div>
+          <div className='mt-0.5 text-xs text-white/70'>四位全中者共同分享</div>
         </div>
       </div>
-
-      {status.phase === 'disabled' ? (
-        <Alert className='mx-4 mt-4 sm:mx-6'>
-          <Info aria-hidden='true' />
-          <AlertDescription>
-            活动暂时不可用，现有套餐额度和历史记录不受影响。
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className='grid xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.6fr)]'>
-        <motion.div className='p-4 sm:p-6' variants={item}>
-          <div className='border-primary/25 bg-primary/[0.045] overflow-hidden rounded-2xl border'>
-            <div className='border-primary/20 flex flex-wrap items-center justify-between gap-3 border-b border-dashed px-4 py-3 sm:px-5'>
-              <span className='text-foreground text-xs font-medium'>
-                {today ? '今日开奖号码' : '本期开奖周期'}
-                {today ? (
-                  <span className='text-muted-foreground ml-1.5'>
-                    {formatLuckyDate(
-                      today.draw_date,
-                      payload.timezone,
-                      'zh-CN'
-                    )}
-                  </span>
-                ) : null}
-              </span>
-              <span className='text-muted-foreground inline-flex items-center gap-1.5 font-mono text-xs tabular-nums'>
-                <Clock3 className='size-3.5' aria-hidden='true' />
-                每日 {drawTime} · {payload.timezone}
-              </span>
-            </div>
-
-            <div className='px-4 py-6 sm:px-6 sm:py-7'>
-              <div className='flex justify-center'>
-                <LuckyDigits
-                  size='lg'
-                  value={today?.winning_number}
-                  placeholder='0000'
-                  pending={status.phase === 'waiting'}
-                  rolling={status.phase === 'settling'}
-                  animateReveal={
-                    status.phase === 'completed' || status.phase === 'failed'
-                  }
-                />
-              </div>
-
-              <div className='mt-6 grid gap-3 sm:grid-cols-2'>
-                <StagePrimaryMetric
-                  phase={status.phase}
-                  countdownSeconds={props.countdownSeconds}
-                  fullMatchCount={today?.full_match_count ?? 0}
-                />
-                <div className='border-primary/20 bg-background/70 rounded-xl border px-4 py-3.5'>
-                  <div className='text-muted-foreground text-[11px]'>
-                    参与与到账
-                  </div>
-                  <div className='text-foreground mt-1 text-sm font-semibold'>
-                    月卡参与，钱包到账
-                  </div>
-                  <p className='text-muted-foreground mt-1 text-[11px] leading-5'>
-                    无需签到，不出售额外次数；中奖额度直接进入钱包余额，永久有效。
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.aside
-          className='border-border/70 bg-muted/20 border-t px-4 py-5 sm:px-6 xl:border-t-0 xl:border-l'
-          variants={item}
-        >
-          <div className='flex items-center gap-2'>
-            <span className='bg-warning/15 text-warning flex size-8 items-center justify-center rounded-lg'>
-              <Trophy className='size-4' aria-hidden='true' />
-            </span>
-            <div>
-              <div className='text-foreground text-sm font-semibold'>
-                本期累计奖池
-              </div>
-              <div className='text-muted-foreground text-xs'>
-                四位全中时由中奖月卡平分
-              </div>
-            </div>
-          </div>
-
-          <motion.div
-            className='mt-5 font-mono text-4xl font-semibold tracking-tight tabular-nums'
-            initial={reduced ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, ease: EASE_OUT_QUINT, delay: 0.15 }}
-          >
-            {formatLuckyUsd(payload.jackpot_usd)}
-          </motion.div>
-
-          <div className='bg-muted mt-3 h-1.5 overflow-hidden rounded-full'>
-            <motion.div
-              className='bg-warning h-full rounded-full'
-              initial={reduced ? false : { width: 0 }}
-              animate={{ width: `${jackpotRatio}%` }}
-              transition={{ duration: 0.8, ease: EASE_OUT_QUINT, delay: 0.2 }}
-            />
-          </div>
-          <div className='text-muted-foreground mt-2 text-xs tabular-nums'>
-            上限 {formatLuckyUsd(payload.jackpot_cap_usd)} · 已累积{' '}
-            {jackpotRatio.toFixed(0)}%
-          </div>
-
-          <div className='border-border mt-5 space-y-2 border-t pt-4 text-xs leading-5'>
-            <div className='text-foreground flex items-center gap-2 font-medium'>
-              <ShieldCheck
-                className='text-primary size-3.5'
-                aria-hidden='true'
-              />
-              奖池与奖励边界
-            </div>
-            <p className='text-muted-foreground'>
-              无人四位全中时奖池累积，有人全中后按规则分配并重置。
-            </p>
-            <p className='text-muted-foreground'>
-              奖励只进钱包余额，不可提现、交易或转让；号码与记录长期保留。
-            </p>
-          </div>
-        </motion.aside>
+      <motion.div
+        key={props.payload.jackpot_usd}
+        className='mt-6 font-mono text-4xl font-semibold tabular-nums'
+        initial={props.reduced ? false : { opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: EASE_OUT_QUINT }}
+      >
+        {formatLuckyUsd(props.payload.jackpot_usd)}
+      </motion.div>
+      <div className='mt-4 h-1.5 overflow-hidden rounded-full bg-white/10'>
+        <motion.div
+          className='h-full rounded-full bg-[oklch(0.79_0.15_78)]'
+          initial={props.reduced ? false : { width: 0 }}
+          animate={{ width: `${ratio}%` }}
+          transition={{ duration: 0.55, ease: EASE_OUT_QUINT }}
+        />
       </div>
-    </motion.section>
+      <div className='mt-2 text-xs text-white/70 tabular-nums'>
+        上限 {formatLuckyUsd(props.payload.jackpot_cap_usd)} · 当前{' '}
+        {ratio.toFixed(0)}%
+      </div>
+      <div className='mt-6 space-y-3 border-t border-white/10 pt-5 text-xs leading-5 text-white/70'>
+        <AsideFact icon={Gift}>
+          无人四位全中时，奖池自动累积至下一期。
+        </AsideFact>
+        <AsideFact icon={ShieldCheck}>
+          中奖额度直接到账，号码和开奖记录长期保留。
+        </AsideFact>
+      </div>
+    </aside>
   )
 }
 
-function StageIcon(props: {
-  phase: ReturnType<typeof resolveDrawStatus>['phase']
-  reduced: boolean
-}) {
-  const spin = !props.reduced && props.phase === 'settling'
-
+function AsideFact(props: { icon: typeof Gift; children: string }) {
   return (
-    <motion.span
-      className='bg-primary text-primary-foreground flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm'
-      animate={spin ? { rotate: 360 } : undefined}
-      transition={
-        spin ? { duration: 2.4, repeat: Infinity, ease: 'linear' } : undefined
-      }
-    >
-      <Sparkles className='size-5' aria-hidden='true' />
-    </motion.span>
-  )
-}
-
-function StagePrimaryMetric(props: {
-  phase: ReturnType<typeof resolveDrawStatus>['phase']
-  countdownSeconds: number
-  fullMatchCount: number
-}) {
-  const config = {
-    waiting: { label: '距离今日开奖', detail: '系统自动开奖，无需操作' },
-    settling: { label: '当前状态', detail: '中奖额度正在写入钱包' },
-    completed: { label: '四位全中', detail: '本期获得全中奖励的月卡数量' },
-    failed: { label: '处理方式', detail: '系统自动重试，号码不会变更' },
-    disabled: { label: '活动状态', detail: '恢复后将继续每日开奖' },
-  }[props.phase]
-
-  const value =
-    props.phase === 'waiting'
-      ? formatCountdown(props.countdownSeconds)
-      : props.phase === 'settling'
-        ? '结算中'
-        : props.phase === 'completed'
-          ? `${props.fullMatchCount} 份`
-          : props.phase === 'failed'
-            ? '自动重试'
-            : '已暂停'
-
-  return (
-    <div className='border-primary/25 bg-background rounded-xl border px-4 py-3.5'>
-      <div className='text-muted-foreground text-[11px]'>{config.label}</div>
-      <div className='text-foreground mt-1 font-mono text-2xl font-semibold tabular-nums sm:text-3xl'>
-        {value}
-      </div>
-      <p className='text-muted-foreground mt-1 text-[11px] leading-5'>
-        {config.detail}
-      </p>
+    <div className='flex gap-2'>
+      <props.icon
+        className='mt-0.5 size-3.5 shrink-0 text-[oklch(0.79_0.15_78)]'
+        aria-hidden='true'
+      />
+      <span>{props.children}</span>
     </div>
   )
+}
+
+function StageFact(props: { label: string; value: string }) {
+  return (
+    <div className='min-w-28'>
+      <div className='text-[11px] text-white/60'>{props.label}</div>
+      <div className='mt-1 font-mono text-sm font-semibold text-white tabular-nums'>
+        {props.value}
+      </div>
+    </div>
+  )
+}
+
+function getPrimaryFact(
+  status: DrawStatus,
+  countdownSeconds: number,
+  fullMatchCount: number
+) {
+  if (status.phase === 'waiting') {
+    return { label: '距离开奖', value: formatCountdown(countdownSeconds) }
+  }
+  if (status.phase === 'settling') {
+    return { label: '当前状态', value: '结算中' }
+  }
+  if (status.phase === 'completed') {
+    return { label: '本期四位全中', value: `${fullMatchCount} 份` }
+  }
+  if (status.phase === 'failed') {
+    return { label: '当前状态', value: '自动重试' }
+  }
+  return { label: '当前状态', value: '已暂停' }
 }

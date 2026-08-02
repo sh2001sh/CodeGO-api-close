@@ -1,7 +1,5 @@
 import { CalendarClock, ScanLine, Wallet, type LucideIcon } from 'lucide-react'
-import { motion, useReducedMotion } from 'motion/react'
 import { formatDrawTime } from '../lib-status'
-import { stackVariants } from '../motion'
 
 interface FlowStep {
   icon: LucideIcon
@@ -14,62 +12,61 @@ export function HowItWorks(props: {
   drawMinute: number
   timezone: string
 }) {
-  const reduced = Boolean(useReducedMotion())
-  const { container, item } = stackVariants(reduced)
   const drawTime = formatDrawTime(props.drawHour, props.drawMinute)
-
   const steps: FlowStep[] = [
     {
       icon: CalendarClock,
-      title: '每天开一个号码',
-      detail: `每日 ${drawTime}（${props.timezone}）全站开出唯一四位号码，你的有效月卡自动参与，无需签到或购买次数。`,
+      title: '自动参与',
+      detail: `有效月卡每天 ${drawTime} 自动加入`,
     },
     {
       icon: ScanLine,
-      title: '从右往左逐位对比',
-      detail:
-        '拿月卡号码的后四位与开奖号码逐位对齐，从最右侧开始数连续对上几位。最右侧一位没对上就算未命中。',
+      title: '尾号对奖',
+      detail: '从最右侧开始连续匹配四位号码',
     },
     {
       icon: Wallet,
-      title: '奖励直接进钱包',
-      detail:
-        '连续命中位数决定基础奖励档位，再乘月卡档位倍率；只发放最高命中的那一档，额度直接进入钱包余额，永久有效且不随月卡到期清零。',
+      title: '即时到账',
+      detail: '按命中位数和月卡倍率发放奖励',
     },
   ]
 
   return (
-    <motion.section
-      className='grid gap-3 sm:grid-cols-3'
-      variants={container}
-      initial='initial'
-      animate='animate'
-      aria-label='玩法说明'
+    <section
+      className='app-page-shell flex flex-col overflow-hidden sm:flex-row'
+      aria-label='参与流程'
     >
-      {steps.map((step, index) => (
-        <motion.div
-          key={step.title}
-          variants={item}
-          className='app-subtle-panel flex gap-3 p-4'
-        >
-          <span className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
-            <step.icon className='size-4' aria-hidden='true' />
-          </span>
-          <div className='min-w-0'>
-            <div className='flex items-center gap-1.5'>
-              <span className='text-muted-foreground font-mono text-[11px] tabular-nums'>
-                0{index + 1}
-              </span>
-              <h3 className='text-foreground text-sm font-semibold'>
+      <div className='border-border/70 bg-muted/25 flex shrink-0 items-center px-4 py-3 sm:w-32 sm:border-r sm:px-5'>
+        <div>
+          <h2 className='text-foreground text-sm font-semibold'>三步看懂</h2>
+          <p className='text-muted-foreground mt-0.5 text-xs'>
+            {props.timezone}
+          </p>
+        </div>
+      </div>
+      <div className='grid min-w-0 flex-1 sm:grid-cols-3'>
+        {steps.map((step, index) => (
+          <div
+            key={step.title}
+            className='border-border/70 flex min-w-0 items-start gap-3 border-t px-4 py-3.5 first:border-t-0 sm:border-t-0 sm:border-l sm:first:border-l-0'
+          >
+            <span className='bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-lg'>
+              <step.icon className='size-4' aria-hidden='true' />
+            </span>
+            <div className='min-w-0'>
+              <div className='text-foreground flex items-center gap-1.5 text-sm font-semibold'>
+                <span className='text-muted-foreground font-mono text-[10px] tabular-nums'>
+                  {index + 1}
+                </span>
                 {step.title}
-              </h3>
+              </div>
+              <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
+                {step.detail}
+              </p>
             </div>
-            <p className='text-muted-foreground mt-1 text-xs leading-5'>
-              {step.detail}
-            </p>
           </div>
-        </motion.div>
-      ))}
-    </motion.section>
+        ))}
+      </div>
+    </section>
   )
 }

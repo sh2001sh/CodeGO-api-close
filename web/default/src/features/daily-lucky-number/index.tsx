@@ -131,23 +131,21 @@ export function DailyLuckyNumberPage() {
       <SectionPageLayout.Title>
         {t('Daily Lucky Number')}
       </SectionPageLayout.Title>
-      <SectionPageLayout.Description>
-        {t(
-          'Active membership cards automatically join one site-wide draw each day. Card numbers are permanent, and winning rewards go directly to the matched card balance.'
-        )}
-      </SectionPageLayout.Description>
       <SectionPageLayout.Actions>
         <Button
           variant='outline'
-          size='sm'
+          size='icon-sm'
           onClick={refresh}
           disabled={refreshing}
+          aria-label={t('Refresh')}
+          title={t('Refresh')}
         >
           <RefreshCw
-            className={refreshing ? 'animate-spin' : undefined}
-            data-icon='inline-start'
+            className={
+              refreshing ? 'animate-spin motion-reduce:animate-none' : undefined
+            }
+            aria-hidden='true'
           />
-          {t('Refresh')}
         </Button>
       </SectionPageLayout.Actions>
       <DailyLuckyRulesDialog

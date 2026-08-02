@@ -4,6 +4,7 @@ import { normalizeLuckyNumber } from '../lib'
 import { DIGIT_ITEM, DIGIT_STACK, EASE_OUT_QUINT } from '../motion'
 
 type DigitSize = 'sm' | 'md' | 'lg'
+type DigitTone = 'default' | 'stage'
 
 const SIZE_BOX: Record<DigitSize, string> = {
   sm: 'w-8 rounded-lg text-base',
@@ -28,6 +29,7 @@ export function LuckyDigits(props: {
   pending?: boolean
   rolling?: boolean
   animateReveal?: boolean
+  tone?: DigitTone
   className?: string
 }) {
   const reduced = Boolean(useReducedMotion())
@@ -64,6 +66,8 @@ export function LuckyDigits(props: {
           }
           pending={Boolean(props.pending) && !value}
           rolling={Boolean(props.rolling) && !reduced}
+          reduced={reduced}
+          tone={props.tone ?? 'default'}
           delayIndex={digits.length - 1 - index}
         />
       ))}
@@ -79,57 +83,33 @@ function DigitBox(props: {
   dimmed: boolean
   pending: boolean
   rolling: boolean
+  reduced: boolean
+  tone: DigitTone
   delayIndex: number
 }) {
   const base = cn(
     'relative inline-flex aspect-square items-center justify-center overflow-hidden border',
     SIZE_BOX[props.size],
-    props.matched
-      ? 'border-primary/60 bg-primary/12 text-primary shadow-[0_0_18px_-6px_color-mix(in_oklch,var(--primary)_65%,transparent)]'
-      : props.dimmed
-        ? 'border-border/60 bg-muted/40 text-muted-foreground/60'
-        : 'border-border bg-muted/65 text-foreground'
+    props.tone === 'stage'
+      ? 'border-white/15 bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+      : props.matched
+        ? 'border-primary/60 bg-primary/12 text-primary shadow-[0_0_18px_-6px_color-mix(in_oklch,var(--primary)_65%,transparent)]'
+        : props.dimmed
+          ? 'border-border/60 bg-muted/40 text-muted-foreground/60'
+          : 'border-border bg-muted/65 text-foreground'
   )
 
   if (props.rolling) {
-    return (
-      <span className={base}>
-        <motion.span
-          className='absolute inset-0 flex flex-col'
-          animate={{ y: ['0%', '-900%'] }}
-          transition={{
-            duration: 1.1 + props.delayIndex * 0.12,
-            repeat: Infinity,
-            ease: 'linear',
-          }}
-        >
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-            <span
-              key={n}
-              className='flex h-full w-full shrink-0 items-center justify-center'
-            >
-              {n}
-            </span>
-          ))}
-        </motion.span>
-      </span>
-    )
+    return <RollingDigit className={base} delayIndex={props.delayIndex} />
   }
 
   if (props.pending) {
     return (
-      <motion.span
+      <PendingDigit
         className={base}
-        animate={{ opacity: [0.45, 0.95, 0.45] }}
-        transition={{
-          duration: 1.8,
-          repeat: Infinity,
-          ease: 'easeInOut',
-          delay: props.delayIndex * 0.16,
-        }}
-      >
-        <span className='bg-muted-foreground/50 size-1.5 rounded-full' />
-      </motion.span>
+        delayIndex={props.delayIndex}
+        reduced={props.reduced}
+      />
     )
   }
 
@@ -155,4 +135,58 @@ function DigitBox(props: {
   }
 
   return <span className={base}>{props.digit}</span>
+}
+
+function RollingDigit(props: { className: string; delayIndex: number }) {
+  return (
+    <span className={props.className}>
+      <motion.span
+        className='absolute inset-0 flex flex-col'
+        animate={{ y: ['0%', '-900%'] }}
+        transition={{
+          duration: 1.1 + props.delayIndex * 0.12,
+          repeat: Infinity,
+          ease: 'linear',
+        }}
+      >
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((number) => (
+          <span
+            key={number}
+            className='flex h-full w-full shrink-0 items-center justify-center'
+          >
+            {number}
+          </span>
+        ))}
+      </motion.span>
+    </span>
+  )
+}
+
+function PendingDigit(props: {
+  className: string
+  delayIndex: number
+  reduced: boolean
+}) {
+  if (props.reduced) {
+    return (
+      <span className={props.className}>
+        <span className='size-1.5 rounded-full bg-current opacity-60' />
+      </span>
+    )
+  }
+
+  return (
+    <motion.span
+      className={props.className}
+      animate={{ opacity: [0.45, 0.95, 0.45] }}
+      transition={{
+        duration: 1.8,
+        repeat: Infinity,
+        ease: 'easeInOut',
+        delay: props.delayIndex * 0.16,
+      }}
+    >
+      <span className='size-1.5 rounded-full bg-current opacity-60' />
+    </motion.span>
+  )
 }

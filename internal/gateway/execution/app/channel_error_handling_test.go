@@ -37,6 +37,15 @@ func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
 	require.Equal(t, 30*time.Second, retryableFailureCooldown(nil, timeout))
 }
 
+func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+	require.True(t, shouldRecordFaultDomainFailure(context))
+
+	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	require.False(t, shouldRecordFaultDomainFailure(context))
+}
+
 func TestIsModelScopedUpstreamFailure(t *testing.T) {
 	require.True(t, IsModelScopedUpstreamFailure(types.NewOpenAIError(
 		errors.New("insufficient_user_quota"), types.ErrorCodeBadResponseStatusCode, http.StatusServiceUnavailable,

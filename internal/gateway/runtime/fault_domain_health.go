@@ -9,7 +9,10 @@ import (
 	"time"
 )
 
-const faultDomainHealthKeyPrefix = "fault-domain\x00"
+const (
+	faultDomainHealthKeyPrefix  = "fault-domain\x00"
+	faultDomainFailureThreshold = 3
+)
 
 // ChannelFaultDomain derives a shared transient-failure boundary without
 // relying on channel names, keys, or user-visible configuration.
@@ -67,10 +70,10 @@ func TryStartFaultDomainRecoveryProbe(domain, model string) bool {
 	return started
 }
 
-// RecordFaultDomainRetryableFailure cools all same-domain model routes after a
-// transient failure. Failures while the circuit is already closed do not extend
-// its timer; a failed half-open probe increases the adaptive backoff instead.
-func RecordFaultDomainRetryableFailure(domain, model string, cooldown time.Duration) {
+// RecordFaultDomainRetryableFailure opens a domain circuit only after three
+// distinct transient request failures. A failed half-open probe increases the
+// adaptive backoff, while retries of the same request count only once.
+func RecordFaultDomainRetryableFailure(domain, model, requestID string, cooldown time.Duration) {
 	if domain == "" || model == "" {
 		return
 	}
@@ -80,21 +83,38 @@ func RecordFaultDomainRetryableFailure(domain, model string, cooldown time.Durat
 
 	now := time.Now().UTC()
 	_ = getChannelHealthCache().UpdateWithTTL(faultDomainHealthKey(domain, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+		if requestID != "" && state.LastFailureRequestID == requestID {
+			return state, nil
+		}
 		state.Model = model
 		state.LastFailureAt = now
+		state.LastFailureRequestID = requestID
 		state.ConsecutiveRetryableFailures++
 		state.RecoveryProbeSuccesses = 0
 		state.RecoveryProbeUntil = time.Time{}
+		backoffLevel := faultDomainBackoffLevel(state.ConsecutiveRetryableFailures)
 		if state.CoolingUntil.After(now) && state.State != ChannelHealthHalfOpen {
-			if state.ConsecutiveRetryableFailures >= channelHealthFailureThreshold {
-				state.CoolingUntil = now.Add(adaptiveChannelCooldown(cooldown, state.ConsecutiveRetryableFailures))
+			if state.ConsecutiveRetryableFailures >= faultDomainFailureThreshold {
+				state.CoolingUntil = now.Add(adaptiveChannelCooldown(cooldown, backoffLevel))
 			}
 			return state, nil
 		}
-		state.CoolingUntil = now.Add(adaptiveChannelCooldown(cooldown, state.ConsecutiveRetryableFailures))
+		if state.ConsecutiveRetryableFailures < faultDomainFailureThreshold {
+			state.CoolingUntil = time.Time{}
+			state.State = ChannelHealthDegraded
+			return state, nil
+		}
+		state.CoolingUntil = now.Add(adaptiveChannelCooldown(cooldown, backoffLevel))
 		state.State = ChannelHealthCooling
 		return state, nil
 	})
+}
+
+func faultDomainBackoffLevel(failures int) int {
+	if failures <= faultDomainFailureThreshold {
+		return 1
+	}
+	return failures - faultDomainFailureThreshold + 1
 }
 
 // RecordFaultDomainSuccess advances a half-open domain circuit. Two successful

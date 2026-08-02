@@ -17,23 +17,24 @@ const (
 	ChannelHealthCooling  = "cooling"
 	ChannelHealthHalfOpen = "half_open"
 
-	channelHealthFailureThreshold         = 5
-	channelHealthShortCooldown            = 15 * time.Second
-	channelHealthIncompleteStreamCooldown = 15 * time.Second
-	channelHealthRateLimitCooldown        = 30 * time.Second
-	channelHealthLongContextTimeout       = 45 * time.Second
-	channelHealthCooldownDuration         = 2 * time.Minute
-	channelHealthProbeLeaseDuration       = 10 * time.Second
-	channelHealthTTL                      = 20 * time.Minute
-	channelModelUnavailableTTL            = 5 * time.Minute
-	channelModelUpstreamFailureTTL        = 2 * time.Minute
-	channelHealthShortWindow              = 2 * time.Minute
-	channelHealthShortMinRequests         = 5
-	channelHealthShortMaxSuccess          = 40.0
-	channelHealthSlowTTFTSamples          = 3
-	channelHealthSlowTTFTThreshold        = 12 * time.Second
-	channelHealthTTFTWindow               = 20
-	channelHealthSlowTTFTP95              = 15 * time.Second
+	channelHealthFailureThreshold          = 5
+	channelHealthRetryableFailureThreshold = 3
+	channelHealthShortCooldown             = 15 * time.Second
+	channelHealthIncompleteStreamCooldown  = 15 * time.Second
+	channelHealthRateLimitCooldown         = 30 * time.Second
+	channelHealthLongContextTimeout        = 45 * time.Second
+	channelHealthCooldownDuration          = 2 * time.Minute
+	channelHealthProbeLeaseDuration        = 10 * time.Second
+	channelHealthTTL                       = 20 * time.Minute
+	channelModelUnavailableTTL             = 5 * time.Minute
+	channelModelUpstreamFailureTTL         = 2 * time.Minute
+	channelHealthShortWindow               = 2 * time.Minute
+	channelHealthShortMinRequests          = 5
+	channelHealthShortMaxSuccess           = 40.0
+	channelHealthSlowTTFTSamples           = 3
+	channelHealthSlowTTFTThreshold         = 12 * time.Second
+	channelHealthTTFTWindow                = 20
+	channelHealthSlowTTFTP95               = 15 * time.Second
 )
 
 // ChannelHealth captures the shared routing health for one channel/model pair.
@@ -212,22 +213,30 @@ func RecordChannelRetryableFailureWithCooldown(channelID int, model string, shor
 		state.ConsecutiveRetryableFailures++
 		state.RecoveryProbeSuccesses = 0
 		state.RecoveryProbeUntil = time.Time{}
-		escalated := shouldCoolForShortTermFailureRate(state) || state.ConsecutiveRetryableFailures >= channelHealthFailureThreshold
+		escalated := shouldCoolForShortTermFailureRate(state) || state.ConsecutiveRetryableFailures >= channelHealthRetryableFailureThreshold
+		backoffLevel := retryableFailureBackoffLevel(state.ConsecutiveRetryableFailures)
 		if state.CoolingUntil.After(now) && state.State != ChannelHealthHalfOpen {
 			if escalated {
-				state.CoolingUntil = now.Add(adaptiveChannelCooldown(shortCooldown, state.ConsecutiveRetryableFailures))
+				state.CoolingUntil = now.Add(adaptiveChannelCooldown(shortCooldown, backoffLevel))
 			}
 			return state, nil
 		}
 		if escalated {
-			state.CoolingUntil = now.Add(adaptiveChannelCooldown(shortCooldown, state.ConsecutiveRetryableFailures))
+			state.CoolingUntil = now.Add(adaptiveChannelCooldown(shortCooldown, backoffLevel))
 			state.State = ChannelHealthCooling
 			return state, nil
 		}
-		state.CoolingUntil = now.Add(adaptiveChannelCooldown(shortCooldown, state.ConsecutiveRetryableFailures))
-		state.State = ChannelHealthCooling
+		state.CoolingUntil = time.Time{}
+		state.State = ChannelHealthDegraded
 		return state, nil
 	})
+}
+
+func retryableFailureBackoffLevel(failures int) int {
+	if failures <= channelHealthRetryableFailureThreshold {
+		return 1
+	}
+	return failures - channelHealthRetryableFailureThreshold + 1
 }
 
 // TryStartChannelRecoveryProbe reserves a single expired circuit for a real

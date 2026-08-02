@@ -12,7 +12,7 @@ func TestChannelHealthCoolingAndRecovery(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
 
-	for range channelHealthFailureThreshold {
+	for range channelHealthRetryableFailureThreshold {
 		RecordChannelRetryableFailure(42, "gpt-test")
 	}
 	require.True(t, IsChannelCooling(42, "gpt-test"))
@@ -45,10 +45,10 @@ func TestChannelHealthCoolsForLowShortTermSuccessRate(t *testing.T) {
 	require.True(t, found)
 	require.Equal(t, ChannelHealthCooling, state.State)
 	require.Equal(t, 20.0, state.SuccessRate2m)
-	require.WithinDuration(t, time.Now().Add(channelHealthCooldownDuration), state.CoolingUntil, time.Second)
+	require.WithinDuration(t, time.Now().Add(channelHealthShortCooldown), state.CoolingUntil, time.Second)
 }
 
-func TestChannelHealthUsesShortCooldownForHealthyShortTermSuccessRate(t *testing.T) {
+func TestChannelHealthDegradesForOneFailureWithHealthyTraffic(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
 
@@ -57,18 +57,20 @@ func TestChannelHealthUsesShortCooldownForHealthyShortTermSuccessRate(t *testing
 	}
 	RecordChannelRetryableFailure(42, "gpt-test")
 
-	require.True(t, IsChannelCooling(42, "gpt-test"))
+	require.False(t, IsChannelCooling(42, "gpt-test"))
 	state, found := GetChannelHealth(42, "gpt-test")
 	require.True(t, found)
 	require.Equal(t, 80.0, state.SuccessRate2m)
-	require.WithinDuration(t, time.Now().Add(channelHealthShortCooldown), state.CoolingUntil, time.Second)
+	require.Equal(t, ChannelHealthDegraded, state.State)
 }
 
 func TestChannelHealthUsesShortCooldownBeforeLongCircuit(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
 
-	RecordChannelRetryableFailureWithCooldown(42, "gpt-short-cooldown", 15*time.Second)
+	for range channelHealthRetryableFailureThreshold {
+		RecordChannelRetryableFailureWithCooldown(42, "gpt-short-cooldown", 15*time.Second)
+	}
 	state, found := GetChannelHealth(42, "gpt-short-cooldown")
 	require.True(t, found)
 	require.Equal(t, ChannelHealthCooling, state.State)
@@ -79,7 +81,9 @@ func TestChannelHealthUsesLongerShortCooldownForIncompleteStreams(t *testing.T) 
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
 
-	RecordChannelRetryableFailureWithCooldown(42, "gpt-incomplete-stream", IncompleteStreamCooldown())
+	for range channelHealthRetryableFailureThreshold {
+		RecordChannelRetryableFailureWithCooldown(42, "gpt-incomplete-stream", IncompleteStreamCooldown())
+	}
 	state, found := GetChannelHealth(42, "gpt-incomplete-stream")
 	require.True(t, found)
 	require.Equal(t, ChannelHealthCooling, state.State)
@@ -90,12 +94,15 @@ func TestChannelHealthShortCooldownEscalatesAfterRepeatedFailures(t *testing.T) 
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
 
-	for range channelHealthFailureThreshold {
+	for range channelHealthRetryableFailureThreshold {
 		RecordChannelRetryableFailure(42, "gpt-escalation")
 	}
+	expireChannelHealthForTest(t, 42, "gpt-escalation")
+	require.True(t, TryStartChannelRecoveryProbe(42, "gpt-escalation"))
+	RecordChannelRetryableFailure(42, "gpt-escalation")
 	state, found := GetChannelHealth(42, "gpt-escalation")
 	require.True(t, found)
-	require.WithinDuration(t, time.Now().Add(channelHealthCooldownDuration), state.CoolingUntil, time.Second)
+	require.WithinDuration(t, time.Now().Add(2*channelHealthShortCooldown), state.CoolingUntil, time.Second)
 }
 
 func TestChannelHealthCoolsSlowFirstTokenRouteBriefly(t *testing.T) {
@@ -176,7 +183,11 @@ func TestFaultDomainSharesCooldownAndRecoversThroughHalfOpenProbes(t *testing.T)
 
 	domain := ChannelFaultDomain(1, "https://upstream.example/v1")
 	require.Equal(t, "1:upstream.example", domain)
-	RecordFaultDomainRetryableFailure(domain, "gpt-test", 15*time.Second)
+	RecordFaultDomainRetryableFailure(domain, "gpt-test", "request-1", 15*time.Second)
+	RecordFaultDomainRetryableFailure(domain, "gpt-test", "request-1", 15*time.Second)
+	require.False(t, IsFaultDomainCooling(domain, "gpt-test"))
+	RecordFaultDomainRetryableFailure(domain, "gpt-test", "request-2", 15*time.Second)
+	RecordFaultDomainRetryableFailure(domain, "gpt-test", "request-3", 15*time.Second)
 	require.True(t, IsFaultDomainCooling(domain, "gpt-test"))
 
 	expireFaultDomainHealthForTest(t, domain, "gpt-test")

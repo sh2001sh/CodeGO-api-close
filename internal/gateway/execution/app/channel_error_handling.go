@@ -49,6 +49,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	// clients may have already received output. It still needs model-level
 	// cooling so subsequent requests choose another healthy route.
 	if failureClass == upstreamFailureIncompleteStream {
+		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, modelName, gatewayruntime.IncompleteStreamCooldown())
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
@@ -84,6 +85,9 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.AppendChannelAffinityAdminInfo(c, adminInfo)
 		if decision, ok := gatewayruntime.GetRouteDecision(c); ok {
 			adminInfo["route_decision"] = decision
+		}
+		if circuit, ok := gatewayruntime.UserStreamFailureCircuitAuditFromContext(c); ok {
+			adminInfo["user_stream_failure_circuit"] = circuit
 		}
 		other["admin_info"] = adminInfo
 

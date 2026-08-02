@@ -7,6 +7,7 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -234,6 +235,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
+	streamFailureCircuitChecked := false
 
 	for ; retryParam.GetRetry() <= platformconfig.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
@@ -244,6 +246,19 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		relayInfo.InitChannelMeta(c)
+		if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) && !streamFailureCircuitChecked {
+			streamFailureCircuitChecked = true
+			if retryAfterSeconds, blocked := relaycommon.UserStreamFailureRetryAfter(c, relayInfo.OriginModelName); blocked {
+				c.Header("Retry-After", strconv.Itoa(retryAfterSeconds))
+				newAPIError = types.NewErrorWithStatusCode(
+					errors.New(types.ModelUnavailableMessage),
+					types.ErrorCodeGetChannelFailed,
+					http.StatusServiceUnavailable,
+					types.ErrOptionWithSkipRetry(),
+				)
+				break
+			}
+		}
 
 		currentPriceData, priceErr := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
 		if priceErr != nil {
@@ -277,6 +292,9 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			gatewayroutingapp.RecordAutoGroupSuccess(c, relayInfo.OriginModelName)
+			if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) {
+				relaycommon.ClearUserStreamFailureCircuit(c, relayInfo.OriginModelName)
+			}
 			ttft := relayInfo.FirstResponseTime.Sub(relayInfo.StartTime)
 			if !relayInfo.HasSendResponse() {
 				ttft = 0

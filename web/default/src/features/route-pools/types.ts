@@ -2,6 +2,7 @@ export type RoutePoolMember = {
   channel_id: number
   cost_multiplier: number
   model_cost_overrides: string
+  fault_domain: string
   enabled: boolean
 }
 
@@ -27,6 +28,7 @@ export type RoutePoolGroup = {
     enabled: boolean
     cost_multiplier: number
     model_cost_overrides: string
+    fault_domain: string
   }>
 }
 

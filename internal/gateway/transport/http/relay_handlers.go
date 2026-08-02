@@ -300,6 +300,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 				ttft = 0
 			}
 			relaycommon.RecordChannelSuccess(channel.Id, relayInfo.OriginModelName, ttft)
+			relaycommon.RecordFaultDomainSuccess(c.GetString("channel_fault_domain"), relayInfo.OriginModelName)
 			relayInfo.LastError = nil
 			return
 		}

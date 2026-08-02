@@ -29,6 +29,7 @@ type RoutePoolGroupChannel struct {
 	Enabled            bool    `json:"enabled"`
 	CostMultiplier     float64 `json:"cost_multiplier"`
 	ModelCostOverrides string  `json:"model_cost_overrides"`
+	FaultDomain        string  `json:"fault_domain"`
 }
 
 type RoutePoolMetrics struct {
@@ -45,6 +46,8 @@ type RoutePoolMemberMetrics struct {
 	Eligible           bool                         `json:"eligible"`
 	CostMultiplier     float64                      `json:"cost_multiplier"`
 	ModelCostOverrides string                       `json:"model_cost_overrides"`
+	FaultDomain        string                       `json:"fault_domain"`
+	FaultDomainHealth  gatewayruntime.ChannelHealth `json:"fault_domain_health"`
 	Score              float64                      `json:"score"`
 	Health             gatewayruntime.ChannelHealth `json:"health"`
 }
@@ -100,7 +103,7 @@ func ListRoutePoolGroups() ([]RoutePoolGroup, error) {
 			view.Channels = append(view.Channels, RoutePoolGroupChannel{
 				ChannelID: channel.Id, ChannelName: channel.Name, ChannelStatus: channel.Status,
 				Models: channel.Models, Enabled: member.Enabled, CostMultiplier: member.CostMultiplier,
-				ModelCostOverrides: member.ModelCostOverrides,
+				ModelCostOverrides: member.ModelCostOverrides, FaultDomain: member.FaultDomain,
 			})
 		}
 	}
@@ -199,6 +202,7 @@ func GetRoutePoolMetrics(poolID int64, modelName string) (*RoutePoolMetrics, err
 			Enabled:            member.Enabled,
 			CostMultiplier:     member.CostMultiplier,
 			ModelCostOverrides: member.ModelCostOverrides,
+			FaultDomain:        member.FaultDomain,
 		}
 		channel, channelErr := gatewaystore.GetCachedChannel(member.ChannelID)
 		if channelErr == nil && channel != nil {
@@ -207,6 +211,11 @@ func GetRoutePoolMetrics(poolID int64, modelName string) (*RoutePoolMetrics, err
 		}
 		if health, found := gatewayruntime.GetChannelHealth(member.ChannelID, modelName); found {
 			metric.Health = health
+		}
+		if channelErr == nil && channel != nil {
+			if health, found := gatewayruntime.GetFaultDomainHealth(routePoolFaultDomain(member, channel), modelName); found {
+				metric.FaultDomainHealth = health
+			}
 		}
 		metrics.Members = append(metrics.Members, metric)
 		if metric.Eligible {

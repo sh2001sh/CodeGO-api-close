@@ -33,7 +33,7 @@ func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
 	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
 	timeout := types.NewErrorWithStatusCode(errors.New("timeout awaiting response headers"), types.ErrorCodeChannelResponseTimeExceeded, http.StatusGatewayTimeout)
 
-	require.Equal(t, 2*time.Minute, retryableFailureCooldown(context, timeout))
+	require.Equal(t, 45*time.Second, retryableFailureCooldown(context, timeout))
 	require.Equal(t, 30*time.Second, retryableFailureCooldown(nil, timeout))
 }
 

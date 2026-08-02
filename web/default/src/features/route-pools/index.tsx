@@ -94,6 +94,7 @@ export function RoutePoolsContent() {
           enabled: channel.enabled,
           cost_multiplier: channel.cost_multiplier,
           model_cost_overrides: channel.model_cost_overrides,
+          fault_domain: channel.fault_domain,
         })),
       }),
     onSuccess: () => {

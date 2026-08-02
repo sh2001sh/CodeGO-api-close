@@ -24,6 +24,15 @@ func TestRoutePoolModelCostOverridesMemberDefault(t *testing.T) {
 	assert.Equal(t, 1.2, routePoolModelCost(member, "other"))
 }
 
+func TestRoutePoolFaultDomainUsesConfiguredValueBeforeUpstreamHost(t *testing.T) {
+	channel := &gatewayschema.Channel{Type: 1}
+	baseURL := "https://proxy.example/v1"
+	channel.BaseURL = &baseURL
+
+	assert.Equal(t, "aihub:63", routePoolFaultDomain(gatewayschema.RoutePoolMember{FaultDomain: " AIHub:63 "}, channel))
+	assert.Equal(t, "1:proxy.example", routePoolFaultDomain(gatewayschema.RoutePoolMember{}, channel))
+}
+
 func TestRoutePoolConservativeSuccessRatePenalizesSmallFailureSamples(t *testing.T) {
 	assert.Greater(t, 98.0, routePoolConservativeSuccessRate(gatewayruntime.ChannelHealth{
 		Window5Requests:  20,

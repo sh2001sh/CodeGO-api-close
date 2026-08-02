@@ -56,10 +56,11 @@ function RoutePoolGroupCard({ group, saving, onSelect, onSave }: { group: RouteP
     </CardHeader>
     {expanded && <CardContent className='border-t pt-0'>
       <div className='divide-y'>
-        {draft.channels.map((channel) => <div key={channel.channel_id} className='grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_116px_132px_auto] md:items-center'>
+        {draft.channels.map((channel) => <div key={channel.channel_id} className='grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_116px_132px_160px_auto] md:items-center'>
           <div className='min-w-0'><p className='truncate font-medium'>#{channel.channel_id} {channel.channel_name}</p><p className='text-muted-foreground truncate text-xs'>{channel.models || '未同步模型'} {channel.channel_status === 1 ? '' : ' | 全局不可用'}</p></div>
           <div><p className='text-muted-foreground text-xs'>采购倍率</p><Input type='number' min='0.0001' step='0.0001' value={channel.cost_multiplier} onChange={(event) => updateChannel(channel.channel_id, { cost_multiplier: Number(event.target.value) || 1 })} /></div>
           <div><p className='text-muted-foreground text-xs'>模型覆盖 JSON</p><Input className='font-mono text-xs' value={channel.model_cost_overrides} onChange={(event) => updateChannel(channel.channel_id, { model_cost_overrides: event.target.value })} /></div>
+          <div><p className='text-muted-foreground text-xs'>故障域</p><Input className='font-mono text-xs' placeholder='自动按上游主机归类' value={channel.fault_domain} onChange={(event) => updateChannel(channel.channel_id, { fault_domain: event.target.value })} /></div>
           <div className='flex items-center gap-2'><Switch checked={channel.enabled} onCheckedChange={(enabled) => updateChannel(channel.channel_id, { enabled })} /><span className='text-sm'>{channel.enabled ? '参与' : '禁用'}</span></div>
         </div>)}
       </div>

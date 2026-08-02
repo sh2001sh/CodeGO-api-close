@@ -17,6 +17,10 @@ func TestChannelHealthCoolingAndRecovery(t *testing.T) {
 	}
 	require.True(t, IsChannelCooling(42, "gpt-test"))
 
+	expireChannelHealthForTest(t, 42, "gpt-test")
+	require.True(t, TryStartChannelRecoveryProbe(42, "gpt-test"))
+	RecordChannelSuccess(42, "gpt-test", 120*time.Millisecond)
+	require.True(t, TryStartChannelRecoveryProbe(42, "gpt-test"))
 	RecordChannelSuccess(42, "gpt-test", 120*time.Millisecond)
 	require.False(t, IsChannelCooling(42, "gpt-test"))
 	state, found := GetChannelHealth(42, "gpt-test")
@@ -44,19 +48,20 @@ func TestChannelHealthCoolsForLowShortTermSuccessRate(t *testing.T) {
 	require.WithinDuration(t, time.Now().Add(channelHealthCooldownDuration), state.CoolingUntil, time.Second)
 }
 
-func TestChannelHealthDoesNotCoolForHealthyShortTermSuccessRate(t *testing.T) {
+func TestChannelHealthUsesShortCooldownForHealthyShortTermSuccessRate(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
 
-	RecordChannelRetryableFailure(42, "gpt-test")
 	for range 4 {
 		RecordChannelSuccess(42, "gpt-test", 0)
 	}
+	RecordChannelRetryableFailure(42, "gpt-test")
 
-	require.False(t, IsChannelCooling(42, "gpt-test"))
+	require.True(t, IsChannelCooling(42, "gpt-test"))
 	state, found := GetChannelHealth(42, "gpt-test")
 	require.True(t, found)
 	require.Equal(t, 80.0, state.SuccessRate2m)
+	require.WithinDuration(t, time.Now().Add(channelHealthShortCooldown), state.CoolingUntil, time.Second)
 }
 
 func TestChannelHealthUsesShortCooldownBeforeLongCircuit(t *testing.T) {
@@ -78,7 +83,7 @@ func TestChannelHealthUsesLongerShortCooldownForIncompleteStreams(t *testing.T) 
 	state, found := GetChannelHealth(42, "gpt-incomplete-stream")
 	require.True(t, found)
 	require.Equal(t, ChannelHealthCooling, state.State)
-	require.WithinDuration(t, time.Now().Add(30*time.Second), state.CoolingUntil, time.Second)
+	require.WithinDuration(t, time.Now().Add(15*time.Second), state.CoolingUntil, time.Second)
 }
 
 func TestChannelHealthShortCooldownEscalatesAfterRepeatedFailures(t *testing.T) {
@@ -163,4 +168,38 @@ func TestCoolChannelModelForUpstreamFailureLeavesOtherModelsHealthy(t *testing.T
 	require.True(t, found)
 	require.Equal(t, ChannelHealthCooling, state.State)
 	require.WithinDuration(t, time.Now().Add(channelModelUpstreamFailureTTL), state.CoolingUntil, time.Second)
+}
+
+func TestFaultDomainSharesCooldownAndRecoversThroughHalfOpenProbes(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	domain := ChannelFaultDomain(1, "https://upstream.example/v1")
+	require.Equal(t, "1:upstream.example", domain)
+	RecordFaultDomainRetryableFailure(domain, "gpt-test", 15*time.Second)
+	require.True(t, IsFaultDomainCooling(domain, "gpt-test"))
+
+	expireFaultDomainHealthForTest(t, domain, "gpt-test")
+	require.True(t, TryStartFaultDomainRecoveryProbe(domain, "gpt-test"))
+	require.False(t, TryStartFaultDomainRecoveryProbe(domain, "gpt-test"))
+	RecordFaultDomainSuccess(domain, "gpt-test")
+	require.True(t, TryStartFaultDomainRecoveryProbe(domain, "gpt-test"))
+	RecordFaultDomainSuccess(domain, "gpt-test")
+	require.False(t, IsFaultDomainCooling(domain, "gpt-test"))
+}
+
+func expireChannelHealthForTest(t *testing.T, channelID int, model string) {
+	t.Helper()
+	require.NoError(t, getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+		state.CoolingUntil = time.Now().Add(-time.Second)
+		return state, nil
+	}))
+}
+
+func expireFaultDomainHealthForTest(t *testing.T, domain, model string) {
+	t.Helper()
+	require.NoError(t, getChannelHealthCache().UpdateWithTTL(faultDomainHealthKey(domain, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+		state.CoolingUntil = time.Now().Add(-time.Second)
+		return state, nil
+	}))
 }

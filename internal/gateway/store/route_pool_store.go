@@ -129,12 +129,14 @@ func SaveRoutePool(pool *gatewayschema.RoutePool, members []gatewayschema.RouteP
 		for index := range members {
 			members[index].ID = 0
 			members[index].RoutePoolID = pool.ID
+			members[index].FaultDomain = strings.TrimSpace(members[index].FaultDomain)
 			member := members[index]
 			if err := tx.Model(&gatewayschema.RoutePoolMember{}).Create(map[string]any{
 				"route_pool_id":        member.RoutePoolID,
 				"channel_id":           member.ChannelID,
 				"cost_multiplier":      member.CostMultiplier,
 				"model_cost_overrides": member.ModelCostOverrides,
+				"fault_domain":         member.FaultDomain,
 				"enabled":              member.Enabled,
 			}).Error; err != nil {
 				return err
@@ -248,6 +250,9 @@ func validateRoutePoolMembers(members []gatewayschema.RoutePoolMember) error {
 		seen[member.ChannelID] = struct{}{}
 		if strings.TrimSpace(member.ModelCostOverrides) == "" {
 			member.ModelCostOverrides = "{}"
+		}
+		if len(strings.TrimSpace(member.FaultDomain)) > 128 {
+			return errors.New("route pool member fault domain exceeds 128 characters")
 		}
 		var overrides map[string]float64
 		if err := json.Unmarshal([]byte(member.ModelCostOverrides), &overrides); err != nil {

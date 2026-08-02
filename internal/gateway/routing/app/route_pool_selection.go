@@ -30,10 +30,13 @@ const (
 )
 
 type scoredRoutePoolCandidate struct {
-	channel *gatewayschema.Channel
-	score   float64
-	probe   bool
-	cost    float64
+	channel      *gatewayschema.Channel
+	score        float64
+	probe        bool
+	cost         float64
+	faultDomain  string
+	channelProbe bool
+	domainProbe  bool
 }
 
 // RoutePoolSelection is request-local and consumed only by settlement code.
@@ -65,16 +68,29 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 			continue
 		}
 		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
-		if found && health.State == gatewayruntime.ChannelHealthCooling {
-			if health.CoolingUntil.After(now) {
+		faultDomain := routePoolFaultDomain(candidate.Member, candidate.Channel)
+		domainHealth, domainFound := gatewayruntime.GetFaultDomainHealth(faultDomain, modelName)
+		if domainFound && gatewayruntime.IsFaultDomainCooling(faultDomain, modelName) {
+			continue
+		}
+		if found && (health.State == gatewayruntime.ChannelHealthCooling || health.State == gatewayruntime.ChannelHealthHalfOpen) {
+			if (health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now)) ||
+				(health.State == gatewayruntime.ChannelHealthHalfOpen && health.RecoveryProbeUntil.After(now)) {
 				continue
 			}
 			cost := routePoolModelCost(candidate.Member, modelName)
-			probes = append(probes, scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), probe: true, cost: cost})
+			probes = append(probes, scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), probe: true, cost: cost, faultDomain: faultDomain, channelProbe: true, domainProbe: domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen)})
 			continue
 		}
 		cost := routePoolModelCost(candidate.Member, modelName)
-		healthy = append(healthy, scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), cost: cost})
+		scored := scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), cost: cost, faultDomain: faultDomain}
+		if domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen) {
+			scored.probe = true
+			scored.domainProbe = true
+			probes = append(probes, scored)
+			continue
+		}
+		healthy = append(healthy, scored)
 	}
 
 	applyRoutePoolTTFTPenalty(healthy, modelName)
@@ -88,16 +104,52 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 		probes = primaryProbes
 	}
 	prepareRoutePoolAffinity(c, detail.Pool.ID, group, modelName)
-	if len(healthy) == 0 {
-		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseLowestRoutePoolCandidate(probes)), true, nil
+	if probe := reserveRoutePoolRecoveryProbe(probes, modelName); probe != nil {
+		return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 	}
-	if len(probes) > 0 && rand.Float64() < routePoolRecoveryProbeRate(healthy, probes) {
-		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseLowestRoutePoolCandidate(probes)), true, nil
+	if len(healthy) == 0 {
+		return nil, true, nil
 	}
 	if sticky := getRoutePoolStickyCandidate(c, healthy, modelName); sticky != nil {
 		return selectRoutePoolCandidate(c, detail.Pool.ID, sticky), true, nil
 	}
 	return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy)), true, nil
+}
+
+func reserveRoutePoolRecoveryProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
+	for len(probes) > 0 {
+		probe := chooseLowestRoutePoolCandidate(probes)
+		if probe == nil {
+			return nil
+		}
+		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelRecoveryProbe(probe.channel.Id, modelName)
+		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainRecoveryProbe(probe.faultDomain, modelName)
+		if channelReady && domainReady {
+			return probe
+		}
+		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
+	}
+	return nil
+}
+
+func removeRoutePoolCandidate(candidates []scoredRoutePoolCandidate, channelID int) []scoredRoutePoolCandidate {
+	filtered := candidates[:0]
+	for _, candidate := range candidates {
+		if candidate.channel == nil || candidate.channel.Id != channelID {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered
+}
+
+func routePoolFaultDomain(member gatewayschema.RoutePoolMember, channel *gatewayschema.Channel) string {
+	if configured := strings.ToLower(strings.TrimSpace(member.FaultDomain)); configured != "" {
+		return configured
+	}
+	if channel == nil {
+		return ""
+	}
+	return gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL())
 }
 
 // RecordAutomaticPoolAffinity keeps an unbound token on the selected pool

@@ -31,6 +31,7 @@ const createMember = (): RoutePoolMember => ({
   channel_id: 0,
   cost_multiplier: 1,
   model_cost_overrides: '{}',
+  fault_domain: '',
   enabled: true,
 })
 
@@ -131,7 +132,7 @@ export function RoutePoolEditor({
           {draft.members.map((member, index) => (
             <div
               key={`${member.channel_id}-${index}`}
-              className='grid gap-2 rounded-lg border p-3 md:grid-cols-[112px_132px_minmax(0,1fr)_auto_auto]'
+              className='grid gap-2 rounded-lg border p-3 md:grid-cols-[112px_132px_minmax(0,1fr)_160px_auto_auto]'
             >
               <Combobox
                 aria-label='渠道'
@@ -164,6 +165,14 @@ export function RoutePoolEditor({
                   updateMember(index, {
                     model_cost_overrides: event.target.value,
                   })
+                }
+              />
+              <Input
+                aria-label='故障域'
+                placeholder='自动按上游主机归类'
+                value={member.fault_domain}
+                onChange={(event) =>
+                  updateMember(index, { fault_domain: event.target.value })
                 }
               />
               <Switch

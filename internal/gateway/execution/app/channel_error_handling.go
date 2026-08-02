@@ -51,9 +51,12 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	if failureClass == upstreamFailureIncompleteStream {
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, modelName, gatewayruntime.IncompleteStreamCooldown())
+		gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), modelName, gatewayruntime.IncompleteStreamCooldown())
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
-		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, c.GetString("original_model"), retryableFailureCooldown(c, err))
+		cooldown := retryableFailureCooldown(c, err)
+		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, c.GetString("original_model"), cooldown)
+		gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), cooldown)
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
 

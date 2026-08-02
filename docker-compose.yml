@@ -47,8 +47,14 @@ services:
       NODE_NAME: ${CONTROL_NODE_NAME:-control-api-1}
       TEMPORAL_HOSTPORT: ${TEMPORAL_HOSTPORT:-temporal:7233}
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      AIHUB_ROUTER_COST_SYNC_SOURCES: ${AIHUB_ROUTER_COST_SYNC_SOURCES:-}
+      AIHUB_ROUTER_COST_SYNC_INTERVAL_SECONDS: ${AIHUB_ROUTER_COST_SYNC_INTERVAL_SECONDS:-60}
+      AIHUB_ROUTER_COST_SYNC_MAX_AGE_SECONDS: ${AIHUB_ROUTER_COST_SYNC_MAX_AGE_SECONDS:-180}
+      AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER: ${AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER:-0.10}
     ports:
       - "${CONTROL_PORT:-3000}:3000"
+    volumes:
+      - ${AIHUB_ROUTER_LOGS_DIR:-/mnt/codego-data/aihub-router/logs}:/var/run/aihub-router:ro
     depends_on: &runtime-depends-on
       postgres:
         condition: service_healthy

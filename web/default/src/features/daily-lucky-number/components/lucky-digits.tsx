@@ -4,7 +4,7 @@ import { normalizeLuckyNumber } from '../lib'
 import { DIGIT_ITEM, DIGIT_STACK, EASE_OUT_QUINT } from '../motion'
 
 type DigitSize = 'sm' | 'md' | 'lg'
-type DigitTone = 'default' | 'stage'
+type DigitTone = 'activity' | 'default' | 'stage'
 
 const SIZE_BOX: Record<DigitSize, string> = {
   sm: 'w-8 rounded-lg text-base',
@@ -92,11 +92,13 @@ function DigitBox(props: {
     SIZE_BOX[props.size],
     props.tone === 'stage'
       ? 'border-white/15 bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
-      : props.matched
-        ? 'border-primary/60 bg-primary/12 text-primary shadow-[0_0_18px_-6px_color-mix(in_oklch,var(--primary)_65%,transparent)]'
-        : props.dimmed
-          ? 'border-border/60 bg-muted/40 text-muted-foreground/60'
-          : 'border-border bg-muted/65 text-foreground'
+      : props.tone === 'activity'
+        ? 'border-primary/30 bg-primary/10 text-primary shadow-[inset_0_1px_0_color-mix(in_oklch,var(--primary)_12%,transparent)]'
+        : props.matched
+          ? 'border-primary/60 bg-primary/12 text-primary shadow-[0_0_18px_-6px_color-mix(in_oklch,var(--primary)_65%,transparent)]'
+          : props.dimmed
+            ? 'border-border/60 bg-muted/40 text-muted-foreground/60'
+            : 'border-border bg-muted/65 text-foreground'
   )
 
   if (props.rolling) {

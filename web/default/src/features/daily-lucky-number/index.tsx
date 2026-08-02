@@ -13,7 +13,6 @@ import {
 } from './api'
 import { DrawStage } from './components/draw-stage'
 import { HistoryPanel } from './components/history-panel'
-import { HowItWorks } from './components/how-it-works'
 import { LuckyMatchBoard } from './components/lucky-match-board'
 import { RewardLadder } from './components/reward-ladder'
 import { DailyLuckyRulesDialog } from './components/rules-dialog'
@@ -186,35 +185,26 @@ export function DailyLuckyNumberPage() {
                 countdownSeconds={countdownSeconds}
                 onOpenRules={openRules}
               />
-              <HowItWorks
-                drawHour={payload.draw_hour}
-                drawMinute={payload.draw_minute}
-                timezone={payload.timezone}
+              <LuckyMatchBoard
+                subscriptions={payload.subscriptions}
+                draw={payload.today_draw}
+                rewards={payload.recent_rewards}
+                rules={payload.rules}
               />
-              <div className='grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]'>
-                <LuckyMatchBoard
-                  subscriptions={payload.subscriptions}
-                  draw={payload.today_draw}
-                  rewards={payload.recent_rewards}
-                  rules={payload.rules}
-                />
-                <div className='flex flex-col gap-5'>
-                  <RewardLadder
-                    rules={payload.rules}
-                    tier={topTier}
-                    matchedDigits={bestMatch}
-                    onOpenRules={openRules}
-                  />
-                  <TodayWinnersPanel
-                    records={publicWinsQuery.data?.records}
-                    drawDate={payload.today_draw?.draw_date}
-                    timezone={payload.timezone}
-                    loading={publicWinsQuery.isLoading}
-                    error={publicWinsQuery.isError}
-                    onRetry={() => void publicWinsQuery.refetch()}
-                  />
-                </div>
-              </div>
+              <RewardLadder
+                rules={payload.rules}
+                tier={topTier}
+                matchedDigits={bestMatch}
+                onOpenRules={openRules}
+              />
+              <TodayWinnersPanel
+                records={publicWinsQuery.data?.records}
+                drawDate={payload.today_draw?.draw_date}
+                timezone={payload.timezone}
+                loading={publicWinsQuery.isLoading}
+                error={publicWinsQuery.isError}
+                onRetry={() => void publicWinsQuery.refetch()}
+              />
               <HistoryPanel
                 tab={historyTab}
                 onTabChange={setHistoryTab}

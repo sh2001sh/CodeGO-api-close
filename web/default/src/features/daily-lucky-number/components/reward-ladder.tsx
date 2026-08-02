@@ -62,9 +62,9 @@ export function RewardLadder(props: {
         </div>
       </div>
 
-      <div className='divide-border/70 divide-y'>
+      <div className='border-border/70 bg-border/70 grid gap-px border-t sm:grid-cols-2 xl:grid-cols-4'>
         {steps.map((step, index) => (
-          <LadderRow
+          <LadderTile
             key={step.digits}
             step={step}
             multiplier={multiplier}
@@ -98,7 +98,7 @@ export function RewardLadder(props: {
   )
 }
 
-function LadderRow(props: {
+function LadderTile(props: {
   step: LadderStep
   multiplier: number
   widthRatio: number
@@ -112,11 +112,11 @@ function LadderRow(props: {
   return (
     <div
       className={cn(
-        'relative px-4 py-3 sm:px-5',
+        'bg-card px-4 py-4 sm:px-5',
         props.active && 'bg-primary/[0.05]'
       )}
     >
-      <div className='flex flex-wrap items-center justify-between gap-2'>
+      <div className='flex items-start justify-between gap-3'>
         <div className='flex min-w-0 items-center gap-2.5'>
           <span
             className={cn(
@@ -136,20 +136,21 @@ function LadderRow(props: {
               {props.step.example}
             </div>
           </div>
-          {props.active ? (
-            <span className='border-primary/30 bg-primary/10 text-primary rounded-full border px-2 py-0.5 text-[10px] font-semibold'>
-              本期命中
-            </span>
-          ) : null}
         </div>
-        <div className='shrink-0 text-right'>
-          <div className='text-foreground font-mono text-sm font-semibold tabular-nums'>
-            {formatLuckyUsd(finalUsd)}
-          </div>
-          <div className='text-muted-foreground text-[11px] tabular-nums'>
-            基础 {formatLuckyUsd(props.step.baseUsd)} ×{' '}
-            {props.multiplier.toFixed(1)}
-          </div>
+        {props.active ? (
+          <span className='border-primary/30 bg-primary/10 text-primary shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold'>
+            本期命中
+          </span>
+        ) : null}
+      </div>
+
+      <div className='mt-4 flex items-end justify-between gap-3'>
+        <div className='text-foreground font-mono text-xl font-semibold tabular-nums'>
+          {formatLuckyUsd(finalUsd)}
+        </div>
+        <div className='text-muted-foreground text-right text-[11px] tabular-nums'>
+          基础 {formatLuckyUsd(props.step.baseUsd)} ×{' '}
+          {props.multiplier.toFixed(1)}
         </div>
       </div>
 

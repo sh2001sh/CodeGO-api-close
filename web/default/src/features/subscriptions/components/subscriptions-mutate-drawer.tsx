@@ -19,7 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useState } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { CalendarClock, CreditCard, RefreshCw, Settings2 } from 'lucide-react'
+import {
+  CalendarClock,
+  CreditCard,
+  RefreshCw,
+  Settings2,
+  Sparkles,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -443,6 +449,95 @@ export function SubscriptionsMutateDrawer({
                 />
               </div>
             </div>
+
+            {isMonthlyCard ? (
+              <div className='space-y-4 rounded-lg border p-4'>
+                <div className='flex items-start gap-2'>
+                  <Sparkles className='text-primary mt-0.5 size-4 shrink-0' />
+                  <div>
+                    <h3 className='text-sm font-medium'>
+                      {t('Daily Lucky Number Benefits')}
+                    </h3>
+                    <p className='text-muted-foreground mt-1 text-xs leading-5'>
+                      {t(
+                        'Daily lucky-number eligibility and membership tier are active. Subscription blind-box gifts are currently paused.'
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='membership_tier'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Membership tier')}</FormLabel>
+                        <Select
+                          items={[
+                            { value: 'none', label: t('No membership tier') },
+                            { value: 'lite', label: t('Lite') },
+                            { value: 'standard', label: t('Standard') },
+                            { value: 'pro', label: t('Pro') },
+                            { value: 'ultra', label: t('Ultra') },
+                          ]}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectGroup>
+                              <SelectItem value='none'>
+                                {t('No membership tier')}
+                              </SelectItem>
+                              <SelectItem value='lite'>{t('Lite')}</SelectItem>
+                              <SelectItem value='standard'>
+                                {t('Standard')}
+                              </SelectItem>
+                              <SelectItem value='pro'>{t('Pro')}</SelectItem>
+                              <SelectItem value='ultra'>
+                                {t('Ultra')}
+                              </SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name='lucky_draw_enabled'
+                  render={({ field }) => (
+                    <FormItem className='flex items-start justify-between gap-3 rounded-lg border border-dashed p-3'>
+                      <div className='space-y-1'>
+                        <FormLabel className='!mt-0'>
+                          {t('Eligible for daily lucky number')}
+                        </FormLabel>
+                        <FormDescription>
+                          {t(
+                            'Active monthly subscriptions join automatically from the next draw.'
+                          )}
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            ) : null}
 
             {isMonthlyCard ? (
               <div className='space-y-3 rounded-lg border p-4'>

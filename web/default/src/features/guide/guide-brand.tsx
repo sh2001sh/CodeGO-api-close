@@ -38,7 +38,7 @@ export function GuideBrand() {
               <Terminal className='size-3.5' />
               推广指南
             </div>
-            <h1 className='text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-50'>
+            <h1 className='text-foreground text-4xl font-semibold tracking-tight'>
               把 AI Coding 讲成一件会持续累积的事
             </h1>
             <p className='text-base leading-8 text-muted-foreground'>
@@ -48,9 +48,9 @@ export function GuideBrand() {
 
           <div className='grid gap-4 md:grid-cols-3'>
             {sections.map((item) => (
-              <div key={item.title} className='rounded-3xl border bg-background p-6'>
+              <div key={item.title} className='app-subtle-panel p-6'>
                 <div className='flex items-center gap-2 text-sm font-semibold'>
-                  <Code2 className='size-4 text-amber-600' />
+                  <Code2 className='text-muted-foreground size-4' />
                   {item.title}
                 </div>
                 <p className='mt-3 text-sm leading-7 text-muted-foreground'>
@@ -61,9 +61,9 @@ export function GuideBrand() {
           </div>
 
           <div className='grid gap-4 lg:grid-cols-2'>
-            <div className='rounded-3xl border bg-background p-6'>
+            <div className='app-subtle-panel p-6'>
               <div className='flex items-center gap-2 text-sm font-semibold'>
-                <Wrench className='size-4 text-sky-600' />
+                <Wrench className='text-muted-foreground size-4' />
                 可直接复用的口径
               </div>
               <ul className='mt-4 space-y-3 text-sm leading-7 text-muted-foreground'>
@@ -72,9 +72,9 @@ export function GuideBrand() {
                 <li>把调用、成就、记录和进度放到同一条线里。</li>
               </ul>
             </div>
-            <div className='rounded-3xl border bg-background p-6'>
+            <div className='app-subtle-panel p-6'>
               <div className='flex items-center gap-2 text-sm font-semibold'>
-                <ArrowRight className='size-4 text-violet-600' />
+                <ArrowRight className='text-muted-foreground size-4' />
                 推广动作
               </div>
               <p className='mt-4 text-sm leading-7 text-muted-foreground'>

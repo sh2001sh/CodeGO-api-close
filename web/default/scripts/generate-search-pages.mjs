@@ -107,7 +107,7 @@ function renderPage({
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:type" content="${escapeHtml(ogType)}" />
     <meta property="og:url" content="${canonical}" />
-    <meta property="og:site_name" content="Code Go" />
+    <meta property="og:site_name" content="CodeGo" />
     <meta property="og:image" content="${baseUrl}/code-go-logo.svg" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(title)}" />

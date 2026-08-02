@@ -105,6 +105,8 @@ func RegisterDesktopRoutes(apiRouter *gin.RouterGroup) {
 	apiRouter.GET("/desktop/import/config", GetDesktopImportConfig)
 	apiRouter.GET("/desktop/release/latest", middleware.DisableCache(), GetDesktopReleaseLatest)
 	apiRouter.GET("/desktop/release/latest.json", middleware.DisableCache(), GetDesktopReleaseLatestJSON)
+	// Browser-side one-click imports use the website session, not a desktop token.
+	apiRouter.POST("/desktop/import/deeplink", middleware.UserAuth(), middleware.CriticalRateLimit(), CreateDesktopImportConfig)
 
 	desktopRoute := apiRouter.Group("/desktop")
 	desktopRoute.Use(middleware.DesktopAuth())
@@ -128,7 +130,6 @@ func RegisterDesktopRoutes(apiRouter *gin.RouterGroup) {
 		desktopRoute.GET("/config/template", middleware.RequireDesktopScope(identitydomain.DesktopScopeConfigRead), GetDesktopConfigTemplate)
 		desktopRoute.GET("/config/templates", middleware.RequireDesktopScope(identitydomain.DesktopScopeConfigRead), GetDesktopConfigTemplates)
 		desktopRoute.GET("/service/status", middleware.RequireDesktopScope(identitydomain.DesktopScopeAccountRead), GetDesktopServiceStatus)
-		desktopRoute.POST("/import/deeplink", middleware.RequireDesktopScope(identitydomain.DesktopScopeConfigWrite), CreateDesktopImportConfig)
 		desktopRoute.POST("/diagnostics/report", middleware.RequireDesktopScope(identitydomain.DesktopScopeConfigWrite), CreateDesktopDiagnosticReport)
 		desktopRoute.POST("/telemetry/events", middleware.RequireDesktopScope(identitydomain.DesktopScopeTelemetryWrite), CreateDesktopTelemetryEvent)
 	}

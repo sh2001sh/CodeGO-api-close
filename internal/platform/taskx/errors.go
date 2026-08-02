@@ -12,6 +12,10 @@ import (
 )
 
 func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
+	return taskErrorWrapper(err, code, statusCode, true)
+}
+
+func taskErrorWrapper(err error, code string, statusCode int, sanitizeUpstreamQuota bool) *dto.TaskError {
 	text := err.Error()
 	if statusCode == http.StatusTooManyRequests {
 		text = "status_code=429"
@@ -21,7 +25,9 @@ func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
 		platformobservability.SysLog(fmt.Sprintf("error: %s", text))
 		text = platformtext.MaskSensitiveInfo(text)
 	}
-	text = platformtext.SanitizeUpstreamQuotaErrorMessage(text)
+	if sanitizeUpstreamQuota {
+		text = platformtext.SanitizeUpstreamQuotaErrorMessage(text)
+	}
 	return &dto.TaskError{
 		Code:       code,
 		Message:    text,
@@ -31,7 +37,7 @@ func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
 }
 
 func TaskErrorWrapperLocal(err error, code string, statusCode int) *dto.TaskError {
-	taskErr := TaskErrorWrapper(err, code, statusCode)
+	taskErr := taskErrorWrapper(err, code, statusCode, false)
 	taskErr.LocalError = true
 	return taskErr
 }
@@ -40,7 +46,11 @@ func TaskErrorFromAPIError(apiErr *types.NewAPIError) *dto.TaskError {
 	if apiErr == nil {
 		return nil
 	}
-	message := platformtext.SanitizeUpstreamQuotaErrorMessage(apiErr.Err.Error())
+	message := apiErr.Err.Error()
+	isUpstream := types.IsRemoteProviderError(apiErr)
+	if isUpstream {
+		message = platformtext.SanitizeUpstreamQuotaErrorMessage(message)
+	}
 	if apiErr.StatusCode == http.StatusTooManyRequests {
 		message = "status_code=429"
 	}
@@ -48,6 +58,7 @@ func TaskErrorFromAPIError(apiErr *types.NewAPIError) *dto.TaskError {
 		Code:       string(apiErr.GetErrorCode()),
 		Message:    message,
 		StatusCode: apiErr.StatusCode,
+		LocalError: !isUpstream,
 		Error:      apiErr.Err,
 	}
 }

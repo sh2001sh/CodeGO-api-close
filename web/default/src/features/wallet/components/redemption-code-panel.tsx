@@ -1,4 +1,5 @@
 import { ExternalLink, Gift, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,17 +17,21 @@ interface RedemptionCodePanelProps {
 }
 
 export function RedemptionCodePanel(props: RedemptionCodePanelProps) {
+  const { t } = useTranslation()
+
   return (
     <div className={cn('app-page-shell p-4', props.className)}>
       <div className='flex flex-wrap items-start justify-between gap-3'>
         <div className='min-w-0'>
           <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
             <Gift className='text-primary h-4 w-4' />
-            {props.title || '兑换码'}
+            {props.title || t('Redemption code')}
           </div>
           <div className='text-muted-foreground mt-1 max-w-2xl text-xs leading-5'>
             {props.description ||
-              '输入管理员发放或线下购买的兑换码，成功后会立即写入对应余额、套餐或权益。'}
+              t(
+                'Enter a code issued by an administrator or purchased offline. Successful redemption immediately adds the associated balance, plan, or benefit.'
+              )}
           </div>
         </div>
         {props.topupLink ? (
@@ -41,7 +46,7 @@ export function RedemptionCodePanel(props: RedemptionCodePanelProps) {
               />
             }
           >
-            获取兑换码
+            {t('Get a redemption code')}
             <ExternalLink data-icon='inline-end' />
           </Button>
         ) : null}
@@ -58,7 +63,7 @@ export function RedemptionCodePanel(props: RedemptionCodePanelProps) {
         <Input
           value={props.redemptionCode}
           onChange={(event) => props.onRedemptionCodeChange(event.target.value)}
-          placeholder='输入兑换码'
+          placeholder={t('Enter redemption code')}
           className='h-10 min-w-0'
         />
         <Button
@@ -69,7 +74,7 @@ export function RedemptionCodePanel(props: RedemptionCodePanelProps) {
           {props.redeeming ? (
             <Loader2 className='h-4 w-4 animate-spin' />
           ) : (
-            '立即兑换'
+            t('Redeem now')
           )}
         </Button>
       </div>

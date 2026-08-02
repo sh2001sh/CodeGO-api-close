@@ -53,10 +53,12 @@ func setupRedemptionTestDB(t *testing.T) *gorm.DB {
 		&commerceschema.GroupBuyOrder{},
 		&commerceschema.GroupBuyMember{},
 		&commerceschema.SubscriptionClaudeConversion{},
+		&commerceschema.WalletQuotaConversion{},
 		&commerceschema.BlindBoxOrder{},
 		&commerceschema.BlindBoxCredit{},
 		&commerceschema.BlindBoxOpenRecord{},
 		&commerceschema.BlindBoxPityState{},
+		&commerceschema.BlindBoxZeroHourState{},
 		&commerceschema.BlindBoxProp{},
 		&billingschema.PointAccount{},
 		&billingschema.PointLedger{},
@@ -73,11 +75,12 @@ func setupRedemptionTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestRedeemCodeBlindBoxAutoOpensOrder(t *testing.T) {
+func TestRedeemCodeBlindBoxCreatesPendingOrderForManualOpen(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	originalSetting := blindboxsettings.Get()
 	setting := originalSetting
+	setting.Enabled = true
 	setting.DailyOpenLimit = 100
 	setting.SubscriptionPrizeProbability = 0
 	setting.PityThreshold = 999
@@ -112,19 +115,27 @@ func TestRedeemCodeBlindBoxAutoOpensOrder(t *testing.T) {
 	assert.Equal(t, commerceschema.RedemptionTypeBlindBox, result.RedeemType)
 	assert.Equal(t, 3, result.BlindBoxQuantity)
 	assert.NotZero(t, result.BlindBoxOrderId)
-	assert.Equal(t, 3, result.BlindBoxOpenCount)
-	require.Len(t, result.BlindBoxRecords, 3)
+	assert.Zero(t, result.BlindBoxOpenCount)
+	assert.Empty(t, result.BlindBoxRecords)
 
 	var order commerceschema.BlindBoxOrder
 	require.NoError(t, db.Where("id = ?", result.BlindBoxOrderId).First(&order).Error)
 	assert.Equal(t, user.Id, order.UserId)
 	assert.Equal(t, 3, order.Quantity)
-	assert.Equal(t, 3, order.OpenedCount)
+	assert.Zero(t, order.OpenedCount)
 	assert.Equal(t, constant.TopUpStatusSuccess, order.Status)
 	assert.Equal(t, "redemption", order.PaymentMethod)
 	assert.Equal(t, "redemption", order.PaymentProvider)
 
 	var savedUser identityschema.User
+	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
+	assert.Zero(t, savedUser.Quota)
+
+	records, err := OpenBlindBoxes(user.Id, 3)
+	require.NoError(t, err)
+	require.Len(t, records, 3)
+	require.NoError(t, db.Where("id = ?", order.Id).First(&order).Error)
+	assert.Equal(t, 3, order.OpenedCount)
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
 	snapshot := loadCommerceBillingSnapshot(t, user.Id, "wallet")
 	assert.Equal(t, int64(savedUser.Quota), snapshot.AvailableBalance)

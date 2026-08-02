@@ -20,11 +20,7 @@ func TestCreateUserWithTxAssignsImmutableExternalUserID(t *testing.T) {
 	t.Cleanup(func() { platformdb.DB = originalDB })
 	platformdb.DB = db
 
-	user := &identityschema.User{
-		Username:    "external-id-user",
-		Password:    "password123",
-		DisplayName: "External ID User",
-	}
+	user := &identityschema.User{Username: "external-id-user", Password: "password123", DisplayName: "External ID User"}
 	tx := db.Begin()
 	require.NoError(t, CreateUserWithTx(tx, user, 0))
 	require.NoError(t, tx.Commit().Error)

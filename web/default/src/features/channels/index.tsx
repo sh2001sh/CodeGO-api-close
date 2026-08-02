@@ -17,7 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 import { SectionPageLayout } from '@/components/layout'
+import { RoutePoolsContent } from '@/features/route-pools'
 import { ChannelsDialogs } from './components/channels-dialogs'
 import { ChannelsPrimaryButtons } from './components/channels-primary-buttons'
 import { ChannelsProvider } from './components/channels-provider'
@@ -25,18 +28,34 @@ import { ChannelsTable } from './components/channels-table'
 
 export function Channels() {
   const { t } = useTranslation()
+  const isSuperAdmin = useAuthStore(
+    (state) => state.auth.user?.role === ROLE.SUPER_ADMIN
+  )
+  const showRouting = isSuperAdmin
+
   return (
     <ChannelsProvider>
       <SectionPageLayout>
-        <SectionPageLayout.Title>{t('Channels')}</SectionPageLayout.Title>
+        <SectionPageLayout.Title>
+          {showRouting ? '渠道与智能路由' : t('Channels')}
+        </SectionPageLayout.Title>
         <SectionPageLayout.Description>
-          {t('Manage API channels and provider configurations')}
+          {showRouting
+            ? '按渠道已配置分组管理自动路由、渠道启用状态和采购倍率。'
+            : '维护上游接入、凭据和模型能力。'}
         </SectionPageLayout.Description>
         <SectionPageLayout.Actions>
           <ChannelsPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <ChannelsTable />
+          {showRouting ? (
+            <div className='space-y-8'>
+              <RoutePoolsContent />
+              <ChannelsTable />
+            </div>
+          ) : (
+            <ChannelsTable />
+          )}
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

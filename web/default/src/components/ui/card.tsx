@@ -29,7 +29,7 @@ function Card({
       data-slot='card'
       data-size={size}
       className={cn(
-        'group/card bg-card text-card-foreground border-border/80 flex flex-col gap-4 overflow-hidden rounded-[22px] border py-4 text-sm shadow-[0_14px_36px_rgba(31,35,43,0.05)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-[22px] *:[img:last-child]:rounded-b-[22px] dark:shadow-[0_16px_36px_rgba(0,0,0,0.24)]',
+        'group/card bg-card text-card-foreground border-border flex flex-col gap-4 overflow-hidden rounded-2xl border py-4 text-sm shadow-[0_1px_2px_rgba(24,20,16,0.04)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-2xl *:[img:last-child]:rounded-b-2xl',
         className
       )}
       {...props}
@@ -42,7 +42,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot='card-header'
       className={cn(
-        'group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-[22px] px-4 group-data-[size=sm]/card:px-3 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-4 group-data-[size=sm]/card:[.border-b]:pb-3',
+        'group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-2xl px-4 group-data-[size=sm]/card:px-3 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-4 group-data-[size=sm]/card:[.border-b]:pb-3',
         className
       )}
       {...props}
@@ -101,7 +101,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot='card-footer'
       className={cn(
-        'bg-muted/42 flex items-center rounded-b-[22px] border-t p-4 group-data-[size=sm]/card:p-3',
+        'bg-muted/42 flex items-center rounded-b-2xl border-t p-4 group-data-[size=sm]/card:p-3',
         className
       )}
       {...props}

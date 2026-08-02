@@ -75,33 +75,8 @@ func ledgerReconciliationForAccount(ctx context.Context, accountID string) (bill
 	if err := platformdb.DB.WithContext(ctx).Where("account_id = ?", accountID).First(&actual).Error; err != nil {
 		return actual, billingschema.BillingBalanceSnapshot{}, err
 	}
-	expected := billingschema.BillingBalanceSnapshot{AccountID: accountID}
-	var entries []billingschema.BillingLedgerEntry
-	if err := platformdb.DB.WithContext(ctx).Where("account_id = ?", accountID).Find(&entries).Error; err != nil {
-		return actual, expected, err
-	}
-	for _, entry := range entries {
-		switch entry.EntryType {
-		case "grant_credit", "reserve_release", "settle_credit":
-			expected.AvailableBalance += entry.Amount
-		case "reserve_hold", "settle_debit":
-			expected.AvailableBalance -= entry.Amount
-		}
-		if entry.EntryType == "grant_credit" {
-			expected.GrantedTotal += entry.Amount
-		}
-	}
-	var settlements []billingschema.BillingSettlement
-	if err := platformdb.DB.WithContext(ctx).Joins("JOIN "+billingschema.BillingReservation{}.TableName()+" ON "+billingschema.BillingReservation{}.TableName()+".reservation_id = "+billingschema.BillingSettlement{}.TableName()+".reservation_id").Where(billingschema.BillingReservation{}.TableName()+".account_id = ?", accountID).Find(&settlements).Error; err != nil {
-		return actual, expected, err
-	}
-	for _, settlement := range settlements {
-		expected.ConsumedTotal += settlement.ActualAmount
-		if settlement.DeltaAmount < 0 {
-			expected.RefundedTotal += -settlement.DeltaAmount
-		}
-	}
-	if err := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingReservation{}).Where("account_id = ? AND status = ?", accountID, billingschema.BillingReservationStatusOpen).Select("COALESCE(SUM(reserved_amount), 0)").Scan(&expected.ReservedBalance).Error; err != nil {
+	expected, err := aggregateExpectedBalanceSnapshot(platformdb.DB.WithContext(ctx), accountID)
+	if err != nil {
 		return actual, expected, err
 	}
 	return actual, expected, nil

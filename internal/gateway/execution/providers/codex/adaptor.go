@@ -48,7 +48,7 @@ func (a *Adaptor) ConvertEmbeddingRequest(*gin.Context, *relaycommon.RelayInfo, 
 	return nil, errors.New("codex channel: /v1/embeddings endpoint not supported")
 }
 
-func (a *Adaptor) ConvertOpenAIResponsesRequest(_ *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
+func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
 	isCompact := info != nil && info.RelayMode == gatewaycontract.RelayModeResponsesCompact
 	if info != nil && info.ChannelSetting.SystemPrompt != "" {
 		systemPrompt := info.ChannelSetting.SystemPrompt
@@ -87,7 +87,7 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(_ *gin.Context, info *relaycommo
 	if len(request.Instructions) == 0 {
 		request.Instructions = json.RawMessage(`""`)
 	}
-	if isCompact {
+	if isCompact || gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
 		return request, nil
 	}
 	request.Store = json.RawMessage("false")

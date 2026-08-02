@@ -245,7 +245,7 @@ export function PricingSidebar(props: PricingSidebarProps) {
   ]
 
   return (
-    <aside className={cn('rounded-2xl border bg-card/70 p-3 backdrop-blur-sm', props.className)}>
+    <aside className={cn('rounded-2xl border bg-card p-3', props.className)}>
       <div className='mb-2.5 flex items-center justify-between gap-2'>
         <div>
           <h2 className='text-foreground text-sm font-semibold'>{t('Filter')}</h2>

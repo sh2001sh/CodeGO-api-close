@@ -16,23 +16,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import type { Variants } from 'motion/react'
 import { Sparkles, Star } from 'lucide-react'
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Variants,
+} from 'motion/react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import {
+  RARITY_BADGE,
+  RARITY_RING,
+  type RewardRarity,
+} from '../lib/blind-box-rarity'
 import type { BlindBoxRecord } from '../types'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
 
 /**
- * Reward rarity classification drives reveal drama: legendary rewards
- * (subscription / pity / high-value) get glow + scale punch, common rewards
- * get a quiet entrance. Keeping this isolated from the dialog so the reveal
- * choreography stays self-contained.
+ * Reward rarity drives reveal drama: legendary rewards (subscription / pity /
+ * high-value) get glow + scale punch, common rewards get a quiet entrance.
  */
-export type RewardRarity = 'legendary' | 'epic' | 'common'
-
 export function classifyReward(record: BlindBoxRecord): RewardRarity {
   if (record.reward_type === 'subscription') return 'legendary'
   if (record.is_pity) return 'legendary'
@@ -76,26 +81,6 @@ const REDUCED_ITEM: Variants = {
   animate: { opacity: 1, transition: { duration: 0.18 } },
 }
 
-const RARITY_RING: Record<RewardRarity, string> = {
-  legendary:
-    'border-amber-400/50 bg-gradient-to-br from-amber-500/12 via-orange-500/8 to-transparent shadow-[0_0_22px_-6px_rgba(245,158,11,0.55)]',
-  epic: 'border-violet-400/40 bg-gradient-to-br from-violet-500/10 to-transparent',
-  common: 'border-border/70 bg-background/72',
-}
-
-const RARITY_BADGE: Record<RewardRarity, { label: string; cls: string } | null> =
-  {
-    legendary: {
-      label: '稀有',
-      cls: 'border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300',
-    },
-    epic: {
-      label: '精品',
-      cls: 'border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-300',
-    },
-    common: null,
-  }
-
 function rewardTypeLabel(record: BlindBoxRecord) {
   if (record.reward_type === 'subscription') return '套餐'
   if (record.reward_type === 'claude_quota') return 'Claude'
@@ -125,15 +110,13 @@ export function PrizeRevealHeader(props: {
       transition={{ duration: reduced ? 0.18 : 0.4, ease: EASE_OUT_QUINT }}
       className={cn(
         'relative overflow-hidden rounded-xl border p-4',
-        celebratory
-          ? 'border-amber-400/50 bg-gradient-to-br from-amber-500/12 via-orange-500/8 to-transparent'
-          : 'app-subtle-panel'
+        celebratory ? 'border-primary/40 bg-primary/8' : 'app-subtle-panel'
       )}
     >
       {celebratory && !reduced ? (
         <motion.div
           aria-hidden
-          className='pointer-events-none absolute -right-6 -top-6 text-amber-400/30'
+          className='text-primary/30 pointer-events-none absolute -top-6 -right-6'
           initial={{ opacity: 0, rotate: -20, scale: 0.6 }}
           animate={{ opacity: 1, rotate: 0, scale: 1 }}
           transition={{ duration: 0.6, ease: EASE_OUT_QUINT, delay: 0.1 }}
@@ -144,7 +127,7 @@ export function PrizeRevealHeader(props: {
       <div className='relative'>
         <div className='flex items-center gap-2'>
           {celebratory ? (
-            <Star className='size-5 shrink-0 fill-amber-400 text-amber-400' />
+            <Star className='fill-primary text-primary size-5 shrink-0' />
           ) : null}
           <div className='text-foreground text-lg font-semibold'>
             {celebratory ? `恭喜！${props.summary}` : props.summary}
@@ -200,8 +183,7 @@ function PrizeRevealCard(props: {
   const propActive =
     manualUseProp &&
     (record.prop_status === 'active' || record.prop_status === 'used')
-  const propAvailable =
-    manualUseProp && record.prop_status === 'available'
+  const propAvailable = manualUseProp && record.prop_status === 'available'
 
   return (
     <motion.div
@@ -228,7 +210,7 @@ function PrizeRevealCard(props: {
               </div>
             ) : null}
             {record.is_pity ? (
-              <div className='border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded-full border px-2.5 py-0.5 text-xs font-medium'>
+              <div className='border-primary/30 bg-primary/10 text-primary rounded-full border px-2.5 py-0.5 text-xs font-medium'>
                 保底
               </div>
             ) : null}
@@ -253,10 +235,10 @@ function PrizeRevealCard(props: {
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
           {manualUseProp
             ? propActive
-            ? '已启用，持续 24 小时自动生效'
-            : propAvailable
-              ? '点击立即使用后生效，持续 24 小时'
-              : '该道具已失效'
+              ? '已启用，持续 24 小时自动生效'
+              : propAvailable
+                ? '点击立即使用后生效，持续 24 小时'
+                : '该道具已失效'
             : record.prop_status === 'used'
               ? '已用于最近一次符合条件的订单'
               : record.prop_status === 'reserved'

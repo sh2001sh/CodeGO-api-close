@@ -1,6 +1,7 @@
 package app
 
 import (
+	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
@@ -194,4 +195,66 @@ func TestReserveAdditionalSubscriptionQuotaRejectsExpiredSubscription(t *testing
 	err := ReserveAdditionalSubscriptionQuota("subscription-extra-expired", subscription.Id, "gpt-5", 1)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no longer active")
+}
+
+func TestPreConsumeUsesLedgerBalanceWhenProjectionIsStale(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	ensureSubscriptionPreConsumeRecordSchema(t)
+	insertSubscriptionStoreTestUser(t, 9931, []int{9932})
+	plan := insertSubscriptionResetAppTestPlan(t, 9933, 0, 1_000)
+	subscription := &commerceschema.UserSubscription{
+		Id: 9932, UserId: 9931, PlanId: plan.Id, AmountTotal: 1_000, AmountUsed: 1_000,
+		StartTime: time.Now().Add(-time.Hour).Unix(), EndTime: time.Now().Add(24 * time.Hour).Unix(), Status: "active",
+	}
+	require.NoError(t, db.Create(subscription).Error)
+
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(subscription.Id), QuotaUnit: "quota",
+	})
+	require.NoError(t, err)
+	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{
+		AccountID: account.AccountID, Amount: 1_000, IdempotencyKey: "stale-projection-ledger-credit",
+		ReasonCode: "test", ReferenceType: "user_subscription", ReferenceID: "9932",
+	})
+	require.NoError(t, err)
+
+	result, err := PreConsumeUserSubscription("stale-projection-request", 9931, "gpt-5", 100)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, result.AmountUsedBefore)
+	assert.EqualValues(t, 100, result.AmountUsedAfter)
+
+	var reloaded commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", subscription.Id).First(&reloaded).Error)
+	assert.EqualValues(t, 100, reloaded.AmountUsed)
+}
+
+func TestReconcileActiveSubscriptionLedgerProjections(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	plan := insertSubscriptionResetAppTestPlan(t, 9941, 0, 1_000)
+	subscription := &commerceschema.UserSubscription{
+		Id: 9942, UserId: 9940, PlanId: plan.Id, AmountTotal: 1_000, AmountUsed: 900,
+		StartTime: time.Now().Add(-time.Hour).Unix(), EndTime: time.Now().Add(24 * time.Hour).Unix(), Status: "active",
+	}
+	require.NoError(t, db.Create(subscription).Error)
+
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(subscription.Id), QuotaUnit: "quota",
+	})
+	require.NoError(t, err)
+	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{
+		AccountID: account.AccountID, Amount: 700, IdempotencyKey: "projection-reconcile-ledger-credit",
+		ReasonCode: "test", ReferenceType: "user_subscription", ReferenceID: "9942",
+	})
+	require.NoError(t, err)
+
+	updated, err := ReconcileActiveSubscriptionLedgerProjections(10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, updated)
+
+	var reloaded commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", subscription.Id).First(&reloaded).Error)
+	assert.EqualValues(t, 300, reloaded.AmountUsed)
+	var adjustment billingschema.BillingLedgerEntry
+	require.NoError(t, db.Where("account_id = ? AND reason_code = ?", account.AccountID, "subscription_projection_reconciled").First(&adjustment).Error)
+	assert.EqualValues(t, 0, adjustment.Amount)
 }

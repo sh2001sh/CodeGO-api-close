@@ -110,14 +110,20 @@ func validateSubscriptionPlanInput(plan *commerceschema.SubscriptionPlan) error 
 		return errors.New("max_purchase_per_user must be >= 0")
 	}
 	plan.PlanType = commercedomain.NormalizeSubscriptionPlanType(plan.PlanType)
+	plan.MembershipTier = commercedomain.NormalizeSubscriptionMembershipTier(plan.MembershipTier)
+	// Subscription blind-box gifts are paused. Keep the column for historical data and API compatibility.
+	plan.BlindBoxBenefitCount = 0
+	if plan.PlanType != commerceschema.SubscriptionPlanTypeMonthly {
+		plan.LuckyDrawEnabled = false
+	}
+	if plan.LuckyDrawEnabled && plan.MembershipTier == commerceschema.SubscriptionMembershipTierNone {
+		return errors.New("lucky draw requires an explicit membership tier")
+	}
 	if plan.PlanType == commerceschema.SubscriptionPlanTypeStarter && plan.MaxPurchasePerUser == 0 {
 		plan.MaxPurchasePerUser = 1
 	}
 	if plan.GroupBuyBonus2 < 0 || plan.GroupBuyBonus3 < 0 || plan.GroupBuyBonus5 < 0 {
 		return errors.New("group buy bonus must be >= 0")
-	}
-	if plan.RenewalBonus2 < 0 || plan.RenewalBonus3 < 0 || plan.RenewalBonus4 < 0 {
-		return errors.New("renewal bonus must be >= 0")
 	}
 	if plan.FuelUnitPrice < 0 || plan.FuelMinQuota < 0 || plan.FuelQuotaStep < 0 {
 		return errors.New("fuel settings must be >= 0")
@@ -134,6 +140,9 @@ func validateSubscriptionPlanInput(plan *commerceschema.SubscriptionPlan) error 
 	}
 	if plan.DurationValue <= 0 && plan.DurationUnit != commerceschema.SubscriptionDurationCustom {
 		plan.DurationValue = 1
+	}
+	if plan.GroupBuyEnabled && commercedomain.IsSubscriptionDayPassPlan(plan) {
+		return errors.New("day passes cannot participate in the collective benefit plan")
 	}
 	normalizedModelLimits, err := normalizeSubscriptionModelLimits(plan.ModelLimits)
 	if err != nil {

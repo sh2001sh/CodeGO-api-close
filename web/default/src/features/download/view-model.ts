@@ -32,7 +32,7 @@ import type {
 } from './types.ts'
 
 export type DownloadPageViewModel = {
-  currentBuildLabel: string
+  currentBuildLabel: string | null
   publishedAtLabel: string
   downloadCards: DownloadCard[]
   recommendedCard: DownloadCard | null
@@ -78,7 +78,9 @@ export function buildDownloadPageViewModel({
   error,
 }: BuildDownloadPageViewModelArgs): DownloadPageViewModel {
   const downloadCards = buildDownloadCards(release, copy)
-  const recommendedCard = getRecommendedDownloadCard(downloadCards, device)
+  const recommendedCard = release
+    ? getRecommendedDownloadCard(downloadCards, device)
+    : null
   const installationTracks = buildInstallationTracks()
   const recommendedTrack =
     installationTracks.find((track) => track.key === device.platform) ??
@@ -86,7 +88,7 @@ export function buildDownloadPageViewModel({
     null
 
   return {
-    currentBuildLabel: release?.tag_name || 'Loading...',
+    currentBuildLabel: release?.tag_name || null,
     publishedAtLabel: formatPublishedAt(release?.published_at),
     downloadCards,
     recommendedCard,

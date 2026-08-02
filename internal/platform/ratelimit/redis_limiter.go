@@ -66,7 +66,7 @@ func (rl *RedisLimiter) Allow(ctx context.Context, key string, opts ...Option) (
 
 type Config struct {
 	Capacity  int64
-	Rate      int64
+	Rate      float64
 	Requested int64
 }
 
@@ -76,7 +76,7 @@ func WithCapacity(c int64) Option {
 	return func(cfg *Config) { cfg.Capacity = c }
 }
 
-func WithRate(r int64) Option {
+func WithRate(r float64) Option {
 	return func(cfg *Config) { cfg.Rate = r }
 }
 

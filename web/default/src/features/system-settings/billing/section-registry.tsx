@@ -21,6 +21,7 @@ import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
 import { BlindBoxSettingsSection } from '../integrations/blind-box-settings-section'
+import { FirstPurchaseDiscountSection } from '../integrations/first-purchase-discount-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
 import { RatioSettingsCard } from '../models/ratio-settings-card'
 import type { BillingSettings } from '../types'
@@ -134,6 +135,23 @@ const BILLING_SECTIONS = [
     ),
   },
   {
+    id: 'first-purchase',
+    titleKey: 'First purchase campaign',
+    descriptionKey:
+      'Configure the first plan purchase discount and activity window',
+    build: (settings: BillingSettings) => (
+      <FirstPurchaseDiscountSection
+        defaultValues={{
+          enabled: settings['payment_setting.first_purchase_discount_enabled'],
+          multiplier:
+            settings['payment_setting.first_purchase_discount_multiplier'],
+          startAt: settings['payment_setting.first_purchase_discount_start_at'],
+          endAt: settings['payment_setting.first_purchase_discount_end_at'],
+        }}
+      />
+    ),
+  },
+  {
     id: 'payment',
     titleKey: 'Payment Gateway',
     descriptionKey: 'Configure payment gateway integrations',
@@ -149,18 +167,6 @@ const BILLING_SECTIONS = [
           PayMethods: settings.PayMethods,
           AmountOptions: settings['payment_setting.amount_options'],
           AmountDiscount: settings['payment_setting.amount_discount'],
-          SubscriptionBoosterEnabled:
-            settings['payment_setting.subscription_booster_enabled'],
-          SubscriptionBoosterRate:
-            settings['payment_setting.subscription_booster_rate'],
-          SubscriptionBoosterMinQuota:
-            settings['payment_setting.subscription_booster_min_quota'],
-          SubscriptionBoosterMaxQuota:
-            settings['payment_setting.subscription_booster_max_quota'],
-          SubscriptionBoosterQuotaStep:
-            settings['payment_setting.subscription_booster_quota_step'],
-          SubscriptionBoosterDailyLimit:
-            settings['payment_setting.subscription_booster_daily_limit'],
           StripeApiSecret: settings.StripeApiSecret,
           StripeWebhookSecret: settings.StripeWebhookSecret,
           StripePriceId: settings.StripePriceId,

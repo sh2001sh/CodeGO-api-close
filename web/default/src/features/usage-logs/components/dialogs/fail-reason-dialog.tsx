@@ -60,7 +60,7 @@ export function FailReasonDialog({
               <Label className='text-sm font-semibold'>
                 {t('Error Message')}
               </Label>
-              <div className='bg-muted/50 relative rounded-md border border-red-200 p-3'>
+              <div className='bg-muted/50 relative rounded-md border border-destructive/30 p-3'>
                 <Button
                   variant='ghost'
                   size='sm'
@@ -69,12 +69,12 @@ export function FailReasonDialog({
                   title={t('Copy to clipboard')}
                 >
                   {copiedText === failReason ? (
-                    <Check className='size-4 text-green-600' />
+                    <Check className='size-4 text-success' />
                   ) : (
                     <Copy className='size-4' />
                   )}
                 </Button>
-                <p className='overflow-wrap-anywhere pr-10 text-sm leading-relaxed break-all whitespace-pre-wrap text-red-600'>
+                <p className='overflow-wrap-anywhere pr-10 text-sm leading-relaxed break-all whitespace-pre-wrap text-destructive'>
                   {failReason || '-'}
                 </p>
               </div>

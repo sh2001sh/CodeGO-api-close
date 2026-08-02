@@ -54,6 +54,10 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.Equal(t, int64(len(V2MigrationIDs())), migrationCount)
 	for _, table := range []string{
 		"billing_outbox_events",
+		"billing_funding_source_policies",
+		"billing_funding_lots",
+		"billing_funding_allocations",
+		"billing_request_economics",
 		"workflow_task_workflows",
 		"workflow_task_snapshots",
 		"workflow_task_terminal_results",
@@ -65,9 +69,17 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 		"gateway_route_plans",
 		"gateway_execution_attempts",
 		"gateway_usage_evidence",
+		"route_pools",
+		"route_pool_members",
+		"blind_box_orders",
+		"blind_box_grants",
 	} {
 		require.True(t, db.Migrator().HasTable(table), table)
 	}
+	require.NoError(t, db.Migrator().DropTable(&commerceschema.BlindBoxGrant{}))
+	require.False(t, db.Migrator().HasTable(&commerceschema.BlindBoxGrant{}))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasTable(&commerceschema.BlindBoxGrant{}))
 	for _, tableName := range []string{
 		"user_companion_pets",
 		"daily_mission_rewards",
@@ -159,4 +171,9 @@ func TestMigrateUserExternalIDsBackfillsExistingUsers(t *testing.T) {
 	require.Len(t, users[0].ExternalId, identityschema.ExternalUserIDLength)
 	require.Len(t, users[1].ExternalId, identityschema.ExternalUserIDLength)
 	require.NotEqual(t, users[0].ExternalId, users[1].ExternalId)
+
+	firstID := users[0].ExternalId
+	require.NoError(t, migrateUserExternalIDs(db))
+	require.NoError(t, db.First(&users[0], 1).Error)
+	require.Equal(t, firstID, users[0].ExternalId)
 }

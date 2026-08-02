@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { type Table } from '@tanstack/react-table'
-import { Power, PowerOff, Tag, Trash2 } from 'lucide-react'
+import { Tag, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,12 +38,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
-import {
-  handleBatchDelete,
-  handleBatchDisable,
-  handleBatchEnable,
-  handleBatchSetTag,
-} from '../lib'
+import { handleBatchDelete, handleBatchSetTag } from '../lib'
 import type { Channel } from '../types'
 
 interface DataTableBulkActionsProps<TData> {
@@ -74,14 +69,6 @@ export function DataTableBulkActions<TData>({
     table.resetRowSelection()
   }
 
-  const handleEnableAll = () => {
-    handleBatchEnable(selectedIds, queryClient, handleClearSelection)
-  }
-
-  const handleDisableAll = () => {
-    handleBatchDisable(selectedIds, queryClient, handleClearSelection)
-  }
-
   const handleDeleteAll = () => {
     handleBatchDelete(selectedIds, queryClient, () => {
       setShowDeleteConfirm(false)
@@ -100,48 +87,6 @@ export function DataTableBulkActions<TData>({
   return (
     <>
       <BulkActionsToolbar table={table} entityName='channel'>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant='outline'
-                size='icon'
-                onClick={handleEnableAll}
-                className='size-8'
-                aria-label={t('Enable selected channels')}
-                title={t('Enable selected channels')}
-              />
-            }
-          >
-            <Power />
-            <span className='sr-only'>{t('Enable selected channels')}</span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{t('Enable selected channels')}</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant='outline'
-                size='icon'
-                onClick={handleDisableAll}
-                className='size-8'
-                aria-label={t('Disable selected channels')}
-                title={t('Disable selected channels')}
-              />
-            }
-          >
-            <PowerOff />
-            <span className='sr-only'>{t('Disable selected channels')}</span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{t('Disable selected channels')}</p>
-          </TooltipContent>
-        </Tooltip>
-
         <Tooltip>
           <TooltipTrigger
             render={

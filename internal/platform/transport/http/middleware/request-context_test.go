@@ -22,3 +22,27 @@ func TestIsHeavyGlobalAPIRateLimitedRequest(t *testing.T) {
 		}
 	}
 }
+
+func TestIsAuthenticatedAPIRoute(t *testing.T) {
+	tests := []struct {
+		method string
+		path   string
+		want   bool
+	}{
+		{method: "GET", path: "/api/desktop/account/summary", want: true},
+		{method: "GET", path: "/api/desktop/release/latest", want: false},
+		{method: "GET", path: "/api/packages/public", want: true},
+		{method: "GET", path: "/api/daily-lucky-number/self", want: true},
+		{method: "POST", path: "/api/daily-lucky-number/admin/backfill", want: true},
+		{method: "GET", path: "/api/bounties", want: false},
+		{method: "POST", path: "/api/bounties", want: true},
+		{method: "POST", path: "/api/user/login", want: false},
+		{method: "GET", path: "/api/user/self", want: true},
+	}
+
+	for _, tt := range tests {
+		if got := isAuthenticatedAPIRoute(tt.method, tt.path); got != tt.want {
+			t.Fatalf("isAuthenticatedAPIRoute(%q, %q) = %v, want %v", tt.method, tt.path, got, tt.want)
+		}
+	}
+}

@@ -97,6 +97,8 @@ export function getSubscriptionDisabledReasonText(
     case 'cannot subscribe to a lower-tier plan while your current package is active':
     case 'cannot subscribe to a lower-tier plan while your current package still has remaining quota':
       return '当前还有更高档且未用完的生效套餐，暂不支持直接降级。'
+    case 'renewal requires at least 30% of the current package quota to be used':
+      return '当前套餐至少使用 30%（剩余额度不高于 70%）后才可续费。'
     default:
       return normalized
   }

@@ -118,9 +118,9 @@ type BillingReservation struct {
 	ReservationID  string     `json:"reservation_id" gorm:"column:reservation_id;primaryKey;size:64"`
 	RequestID      string     `json:"request_id" gorm:"column:request_id;size:64;index"`
 	WorkflowID     string     `json:"workflow_id" gorm:"column:workflow_id;size:64;index"`
-	AccountID      string     `json:"account_id" gorm:"column:account_id;size:64;index"`
+	AccountID      string     `json:"account_id" gorm:"column:account_id;size:64;index;index:idx_billing_reservations_account_status"`
 	ReservedAmount int64      `json:"reserved_amount" gorm:"column:reserved_amount"`
-	Status         string     `json:"status" gorm:"column:status;size:32;index"`
+	Status         string     `json:"status" gorm:"column:status;size:32;index;index:idx_billing_reservations_account_status"`
 	IdempotencyKey string     `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:uq_billing_reservations_idempotency"`
 	ExpiresAt      *time.Time `json:"expires_at" gorm:"column:expires_at;index"`
 	CreatedAt      time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`

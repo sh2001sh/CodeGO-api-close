@@ -1,12 +1,12 @@
 package app
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"fmt"
 	"github.com/sh2001sh/new-api/constant"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -226,6 +226,63 @@ func TestOpenBlindBoxOrderByTradeNo_DoesNotDoubleCreditQuota(t *testing.T) {
 	assert.Contains(t, logs[0].Content, "盲盒开奖到账")
 }
 
+func TestOpenBlindBoxOrderByTradeNo_PropRewardAdvancesPityAndThresholdDrawTriggersGuarantee(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	setting := blindboxsettings.Get()
+	originalSetting := setting
+	setting.Enabled = true
+	setting.SubscriptionPrizeProbability = 0
+	setting.PityThreshold = 2
+	setting.PityGuaranteeUSD = 2
+	setting.LowRewardThresholdUSD = 2
+	setting.FirstPurchaseGuaranteeUSD = 0.0001
+	setting.Tiers = []blindboxsettings.TierSetting{
+		{Name: "0.9 倍率卡", Probability: 1, RewardType: commerceschema.BlindBoxRewardTypeProp},
+	}
+	blindboxsettings.Set(setting)
+	t.Cleanup(func() {
+		blindboxsettings.Set(originalSetting)
+	})
+
+	user := &identityschema.User{
+		Id:       8814,
+		Username: "blind_box_prop_pity_user",
+		Status:   constant.UserStatusEnabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	order := &commerceschema.BlindBoxOrder{
+		UserId:          user.Id,
+		Quantity:        2,
+		TradeNo:         "blind-box-prop-pity-order",
+		PaymentMethod:   "test",
+		PaymentProvider: "test",
+		Status:          constant.TopUpStatusSuccess,
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, db.Create(order).Error)
+
+	firstDraw, err := OpenBlindBoxes(user.Id, 1)
+	require.NoError(t, err)
+	require.Len(t, firstDraw, 1)
+	assert.Equal(t, commerceschema.BlindBoxRewardTypeProp, firstDraw[0].RewardType)
+	assert.False(t, firstDraw[0].IsPity)
+
+	var pityState commerceschema.BlindBoxPityState
+	require.NoError(t, db.Where("user_id = ?", user.Id).First(&pityState).Error)
+	assert.Equal(t, 1, pityState.ConsecutiveLowRewards)
+
+	secondDraw, err := OpenBlindBoxes(user.Id, 1)
+	require.NoError(t, err)
+	require.Len(t, secondDraw, 1)
+	assert.True(t, secondDraw[0].IsPity)
+	assert.Equal(t, 2.0, secondDraw[0].RewardUSD)
+
+	require.NoError(t, db.Where("user_id = ?", user.Id).First(&pityState).Error)
+	assert.Zero(t, pityState.ConsecutiveLowRewards)
+}
+
 func TestApplyFirstPurchaseMinimumGuarantee(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -258,13 +315,13 @@ func TestApplyFirstPurchaseMinimumGuarantee(t *testing.T) {
 			expectedWalletType: commerceschema.BlindBoxRewardWalletTypeClaude,
 		},
 		{
-			name:               "keeps prop reward",
+			name:               "converts prop reward to ordinary guarantee",
 			isFirstPurchase:    true,
 			rewardUSD:          0,
 			rewardType:         commerceschema.BlindBoxRewardTypeProp,
 			walletType:         commerceschema.BlindBoxRewardWalletTypeDefault,
-			expectedRewardUSD:  0,
-			expectedRewardType: commerceschema.BlindBoxRewardTypeProp,
+			expectedRewardUSD:  20,
+			expectedRewardType: commerceschema.BlindBoxRewardTypeQuota,
 			expectedWalletType: commerceschema.BlindBoxRewardWalletTypeDefault,
 		},
 		{

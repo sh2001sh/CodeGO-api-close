@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect } from 'react'
 import { Gift, ExternalLink, Loader2, Receipt, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { formatNumber } from '@/lib/format'
+import { formatUsdAmount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  formatCurrency,
+  formatPaymentAmount,
   getDiscountLabel,
   getPaymentIcon,
   getMinTopupAmount,
@@ -121,7 +121,6 @@ export function RechargeFormCard({
   const { t } = useTranslation()
   const [localAmount, setLocalAmount] = useState(topupAmount.toString())
   const sectionLabelClassName = 'text-muted-foreground text-xs font-medium'
-
   useEffect(() => {
     setLocalAmount(topupAmount.toString())
   }, [topupAmount])
@@ -200,8 +199,8 @@ export function RechargeFormCard({
 
   return (
     <TitledCard
-      title='余额充值'
-      description='选择金额并完成支付'
+      title={t('Balance top-up')}
+      description={t('Choose an amount and complete payment')}
       icon={<WalletCards className='h-4 w-4' />}
       action={
         onOpenBilling ? (
@@ -212,35 +211,43 @@ export function RechargeFormCard({
             className='w-full gap-2 sm:w-auto'
           >
             <Receipt className='h-4 w-4' />
-            账单记录
+            {t('Billing History')}
           </Button>
         ) : null
       }
-      className={compact ? 'rounded-[20px]' : undefined}
-      contentClassName={compact ? 'space-y-3 sm:space-y-4' : 'space-y-4 sm:space-y-6'}
+      className={compact ? 'rounded-xl' : undefined}
+      contentClassName={
+        compact ? 'space-y-3 sm:space-y-4' : 'space-y-4 sm:space-y-6'
+      }
     >
       {/* Online Topup Section */}
       {hasAnyTopup ? (
-        <div className={compact ? 'space-y-3 sm:space-y-4' : 'space-y-4 sm:space-y-6'}>
+        <div
+          className={
+            compact ? 'space-y-3 sm:space-y-4' : 'space-y-4 sm:space-y-6'
+          }
+        >
           {hasConfigurableTopup && (
             <>
               <div className='space-y-2.5 sm:space-y-3'>
                 <Label className={sectionLabelClassName}>
-                  充值余额池
+                  {t('Recharge wallet')}
                 </Label>
                 <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
                   {[
                     {
                       value: 'default' as const,
-                      title: '普通余额',
-                      description:
-                        '用于非 Claude 模型，保留原有折扣和分组倍率。',
+                      title: t('Standard wallet'),
+                      description: t(
+                        'For non-Claude models, existing discounts and group rates apply.'
+                      ),
                     },
                     {
                       value: 'claude' as const,
-                      title: 'Claude 额度',
-                      description:
-                        '仅用于 Claude 模型，最小 1，固定 1:1 充值。',
+                      title: t('Claude quota'),
+                      description: t(
+                        'Only for Claude models; minimum 1 with fixed 1:1 recharge.'
+                      ),
                     },
                   ].map((item) => (
                     <Button
@@ -276,7 +283,7 @@ export function RechargeFormCard({
               {presetAmounts.length > 0 && (
                 <div className='space-y-2.5 sm:space-y-3'>
                   <Label className={sectionLabelClassName}>
-                    {t('Amount')}
+                    {t('Recharge quota (USD)')}
                   </Label>
                   <div
                     className={cn(
@@ -287,12 +294,13 @@ export function RechargeFormCard({
                     )}
                   >
                     {presetAmounts.map((preset, index) => {
-                      const discount =
+                      const amountDiscount =
                         selectedWalletType === 'claude'
                           ? 1.0
                           : preset.discount ||
                             topupInfo?.discount?.[preset.value] ||
                             1.0
+                      const discount = amountDiscount
                       const effectivePriceRatio =
                         selectedWalletType === 'claude' ? 1 : priceRatio
                       const {
@@ -322,7 +330,7 @@ export function RechargeFormCard({
                         >
                           <div className='flex w-full items-center justify-between'>
                             <div className='text-base font-semibold sm:text-lg'>
-                              {formatNumber(displayValue)}
+                              {formatUsdAmount(displayValue)}
                             </div>
                             {hasDiscount && (
                               <div className='text-success text-xs font-medium'>
@@ -331,11 +339,15 @@ export function RechargeFormCard({
                             )}
                           </div>
                           <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
-                            实付 {formatCurrency(actualPrice)}
+                            {t('Pay {{amount}}', {
+                              amount: formatPaymentAmount(actualPrice),
+                            })}
                             {hasDiscount && savedAmount > 0 && (
                               <span className='text-success'>
                                 {' '}
-                                省 {formatCurrency(savedAmount)}
+                                {t('Save {{amount}}', {
+                                  amount: formatPaymentAmount(savedAmount),
+                                })}
                               </span>
                             )}
                           </div>
@@ -347,11 +359,8 @@ export function RechargeFormCard({
               )}
 
               <div className='space-y-2.5 sm:space-y-3'>
-                <Label
-                  htmlFor='topup-amount'
-                  className={sectionLabelClassName}
-                >
-                  {t('Custom Amount')}
+                <Label htmlFor='topup-amount' className={sectionLabelClassName}>
+                  {t('Recharge quota (USD)')}
                 </Label>
                 <div
                   className={cn(
@@ -361,27 +370,34 @@ export function RechargeFormCard({
                       : 'grid-cols-[minmax(0,1fr)_minmax(110px,0.55fr)] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center'
                   )}
                 >
-                  <Input
-                    id='topup-amount'
-                    type='number'
-                    value={localAmount}
-                    onChange={(e) => handleAmountChange(e.target.value)}
-                    min={effectiveMinTopup}
-                    placeholder={`最低 ${effectiveMinTopup}`}
-                    className={cn(
-                      'text-base',
-                      compact ? 'h-10 sm:text-base' : 'h-9 sm:h-10 sm:text-lg'
-                    )}
-                  />
+                  <div className='relative'>
+                    <Input
+                      id='topup-amount'
+                      type='number'
+                      value={localAmount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                      min={effectiveMinTopup}
+                      placeholder={t('Minimum {{amount}} USD', {
+                        amount: effectiveMinTopup,
+                      })}
+                      className={cn(
+                        'pr-14 text-base',
+                        compact ? 'h-10 sm:text-base' : 'h-9 sm:h-10 sm:text-lg'
+                      )}
+                    />
+                    <span className='text-muted-foreground pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold'>
+                      USD
+                    </span>
+                  </div>
                   <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
                     <span className='text-muted-foreground truncate text-xs'>
-                      应付金额
+                      {t('Payment amount (CNY)')}
                     </span>
                     {calculating ? (
                       <Skeleton className='h-5 w-16' />
                     ) : (
                       <span className='text-sm font-semibold'>
-                        {formatCurrency(paymentAmount)}
+                        {formatPaymentAmount(paymentAmount)}
                       </span>
                     )}
                   </div>
@@ -556,10 +572,7 @@ export function RechargeFormCard({
         >
           <div className='flex items-center gap-2'>
             <Gift className='text-muted-foreground h-4 w-4' />
-            <Label
-              htmlFor='redemption-code'
-              className={sectionLabelClassName}
-            >
+            <Label htmlFor='redemption-code' className={sectionLabelClassName}>
               {t('Have a Code?')}
             </Label>
           </div>

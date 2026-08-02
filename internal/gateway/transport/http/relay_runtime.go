@@ -92,6 +92,10 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 	}
 
 	channel, selectGroup, err := gatewayroutingapp.CacheGetRandomSatisfiedChannel(retryParam)
+	if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
+		info.RoutePoolID = selection.PoolID
+		info.ProcurementCostMultiplier = selection.ProcurementCostMultiplier
+	}
 	info.PriceData.GroupRatioInfo = relaycommon.HandleGroupRatio(c, info)
 	if err != nil {
 		return nil, types.NewError(
@@ -122,20 +126,23 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if gatewayruntime.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
+	if retryTimes <= 0 {
+		return false
+	}
+	if _, ok := c.Get("specific_channel_id"); ok {
+		return false
+	}
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
+		return false
+	}
 	if types.IsChannelError(openaiErr) {
 		return true
 	}
 	if types.IsSkipRetryError(openaiErr) {
 		return false
 	}
-	if gatewayexecutionapp.IsModelUnavailableError(openaiErr) {
+	if gatewayexecutionapp.IsModelScopedUpstreamFailure(openaiErr) {
 		return c.GetBool("model_unavailable_with_alternative")
-	}
-	if retryTimes <= 0 {
-		return false
-	}
-	if _, ok := c.Get("specific_channel_id"); ok {
-		return false
 	}
 	code := openaiErr.StatusCode
 	if code >= 200 && code < 300 {
@@ -158,8 +165,12 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
 		return
 	}
+	apiErr.SanitizeDownstreamResponse()
 	rawMessageWithRequestID := platformtext.MessageWithRequestID(apiErr.Error(), requestID)
-	apiErr.SetMessage(platformtext.SanitizeUpstreamQuotaErrorMessage(rawMessageWithRequestID))
+	if types.IsRemoteProviderError(apiErr) {
+		rawMessageWithRequestID = platformtext.SanitizeUpstreamProviderErrorMessage(rawMessageWithRequestID)
+	}
+	apiErr.SetMessage(rawMessageWithRequestID)
 	switch relayFormat {
 	case types.RelayFormatOpenAIRealtime:
 		relaycommon.WssError(c, ws, apiErr.ToOpenAIError())

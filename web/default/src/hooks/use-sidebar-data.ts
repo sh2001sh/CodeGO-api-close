@@ -6,25 +6,28 @@ import {
   Compass,
   Egg,
   FileText,
-  FlaskConical,
+  Images,
   Gem,
   MessageSquare,
   Package,
   Radio,
-	ShieldCheck,
+  ShieldCheck,
   RefreshCcw,
   ScrollText,
   Settings,
+  Sparkles,
   Ticket,
   User,
   Users,
+  HandCoins,
+  LibraryBig,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
 import { type SidebarData } from '@/components/layout/types'
 
 export function useSidebarData(): SidebarData {
-  useTranslation()
+  const { t } = useTranslation()
 
   return {
     workspaces: [
@@ -38,46 +41,51 @@ export function useSidebarData(): SidebarData {
     navGroups: [
       {
         id: 'chat',
-        title: '聊天',
+        title: t('Chat'),
         items: [
           {
-            title: '游乐场',
+            title: t('AI chat'),
             url: '/playground',
-            icon: FlaskConical,
+            icon: MessageSquare,
           },
           {
-            title: '预设',
-            icon: MessageSquare,
+            title: t('Image workspace'),
+            url: '/images',
+            icon: Images,
+          },
+          {
+            title: t('Presets'),
+            icon: FileText,
             type: 'chat-presets',
           },
         ],
       },
       {
         id: 'general',
-        title: '常规',
+        title: t('General'),
         items: [
           {
-            title: '概览',
+            title: t('Overview'),
             url: '/dashboard/overview',
             icon: Activity,
           },
           {
-            title: '分组状态',
+            title: t('Group status'),
             url: '/group-status',
             icon: Compass,
           },
           {
-            title: '模型分析',
+            title: t('Model analytics'),
             url: '/dashboard/models',
             icon: Activity,
           },
           {
-            title: 'API 密钥',
+            title: t('API keys'),
             url: '/keys',
             icon: BadgeCheck,
           },
           {
-            title: '使用日志',
+            title: t('Usage logs'),
             url: '/usage-logs/common',
             icon: FileText,
           },
@@ -85,86 +93,113 @@ export function useSidebarData(): SidebarData {
       },
       {
         id: 'personal',
-        title: '个人',
+        title: t('Personal'),
         items: [
           {
-            title: '钱包',
+            title: t('Wallet'),
             url: '/wallet',
             icon: Gem,
           },
           {
-            title: '套餐',
-            url: '/packages',
-            icon: Package,
-          },
-          {
-            title: '拼团大厅',
-            url: '/group-buy',
-            icon: Users,
-          },
-          {
-            title: '盲盒',
+            title: t('Blind box'),
             url: '/blind-box',
             icon: Ticket,
           },
           {
-            title: '邀请',
+            title: t('Plans'),
+            url: '/packages',
+            icon: Package,
+          },
+          {
+            title: t('Collective benefit plan'),
+            url: '/group-buy',
+            icon: Users,
+          },
+          {
+            title: t('Daily Lucky Number'),
+            url: '/daily-lucky-number',
+            icon: Sparkles,
+          },
+          {
+            title: t('Invites'),
             url: '/invite-rewards',
             icon: RefreshCcw,
           },
           {
-            title: '个人资料',
+            title: t('Profile'),
             url: '/profile',
             icon: User,
+          },
+          {
+            title: t('Bounties'),
+            url: '/bounties',
+            icon: HandCoins,
+          },
+          {
+            title: t('Community resources'),
+            url: '/community-resources',
+            icon: LibraryBig,
           },
         ],
       },
       {
         id: 'admin',
-        title: '管理',
+        title: t('Admin'),
         items: [
           {
-            title: '渠道',
+            title: t('Channels'),
             url: '/channels',
             icon: Radio,
           },
           {
-            title: '模型',
+            title: t('Models'),
             url: '/models/metadata',
             icon: Box,
           },
           {
-            title: '用户',
+            title: t('Users'),
             url: '/users',
             icon: Users,
           },
           {
-            title: '兑换码',
+            title: t('Redemption codes'),
             url: '/redemption-codes',
             icon: Ticket,
           },
           {
-            title: '订阅',
+            title: t('Subscriptions'),
             url: '/subscriptions',
             icon: ScrollText,
           },
           {
-            title: '盲盒管理',
+            title: t('Blind box admin'),
             url: '/subscriptions#blind-box-admin',
             activeUrls: ['/subscriptions'],
             configUrls: ['/blind-box-admin'],
             icon: Egg,
           },
           {
-            title: '系统设置',
+            title: t('Daily Lucky Number'),
+            url: '/subscriptions#daily-lucky-admin',
+            activeUrls: ['/subscriptions'],
+            configUrls: ['/daily-lucky-admin'],
+            icon: Sparkles,
+          },
+          {
+            title: t('System settings'),
             url: '/system-settings/site',
             activeUrls: ['/system-settings'],
             icon: Settings,
           },
           {
-            title: '运行健康',
+            title: t('Operations'),
             url: '/operations',
             icon: ShieldCheck,
+          },
+          {
+            title: t('Bounty management'),
+            url: '/bounties/admin',
+            icon: HandCoins,
           },
         ],
       },

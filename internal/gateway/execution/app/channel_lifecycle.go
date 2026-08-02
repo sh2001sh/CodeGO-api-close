@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
-	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	"github.com/sh2001sh/new-api/internal/platform/notifyx"
@@ -53,23 +52,6 @@ func EnableChannel(channelID int, usingKey string, channelName string) {
 		content := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelID)
 		notifyx.NotifyRootUser(formatNotifyType(channelID, constant.ChannelStatusEnabled), subject, content)
 	}
-}
-
-// SelectCoolingAlternativeProbe returns one cooling backup route. The retry
-// chain reuses the current user request to verify it without extra requests.
-func SelectCoolingAlternativeProbe(channelID int, group string, modelName string) int {
-	alternatives, err := gatewaystore.LoadAlternativeEnabledChannels(channelID, group, modelName)
-	if err != nil {
-		platformobservability.SysError(fmt.Sprintf("查询模型 %s 的冷却备用渠道失败：%v", modelName, err))
-		return 0
-	}
-	for _, channel := range alternatives {
-		if channel == nil || !gatewayruntime.IsChannelCooling(channel.Id, modelName) {
-			continue
-		}
-		return channel.Id
-	}
-	return 0
 }
 
 // ShouldDisableChannel reports whether a channel failure should trigger auto-disable.

@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { AlertTriangle } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { getUserModels, getUserGroups } from './api'
 import { PlaygroundChat } from './components/playground-chat'
 import { PlaygroundInput } from './components/playground-input'
@@ -51,8 +53,9 @@ export function Playground() {
 
   // Load models
   const { data: modelsData, isLoading: isLoadingModels } = useQuery({
-    queryKey: ['playground-models'],
-    queryFn: getUserModels,
+    queryKey: ['playground-models', config.group],
+    queryFn: () => getUserModels(config.group),
+    enabled: Boolean(config.group),
   })
 
   // Load groups
@@ -184,6 +187,21 @@ export function Playground() {
 
       {/* Input area: center content and constrain to the same container width */}
       <div className='mx-auto w-full max-w-4xl'>
+        {config.group === 'auto' &&
+          !isLoadingModels &&
+          !models.some((model) =>
+            model.value.toLowerCase().includes('claude')
+          ) && (
+            <Alert className='mx-3 mb-2 border-amber-500/40 bg-amber-500/5 sm:mx-0'>
+              <AlertTriangle className='text-amber-600' />
+              <AlertTitle>自动分组当前未提供 Claude 模型</AlertTitle>
+              <AlertDescription>
+                请检查后台 AutoGroups 是否包含 Claude
+                所在分组、当前用户是否有该分组权限，以及 Claude
+                模型是否已配置计费。
+              </AlertDescription>
+            </Alert>
+          )}
         <PlaygroundInput
           disabled={isGenerating}
           groups={groups}

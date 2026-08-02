@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, RefreshCw, Save } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -37,13 +38,19 @@ interface WalletBillingOrderPanelProps {
 }
 
 export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
+  const { t } = useTranslation()
+
   return (
     <div className='app-page-shell p-4'>
       <div className='flex flex-wrap items-start justify-between gap-3'>
         <div>
-          <div className='text-foreground text-sm font-semibold'>扣费顺序</div>
+          <div className='text-foreground text-sm font-semibold'>
+            {t('Billing priority')}
+          </div>
           <div className='text-muted-foreground mt-1 text-xs leading-5'>
-            订阅额度和钱包余额共用同一套优先级，下面可以直接调整。
+            {t(
+              'Subscription quota and wallet balance share one priority order, which you can adjust below.'
+            )}
           </div>
         </div>
         <div className='flex gap-2'>
@@ -63,28 +70,23 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
           </Button>
           <Button onClick={props.onSave} disabled={props.saving}>
             <Save className='mr-1 h-4 w-4' />
-            保存设置
+            {t('Save settings')}
           </Button>
         </div>
       </div>
 
       <div className='mt-4 grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]'>
         <div className='space-y-3'>
-          <div className='app-section-kicker'>
-            扣费来源顺序
-          </div>
+          <div className='app-section-kicker'>{t('Billing source order')}</div>
           {props.draftFundingSourceOrder.map((source, index) => (
-            <div
-              key={source}
-              className='app-subtle-panel px-3 py-3'
-            >
+            <div key={source} className='app-subtle-panel px-3 py-3'>
               <div className='flex items-start justify-between gap-3'>
                 <div className='min-w-0'>
                   <div className='text-foreground truncate text-sm font-semibold'>
-                    {index + 1}. {getFundingSourceLabel(source, String)}
+                    {index + 1}. {getFundingSourceLabel(source, t)}
                   </div>
                   <div className='text-muted-foreground mt-1 text-xs'>
-                    {getFundingSourceDescription(source, String)}
+                    {getFundingSourceDescription(source, t)}
                   </div>
                 </div>
                 <div className='flex shrink-0 items-center gap-1'>
@@ -94,7 +96,7 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                     onClick={() => props.onToggleFundingSource(source)}
                     disabled={props.saving}
                   >
-                    停用
+                    {t('Disable')}
                   </Button>
                   <Button
                     variant='outline'
@@ -124,7 +126,9 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
 
           {props.disabledFundingSources.length > 0 ? (
             <div className='border-border/70 bg-background/60 text-muted-foreground rounded-2xl border border-dashed px-3 py-4 text-xs'>
-              <div className='text-foreground font-medium'>已停用来源</div>
+              <div className='text-foreground font-medium'>
+                {t('Disabled sources')}
+              </div>
               <div className='mt-2 flex flex-wrap gap-2'>
                 {props.disabledFundingSources.map((source) => (
                   <Button
@@ -134,7 +138,9 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                     onClick={() => props.onToggleFundingSource(source)}
                     disabled={props.saving}
                   >
-                    启用 {getFundingSourceLabel(source, String)}
+                    {t('Enable {{source}}', {
+                      source: getFundingSourceLabel(source, t),
+                    })}
                   </Button>
                 ))}
               </div>
@@ -148,7 +154,7 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
               onClick={props.onResetFundingSourceOrder}
               disabled={props.saving}
             >
-              重置来源顺序
+              {t('Reset source order')}
             </Button>
             <Button
               variant='outline'
@@ -156,14 +162,14 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
               onClick={props.onResetSubscriptionOrder}
               disabled={!props.hasActiveSubscriptions || props.saving}
             >
-              重置订阅顺序
+              {t('Reset subscription order')}
             </Button>
           </div>
         </div>
 
         <div className='space-y-3'>
           <div className='app-section-kicker'>
-            订阅扣费顺序
+            {t('Subscription billing order')}
           </div>
           {props.isLoading ? (
             <div className='space-y-2'>
@@ -172,18 +178,24 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
             </div>
           ) : !props.subscriptionModeEnabled ? (
             <div className='border-border/70 bg-background/60 text-muted-foreground rounded-2xl border border-dashed px-3 py-4 text-xs'>
-              你已停用订阅扣费，结算时会跳过所有订阅。
+              {t(
+                'Subscription billing is disabled; all subscriptions will be skipped during settlement.'
+              )}
             </div>
           ) : !props.hasActiveSubscriptions ? (
             <div className='border-border/70 bg-background/60 text-muted-foreground rounded-2xl border border-dashed px-3 py-4 text-xs'>
-              暂无可排序的生效订阅。
+              {t('No active subscriptions can be reordered.')}
             </div>
           ) : (
             <div className='space-y-2'>
               {props.orderedSubscriptions.map((record, index) => {
                 const subscription = record.subscription
                 const meta = props.planMetaMap.get(subscription.plan_id)
-                const usageStatus = getSubscriptionUsageStatus(record, meta?.plan)
+                const usageStatus = getSubscriptionUsageStatus(
+                  record,
+                  meta?.plan,
+                  t
+                )
 
                 return (
                   <div
@@ -193,17 +205,22 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                     <div className='flex items-start justify-between gap-3'>
                       <div className='min-w-0'>
                         <div className='text-foreground truncate text-sm font-semibold'>
-                          {index + 1}. {meta?.title || `套餐 #${subscription.id}`}
+                          {index + 1}.{' '}
+                          {meta?.title ||
+                            t('Plan #{{id}}', { id: subscription.id })}
                         </div>
                         <div className='text-muted-foreground mt-1 text-xs'>
-                          {meta?.subtitle || '订阅'} · 约{' '}
-                          {getWalletRemainingDays(subscription.end_time)} 天
+                          {meta?.subtitle || t('Subscription')} · ~{' '}
+                          {getWalletRemainingDays(subscription.end_time)}{' '}
+                          {t('days')}
                         </div>
                         <div className='text-warning mt-1 text-xs'>
                           {usageStatus.note || usageStatus.label}
                         </div>
                         <div className='text-muted-foreground mt-1 text-xs'>
-                          到期时间：{formatWalletDateTime(subscription.end_time)}
+                          {t('Expires at: {{time}}', {
+                            time: formatWalletDateTime(subscription.end_time),
+                          })}
                         </div>
                       </div>
                       <div className='flex shrink-0 items-center gap-1'>
@@ -211,7 +228,9 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                           variant='outline'
                           size='icon'
                           className='h-8 w-8'
-                          onClick={() => props.onMoveSubscription(subscription.id, -1)}
+                          onClick={() =>
+                            props.onMoveSubscription(subscription.id, -1)
+                          }
                           disabled={index === 0 || props.saving}
                         >
                           <ArrowUp className='h-4 w-4' />
@@ -220,7 +239,9 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                           variant='outline'
                           size='icon'
                           className='h-8 w-8'
-                          onClick={() => props.onMoveSubscription(subscription.id, 1)}
+                          onClick={() =>
+                            props.onMoveSubscription(subscription.id, 1)
+                          }
                           disabled={
                             index === props.orderedSubscriptions.length - 1 ||
                             props.saving

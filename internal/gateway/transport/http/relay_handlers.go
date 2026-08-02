@@ -7,12 +7,14 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/sh2001sh/new-api/constant"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
@@ -176,6 +178,18 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
+		if relayFormat == types.RelayFormatOpenAIImage || gatewaycontract.IsImageGenerationModel(relayInfo.OriginModelName) {
+			newAPIError = types.NewErrorWithStatusCode(errors.New("0 倍率分组不支持生图模型"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
+			return
+		}
+		releaseSlot, slotErr := acquireZeroHourSlot(c)
+		if slotErr != nil {
+			newAPIError = types.NewErrorWithStatusCode(slotErr, types.ErrorCodeAccessDenied, http.StatusTooManyRequests, types.ErrOptionWithSkipRetry())
+			return
+		}
+		defer releaseSlot()
+	}
 
 	needSensitiveCheck := requestsettings.ShouldCheckPromptSensitive()
 	needCountToken := constant.CountToken
@@ -202,6 +216,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 	relayInfo.SetEstimatePromptTokens(tokens)
+	relaycommon.MarkLongContextRequest(c, relayInfo.OriginModelName, tokens)
 
 	priceData, err := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
 	if err != nil {
@@ -220,6 +235,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
+	streamFailureCircuitChecked := false
 
 	for ; retryParam.GetRetry() <= platformconfig.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
@@ -230,6 +246,19 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		relayInfo.InitChannelMeta(c)
+		if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) && !streamFailureCircuitChecked {
+			streamFailureCircuitChecked = true
+			if retryAfterSeconds, blocked := relaycommon.UserStreamFailureRetryAfter(c, relayInfo.OriginModelName); blocked {
+				c.Header("Retry-After", strconv.Itoa(retryAfterSeconds))
+				newAPIError = types.NewErrorWithStatusCode(
+					errors.New(types.ModelUnavailableMessage),
+					types.ErrorCodeGetChannelFailed,
+					http.StatusServiceUnavailable,
+					types.ErrOptionWithSkipRetry(),
+				)
+				break
+			}
+		}
 
 		currentPriceData, priceErr := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
 		if priceErr != nil {
@@ -263,7 +292,15 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			gatewayroutingapp.RecordAutoGroupSuccess(c, relayInfo.OriginModelName)
-			relaycommon.RecordChannelSuccess(channel.Id, relayInfo.OriginModelName, 0)
+			if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) {
+				relaycommon.ClearUserStreamFailureCircuit(c, relayInfo.OriginModelName)
+			}
+			ttft := relayInfo.FirstResponseTime.Sub(relayInfo.StartTime)
+			if !relayInfo.HasSendResponse() {
+				ttft = 0
+			}
+			relaycommon.RecordChannelSuccess(channel.Id, relayInfo.OriginModelName, ttft)
+			relaycommon.RecordFaultDomainSuccess(c.GetString("channel_fault_domain"), relayInfo.OriginModelName)
 			relayInfo.LastError = nil
 			return
 		}
@@ -280,12 +317,6 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		relaycommon.RecordRouteDecisionRetry(c)
 		gatewayroutingapp.RecordAutoGroupFailure(c, relayInfo.OriginModelName)
-		if relayInfo.Billing != nil {
-			if refundErr := billingapp.RefundRelayBillingSync(c, relayInfo); refundErr != nil {
-				logger.LogError(c, fmt.Sprintf("refund pre-consume before retry failed: %s", refundErr.Error()))
-				break
-			}
-		}
 	}
 
 	useChannel := c.GetStringSlice("use_channel")
@@ -311,6 +342,7 @@ func respondRelayError(c *gin.Context, newAPIError *types.NewAPIError) {
 	if newAPIError == nil {
 		return
 	}
+	newAPIError.SanitizeDownstreamResponse()
 	c.JSON(newAPIError.StatusCode, gin.H{
 		"error": newAPIError.ToOpenAIError(),
 	})

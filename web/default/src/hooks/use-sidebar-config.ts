@@ -39,7 +39,7 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
   chat: {
     enabled: true,
     playground: true,
-    images: false,
+    images: true,
     chat: true,
   },
   console: {
@@ -53,6 +53,7 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
     enabled: true,
     topup: true,
     rewards: true,
+    community: true,
     personal: true,
   },
   admin: {
@@ -97,6 +98,7 @@ const mergeWithDefaultSidebarModules = (
  */
 const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/playground': { section: 'chat', module: 'playground' },
+  '/images': { section: 'chat', module: 'images' },
   '/dashboard': { section: 'console', module: 'detail' },
   '/dashboard/overview': { section: 'console', module: 'detail' },
   '/dashboard/models': { section: 'console', module: 'detail' },
@@ -108,6 +110,9 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/usage-logs/task': { section: 'console', module: 'task' },
   '/wallet': { section: 'personal', module: 'topup' },
   '/packages': { section: 'personal', module: 'topup' },
+  '/bounties': { section: 'personal', module: 'topup' },
+  '/bounties/admin': { section: 'admin', module: 'subscription' },
+  '/community-resources': { section: 'personal', module: 'community' },
   '/group-buy': { section: 'personal', module: 'topup' },
   '/blind-box': { section: 'personal', module: 'topup' },
   '/invite-rewards': { section: 'personal', module: 'rewards' },

@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import { isMonthlyCardPlan } from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
@@ -51,7 +52,8 @@ export function getOrderedSubscriptions(
 
 export function getSubscriptionUsageStatus(
   record: UserSubscriptionRecord,
-  plan?: PlanRecord['plan']
+  plan: PlanRecord['plan'] | undefined,
+  t: TFunction
 ): {
   label: string
   note: string | null
@@ -63,7 +65,8 @@ export function getSubscriptionUsageStatus(
 
   if (!active) {
     return {
-      label: subscription.status === 'cancelled' ? '已取消' : '已过期',
+      label:
+        subscription.status === 'cancelled' ? t('Cancelled') : t('Expired'),
       note: null,
     }
   }
@@ -80,17 +83,21 @@ export function getSubscriptionUsageStatus(
 
   if (totalAmount > 0 && totalRemain <= 0) {
     return {
-      label: '已耗尽',
-      note: '总额度用完后，系统会自动跳过这份订阅。',
+      label: t('Exhausted'),
+      note: t(
+        'This subscription is skipped automatically after its total quota is used.'
+      ),
     }
   }
 
   if (!isMonthlyPlan && periodAmount > 0 && periodRemain <= 0) {
     return {
-      label: '待重置',
-      note: '本期额度已用完，重置后会继续参与扣费。',
+      label: t('Pending reset'),
+      note: t(
+        'This period quota is used up and will rejoin billing after reset.'
+      ),
     }
   }
 
-  return { label: '可用', note: null }
+  return { label: t('Available'), note: null }
 }

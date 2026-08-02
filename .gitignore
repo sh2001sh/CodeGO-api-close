@@ -7,6 +7,9 @@ upload
 *.db
 build
 *.db-journal
+*.log
+*.py[cod]
+__pycache__/
 logs
 web/default/dist
 web/classic/dist

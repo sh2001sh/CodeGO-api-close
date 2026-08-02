@@ -43,21 +43,6 @@ func validateOptionGuards(key string, value string) error {
 
 func validateOptionValue(key string, value string) error {
 	switch key {
-	case "payment_setting.subscription_booster_rate":
-		parsed, err := strconv.ParseFloat(value, 64)
-		if err != nil || parsed <= 0 || parsed > 10 {
-			return fmt.Errorf("subscription booster rate must be greater than 0 and at most 10")
-		}
-	case "payment_setting.subscription_booster_min_quota", "payment_setting.subscription_booster_max_quota", "payment_setting.subscription_booster_quota_step":
-		parsed, err := strconv.ParseInt(value, 10, 64)
-		if err != nil || parsed <= 0 {
-			return fmt.Errorf("subscription booster quota setting must be a positive integer")
-		}
-	case "payment_setting.subscription_booster_daily_limit":
-		parsed, err := strconv.Atoi(value)
-		if err != nil || parsed < 0 || parsed > 1000 {
-			return fmt.Errorf("subscription booster daily limit must be between 0 and 1000")
-		}
 	case "GitHubOAuthEnabled":
 		if value == "true" && platformconfig.GitHubClientId == "" {
 			return ErrOptionGitHubOAuthMissingConfig
@@ -112,6 +97,21 @@ func validateOptionValue(key string, value string) error {
 	case "AutomaticRetryStatusCodes":
 		_, err := gatewaystore.ParseHTTPStatusCodeRanges(value)
 		return err
+	case "community_resource_setting.reward_usd":
+		reward, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil || reward < 0 || reward > 1000 {
+			return fmt.Errorf("community resource reward must be between 0 and 1000 USD")
+		}
+	case "payment_setting.first_purchase_discount_multiplier":
+		multiplier, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil || multiplier <= 0 || multiplier >= 1 {
+			return fmt.Errorf("first purchase discount multiplier must be greater than 0 and less than 1")
+		}
+	case "payment_setting.first_purchase_discount_start_at", "payment_setting.first_purchase_discount_end_at":
+		timestamp, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil || timestamp < 0 {
+			return fmt.Errorf("first purchase discount time must be a valid Unix timestamp")
+		}
 	case "console_setting.api_info":
 		return platformstore.ValidateConsoleSettings(value, "ApiInfo")
 	case "console_setting.announcements":

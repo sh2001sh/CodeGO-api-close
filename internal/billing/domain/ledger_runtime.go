@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -74,10 +75,12 @@ type RecordAdjustmentParams struct {
 	AccountID      string
 	IdempotencyKey string
 	ReasonCode     string
+	ReasonDetail   string
 	ReferenceType  string
 	ReferenceID    string
 	OperatorType   string
 	OperatorID     string
+	Metadata       json.RawMessage
 }
 
 // RecordAdjustment records a zero-balance audit adjustment for state changes such
@@ -88,30 +91,54 @@ func RecordAdjustment(params RecordAdjustmentParams) (*billingschema.BillingLedg
 	}
 	var entry billingschema.BillingLedgerEntry
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if existing, found, err := findLedgerEntryByIdempotency(tx, params.IdempotencyKey); err != nil {
-			return err
-		} else if found {
-			if existing.AccountID != params.AccountID || existing.EntryType != LedgerEntryTypeAdjustment {
-				return ErrLedgerConflict
-			}
-			entry = *existing
-			return nil
-		}
-		entry = billingschema.BillingLedgerEntry{
-			AccountID: params.AccountID, ReferenceType: defaultIfEmpty(params.ReferenceType, "adjustment"),
-			ReferenceID: defaultIfEmpty(params.ReferenceID, params.AccountID), EntryType: LedgerEntryTypeAdjustment,
-			Direction: billingschema.BillingDirectionCredit, Amount: 0, IdempotencyKey: params.IdempotencyKey,
-			ReasonCode: defaultIfEmpty(params.ReasonCode, "adjustment"), OperatorType: defaultIfEmpty(params.OperatorType, "system"), OperatorID: params.OperatorID,
-		}
-		if err := tx.Create(&entry).Error; err != nil {
-			return err
-		}
-		return RecordOutboxEvent(tx, OutboxEventInput{AccountID: entry.AccountID, AggregateType: "ledger_entry", AggregateID: entry.EntryID, EventType: "billing.adjustment_recorded", IdempotencyKey: "outbox:" + entry.IdempotencyKey, Payload: entry})
+		var innerErr error
+		entry, innerErr = recordAdjustmentTx(tx, params)
+		return innerErr
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &entry, nil
+}
+
+// RecordAdjustmentTx records a zero-balance audit adjustment within an existing transaction.
+func RecordAdjustmentTx(tx *gorm.DB, params RecordAdjustmentParams) (*billingschema.BillingLedgerEntry, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("transaction is required")
+	}
+	if strings.TrimSpace(params.AccountID) == "" || strings.TrimSpace(params.IdempotencyKey) == "" {
+		return nil, fmt.Errorf("account_id and idempotency_key are required")
+	}
+	entry, err := recordAdjustmentTx(tx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
+func recordAdjustmentTx(tx *gorm.DB, params RecordAdjustmentParams) (billingschema.BillingLedgerEntry, error) {
+	if existing, found, err := findLedgerEntryByIdempotency(tx, params.IdempotencyKey); err != nil {
+		return billingschema.BillingLedgerEntry{}, err
+	} else if found {
+		if existing.AccountID != params.AccountID || existing.EntryType != LedgerEntryTypeAdjustment {
+			return billingschema.BillingLedgerEntry{}, ErrLedgerConflict
+		}
+		return *existing, nil
+	}
+	entry := billingschema.BillingLedgerEntry{
+		AccountID: params.AccountID, ReferenceType: defaultIfEmpty(params.ReferenceType, "adjustment"),
+		ReferenceID: defaultIfEmpty(params.ReferenceID, params.AccountID), EntryType: LedgerEntryTypeAdjustment,
+		Direction: billingschema.BillingDirectionCredit, Amount: 0, IdempotencyKey: params.IdempotencyKey,
+		ReasonCode: defaultIfEmpty(params.ReasonCode, "adjustment"), ReasonDetail: strings.TrimSpace(params.ReasonDetail),
+		OperatorType: defaultIfEmpty(params.OperatorType, "system"), OperatorID: params.OperatorID, Metadata: params.Metadata,
+	}
+	if err := tx.Create(&entry).Error; err != nil {
+		return billingschema.BillingLedgerEntry{}, err
+	}
+	if err := RecordOutboxEvent(tx, OutboxEventInput{AccountID: entry.AccountID, AggregateType: "ledger_entry", AggregateID: entry.EntryID, EventType: "billing.adjustment_recorded", IdempotencyKey: "outbox:" + entry.IdempotencyKey, Payload: entry}); err != nil {
+		return billingschema.BillingLedgerEntry{}, err
+	}
+	return entry, nil
 }
 
 // EnsureBillingAccount creates the billing account and its balance snapshot on first use.

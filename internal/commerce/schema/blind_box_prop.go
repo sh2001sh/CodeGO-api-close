@@ -12,6 +12,7 @@ const (
 	BlindBoxPropTypeSubscriptionDiscount90 = "subscription_discount_90"
 	BlindBoxPropTypeConsumeDiscount95      = "consume_discount_95"
 	BlindBoxPropTypeConsumeDiscount90      = "consume_discount_90"
+	BlindBoxPropTypeZeroHourMultiplier     = "zero_hour_multiplier"
 )
 
 const (
@@ -50,6 +51,17 @@ type BlindBoxProp struct {
 
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
+}
+
+// BlindBoxZeroHourState tracks one user's hidden zero-multiplier draw progress.
+// Points are deliberately integer based to keep probability updates deterministic.
+type BlindBoxZeroHourState struct {
+	Id         int   `json:"id"`
+	UserId     int   `json:"user_id" gorm:"uniqueIndex"`
+	Points     int64 `json:"points" gorm:"not null;default:0"`
+	UsageQuota int64 `json:"usage_quota" gorm:"not null;default:0"`
+	HitCount   int   `json:"hit_count" gorm:"not null;default:0"`
+	UpdatedAt  int64 `json:"updated_at" gorm:"bigint"`
 }
 
 type BlindBoxPropSpec struct {

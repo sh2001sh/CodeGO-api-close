@@ -93,7 +93,7 @@ func SubmitRelayTask(c *gin.Context) {
 			channel, channelErr = getTaskChannel(c, relayInfo, retryParam)
 			if channelErr != nil {
 				logger.LogError(c, channelErr.Error())
-				taskErr = taskx.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", http.StatusInternalServerError)
+				taskErr = taskx.TaskErrorWrapper(channelErr.Err, "get_channel_failed", http.StatusServiceUnavailable)
 				break
 			}
 		}
@@ -177,7 +177,13 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 	if taskErr.StatusCode == http.StatusTooManyRequests {
 		taskErr.Message = "status_code=429"
 	}
-	taskErr.Message = platformtext.SanitizeUpstreamQuotaErrorMessage(taskErr.Message)
+	if taskErr.Code == string(types.ErrorCodeGetChannelFailed) {
+		taskErr.StatusCode = http.StatusServiceUnavailable
+		taskErr.Message = types.ModelUnavailableMessage
+	}
+	if !taskErr.LocalError {
+		taskErr.Message = platformtext.SanitizeUpstreamQuotaErrorMessage(taskErr.Message)
+	}
 	c.JSON(taskErr.StatusCode, taskErr)
 }
 

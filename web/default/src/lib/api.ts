@@ -95,8 +95,8 @@ api.interceptors.response.use(
     if (!skip) {
       const status = error?.response?.status
 
-      if (status === 401) {
-        // Unauthorized: clear auth state and show toast
+      if (status === 401 && isSessionValidationRequest(error?.config?.url)) {
+        // Only a failed session validation proves that the browser session expired.
         toast.error(i18next.t('Session expired!'))
         try {
           useAuthStore.getState().auth.reset()
@@ -130,6 +130,11 @@ function getUserId(): string | null {
     /* empty */
   }
   return null
+}
+
+function isSessionValidationRequest(url: unknown) {
+  if (typeof url !== 'string') return false
+  return url.split('?')[0] === '/api/user/self'
 }
 
 /**

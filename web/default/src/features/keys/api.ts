@@ -27,6 +27,7 @@ import type {
 } from './types'
 
 export interface DesktopImportLinkRequest {
+  target?: 'codego' | 'ccswitch'
   tool: 'claude' | 'codex' | 'gemini' | 'opencode' | 'openclaw' | 'hermes'
   token_id: number
   name: string

@@ -185,7 +185,7 @@ func CreateDesktopImportConfig(c *gin.Context) {
 	}
 	payload, err := identityapp.BuildDesktopImportConfigDeepLink(c.GetInt("id"), req)
 	if err != nil {
-		if err.Error() == "unsupported tool" || err.Error() == "invalid token_id" || err.Error() == "token is not enabled" {
+		if err.Error() == "unsupported desktop target" || err.Error() == "unsupported tool" || err.Error() == "invalid token_id" || err.Error() == "token is not enabled" {
 			httpapi.ApiErrorMsg(c, err.Error())
 			return
 		}

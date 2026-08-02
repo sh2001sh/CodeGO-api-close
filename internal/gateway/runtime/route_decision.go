@@ -16,6 +16,7 @@ type RouteDecision struct {
 	Model           string   `json:"model"`
 	RequestedGroup  string   `json:"requested_group"`
 	SelectedGroup   string   `json:"selected_group,omitempty"`
+	Mode            string   `json:"mode,omitempty"`
 	ChannelID       int      `json:"channel_id,omitempty"`
 	CandidateGroups int      `json:"candidate_groups"`
 	Excluded        []string `json:"excluded,omitempty"`
@@ -23,6 +24,14 @@ type RouteDecision struct {
 	AffinityHit     bool     `json:"affinity_hit"`
 	Fallback        bool     `json:"fallback"`
 	HealthState     string   `json:"health_state,omitempty"`
+}
+
+// MarkAutomaticPool records that the selected channel came from the cost and
+// health based automatic pool rather than legacy priority/weight selection.
+func MarkAutomaticPool(c *gin.Context) {
+	updateRouteDecision(c, func(decision *RouteDecision) {
+		decision.Mode = "automatic_pool"
+	})
 }
 
 func StartRouteDecision(c *gin.Context, model string, requestedGroup string) {

@@ -22,7 +22,11 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { getAffiliateRewardsOverview } from '../api'
 import { generateAffiliateLink } from '../lib'
 
-const AFFILIATE_OVERVIEW_QUERY_KEY = ['wallet', 'affiliate', 'overview'] as const
+const AFFILIATE_OVERVIEW_QUERY_KEY = [
+  'wallet',
+  'affiliate',
+  'overview',
+] as const
 
 export function useAffiliate() {
   const { copyToClipboard } = useCopyToClipboard()
@@ -47,11 +51,17 @@ export function useAffiliate() {
     await copyToClipboard(affiliateLink)
   }, [affiliateLink, copyToClipboard])
 
+  const copyAffiliateCode = useCallback(async () => {
+    if (!affiliateCode) return
+    await copyToClipboard(affiliateCode)
+  }, [affiliateCode, copyToClipboard])
+
   return {
     overview: overviewQuery.data,
     affiliateCode,
     affiliateLink,
     loading: overviewQuery.isLoading,
+    copyAffiliateCode,
     copyAffiliateLink,
     refetch: overviewQuery.refetch,
   }

@@ -121,6 +121,17 @@ export function UsersTable() {
     placeholderData: (previousData) => previousData,
   })
 
+  const totalUsersQuery = useQuery({
+    queryKey: ['users-total', refreshTrigger],
+    queryFn: async () => {
+      const result = await getUsers({ p: 1, page_size: 1 })
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to load users')
+      }
+      return result.data?.total || 0
+    },
+  })
+
   const users = data?.items || []
 
   const table = useReactTable({
@@ -139,8 +150,9 @@ export function UsersTable() {
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     globalFilterFn: (row, _columnId, filterValue) => {
-      const searchValue = String(filterValue).toLowerCase()
+      const searchValue = String(filterValue).trim().toLowerCase()
       const fields = [
+        row.original.id,
         row.original.external_id,
         row.getValue('username'),
         row.original.display_name,
@@ -161,51 +173,72 @@ export function UsersTable() {
     onPaginationChange,
     onGlobalFilterChange,
     onColumnFiltersChange,
-    manualPagination: !globalFilter,
+    manualFiltering: true,
+    manualPagination: true,
     pageCount: Math.ceil((data?.total || 0) / pagination.pageSize),
   })
 
   const pageCount = table.getPageCount()
   useEffect(() => {
+    if (!globalFilter?.trim()) return
+    onPaginationChange((current) =>
+      current.pageIndex === 0 ? current : { ...current, pageIndex: 0 }
+    )
+  }, [globalFilter, onPaginationChange])
+
+  useEffect(() => {
     ensurePageInRange(pageCount)
   }, [pageCount, ensurePageInRange])
 
   return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      emptyTitle={t('No Users Found')}
-      emptyDescription={t(
-        'No users available. Try adjusting your search or filters.'
-      )}
-      skeletonKeyPrefix='users-skeleton'
-      toolbarProps={{
-        searchPlaceholder: '搜索用户 ID、用户名、昵称或邮箱',
-        filters: [
-          {
-            columnId: 'status',
-            title: t('Status'),
-            options: getUserStatusOptions(t),
-            singleSelect: true,
-          },
-          {
-            columnId: 'role',
-            title: t('Role'),
-            options: getUserRoleOptions(t),
-            singleSelect: true,
-          },
-        ],
-      }}
-      getRowClassName={(row, { isMobile }) =>
-        isDisabledUserRow(row.original)
-          ? isMobile
-            ? DISABLED_ROW_MOBILE
-            : DISABLED_ROW_DESKTOP
-          : undefined
-      }
-      bulkActions={<DataTableBulkActions table={table} />}
-    />
+    <div className='space-y-3'>
+      <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm'>
+        <span>
+          {t('Total users')}:{' '}
+          {totalUsersQuery.isLoading ? '—' : (totalUsersQuery.data ?? '—')}
+        </span>
+        {globalFilter?.trim() ? (
+          <span>
+            {t('Matching users')}: {data?.total ?? 0}
+          </span>
+        ) : null}
+      </div>
+      <DataTablePage
+        table={table}
+        columns={columns}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        emptyTitle={t('No Users Found')}
+        emptyDescription={t(
+          'No users available. Try adjusting your search or filters.'
+        )}
+        skeletonKeyPrefix='users-skeleton'
+        toolbarProps={{
+          searchPlaceholder: t('Filter by ID, username, name or email...'),
+          filters: [
+            {
+              columnId: 'status',
+              title: t('Status'),
+              options: getUserStatusOptions(t),
+              singleSelect: true,
+            },
+            {
+              columnId: 'role',
+              title: t('Role'),
+              options: getUserRoleOptions(t),
+              singleSelect: true,
+            },
+          ],
+        }}
+        getRowClassName={(row, { isMobile }) =>
+          isDisabledUserRow(row.original)
+            ? isMobile
+              ? DISABLED_ROW_MOBILE
+              : DISABLED_ROW_DESKTOP
+            : undefined
+        }
+        bulkActions={<DataTableBulkActions table={table} />}
+      />
+    </div>
   )
 }

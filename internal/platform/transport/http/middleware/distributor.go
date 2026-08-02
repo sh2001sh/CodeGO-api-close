@@ -14,6 +14,7 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
+	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/sh2001sh/new-api/internal/platform/taskx"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
@@ -118,7 +119,9 @@ func Distribute() func(c *gin.Context) {
 				if preferredChannelID, found := gatewayruntime.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 					preferred, err := gatewaystore.GetCachedChannel(preferredChannelID)
 					if err == nil && preferred != nil {
-						if preferred.Status != constant.ChannelStatusEnabled || gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model) {
+						if preferred.Status != constant.ChannelStatusEnabled ||
+							gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model) ||
+							gatewayroutingapp.ShouldMigrateAutomaticPoolAffinity(usingGroup, modelRequest.Model, preferred.Id) {
 							gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 							gatewayruntime.ExcludeRouteDecisionCandidate(c, "stale_affinity")
 						} else if usingGroup == "auto" {
@@ -155,16 +158,16 @@ func Distribute() func(c *gin.Context) {
 						if usingGroup == "auto" {
 							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
 						}
-						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": err.Error()})
+						logger.LogError(c, i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": err.Error()}))
 						// 濡傛灉閿欒锛屼絾鏄笭閬撲笉涓虹┖锛岃鏄庢槸鏁版嵁搴撲竴鑷存€ч棶棰?						//if channel != nil {
 						//	platformobservability.SysError(fmt.Sprintf("娓犻亾涓嶅瓨鍦細%d", channel.Id))
 						//	message = "鏁版嵁搴撲竴鑷存€у凡琚牬鍧忥紝璇疯仈绯荤鐞嗗憳"
 						//}
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, types.ErrorCodeModelNotFound)
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, platformtext.UpstreamQuotaGenericMessage, types.ErrorCodeModelNotFound)
 						return
 					}
 					if channel == nil {
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, platformtext.UpstreamQuotaGenericMessage, types.ErrorCodeModelNotFound)
 						return
 					}
 				}
@@ -175,6 +178,7 @@ func Distribute() func(c *gin.Context) {
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			gatewayruntime.RecordChannelAffinity(c, channel.Id)
+			gatewayroutingapp.RecordAutomaticPoolAffinity(c, channel.Id)
 		}
 	}
 }

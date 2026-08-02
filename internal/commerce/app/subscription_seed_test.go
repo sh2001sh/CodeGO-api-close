@@ -101,6 +101,16 @@ func TestEnsureDefaultSubscriptionPlans_FixesLegacyPresetUsageUnits(t *testing.T
 	assert.Zero(t, pickFirstBillableSubscriptionID(t, 9101, int64(platformruntime.QuotaPerUnit)))
 }
 
+func TestDefaultDayPassesDoNotParticipateInCollectiveBenefit(t *testing.T) {
+	for _, title := range []string{"50刀日卡", "100刀日卡"} {
+		plan := requirePresetPlanByTitle(t, title)
+		assert.False(t, plan.GroupBuyEnabled)
+		assert.Zero(t, plan.GroupBuyBonus2)
+		assert.Zero(t, plan.GroupBuyBonus3)
+		assert.Zero(t, plan.GroupBuyBonus5)
+	}
+}
+
 func TestEnsureDefaultSubscriptionPlans_RepairsCollapsedMonthlyQuotaSnapshot(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	ensureSubscriptionSeedTestSchema(t)
@@ -153,7 +163,7 @@ func TestEnsureDefaultSubscriptionPlans_RepairsCollapsedMonthlyQuotaSnapshot(t *
 	assert.Equal(t, monthPlan.TotalAmount-reloadedSub.AmountUsed, snapshot.AvailableBalance)
 }
 
-func TestEnsureDefaultSubscriptionPlans_UpdatesLegacyBonusColumnsWithoutMissingColumnError(t *testing.T) {
+func TestEnsureDefaultSubscriptionPlans_UpdatesLegacyGroupBuyColumnsWithoutMissingColumnError(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	ensureSubscriptionSeedTestSchema(t)
 
@@ -163,9 +173,6 @@ func TestEnsureDefaultSubscriptionPlans_UpdatesLegacyBonusColumnsWithoutMissingC
 	legacyPlan.GroupBuyBonus2 = 0
 	legacyPlan.GroupBuyBonus3 = 0
 	legacyPlan.GroupBuyBonus5 = 0
-	legacyPlan.RenewalBonus2 = 0
-	legacyPlan.RenewalBonus3 = 0
-	legacyPlan.RenewalBonus4 = 0
 	require.NoError(t, db.Create(&legacyPlan).Error)
 
 	require.NoError(t, EnsureDefaultSubscriptionPlans())
@@ -175,9 +182,6 @@ func TestEnsureDefaultSubscriptionPlans_UpdatesLegacyBonusColumnsWithoutMissingC
 	assert.Equal(t, preset.GroupBuyBonus2, reloadedPlan.GroupBuyBonus2)
 	assert.Equal(t, preset.GroupBuyBonus3, reloadedPlan.GroupBuyBonus3)
 	assert.Equal(t, preset.GroupBuyBonus5, reloadedPlan.GroupBuyBonus5)
-	assert.Equal(t, preset.RenewalBonus2, reloadedPlan.RenewalBonus2)
-	assert.Equal(t, preset.RenewalBonus3, reloadedPlan.RenewalBonus3)
-	assert.Equal(t, preset.RenewalBonus4, reloadedPlan.RenewalBonus4)
 }
 
 func TestEnsureDefaultSubscriptionPlans_UpdatesFuelConfiguration(t *testing.T) {

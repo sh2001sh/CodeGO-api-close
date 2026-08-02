@@ -93,24 +93,24 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   return (
     <div
       className={cn(
-        'group bg-card/70 relative flex min-h-[230px] flex-col overflow-hidden rounded-2xl border p-3 backdrop-blur-sm transition-all duration-200 sm:p-5',
+        'group bg-card relative flex min-h-[230px] flex-col overflow-hidden rounded-2xl border p-3 transition-all duration-200 sm:p-5',
         isFreeModel
-          ? 'border-emerald-500/25 shadow-[0_0_18px_rgb(16_185_129_/_0.06)] hover:border-emerald-400/45 hover:shadow-[0_0_22px_rgb(16_185_129_/_0.14)]'
+          ? 'border-success/25 hover:border-success/45 shadow-[0_0_18px_color-mix(in_oklch,var(--success)_6%,transparent)] hover:shadow-[0_0_22px_color-mix(in_oklch,var(--success)_14%,transparent)]'
           : 'hover:border-foreground/18 hover:bg-card'
       )}
     >
       {isFreeModel && (
         <div className='pointer-events-none absolute right-4 bottom-4 z-0'>
-          <Badge className='rounded-full border border-emerald-500/15 bg-emerald-500/8 px-3 py-1 text-[11px] tracking-[0.16em] text-emerald-700/55 uppercase shadow-none dark:text-emerald-300/55'>
+          <Badge className='border-success/15 bg-success/8 text-success/55 rounded-full border px-3 py-1 text-[11px] tracking-[0.16em] uppercase shadow-none'>
             <Sparkles className='size-3' />
             {t('Free')}
           </Badge>
         </div>
       )}
 
-      {/* Header: icon + content + actions */}
-      <div className='relative z-10 flex items-start justify-between gap-2.5 sm:gap-3'>
-        <div className='flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3'>
+      {/* Header: reserve the full content width for long model identifiers. */}
+      <div className='relative z-10'>
+        <div className='flex min-w-0 items-start gap-2.5 sm:gap-3'>
           <div className='bg-muted/45 ring-border/60 flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 sm:size-10'>
             {vendorIcon || (
               <span className='text-muted-foreground text-sm font-bold'>
@@ -119,7 +119,10 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             )}
           </div>
           <div className='min-w-0 flex-1'>
-            <h3 className='text-foreground min-w-0 truncate font-mono text-[15px] leading-tight font-semibold'>
+            <h3
+              className='text-foreground min-w-0 font-mono text-[15px] leading-[1.35] font-semibold break-all'
+              title={props.model.model_name}
+            >
               {props.model.model_name}
             </h3>
 
@@ -127,7 +130,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               {dynamicSummary ? (
                 dynamicSummary.isSpecialExpression ? (
                   <span className='min-w-0'>
-                    <span className='text-amber-700 dark:text-amber-300'>
+                    <span className='text-warning'>
                       {t('Special billing expression')}
                     </span>
                     <code className='text-muted-foreground/70 mt-0.5 line-clamp-1 block font-mono text-[11px] break-all'>
@@ -216,25 +219,6 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             </div>
           </div>
         </div>
-
-        <div className='flex shrink-0 items-center gap-1.5 self-start'>
-          <button
-            type='button'
-            onClick={props.onClick}
-            className='text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition-colors sm:px-2.5 sm:py-1.5'
-          >
-            {t('Details')}
-            <ChevronRight className='size-3.5' />
-          </button>
-          <button
-            type='button'
-            onClick={handleCopy}
-            className='text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border p-1.5 transition-colors'
-            title={t('Copy')}
-          >
-            <Copy className='size-3.5' />
-          </button>
-        </div>
       </div>
 
       {/* Description */}
@@ -283,13 +267,32 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               </span>
             )}
             {isFreeModel && (
-              <span className='text-xs font-medium whitespace-nowrap text-emerald-700 dark:text-emerald-300'>
+              <span className='text-success text-xs font-medium whitespace-nowrap'>
                 {freeGroups[0] ? `${freeGroups[0]} · ` : ''}
                 {t('Available at zero group ratio')}
               </span>
             )}
           </div>
         </div>
+      </div>
+
+      <div className='border-border/60 relative z-10 mt-3 flex items-center justify-end gap-1.5 border-t pt-3'>
+        <button
+          type='button'
+          onClick={props.onClick}
+          className='text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition-colors sm:px-2.5 sm:py-1.5'
+        >
+          {t('Details')}
+          <ChevronRight className='size-3.5' />
+        </button>
+        <button
+          type='button'
+          onClick={handleCopy}
+          className='text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border p-1.5 transition-colors'
+          title={t('Copy')}
+        >
+          <Copy className='size-3.5' />
+        </button>
       </div>
     </div>
   )

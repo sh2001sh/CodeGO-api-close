@@ -88,7 +88,7 @@ export function MessageActions({
                 : MESSAGE_ACTION_LABELS.COPY
             }
             onClick={handleCopy}
-            className={isCopied ? 'text-green-600' : ''}
+            className={isCopied ? 'text-success' : ''}
           />
         )}
 

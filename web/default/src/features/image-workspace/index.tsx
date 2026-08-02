@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { nanoid } from 'nanoid'
+import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   AlertCircle,
-  Bot,
   Clock3,
   Download,
   History,
@@ -14,10 +12,11 @@ import {
   PenSquare,
   RefreshCw,
   Sparkles,
-  UserRound,
   WandSparkles,
 } from 'lucide-react'
+import { nanoid } from 'nanoid'
 import { toast } from 'sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,7 +26,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty'
-import { ImageDialog } from '@/features/usage-logs/components/dialogs/image-dialog'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -41,6 +39,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { ImageDialog } from '@/features/usage-logs/components/dialogs/image-dialog'
 import {
   fetchImageWorkspaceSourceFile,
   getImageWorkspaceGroups,
@@ -129,53 +128,10 @@ function dedupeItems(items: ImageWorkspaceItem[]) {
   })
 }
 
-function ConversationBubble(props: {
-  role: 'assistant' | 'user'
-  title: string
-  children: React.ReactNode
-}) {
-  const isAssistant = props.role === 'assistant'
-  const Icon = isAssistant ? Bot : UserRound
-
-  return (
-    <div
-      className={`flex items-start gap-3 ${isAssistant ? '' : 'justify-end'}`}
-    >
-      {isAssistant ? (
-        <div className='bg-foreground text-background flex size-10 shrink-0 items-center justify-center rounded-2xl dark:bg-slate-100 dark:text-slate-900'>
-          <Icon className='size-4' />
-        </div>
-      ) : null}
-
-      <div
-        className={`max-w-3xl rounded-[28px] border px-5 py-4 shadow-sm ${
-          isAssistant
-            ? 'border-border bg-card text-card-foreground'
-            : 'border-emerald-200 bg-emerald-50 text-slate-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-slate-100'
-        }`}
-      >
-        <div className='mb-2 flex items-center gap-2 text-sm font-semibold'>
-          <Icon className='size-4' />
-          <span>{props.title}</span>
-        </div>
-        <div className='space-y-3 text-sm leading-7'>{props.children}</div>
-      </div>
-
-      {!isAssistant ? (
-        <div className='flex size-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white'>
-          <Icon className='size-4' />
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 function InfoPill(props: { label: string; value: string }) {
   return (
-    <div className='rounded-2xl border border-border bg-muted/40 px-4 py-3'>
-      <div className='text-muted-foreground text-xs'>
-        {props.label}
-      </div>
+    <div className='border-border bg-muted/40 rounded-2xl border px-4 py-3'>
+      <div className='text-muted-foreground text-xs'>{props.label}</div>
       <div className='text-foreground mt-1 text-sm font-semibold'>
         {props.value}
       </div>
@@ -196,7 +152,9 @@ export function ImageWorkspace() {
   const [sessionId, setSessionId] = useState(loadSessionId)
   const [galleryTab, setGalleryTab] = useState('session')
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null)
-  const [previewItem, setPreviewItem] = useState<ImageWorkspaceItem | null>(null)
+  const [previewItem, setPreviewItem] = useState<ImageWorkspaceItem | null>(
+    null
+  )
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [form, setForm] = useState<ImageWorkspaceFormState>({
     mode: 'generate',
@@ -209,8 +167,9 @@ export function ImageWorkspace() {
   })
 
   const modelsQuery = useQuery({
-    queryKey: ['image-workspace-models'],
-    queryFn: getImageWorkspaceModels,
+    queryKey: ['image-workspace-models', form.group],
+    queryFn: () => getImageWorkspaceModels(form.group),
+    enabled: Boolean(form.group),
   })
 
   const groupsQuery = useQuery({
@@ -239,11 +198,16 @@ export function ImageWorkspace() {
 
   useEffect(() => {
     const models = modelsQuery.data ?? []
-    if (!form.model && models.length > 0) {
+    const currentModelAvailable = models.some(
+      (item) => item.value === form.model
+    )
+    if (models.length > 0 && !currentModelAvailable) {
       const preferredModel =
         models.find((item) => item.value === 'gpt-image-2')?.value ??
         models[0].value
       setForm((prev) => ({ ...prev, model: preferredModel }))
+    } else if (models.length === 0 && form.model) {
+      setForm((prev) => ({ ...prev, model: '' }))
     }
   }, [form.model, modelsQuery.data])
 
@@ -409,67 +373,50 @@ export function ImageWorkspace() {
     <>
       <div className='min-h-full bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.16),transparent_26%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_22%),linear-gradient(180deg,rgba(15,23,42,0.03),transparent_30%),var(--background)] p-4 md:p-6'>
         <div className='mx-auto max-w-[1580px] space-y-5'>
-          <div className='rounded-[34px] border border-border bg-card p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)]'>
-            <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
-              <div>
-                <div className='text-muted-foreground text-xs font-medium tracking-[0.28em]'>
-                  生图工作台
-                </div>
-                <h1 className='text-foreground mt-2 text-2xl font-semibold tracking-tight'>
-                  直接用中文对话的方式生成、续改和管理图片
-                </h1>
+          {form.group && !modelsQuery.isLoading && models.length === 0 && (
+            <Alert className='border-amber-500/40 bg-amber-500/5'>
+              <AlertCircle className='text-amber-600' />
+              <AlertTitle>当前分组没有可用的生图模型</AlertTitle>
+              <AlertDescription>
+                {form.group === 'auto'
+                  ? '请检查后台 AutoGroups 是否包含生图模型所在分组、用户分组权限和模型计费配置。'
+                  : '请检查该分组的渠道模型、用户权限和模型计费配置。'}
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className='flex flex-wrap items-center justify-between gap-3 px-1'>
+            <div>
+              <div className='text-muted-foreground text-xs font-medium tracking-[0.28em]'>
+                生图工作台
               </div>
-              <div className='flex flex-wrap gap-2'>
-                <Button variant='outline' onClick={handleNewSession}>
-                  <RefreshCw data-icon='inline-start' />
-                  新建会话
-                </Button>
-                <Button
-                  render={
-                    <Link
-                      to='/usage-logs/$section'
-                      params={{ section: 'common' }}
-                    />
-                  }
-                >
-                  <Clock3 data-icon='inline-start' />
-                  查看日志
-                </Button>
-              </div>
+              <h1 className='text-foreground mt-2 text-2xl font-semibold tracking-tight'>
+                生成、编辑和管理图片
+              </h1>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                选择模型与参数，输入中文提示词即可开始创作。
+              </p>
             </div>
-
-            <div className='space-y-4'>
-              <ConversationBubble role='assistant' title='系统提示'>
-                <p>
-                  这里的图片生成和改图都会直接扣你自己的额度，扣费逻辑沿用现有计费链路。
-                </p>
-                <p>
-                  服务器只会临时保存图片，过一段时间会自动清理，避免占满磁盘空间。
-                </p>
-              </ConversationBubble>
-
-              <ConversationBubble role='user' title='我这次准备这样生成'>
-                <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-                  <InfoPill label='当前模式' value={form.mode === 'generate' ? '直接生图' : '基于旧图改图'} />
-                  <InfoPill label='当前模型' value={form.model || '未选择'} />
-                  <InfoPill label='当前分组' value={selectedGroup?.label || '未选择'} />
-                  <InfoPill label='当前会话' value={sessionId} />
-                </div>
-              </ConversationBubble>
-
-              <ConversationBubble role='assistant' title='操作建议'>
-                <p>
-                  如果你是第一次尝试，建议先用一句完整中文描述把主体、风格、镜头、光线和材质都说清楚。
-                </p>
-                <p>
-                  如果你想延续已有图片，请切到“改图模式”，选择历史图片作为来源，再补充你要保留和修改的部分。
-                </p>
-              </ConversationBubble>
+            <div className='flex flex-wrap gap-2'>
+              <Button variant='outline' onClick={handleNewSession}>
+                <RefreshCw data-icon='inline-start' />
+                新建会话
+              </Button>
+              <Button
+                render={
+                  <Link
+                    to='/usage-logs/$section'
+                    params={{ section: 'common' }}
+                  />
+                }
+              >
+                <Clock3 data-icon='inline-start' />
+                查看日志
+              </Button>
             </div>
           </div>
 
           <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]'>
-            <div className='rounded-[30px] border border-border bg-card p-5 shadow-sm'>
+            <div className='border-border bg-card rounded-[30px] border p-5 shadow-sm'>
               <div className='text-foreground flex items-center gap-2 text-base font-semibold'>
                 <Sparkles className='size-4' />
                 创作对话
@@ -501,7 +448,9 @@ export function ImageWorkspace() {
                   <Label>提示词</Label>
                   <Textarea
                     value={form.prompt}
-                    onChange={(event) => updateForm('prompt', event.target.value)}
+                    onChange={(event) =>
+                      updateForm('prompt', event.target.value)
+                    }
                     placeholder='例如：生成一张电影感的雨夜街头场景，主角撑着透明雨伞站在霓虹灯下，镜头低角度，反光地面细节丰富，整体偏青橙色调。'
                     className='min-h-40 rounded-3xl'
                   />
@@ -519,7 +468,9 @@ export function ImageWorkspace() {
                         label: item.label,
                       }))}
                       value={form.model}
-                      onValueChange={(value) => updateForm('model', value ?? '')}
+                      onValueChange={(value) =>
+                        updateForm('model', value ?? '')
+                      }
                     >
                       <SelectTrigger className='w-full rounded-2xl'>
                         <SelectValue placeholder='选择模型' />
@@ -544,7 +495,9 @@ export function ImageWorkspace() {
                         label: item.label,
                       }))}
                       value={form.group}
-                      onValueChange={(value) => updateForm('group', value ?? '')}
+                      onValueChange={(value) =>
+                        updateForm('group', value ?? '')
+                      }
                     >
                       <SelectTrigger className='w-full rounded-2xl'>
                         <SelectValue placeholder='选择分组' />
@@ -653,7 +606,7 @@ export function ImageWorkspace() {
                 </div>
 
                 {form.mode === 'edit' && (
-                  <div className='rounded-[28px] border border-border bg-muted/40 p-4'>
+                  <div className='border-border bg-muted/40 rounded-[28px] border p-4'>
                     <div className='flex items-center justify-between gap-3'>
                       <div>
                         <div className='text-foreground text-sm font-semibold'>
@@ -663,7 +616,9 @@ export function ImageWorkspace() {
                           先从历史图片中选一张作为改图基础，再输入你要继续调整的方向。
                         </div>
                       </div>
-                      <Badge variant='outline'>{readySourceItems.length} 张可选</Badge>
+                      <Badge variant='outline'>
+                        {readySourceItems.length} 张可选
+                      </Badge>
                     </div>
 
                     <div className='mt-4 space-y-3'>
@@ -676,13 +631,14 @@ export function ImageWorkspace() {
                           />
                           <div className='space-y-2'>
                             <div className='text-foreground line-clamp-3 text-sm leading-6'>
-                              {selectedSource.revised_prompt || selectedSource.prompt}
+                              {selectedSource.revised_prompt ||
+                                selectedSource.prompt}
                             </div>
                             <div className='text-muted-foreground text-xs'>
                               {selectedSource.model} ·{' '}
-                              {dayjs.unix(selectedSource.created_at).format(
-                                'MM-DD HH:mm'
-                              )}
+                              {dayjs
+                                .unix(selectedSource.created_at)
+                                .format('MM-DD HH:mm')}
                             </div>
                             <div className='flex flex-wrap gap-2'>
                               <Button
@@ -703,7 +659,7 @@ export function ImageWorkspace() {
                           </div>
                         </div>
                       ) : (
-                        <div className='text-sm text-muted-foreground'>
+                        <div className='text-muted-foreground text-sm'>
                           暂时没有可用来源图片。你可以先生成一张，再回来做改图。
                         </div>
                       )}
@@ -771,7 +727,7 @@ export function ImageWorkspace() {
               </div>
             </div>
 
-            <div className='rounded-[30px] border border-border bg-card p-5 shadow-sm'>
+            <div className='border-border bg-card rounded-[30px] border p-5 shadow-sm'>
               <div className='flex items-end justify-between gap-3'>
                 <div>
                   <div className='text-foreground flex items-center gap-2 text-base font-semibold'>
@@ -824,8 +780,14 @@ export function ImageWorkspace() {
               </Tabs>
 
               <div className='mt-5 grid gap-3'>
-                <InfoPill label='当前会话图片数' value={String(sessionItems.length)} />
-                <InfoPill label='最近历史图片数' value={String(recentItems.length)} />
+                <InfoPill
+                  label='当前会话图片数'
+                  value={String(sessionItems.length)}
+                />
+                <InfoPill
+                  label='最近历史图片数'
+                  value={String(recentItems.length)}
+                />
                 <InfoPill
                   label='当前浏览标签'
                   value={galleryTab === 'session' ? '当前会话' : '最近历史'}
@@ -885,7 +847,7 @@ function ImageGrid(props: {
         return (
           <div
             key={item.id}
-            className='rounded-[28px] border border-border bg-muted/40 p-4'
+            className='border-border bg-muted/40 rounded-[28px] border p-4'
           >
             <div className='flex gap-4'>
               {isReady ? (
@@ -918,12 +880,15 @@ function ImageGrid(props: {
                     <div className='text-muted-foreground mt-2 flex flex-wrap items-center gap-2 text-xs'>
                       <span>{item.model}</span>
                       <span>·</span>
-                      <span>{dayjs.unix(item.created_at).format('MM-DD HH:mm')}</span>
+                      <span>
+                        {dayjs.unix(item.created_at).format('MM-DD HH:mm')}
+                      </span>
                       {item.expires_at > 0 && !isExpired ? (
                         <>
                           <span>·</span>
                           <span>
-                            到期 {dayjs.unix(item.expires_at).format('MM-DD HH:mm')}
+                            到期{' '}
+                            {dayjs.unix(item.expires_at).format('MM-DD HH:mm')}
                           </span>
                         </>
                       ) : null}

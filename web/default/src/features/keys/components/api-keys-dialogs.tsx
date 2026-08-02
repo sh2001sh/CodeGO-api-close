@@ -48,7 +48,7 @@ export function ApiKeysDialogs() {
       />
       <ApiKeysDeleteDialog />
       <CCSwitchDialog
-        open={open === 'cc-switch'}
+        open={open === 'desktop-client'}
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
         tokenId={currentRow?.id ?? null}
       />

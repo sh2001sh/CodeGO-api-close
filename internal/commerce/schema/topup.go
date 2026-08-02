@@ -33,17 +33,19 @@ var (
 
 // TopUp is a commerce payment order.
 type TopUp struct {
-	Id              int     `json:"id"`
-	UserId          int     `json:"user_id" gorm:"index"`
-	Amount          int64   `json:"amount"`
-	Money           float64 `json:"money"`
-	TradeNo         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
-	PaymentProvider string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
-	WalletType      string  `json:"wallet_type" gorm:"type:varchar(32);default:'default';index"`
-	CreateTime      int64   `json:"create_time"`
-	CompleteTime    int64   `json:"complete_time"`
-	Status          string  `json:"status"`
+	Id                              int     `json:"id"`
+	UserId                          int     `json:"user_id" gorm:"index"`
+	Amount                          int64   `json:"amount"`
+	Money                           float64 `json:"money"`
+	TradeNo                         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod                   string  `json:"payment_method" gorm:"type:varchar(50)"`
+	PaymentProvider                 string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	WalletType                      string  `json:"wallet_type" gorm:"type:varchar(32);default:'default';index"`
+	FirstPurchaseDiscountApplied    bool    `json:"first_purchase_discount_applied" gorm:"not null;default:false;index"`
+	FirstPurchaseDiscountMultiplier float64 `json:"first_purchase_discount_multiplier" gorm:"type:decimal(8,4);not null;default:0"`
+	CreateTime                      int64   `json:"create_time"`
+	CompleteTime                    int64   `json:"complete_time"`
+	Status                          string  `json:"status"`
 }
 
 func NormalizeWalletType(walletType string) string {

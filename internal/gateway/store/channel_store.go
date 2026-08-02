@@ -57,6 +57,14 @@ func ListAllChannels(startIdx int, num int, selectAll bool, idSort bool, sortOpt
 	return channels, err
 }
 
+// ListAllChannelSummaries loads every channel without credentials for Root-only
+// configuration views that derive routing groups from channel assignments.
+func ListAllChannelSummaries() ([]*gatewayschema.Channel, error) {
+	var channels []*gatewayschema.Channel
+	err := applyChannelSort(platformdb.DB.Omit("key"), resolveChannelSortOptions(true, nil)).Find(&channels).Error
+	return channels, err
+}
+
 // SearchChannels searches channels for admin views.
 func SearchChannels(keyword string, group string, modelName string, idSort bool, sortOptions ...ChannelSortOptions) ([]*gatewayschema.Channel, error) {
 	var channels []*gatewayschema.Channel

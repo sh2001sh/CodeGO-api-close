@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import * as React from 'react'
 import * as z from 'zod'
-import { useForm, type Control, type FieldPath } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Code2, Eye, ShieldAlert } from 'lucide-react'
@@ -114,12 +114,6 @@ const paymentSchema = z.object({
       })
     }
   }),
-  SubscriptionBoosterEnabled: z.boolean(),
-  SubscriptionBoosterRate: z.coerce.number().gt(0).max(10),
-  SubscriptionBoosterMinQuota: z.coerce.number().int().positive(),
-  SubscriptionBoosterMaxQuota: z.coerce.number().int().positive(),
-  SubscriptionBoosterQuotaStep: z.coerce.number().int().positive(),
-  SubscriptionBoosterDailyLimit: z.coerce.number().int().min(0).max(1000),
   StripeApiSecret: z.string(),
   StripeWebhookSecret: z.string(),
   StripePriceId: z.string(),
@@ -146,39 +140,6 @@ const paymentSchema = z.object({
 })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
-type PaymentFormInput = z.input<typeof paymentSchema>
-
-function BoosterNumberField(props: {
-  control: Control<PaymentFormInput>
-  name: FieldPath<PaymentFormInput>
-  label: string
-  description: string
-  step: string
-  min?: number
-}) {
-  return (
-    <FormField
-      control={props.control}
-      name={props.name}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{props.label}</FormLabel>
-          <FormControl>
-            <Input
-              type='number'
-              step={props.step}
-              min={props.min ?? 0.01}
-              value={Number(field.value ?? 0)}
-              onChange={(event) => field.onChange(event.target.valueAsNumber)}
-            />
-          </FormControl>
-          <FormDescription>{props.description}</FormDescription>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  )
-}
 
 const CURRENT_COMPLIANCE_TERMS_VERSION = 'v1'
 
@@ -326,12 +287,6 @@ export function PaymentSettingsSection({
       PayMethods: values.PayMethods.trim(),
       AmountOptions: values.AmountOptions.trim(),
       AmountDiscount: values.AmountDiscount.trim(),
-      SubscriptionBoosterEnabled: values.SubscriptionBoosterEnabled,
-      SubscriptionBoosterRate: values.SubscriptionBoosterRate,
-      SubscriptionBoosterMinQuota: values.SubscriptionBoosterMinQuota,
-      SubscriptionBoosterMaxQuota: values.SubscriptionBoosterMaxQuota,
-      SubscriptionBoosterQuotaStep: values.SubscriptionBoosterQuotaStep,
-      SubscriptionBoosterDailyLimit: values.SubscriptionBoosterDailyLimit,
     }
 
     const initial = {
@@ -340,16 +295,6 @@ export function PaymentSettingsSection({
       PayMethods: initialRef.current.PayMethods.trim(),
       AmountOptions: initialRef.current.AmountOptions.trim(),
       AmountDiscount: initialRef.current.AmountDiscount.trim(),
-      SubscriptionBoosterEnabled: initialRef.current.SubscriptionBoosterEnabled,
-      SubscriptionBoosterRate: initialRef.current.SubscriptionBoosterRate,
-      SubscriptionBoosterMinQuota:
-        initialRef.current.SubscriptionBoosterMinQuota,
-      SubscriptionBoosterMaxQuota:
-        initialRef.current.SubscriptionBoosterMaxQuota,
-      SubscriptionBoosterQuotaStep:
-        initialRef.current.SubscriptionBoosterQuotaStep,
-      SubscriptionBoosterDailyLimit:
-        initialRef.current.SubscriptionBoosterDailyLimit,
     }
 
     const updates: Array<{ key: string; value: string | number }> = []
@@ -387,35 +332,6 @@ export function PaymentSettingsSection({
         key: 'payment_setting.amount_discount',
         value: sanitized.AmountDiscount,
       })
-    }
-
-    const boosterKeys = [
-      [
-        'SubscriptionBoosterEnabled',
-        'payment_setting.subscription_booster_enabled',
-      ],
-      ['SubscriptionBoosterRate', 'payment_setting.subscription_booster_rate'],
-      [
-        'SubscriptionBoosterMinQuota',
-        'payment_setting.subscription_booster_min_quota',
-      ],
-      [
-        'SubscriptionBoosterMaxQuota',
-        'payment_setting.subscription_booster_max_quota',
-      ],
-      [
-        'SubscriptionBoosterQuotaStep',
-        'payment_setting.subscription_booster_quota_step',
-      ],
-      [
-        'SubscriptionBoosterDailyLimit',
-        'payment_setting.subscription_booster_daily_limit',
-      ],
-    ] as const
-    for (const [field, key] of boosterKeys) {
-      if (sanitized[field] !== initial[field]) {
-        updates.push({ key, value: sanitized[field] as string | number })
-      }
     }
 
     if (updates.length === 0) {
@@ -1125,77 +1041,6 @@ export function PaymentSettingsSection({
                   </FormItem>
                 )}
               />
-            </div>
-
-            <div className='rounded-lg border p-4'>
-              <div className='mb-4 flex items-start justify-between gap-4'>
-                <div>
-                  <h4 className='font-medium'>
-                    {t('Monthly subscription booster')}
-                  </h4>
-                  <p className='text-muted-foreground mt-1 text-sm'>
-                    {t(
-                      'Users choose how much quota to add. Added quota expires with the current monthly subscription.'
-                    )}
-                  </p>
-                </div>
-                <FormField
-                  control={form.control}
-                  name='SubscriptionBoosterEnabled'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-                <BoosterNumberField
-                  control={form.control}
-                  name='SubscriptionBoosterRate'
-                  label={t('Booster rate')}
-                  description={t(
-                    'Amount due = added quota in USD × rate. Default: 0.12'
-                  )}
-                  step='0.01'
-                />
-                <BoosterNumberField
-                  control={form.control}
-                  name='SubscriptionBoosterMinQuota'
-                  label={t('Minimum booster quota')}
-                  description={t('Smallest quota users may add')}
-                  step='1'
-                />
-                <BoosterNumberField
-                  control={form.control}
-                  name='SubscriptionBoosterMaxQuota'
-                  label={t('Maximum booster quota')}
-                  description={t('Largest quota users may add per order')}
-                  step='1'
-                />
-                <BoosterNumberField
-                  control={form.control}
-                  name='SubscriptionBoosterQuotaStep'
-                  label={t('Booster quota step')}
-                  description={t('User input must be a multiple of this value')}
-                  step='1'
-                />
-                <BoosterNumberField
-                  control={form.control}
-                  name='SubscriptionBoosterDailyLimit'
-                  label={t('Daily purchase limit')}
-                  description={t(
-                    'Maximum booster orders per user per day; 0 means unlimited'
-                  )}
-                  step='1'
-                  min={0}
-                />
-              </div>
             </div>
 
             <Button

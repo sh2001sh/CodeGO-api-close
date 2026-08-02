@@ -24,9 +24,10 @@ import { cn } from '@/lib/utils'
 interface MarkdownProps {
   children: string
   className?: string
+  allowHtml?: boolean
 }
 
-export function Markdown({ children, className }: MarkdownProps) {
+export function Markdown(props: MarkdownProps) {
   return (
     <div
       className={cn(
@@ -44,12 +45,12 @@ export function Markdown({ children, className }: MarkdownProps) {
         'prose-img:rounded-lg prose-img:shadow-sm',
         '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
         '[overflow-wrap:anywhere] break-words',
-        className
+        props.className
       )}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={props.allowHtml === false ? undefined : [rehypeRaw]}
         components={{
           // 自定义组件渲染（可选）
           a: ({ node, ...props }) => (
@@ -57,7 +58,7 @@ export function Markdown({ children, className }: MarkdownProps) {
           ),
         }}
       >
-        {children}
+        {props.children}
       </ReactMarkdown>
     </div>
   )

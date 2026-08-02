@@ -76,7 +76,7 @@ export function BalanceWorkspace(props: {
               </div>
             ))}
             <div className='flex items-center gap-1.5'>
-              <span className='size-2 rounded-full bg-violet-500' />
+              <span className='size-2 rounded-full bg-info' />
               <span className='text-muted-foreground'>Claude</span>
               <span className='text-foreground font-medium tabular-nums'>
                 {props.claudeQuota}
@@ -217,7 +217,7 @@ export function PackageStatusCard(props: {
           </div>
         </div>
       ) : (
-        <div className='border-border text-muted-foreground rounded-[22px] border border-dashed bg-background/65 px-4 py-6 text-sm'>
+        <div className='border-border text-muted-foreground rounded-xl border border-dashed px-4 py-6 text-sm'>
           当前没有生效套餐。购买后这里会展示额度使用进度。
         </div>
       )}

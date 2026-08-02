@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/sh2001sh/new-api/constant"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	"strings"
@@ -24,10 +25,13 @@ var starterUpgradeBonuses = map[string]int{
 
 // SubscriptionPlanDTO is the public subscription plan payload returned to commerce clients.
 type SubscriptionPlanDTO struct {
-	Plan           commerceschema.SubscriptionPlan `json:"plan"`
-	Action         string                          `json:"action,omitempty"`
-	AmountDue      float64                         `json:"amount_due,omitempty"`
-	DisabledReason string                          `json:"disabled_reason,omitempty"`
+	Plan                            commerceschema.SubscriptionPlan `json:"plan"`
+	Action                          string                          `json:"action,omitempty"`
+	BaseAmountDue                   float64                         `json:"base_amount_due,omitempty"`
+	AmountDue                       float64                         `json:"amount_due,omitempty"`
+	DisabledReason                  string                          `json:"disabled_reason,omitempty"`
+	FirstPurchaseDiscountApplied    bool                            `json:"first_purchase_discount_applied,omitempty"`
+	FirstPurchaseDiscountMultiplier float64                         `json:"first_purchase_discount_multiplier,omitempty"`
 }
 
 // UpdateSubscriptionPreferenceRequest captures user billing and subscription ordering preferences.
@@ -64,8 +68,11 @@ func ListSubscriptionPlans(userID int) ([]SubscriptionPlanDTO, error) {
 			preview, err := ResolveSubscriptionPurchasePreview(userID, &plan)
 			if err == nil && preview != nil {
 				record.Action = preview.Action
+				record.BaseAmountDue = preview.BaseAmountDue
 				record.AmountDue = preview.AmountDue
 				record.DisabledReason = preview.DisabledReason
+				record.FirstPurchaseDiscountApplied = preview.FirstPurchaseDiscountApplied
+				record.FirstPurchaseDiscountMultiplier = preview.FirstPurchaseDiscountMultiplier
 			}
 		}
 		result = append(result, record)
@@ -96,17 +103,77 @@ func BuildSubscriptionOrderStatusPayload(userID int, tradeNo string) (map[string
 	if plan, planErr := GetSubscriptionPlanByID(order.PlanId); planErr == nil && plan != nil {
 		planTitle = plan.Title
 	}
-	return map[string]any{
-		"trade_no":         order.TradeNo,
-		"status":           order.Status,
-		"plan_id":          order.PlanId,
-		"plan_title":       planTitle,
-		"money":            order.Money,
-		"payment_method":   order.PaymentMethod,
-		"payment_provider": order.PaymentProvider,
-		"create_time":      order.CreateTime,
-		"complete_time":    order.CompleteTime,
-	}, nil
+	payload := map[string]any{
+		"trade_no":                           order.TradeNo,
+		"status":                             order.Status,
+		"plan_id":                            order.PlanId,
+		"plan_title":                         planTitle,
+		"money":                              order.Money,
+		"original_money":                     order.OriginalMoney,
+		"first_purchase_discount_applied":    order.FirstPurchaseDiscountApplied,
+		"first_purchase_discount_multiplier": order.FirstPurchaseDiscountMultiplier,
+		"payment_method":                     order.PaymentMethod,
+		"payment_provider":                   order.PaymentProvider,
+		"create_time":                        order.CreateTime,
+		"complete_time":                      order.CompleteTime,
+		"fulfillment_status":                 order.FulfillmentStatus,
+		"target_subscription_id":             order.TargetSubscriptionId,
+	}
+	if order.Status == constant.TopUpStatusSuccess && order.FulfillmentStatus == commerceschema.SubscriptionOrderFulfillmentCompleted {
+		if reveal := buildSubscriptionLuckyOrderReveal(userID, order.PlanId, order.TargetSubscriptionId); reveal != nil {
+			payload["lucky_number"] = reveal["lucky_number"]
+			if reveal["blind_box_benefit"] != nil {
+				payload["blind_box_benefit"] = reveal["blind_box_benefit"]
+			}
+		}
+	}
+	return payload, nil
+}
+
+// buildSubscriptionLuckyOrderReveal returns only the benefit fields needed by the
+// purchase confirmation UI. It intentionally avoids exposing another user's data
+// when an order is renewed or upgraded without a direct subscription FK.
+func buildSubscriptionLuckyOrderReveal(userID, planID, targetSubscriptionID int) map[string]any {
+	if userID <= 0 || planID <= 0 || platformdb.DB == nil {
+		return nil
+	}
+	var subscription commerceschema.UserSubscription
+	query := platformdb.DB.Where("user_id = ? AND plan_id = ?", userID, planID)
+	if targetSubscriptionID > 0 {
+		query = query.Where("id = ?", targetSubscriptionID)
+	}
+	if err := query.Order("start_time desc, id desc").First(&subscription).Error; err != nil {
+		return nil
+	}
+	var plan commerceschema.SubscriptionPlan
+	if err := platformdb.DB.Where("id = ?", planID).First(&plan).Error; err != nil {
+		return nil
+	}
+	result := map[string]any{}
+	if platformdb.DB.Migrator().HasTable(&commerceschema.SubscriptionLuckyNumber{}) {
+		var number commerceschema.SubscriptionLuckyNumber
+		if err := platformdb.DB.Where("user_subscription_id = ?", subscription.Id).First(&number).Error; err == nil {
+			result["lucky_number"] = map[string]any{
+				"card_code":       number.CardCode,
+				"lucky_suffix":    number.LuckySuffix,
+				"membership_tier": commercedomain.NormalizeSubscriptionMembershipTier(plan.MembershipTier),
+			}
+		}
+		if strings.TrimSpace(subscription.LuckyBenefitCycle) != "" && platformdb.DB.Migrator().HasTable(&commerceschema.SubscriptionBlindBoxBenefitCycle{}) {
+			var benefit commerceschema.SubscriptionBlindBoxBenefitCycle
+			if err := platformdb.DB.Where("user_subscription_id = ? AND benefit_cycle = ?", subscription.Id, subscription.LuckyBenefitCycle).First(&benefit).Error; err == nil {
+				result["blind_box_benefit"] = map[string]any{
+					"expected_count":  benefit.ExpectedCount,
+					"granted_count":   benefit.GrantedCount,
+					"membership_tier": benefit.MembershipTier,
+					"starts_at":       benefit.StartsAt,
+					"ends_at":         benefit.EndsAt,
+					"status":          benefit.Status,
+				}
+			}
+		}
+	}
+	return result
 }
 
 // BuildSubscriptionSelfPayload returns the user's subscription overview and preference state.

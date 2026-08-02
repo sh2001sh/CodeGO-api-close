@@ -119,45 +119,14 @@ func rebuildBalanceSnapshotTx(tx *gorm.DB, accountID string) error {
 		return err
 	}
 
-	var entries []billingschema.BillingLedgerEntry
-	if err := tx.Where("account_id = ?", accountID).Order("created_at asc, entry_id asc").Find(&entries).Error; err != nil {
-		return err
-	}
-	var settlements []billingschema.BillingSettlement
-	if err := tx.Joins("JOIN "+billingschema.BillingReservation{}.TableName()+" ON "+billingschema.BillingReservation{}.TableName()+".reservation_id = "+billingschema.BillingSettlement{}.TableName()+".reservation_id").
-		Where(billingschema.BillingReservation{}.TableName()+".account_id = ? AND "+billingschema.BillingSettlement{}.TableName()+".status = ?", accountID, billingschema.BillingSettlementStatusCompleted).
-		Find(&settlements).Error; err != nil {
-		return err
-	}
-	var openReserved int64
-	if err := tx.Model(&billingschema.BillingReservation{}).
-		Where("account_id = ? AND status = ?", accountID, billingschema.BillingReservationStatusOpen).
-		Select("COALESCE(SUM(reserved_amount), 0)").
-		Scan(&openReserved).Error; err != nil {
-		return err
-	}
 	var existing billingschema.BillingBalanceSnapshot
 	if err := tx.Where("account_id = ?", accountID).First(&existing).Error; err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
 
-	snapshot := billingschema.BillingBalanceSnapshot{AccountID: accountID, ReservedBalance: openReserved}
-	for _, entry := range entries {
-		switch entry.EntryType {
-		case "grant_credit":
-			snapshot.AvailableBalance += entry.Amount
-			snapshot.GrantedTotal += entry.Amount
-		case "reserve_hold", "settle_debit":
-			snapshot.AvailableBalance -= entry.Amount
-		case "reserve_release", "settle_credit":
-			snapshot.AvailableBalance += entry.Amount
-		}
-	}
-	for _, settlement := range settlements {
-		snapshot.ConsumedTotal += settlement.ActualAmount
-		if settlement.DeltaAmount < 0 {
-			snapshot.RefundedTotal += -settlement.DeltaAmount
-		}
+	snapshot, err := aggregateExpectedBalanceSnapshot(tx, accountID)
+	if err != nil {
+		return err
 	}
 	if snapshotDiffers(existing, snapshot) {
 		platformobservability.SysError(fmt.Sprintf(

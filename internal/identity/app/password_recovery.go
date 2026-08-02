@@ -10,6 +10,7 @@ import (
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformnotify "github.com/sh2001sh/new-api/internal/platform/notifyx"
 	platformvalidation "github.com/sh2001sh/new-api/internal/platform/validation"
+	"net/url"
 	"strings"
 )
 
@@ -65,12 +66,7 @@ func SendRegistrationVerification(email string) error {
 	code := GenerateVerificationCode(6)
 	RegisterVerificationCodeWithKey(email, code, EmailVerificationPurpose)
 	subject := fmt.Sprintf("%s邮箱验证邮件", platformconfig.SystemName)
-	content := fmt.Sprintf(
-		"<p>您好，你正在进行%s邮箱验证。</p><p>您的验证码为: <strong>%s</strong></p><p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>",
-		platformconfig.SystemName,
-		code,
-		VerificationValidMinutes,
-	)
+	content := renderRegistrationVerificationEmail(platformconfig.SystemName, code, VerificationValidMinutes)
 	return sendEmail(subject, email, content)
 }
 
@@ -85,15 +81,12 @@ func SendPasswordResetEmail(ctx context.Context, email string) error {
 
 	code := GenerateVerificationCode(0)
 	RegisterVerificationCodeWithKey(email, code, PasswordResetPurpose)
-	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", platformconfig.ServerAddress, email, code)
+	link := fmt.Sprintf("%s/user/reset?%s", strings.TrimRight(platformconfig.ServerAddress, "/"), url.Values{
+		"email": []string{email},
+		"token": []string{code},
+	}.Encode())
 	subject := fmt.Sprintf("%s密码重置", platformconfig.SystemName)
-	content := fmt.Sprintf(
-		"<p>您好，你正在进行%s密码重置。</p><p>点击 <a href='%s'>此处</a> 进行密码重置。</p><p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p><p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>",
-		platformconfig.SystemName,
-		link,
-		link,
-		VerificationValidMinutes,
-	)
+	content := renderPasswordResetEmail(platformconfig.SystemName, link, VerificationValidMinutes)
 	if err := sendEmail(subject, email, content); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("failed to send password reset email to %s: %s", email, err.Error()))
 	}

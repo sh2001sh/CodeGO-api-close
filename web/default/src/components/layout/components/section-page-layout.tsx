@@ -67,6 +67,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
   let actions: ReactNode = null
   let content: ReactNode = null
   let breadcrumb: ReactNode = null
+  const auxiliaryChildren: ReactNode[] = []
 
   Children.forEach(props.children, (node) => {
     if (!isValidElement(node)) return
@@ -80,44 +81,48 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
       content = child.props.children
     else if (child.type === SectionPageLayoutBreadcrumb)
       breadcrumb = child.props.children
+    else auxiliaryChildren.push(node)
   })
 
   return (
-    <PageFooterProvider container={footerContainer}>
-      <Main>
-        <div className='shrink-0 px-3 pt-3 pb-2.5 sm:px-5 sm:pt-5 sm:pb-3'>
-          {breadcrumb != null && (
-            <div className='mb-2 sm:mb-3'>{breadcrumb}</div>
-          )}
-          <div className='overview-hero-card flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-4 py-4 sm:px-5'>
-            <div className='min-w-0 max-w-3xl'>
-              <h2 className='text-balance text-lg font-semibold tracking-tight sm:text-xl'>
-                {title}
-              </h2>
-              {description != null && (
-                <p className='text-muted-foreground mt-1.5 text-sm leading-6'>
-                  {description}
-                </p>
+    <>
+      {auxiliaryChildren}
+      <PageFooterProvider container={footerContainer}>
+        <Main>
+          <div className='shrink-0 px-3 pt-3 pb-2.5 sm:px-5 sm:pt-5 sm:pb-3'>
+            {breadcrumb != null && (
+              <div className='mb-2 sm:mb-3'>{breadcrumb}</div>
+            )}
+            <div className='overview-hero-card flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-4 py-4 sm:px-5'>
+              <div className='max-w-3xl min-w-0'>
+                <h2 className='text-lg font-semibold tracking-tight text-balance sm:text-xl'>
+                  {title}
+                </h2>
+                {description != null && (
+                  <p className='text-muted-foreground mt-1.5 text-sm leading-6'>
+                    {description}
+                  </p>
+                )}
+              </div>
+              {actions != null && (
+                <div className='flex shrink-0 flex-wrap items-center gap-2 sm:gap-x-4'>
+                  {actions}
+                </div>
               )}
             </div>
-            {actions != null && (
-              <div className='flex shrink-0 flex-wrap items-center gap-2 sm:gap-x-4'>
-                {actions}
-              </div>
-            )}
           </div>
-        </div>
 
-        <div className='min-h-0 flex-1 overflow-auto px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-5'>
-          {content}
-        </div>
+          <div className='min-h-0 flex-1 overflow-auto px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-5'>
+            {content}
+          </div>
 
-        <div
-          ref={setFooterContainer}
-          className='bg-background shrink-0 border-t px-3 py-2.5 empty:hidden sm:px-5 sm:py-3'
-        />
-      </Main>
-    </PageFooterProvider>
+          <div
+            ref={setFooterContainer}
+            className='bg-background shrink-0 border-t px-3 py-2.5 empty:hidden sm:px-5 sm:py-3'
+          />
+        </Main>
+      </PageFooterProvider>
+    </>
   )
 }
 

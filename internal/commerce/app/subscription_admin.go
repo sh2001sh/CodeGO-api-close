@@ -64,13 +64,13 @@ func UpdateAdminSubscriptionPlan(planID int, req AdminUpsertSubscriptionPlanRequ
 			"creem_product_id":           req.Plan.CreemProductId,
 			"max_purchase_per_user":      req.Plan.MaxPurchasePerUser,
 			"plan_type":                  req.Plan.PlanType,
+			"membership_tier":            req.Plan.MembershipTier,
+			"lucky_draw_enabled":         req.Plan.LuckyDrawEnabled,
+			"blind_box_benefit_count":    req.Plan.BlindBoxBenefitCount,
 			"group_buy_enabled":          req.Plan.GroupBuyEnabled,
 			"group_buy_bonus2":           req.Plan.GroupBuyBonus2,
 			"group_buy_bonus3":           req.Plan.GroupBuyBonus3,
 			"group_buy_bonus5":           req.Plan.GroupBuyBonus5,
-			"renewal_bonus2":             req.Plan.RenewalBonus2,
-			"renewal_bonus3":             req.Plan.RenewalBonus3,
-			"renewal_bonus4":             req.Plan.RenewalBonus4,
 			"fuel_enabled":               req.Plan.FuelEnabled,
 			"fuel_unit_price":            req.Plan.FuelUnitPrice,
 			"fuel_min_quota":             req.Plan.FuelMinQuota,
@@ -221,6 +221,9 @@ func ResetSubscriptionPeriodProjection(subscriptionID int) (*commerceschema.User
 		}
 		if usesLegacySubscriptionPeriodicQuota(plan, sub) {
 			sub.AmountUsed = 0
+			if err := restoreSubscriptionLedgerBalanceAfterResetTx(tx, sub, fmt.Sprintf("period-projection:%d:%d", sub.Id, now)); err != nil {
+				return err
+			}
 		} else {
 			sub.PeriodUsed = 0
 		}

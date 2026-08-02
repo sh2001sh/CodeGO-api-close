@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { Loader2, Sparkles } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { SubscriptionResetOpportunitySummary } from '@/features/subscriptions/types'
 import { WalletStatItem } from './wallet-panel-primitives'
@@ -15,48 +16,77 @@ interface WalletResetOpportunityPanelProps {
 export function WalletResetOpportunityPanel(
   props: WalletResetOpportunityPanelProps
 ) {
+  const { t } = useTranslation()
+  const hasCurrentSubscription = Boolean(props.currentSubscriptionTitle)
+  const monthlyStatus = props.resetOpportunity.used_this_month
+    ? t('Used')
+    : !hasCurrentSubscription
+      ? t('No active plan')
+      : props.resetOpportunity.available_count <= 0
+        ? t('No opportunity available')
+        : t('Available')
+
   return (
     <div className='app-page-shell p-4'>
       <div className='flex items-start justify-between gap-3'>
         <div>
           <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
             <Sparkles className='text-warning h-4 w-4' />
-            额度重置机会
+            {t('Quota reset opportunity')}
           </div>
           <div className='text-muted-foreground mt-1 text-xs leading-5'>
-            邀请新用户首购月卡后获得，机会可长期保存。每个自然月最多使用 1 次。
+            {t(
+              'Earned when an invited new user purchases a monthly plan. Opportunities are saved and can be used once per calendar month.'
+            )}
           </div>
         </div>
         <div className='border-border bg-background/80 text-foreground rounded-full border px-3 py-1 text-xs font-semibold'>
-          可用 {props.resetOpportunity.available_count} 次
+          {t('{{count}} available', {
+            count: props.resetOpportunity.available_count,
+          })}
         </div>
       </div>
 
       <div className='mt-3 grid gap-2 sm:grid-cols-3'>
         <WalletStatItem
-          label='累计获得'
+          label={t('Total earned')}
           value={`${props.resetOpportunity.earned_total}`}
         />
         <WalletStatItem
-          label='累计使用'
+          label={t('Total used')}
           value={`${props.resetOpportunity.used_total}`}
         />
         <WalletStatItem
-          label='本月状态'
-          value={props.resetOpportunity.used_this_month ? '已使用' : '可使用'}
+          label={t('This month status')}
+          value={monthlyStatus}
         />
       </div>
 
       <div className='border-border/70 bg-background/72 text-muted-foreground mt-3 rounded-2xl border px-3 py-3 text-xs'>
         <div className='text-foreground font-medium'>
-          当前会作用于：{props.currentSubscriptionTitle || '暂无生效订阅'}
+          {t('Applies to: {{subscription}}', {
+            subscription:
+              props.currentSubscriptionTitle || t('No active subscription'),
+          })}
         </div>
         <div className='mt-1 leading-5'>
-          只清空当前排序第 1 个生效订阅的已用额度，不会延长到期时间，也不会修改订阅权益。
+          {t(
+            'Only clears used quota for the first active subscription in the billing order. It does not extend the expiry date or change subscription benefits.'
+          )}
         </div>
         {props.resetOpportunity.used_this_month ? (
           <div className='text-warning mt-2'>
-            本月已经使用过一次，请下个月再使用。
+            {t('Already used this month. Try again next month.')}
+          </div>
+        ) : !hasCurrentSubscription ? (
+          <div className='text-warning mt-2'>
+            {t('Purchase and activate a plan to use a reset opportunity.')}
+          </div>
+        ) : props.resetOpportunity.available_count <= 0 ? (
+          <div className='text-warning mt-2'>
+            {t(
+              'No reset opportunities are available. Invite a new user to purchase a monthly plan to earn one.'
+            )}
           </div>
         ) : null}
       </div>
@@ -65,19 +95,21 @@ export function WalletResetOpportunityPanel(
         <Button
           className='flex-1'
           onClick={props.onUseResetOpportunity}
-          disabled={!props.canUseResetOpportunity || props.usingResetOpportunity}
+          disabled={
+            !props.canUseResetOpportunity || props.usingResetOpportunity
+          }
         >
           {props.usingResetOpportunity ? (
             <Loader2 className='mr-1 h-4 w-4 animate-spin' />
           ) : null}
-          立即重置当前订阅额度
+          {t('Reset current subscription quota')}
         </Button>
         <Button
           variant='outline'
           className='flex-1'
           render={<Link to='/invite-rewards' />}
         >
-          查看刷新说明
+          {t('View reset details')}
         </Button>
       </div>
     </div>

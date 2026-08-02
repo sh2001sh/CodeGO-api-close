@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"github.com/sh2001sh/new-api/constant"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
@@ -9,6 +10,7 @@ import (
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"sort"
+	"strings"
 )
 
 type SelfProfileResponse struct {
@@ -104,13 +106,40 @@ func loadDisplayWalletQuotas(user *identityschema.User) (int, int, error) {
 
 // ListUserModels returns the authenticated user's deduplicated model catalog.
 func ListUserModels(userID int) ([]string, error) {
+	return ListUserModelsForGroup(userID, "")
+}
+
+// ListUserModelsForGroup returns the models routeable through one concrete
+// group or through the user's configured auto-group chain.
+func ListUserModelsForGroup(userID int, requestedGroup string) ([]string, error) {
 	user, err := LoadUserCacheSnapshot(userID)
 	if err != nil {
 		return nil, err
 	}
 
+	usableGroups := gatewayroutingapp.GetUserUsableGroups(user.Group)
+	groupNames := make([]string, 0, len(usableGroups))
+	requestedGroup = strings.TrimSpace(requestedGroup)
+	if requestedGroup == "" {
+		for groupName := range usableGroups {
+			if groupName != gatewayroutingapp.AutoGroupName {
+				groupNames = append(groupNames, groupName)
+			}
+		}
+	} else {
+		requestedGroup = gatewayroutingapp.NormalizeTokenGroup(requestedGroup)
+		if requestedGroup == gatewayroutingapp.AutoGroupName {
+			groupNames = gatewayroutingapp.GetUserAutoGroup(user.Group)
+		} else {
+			if _, ok := usableGroups[requestedGroup]; !ok {
+				return nil, fmt.Errorf("group %s is not available for current user", requestedGroup)
+			}
+			groupNames = append(groupNames, requestedGroup)
+		}
+	}
+
 	modelSet := make(map[string]struct{})
-	for groupName := range gatewayroutingapp.GetUserUsableGroups(user.Group) {
+	for _, groupName := range groupNames {
 		for _, modelName := range gatewayroutingapp.EnabledModelsForGroup(groupName) {
 			modelSet[modelName] = struct{}{}
 		}

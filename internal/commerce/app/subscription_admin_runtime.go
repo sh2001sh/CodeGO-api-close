@@ -231,6 +231,9 @@ func resetAdminUserSubscriptionQuotaRuntime(userSubscriptionID int, input adminR
 		sub.AmountUsed = 0
 		sub.PeriodUsed = 0
 		sub.ModelUsage = ""
+		if err := restoreSubscriptionLedgerBalanceAfterResetTx(tx, sub, fmt.Sprintf("admin:%d:%d", sub.Id, now)); err != nil {
+			return err
+		}
 		if commercedomain.NormalizeResetPeriod(plan.QuotaResetPeriod) == commerceschema.SubscriptionResetNever {
 			sub.LastResetTime = 0
 			sub.NextResetTime = 0

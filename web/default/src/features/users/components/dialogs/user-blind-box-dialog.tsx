@@ -6,6 +6,8 @@ import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Sheet,
   SheetContent,
@@ -21,33 +23,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { BlindBoxRecord, BlindBoxSelfData } from '@/features/wallet/types'
-import { getUserBlindBoxOverview } from '../../api'
+import { Textarea } from '@/components/ui/textarea'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import type { BlindBoxSelfData } from '@/features/wallet/types'
+import { getUserBlindBoxOverview, grantUserBlindBoxes } from '../../api'
 
 function formatTime(timestamp?: number): string {
   if (!timestamp) return '-'
   return new Date(timestamp * 1000).toLocaleString()
-}
-
-function formatRewardType(record: BlindBoxRecord) {
-  switch (record.reward_type) {
-    case 'subscription':
-      return '套餐'
-    case 'prop':
-      return record.prop_status === 'available'
-        ? '道具（待使用）'
-        : record.prop_status === 'active'
-          ? '道具（生效中）'
-          : record.prop_status === 'reserved'
-            ? '道具（已锁定）'
-            : record.prop_status === 'used'
-              ? '道具（已使用）'
-              : '道具'
-    case 'claude_quota':
-      return `${Number(record.reward_usd || 0).toFixed(2)} Claude 额度`
-    default:
-      return `${Number(record.reward_usd || 0).toFixed(2)} 美元额度`
-  }
 }
 
 interface Props {
@@ -60,6 +43,11 @@ export function UserBlindBoxDialog(props: Props) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<BlindBoxSelfData | null>(null)
+  const [grantQuantity, setGrantQuantity] = useState('1')
+  const [grantReason, setGrantReason] = useState('')
+  const [granting, setGranting] = useState(false)
+  const [grantConfirmOpen, setGrantConfirmOpen] = useState(false)
+  const [grantIdempotencyKey, setGrantIdempotencyKey] = useState('')
 
   const loadData = useCallback(async () => {
     if (!props.user?.id) return
@@ -83,6 +71,47 @@ export function UserBlindBoxDialog(props: Props) {
       void loadData()
     }
   }, [loadData, props.open])
+
+  const validateGrant = () => {
+    if (!props.user?.id) return
+    const quantity = Number(grantQuantity)
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) {
+      toast.error(t('Quantity must be between 1 and 1000'))
+      return false
+    }
+    setGrantIdempotencyKey(createIdempotencyKey())
+    setGrantConfirmOpen(true)
+    return true
+  }
+
+  const handleGrant = async () => {
+    if (!props.user?.id) return
+    const quantity = Number(grantQuantity)
+    const reason = grantReason.trim()
+
+    setGranting(true)
+    try {
+      const response = await grantUserBlindBoxes(props.user.id, {
+        quantity,
+        reason,
+        idempotency_key: grantIdempotencyKey || createIdempotencyKey(),
+      })
+      if (!response.success) {
+        toast.error(response.message || t('Grant blind boxes failed'))
+        return
+      }
+      toast.success(t('Blind boxes granted successfully'))
+      setGrantQuantity('1')
+      setGrantReason('')
+      setGrantIdempotencyKey('')
+      setGrantConfirmOpen(false)
+      await loadData()
+    } catch {
+      toast.error(t('Grant blind boxes failed'))
+    } finally {
+      setGranting(false)
+    }
+  }
 
   return (
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
@@ -114,6 +143,53 @@ export function UserBlindBoxDialog(props: Props) {
                 className={cn('mr-1 h-4 w-4', loading && 'animate-spin')}
               />
               {t('Refresh')}
+            </Button>
+          </div>
+
+          <div className='rounded-lg border p-4'>
+            <div className='text-sm font-medium'>{t('Grant blind boxes')}</div>
+            <div className='text-muted-foreground mt-1 text-sm'>
+              {t(
+                'Granted boxes do not charge the user. The user can open them from the blind box page.'
+              )}
+            </div>
+            <div className='mt-4 grid gap-4 sm:grid-cols-[140px_minmax(0,1fr)]'>
+              <div className='space-y-2'>
+                <Label htmlFor='blind-box-grant-quantity'>
+                  {t('Quantity')}
+                </Label>
+                <Input
+                  id='blind-box-grant-quantity'
+                  type='number'
+                  min={1}
+                  max={1000}
+                  step={1}
+                  value={grantQuantity}
+                  onChange={(event) => setGrantQuantity(event.target.value)}
+                  disabled={granting}
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='blind-box-grant-reason'>
+                  {t('Grant reason')}
+                </Label>
+                <Textarea
+                  id='blind-box-grant-reason'
+                  value={grantReason}
+                  onChange={(event) => setGrantReason(event.target.value)}
+                  placeholder={t('Example: campaign reward')}
+                  maxLength={255}
+                  className='min-h-9 resize-y'
+                  disabled={granting}
+                />
+              </div>
+            </div>
+            <Button
+              className='mt-4'
+              onClick={validateGrant}
+              disabled={granting}
+            >
+              {t('Grant blind boxes')}
             </Button>
           </div>
 
@@ -193,7 +269,11 @@ export function UserBlindBoxDialog(props: Props) {
                           </div>
                         </TableCell>
                         <TableCell>{record.reward_tier || '-'}</TableCell>
-                        <TableCell>{formatRewardType(record)}</TableCell>
+                        <TableCell>
+                          {record.reward_type === 'subscription'
+                            ? t('Subscription')
+                            : `${Number(record.reward_usd || 0).toFixed(2)} USD`}
+                        </TableCell>
                         <TableCell>{formatTime(record.create_time)}</TableCell>
                       </TableRow>
                     ))
@@ -203,6 +283,37 @@ export function UserBlindBoxDialog(props: Props) {
             </div>
 
             <div className='space-y-4'>
+              <div className='rounded-lg border p-4'>
+                <div className='text-sm font-medium'>{t('Grant history')}</div>
+                <div className='mt-3 space-y-3'>
+                  {(data?.grants || []).length === 0 ? (
+                    <div className='text-muted-foreground text-sm'>
+                      {t('No grant records yet')}
+                    </div>
+                  ) : (
+                    (data?.grants || []).map((grant) => (
+                      <div
+                        key={grant.id}
+                        className='border-border/60 border-b pb-3 last:border-0 last:pb-0'
+                      >
+                        <div className='flex items-center justify-between gap-3 text-sm'>
+                          <span className='font-medium'>
+                            {t('{{count}} blind boxes', {
+                              count: grant.quantity,
+                            })}
+                          </span>
+                          <span className='text-muted-foreground text-xs'>
+                            {formatTime(grant.created_at)}
+                          </span>
+                        </div>
+                        <div className='text-muted-foreground mt-1 text-xs'>
+                          {grant.reason}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
               <div className='rounded-lg border p-4'>
                 <div className='text-sm font-medium'>{t('Current rules')}</div>
                 <div className='text-muted-foreground mt-3 space-y-2 text-sm'>
@@ -256,8 +367,28 @@ export function UserBlindBoxDialog(props: Props) {
           </div>
         </div>
       </SheetContent>
+      <ConfirmDialog
+        open={grantConfirmOpen}
+        onOpenChange={setGrantConfirmOpen}
+        title={t('Confirm blind box grant')}
+        desc={t('Grant {{count}} blind boxes to {{user}}? Reason: {{reason}}', {
+          count: grantQuantity,
+          user: props.user?.username || props.user?.id || '-',
+          reason: grantReason.trim() || t('None'),
+        })}
+        confirmText={granting ? t('Granting...') : t('Confirm grant')}
+        isLoading={granting}
+        handleConfirm={() => void handleGrant()}
+      />
     </Sheet>
   )
+}
+
+function createIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random()}`
 }
 
 function MetricCard(props: { label: string; value: string }) {

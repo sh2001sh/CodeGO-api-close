@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	gatewayhttp "github.com/sh2001sh/new-api/internal/gateway/transport/http"
+	identityhttp "github.com/sh2001sh/new-api/internal/identity/transport/http"
 	"github.com/sh2001sh/new-api/internal/platform/transport/http/middleware"
 	workflowhttp "github.com/sh2001sh/new-api/internal/workflow/transport/http"
 	"github.com/sh2001sh/new-api/types"
@@ -79,6 +80,14 @@ func registerRelayPlaygroundRoutes(router *gin.Engine) {
 }
 
 func registerRelayCoreRoutes(router *gin.Engine) {
+	balanceRouter := router.Group("/v1/dashboard")
+	balanceRouter.Use(middleware.RouteTag("relay"))
+	balanceRouter.Use(middleware.SystemPerformanceCheck())
+	balanceRouter.Use(middleware.TokenAuth())
+	{
+		balanceRouter.GET("/balance", middleware.DisableCache(), identityhttp.GetTokenAccountBalance)
+	}
+
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(middleware.RouteTag("relay"))
 	relayV1Router.Use(middleware.SystemPerformanceCheck())

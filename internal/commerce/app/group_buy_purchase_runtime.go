@@ -24,7 +24,7 @@ func ValidateGroupBuyPurchase(userID int, planID int, purchaseType string, group
 	if err != nil {
 		return err
 	}
-	if !plan.GroupBuyEnabled {
+	if !supportsGroupBuyPlan(plan) {
 		return ErrGroupBuyPlanNotEnabled
 	}
 
@@ -62,7 +62,7 @@ func ApplyGroupBuyPurchaseAfterPaymentTx(tx *gorm.DB, order *commerceschema.Subs
 	if purchaseType == commerceschema.SubscriptionPurchaseTypeNormal {
 		return nil
 	}
-	if !plan.GroupBuyEnabled {
+	if !supportsGroupBuyPlan(plan) {
 		return ErrGroupBuyPlanNotEnabled
 	}
 
@@ -149,16 +149,10 @@ func settleGroupBuyOrder(groupBuyID int64) error {
 			return err
 		}
 
-		realCount := 0
-		for _, member := range members {
-			if member.OrderId != 0 || !member.BonusGranted {
-				realCount++
-			}
-		}
-
-		bonusUSD := bonusForGroupBuyCount(*plan, realCount)
+		memberCount := len(members)
+		bonusUSD := bonusForGroupBuyCount(*plan, memberCount)
 		status := commerceschema.GroupBuyStatusExpired
-		if realCount >= 2 {
+		if memberCount >= 2 {
 			status = commerceschema.GroupBuyStatusCompleted
 		}
 		if bonusUSD > 0 {
@@ -181,7 +175,7 @@ func settleGroupBuyOrder(groupBuyID int64) error {
 					}).Error; err != nil {
 					return err
 				}
-				if err := auditapp.RecordLogTx(tx, member.UserId, auditschema.LogTypeTopup, fmt.Sprintf("拼团奖励到账，已加入套餐额度，套餐: %s，奖励额度: $%.2f", plan.Title, bonusUSD)); err != nil {
+				if err := auditapp.RecordLogTx(tx, member.UserId, auditschema.LogTypeTopup, fmt.Sprintf("集享计划加成到账，已加入套餐额度，套餐: %s，加成额度: $%.2f", plan.Title, bonusUSD)); err != nil {
 					return err
 				}
 			}
@@ -194,6 +188,48 @@ func settleGroupBuyOrder(groupBuyID int64) error {
 				"updated_at": platformruntime.GetTimestamp(),
 			}).Error
 	})
+}
+
+// ReconcileGroupBuyBonus applies missing tier differences to real members only.
+func ReconcileGroupBuyBonus(groupBuyID int64) (int, error) {
+	adjusted := 0
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var order commerceschema.GroupBuyOrder
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").First(&order, groupBuyID).Error; err != nil {
+			return err
+		}
+		var members []commerceschema.GroupBuyMember
+		if err := tx.Where("group_buy_id = ?", groupBuyID).Find(&members).Error; err != nil {
+			return err
+		}
+		plan, err := getSubscriptionPlanRecordTx(tx, order.PlanId)
+		if err != nil {
+			return err
+		}
+		target := bonusForGroupBuyCount(*plan, len(members))
+		for _, member := range members {
+			if member.OrderId == 0 || target <= member.BonusAmountUSD {
+				continue
+			}
+			delta := target - member.BonusAmountUSD
+			sub, err := getGroupBuyMemberSubscriptionTx(tx, member, order.PlanId)
+			if err != nil {
+				return err
+			}
+			if err := addSubscriptionBonusTx(tx, sub, int64(quotaUnitsFromUSD(delta))); err != nil {
+				return err
+			}
+			if err := tx.Model(&commerceschema.GroupBuyMember{}).Where("id = ?", member.Id).Updates(map[string]any{"bonus_granted": true, "bonus_amount_usd": target}).Error; err != nil {
+				return err
+			}
+			if err := auditapp.RecordLogTx(tx, member.UserId, auditschema.LogTypeTopup, fmt.Sprintf("集享计划档位补差到账，套餐: %s，加成额度: $%.2f", plan.Title, delta)); err != nil {
+				return err
+			}
+			adjusted++
+		}
+		return nil
+	})
+	return adjusted, err
 }
 
 func getGroupBuyMemberSubscriptionTx(tx *gorm.DB, member commerceschema.GroupBuyMember, planID int) (*commerceschema.UserSubscription, error) {

@@ -43,22 +43,20 @@ const STATUS_CONFIG = {
   pending: {
     icon: <Loader2 className='size-5 animate-spin' />,
     title: '等待支付',
-    tone: 'border-amber-500/20 bg-amber-500/5',
+    tone: 'border-warning/20 bg-warning/5',
   },
   success: {
-    icon: <CheckCircle2 className='size-5 text-emerald-600' />,
+    icon: <CheckCircle2 className='size-5 text-success' />,
     title: '支付成功',
-    tone: 'border-emerald-500/20 bg-emerald-500/5',
+    tone: 'border-success/20 bg-success/5',
   },
   failed: {
-    icon: <XCircle className='size-5 text-rose-600' />,
+    icon: <XCircle className='size-5 text-destructive' />,
     title: '支付失败',
-    tone: 'border-rose-500/20 bg-rose-500/5',
+    tone: 'border-destructive/20 bg-destructive/5',
   },
   idle: {
-    icon: (
-      <CircleSlash className='size-5 text-slate-500 dark:text-muted-foreground' />
-    ),
+    icon: <CircleSlash className='size-5 text-muted-foreground' />,
     title: '待支付',
     tone: 'border-border/70 bg-background/50',
   },
@@ -122,7 +120,7 @@ export function BlindBoxPaymentDialog(props: {
           <div className='space-y-4 px-5 py-5'>
             <div className={cn('rounded-xl border p-4', statusConfig.tone)}>
               <div className='flex items-start gap-3'>
-                <div className='flex size-10 items-center justify-center rounded-full border bg-white/90 dark:border-border dark:bg-card/80'>
+                <div className='border-border bg-card flex size-10 items-center justify-center rounded-full border'>
                   {statusConfig.icon}
                 </div>
                 <div className='min-w-0 flex-1'>
@@ -192,7 +190,7 @@ function ExitConfirmPanel(props: {
 }) {
   return (
     <div className='space-y-4 px-5 py-5'>
-      <div className='rounded-xl border border-amber-500/20 bg-amber-500/5 p-4'>
+      <div className='border-warning/20 bg-warning/5 rounded-xl border p-4'>
         <div className='text-foreground text-sm font-semibold'>
           支付仍在处理中
         </div>

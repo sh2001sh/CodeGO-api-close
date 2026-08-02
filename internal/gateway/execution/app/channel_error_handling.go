@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
-	"strings"
 	"time"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -23,21 +22,18 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, platformtext.LocalLogPreview(err.Error())))
 
 	modelName := c.GetString("original_model")
-	if IsModelUnavailableError(err) && modelName != "" {
+	failureClass := classifyUpstreamFailure(err)
+	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
+	if modelScopedFailure && modelName != "" {
 		group := selectedChannelGroup(c)
 		alternative, lookupErr := gatewaystore.HasAlternativeEnabledAbility(channelError.ChannelId, group, modelName)
 		if lookupErr != nil {
 			platformobservability.SysError(fmt.Sprintf("检查通道「%s」（#%d）的模型 %s 备用路由失败：%v", channelError.ChannelName, channelError.ChannelId, modelName, lookupErr))
 		} else if alternative {
-			cooling := gatewayruntime.RecordChannelModelUnavailable(channelError.ChannelId, modelName, c.GetString(constant.RequestIdKey))
+			cooling := coolModelScopedUpstreamFailure(channelError.ChannelId, modelName, c.GetString(constant.RequestIdKey), err)
 			c.Set("model_unavailable_with_alternative", true)
-			if probeChannelID := SelectCoolingAlternativeProbe(channelError.ChannelId, group, modelName); probeChannelID > 0 {
-				c.Set("model_probe_channel_id", probeChannelID)
-				c.Set("model_probe_group", group)
-				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 出错，当前用户请求将优先复测冷却备用渠道 #%d", channelError.ChannelName, channelError.ChannelId, modelName, probeChannelID))
-			}
 			if cooling {
-				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 连续五次真实请求失败，已临时熔断并切换备用渠道", channelError.ChannelName, channelError.ChannelId, modelName))
+				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 上游不可用，已临时冷却该模型路由并切换备用渠道", channelError.ChannelName, channelError.ChannelId, modelName))
 			} else {
 				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 第 %d 次连续失败，保留试错空间", channelError.ChannelName, channelError.ChannelId, modelName, channelHealthFailureCount(channelError.ChannelId, modelName)))
 			}
@@ -49,8 +45,22 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
 	}
-	if isRetryableChannelFailure(err) && !IsModelUnavailableError(err) {
-		gatewayruntime.RecordChannelRetryableFailure(channelError.ChannelId, c.GetString("original_model"))
+	// A partial Responses stream must never be retried in the current request:
+	// clients may have already received output. It still needs model-level
+	// cooling so subsequent requests choose another healthy route.
+	if failureClass == upstreamFailureIncompleteStream {
+		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
+		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, modelName, gatewayruntime.IncompleteStreamCooldown())
+		if shouldRecordFaultDomainFailure(c) {
+			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), modelName, c.GetString(constant.RequestIdKey), gatewayruntime.IncompleteStreamCooldown())
+		}
+		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
+		cooldown := retryableFailureCooldown(c, err)
+		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, c.GetString("original_model"), cooldown)
+		if shouldRecordFaultDomainFailure(c) {
+			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), c.GetString(constant.RequestIdKey), cooldown)
+		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
 
@@ -68,6 +78,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["error_type"] = err.GetErrorType()
 		other["error_code"] = err.GetErrorCode()
 		other["status_code"] = err.StatusCode
+		other["upstream_failure_class"] = failureClass
 		other["channel_id"] = channelID
 		other["channel_name"] = c.GetString("channel_name")
 		other["channel_type"] = c.GetInt("channel_type")
@@ -81,6 +92,9 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.AppendChannelAffinityAdminInfo(c, adminInfo)
 		if decision, ok := gatewayruntime.GetRouteDecision(c); ok {
 			adminInfo["route_decision"] = decision
+		}
+		if circuit, ok := gatewayruntime.UserStreamFailureCircuitAuditFromContext(c); ok {
+			adminInfo["user_stream_failure_circuit"] = circuit
 		}
 		other["admin_info"] = adminInfo
 
@@ -105,6 +119,27 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	}
 }
 
+func retryableFailureCooldown(c *gin.Context, err *types.NewAPIError) time.Duration {
+	if gatewayruntime.IsLongContextRequest(c) && err != nil && err.GetErrorCode() == types.ErrorCodeChannelResponseTimeExceeded {
+		return gatewayruntime.LongContextTimeoutCooldown()
+	}
+	if err == nil {
+		return gatewayruntime.RetryableFailureCooldown(0)
+	}
+	return gatewayruntime.RetryableFailureCooldown(err.StatusCode)
+}
+
+func shouldRecordFaultDomainFailure(c *gin.Context) bool {
+	return !gatewayruntime.IsLongContextRequest(c)
+}
+
+func coolModelScopedUpstreamFailure(channelID int, modelName string, requestID string, err *types.NewAPIError) bool {
+	if IsModelUnavailableError(err) {
+		return gatewayruntime.RecordChannelModelUnavailable(channelID, modelName, requestID)
+	}
+	return gatewayruntime.CoolChannelModelForUpstreamFailure(channelID, modelName)
+}
+
 func channelHealthFailureCount(channelID int, modelName string) int {
 	state, found := gatewayruntime.GetChannelHealth(channelID, modelName)
 	if !found {
@@ -113,31 +148,10 @@ func channelHealthFailureCount(channelID int, modelName string) int {
 	return state.ConsecutiveRetryableFailures
 }
 
-// IsModelUnavailableError identifies an upstream rejection that applies to
-// the requested model rather than to the entire channel credential.
-func IsModelUnavailableError(err *types.NewAPIError) bool {
-	if err == nil {
-		return false
-	}
-	if err.GetErrorCode() == types.ErrorCodeModelNotFound {
-		return true
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "model") &&
-		(strings.Contains(message, "not found") || strings.Contains(message, "not exist") || strings.Contains(message, "not support") || strings.Contains(message, "unavailable"))
-}
-
 func selectedChannelGroup(c *gin.Context) string {
 	group := httpctx.GetContextKeyString(c, constant.ContextKeyAutoGroup)
 	if group != "" {
 		return group
 	}
 	return httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-}
-
-func isRetryableChannelFailure(err *types.NewAPIError) bool {
-	if err == nil || types.IsSkipRetryError(err) {
-		return false
-	}
-	return types.IsChannelError(err) || err.StatusCode == 429 || err.StatusCode >= 500
 }

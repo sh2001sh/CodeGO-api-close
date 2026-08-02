@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -16,6 +18,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformstore "github.com/sh2001sh/new-api/internal/platform/store"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type summary struct {
@@ -25,9 +28,22 @@ type summary struct {
 	SubscriptionAccounts int
 }
 
+type negativeWalletLegacyCandidate struct {
+	UserID      int
+	AccountID   string
+	LegacyQuota int64
+}
+
+type negativeWalletLegacySummary struct {
+	Candidates           []negativeWalletLegacyCandidate
+	TotalNormalizedQuota int64
+}
+
 func main() {
 	apply := flag.Bool("apply", false, "persist ledger accounts and bootstrap entries")
 	limit := flag.Int("limit", 0, "optional maximum subjects per account type")
+	normalizeNegativeWalletLegacy := flag.Bool("normalize-negative-wallet-legacy", false, "normalize strict negative legacy wallet quotas to the canonical zero ledger balance")
+	groupBuyID := flag.Int64("reconcile-group-buy-id", 0, "reconcile missing group-buy tier bonus for one group")
 	flag.Parse()
 
 	platformconfig.IsMasterNode = true
@@ -40,6 +56,34 @@ func main() {
 	defer platformstore.CloseDatabases()
 	if err := platformstore.ApplyV2Migrations(context.Background(), false); err != nil {
 		log.Fatalf("apply v2 migrations: %v", err)
+	}
+	if *groupBuyID > 0 {
+		if !*apply {
+			log.Fatal("reconcile-group-buy-id requires --apply")
+		}
+		adjusted, err := commerceapp.ReconcileGroupBuyBonus(*groupBuyID)
+		if err != nil {
+			log.Fatalf("reconcile group buy bonus: %v", err)
+		}
+		fmt.Printf("group-buy members adjusted: %d\n", adjusted)
+		return
+	}
+	if *normalizeNegativeWalletLegacy {
+		plan, err := inspectNegativeWalletLegacy(*limit)
+		if err != nil {
+			log.Fatalf("inspect negative legacy wallet quotas: %v", err)
+		}
+		fmt.Printf("negative legacy wallet quotas to normalize: %d\n", len(plan.Candidates))
+		fmt.Printf("total legacy quota to normalize: %d\n", plan.TotalNormalizedQuota)
+		if !*apply {
+			fmt.Println("dry-run only; rerun with --apply --normalize-negative-wallet-legacy to normalize matching legacy quotas")
+			return
+		}
+		if err := applyNegativeWalletLegacyNormalization(*limit); err != nil {
+			log.Fatalf("normalize negative legacy wallet quotas: %v", err)
+		}
+		fmt.Println("negative legacy wallet quota normalization completed")
+		return
 	}
 
 	plan, err := inspect(*limit)
@@ -58,6 +102,125 @@ func main() {
 		log.Fatalf("apply ledger backfill: %v", err)
 	}
 	fmt.Println("ledger backfill completed")
+}
+
+func inspectNegativeWalletLegacy(limit int) (negativeWalletLegacySummary, error) {
+	return inspectNegativeWalletLegacyTx(platformdb.DB, limit)
+}
+
+func inspectNegativeWalletLegacyTx(tx *gorm.DB, limit int) (negativeWalletLegacySummary, error) {
+	var result negativeWalletLegacySummary
+	if !tx.Migrator().HasTable(&identityschema.User{}) {
+		return result, nil
+	}
+	var users []identityschema.User
+	query := tx.Where("quota < ?", 0).Order("id asc")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if err := query.Find(&users).Error; err != nil {
+		return result, err
+	}
+	for _, user := range users {
+		candidate, found, err := strictNegativeWalletLegacyCandidate(tx, user, false)
+		if err != nil {
+			return result, err
+		}
+		if !found {
+			continue
+		}
+		result.Candidates = append(result.Candidates, candidate)
+		result.TotalNormalizedQuota += -candidate.LegacyQuota
+	}
+	return result, nil
+}
+
+func strictNegativeWalletLegacyCandidate(tx *gorm.DB, user identityschema.User, lockSnapshot bool) (negativeWalletLegacyCandidate, bool, error) {
+	if user.Quota >= 0 {
+		return negativeWalletLegacyCandidate{}, false, nil
+	}
+	var account billingschema.BillingAccount
+	err := tx.Where("owner_type = ? AND owner_id = ? AND account_type = ? AND quota_unit = ?", "user", user.Id, "wallet", "quota").First(&account).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return negativeWalletLegacyCandidate{}, false, nil
+	}
+	if err != nil {
+		return negativeWalletLegacyCandidate{}, false, err
+	}
+	var snapshot billingschema.BillingBalanceSnapshot
+	snapshotQuery := tx.Where("account_id = ?", account.AccountID)
+	if lockSnapshot {
+		snapshotQuery = snapshotQuery.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	err = snapshotQuery.First(&snapshot).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return negativeWalletLegacyCandidate{}, false, nil
+	}
+	if err != nil {
+		return negativeWalletLegacyCandidate{}, false, err
+	}
+	if snapshot.AvailableBalance != 0 || snapshot.ReservedBalance != 0 || snapshot.GrantedTotal != 0 || snapshot.ConsumedTotal != 0 || snapshot.RefundedTotal != 0 {
+		return negativeWalletLegacyCandidate{}, false, nil
+	}
+	var entryCount int64
+	if err := tx.Model(&billingschema.BillingLedgerEntry{}).Where("account_id = ?", account.AccountID).Count(&entryCount).Error; err != nil {
+		return negativeWalletLegacyCandidate{}, false, err
+	}
+	if entryCount != 0 {
+		return negativeWalletLegacyCandidate{}, false, nil
+	}
+	var openReservationCount int64
+	if err := tx.Model(&billingschema.BillingReservation{}).Where("account_id = ? AND status = ?", account.AccountID, billingschema.BillingReservationStatusOpen).Count(&openReservationCount).Error; err != nil {
+		return negativeWalletLegacyCandidate{}, false, err
+	}
+	if openReservationCount != 0 {
+		return negativeWalletLegacyCandidate{}, false, nil
+	}
+	return negativeWalletLegacyCandidate{UserID: user.Id, AccountID: account.AccountID, LegacyQuota: int64(user.Quota)}, true, nil
+}
+
+func applyNegativeWalletLegacyNormalization(limit int) error {
+	plan, err := inspectNegativeWalletLegacy(limit)
+	if err != nil {
+		return err
+	}
+	for _, candidate := range plan.Candidates {
+		if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+			var user identityschema.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND quota < ?", candidate.UserID, 0).First(&user).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				return err
+			}
+			current, found, err := strictNegativeWalletLegacyCandidate(tx, user, true)
+			if err != nil {
+				return err
+			}
+			if !found {
+				return nil
+			}
+			metadata, err := json.Marshal(map[string]any{
+				"migration":             "legacy_negative_wallet_normalization",
+				"previous_legacy_quota": current.LegacyQuota,
+				"canonical_balance":     0,
+			})
+			if err != nil {
+				return err
+			}
+			if _, err := billingdomain.RecordAdjustmentTx(tx, billingdomain.RecordAdjustmentParams{
+				AccountID: current.AccountID, IdempotencyKey: fmt.Sprintf("migration:legacy-negative-wallet-normalization:user:%d", current.UserID),
+				ReasonCode: "legacy_negative_quota_normalized", ReasonDetail: fmt.Sprintf("normalized legacy users.quota from %d to 0; ledger balance remains canonical at 0", current.LegacyQuota),
+				ReferenceType: "user", ReferenceID: fmt.Sprintf("%d", current.UserID), OperatorType: "migration", Metadata: metadata,
+			}); err != nil {
+				return err
+			}
+			return tx.Model(&identityschema.User{}).Where("id = ? AND quota = ?", current.UserID, current.LegacyQuota).Update("quota", 0).Error
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func inspect(limit int) (summary, error) {

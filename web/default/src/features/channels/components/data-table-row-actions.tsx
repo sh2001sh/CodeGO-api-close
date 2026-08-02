@@ -28,14 +28,16 @@ import {
   DollarSign,
   Download,
   Copy,
-  Power,
-  PowerOff,
   Key,
   Trash2,
   RefreshCw,
   Loader2,
+  RotateCcw,
+  Ban,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -51,13 +53,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { MODEL_FETCHABLE_TYPES } from '../constants'
+import { CHANNEL_STATUS, MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   channelsQueryKeys,
   handleDeleteChannel,
+  handleDisableChannel,
+  handleEnableChannel,
   handleTestChannel,
-  handleToggleChannelStatus,
-  isChannelEnabled,
   isMultiKeyChannel,
 } from '../lib'
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
@@ -74,11 +76,13 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow, upstream } = useChannels()
   const queryClient = useQueryClient()
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [disableConfirmOpen, setDisableConfirmOpen] = useState(false)
+  const [recoverConfirmOpen, setRecoverConfirmOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
-  const [isTogglingStatus, setIsTogglingStatus] = useState(false)
-
-  const isEnabled = isChannelEnabled(channel)
   const isMultiKey = isMultiKeyChannel(channel)
+  const isSuperAdmin = useAuthStore(
+    (state) => state.auth.user?.role === ROLE.SUPER_ADMIN
+  )
 
   const handleEdit = () => {
     setCurrentRow(channel)
@@ -127,18 +131,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     setOpen('multi-key-manage')
   }
 
-  const handleToggleStatus = async (
-    e?: React.MouseEvent<HTMLButtonElement>
-  ) => {
-    e?.stopPropagation()
-    setIsTogglingStatus(true)
-    try {
-      await handleToggleChannelStatus(channel.id, channel.status, queryClient)
-    } finally {
-      setIsTogglingStatus(false)
-    }
-  }
-
   return (
     <div className='flex items-center justify-end gap-1'>
       <Tooltip>
@@ -160,36 +152,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           )}
         </TooltipTrigger>
         <TooltipContent>{t('Test Connection')}</TooltipContent>
-      </Tooltip>
-
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant='ghost'
-              size='icon-sm'
-              onClick={handleToggleStatus}
-              disabled={isTogglingStatus}
-              aria-label={isEnabled ? t('Disable') : t('Enable')}
-              className={
-                isEnabled
-                  ? 'text-destructive hover:text-destructive'
-                  : 'text-emerald-600 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400'
-              }
-            />
-          }
-        >
-          {isTogglingStatus ? (
-            <Loader2 className='size-4 animate-spin' />
-          ) : isEnabled ? (
-            <PowerOff className='size-4' />
-          ) : (
-            <Power className='size-4' />
-          )}
-        </TooltipTrigger>
-        <TooltipContent>
-          {isEnabled ? t('Disable') : t('Enable')}
-        </TooltipContent>
       </Tooltip>
 
       <DropdownMenu>
@@ -274,6 +236,35 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
+          {isSuperAdmin && channel.status !== CHANNEL_STATUS.ENABLED && (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault()
+                setRecoverConfirmOpen(true)
+              }}
+            >
+              解除全局禁用
+              <DropdownMenuShortcut>
+                <RotateCcw size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+
+          {isSuperAdmin && channel.status === CHANNEL_STATUS.ENABLED && (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault()
+                setDisableConfirmOpen(true)
+              }}
+              className='text-destructive focus:text-destructive'
+            >
+              全局禁用
+              <DropdownMenuShortcut>
+                <Ban size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+
           <DropdownMenuSeparator />
 
           {/* Copy Channel */}
@@ -322,6 +313,29 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         handleConfirm={() => {
           handleDeleteChannel(channel.id, queryClient)
           setDeleteConfirmOpen(false)
+        }}
+      />
+      <ConfirmDialog
+        open={disableConfirmOpen}
+        onOpenChange={setDisableConfirmOpen}
+        title='全局禁用'
+        desc={`停止“${channel.name}”的所有新请求。该操作不会改变分组内自动路由开关或成本倍率。`}
+        confirmText='确认禁用'
+        destructive
+        handleConfirm={() => {
+          void handleDisableChannel(channel.id, queryClient)
+          setDisableConfirmOpen(false)
+        }}
+      />
+      <ConfirmDialog
+        open={recoverConfirmOpen}
+        onOpenChange={setRecoverConfirmOpen}
+        title='解除全局禁用'
+        desc={`恢复“${channel.name}”的全局渠道状态。该操作不会改变分组内自动路由开关或成本倍率。`}
+        confirmText='确认恢复'
+        handleConfirm={() => {
+          void handleEnableChannel(channel.id, queryClient)
+          setRecoverConfirmOpen(false)
         }}
       />
     </div>

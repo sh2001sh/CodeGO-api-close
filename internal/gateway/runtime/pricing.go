@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
@@ -12,6 +13,7 @@ import (
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformmath "github.com/sh2001sh/new-api/internal/platform/mathx"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -36,6 +38,12 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *RelayInfo) types.GroupRatioIn
 	groupRatioInfo := types.GroupRatioInfo{
 		GroupRatio:        1.0,
 		GroupSpecialRatio: -1,
+	}
+	if httpctx.GetContextKeyBool(ctx, constant.ContextKeyZeroHourActive) {
+		groupRatioInfo.GroupRatio = 0
+		groupRatioInfo.GroupSpecialRatio = 0
+		groupRatioInfo.HasSpecialRatio = true
+		return groupRatioInfo
 	}
 
 	autoGroup, exists := ctx.Get("auto_group")

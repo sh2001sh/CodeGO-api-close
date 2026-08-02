@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
+import { RELEASE_PAGE_URL } from './lib.ts'
 import type { DesktopRelease, DownloadCopy } from './types.ts'
 import { buildDownloadPageViewModel } from './view-model.ts'
 
@@ -97,13 +98,13 @@ describe('download page view model', () => {
       error: new Error('Desktop release channel unavailable'),
     })
 
-    assert.equal(viewModel.currentBuildLabel, 'Loading...')
+    assert.equal(viewModel.currentBuildLabel, null)
     assert.equal(viewModel.publishedAtLabel, '-')
-    assert.equal(viewModel.downloadCards[0]?.href, '/download')
-    assert.equal(viewModel.downloadCards[1]?.href, '/download')
-    assert.equal(viewModel.downloadCards[2]?.href, '/download')
-    assert.equal(viewModel.downloadCards[3]?.href, '/download')
-    assert.equal(viewModel.recommendedCard?.key, 'windows')
+    assert.equal(viewModel.downloadCards[0]?.href, RELEASE_PAGE_URL)
+    assert.equal(viewModel.downloadCards[1]?.href, RELEASE_PAGE_URL)
+    assert.equal(viewModel.downloadCards[2]?.href, RELEASE_PAGE_URL)
+    assert.equal(viewModel.downloadCards[3]?.href, RELEASE_PAGE_URL)
+    assert.equal(viewModel.recommendedCard, null)
     assert.equal(viewModel.recommendedTrack?.key, 'windows')
     assert.equal(viewModel.errorMessage, 'Desktop release channel unavailable')
     assert.equal(viewModel.isLoading, true)

@@ -4,6 +4,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
@@ -132,6 +133,59 @@ func TestGetUserModelsReturnsSortedDeduplicatedModels(t *testing.T) {
 	}
 }
 
+func TestGetUserModelsFiltersByAutoGroupChain(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+
+	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
+	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()
+	t.Cleanup(func() {
+		_ = gatewaygroups.UpdateAutoGroupsByJsonString(originalAutoGroups)
+		_ = gatewaygroups.UpdateUserUsableGroupsByJSONString(originalUsableGroups)
+	})
+	if err := gatewaygroups.UpdateAutoGroupsByJsonString(`["default","claude"]`); err != nil {
+		t.Fatalf("failed to configure auto groups: %v", err)
+	}
+	if err := gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"default":"默认","claude":"Claude","archive":"归档"}`); err != nil {
+		t.Fatalf("failed to configure usable groups: %v", err)
+	}
+
+	user := &identityschema.User{Id: 1, Username: "auto-models-user", Password: "password123", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default"}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	for _, ability := range []gatewayschema.Ability{
+		{Group: "default", Model: "gpt-5", ChannelId: 1, Enabled: true},
+		{Group: "claude", Model: "claude-sonnet-4-5", ChannelId: 2, Enabled: true},
+		{Group: "archive", Model: "legacy-model", ChannelId: 3, Enabled: true},
+	} {
+		record := ability
+		if err := db.Create(&record).Error; err != nil {
+			t.Fatalf("failed to seed ability: %v", err)
+		}
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, "GET", "/api/user/models?group=auto", nil, user.Id)
+	GetUserModels(ctx)
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected success response, got message: %s", response.Message)
+	}
+
+	var models []string
+	if err := platformencoding.Unmarshal(response.Data, &models); err != nil {
+		t.Fatalf("failed to decode user models: %v", err)
+	}
+	expected := []string{"claude-sonnet-4-5", "gpt-5"}
+	if len(models) != len(expected) {
+		t.Fatalf("expected auto models %v, got %v", expected, models)
+	}
+	for index := range expected {
+		if models[index] != expected[index] {
+			t.Fatalf("expected auto models %v, got %v", expected, models)
+		}
+	}
+}
+
 func TestGetUserAffiliateCodeCreatesAndPersistsCode(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
 
@@ -168,9 +222,9 @@ func TestGetUserAffiliateCodeCreatesAndPersistsCode(t *testing.T) {
 func TestGetUserAffiliateRewardsOverviewReturnsInviteeStatuses(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
 
-	inviter := &identityschema.User{Id: 1, Username: "inviter-user", Password: "password123", DisplayName: "Inviter User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default"}
-	inviteeOne := &identityschema.User{Id: 2, Username: "invitee-1", Password: "password123", DisplayName: "Invitee One", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", AffCode: "INV1", InviterId: inviter.Id}
-	inviteeTwo := &identityschema.User{Id: 3, Username: "invitee-2", Password: "password123", DisplayName: "Invitee Two", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", AffCode: "INV2", InviterId: inviter.Id}
+	inviter := &identityschema.User{Id: 1, ExternalId: "INV001", Username: "inviter-user", Password: "password123", DisplayName: "Inviter User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default"}
+	inviteeOne := &identityschema.User{Id: 2, ExternalId: "ITE001", Username: "invitee-1", Password: "password123", DisplayName: "Invitee One", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", AffCode: "INV1", InviterId: inviter.Id}
+	inviteeTwo := &identityschema.User{Id: 3, ExternalId: "ITE002", Username: "invitee-2", Password: "password123", DisplayName: "Invitee Two", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", AffCode: "INV2", InviterId: inviter.Id}
 	for _, user := range []*identityschema.User{inviter, inviteeOne, inviteeTwo} {
 		if err := db.Create(user).Error; err != nil {
 			t.Fatalf("failed to seed user: %v", err)
@@ -225,6 +279,9 @@ func TestGetUserAffiliateRewardsOverviewReturnsInviteeStatuses(t *testing.T) {
 	}
 	if inviteeStatus, ok := statusByInvitee[inviteeOne.Id]; !ok || !inviteeStatus.MonthCardPurchased || !inviteeStatus.ResetOpportunityEarned {
 		t.Fatalf("expected first invitee to be marked as rewarded, got %#v", inviteeStatus)
+	}
+	if inviteeStatus, ok := statusByInvitee[inviteeOne.Id]; !ok || inviteeStatus.InviteeExternalId != inviteeOne.ExternalId {
+		t.Fatalf("expected invitee public ID, got %#v", inviteeStatus)
 	}
 	if inviteeStatus, ok := statusByInvitee[inviteeTwo.Id]; !ok || inviteeStatus.MonthCardPurchased || inviteeStatus.ResetOpportunityEarned {
 		t.Fatalf("expected second invitee to be unrewarded, got %#v", inviteeStatus)

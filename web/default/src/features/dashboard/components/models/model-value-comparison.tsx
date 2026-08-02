@@ -2,16 +2,25 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
 import { getPricing } from '@/features/pricing/api'
 import type { PricingModel } from '@/features/pricing/types'
 
 type Scene = 'coding' | 'chat' | 'long' | 'reasoning' | 'image' | 'video'
-type ViewMode = 'map' | 'table'
 const MIN_SAMPLES = 20
+
+function getSceneLabel(scene: Scene, t: (key: string) => string): string {
+  const labels: Record<Scene, string> = {
+    coding: t('Coding assistant'),
+    chat: t('General chat'),
+    long: t('Long context'),
+    reasoning: t('Reasoning'),
+    image: t('Image'),
+    video: t('Video'),
+  }
+  return labels[scene]
+}
 
 function sceneMatches(model: PricingModel, scene: Scene): boolean {
   const text = `${model.model_name} ${model.tags ?? ''}`.toLowerCase()
@@ -34,7 +43,6 @@ function standardCost(model: PricingModel): number {
 export function ModelValueComparison() {
   const { t } = useTranslation()
   const [scene, setScene] = useState<Scene>('coding')
-  const [view, setView] = useState<ViewMode>('map')
   const pricing = useQuery({
     queryKey: ['pricing', 'model-value'],
     queryFn: getPricing,
@@ -112,15 +120,6 @@ export function ModelValueComparison() {
             <option value='image'>{t('Image')}</option>
             <option value='video'>{t('Video')}</option>
           </select>
-          <Tabs
-            value={view}
-            onValueChange={(value) => setView(value as ViewMode)}
-          >
-            <TabsList>
-              <TabsTrigger value='map'>{t('Map')}</TabsTrigger>
-              <TabsTrigger value='table'>{t('Table')}</TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
       </header>
       {loading ? (
@@ -131,7 +130,7 @@ export function ModelValueComparison() {
         <div className='text-muted-foreground px-5 py-14 text-center text-sm'>
           {t('No comparable model data is available for this scenario.')}
         </div>
-      ) : view === 'table' ? (
+      ) : (
         <div className='overflow-x-auto'>
           <table className='w-full min-w-[720px] text-sm'>
             <thead className='bg-muted/40 text-muted-foreground text-xs'>
@@ -154,7 +153,10 @@ export function ModelValueComparison() {
             <tbody className='divide-y'>
               {rows.map((row, index) => (
                 <tr key={row.model.model_name}>
-                  <td className='px-4 py-3 font-mono text-xs'>
+                  <td
+                    className='max-w-72 truncate px-4 py-3 font-mono text-xs'
+                    title={row.model.model_name}
+                  >
                     {row.model.model_name}
                   </td>
                   <td className='px-4 py-3 tabular-nums'>
@@ -184,43 +186,6 @@ export function ModelValueComparison() {
             </tbody>
           </table>
         </div>
-      ) : (
-        <div className='bg-muted/20 relative h-72 overflow-hidden p-5'>
-          <div className='text-muted-foreground absolute top-3 left-3 text-[11px]'>
-            {t('Faster response')} ↑
-          </div>
-          <div className='text-muted-foreground absolute right-4 bottom-3 text-[11px]'>
-            {t('Lower cost')} →
-          </div>
-          {rows.slice(0, 4).map((row) => {
-            const maxCost = Math.max(...rows.map((item) => item.cost))
-            const maxLatency = Math.max(
-              ...rows.map((item) => item.latency || 1)
-            )
-            const left = 12 + (1 - row.cost / maxCost) * 70
-            const top = 15 + (row.latency / maxLatency) * 62
-            return (
-              <Button
-                key={row.model.model_name}
-                variant='outline'
-                className='absolute h-auto max-w-44 rounded-full px-3 py-2 shadow-sm'
-                style={{
-                  left: `${left}%`,
-                  top: `${top}%`,
-                  transform: 'translate(-50%,-50%)',
-                }}
-                title={`${row.samples} ${t('samples')}`}
-              >
-                <span
-                  className={`mr-2 size-2 rounded-full ${row.success >= 99 ? 'bg-success' : row.success >= 95 ? 'bg-warning' : 'bg-destructive'}`}
-                />
-                <span className='truncate font-mono text-[11px]'>
-                  {row.model.model_name}
-                </span>
-              </Button>
-            )
-          })}
-        </div>
       )}
       <footer className='border-t px-4 py-3 text-xs sm:px-5'>
         <span className='font-medium'>{t('Conclusion')}：</span>
@@ -229,7 +194,7 @@ export function ModelValueComparison() {
               '{{model}} currently offers the strongest cost-performance balance for {{scene}} based on {{samples}} samples.',
               {
                 model: rows[0].model.model_name,
-                scene: t(scene),
+                scene: getSceneLabel(scene, t),
                 samples: rows[0].samples,
               }
             )

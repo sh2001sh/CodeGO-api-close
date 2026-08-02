@@ -25,6 +25,10 @@ var SyncFrequency int
 var BatchUpdateInterval int
 
 var RelayTimeout int
+
+// RelayResponseHeaderTimeout bounds outbound connection, TLS, and response-header waits
+// without limiting a stream after the upstream has started responding.
+var RelayResponseHeaderTimeout int
 var RelayMaxIdleConns int
 var RelayMaxIdleConnsPerHost int
 var TrustedProxies []string

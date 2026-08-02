@@ -1,14 +1,16 @@
 package app
 
 import (
+	"errors"
 	"fmt"
-	"github.com/sh2001sh/new-api/constant"
+
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
-	"math"
 	"strings"
 	"time"
 
@@ -63,31 +65,6 @@ func starterUpgradeBonusUSD(plan *commerceschema.SubscriptionPlan) float64 {
 	}
 }
 
-func renewalBonusRate(plan *commerceschema.SubscriptionPlan, renewalIndex int) float64 {
-	if plan == nil || renewalIndex < 2 {
-		return 0
-	}
-	switch renewalIndex {
-	case 2:
-		return plan.RenewalBonus2
-	case 3:
-		return plan.RenewalBonus3
-	default:
-		return plan.RenewalBonus4
-	}
-}
-
-func countCompletedSubscriptionOrdersTx(tx *gorm.DB, userID int, planID int) (int, error) {
-	if tx == nil || userID <= 0 || planID <= 0 {
-		return 0, nil
-	}
-	var count int64
-	err := tx.Model(&commerceschema.SubscriptionOrder{}).
-		Where("user_id = ? AND plan_id = ? AND status = ?", userID, planID, constant.TopUpStatusSuccess).
-		Count(&count).Error
-	return int(count), err
-}
-
 func quotaUnitsToUSD(amount int64) float64 {
 	if amount <= 0 || platformruntime.QuotaPerUnit <= 0 {
 		return 0
@@ -103,15 +80,45 @@ func addSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, b
 	if sub.PeriodAmount > 0 {
 		sub.PeriodAmount += bonusQuota
 	}
-	return tx.Model(&commerceschema.UserSubscription{}).Where("id = ?", sub.Id).
+	if err := tx.Model(&commerceschema.UserSubscription{}).Where("id = ?", sub.Id).
 		Updates(map[string]any{
 			"amount_total":  sub.AmountTotal,
 			"period_amount": sub.PeriodAmount,
 			"updated_at":    platformruntime.GetTimestamp(),
-		}).Error
+		}).Error; err != nil {
+		return err
+	}
+	return creditMaterializedSubscriptionBonusTx(tx, sub, bonusQuota)
 }
 
-// ApplySubscriptionPurchaseBonusTx applies starter-upgrade and renewal bonuses to a purchased subscription.
+// creditMaterializedSubscriptionBonusTx mirrors a subscription bonus into an
+// existing ledger account. New subscriptions remain unmaterialized until first
+// use, at which point their full updated quota is bootstrapped once.
+func creditMaterializedSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, bonusQuota int64) error {
+	var account billingschema.BillingAccount
+	err := tx.Where("account_type = ? AND owner_type = ? AND owner_id = ?", "subscription", "user_subscription", sub.Id).
+		First(&account).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+		AccountID:      account.AccountID,
+		Amount:         bonusQuota,
+		IdempotencyKey: fmt.Sprintf("subscription-bonus:%d:%d:%d", sub.Id, sub.AmountTotal, bonusQuota),
+		ReasonCode:     "subscription_bonus",
+		ReferenceType:  "user_subscription",
+		ReferenceID:    fmt.Sprintf("%d", sub.Id),
+		OperatorType:   "commerce",
+		OperatorID:     "subscription_bonus",
+	})
+	return err
+}
+
+// ApplySubscriptionPurchaseBonusTx applies the starter-to-monthly upgrade bonus.
 func ApplySubscriptionPurchaseBonusTx(tx *gorm.DB, userID int, sub *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, preview *commercedomain.SubscriptionPurchasePreview) error {
 	if tx == nil || sub == nil || plan == nil || preview == nil {
 		return nil
@@ -127,17 +134,6 @@ func ApplySubscriptionPurchaseBonusTx(tx *gorm.DB, userID int, sub *commercesche
 		if eligible {
 			totalBonusUSD += starterUpgradeBonusUSD(plan)
 		}
-		if preview.Action == commerceschema.SubscriptionPurchaseActionRenew {
-			completedCount, err := countCompletedSubscriptionOrdersTx(tx, userID, plan.Id)
-			if err != nil {
-				return err
-			}
-			renewalIndex := completedCount + 1
-			rate := renewalBonusRate(plan, renewalIndex)
-			if rate > 0 && plan.TotalAmount > 0 {
-				totalBonusUSD += math.Round(quotaUnitsToUSD(plan.TotalAmount)*rate*100) / 100
-			}
-		}
 	}
 
 	if totalBonusUSD <= 0 {
@@ -147,5 +143,5 @@ func ApplySubscriptionPurchaseBonusTx(tx *gorm.DB, userID int, sub *commercesche
 	if err := addSubscriptionBonusTx(tx, sub, bonusQuota); err != nil {
 		return err
 	}
-	return auditapp.RecordLogTx(tx, userID, auditschema.LogTypeTopup, fmt.Sprintf("套餐奖励到账，套餐: %s，奖励额度: $%.2f", plan.Title, totalBonusUSD))
+	return auditapp.RecordLogTx(tx, userID, auditschema.LogTypeTopup, fmt.Sprintf("套餐升级奖励到账，套餐: %s，奖励额度: $%.2f", plan.Title, totalBonusUSD))
 }

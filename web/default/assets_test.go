@@ -10,7 +10,7 @@ import (
 	platformhttp "github.com/sh2001sh/new-api/internal/platform/transport/http"
 )
 
-func TestThemeAssetsServeStaticFilesAndPublicPages(t *testing.T) {
+func TestThemeAssetsServeStaticFilesAndReactPublicRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	platformhttp.RegisterControlRuntimeRoutes(engine, ThemeAssets(DefaultIndexPage()))
@@ -23,8 +23,10 @@ func TestThemeAssetsServeStaticFilesAndPublicPages(t *testing.T) {
 		wantTarget string
 	}{
 		{path: "/code-go-logo.svg", wantStatus: http.StatusOK, wantType: "image/svg+xml"},
-		{path: "/pricing", wantStatus: http.StatusOK, wantType: "text/html", wantBody: "Public SEO Page"},
-		{path: "/pricing/", wantStatus: http.StatusPermanentRedirect, wantTarget: "/pricing"},
+		{path: "/pricing", wantStatus: http.StatusOK, wantType: "text/html", wantBody: "id=\"root\""},
+		{path: "/pricing/", wantStatus: http.StatusOK, wantType: "text/html", wantBody: "id=\"root\""},
+		{path: "/download", wantStatus: http.StatusOK, wantType: "text/html", wantBody: "id=\"root\""},
+		{path: "/guide", wantStatus: http.StatusOK, wantType: "text/html", wantBody: "id=\"root\""},
 	}
 
 	for _, test := range tests {

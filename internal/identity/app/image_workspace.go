@@ -38,9 +38,10 @@ type ImageWorkspaceItemsPage struct {
 	Total int64                        `json:"total"`
 }
 
-// ListImageWorkspaceModels returns image-generation models available to the current user.
-func ListImageWorkspaceModels(userID int) ([]string, error) {
-	models, err := ListUserModels(userID)
+// ListImageWorkspaceModels returns image-generation models available to the
+// current user through the requested concrete or automatic group.
+func ListImageWorkspaceModels(userID int, group string) ([]string, error) {
+	models, err := ListUserModelsForGroup(userID, group)
 	if err != nil {
 		return nil, err
 	}

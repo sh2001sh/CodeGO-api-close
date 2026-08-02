@@ -53,6 +53,8 @@ export function CCSwitchDialog(props: Props) {
     DESKTOP_IMPORT_APP_CONFIGS.claude.defaultName
   )
   const [models, setModels] = useState<Record<string, string>>({})
+  const [target, setTarget] = useState<'codego' | 'ccswitch'>('codego')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { data: modelsData } = useQuery({
     queryKey: ['user-models-ccswitch'],
@@ -74,6 +76,8 @@ export function CCSwitchDialog(props: Props) {
       setApp('claude')
 
       setName(DESKTOP_IMPORT_APP_CONFIGS.claude.defaultName)
+
+      setTarget('codego')
     }
   }, [props.open])
 
@@ -86,21 +90,17 @@ export function CCSwitchDialog(props: Props) {
     setModels({})
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (target: 'codego' | 'ccswitch') => {
+    setIsSubmitting(true)
     const result = await submitDesktopImportRequest(
-      {
-        app,
-        tokenId: props.tokenId,
-        name,
-        models,
-      },
+      { app, tokenId: props.tokenId, name, models, target },
       {
         createDesktopImportLink,
         openDesktopImportDeepLink,
         t,
         windowLike: window,
       }
-    )
+    ).finally(() => setIsSubmitting(false))
 
     if (result.tone === 'warning') {
       toast.warning(result.message)
@@ -121,10 +121,58 @@ export function CCSwitchDialog(props: Props) {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className='sm:max-w-md'>
         <DialogHeader>
-          <DialogTitle>{t('Import to Code Go Desktop')}</DialogTitle>
+          <DialogTitle>{t('Configure Desktop Client')}</DialogTitle>
         </DialogHeader>
 
         <div className='space-y-4'>
+          <div className='space-y-2'>
+            <Label>{t('Desktop Client')}</Label>
+            <RadioGroup
+              value={target}
+              onValueChange={(value) =>
+                setTarget(value as 'codego' | 'ccswitch')
+              }
+              className='grid grid-cols-1 gap-3 sm:grid-cols-2'
+            >
+              <Label
+                htmlFor='desktop-target-codego'
+                className='border-input bg-background has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 flex cursor-pointer items-start gap-3 rounded-md border p-3'
+              >
+                <RadioGroupItem
+                  value='codego'
+                  id='desktop-target-codego'
+                  className='mt-0.5'
+                />
+                <span className='space-y-1'>
+                  <span className='block text-sm font-medium'>
+                    CodeGo Desktop
+                  </span>
+                  <span className='text-muted-foreground block text-xs leading-5 font-normal'>
+                    {t(
+                      'Use the CodeGo protocol and apply the selected tool configuration'
+                    )}
+                  </span>
+                </span>
+              </Label>
+              <Label
+                htmlFor='desktop-target-ccswitch'
+                className='border-input bg-background has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 flex cursor-pointer items-start gap-3 rounded-md border p-3'
+              >
+                <RadioGroupItem
+                  value='ccswitch'
+                  id='desktop-target-ccswitch'
+                  className='mt-0.5'
+                />
+                <span className='space-y-1'>
+                  <span className='block text-sm font-medium'>CC Switch</span>
+                  <span className='text-muted-foreground block text-xs leading-5 font-normal'>
+                    {t('Use the CC Switch protocol and import a provider')}
+                  </span>
+                </span>
+              </Label>
+            </RadioGroup>
+          </div>
+
           <div className='space-y-2'>
             <Label>{t('Application')}</Label>
             <RadioGroup
@@ -190,7 +238,16 @@ export function CCSwitchDialog(props: Props) {
           <Button variant='outline' onClick={() => props.onOpenChange(false)}>
             {t('Cancel')}
           </Button>
-          <Button onClick={handleSubmit}>{t('Open Code Go Desktop')}</Button>
+          <Button
+            disabled={isSubmitting}
+            onClick={() => void handleSubmit(target)}
+          >
+            {isSubmitting
+              ? t('Generating configuration...')
+              : target === 'codego'
+                ? t('Open Code Go Desktop')
+                : t('Import to CC Switch')}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

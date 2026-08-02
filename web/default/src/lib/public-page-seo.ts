@@ -29,18 +29,18 @@ export const publicPageSeoEntries: PublicPageSeoEntry[] = [
     path: '/pricing',
     title: 'Code Go 模型广场 | 免费模型、价格对比与 Codex / Claude 选择',
     description:
-      'Code Go 模型广场集中展示免费模型、Codex、Claude、GPT 与多供应商价格结构，方便你按分组、标签、额度和输出成本快速筛选，找到适合长期 AI Coding 的模型入口。',
+      'Code Go 模型广场集中展示免费模型、Codex、Claude、GPT 与多供应商价格结构，方便你按分组、标签、额度和输出成本快速筛选，找到适合长期 AI 编程的模型入口。',
     keywords:
       'Code Go 模型广场,免费模型,价格对比,Codex,Claude,GPT,AI API 价格,模型筛选',
     h1: 'Code Go 模型广场与价格总览',
-    eyebrow: 'Models Directory',
+    eyebrow: '模型目录',
     intro:
       '这个页面把当前可用模型、免费模型、价格维度和筛选方式放在同一处。你可以先看免费模型能否承担前置任务，再决定什么时候切到 Claude、GPT 或更适合代码工作的模型。',
     sections: [
       {
         heading: '先按任务类型筛，而不是先按模型名筛',
         paragraphs: [
-          '真正高频使用 AI Coding 的开发者，往往不是一开始就锁定某个模型，而是先判断当前任务更偏向信息整理、轻量改写、复杂推理，还是长上下文代码协作。模型广场的价值，就是把这些判断动作提前做掉。',
+          '真正高频使用 AI 编程的开发者，往往不是一开始就锁定某个模型，而是先判断当前任务更偏向信息整理、轻量改写、复杂推理，还是长上下文代码协作。模型广场的价值，就是把这些判断动作提前做掉。',
           '在 Code Go 里，你可以从供应商、分组、标签、额度类型和价格维度一起看，避免在多个页面之间来回切换，再决定是否从免费模型切到更高阶模型。',
         ],
       },
@@ -62,13 +62,13 @@ export const publicPageSeoEntries: PublicPageSeoEntry[] = [
   },
   {
     path: '/guide',
-    title: 'Code Go 使用说明 | API Key、套餐、盲盒与配置指南',
+    title: 'Code Go 使用说明 | API 密钥、套餐、盲盒与配置指南',
     description:
-      'Code Go 使用说明覆盖账号注册、API Key 创建、Codex 配置脚本、套餐购买、盲盒活动、钱包策略和宠物图鉴，帮助你把站点入口真正接入长期 AI Coding 工作流。',
+      'Code Go 使用说明覆盖账号注册、API 密钥创建、Codex 配置脚本、套餐购买、盲盒活动、钱包策略和宠物图鉴，帮助你把站点入口真正接入长期 AI 编程工作流。',
     keywords:
-      'Code Go 使用说明,API Key,配置指南,Codex 脚本,套餐,盲盒,钱包,宠物图鉴',
+      'Code Go 使用说明,API 密钥,配置指南,Codex 脚本,套餐,盲盒,钱包,宠物图鉴',
     h1: 'Code Go 使用说明与配置路径',
-    eyebrow: 'Guide',
+    eyebrow: '使用指南',
     intro:
       '这不是只讲一个按钮怎么点的说明页，而是把注册、登录、API Key、脚本下载、套餐、盲盒、钱包和宠物体系串成一条完整路径，让新用户可以顺着站点结构真正开始使用。',
     sections: [
@@ -97,11 +97,11 @@ export const publicPageSeoEntries: PublicPageSeoEntry[] = [
   },
   {
     path: '/faq',
-    title: 'Code Go 常见问题 | Codex、Claude Code 与 AI Coding FAQ',
+    title: 'Code Go 常见问题 | Codex、Claude Code 与 AI 编程问答',
     description:
-      'Code Go 常见问题页面解释平台定位、Codex 与 Claude Code 适用场景、长期 AI Coding 积累方式，以及模型入口、套餐、记录和工作流之间的关系。',
+      'Code Go 常见问题页面解释平台定位、Codex 与 Claude Code 适用场景、长期 AI 编程积累方式，以及模型入口、套餐、记录和工作流之间的关系。',
     keywords:
-      'Code Go FAQ,常见问题,Codex,Claude Code,AI Coding,长期工作流,模型入口',
+      'Code Go 常见问题,常见问题,Codex,Claude Code,AI 编程,长期工作流,模型入口',
     h1: 'Code Go 常见问题与核心说明',
     eyebrow: 'FAQ',
     intro:
@@ -132,15 +132,15 @@ export const publicPageSeoEntries: PublicPageSeoEntry[] = [
   },
   {
     path: '/about',
-    title: '关于 Code Go | 长期 AI Coding、品牌定位与产品理念',
+    title: '关于 Code Go | 长期 AI 编程、品牌定位与产品理念',
     description:
-      '关于 Code Go 页面说明平台为什么强调长期 AI Coding、持续记录和多模型工作流，也介绍品牌定位、售后支持和面向 Codex、Claude Code 用户的核心产品理念。',
+      '关于 Code Go 页面说明平台为什么强调长期 AI 编程、持续记录和多模型工作流，也介绍品牌定位、售后支持和面向 Codex、Claude Code 用户的核心产品理念。',
     keywords:
-      '关于 Code Go,品牌定位,AI Coding,长期使用,产品理念,Codex,Claude Code',
-    h1: '关于 Code Go 与长期 AI Coding 的产品理念',
-    eyebrow: 'About',
+      '关于 Code Go,品牌定位,AI 编程,长期使用,产品理念,Codex,Claude Code',
+    h1: '关于 Code Go 与长期 AI 编程的产品理念',
+    eyebrow: '关于我们',
     intro:
-      'About 页的目标不是一句空泛品牌文案，而是解释 Code Go 为什么存在、适合什么样的开发者，以及为什么它把“长期使用感”和“持续积累”放在公开表达最前面。',
+      '关于页的目标不是一句空泛品牌文案，而是解释 Code Go 为什么存在、适合什么样的开发者，以及为什么它把“长期使用感”和“持续积累”放在公开表达最前面。',
     sections: [
       {
         heading: 'Code Go 不是只解决一次调用',
@@ -152,15 +152,15 @@ export const publicPageSeoEntries: PublicPageSeoEntry[] = [
       {
         heading: '公开页需要承接品牌理解和支持入口',
         paragraphs: [
-          'About 页同时承担两种职责：一是向搜索引擎和新用户解释品牌定位，二是向已经进入站点的用户展示售后支持和进一步阅读路径。',
-          '这也是为什么 About 页不能只是一个很短的标题或空白容器，而需要在 HTML 初始输出里就具备完整文本。',
+          '关于页同时承担两种职责：一是向搜索引擎和新用户解释品牌定位，二是向已经进入站点的用户展示售后支持和进一步阅读路径。',
+          '这也是为什么关于页不能只是一个很短的标题或空白容器，而需要在 HTML 初始输出里就具备完整文本。',
         ],
       },
       {
         heading: '品牌表达要和实际页面结构一致',
         paragraphs: [
-          '如果首页、教程页、模型页和 FAQ 页都围绕长期 AI Coding 展开，那么 About 页也必须与这条主线保持一致，而不是变成泛化介绍。',
-          '这次调整会让 About 页在不同加载分支下都保留统一 H1 和完整元信息，避免被 Bing 判成薄内容页或缺少主体结构。',
+          '如果首页、教程页、模型页和常见问题页都围绕长期 AI 编程展开，那么关于页也必须与这条主线保持一致，而不是变成泛化介绍。',
+          '这次调整会让关于页在不同加载分支下都保留统一 H1 和完整元信息，避免被 Bing 判成内容过少或缺少主体结构的页面。',
         ],
       },
     ],
@@ -173,7 +173,7 @@ export const publicPageSeoEntries: PublicPageSeoEntry[] = [
     keywords:
       'Code Go Desktop 下载,Windows,macOS,Linux,Codex,Claude Code,Gemini CLI,OpenCode',
     h1: 'Code Go Desktop 下载与安装说明',
-    eyebrow: 'Download',
+    eyebrow: '桌面端下载',
     intro:
       '下载页不仅要提供平台安装包，也要解释桌面端在浏览器授权、Token 导入和本地工具配置中的作用。对从搜索直接进入的用户来说，这页应该能直接回答“下载后怎么接上 Code Go”。',
     sections: [
@@ -205,10 +205,9 @@ export const publicPageSeoEntries: PublicPageSeoEntry[] = [
     title: 'Code Go 隐私政策 | 账号、调用记录与数据处理说明',
     description:
       'Code Go 隐私政策说明账号信息、调用记录、支付订单、偏好配置和必要风控数据的处理方式，并解释数据保留、安全措施、第三方服务和用户可申请的隐私权利。',
-    keywords:
-      'Code Go 隐私政策,账号信息,调用记录,数据处理,支付订单,用户隐私',
+    keywords: 'Code Go 隐私政策,账号信息,调用记录,数据处理,支付订单,用户隐私',
     h1: 'Code Go 隐私政策与数据处理说明',
-    eyebrow: 'Privacy Policy',
+    eyebrow: '隐私政策',
     intro:
       '隐私政策页需要在公开抓取时就清楚说明站点会收集哪些数据、为什么收集、如何保留和如何保护。否则搜索引擎很容易把它判定为只有极少内容的模板页。',
     sections: [
@@ -240,10 +239,9 @@ export const publicPageSeoEntries: PublicPageSeoEntry[] = [
     title: 'Code Go 用户协议 | 额度、套餐、模型调用与使用规则',
     description:
       'Code Go 用户协议说明账号安全、额度和套餐规则、模型调用使用边界、盲盒和活动机制、中断与变更说明，以及用户在站点内使用服务时应遵守的责任与限制。',
-    keywords:
-      'Code Go 用户协议,额度规则,套餐规则,模型调用,账号安全,使用规范',
+    keywords: 'Code Go 用户协议,额度规则,套餐规则,模型调用,账号安全,使用规范',
     h1: 'Code Go 用户协议与使用规则说明',
-    eyebrow: 'User Agreement',
+    eyebrow: '用户协议',
     intro:
       '用户协议页不仅是法律文本，也是解释站点使用边界的重要公开页面。它需要明确账号安全、额度规则、模型调用、活动机制和服务变更说明，避免只有很短的通用描述。',
     sections: [

@@ -53,6 +53,7 @@ type DesktopImportConfigPayload struct {
 }
 
 type DesktopImportCreateRequest struct {
+	Target      string `json:"target"`
 	Tool        string `json:"tool"`
 	TokenID     int    `json:"token_id"`
 	Name        string `json:"name"`
@@ -377,8 +378,15 @@ func BuildDesktopImportConfig(tool string, token *identityschema.Token, req Desk
 	return payload, nil
 }
 
-// BuildDesktopImportConfigDeepLink creates a one-time desktop import deeplink.
+// BuildDesktopImportConfigDeepLink creates a target-specific desktop import link.
 func BuildDesktopImportConfigDeepLink(userID int, req DesktopImportCreateRequest) (*DesktopImportCreateResponse, error) {
+	target := strings.ToLower(strings.TrimSpace(req.Target))
+	if target == "" {
+		target = "codego"
+	}
+	if target != "codego" && target != "ccswitch" {
+		return nil, errors.New("unsupported desktop target")
+	}
 	tool := NormalizeDesktopTool(req.Tool)
 	if tool == "" {
 		return nil, errors.New("unsupported tool")
@@ -399,17 +407,11 @@ func BuildDesktopImportConfigDeepLink(userID int, req DesktopImportCreateRequest
 	if err != nil {
 		return nil, err
 	}
-
-	code := platformruntime.GetRandomString(32)
-	if code == "" {
-		return nil, errors.New("failed to generate import code")
-	}
-	if err = getDesktopImportCache().SetWithTTL(code, *payload, desktopImportCodeTTL); err != nil {
-		return nil, err
+	if target == "ccswitch" {
+		payload.Notes = "Imported from CodeGo website"
 	}
 
 	serverAddress := NormalizeDesktopServerAddress("")
-	configURL := serverAddress + "/api/desktop/import/config?code=" + url.QueryEscape(code)
 	params := url.Values{}
 	params.Set("resource", "provider")
 	params.Set("app", tool)
@@ -418,10 +420,29 @@ func BuildDesktopImportConfigDeepLink(userID int, req DesktopImportCreateRequest
 	params.Set("homepage", payload.Homepage)
 	params.Set("enabled", strconv.FormatBool(payload.Enabled))
 	params.Set("icon", payload.Icon)
-	params.Set("tokenId", strconv.Itoa(req.TokenID))
-	params.Set("codegoAction", "applyToolConfig")
-	params.Set("configUrl", configURL)
-	params.Set("configFormat", payload.ConfigFormat)
+	code := ""
+	configURL := ""
+	expiresIn := int64(0)
+	if target == "codego" {
+		code = platformruntime.GetRandomString(32)
+		if code == "" {
+			return nil, errors.New("failed to generate import code")
+		}
+		if err = getDesktopImportCache().SetWithTTL(code, *payload, desktopImportCodeTTL); err != nil {
+			return nil, err
+		}
+		configURL = serverAddress + "/api/desktop/import/config?code=" + url.QueryEscape(code)
+		expiresIn = int64(desktopImportCodeTTL / time.Second)
+		params.Set("codegoAction", "applyToolConfig")
+		params.Set("configUrl", configURL)
+		params.Set("configFormat", payload.ConfigFormat)
+		params.Set("tokenId", strconv.Itoa(req.TokenID))
+	} else {
+		params.Set("apiKey", payload.APIKey)
+		params.Set("usageEnabled", "true")
+		params.Set("usageScript", platformtext.EncodeBase64(ccSwitchBalanceUsageScript))
+		params.Set("usageAutoInterval", "10")
+	}
 	if payload.Model != "" {
 		params.Set("model", payload.Model)
 	}
@@ -438,16 +459,51 @@ func BuildDesktopImportConfigDeepLink(userID int, req DesktopImportCreateRequest
 		params.Set("notes", payload.Notes)
 	}
 
+	protocol := "codego"
+	if target == "ccswitch" {
+		protocol = "ccswitch"
+	}
 	return &DesktopImportCreateResponse{
 		Code:      code,
-		DeepLink:  "codego://v1/import?" + params.Encode(),
+		DeepLink:  protocol + "://v1/import?" + params.Encode(),
 		ConfigURL: configURL,
-		ExpiresIn: int64(desktopImportCodeTTL / time.Second),
+		ExpiresIn: expiresIn,
 		Tool:      tool,
 		TokenName: token.Name,
 		Provider:  payload.Name,
 	}, nil
 }
+
+const ccSwitchBalanceUsageScript = `({
+  request: {
+    url: "{{baseUrl}}/dashboard/balance",
+    method: "GET",
+    headers: {
+      "Authorization": "Bearer {{apiKey}}"
+    }
+  },
+  extractor: function(response) {
+    if (!response.success || !response.data) {
+      return {
+        isValid: false,
+        invalidMessage: response.message || "Balance query failed"
+      };
+    }
+    var balance = response.data;
+    var subscriptionText = (balance.subscriptions || []).map(function(item) {
+      return item.name + ": $" + Number(item.remaining_usd || 0).toFixed(2);
+    }).join(" | ");
+    return {
+      isValid: true,
+      planName: balance.subscription_available_usd > 0 ? "Code Go wallet + plans" : "Code Go wallet",
+      remaining: Number(balance.available_usd || 0),
+      total: Number(balance.account_available_usd || 0),
+      used: 0,
+      unit: balance.currency || "USD",
+      extra: subscriptionText
+    };
+  }
+})`
 
 // ResolveDesktopImportConfig resolves and consumes a one-time desktop import code.
 func ResolveDesktopImportConfig(code string) (*DesktopImportConfigPayload, error) {

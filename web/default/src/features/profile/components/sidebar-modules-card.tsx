@@ -57,12 +57,17 @@ export function SidebarModulesCard() {
     {
       key: 'chat',
       title: t('Chat Area'),
-      description: t('Playground and chat functions'),
+      description: t('Chat and image generation workspaces'),
       modules: [
         {
           key: 'playground',
-          title: t('Playground'),
-          description: t('AI model testing environment'),
+          title: t('AI chat'),
+          description: t('Chat with available models in real time.'),
+        },
+        {
+          key: 'images',
+          title: t('Image workspace'),
+          description: t('Generate, edit, and manage images with AI models.'),
         },
         {
           key: 'chat',

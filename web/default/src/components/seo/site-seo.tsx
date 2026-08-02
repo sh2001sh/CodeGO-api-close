@@ -10,7 +10,8 @@ type SiteSeoProps = {
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>
 }
 
-const SITE_NAME = 'Code Go'
+const SITE_NAME = 'CodeGo'
+const SITE_ALTERNATE_NAME = 'Code Go'
 const SITE_ORIGIN = 'https://shu26.cfd'
 const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/code-go-logo.svg`
 
@@ -36,7 +37,8 @@ function ensureLink(selector: string, rel: string) {
 
 export function SiteSeo(props: SiteSeoProps) {
   useEffect(() => {
-    const fullTitle = props.title.includes(SITE_NAME)
+    const fullTitle =
+      props.title.includes(SITE_NAME) || props.title.includes(SITE_ALTERNATE_NAME)
       ? props.title
       : `${props.title} | ${SITE_NAME}`
     const canonicalUrl = `${SITE_ORIGIN}${props.canonicalPath || ''}`
@@ -48,7 +50,7 @@ export function SiteSeo(props: SiteSeoProps) {
       props.description
     ensureMeta('meta[name="keywords"]', 'name', 'keywords').content =
       props.keywords ||
-      'Code Go, AI Coding, Codex, Claude Code, AI API, OpenAI compatible API, Claude API, Gemini API'
+      'CodeGo, Code Go, AI Coding, Codex, Claude Code, AI API, OpenAI compatible API, Claude API, Gemini API'
     ensureMeta('meta[name="robots"]', 'name', 'robots').content =
       props.robots || 'index,follow'
     ensureMeta('meta[property="og:title"]', 'property', 'og:title').content =

@@ -128,22 +128,37 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		if chunk == nil {
 			return true
 		}
-		if info.RelayFormat == types.RelayFormatOpenAI {
-			if err := helper.ObjectData(c, chunk); err != nil {
-				streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
-				return false
-			}
-			return true
-		}
-
 		chunkData, err := platformencoding.Marshal(chunk)
 		if err != nil {
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 			return false
 		}
-		if err := HandleStreamFormat(c, info, string(chunkData), false, false); err != nil {
-			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+		parts, err := splitChatStreamData(info, string(chunkData))
+		if err != nil {
+			streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 			return false
+		}
+		for _, partData := range parts {
+			if err := paceChatStream(c, info, partData); err != nil {
+				streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+				return false
+			}
+			if info.RelayFormat == types.RelayFormatOpenAI {
+				var part dto.ChatCompletionsStreamResponse
+				if err := platformencoding.UnmarshalString(partData, &part); err != nil {
+					streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
+					return false
+				}
+				if err := helper.ObjectData(c, &part); err != nil {
+					streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+					return false
+				}
+				continue
+			}
+			if err := HandleStreamFormat(c, info, partData, false, false); err != nil {
+				streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+				return false
+			}
 		}
 		return true
 	}

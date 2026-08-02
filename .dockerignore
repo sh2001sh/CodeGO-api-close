@@ -14,6 +14,12 @@ output
 web/default/.playwright-cli
 web/default/output
 *.log
+*.exe
+*.db
+*.db-*
+artifacts
+bin
+logs
 /web/node_modules
 /web/default/node_modules
 /web/default/dist

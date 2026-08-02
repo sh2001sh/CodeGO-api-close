@@ -101,30 +101,27 @@ export function createTimestampColumn<T>(config: {
  * Duration pill colors matching common logs timing column
  */
 const durationPillBg: Record<string, string> = {
-  green:
-    'border border-emerald-200/60 bg-emerald-50/70 dark:border-emerald-800/50 dark:bg-emerald-950/25',
-  red: 'border border-rose-200/70 bg-rose-50/70 dark:border-rose-800/50 dark:bg-rose-950/25',
-  success:
-    'border border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-800/50 dark:bg-emerald-950/20',
-  info: 'border border-sky-200/60 bg-sky-50/50 dark:border-sky-800/50 dark:bg-sky-950/20',
-  warning:
-    'border border-amber-200/60 bg-amber-50/50 dark:border-amber-800/50 dark:bg-amber-950/20',
+  green: 'border border-success/20 bg-success/8',
+  red: 'border border-destructive/25 bg-destructive/8',
+  success: 'border border-success/20 bg-success/8',
+  info: 'border border-info/20 bg-info/8',
+  warning: 'border border-warning/25 bg-warning/8',
 }
 
 const durationTextColor: Record<string, string> = {
-  green: 'text-emerald-700 dark:text-emerald-400',
-  red: 'text-rose-700 dark:text-rose-400',
-  success: 'text-emerald-700 dark:text-emerald-400',
-  info: 'text-sky-700 dark:text-sky-400',
-  warning: 'text-amber-700 dark:text-amber-400',
+  green: 'text-success',
+  red: 'text-destructive',
+  success: 'text-success',
+  info: 'text-info',
+  warning: 'text-warning',
 }
 
 const durationDotColor: Record<string, string> = {
-  green: 'bg-emerald-500',
-  red: 'bg-rose-500',
-  success: 'bg-emerald-500',
-  info: 'bg-sky-500',
-  warning: 'bg-amber-500',
+  green: 'bg-success',
+  red: 'bg-destructive',
+  success: 'bg-success',
+  info: 'bg-info',
+  warning: 'bg-warning',
 }
 
 /**
@@ -252,7 +249,7 @@ export function createFailReasonColumn<T>(config: {
             onClick={() => setDialogOpen(true)}
             title={cellTitle}
           >
-            <span className='truncate leading-snug text-red-600 group-hover:underline dark:text-red-400'>
+            <span className='truncate leading-snug text-destructive group-hover:underline'>
               {failReason}
             </span>
           </button>

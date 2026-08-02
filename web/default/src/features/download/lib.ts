@@ -29,7 +29,8 @@ import type {
 } from './types'
 
 export const RELEASES_URL = '/api/desktop/release/latest'
-export const RELEASE_PAGE_URL = '/download'
+export const RELEASE_PAGE_URL =
+  'https://github.com/sh2001sh/CodeGO/releases/latest'
 
 function compareAssetPreference(left: number[], right: number[]) {
   for (let index = 0; index < Math.max(left.length, right.length); index += 1) {

@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { FadeIn } from '@/components/page-transition'
 import { SiteSeo } from '@/components/seo'
+import { ModelOperationsOverview } from './components/models/model-operations-overview'
 import { ModelValueComparison } from './components/models/model-value-comparison'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
@@ -153,7 +154,9 @@ export function Dashboard() {
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
-  const [modelView, setModelView] = useState<'compare' | 'trend'>('compare')
+  const [modelView, setModelView] = useState<'overview' | 'trend' | 'compare'>(
+    'overview'
+  )
   const [dataLoading, setDataLoading] = useState(false)
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
@@ -271,16 +274,25 @@ export function Dashboard() {
               <Tabs
                 value={modelView}
                 onValueChange={(value) =>
-                  setModelView(value as 'compare' | 'trend')
+                  setModelView(value as 'overview' | 'trend' | 'compare')
                 }
               >
                 <TabsList>
-                  <TabsTrigger value='compare'>
-                    {t('Model comparison')}
+                  <TabsTrigger value='overview'>
+                    {t('Operations overview')}
                   </TabsTrigger>
-                  <TabsTrigger value='trend'>{t('Usage trends')}</TabsTrigger>
+                  <TabsTrigger value='trend'>{t('Trend analysis')}</TabsTrigger>
+                  <TabsTrigger value='compare'>
+                    {t('Value comparison')}
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
+              {modelView === 'overview' && (
+                <ModelOperationsOverview
+                  data={modelData}
+                  loading={dataLoading}
+                />
+              )}
               {modelView === 'compare' && <ModelValueComparison />}
               {modelView === 'trend' && isAdmin && (
                 <FadeIn delay={0.05}>

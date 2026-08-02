@@ -41,17 +41,23 @@ const calendarLocales = {
 } as const
 
 interface DateTimePickerProps {
+  id?: string
   value?: Date
   onChange?: (date: Date | undefined) => void
   placeholder?: string
   className?: string
+  ariaInvalid?: boolean
+  minDateTime?: Date
 }
 
 export function DateTimePicker({
+  id,
   value,
   onChange,
   placeholder,
   className,
+  ariaInvalid,
+  minDateTime,
 }: DateTimePickerProps) {
   const { t, i18n } = useTranslation()
   const placeholderText = placeholder ?? t('Select date')
@@ -68,30 +74,43 @@ export function DateTimePicker({
     }
     return '00:00'
   })
+  const valueTime = value?.getTime()
+  const dateTime = date?.getTime()
 
   React.useEffect(() => {
-    if (value !== date) {
+    if (valueTime !== dateTime) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setDate(value)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMonth(value)
       if (value) {
         const hours = value.getHours().toString().padStart(2, '0')
         const minutes = value.getMinutes().toString().padStart(2, '0')
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTime(`${hours}:${minutes}`)
       } else {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTime('00:00')
       }
     }
-  }, [value, date])
+  }, [dateTime, value, valueTime])
+
+  const minimumTime = React.useMemo(() => {
+    if (!minDateTime || !date || !isSameDay(date, minDateTime)) return undefined
+    return formatTime(minDateTime)
+  }, [date, minDateTime])
+  const minimumDate = React.useMemo(
+    () => (minDateTime ? startOfDay(minDateTime) : undefined),
+    [minDateTime]
+  )
 
   const handleDateSelect = (selectedDate: Date | undefined) => {
     if (selectedDate) {
       const [hours, minutes] = time.split(':').map(Number)
       const newDate = new Date(selectedDate)
       newDate.setHours(hours, minutes, 0, 0)
+      if (minDateTime && newDate < minDateTime) {
+        newDate.setTime(minDateTime.getTime())
+        newDate.setSeconds(0, 0)
+        setTime(formatTime(newDate))
+      }
       setDate(newDate)
       setMonth(newDate)
       onChange?.(newDate)
@@ -111,6 +130,11 @@ export function DateTimePicker({
       const [hours, minutes] = newTime.split(':').map(Number)
       const newDate = new Date(date)
       newDate.setHours(hours, minutes, 0, 0)
+      if (minDateTime && newDate < minDateTime) {
+        newDate.setTime(minDateTime.getTime())
+        newDate.setSeconds(0, 0)
+        setTime(formatTime(newDate))
+      }
       setDate(newDate)
       onChange?.(newDate)
     }
@@ -130,6 +154,9 @@ export function DateTimePicker({
           render={
             <Button
               variant='outline'
+              id={id}
+              type='button'
+              aria-invalid={ariaInvalid}
               className={cn(
                 'flex-1 justify-between font-normal',
                 !date && 'text-muted-foreground'
@@ -146,15 +173,20 @@ export function DateTimePicker({
             selected={date}
             month={month}
             onMonthChange={setMonth}
+            startMonth={minimumDate ? startOfMonth(minimumDate) : undefined}
             captionLayout='dropdown'
             onSelect={handleDateSelect}
             locale={calendarLocale}
+            disabled={(candidate) =>
+              minimumDate ? startOfDay(candidate) < minimumDate : false
+            }
           />
         </PopoverContent>
       </Popover>
       <Input
         type='time'
         value={time}
+        min={minimumTime}
         onChange={handleTimeChange}
         className='w-32 appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none'
         disabled={!date}
@@ -172,5 +204,29 @@ export function DateTimePicker({
         </Button>
       )}
     </div>
+  )
+}
+
+function formatTime(date: Date) {
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+}
+
+function startOfDay(date: Date) {
+  const value = new Date(date)
+  value.setHours(0, 0, 0, 0)
+  return value
+}
+
+function startOfMonth(date: Date) {
+  const value = startOfDay(date)
+  value.setDate(1)
+  return value
+}
+
+function isSameDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
   )
 }

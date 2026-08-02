@@ -1,6 +1,7 @@
 package app
 
 import (
+	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
@@ -138,6 +139,12 @@ func BuildUserGroupsPayload(userID int) map[string]map[string]any {
 		usableGroups["auto"] = map[string]any{
 			"ratio": "自动",
 			"desc":  gatewaygroups.GetUsableGroupDescription("auto"),
+		}
+	}
+	if zeroHour, err := commerceapp.BuildZeroHourOverview(userID); err == nil && zeroHour.Active {
+		usableGroups[commerceapp.ZeroHourGroup] = map[string]any{
+			"ratio": 0,
+			"desc":  "盲盒 0 倍率卡生效中，仅限 default 分组非生图模型",
 		}
 	}
 

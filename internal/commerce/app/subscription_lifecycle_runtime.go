@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-const minimumRenewalPriceRate = 0.30
-
 func calcSubscriptionPlanEndTime(start time.Time, plan *commerceschema.SubscriptionPlan) (int64, error) {
 	if plan == nil {
 		return 0, errors.New("plan is nil")
@@ -57,25 +55,26 @@ func resolveSubscriptionPurchasePreviewTx(tx *gorm.DB, userID int, targetPlan *c
 		BaseAmountDue: targetPlan.PriceAmount,
 		AmountDue:     targetPlan.PriceAmount,
 	}
-	if !isManagedSubscriptionPlan(targetPlan) {
-		return preview, nil
+	if isManagedSubscriptionPlan(targetPlan) {
+		if err := applyManagedSubscriptionPreview(tx, userID, targetPlan, preview); err != nil {
+			return nil, err
+		}
 	}
-
-	now := commercestore.GetDBTimestamp()
-	currentSub, currentPlan, err := pickPrimaryActivePackageTx(tx, userID, now)
-	if err != nil {
+	if err := applySubscriptionPreviewDiscounts(tx, userID, targetPlan, preview); err != nil {
 		return nil, err
 	}
-	if currentSub == nil || currentPlan == nil {
-		return preview, nil
+	return preview, nil
+}
+
+func applyManagedSubscriptionPreview(tx *gorm.DB, userID int, targetPlan *commerceschema.SubscriptionPlan, preview *commercedomain.SubscriptionPurchasePreview) error {
+	currentSub, currentPlan, err := pickPrimaryActivePackageTx(tx, userID, commercestore.GetDBTimestamp())
+	if err != nil || currentSub == nil || currentPlan == nil {
+		return err
 	}
 
 	preview.CurrentSubscription = currentSub
 	preview.CurrentPlan = currentPlan
-	remainingQuota := currentSub.AmountTotal - currentSub.AmountUsed
-	if remainingQuota < 0 {
-		remainingQuota = 0
-	}
+	remainingQuota := max(currentSub.AmountTotal-currentSub.AmountUsed, 0)
 	hasRemainingQuota := currentSub.AmountTotal <= 0 || hasMeaningfulSubscriptionQuotaRemaining(currentSub)
 
 	switch compareSubscriptionPlanTier(targetPlan, currentPlan) {
@@ -87,6 +86,13 @@ func resolveSubscriptionPurchasePreviewTx(tx *gorm.DB, userID int, targetPlan *c
 			preview.DisabledReason = "cannot subscribe to a lower-tier plan while your current package still has remaining quota"
 		}
 	case 0:
+		if !isSubscriptionRenewalEligible(currentSub) {
+			preview.Action = commerceschema.SubscriptionPurchaseActionDisabled
+			preview.BaseAmountDue = 0
+			preview.AmountDue = 0
+			preview.DisabledReason = subscriptionRenewalQuotaThresholdReason
+			return nil
+		}
 		preview.Action = commerceschema.SubscriptionPurchaseActionRenew
 		preview.BaseAmountDue = calculateRenewalPrice(targetPlan, currentSub)
 		preview.AmountDue = preview.BaseAmountDue
@@ -96,34 +102,32 @@ func resolveSubscriptionPurchasePreviewTx(tx *gorm.DB, userID int, targetPlan *c
 		if currentPlan.PriceAmount > 0 && currentSub.AmountTotal > 0 && remainingQuota > 0 {
 			discount = currentPlan.PriceAmount * float64(remainingQuota) / float64(currentSub.AmountTotal)
 		}
-		preview.BaseAmountDue = targetPlan.PriceAmount - discount
+		preview.BaseAmountDue = math.Max(targetPlan.PriceAmount-discount, 0.01)
 		preview.AmountDue = preview.BaseAmountDue
-		if preview.AmountDue < 0.01 {
-			preview.BaseAmountDue = 0.01
-			preview.AmountDue = 0.01
-		}
 	}
-	if preview.Action != commerceschema.SubscriptionPurchaseActionDisabled && preview.AmountDue > 0 {
-		discountRate := GetUserBlindBoxSubscriptionDiscountRate(userID)
-		if discountRate > 0 {
-			preview.AppliedBlindBoxDiscountRate = discountRate
-			preview.AmountDue = commercedomain.ApplyDiscountRateToMoney(preview.AmountDue, discountRate)
-		}
-	}
-	return preview, nil
+	return nil
 }
 
-func calculateRenewalPrice(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription) float64 {
-	if plan == nil || plan.PriceAmount <= 0 {
-		return 0
+func applySubscriptionPreviewDiscounts(tx *gorm.DB, userID int, plan *commerceschema.SubscriptionPlan, preview *commercedomain.SubscriptionPurchasePreview) error {
+	if preview.Action == commerceschema.SubscriptionPurchaseActionDisabled || preview.AmountDue <= 0 {
+		return nil
 	}
-	if sub == nil || sub.AmountTotal <= 0 {
-		return plan.PriceAmount
+	query := platformdb.DB
+	if tx != nil {
+		query = tx
 	}
-
-	usedRate := float64(sub.AmountUsed) / float64(sub.AmountTotal)
-	usedRate = math.Max(0, math.Min(usedRate, 1))
-	return math.Round(plan.PriceAmount*math.Max(usedRate, minimumRenewalPriceRate)*100) / 100
+	if err := applyFirstPurchaseDiscountPreview(query, userID, plan, preview, time.Now()); err != nil {
+		return err
+	}
+	if preview.FirstPurchaseDiscountApplied {
+		return nil
+	}
+	discountRate := GetUserBlindBoxSubscriptionDiscountRate(userID)
+	if discountRate > 0 {
+		preview.AppliedBlindBoxDiscountRate = discountRate
+		preview.AmountDue = commercedomain.ApplyDiscountRateToMoney(preview.AmountDue, discountRate)
+	}
+	return nil
 }
 
 // CreateUserSubscriptionFromPlanTx creates an active subscription snapshot from a plan.
@@ -200,6 +204,9 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userID int, plan *commercesch
 	if err := tx.Create(sub).Error; err != nil {
 		return nil, err
 	}
+	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
+		return nil, err
+	}
 	return sub, nil
 }
 
@@ -267,6 +274,16 @@ func renewUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubscr
 	if err := tx.Save(sub).Error; err != nil {
 		return nil, err
 	}
+	sub.LuckyBenefitCycle = ""
+	if err := tx.Model(sub).Update("lucky_benefit_cycle", "").Error; err != nil {
+		return nil, err
+	}
+	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
+		return nil, err
+	}
+	if err := replenishSubscriptionLedgerForCycleTx(tx, sub, "renewal"); err != nil {
+		return nil, err
+	}
 	return sub, nil
 }
 
@@ -308,6 +325,16 @@ func upgradeUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubs
 	if err := tx.Save(sub).Error; err != nil {
 		return nil, err
 	}
+	sub.LuckyBenefitCycle = ""
+	if err := tx.Model(sub).Update("lucky_benefit_cycle", "").Error; err != nil {
+		return nil, err
+	}
+	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
+		return nil, err
+	}
+	if err := replenishSubscriptionLedgerForCycleTx(tx, sub, "upgrade"); err != nil {
+		return nil, err
+	}
 	return sub, nil
 }
 
@@ -324,6 +351,7 @@ func ApplySubscriptionPurchaseTx(tx *gorm.DB, userID int, plan *commerceschema.S
 	if err != nil {
 		return nil, nil, err
 	}
+	var sub *commerceschema.UserSubscription
 	switch preview.Action {
 	case commerceschema.SubscriptionPurchaseActionDisabled:
 		if strings.TrimSpace(preview.DisabledReason) != "" {
@@ -332,18 +360,29 @@ func ApplySubscriptionPurchaseTx(tx *gorm.DB, userID int, plan *commerceschema.S
 		return nil, preview, errors.New("plan is not available for the current subscription")
 	case commerceschema.SubscriptionPurchaseActionRenew:
 		if preview.CurrentSubscription != nil {
-			sub, err := renewUserSubscriptionWithPlanTx(tx, preview.CurrentSubscription, plan, source)
-			return sub, preview, err
+			var err error
+			sub, err = renewUserSubscriptionWithPlanTx(tx, preview.CurrentSubscription, plan, source)
+			if err != nil {
+				return nil, preview, err
+			}
 		}
 	case commerceschema.SubscriptionPurchaseActionUpgrade:
 		if preview.CurrentSubscription != nil {
-			sub, err := upgradeUserSubscriptionWithPlanTx(tx, preview.CurrentSubscription, plan, source)
-			return sub, preview, err
+			var err error
+			sub, err = upgradeUserSubscriptionWithPlanTx(tx, preview.CurrentSubscription, plan, source)
+			if err != nil {
+				return nil, preview, err
+			}
 		}
 	}
-
-	sub, err := CreateUserSubscriptionFromPlanTx(tx, userID, plan, source)
-	return sub, preview, err
+	if sub == nil {
+		var err error
+		sub, err = CreateUserSubscriptionFromPlanTx(tx, userID, plan, source)
+		if err != nil {
+			return nil, preview, err
+		}
+	}
+	return sub, preview, nil
 }
 
 func pickPrimaryActivePackageTx(tx *gorm.DB, userID int, now int64) (*commerceschema.UserSubscription, *commerceschema.SubscriptionPlan, error) {

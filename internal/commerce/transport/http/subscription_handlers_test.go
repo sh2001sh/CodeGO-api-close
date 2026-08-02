@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -113,6 +114,60 @@ func TestGetSubscriptionPlansReturnsPublicPlans(t *testing.T) {
 	}
 	if len(payload) != 1 {
 		t.Fatalf("expected 1 plan, got %d", len(payload))
+	}
+}
+
+func TestGetPublicPackagesReturnsFirstPurchasePrice(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	confirmTopupComplianceForTest(t)
+
+	setting := commercestore.GetPaymentSetting()
+	originalEnabled := setting.FirstPurchaseDiscountEnabled
+	originalMultiplier := setting.FirstPurchaseDiscountMultiplier
+	originalStartAt := setting.FirstPurchaseDiscountStartAt
+	originalEndAt := setting.FirstPurchaseDiscountEndAt
+	t.Cleanup(func() {
+		setting.FirstPurchaseDiscountEnabled = originalEnabled
+		setting.FirstPurchaseDiscountMultiplier = originalMultiplier
+		setting.FirstPurchaseDiscountStartAt = originalStartAt
+		setting.FirstPurchaseDiscountEndAt = originalEndAt
+	})
+	now := time.Now()
+	setting.FirstPurchaseDiscountEnabled = true
+	setting.FirstPurchaseDiscountMultiplier = 0.8
+	setting.FirstPurchaseDiscountStartAt = now.Add(-time.Hour).Unix()
+	setting.FirstPurchaseDiscountEndAt = now.Add(time.Hour).Unix()
+
+	user := &identityschema.User{Id: 917, Username: "first-package-buyer", Status: constant.UserStatusEnabled}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	if err := db.Create(&commerceschema.SubscriptionPlan{
+		Id: 917, Title: "Lite月卡", Enabled: true, PriceAmount: 100,
+		DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed subscription plan: %v", err)
+	}
+
+	ctx, recorder := newCommerceContext(t, stdhttp.MethodGet, "/api/packages/public", nil, user.Id)
+	getPublicPackages(ctx)
+	response := decodeCommerceResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected public packages success, got %#v", response)
+	}
+	var payload []struct {
+		BaseAmountDue                   float64 `json:"base_amount_due"`
+		AmountDue                       float64 `json:"amount_due"`
+		FirstPurchaseDiscountApplied    bool    `json:"first_purchase_discount_applied"`
+		FirstPurchaseDiscountMultiplier float64 `json:"first_purchase_discount_multiplier"`
+	}
+	if err := platformencoding.Unmarshal(response.Data, &payload); err != nil {
+		t.Fatalf("failed to decode packages payload: %v", err)
+	}
+	if len(payload) != 1 || !payload[0].FirstPurchaseDiscountApplied ||
+		payload[0].BaseAmountDue != 100 || payload[0].AmountDue != 80 ||
+		payload[0].FirstPurchaseDiscountMultiplier != 0.8 {
+		t.Fatalf("unexpected discounted package payload: %#v", payload)
 	}
 }
 

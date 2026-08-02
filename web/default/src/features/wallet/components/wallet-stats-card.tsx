@@ -1,9 +1,13 @@
 import { useMemo } from 'react'
 import { Activity, WalletCards } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getSubscriptionPlanSubtitle } from '@/features/subscriptions/lib'
-import type { PlanRecord, SelfSubscriptionData } from '@/features/subscriptions/types'
+import type {
+  PlanRecord,
+  SelfSubscriptionData,
+} from '@/features/subscriptions/types'
 import type { UserWalletData } from '../types'
 import { ResetOpportunityEntryCard } from './reset-opportunity-entry-card'
 import { SubscriptionClaudeConversionCard } from './subscription-claude-conversion-card'
@@ -19,6 +23,7 @@ interface WalletStatsCardProps {
 }
 
 export function WalletStatsCard(props: WalletStatsCardProps) {
+  const { t } = useTranslation()
   const activeSubscriptions = props.subscriptionData?.subscriptions || []
   const resetOpportunity = props.subscriptionData?.reset_opportunity ?? {
     available_count: 0,
@@ -34,21 +39,18 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
     for (const item of props.plans) {
       if (!item?.plan?.id) continue
       map[item.plan.id] = {
-        title: item.plan.title || `套餐 #${item.plan.id}`,
-        subtitle: getSubscriptionPlanSubtitle(item.plan) || '订阅',
+        title: item.plan.title || t('Plan #{{id}}', { id: item.plan.id }),
+        subtitle: getSubscriptionPlanSubtitle(item.plan) || t('Subscription'),
       }
     }
     return map
-  }, [props.plans])
+  }, [props.plans, t])
 
   if (props.loading) {
     return (
       <aside className='space-y-4 lg:sticky lg:top-4'>
         {Array.from({ length: 2 }).map((_, index) => (
-          <div
-            key={index}
-            className='app-page-shell p-4'
-          >
+          <div key={index} className='app-page-shell p-4'>
             <Skeleton className='h-5 w-28' />
             <Skeleton className='mt-3 h-10 w-full' />
             <Skeleton className='mt-3 h-10 w-full' />
@@ -63,26 +65,33 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
       <div className='app-page-shell p-4'>
         <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
           <WalletCards className='text-primary h-4 w-4' />
-          钱包余额
+          {t('Wallet balance')}
         </div>
         <div className='text-foreground mt-3 font-mono text-3xl font-bold tracking-tight tabular-nums'>
           {formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
         </div>
         <div className='mt-4 grid gap-2'>
           <WalletStatItem
-            label='Claude 余额'
-            value={formatUsdAmount(quotaUnitsToUsd(props.user?.claude_quota ?? 0))}
+            label={t('Claude balance')}
+            value={formatUsdAmount(
+              quotaUnitsToUsd(props.user?.claude_quota ?? 0)
+            )}
           />
           <WalletStatItem
-            label='累计消耗'
-            value={formatUsdAmount(quotaUnitsToUsd(props.user?.used_quota ?? 0))}
+            label={t('Total spent')}
+            value={formatUsdAmount(
+              quotaUnitsToUsd(props.user?.used_quota ?? 0)
+            )}
           />
           <WalletStatItem
-            label='API 请求'
+            label={t('API requests')}
             value={(props.user?.request_count ?? 0).toLocaleString()}
             icon={<Activity className='text-muted-foreground h-4 w-4' />}
           />
-          <WalletStatItem label='生效订阅' value={`${activeSubscriptions.length}`} />
+          <WalletStatItem
+            label={t('Active subscriptions')}
+            value={`${activeSubscriptions.length}`}
+          />
         </div>
       </div>
 
@@ -96,8 +105,10 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
       <ResetOpportunityEntryCard
         resetOpportunity={resetOpportunity}
         compact
-        title='套餐额度刷新'
-        description='邀请新用户首购后可获得刷新机会，当前只展示你的使用状态。'
+        title={t('Plan quota reset')}
+        description={t(
+          'Invite a new user to make a first purchase to earn a reset opportunity. Your current status is shown here.'
+        )}
       />
     </aside>
   )

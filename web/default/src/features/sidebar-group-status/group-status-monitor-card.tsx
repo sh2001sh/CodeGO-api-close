@@ -32,7 +32,7 @@ export function GroupStatusMonitorCard(props: {
     <Card
       size='sm'
       className={cn(
-        'group relative overflow-hidden border-2 bg-card py-0 shadow-sm transition-all hover:shadow-lg',
+        'group bg-card relative overflow-hidden border py-0 shadow-sm transition-shadow hover:shadow-md',
         meta.border
       )}
     >

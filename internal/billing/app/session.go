@@ -544,6 +544,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	}
 
 	var lastInsufficientErr *types.NewAPIError
+	insufficientSources := make(map[string]struct{}, len(fundingSourceOrder))
 	for _, source := range fundingSourceOrder {
 		var (
 			session *BillingSession
@@ -562,6 +563,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		if apiErr != nil {
 			if apiErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota {
 				lastInsufficientErr = apiErr
+				insufficientSources[source] = struct{}{}
 				continue
 			}
 			return nil, apiErr
@@ -572,6 +574,17 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	}
 
 	if lastInsufficientErr != nil {
+		_, subscriptionInsufficient := insufficientSources[BillingSourceSubscription]
+		_, walletInsufficient := insufficientSources[BillingSourceWallet]
+		if subscriptionInsufficient && walletInsufficient {
+			return nil, types.NewErrorWithStatusCode(
+				fmt.Errorf("套餐可用额度不足，且钱包余额不足"),
+				types.ErrorCodeInsufficientUserQuota,
+				http.StatusForbidden,
+				types.ErrOptionWithSkipRetry(),
+				types.ErrOptionWithNoRecordErrorLog(),
+			)
+		}
 		return nil, lastInsufficientErr
 	}
 	return nil, types.NewErrorWithStatusCode(

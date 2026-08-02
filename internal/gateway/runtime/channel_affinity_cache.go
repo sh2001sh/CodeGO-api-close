@@ -210,6 +210,12 @@ func invalidateChannelAffinityCacheKey(cacheKey string) {
 	_, _ = getChannelAffinityCache().DeleteMany([]string{cacheKey})
 }
 
+// InvalidatePreferredChannel removes one affinity entry. Automatic route pools
+// use this when a short-lived sticky route becomes unhealthy or unavailable.
+func InvalidatePreferredChannel(cacheKey string) {
+	invalidateChannelAffinityCacheKey(cacheKey)
+}
+
 func ResetChannelAffinityCacheForTest() error {
 	if channelAffinityCache != nil {
 		if err := channelAffinityCache.Purge(); err != nil {
@@ -259,7 +265,7 @@ func GetChannelAffinityCacheStats() ChannelAffinityCacheStats {
 		keys = nil
 	}
 
-	total := len(keys)
+	total := 0
 	unknown := 0
 	for _, key := range keys {
 		prefix := channelAffinityCacheNamespace + ":"
@@ -268,6 +274,10 @@ func GetChannelAffinityCacheStats() ChannelAffinityCacheStats {
 			continue
 		}
 		rest := strings.TrimPrefix(key, prefix)
+		if strings.HasPrefix(rest, "route_pool:") {
+			continue
+		}
+		total++
 		parts := strings.Split(rest, ":")
 		if len(parts) < 2 {
 			unknown++

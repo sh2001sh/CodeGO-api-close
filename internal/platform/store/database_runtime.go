@@ -6,7 +6,9 @@ import (
 	auditdomain "github.com/sh2001sh/new-api/internal/audit/domain"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	bountyschema "github.com/sh2001sh/new-api/internal/bounty/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	communityschema "github.com/sh2001sh/new-api/internal/community/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -214,6 +216,7 @@ func migratePrimaryDB() error {
 		&commerceschema.SubscriptionPreConsumeRecord{},
 		&commerceschema.GroupBuyOrder{},
 		&commerceschema.BlindBoxOrder{},
+		&commerceschema.BlindBoxGrant{},
 		&commerceschema.BlindBoxCredit{},
 		&commerceschema.BlindBoxOpenRecord{},
 		&commerceschema.BlindBoxProp{},
@@ -235,6 +238,16 @@ func migratePrimaryDB() error {
 		&identitydomain.DesktopDiagnosticReport{},
 		&identitydomain.DesktopTelemetryEvent{},
 		&identitydomain.ImageWorkspaceItem{},
+		&bountyschema.BountyTask{},
+		&bountyschema.BountyApplication{},
+		&bountyschema.BountyMaterialRequest{},
+		&bountyschema.BountyMaterialReply{},
+		&bountyschema.BountySubmission{},
+		&bountyschema.BountyDispute{},
+		&bountyschema.BountyEvent{},
+		&bountyschema.BountyNotification{},
+		&bountyschema.BountyReport{},
+		&communityschema.Resource{},
 	)
 	if err != nil {
 		return err
@@ -317,6 +330,9 @@ func ensureSubscriptionPlanTableSQLiteTx(db *gorm.DB) error {
 			"`creem_product_id` varchar(128) DEFAULT '',\n" +
 			"`max_purchase_per_user` integer DEFAULT 0,\n" +
 			"`plan_type` varchar(20) DEFAULT 'monthly',\n" +
+			"`membership_tier` varchar(16) DEFAULT 'none',\n" +
+			"`lucky_draw_enabled` numeric DEFAULT 0,\n" +
+			"`blind_box_benefit_count` integer DEFAULT 0,\n" +
 			"`group_buy_enabled` numeric DEFAULT 0,\n" +
 			"`group_buy_bonus2` decimal(10,2) DEFAULT 0,\n" +
 			"`group_buy_bonus3` decimal(10,2) DEFAULT 0,\n" +
@@ -366,6 +382,9 @@ func ensureSubscriptionPlanTableSQLiteTx(db *gorm.DB) error {
 		{Name: "creem_product_id", DDL: "`creem_product_id` varchar(128) DEFAULT ''"},
 		{Name: "max_purchase_per_user", DDL: "`max_purchase_per_user` integer DEFAULT 0"},
 		{Name: "plan_type", DDL: "`plan_type` varchar(20) DEFAULT 'monthly'"},
+		{Name: "membership_tier", DDL: "`membership_tier` varchar(16) DEFAULT 'none'"},
+		{Name: "lucky_draw_enabled", DDL: "`lucky_draw_enabled` numeric DEFAULT 0"},
+		{Name: "blind_box_benefit_count", DDL: "`blind_box_benefit_count` integer DEFAULT 0"},
 		{Name: "group_buy_enabled", DDL: "`group_buy_enabled` numeric DEFAULT 0"},
 		{Name: "group_buy_bonus2", DDL: "`group_buy_bonus2` decimal(10,2) DEFAULT 0"},
 		{Name: "group_buy_bonus3", DDL: "`group_buy_bonus3` decimal(10,2) DEFAULT 0"},
@@ -470,6 +489,7 @@ func ensureUserSubscriptionTableSQLiteTx(db *gorm.DB) error {
 		{Name: "next_reset_time", DDL: "`next_reset_time` bigint DEFAULT 0"},
 		{Name: "upgrade_group", DDL: "`upgrade_group` varchar(64) DEFAULT ''"},
 		{Name: "prev_user_group", DDL: "`prev_user_group` varchar(64) DEFAULT ''"},
+		{Name: "lucky_benefit_cycle", DDL: "`lucky_benefit_cycle` varchar(128) DEFAULT ''"},
 	}
 	for _, col := range required {
 		if _, ok := existing[col.Name]; ok {

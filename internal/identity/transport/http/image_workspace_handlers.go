@@ -11,7 +11,7 @@ import (
 )
 
 func GetImageWorkspaceModels(c *gin.Context) {
-	models, err := identityapp.ListImageWorkspaceModels(c.GetInt("id"))
+	models, err := identityapp.ListImageWorkspaceModels(c.GetInt("id"), c.Query("group"))
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

@@ -1,14 +1,14 @@
 package http
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"bytes"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	stdhttp "net/http"
@@ -16,7 +16,7 @@ import (
 	"testing"
 )
 
-func TestUpdateAdminSubscriptionPlanUsesLegacyBonusColumns(t *testing.T) {
+func TestUpdateAdminSubscriptionPlanUsesLegacyGroupBuyColumns(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 	confirmTopupComplianceForTest(t)
 
@@ -34,9 +34,6 @@ func TestUpdateAdminSubscriptionPlanUsesLegacyBonusColumns(t *testing.T) {
 		GroupBuyBonus2:          0,
 		GroupBuyBonus3:          0,
 		GroupBuyBonus5:          0,
-		RenewalBonus2:           0,
-		RenewalBonus3:           0,
-		RenewalBonus4:           0,
 		TotalAmount:             100,
 		PeriodAmount:            100,
 		QuotaResetPeriod:        commerceschema.SubscriptionResetMonthly,
@@ -61,9 +58,6 @@ func TestUpdateAdminSubscriptionPlanUsesLegacyBonusColumns(t *testing.T) {
 			"group_buy_bonus_2":          20,
 			"group_buy_bonus_3":          30,
 			"group_buy_bonus_5":          50,
-			"renewal_bonus_2":            0.2,
-			"renewal_bonus_3":            0.3,
-			"renewal_bonus_4":            0.4,
 			"total_amount":               200,
 			"period_amount":              200,
 			"quota_reset_period":         commerceschema.SubscriptionResetMonthly,
@@ -85,9 +79,6 @@ func TestUpdateAdminSubscriptionPlanUsesLegacyBonusColumns(t *testing.T) {
 	}
 	if reloaded.GroupBuyBonus2 != 20 || reloaded.GroupBuyBonus3 != 30 || reloaded.GroupBuyBonus5 != 50 {
 		t.Fatalf("expected group buy bonuses to persist legacy columns, got %#v", reloaded)
-	}
-	if reloaded.RenewalBonus2 != 0.2 || reloaded.RenewalBonus3 != 0.3 || reloaded.RenewalBonus4 != 0.4 {
-		t.Fatalf("expected renewal bonuses to persist legacy columns, got %#v", reloaded)
 	}
 }
 

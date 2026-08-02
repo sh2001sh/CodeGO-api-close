@@ -102,7 +102,7 @@ function TopicSurface(props: {
     <section
       id={props.id}
       className={[
-        'rounded-[22px] border border-slate-200/70 bg-white/85 p-6 shadow-[0_14px_38px_rgba(15,20,27,0.08)] backdrop-blur dark:border-white/10 dark:bg-white/[0.04]',
+        'app-page-shell p-6',
         props.className,
       ]
         .filter(Boolean)
@@ -120,15 +120,15 @@ function TopicNavCard(props: {
   external?: boolean
 }) {
   const className =
-    'block rounded-2xl border border-transparent bg-white/70 px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-white dark:bg-white/[0.03] dark:hover:bg-white/[0.06]'
+    'block rounded-xl border border-transparent px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-muted'
 
   if (props.external) {
     return (
       <a href={props.href} className={className}>
-        <div className='text-sm font-semibold text-slate-950 dark:text-slate-50'>
+        <div className='text-foreground text-sm font-semibold'>
           {props.title}
         </div>
-        <div className='mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300'>
+        <div className='text-muted-foreground mt-1 text-sm leading-6'>
           {props.description}
         </div>
       </a>
@@ -137,10 +137,10 @@ function TopicNavCard(props: {
 
   return (
     <Link to={props.href} className={className}>
-      <div className='text-sm font-semibold text-slate-950 dark:text-slate-50'>
+      <div className='text-foreground text-sm font-semibold'>
         {props.title}
       </div>
-      <div className='mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300'>
+      <div className='text-muted-foreground mt-1 text-sm leading-6'>
         {props.description}
       </div>
     </Link>
@@ -155,10 +155,10 @@ function TopicSlugCard(props: {
 }) {
   const content = (
     <>
-      <div className='text-sm font-semibold text-slate-950 dark:text-slate-50'>
+      <div className='text-foreground text-sm font-semibold'>
         {props.title}
       </div>
-      <div className='mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300'>
+      <div className='text-muted-foreground mt-1 text-sm leading-6'>
         {props.description}
       </div>
     </>
@@ -168,7 +168,7 @@ function TopicSlugCard(props: {
     return (
       <a
         href={props.anchorHref}
-        className='block rounded-2xl border border-transparent bg-white/70 px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-white dark:bg-white/[0.03] dark:hover:bg-white/[0.06]'
+        className='block rounded-xl border border-transparent px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-muted'
       >
         {content}
       </a>
@@ -179,7 +179,7 @@ function TopicSlugCard(props: {
     <Link
       to='/topics/$slug'
       params={{ slug: props.slug }}
-      className='block rounded-2xl border border-transparent bg-white/70 px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-white dark:bg-white/[0.03] dark:hover:bg-white/[0.06]'
+      className='block rounded-xl border border-transparent px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-muted'
     >
       {content}
     </Link>
@@ -194,13 +194,13 @@ function TopicHero(props: {
 }) {
   return (
     <TopicSurface>
-      <div className='inline-flex items-center rounded-full border border-slate-200 bg-white/90 px-3.5 py-2 text-[12px] font-semibold text-slate-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-200'>
+      <div className='text-muted-foreground bg-muted inline-flex items-center rounded-full border border-transparent px-3.5 py-2 text-[12px] font-semibold'>
         {props.eyebrow}
       </div>
-      <h1 className='mt-5 max-w-5xl text-[2.25rem] font-semibold tracking-[-0.03em] text-slate-950 sm:text-5xl dark:text-slate-50'>
+      <h1 className='text-foreground mt-5 max-w-5xl text-[2.25rem] font-semibold tracking-[-0.03em] sm:text-5xl'>
         {props.title}
       </h1>
-      <p className='mt-4 max-w-4xl text-[15px] leading-8 text-slate-600 dark:text-slate-300'>
+      <p className='text-muted-foreground mt-4 max-w-4xl text-[15px] leading-8'>
         {props.description}
       </p>
       {props.meta && props.meta.length > 0 && (
@@ -208,7 +208,7 @@ function TopicHero(props: {
           {props.meta.map((item) => (
             <span
               key={item}
-              className='inline-flex items-center rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[12px] font-semibold text-slate-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-200'
+              className='text-muted-foreground bg-muted inline-flex items-center rounded-full border border-transparent px-3 py-1.5 text-[12px] font-semibold'
             >
               {item}
             </span>
@@ -220,7 +220,7 @@ function TopicHero(props: {
           <Link
             key={item.to}
             to={item.to}
-            className='inline-flex items-center rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-white dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-200 dark:hover:bg-white/[0.08]'
+            className='text-foreground bg-muted hover:bg-accent inline-flex items-center rounded-full border border-transparent px-4 py-2 text-sm font-medium transition-colors'
           >
             {item.label}
           </Link>
@@ -234,11 +234,11 @@ function SectionHeading(props: { kicker: string; title: string; description?: st
   return (
     <div>
       <div className='text-primary text-[12px] font-semibold'>{props.kicker}</div>
-      <h2 className='mt-3 text-[1.85rem] font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-50'>
+      <h2 className='text-foreground mt-3 text-[1.85rem] font-semibold tracking-[-0.02em]'>
         {props.title}
       </h2>
       {props.description ? (
-        <p className='mt-3 max-w-[72ch] text-[15px] leading-8 text-slate-600 dark:text-slate-300'>
+        <p className='text-muted-foreground mt-3 max-w-[72ch] text-[15px] leading-8'>
           {props.description}
         </p>
       ) : null}
@@ -256,15 +256,15 @@ function TopicSidebar(props: {
     <aside className='hidden xl:block'>
       <TopicSurface className='sticky top-[86px] p-[18px]'>
         <div className='text-primary text-[12px] font-semibold'>页内导航</div>
-        <div className='mt-3 text-base font-semibold text-slate-950 dark:text-slate-50'>
+        <div className='text-foreground mt-3 text-base font-semibold'>
           {props.navTitle}
         </div>
-        <div className='mt-2 text-[13px] leading-6 text-slate-600 dark:text-slate-300'>
+        <div className='text-muted-foreground mt-2 text-[13px] leading-6'>
           {props.navDescription}
         </div>
         <div className='mt-4 space-y-2'>{props.navItems}</div>
         {props.extraItems ? (
-          <div className='mt-5 border-t border-slate-200/80 pt-5 dark:border-white/10'>
+          <div className='border-border/70 mt-5 border-t pt-5'>
             {props.extraItems}
           </div>
         ) : null}
@@ -283,7 +283,7 @@ function TopicBulletList(props: { items: string[] }) {
       {props.items.map((item) => (
         <li
           key={item}
-          className='relative pl-4 text-sm leading-7 text-slate-600 before:absolute before:top-2.5 before:left-0 before:size-1.5 before:rounded-full before:bg-primary dark:text-slate-300'
+          className='text-muted-foreground relative pl-4 text-sm leading-7 before:absolute before:top-2.5 before:left-0 before:size-1.5 before:rounded-full before:bg-primary'
         >
           {item}
         </li>
@@ -468,30 +468,30 @@ export function SearchPage(props: { slug: string }) {
               description='这一页会先解释“为什么有人会搜这个词”，再把模型、价格路径、教程入口和常见判断逻辑整理清楚。你可以先看总览，再按目录直接跳到最关心的章节。'
             />
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
-              <div className='rounded-[18px] border border-slate-200 bg-white/92 p-5 dark:border-white/10 dark:bg-white/[0.05]'>
+              <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>01</div>
-                <div className='mt-3 text-base font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-3 text-base font-semibold'>
                   先判断你要解决什么问题
                 </div>
-                <p className='mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-2 text-sm leading-7'>
                   是找模型入口、看接入教程，还是正在比较稳定性、成本和错误处理。
                 </p>
               </div>
-              <div className='rounded-[18px] border border-slate-200 bg-white/92 p-5 dark:border-white/10 dark:bg-white/[0.05]'>
+              <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>02</div>
-                <div className='mt-3 text-base font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-3 text-base font-semibold'>
                   再看这个词和 Code Go 的关系
                 </div>
-                <p className='mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-2 text-sm leading-7'>
                   看清它对应的模型、路由方式和最短使用路径，不在关键词里绕圈。
                 </p>
               </div>
-              <div className='rounded-[18px] border border-slate-200 bg-white/92 p-5 dark:border-white/10 dark:bg-white/[0.05]'>
+              <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>03</div>
-                <div className='mt-3 text-base font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-3 text-base font-semibold'>
                   最后回到模型页或教程页
                 </div>
-                <p className='mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-2 text-sm leading-7'>
                   专题页负责解释和分流，真正下决策还是回到模型广场与教程入口。
                 </p>
               </div>
@@ -505,15 +505,15 @@ export function SearchPage(props: { slug: string }) {
                 <a
                   key={section.heading}
                   href={`#section-${index + 1}`}
-                  className='rounded-[18px] border border-slate-200 bg-white/92 px-5 py-4 transition-colors hover:border-primary/25 dark:border-white/10 dark:bg-white/[0.05]'
+                  className='app-subtle-panel px-5 py-4 transition-colors hover:border-primary/25'
                 >
                   <div className='text-primary text-[12px] font-semibold'>
                     {String(index + 1).padStart(2, '0')}
                   </div>
-                  <div className='mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50'>
+                  <div className='text-foreground mt-2 text-sm font-semibold'>
                     {section.heading}
                   </div>
-                  <p className='mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300'>
+                  <p className='text-muted-foreground mt-1 text-sm leading-6'>
                     {section.paragraphs[0] || page.intro}
                   </p>
                 </a>
@@ -531,7 +531,7 @@ export function SearchPage(props: { slug: string }) {
                 {section.paragraphs.map((paragraph) => (
                   <p
                     key={paragraph}
-                    className='max-w-[72ch] text-[15px] leading-8 text-slate-600 dark:text-slate-300'
+                    className='text-muted-foreground max-w-[72ch] text-[15px] leading-8'
                   >
                     {paragraph}
                   </p>
@@ -546,12 +546,12 @@ export function SearchPage(props: { slug: string }) {
               {faqItems.map((item) => (
                 <div
                   key={item.question}
-                  className='rounded-[18px] border border-slate-200 bg-white/92 px-5 py-5 dark:border-white/10 dark:bg-white/[0.05]'
+                  className='app-subtle-panel px-5 py-5'
                 >
-                  <div className='text-base font-semibold text-slate-950 dark:text-slate-50'>
+                  <div className='text-foreground text-base font-semibold'>
                     {item.question}
                   </div>
-                  <p className='mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300'>
+                  <p className='text-muted-foreground mt-2 text-sm leading-7'>
                     {item.answer}
                   </p>
                 </div>
@@ -692,30 +692,30 @@ export function SearchTopicsIndex() {
               description='这个入口页的目标不是堆满 SEO 关键词，而是让从搜索直接进入的用户先看懂：这些词各自代表什么、适合去哪一页继续看，以及怎么最快完成配置与选择。'
             />
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
-              <div className='rounded-[18px] border border-slate-200 bg-white/92 p-5 dark:border-white/10 dark:bg-white/[0.05]'>
+              <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>01</div>
-                <div className='mt-3 text-base font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-3 text-base font-semibold'>
                   先看核心入口专题
                 </div>
-                <p className='mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-2 text-sm leading-7'>
                   如果你搜的是 Codex API、Claude Code API、Codex 中转、Claude 中转，先从核心入口看起。
                 </p>
               </div>
-              <div className='rounded-[18px] border border-slate-200 bg-white/92 p-5 dark:border-white/10 dark:bg-white/[0.05]'>
+              <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>02</div>
-                <div className='mt-3 text-base font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-3 text-base font-semibold'>
                   再按教程或排障分流
                 </div>
-                <p className='mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-2 text-sm leading-7'>
                   需要接入、配置、怎么用，就去教程；需要比较和排查，就去比较与排障。
                 </p>
               </div>
-              <div className='rounded-[18px] border border-slate-200 bg-white/92 p-5 dark:border-white/10 dark:bg-white/[0.05]'>
+              <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>03</div>
-                <div className='mt-3 text-base font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-3 text-base font-semibold'>
                   最后回到模型页或教程页
                 </div>
-                <p className='mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-2 text-sm leading-7'>
                   专题页负责解释搜索词，真正做模型选择和接入时还是回到模型广场与指南页。
                 </p>
               </div>
@@ -730,37 +730,37 @@ export function SearchTopicsIndex() {
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
               <a
                 href='#group-1'
-                className='rounded-[18px] border border-slate-200 bg-white/92 px-5 py-4 transition-colors hover:border-primary/25 dark:border-white/10 dark:bg-white/[0.05]'
+                className='app-subtle-panel px-5 py-4 transition-colors hover:border-primary/25'
               >
                 <div className='text-primary text-[12px] font-semibold'>01</div>
-                <div className='mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-2 text-sm font-semibold'>
                   核心入口
                 </div>
-                <p className='mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-1 text-sm leading-6'>
                   先看主搜索词和对应的产品入口，适合第一次判断模型与路由方式。
                 </p>
               </a>
               <a
                 href='#group-2'
-                className='rounded-[18px] border border-slate-200 bg-white/92 px-5 py-4 transition-colors hover:border-primary/25 dark:border-white/10 dark:bg-white/[0.05]'
+                className='app-subtle-panel px-5 py-4 transition-colors hover:border-primary/25'
               >
                 <div className='text-primary text-[12px] font-semibold'>02</div>
-                <div className='mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-2 text-sm font-semibold'>
                   接入教程
                 </div>
-                <p className='mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-1 text-sm leading-6'>
                   看怎么接、怎么配、怎么用，把接入流程一次理顺。
                 </p>
               </a>
               <a
                 href='#group-3'
-                className='rounded-[18px] border border-slate-200 bg-white/92 px-5 py-4 transition-colors hover:border-primary/25 dark:border-white/10 dark:bg-white/[0.05]'
+                className='app-subtle-panel px-5 py-4 transition-colors hover:border-primary/25'
               >
                 <div className='text-primary text-[12px] font-semibold'>03</div>
-                <div className='mt-2 text-sm font-semibold text-slate-950 dark:text-slate-50'>
+                <div className='text-foreground mt-2 text-sm font-semibold'>
                   比较与排障
                 </div>
-                <p className='mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300'>
+                <p className='text-muted-foreground mt-1 text-sm leading-6'>
                   如果你正在比较、排错或判断稳定性，直接去问题导向专题。
                 </p>
               </a>
@@ -780,12 +780,12 @@ export function SearchTopicsIndex() {
                     key={item.slug}
                     to='/topics/$slug'
                     params={{ slug: item.slug }}
-                    className='block rounded-[18px] border border-slate-200 bg-white/92 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 dark:border-white/10 dark:bg-white/[0.05]'
+                    className='app-subtle-panel block p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25'
                   >
-                    <div className='text-base font-semibold text-slate-950 dark:text-slate-50'>
+                    <div className='text-foreground text-base font-semibold'>
                       {item.title}
                     </div>
-                    <p className='mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300'>
+                    <p className='text-muted-foreground mt-2 text-sm leading-7'>
                       {item.description}
                     </p>
                   </Link>

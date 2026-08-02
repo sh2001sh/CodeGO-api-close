@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   consumeSubscriptionResetOpportunity,
   updateBillingPreference,
@@ -15,24 +17,19 @@ import type {
   PlanRecord,
   SelfSubscriptionData,
 } from '@/features/subscriptions/types'
-import type { UserWalletData } from '../types'
 import { RedemptionCodePanel } from './redemption-code-panel'
 import { SubscriptionClaudeConversionCard } from './subscription-claude-conversion-card'
-import { WalletBalancePanels } from './wallet-balance-panels'
 import { WalletBillingOrderPanel } from './wallet-billing-order-panel'
 import {
   getOrderedSubscriptions,
   type WalletPlanMeta,
 } from './wallet-panel-utils'
+import { WalletQuotaConversionCard } from './wallet-quota-conversion-card'
 import { WalletResetOpportunityPanel } from './wallet-reset-opportunity-panel'
 
-const ALL_FUNDING_SOURCES: FundingSource[] = [
-  'subscription',
-  'wallet',
-]
+const ALL_FUNDING_SOURCES: FundingSource[] = ['subscription', 'wallet']
 
 interface WalletPagePanelsProps {
-  user: UserWalletData | null
   plans: PlanRecord[]
   plansLoading?: boolean
   loading?: boolean
@@ -44,17 +41,22 @@ interface WalletPagePanelsProps {
   subscriptionData?: SelfSubscriptionData | null
   subscriptionLoading?: boolean
   onSubscriptionRefresh?: () => Promise<void>
-  showBalancePanels?: boolean
+  onUserRefresh?: () => Promise<void>
+  section: 'funding' | 'conversion' | 'billing'
+  onOpenConversionHistory?: () => void
 }
 
 export function WalletPagePanels(props: WalletPagePanelsProps) {
+  const { t } = useTranslation()
   const [draftFundingSourceOrder, setDraftFundingSourceOrder] = useState<
     FundingSource[]
   >(['subscription', 'wallet'])
   const [draftOrderIds, setDraftOrderIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const [usingResetOpportunity, setUsingResetOpportunity] = useState(false)
-  const showBalancePanels = props.showBalancePanels !== false
+  const [conversionMode, setConversionMode] = useState<'wallet' | 'plan'>(
+    'wallet'
+  )
 
   const activeSubscriptions = useMemo(
     () => props.subscriptionData?.subscriptions ?? [],
@@ -142,7 +144,7 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
           (item) => item === 'subscription' || item === 'wallet'
         )
         if (!hasPrimarySource) {
-          toast.error('至少保留一种主要扣费来源')
+          toast.error(t('Keep at least one primary billing source enabled.'))
           return current
         }
         return next
@@ -185,13 +187,13 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
         subscriptionOrderIds: hasActiveSubscriptions ? draftOrderIds : [],
       })
       if (!response.success) {
-        toast.error(response.message || '保存扣费顺序失败')
+        toast.error(response.message || t('Failed to save billing priority.'))
         return
       }
-      toast.success('扣费顺序已更新')
+      toast.success(t('Billing priority updated.'))
       await props.onSubscriptionRefresh?.()
     } catch {
-      toast.error('保存扣费顺序失败')
+      toast.error(t('Failed to save billing priority.'))
     } finally {
       setSaving(false)
     }
@@ -203,24 +205,28 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
     try {
       const response = await consumeSubscriptionResetOpportunity()
       if (!response.success || !response.data) {
-        toast.error(response.message || '使用额度重置机会失败')
+        toast.error(
+          response.message || t('Failed to use the quota reset opportunity.')
+        )
         return
       }
       toast.success(
-        `已清空${currentSubscriptionPlanMeta?.title || '当前订阅'}已用额度`
+        t('Cleared used quota for {{plan}}.', {
+          plan: currentSubscriptionPlanMeta?.title || t('Current subscription'),
+        })
       )
       await props.onSubscriptionRefresh?.()
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('subscription:changed'))
       }
     } catch {
-      toast.error('使用额度重置机会失败')
+      toast.error(t('Failed to use the quota reset opportunity.'))
     } finally {
       setUsingResetOpportunity(false)
     }
   }
 
-  if (props.loading) {
+  if (props.loading && props.section !== 'funding') {
     return (
       <div className='grid gap-4 lg:grid-cols-2'>
         {Array.from({ length: 4 }).map((_, index) => (
@@ -234,53 +240,71 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
     )
   }
 
-  return (
-    <div className='space-y-4'>
-      {showBalancePanels ? (
-        <WalletBalancePanels
-          user={props.user}
-          topupLink={props.topupLink}
-          redemptionCode={props.redemptionCode}
-          onRedemptionCodeChange={props.onRedemptionCodeChange}
-          onRedeem={props.onRedeem}
-          redeeming={props.redeeming}
-        />
-      ) : null}
-
+  if (props.section === 'funding') {
+    return (
       <RedemptionCodePanel
-        title='兑换码'
-        description='兑换码可补充普通余额、Claude 额度、套餐或活动权益。这里位于额度重置区域上方，适合先核销再调整订阅额度。'
+        title={t('Redemption code')}
+        description={t(
+          'Redeem codes can add standard balance, Claude quota, plans, or promotional benefits.'
+        )}
         topupLink={props.topupLink}
         redemptionCode={props.redemptionCode}
         onRedemptionCodeChange={props.onRedemptionCodeChange}
         onRedeem={props.onRedeem}
         redeeming={props.redeeming}
       />
+    )
+  }
 
-      <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.92fr)]'>
-        <SubscriptionClaudeConversionCard
-          subscriptionData={props.subscriptionData}
-          loading={props.subscriptionLoading}
-          planTitles={Object.fromEntries(
-            Array.from(planMetaMap.entries()).map(([id, value]) => [
-              id,
-              {
-                title: value.title || `套餐 #${id}`,
-                subtitle: value.subtitle || '订阅',
-              },
-            ])
-          )}
-          onRefresh={props.onSubscriptionRefresh}
-        />
+  if (props.section === 'conversion') {
+    return (
+      <div className='space-y-4'>
+        <Tabs
+          value={conversionMode}
+          onValueChange={(value) =>
+            setConversionMode(value as 'wallet' | 'plan')
+          }
+        >
+          <TabsList className='grid w-full max-w-xl grid-cols-2'>
+            <TabsTrigger value='wallet'>{t('Wallet balances')}</TabsTrigger>
+            <TabsTrigger value='plan'>{t('Plan quota')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-        <WalletResetOpportunityPanel
-          resetOpportunity={resetOpportunity}
-          currentSubscriptionTitle={currentSubscriptionPlanMeta?.title}
-          canUseResetOpportunity={canUseResetOpportunity}
-          usingResetOpportunity={usingResetOpportunity}
-          onUseResetOpportunity={() => void handleUseResetOpportunity()}
-        />
+        {conversionMode === 'wallet' ? (
+          <WalletQuotaConversionCard
+            onUserRefresh={props.onUserRefresh}
+            onOpenHistory={props.onOpenConversionHistory}
+          />
+        ) : (
+          <SubscriptionClaudeConversionCard
+            subscriptionData={props.subscriptionData}
+            loading={props.subscriptionLoading}
+            planTitles={Object.fromEntries(
+              Array.from(planMetaMap.entries()).map(([id, value]) => [
+                id,
+                {
+                  title: value.title || t('Plan #{{id}}', { id }),
+                  subtitle: value.subtitle || t('Subscription'),
+                },
+              ])
+            )}
+            onRefresh={props.onSubscriptionRefresh}
+          />
+        )}
       </div>
+    )
+  }
+
+  return (
+    <div className='space-y-4'>
+      <WalletResetOpportunityPanel
+        resetOpportunity={resetOpportunity}
+        currentSubscriptionTitle={currentSubscriptionPlanMeta?.title}
+        canUseResetOpportunity={canUseResetOpportunity}
+        usingResetOpportunity={usingResetOpportunity}
+        onUseResetOpportunity={() => void handleUseResetOpportunity()}
+      />
 
       <WalletBillingOrderPanel
         draftFundingSourceOrder={draftFundingSourceOrder}

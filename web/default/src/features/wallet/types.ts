@@ -97,6 +97,43 @@ export interface CreemPaymentRequest {
 
 export type WalletType = 'default' | 'claude'
 
+export type WalletQuotaConversionDirection =
+  | 'standard_to_claude'
+  | 'claude_to_standard'
+
+export interface WalletQuotaConversion {
+  id: number
+  user_id: number
+  request_id: string
+  direction: WalletQuotaConversionDirection
+  status: string
+  source_quota: number
+  target_quota: number
+  standard_quota_before: number
+  standard_quota_after: number
+  claude_quota_before: number
+  claude_quota_after: number
+  created_at: number
+}
+
+export interface WalletQuotaConversionOverview {
+  standard_per_claude: number
+  quota_per_usd: number
+  standard_quota: number
+  claude_quota: number
+  recent_conversions: WalletQuotaConversion[]
+}
+
+export interface WalletQuotaConversionRequest {
+  direction: WalletQuotaConversionDirection
+  source_quota: number
+  request_id: string
+}
+
+export type WalletQuotaConversionOverviewResponse =
+  ApiResponse<WalletQuotaConversionOverview>
+export type WalletQuotaConversionResponse = ApiResponse<WalletQuotaConversion>
+
 /**
  * Payment method configuration
  */
@@ -242,6 +279,7 @@ export interface SubscriptionResetOpportunitySummary {
 
 export interface AffiliateInviteeRewardStatus {
   invitee_id: number
+  invitee_external_id: string
   invitee_username: string
   invitee_display_name?: string
   created_at: number
@@ -376,6 +414,26 @@ export interface BlindBoxRecord {
   prop_expires_at?: number
 }
 
+export interface BlindBoxHistoryPage {
+  page: number
+  page_size: number
+  total: number
+  retention_days: number
+  cutoff_time: number
+  records: BlindBoxRecord[]
+}
+
+export interface BlindBoxGrant {
+  id: number
+  user_id: number
+  admin_user_id: number
+  blind_box_order_id: number
+  quantity: number
+  reason: string
+  trade_no: string
+  created_at: number
+}
+
 export interface BlindBoxOverview {
   available_boxes: number
   pending_boxes: number
@@ -389,6 +447,28 @@ export interface BlindBoxOverview {
   purchased_today: number
   purchased_this_month: number
   recent_records: BlindBoxRecord[]
+}
+
+export interface BlindBoxZeroHourOverview {
+  current_probability: number
+  max_probability: number
+  points: number
+  point_cap: number
+  active: boolean
+  active_until?: number
+}
+
+export interface BlindBoxRewardStatistics {
+  reward_type: string
+  opened_count: number
+  reward_usd: number
+  credit_amount: number
+}
+
+export interface BlindBoxStatistics {
+  total_opened: number
+  pity_wins: number
+  rewards: BlindBoxRewardStatistics[]
 }
 
 export interface BlindBoxSelfData {
@@ -409,6 +489,9 @@ export interface BlindBoxSelfData {
   pay_methods: PaymentMethod[]
   overview: BlindBoxOverview
   props: BlindBoxProp[]
+  zero_hour?: BlindBoxZeroHourOverview
+  statistics?: BlindBoxStatistics
+  grants?: BlindBoxGrant[]
 }
 
 export interface BlindBoxOrderStatus {
@@ -430,6 +513,7 @@ export type BlindBoxOpenResponse = ApiResponse<{
   open_count: number
 }>
 export type BlindBoxOrderStatusResponse = ApiResponse<BlindBoxOrderStatus>
+export type BlindBoxHistoryResponse = ApiResponse<BlindBoxHistoryPage>
 
 export interface BlindBoxAmountRequest {
   quantity: number

@@ -72,7 +72,11 @@ func registerEmbeddedWebRoutes(router *gin.Engine, assets ThemeAssets) {
 			c.Next()
 			return
 		}
-		if serveEmbeddedStaticPage(c, defaultFS) {
+		// Application routes are extensionless. Let the SPA handle them even if
+		// an outdated build happens to contain a same-named directory.
+		lastSegment := path[strings.LastIndex(path, "/")+1:]
+		if !strings.Contains(lastSegment, ".") {
+			c.Next()
 			return
 		}
 		staticHandler(c)
@@ -85,39 +89,6 @@ func registerEmbeddedWebRoutes(router *gin.Engine, assets ThemeAssets) {
 		}
 		serveIndexPage(c, assets.DefaultIndexPage)
 	})
-}
-
-func serveEmbeddedStaticPage(c *gin.Context, fs static.ServeFileSystem) bool {
-	if c.Request.Method != nethttp.MethodGet && c.Request.Method != nethttp.MethodHead {
-		return false
-	}
-
-	path := c.Request.URL.Path
-	pagePath := strings.Trim(path, "/")
-	if pagePath == "" {
-		return false
-	}
-
-	assetPath := "/" + pagePath + "/index.html"
-	file, err := fs.Open(assetPath)
-	if err != nil {
-		return false
-	}
-	file.Close()
-
-	if strings.HasSuffix(path, "/") {
-		canonicalPath := "/" + pagePath
-		if c.Request.URL.RawQuery != "" {
-			canonicalPath += "?" + c.Request.URL.RawQuery
-		}
-		c.Redirect(nethttp.StatusPermanentRedirect, canonicalPath)
-		c.Abort()
-		return true
-	}
-
-	serveEmbeddedHTML(c, fs, assetPath)
-	c.Abort()
-	return true
 }
 
 func serveEmbeddedHTML(c *gin.Context, fs static.ServeFileSystem, assetPath string) {

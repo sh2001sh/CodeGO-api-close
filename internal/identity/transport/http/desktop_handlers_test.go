@@ -547,6 +547,9 @@ func TestGetDesktopTokenConfigReturnsPerToolPayloads(t *testing.T) {
 	if !response.Success {
 		t.Fatalf("expected success response, got message: %s", response.Message)
 	}
+	if !strings.Contains(string(response.Data), `"icon":"codego"`) {
+		t.Fatalf("expected CodeGo icon in token config response, got: %s", response.Data)
+	}
 }
 
 func TestGetDesktopTokenConfigUsesTokenGroupModels(t *testing.T) {
@@ -681,6 +684,134 @@ func TestCreateDesktopImportConfigAndConsumeCodeOnce(t *testing.T) {
 	}
 }
 
+func TestCreateCCSwitchImportUsesOfficialDirectParameterContract(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	resetDesktopImportCacheForTest(t)
+	user := &identityschema.User{Id: 1, Username: "ccswitch-import-user", Password: "password123", DisplayName: "CC Switch Import User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default"}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	token := seedDesktopToken(t, db, 1, "ccswitch-key", "ccswitchsecret123456")
+	platformconfig.ServerAddress = "https://shu26.cfd"
+	t.Cleanup(func() {
+		platformconfig.ServerAddress = "http://localhost:3000"
+		resetDesktopImportCacheForTest(t)
+	})
+
+	body := map[string]any{"target": "ccswitch", "tool": "codex", "token_id": token.Id, "name": "CodeGo", "model": "gpt-5.6-luna"}
+	createCtx, createRecorder := newAuthenticatedContext(t, http.MethodPost, "/api/desktop/import/deeplink", body, 1)
+	CreateDesktopImportConfig(createCtx)
+	createResponse := decodeAPIResponse(t, createRecorder)
+	if !createResponse.Success {
+		t.Fatalf("expected CC Switch import success, got %s", createResponse.Message)
+	}
+	if strings.Contains(string(createResponse.Data), `"config":`) {
+		t.Fatalf("create response must not expose the encoded API key config")
+	}
+
+	var created desktopImportCreatePayload
+	if err := platformencoding.Unmarshal(createResponse.Data, &created); err != nil {
+		t.Fatalf("failed to decode create response: %v", err)
+	}
+	deepLink, err := url.Parse(created.DeepLink)
+	if err != nil {
+		t.Fatalf("failed to parse deep link: %v", err)
+	}
+	if deepLink.Scheme != "ccswitch" {
+		t.Fatalf("expected ccswitch scheme, got %q", deepLink.Scheme)
+	}
+	params := deepLink.Query()
+	for _, key := range []string{"config", "configFormat", "configUrl", "codegoAction", "tokenId"} {
+		if params.Has(key) {
+			t.Fatalf("CC Switch link must not contain %s", key)
+		}
+	}
+	if params.Get("apiKey") != token.GetFullKey() {
+		t.Fatalf("expected direct API key parameter")
+	}
+	if params.Get("usageEnabled") != "true" || params.Get("usageAutoInterval") != "10" {
+		t.Fatalf("expected enabled CC Switch balance query configuration")
+	}
+	usageScript, err := base64.StdEncoding.DecodeString(params.Get("usageScript"))
+	if err != nil {
+		t.Fatalf("failed to decode CC Switch balance usage script: %v", err)
+	}
+	if !strings.Contains(string(usageScript), "{{baseUrl}}/dashboard/balance") || !strings.Contains(string(usageScript), "{{apiKey}}") {
+		t.Fatalf("unexpected CC Switch balance usage script: %s", usageScript)
+	}
+	if params.Get("endpoint") != "https://shu26.cfd/v1" {
+		t.Fatalf("unexpected endpoint %q", params.Get("endpoint"))
+	}
+	if params.Get("model") != "gpt-5.6-luna" {
+		t.Fatalf("unexpected model %q", params.Get("model"))
+	}
+	if params.Get("homepage") != "https://shu26.cfd" || params.Get("enabled") != "true" {
+		t.Fatalf("missing official provider metadata in %q", created.DeepLink)
+	}
+	if params.Get("notes") != "Imported from CodeGo website" {
+		t.Fatalf("unexpected CC Switch import notes %q", params.Get("notes"))
+	}
+	if created.Code != "" || created.ConfigURL != "" || created.ExpiresIn != 0 {
+		t.Fatalf("CC Switch direct import must not create a one-time config: %+v", created)
+	}
+}
+
+func TestGetTokenAccountBalanceAppliesTokenLimit(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	user := &identityschema.User{
+		Id:       1,
+		Username: "balance-user",
+		Password: "password123",
+		Role:     constant.RoleCommonUser,
+		Status:   constant.UserStatusEnabled,
+		Group:    "default",
+		Quota:    int(platformruntime.QuotaPerUnit * 3),
+	}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	token := &identityschema.Token{
+		UserId:         user.Id,
+		Name:           "limited-balance-key",
+		Key:            "balancekey1234567890",
+		Status:         constant.TokenStatusEnabled,
+		CreatedTime:    1,
+		AccessedTime:   1,
+		ExpiredTime:    -1,
+		RemainQuota:    int(platformruntime.QuotaPerUnit * 2),
+		UnlimitedQuota: false,
+		Group:          "default",
+	}
+	if err := db.Create(token).Error; err != nil {
+		t.Fatalf("failed to seed token: %v", err)
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/v1/dashboard/balance", nil, user.Id)
+	ctx.Set("token_id", token.Id)
+	GetTokenAccountBalance(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected balance query success, got %s", response.Message)
+	}
+	var payload struct {
+		AvailableUSD        float64  `json:"available_usd"`
+		AccountAvailableUSD float64  `json:"account_available_usd"`
+		WalletAvailableUSD  float64  `json:"wallet_available_usd"`
+		TokenAvailableUSD   *float64 `json:"token_available_usd"`
+		TokenUnlimited      bool     `json:"token_unlimited"`
+	}
+	if err := platformencoding.Unmarshal(response.Data, &payload); err != nil {
+		t.Fatalf("failed to decode balance payload: %v", err)
+	}
+	if payload.AccountAvailableUSD != 3 || payload.WalletAvailableUSD != 3 || payload.AvailableUSD != 2 {
+		t.Fatalf("unexpected balance payload: %+v", payload)
+	}
+	if payload.TokenAvailableUSD == nil || *payload.TokenAvailableUSD != 2 || payload.TokenUnlimited {
+		t.Fatalf("expected finite token limit in payload: %+v", payload)
+	}
+}
+
 func TestCreateDesktopImportConfigSupportsAllDesktopTools(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
 	resetDesktopImportCacheForTest(t)
@@ -784,6 +915,23 @@ func TestCreateDesktopImportConfigRejectsUnsupportedTool(t *testing.T) {
 	response := decodeAPIResponse(t, recorder)
 	if response.Success {
 		t.Fatalf("expected unsupported tool import config creation to fail")
+	}
+}
+
+func TestCreateDesktopImportConfigRejectsUnsupportedTarget(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	resetDesktopImportCacheForTest(t)
+	user := &identityschema.User{Id: 1, Username: "unsupported-target-user", Password: "password123", DisplayName: "Unsupported Target User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default"}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	token := seedDesktopToken(t, db, 1, "target-token", "targettoken123456")
+	body := map[string]any{"target": "other", "tool": "codex", "token_id": token.Id, "name": "Code Go Codex"}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/desktop/import/deeplink", body, 1)
+	CreateDesktopImportConfig(ctx)
+	response := decodeAPIResponse(t, recorder)
+	if response.Success || response.Message != "unsupported desktop target" {
+		t.Fatalf("expected unsupported desktop target error, got %+v", response)
 	}
 }
 

@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
-import { SiteSeo } from '@/components/seo'
 import { SectionPageLayout } from '@/components/layout'
+import { SiteSeo } from '@/components/seo'
 import { ApiKeysDialogs } from './components/api-keys-dialogs'
 import { ApiKeysPrimaryButtons } from './components/api-keys-primary-buttons'
 import { ApiKeysProvider } from './components/api-keys-provider'
@@ -29,8 +29,10 @@ export function ApiKeys() {
   return (
     <ApiKeysProvider>
       <SiteSeo
-        title='API Keys'
-        description='管理 Code Go API Keys、创建与筛选密钥、查看状态和批量操作。'
+        title={t('API Keys')}
+        description={t(
+          '管理 Code Go API 密钥、创建与筛选密钥、查看状态和批量操作。'
+        )}
         canonicalPath='/keys'
         robots='noindex,follow'
       />

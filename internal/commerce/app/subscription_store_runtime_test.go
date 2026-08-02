@@ -239,7 +239,7 @@ func TestExpireSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) 
 	assert.Equal(t, constant.TopUpStatusPending, order.Status)
 }
 
-func TestCreatePendingSubscriptionOrderWithBlindBoxDiscount_ReleasesReservedPropOnExpire(t *testing.T) {
+func TestCreatePendingSubscriptionOrderWithDiscounts_ReleasesReservedPropOnExpire(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	user := &identityschema.User{
@@ -268,7 +268,7 @@ func TestCreatePendingSubscriptionOrderWithBlindBoxDiscount_ReleasesReservedProp
 		PaymentProvider: "test",
 		CreateTime:      time.Now().Unix(),
 	}
-	appliedRate, err := CreatePendingSubscriptionOrderWithBlindBoxDiscount(order, 100)
+	appliedRate, err := CreatePendingSubscriptionOrderWithDiscounts(order, 100)
 	require.NoError(t, err)
 	assert.InDelta(t, 0.10, appliedRate, 0.0001)
 	assert.Equal(t, 90.0, order.Money)

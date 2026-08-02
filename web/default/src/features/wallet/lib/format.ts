@@ -62,6 +62,28 @@ export function formatCurrency(amount: number | string): string {
 }
 
 /**
+ * Format a payment amount with an explicit payment currency.
+ * Payment amounts are already calculated by the backend and must not be
+ * converted through the quota display exchange rate.
+ */
+export function formatPaymentAmount(
+  amount: number | string,
+  currency = 'CNY'
+): string {
+  const numeric =
+    typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
+  if (!Number.isFinite(numeric)) return '-'
+
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'narrowSymbol',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Math.abs(numeric) >= 1 ? 2 : 4,
+  }).format(numeric)
+}
+
+/**
  * Get discount label for display (e.g., "20% OFF")
  */
 export function getDiscountLabel(discount: number): string {

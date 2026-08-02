@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformratelimit "github.com/sh2001sh/new-api/internal/platform/ratelimit"
 )
 
 var timeFormat = "2006-01-02T15:04:05.000Z"
@@ -100,6 +101,72 @@ func GlobalAPIRateLimit() func(c *gin.Context) {
 		return rateLimitFactory(platformconfig.GlobalApiRateLimitNum, platformconfig.GlobalApiRateLimitDuration, "GA")
 	}
 	return defNext
+}
+
+// GlobalAuthenticatedAPIRateLimit isolates authenticated traffic by user or
+// desktop device so one noisy client IP cannot consume another user's quota.
+func GlobalAuthenticatedAPIRateLimit() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !enforceGlobalAuthenticatedAPIRateLimit(c) {
+			return
+		}
+		c.Next()
+	}
+}
+
+func enforceGlobalAuthenticatedAPIRateLimit(c *gin.Context) bool {
+	if !platformconfig.GlobalApiRateLimitEnable {
+		return true
+	}
+
+	key := globalAuthenticatedRateLimitKey(c)
+	if key == "" {
+		return true
+	}
+	if platformcache.RedisEnabled {
+		allowed, err := platformratelimit.NewRedisLimiter(c.Request.Context(), platformcache.RDB).Allow(
+			c.Request.Context(),
+			"rateLimit:GA:"+key,
+			platformratelimit.WithCapacity(int64(platformconfig.GlobalApiRateLimitNum)),
+			platformratelimit.WithRate(globalAPIRatePerSecond()),
+			platformratelimit.WithRequested(1),
+		)
+		if err != nil {
+			c.Status(http.StatusInternalServerError)
+			c.Abort()
+			return false
+		}
+		if !allowed {
+			c.Status(http.StatusTooManyRequests)
+			c.Abort()
+			return false
+		}
+		return true
+	}
+
+	if !inMemoryRateLimiter.Request("GA:"+key, platformconfig.GlobalApiRateLimitNum, platformconfig.GlobalApiRateLimitDuration) {
+		c.Status(http.StatusTooManyRequests)
+		c.Abort()
+		return false
+	}
+	return true
+}
+
+func globalAPIRatePerSecond() float64 {
+	if platformconfig.GlobalApiRateLimitDuration <= 0 {
+		return 1
+	}
+	return float64(platformconfig.GlobalApiRateLimitNum) / float64(platformconfig.GlobalApiRateLimitDuration)
+}
+
+func globalAuthenticatedRateLimitKey(c *gin.Context) string {
+	if desktopDeviceID := c.GetInt("desktop_device_id"); desktopDeviceID > 0 {
+		return fmt.Sprintf("desktop:%d", desktopDeviceID)
+	}
+	if userID := c.GetInt("id"); userID > 0 {
+		return fmt.Sprintf("user:%d", userID)
+	}
+	return ""
 }
 
 func CriticalRateLimit() func(c *gin.Context) {

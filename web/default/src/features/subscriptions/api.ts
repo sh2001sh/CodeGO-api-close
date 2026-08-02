@@ -205,6 +205,11 @@ export async function getSubscriptionOrderStatus(
   return res.data
 }
 
+export async function cancelSubscriptionOrder(tradeNo: string): Promise<ApiResponse> {
+  const res = await api.post(`/api/subscription/orders/${tradeNo}/cancel`)
+  return res.data
+}
+
 // ============================================================================
 // User Self Subscriptions
 // ============================================================================

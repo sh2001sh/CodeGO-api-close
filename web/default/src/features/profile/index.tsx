@@ -23,6 +23,7 @@ import {
   CardStaggerContainer,
   CardStaggerItem,
 } from '@/components/page-transition'
+import { SiteSeo } from '@/components/seo'
 import { CheckinCalendarCard } from './components/checkin-calendar-card'
 import { LanguagePreferencesCard } from './components/language-preferences-card'
 import { PasskeyCard } from './components/passkey-card'
@@ -47,6 +48,12 @@ export function Profile() {
 
   return (
     <Main>
+      <SiteSeo
+        title='个人资料'
+        description='管理账户信息、语言偏好、登录安全和侧边栏设置。'
+        canonicalPath='/profile'
+        robots='noindex,follow'
+      />
       <div className='min-h-0 flex-1 overflow-auto px-3 py-3 sm:px-4 sm:py-6'>
         <CardStaggerContainer className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-6'>
           <CardStaggerItem>

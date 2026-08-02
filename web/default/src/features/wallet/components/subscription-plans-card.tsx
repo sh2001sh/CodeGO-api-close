@@ -88,7 +88,10 @@ export function SubscriptionPlansCard({
     () => getEpayMethods(topupInfo?.pay_methods),
     [topupInfo?.pay_methods]
   )
-  const allSubscriptions = subscriptionData?.all_subscriptions || []
+  const allSubscriptions = useMemo(
+    () => subscriptionData?.all_subscriptions ?? [],
+    [subscriptionData?.all_subscriptions]
+  )
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -142,11 +145,11 @@ export function SubscriptionPlansCard({
     return map
   }, [plans])
 
-  const planMap = useMemo(() => {
-    const map = new Map<number, PlanRecord['plan']>()
+  const planRecordMap = useMemo(() => {
+    const map = new Map<number, PlanRecord>()
     for (const item of plans) {
       if (!item?.plan?.id) continue
-      map.set(item.plan.id, item.plan)
+      map.set(item.plan.id, item)
     }
     return map
   }, [plans])
@@ -237,7 +240,10 @@ export function SubscriptionPlansCard({
                   const title =
                     planTitleMap.get(subscription.plan_id) ||
                     `订阅 #${subscription.id}`
-                  const relatedPlan = planMap.get(subscription.plan_id)
+                  const relatedPlanRecord = planRecordMap.get(
+                    subscription.plan_id
+                  )
+                  const relatedPlan = relatedPlanRecord?.plan
                   const totalAmount = Number(subscription.amount_total || 0)
                   const usedAmount = Number(subscription.amount_used || 0)
                   const totalRemain =
@@ -439,7 +445,7 @@ function PlanSection(props: {
       {props.loading ? (
         <div className='grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3'>
           {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className='h-[280px] w-full rounded-[20px]' />
+            <Skeleton key={index} className='h-[280px] w-full rounded-2xl' />
           ))}
         </div>
       ) : childArray.length > 0 ? (

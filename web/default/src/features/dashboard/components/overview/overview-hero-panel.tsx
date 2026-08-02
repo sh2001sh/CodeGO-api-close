@@ -17,7 +17,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
-import { ArrowRight, Check, Circle, KeyRound, LinkIcon } from 'lucide-react'
+import {
+  ArrowRight,
+  Check,
+  Circle,
+  KeyRound,
+  LinkIcon,
+  Package,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/copy-button'
@@ -77,6 +84,10 @@ export function OverviewHeroPanel(props: { guide: SetupGuideState }) {
             <Button variant='outline' render={<Link to='/wallet' />}>
               <KeyRound data-icon='inline-start' />
               查看钱包
+            </Button>
+            <Button variant='outline' render={<Link to='/packages' />}>
+              <Package data-icon='inline-start' />
+              查看套餐
             </Button>
             <Button render={<Link to='/blind-box' />}>
               <ArrowRight data-icon='inline-end' />

@@ -78,12 +78,8 @@ export function DataTableRowActions<TData>({
 }: DataTableRowActionsProps<TData>) {
   const { t } = useTranslation()
   const apiKey = apiKeySchema.parse(row.original)
-  const {
-    setOpen,
-    setCurrentRow,
-    triggerRefresh,
-    resolveRealKey,
-  } = useApiKeys()
+  const { setOpen, setCurrentRow, triggerRefresh, resolveRealKey } =
+    useApiKeys()
   const isEnabled = apiKey.status === API_KEY_STATUS.ENABLED
   const { chatPresets, serverAddress } = useChatPresets()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
@@ -188,7 +184,7 @@ export function DataTableRowActions<TData>({
               className={
                 isEnabled
                   ? 'text-destructive hover:text-destructive'
-                  : 'text-emerald-600 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400'
+                  : 'text-success hover:text-success'
               }
             />
           }
@@ -264,10 +260,10 @@ export function DataTableRowActions<TData>({
           <DropdownMenuItem
             onClick={() => {
               setCurrentRow(apiKey)
-              setOpen('cc-switch')
+              setOpen('desktop-client')
             }}
           >
-            {t('Code Go Desktop')}
+            {t('Configure Desktop Client')}
             <DropdownMenuShortcut>
               <ArrowRightLeft size={16} />
             </DropdownMenuShortcut>

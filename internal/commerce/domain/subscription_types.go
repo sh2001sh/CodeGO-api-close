@@ -7,13 +7,15 @@ type SubscriptionSummary struct {
 }
 
 type SubscriptionPurchasePreview struct {
-	Action                      string                           `json:"action"`
-	BaseAmountDue               float64                          `json:"base_amount_due"`
-	AmountDue                   float64                          `json:"amount_due"`
-	CurrentSubscription         *commerceschema.UserSubscription `json:"-"`
-	CurrentPlan                 *commerceschema.SubscriptionPlan `json:"-"`
-	DisabledReason              string                           `json:"disabled_reason,omitempty"`
-	AppliedBlindBoxDiscountRate float64                          `json:"applied_blind_box_discount_rate,omitempty"`
+	Action                          string                           `json:"action"`
+	BaseAmountDue                   float64                          `json:"base_amount_due"`
+	AmountDue                       float64                          `json:"amount_due"`
+	CurrentSubscription             *commerceschema.UserSubscription `json:"-"`
+	CurrentPlan                     *commerceschema.SubscriptionPlan `json:"-"`
+	DisabledReason                  string                           `json:"disabled_reason,omitempty"`
+	AppliedBlindBoxDiscountRate     float64                          `json:"applied_blind_box_discount_rate,omitempty"`
+	FirstPurchaseDiscountApplied    bool                             `json:"first_purchase_discount_applied,omitempty"`
+	FirstPurchaseDiscountMultiplier float64                          `json:"first_purchase_discount_multiplier,omitempty"`
 }
 
 type SubscriptionPreConsumeResult struct {

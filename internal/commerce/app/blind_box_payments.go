@@ -60,6 +60,7 @@ func CreateBlindBoxEpayPayment(userID int, req BlindBoxPayRequest) (*BlindBoxEpa
 		TradeNo:         tradeNo,
 		PaymentMethod:   req.PaymentMethod,
 		PaymentProvider: commerceschema.PaymentProviderEpay,
+		Source:          commerceschema.BlindBoxOrderSourcePurchase,
 		CreateTime:      time.Now().Unix(),
 		Status:          constant.TopUpStatusPending,
 	}
@@ -108,6 +109,7 @@ func CreateBlindBoxXunhuPayment(userID int, quantity int) (*BlindBoxXunhuCheckou
 		TradeNo:         tradeNo,
 		PaymentMethod:   commerceschema.PaymentMethodXunhu,
 		PaymentProvider: commerceschema.PaymentProviderXunhu,
+		Source:          commerceschema.BlindBoxOrderSourcePurchase,
 		CreateTime:      time.Now().Unix(),
 		Status:          constant.TopUpStatusPending,
 	}

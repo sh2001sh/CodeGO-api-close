@@ -1,71 +1,23 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import {
-  Apple,
-  ArrowUpRight,
-  ExternalLink,
-  Laptop,
-  Loader2,
-  Monitor,
-} from 'lucide-react'
+import { ArrowRight, Loader2 } from 'lucide-react'
+import { motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { motion, useReducedMotion, type Variants } from 'motion/react'
-import { MOTION_TRANSITION } from '@/lib/motion'
-import { cn } from '@/lib/utils'
+import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { Button } from '@/components/ui/button'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
-import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
+import { DownloadPanel } from './download-panel'
 import {
   detectDesktopArchitecture,
   detectDesktopPlatform,
-  formatFileSize,
-  RELEASE_PAGE_URL,
   RELEASES_URL,
 } from './lib'
 import type { DesktopDevice, DesktopRelease, DownloadCopy } from './types'
 import { buildDownloadPageViewModel } from './view-model'
 
 const downloadSeo = getPublicPageSeoEntry('/download')
-
-const PAGE_STAGGER: Variants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } },
-}
-
-const FADE_UP: Variants = {
-  hidden: { opacity: 0, y: 20, filter: 'blur(6px)' },
-  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: MOTION_TRANSITION.slow },
-}
-
-const CARDS_STAGGER: Variants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.07, delayChildren: 0.2 } },
-}
-
-const CARD_ITEM: Variants = {
-  hidden: { opacity: 0, y: 16, scale: 0.97 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: MOTION_TRANSITION.slow },
-}
 
 function getDownloadCopy(t: (key: string) => string): DownloadCopy {
   return {
@@ -82,7 +34,9 @@ function getDownloadCopy(t: (key: string) => string): DownloadCopy {
     ),
     macosAppleSiliconCta: t('Download for Apple Silicon'),
     macosIntelTitle: t('macOS Intel'),
-    macosIntelDescription: t('Signed DMG installer for macOS 12+ on Intel Macs.'),
+    macosIntelDescription: t(
+      'Signed DMG installer for macOS 12+ on Intel Macs.'
+    ),
     macosIntelCta: t('Download for Intel Mac'),
     macosFallbackCta: t('Install with Homebrew'),
     linuxTitle: t('Linux'),
@@ -95,12 +49,22 @@ function getDownloadCopy(t: (key: string) => string): DownloadCopy {
   }
 }
 
-export function DownloadPage() {
-  const { t } = useTranslation()
-  const shouldReduceMotion = Boolean(useReducedMotion())
+function detectDevice(): DesktopDevice {
+  if (typeof navigator === 'undefined') {
+    return { platform: 'unknown', arch: 'unknown' }
+  }
+  const platform = detectDesktopPlatform(navigator.userAgent)
+  return {
+    platform,
+    arch: detectDesktopArchitecture(navigator.userAgent, platform),
+  }
+}
 
+export function DownloadPage() {
+  const { i18n, t } = useTranslation()
+  const reduceMotion = Boolean(useReducedMotion())
   const releaseQuery = useQuery({
-    queryKey: ['desktop-download-release'],
+    queryKey: ['desktop-download-release', i18n.language, t],
     queryFn: async () => {
       const response = await fetch(RELEASES_URL, {
         headers: {
@@ -108,463 +72,137 @@ export function DownloadPage() {
           'User-Agent': 'code-go-download-page',
         },
       })
-
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(t('Failed to contact the desktop release channel'))
-      }
-
       const release = (await response.json()) as DesktopRelease
       if (!release?.tag_name || !Array.isArray(release.assets)) {
         throw new Error(t('Unexpected release payload'))
       }
-
       return release
     },
     staleTime: 5 * 60 * 1000,
   })
-
-  const release = releaseQuery.data
   const copy = useMemo(() => getDownloadCopy(t), [t])
-  const device = useMemo<DesktopDevice>(
-    () => {
-      if (typeof navigator === 'undefined') {
-        return { platform: 'unknown', arch: 'unknown' }
-      }
-      const platform = detectDesktopPlatform(navigator.userAgent)
-      return {
-        platform,
-        arch: detectDesktopArchitecture(navigator.userAgent, platform),
-      }
-    },
-    []
-  )
+  const device = useMemo(() => detectDevice(), [])
   const viewModel = useMemo(
     () =>
       buildDownloadPageViewModel({
-        release,
+        release: releaseQuery.data,
         copy,
         device,
         isLoading: releaseQuery.isLoading,
         error: releaseQuery.error,
       }),
-    [copy, device, release, releaseQuery.error, releaseQuery.isLoading]
+    [
+      copy,
+      device,
+      releaseQuery.data,
+      releaseQuery.error,
+      releaseQuery.isLoading,
+    ]
   )
-  const recommendedCard = viewModel.recommendedCard
-  const hasMacArchitectureChoice = viewModel.downloadCards.some(
-    (card) => card.key === 'macos-arm64'
-  )
+  const setupSteps = [
+    [
+      t('Install Code Go'),
+      t(
+        'Download the build for your platform and finish the standard installation.'
+      ),
+    ],
+    [
+      t('Authorize in browser'),
+      t(
+        'Sign in through the website and approve this desktop device without sharing your password with the app.'
+      ),
+    ],
+    [
+      t('Apply your tools'),
+      t(
+        'Import a token, preview the changes, and configure your local AI coding tools in one place.'
+      ),
+    ],
+  ]
 
   return (
     <PublicLayout showMainContainer={false}>
-      <SiteSeo
-        title={downloadSeo.title}
-        description={downloadSeo.description}
-        keywords={downloadSeo.keywords}
-        canonicalPath={downloadSeo.path}
-      />
+      <SiteSeo {...downloadSeo} canonicalPath={downloadSeo.path} />
+      <main className='bg-background min-h-screen pt-28 pb-20'>
+        <motion.div
+          className='mx-auto w-full max-w-5xl px-4 md:px-6'
+          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <header className='mx-auto max-w-3xl text-center'>
+            <p className='text-primary text-sm font-medium'>
+              {t('Code Go Desktop')}
+            </p>
+            <h1 className='mt-3 text-4xl font-semibold tracking-tight text-balance md:text-5xl'>
+              {t('Your AI tools, configured locally.')}
+            </h1>
+            <p className='text-muted-foreground mx-auto mt-4 max-w-2xl text-base leading-7 md:text-lg'>
+              {t(
+                'Securely import your Code Go token and configure Codex, Claude Code, Gemini CLI, and more from one desktop app.'
+              )}
+            </p>
+          </header>
 
-      <main className='bg-background min-h-screen pt-28 pb-16'>
-        <section className='mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 md:px-6'>
-          <motion.div
-            className='grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.8fr)] lg:items-end'
-            variants={PAGE_STAGGER}
-            initial={shouldReduceMotion ? false : 'hidden'}
-            animate='visible'
-          >
-            <motion.div variants={FADE_UP} className='space-y-6'>
-              <div className='inline-flex w-fit items-center rounded-full border border-orange-500/20 bg-orange-500/8 px-3 py-1 text-xs font-medium text-orange-700 dark:text-orange-300'>
-                {t('Desktop release channel')}
-              </div>
-              <div className='space-y-3'>
-                <h1 className='max-w-4xl text-4xl font-semibold tracking-tight text-balance md:text-5xl'>
-                  {t('Download Code Go Desktop')}
-                </h1>
-                <p className='text-muted-foreground max-w-3xl text-base leading-7 md:text-lg'>
-                  {t(
-                    'Use browser-approved desktop access, import API tokens from the website, and configure Codex, Claude Code, Gemini CLI, OpenCode, OpenClaw, or Hermes from one local control surface.'
-                  )}
-                </p>
-              </div>
-              <div className='flex flex-wrap gap-3'>
-                {recommendedCard ? (
-                  <Button
-                    size='lg'
-                    render={
-                      <a
-                        href={recommendedCard.href}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                      />
-                    }
-                  >
-                    {t('Recommended download')}: {recommendedCard.title}
-                  </Button>
-                ) : null}
-                {!recommendedCard &&
-                device.platform === 'macos' &&
-                hasMacArchitectureChoice ? (
-                  <Button size='lg' render={<a href='#desktop-downloads' />}>
-                    {t('Choose your Mac build')}
-                  </Button>
-                ) : null}
-                <Button
-                  size='lg'
-                  render={<Link to='/sign-in' search={{ redirect: '/keys' }} />}
-                >
-                  {t('Open token console')}
-                </Button>
-                <Button
-                  size='lg'
-                  variant='outline'
-                  render={
-                    <a
-                      href={release?.html_url || RELEASE_PAGE_URL}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                    />
-                  }
-                >
-                  {t('Open release')}
-                  <ExternalLink className='size-4' />
-                </Button>
-              </div>
-            </motion.div>
-
-            <motion.div variants={FADE_UP} className='overview-glass-card rounded-3xl p-6'>
-              <div className='space-y-5'>
-                <div>
-                  <div className='text-muted-foreground text-sm'>
-                    {t('Current desktop build')}
-                  </div>
-                  <div className='mt-1 text-2xl font-semibold'>
-                    {viewModel.currentBuildLabel}
-                  </div>
-                </div>
-                <div className='grid gap-4 sm:grid-cols-2'>
-                  <div>
-                    <div className='text-muted-foreground text-sm'>
-                      {t('Published')}
-                    </div>
-                    <div className='mt-1 font-medium'>
-                      {viewModel.publishedAtLabel}
-                    </div>
-                  </div>
-                  <div>
-                    <div className='text-muted-foreground text-sm'>
-                      {t('Support')}
-                    </div>
-                    <div className='mt-1 font-medium'>
-                      {t('Windows, macOS, Linux')}
-                    </div>
-                  </div>
-                </div>
-                <div className='border-border/60 bg-background/80 rounded-2xl border p-4 text-sm leading-6'>
-                  <div className='font-medium'>{t('What ships today')}</div>
-                  <p className='text-muted-foreground mt-2'>
-                    {t(
-                      'The current public build, in-app updater, browser authorization, token import, and device revocation now resolve through the same Code Go release channel and website account.'
-                    )}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-
-          <motion.div
-            id='desktop-downloads'
-            className='grid gap-5 md:grid-cols-2 xl:grid-cols-4'
-            variants={CARDS_STAGGER}
-            initial={shouldReduceMotion ? false : 'hidden'}
-            whileInView='visible'
-            viewport={{ once: true, margin: '-60px' }}
-          >
-            {viewModel.downloadCards.map((card) => {
-              const Icon =
-                card.platform === 'windows'
-                  ? Monitor
-                  : card.platform === 'macos'
-                    ? Apple
-                    : Laptop
-              const isRecommended = viewModel.recommendedCard?.key === card.key
-              const iconBg =
-                card.platform === 'windows'
-                  ? 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white'
-                  : card.platform === 'macos'
-                    ? 'bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950'
-                    : 'bg-emerald-700 text-white dark:bg-emerald-600 dark:text-white'
-
-              return (
-                <motion.section
-                  key={card.key}
-                  variants={CARD_ITEM}
-                  className={cn(
-                    'flex h-full flex-col rounded-3xl border p-6 backdrop-blur-xl transition-shadow',
-                    isRecommended
-                      ? 'border-orange-400/35 bg-card/90 shadow-[0_0_0_1px_rgba(251,146,60,0.08)_inset,0_20px_44px_rgba(251,146,60,0.08)]'
-                      : 'border-border/70 bg-card/80 shadow-sm'
-                  )}
-                >
-                  <div className='flex items-start justify-between gap-4'>
-                    <div className='space-y-1'>
-                      <div className={cn('inline-flex size-11 items-center justify-center rounded-2xl', iconBg)}>
-                        <Icon className='size-5' />
-                      </div>
-                      <h2 className='pt-3 text-xl font-semibold'>
-                        {card.title}
-                      </h2>
-                    </div>
-                    <div className='flex flex-col items-end gap-2'>
-                      {card.arch ? (
-                        <span className='border-border rounded-full border px-2.5 py-1 text-xs font-medium'>
-                          {card.archLabel || card.arch}
-                        </span>
-                      ) : null}
-                      {isRecommended ? (
-                        <span className='rounded-full border border-orange-500/20 bg-orange-500/8 px-2.5 py-1 text-xs font-medium text-orange-700 dark:text-orange-300'>
-                          {t('Recommended')}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <p className='text-muted-foreground mt-4 text-sm leading-6'>
-                    {card.description}
-                  </p>
-
-                  <dl className='mt-6 space-y-3 text-sm'>
-                    <div className='flex items-start justify-between gap-4'>
-                      <dt className='text-muted-foreground'>{t('Asset')}</dt>
-                      <dd className='max-w-[65%] text-right font-medium break-all'>
-                        {card.fileName || t('Latest release page')}
-                      </dd>
-                    </div>
-                    <div className='flex items-start justify-between gap-4'>
-                      <dt className='text-muted-foreground'>
-                        {t('Package size')}
-                      </dt>
-                      <dd className='font-medium'>
-                        {card.fileSize ? formatFileSize(card.fileSize) : '-'}
-                      </dd>
-                    </div>
-                    <div className='flex items-start justify-between gap-4'>
-                      <dt className='text-muted-foreground'>SHA256</dt>
-                      <dd className='max-w-[65%] text-right font-mono text-xs break-all'>
-                        {card.digest?.replace('sha256:', '') || '-'}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  <div className='mt-auto pt-6'>
-                    <Button
-                      className='w-full justify-center'
-                      variant={card.fallback ? 'outline' : 'default'}
-                      render={
-                        <a
-                          href={card.href}
-                          target='_blank'
-                          rel='noopener noreferrer'
-                        />
-                      }
-                    >
-                      {card.cta}
-                      {card.fallback ? (
-                        <ArrowUpRight className='size-4' />
-                      ) : null}
-                    </Button>
-                  </div>
-                </motion.section>
-              )
-            })}
-          </motion.div>
-
-          <div className='grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]'>
-            <section className='overview-glass-card rounded-3xl p-6'>
-              <h2 className='text-xl font-semibold'>
-                {t('After installation')}
-              </h2>
-              <div className='mt-5 grid gap-4 sm:grid-cols-3'>
-                <div className='border-border/60 bg-background/70 rounded-2xl border p-4'>
-                  <div className='text-sm font-medium'>1. {t('Sign in')}</div>
-                  <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                    {t(
-                      'Start from browser authorization instead of entering your website password inside the desktop app.'
-                    )}
-                  </p>
-                </div>
-                <div className='border-border/60 bg-background/70 rounded-2xl border p-4'>
-                  <div className='text-sm font-medium'>
-                    2. {t('Import token')}
-                  </div>
-                  <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                    {t(
-                      'Open any token row in the website console and send it to Code Go Desktop through the one-click import action.'
-                    )}
-                  </p>
-                </div>
-                <div className='border-border/60 bg-background/70 rounded-2xl border p-4'>
-                  <div className='text-sm font-medium'>
-                    3. {t('Configure local tools')}
-                  </div>
-                  <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                    {t(
-                      'Use the desktop app to write Codex, Claude Code, Gemini CLI, OpenCode, OpenClaw, or Hermes settings with backup and recovery support.'
-                    )}
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            <section className='overview-glass-card rounded-3xl p-6'>
-              <h2 className='text-xl font-semibold'>
-                {t('Need another asset?')}
-              </h2>
-              <p className='text-muted-foreground mt-3 text-sm leading-6'>
-                {t(
-                  'Portable Windows builds, macOS archives, and Linux .deb/.rpm packages remain available on the release page.'
-                )}
+          <div className='mt-10'>
+            <DownloadPanel
+              cards={viewModel.downloadCards}
+              recommendedCard={viewModel.recommendedCard}
+              detectedPlatform={device.platform}
+              release={releaseQuery.data}
+            />
+            {viewModel.isLoading ? (
+              <p className='text-muted-foreground mt-3 flex items-center justify-center gap-2 text-sm'>
+                <Loader2 className='size-4 animate-spin' />
+                {t('Checking the latest release...')}
               </p>
-              <div className='mt-5 space-y-3'>
-                <Button
-                  className='w-full justify-center'
-                  variant='outline'
-                  render={
-                    <a
-                      href={release?.html_url || RELEASE_PAGE_URL}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                    />
-                  }
-                >
-                  {t('Browse all desktop assets')}
-                  <ExternalLink className='size-4' />
-                </Button>
-              </div>
-            </section>
+            ) : null}
+            {viewModel.errorMessage ? (
+              <p className='text-destructive mt-3 text-center text-sm'>
+                {viewModel.errorMessage} ·{' '}
+                {t('Release page links are still available.')}
+              </p>
+            ) : null}
           </div>
 
-          <div className='grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]'>
-            <section className='overview-glass-card rounded-3xl p-6'>
-              <div className='flex flex-wrap items-center justify-between gap-3'>
-                <div>
-                  <h2 className='text-xl font-semibold'>
-                    {t('Platform setup checklist')}
-                  </h2>
-                  <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                    {t(
-                      'Use the track that matches your operating system so the installer, browser authorization, and local tool changes happen in the expected order.'
-                    )}
-                  </p>
-                </div>
-                {viewModel.recommendedTrack ? (
-                  <span className='rounded-full border border-orange-500/20 bg-orange-500/8 px-2.5 py-1 text-xs font-medium text-orange-700 dark:text-orange-300'>
-                    {t('Recommended')}: {viewModel.recommendedTrack.title}
-                  </span>
-                ) : null}
-              </div>
-
-              <div className='mt-5 grid gap-4 lg:grid-cols-3'>
-                {viewModel.installationTracks.map((track) => (
-                  <section
-                    key={track.key}
-                    className='border-border/60 bg-background/75 rounded-2xl border p-4'
-                  >
-                    <div className='flex items-center justify-between gap-3'>
-                      <h3 className='text-sm font-semibold'>{track.title}</h3>
-                      {track.badge ? (
-                        <span className='border-border rounded-full border px-2 py-0.5 text-[11px] font-medium'>
-                          {track.badge}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className='mt-4 space-y-4'>
-                      {track.steps.map((step, index) => (
-                        <div key={step.title} className='space-y-1.5'>
-                          <div className='text-sm font-medium'>
-                            {index + 1}. {t(step.title)}
-                          </div>
-                          <p className='text-muted-foreground text-sm leading-6'>
-                            {t(step.description)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
-            </section>
-
-            <section className='overview-glass-card rounded-3xl p-6'>
-              <h2 className='text-xl font-semibold'>
-                {t('Verify before running')}
-              </h2>
-              <div className='mt-5 space-y-4'>
-                {viewModel.verificationItems.map((item) => (
-                  <div
-                    key={item.title}
-                    className='border-border/60 bg-background/75 rounded-2xl border p-4'
-                  >
-                    <div className='text-sm font-medium'>{t(item.title)}</div>
-                    <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                      {t(item.description)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <section className='overview-glass-card rounded-3xl p-6'>
-            <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
-              <div className='max-w-3xl'>
-                <h2 className='text-xl font-semibold'>
-                  {t('Need the full walkthrough?')}
-                </h2>
-                <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                  {t(
-                    'Use the FAQ for product-level questions, the token console for one-click imports, and the release details page when you need alternate packages or checksum context.'
-                  )}
+          <section className='mt-16'>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
+              <div>
+                <p className='text-primary text-sm font-medium'>
+                  {t('Three steps')}
                 </p>
+                <h2 className='mt-2 text-2xl font-semibold tracking-tight'>
+                  {t('Ready in a few minutes')}
+                </h2>
               </div>
-              <div className='flex flex-wrap gap-3'>
-                <Button variant='outline' render={<Link to='/faq' />}>
-                  {t('Open FAQ')}
-                </Button>
-                <Button
-                  variant='outline'
-                  render={<Link to='/sign-in' search={{ redirect: '/keys' }} />}
-                >
-                  {t('Open token console')}
-                </Button>
-                <Button
-                  variant='outline'
-                  render={
-                    <a
-                      href={release?.html_url || RELEASE_PAGE_URL}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                    />
-                  }
-                >
-                  {t('View source release')}
-                  <ExternalLink className='size-4' />
-                </Button>
-              </div>
+              <Button
+                variant='ghost'
+                render={<Link to='/sign-in' search={{ redirect: '/keys' }} />}
+              >
+                {t('Open token console')}
+                <ArrowRight className='size-4' />
+              </Button>
             </div>
+            <ol className='border-border mt-6 grid border-y sm:grid-cols-3'>
+              {setupSteps.map(([title, description], index) => (
+                <li
+                  key={title}
+                  className='border-border py-6 max-sm:border-t max-sm:first:border-t-0 sm:border-l sm:px-6 sm:first:border-l-0 sm:first:pl-0 sm:last:pr-0'
+                >
+                  <span className='text-primary font-mono text-xs'>
+                    0{index + 1}
+                  </span>
+                  <h3 className='mt-3 font-semibold'>{title}</h3>
+                  <p className='text-muted-foreground mt-2 text-sm leading-6'>
+                    {description}
+                  </p>
+                </li>
+              ))}
+            </ol>
           </section>
-
-          {viewModel.isLoading ? (
-            <div className='text-muted-foreground flex items-center justify-center gap-2 py-8 text-sm'>
-              <Loader2 className='size-4 animate-spin' />
-              {t('Loading desktop release...')}
-            </div>
-          ) : null}
-
-          {viewModel.errorMessage ? (
-            <div className='border-destructive/20 bg-destructive/5 text-destructive rounded-2xl border px-4 py-3 text-sm'>
-              {viewModel.errorMessage}
-            </div>
-          ) : null}
-        </section>
+        </motion.div>
       </main>
     </PublicLayout>
   )

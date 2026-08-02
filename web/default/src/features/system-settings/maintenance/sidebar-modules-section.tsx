@@ -79,8 +79,12 @@ export function SidebarModulesSection({
   > = {
     chat: {
       playground: {
-        title: t('Playground'),
-        description: t('Experiment with prompts and models in real time.'),
+        title: t('AI chat'),
+        description: t('Chat with available models in real time.'),
+      },
+      images: {
+        title: t('Image workspace'),
+        description: t('Generate, edit, and manage images with AI models.'),
       },
       chat: {
         title: t('Chat'),
@@ -112,7 +116,15 @@ export function SidebarModulesSection({
       },
       rewards: {
         title: t('Invite Rewards'),
-        description: t('Referral links, pending rewards, and reward transfers.'),
+        description: t(
+          'Referral links, pending rewards, and reward transfers.'
+        ),
+      },
+      community: {
+        title: t('Community resources'),
+        description: t(
+          'Browse, submit, and download community GitHub resources.'
+        ),
       },
       personal: {
         title: t('Profile'),

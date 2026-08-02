@@ -254,9 +254,34 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 	}
 }
 
-func sendResponsesStreamData(c *gin.Context, streamResponse dto.ResponsesStreamResponse, data string) error {
+func sendResponsesStreamData(c *gin.Context, info *relaycommon.RelayInfo, streamResponse dto.ResponsesStreamResponse, data string) error {
 	if data == "" {
 		return nil
 	}
-	return helper.ResponseChunkData(c, streamResponse, data)
+	if !isPaceableResponsesTextDelta(streamResponse) || info == nil || info.StreamPacer == nil {
+		return helper.ResponseChunkData(c, streamResponse, data)
+	}
+
+	for _, delta := range info.StreamPacer.SplitText(streamResponse.Delta) {
+		part := streamResponse
+		part.Delta = delta
+		partData, err := platformencoding.Marshal(part)
+		if err != nil {
+			return err
+		}
+		if err := info.StreamPacer.Pace(c.Request.Context(), delta); err != nil {
+			return err
+		}
+		if err := helper.ResponseChunkData(c, part, string(partData)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isPaceableResponsesTextDelta(streamResponse dto.ResponsesStreamResponse) bool {
+	if streamResponse.Delta == "" || !strings.HasSuffix(streamResponse.Type, ".delta") {
+		return false
+	}
+	return streamResponse.Type != "response.function_call_arguments.delta"
 }

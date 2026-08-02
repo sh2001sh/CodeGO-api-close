@@ -191,7 +191,7 @@ func CreateSubscriptionEpayPayment(userID int, req SubscriptionEpayPayRequest) (
 		Status:          constant.TopUpStatusPending,
 	}
 	ApplySubscriptionPurchaseFields(order, purchaseType, groupBuyID)
-	if _, err := CreatePendingSubscriptionOrderWithBlindBoxDiscount(order, preview.BaseAmountDue); err != nil {
+	if _, err := CreatePendingSubscriptionOrderWithDiscounts(order, preview.BaseAmountDue); err != nil {
 		return nil, errors.New("failed to create order")
 	}
 
@@ -283,7 +283,7 @@ func CreateSubscriptionXunhuPayment(userID int, req SubscriptionXunhuPayRequest)
 		Status:          constant.TopUpStatusPending,
 	}
 	ApplySubscriptionPurchaseFields(order, purchaseType, groupBuyID)
-	if _, err := CreatePendingSubscriptionOrderWithBlindBoxDiscount(order, preview.BaseAmountDue); err != nil {
+	if _, err := CreatePendingSubscriptionOrderWithDiscounts(order, preview.BaseAmountDue); err != nil {
 		return nil, errors.New("failed to create order")
 	}
 
@@ -370,7 +370,7 @@ func CreateSubscriptionStripePayment(userID int, req SubscriptionStripePayReques
 		Status:          constant.TopUpStatusPending,
 	}
 	ApplySubscriptionPurchaseFields(order, purchaseType, groupBuyID)
-	if _, err := CreatePendingSubscriptionOrderWithBlindBoxDiscount(order, preview.BaseAmountDue); err != nil {
+	if _, err := CreatePendingSubscriptionOrderWithDiscounts(order, preview.BaseAmountDue); err != nil {
 		return nil, errors.New("failed to create order")
 	}
 	payLink, err := genStripeSubscriptionLink(referenceID, user.StripeCustomer, user.Email, plan.Title, order.Money)
@@ -381,7 +381,7 @@ func CreateSubscriptionStripePayment(userID int, req SubscriptionStripePayReques
 	return &SubscriptionStripeCheckoutPayload{
 		SubscriptionCheckoutPayload: SubscriptionCheckoutPayload{
 			OrderID:   referenceID,
-			AmountDue: preview.AmountDue,
+			AmountDue: order.Money,
 			Action:    preview.Action,
 		},
 		PayLink: payLink,
@@ -428,7 +428,7 @@ func CreateSubscriptionCreemPayment(userID int, req SubscriptionCreemPayRequest)
 		Status:          constant.TopUpStatusPending,
 	}
 	ApplySubscriptionPurchaseFields(order, purchaseType, groupBuyID)
-	if _, err := CreatePendingSubscriptionOrderWithBlindBoxDiscount(order, preview.BaseAmountDue); err != nil {
+	if _, err := CreatePendingSubscriptionOrderWithDiscounts(order, preview.BaseAmountDue); err != nil {
 		return nil, errors.New("failed to create order")
 	}
 
@@ -454,7 +454,7 @@ func CreateSubscriptionCreemPayment(userID int, req SubscriptionCreemPayRequest)
 	return &SubscriptionCreemCheckoutPayload{
 		SubscriptionCheckoutPayload: SubscriptionCheckoutPayload{
 			OrderID:   referenceID,
-			AmountDue: preview.AmountDue,
+			AmountDue: order.Money,
 			Action:    preview.Action,
 		},
 		CheckoutURL: checkoutURL,

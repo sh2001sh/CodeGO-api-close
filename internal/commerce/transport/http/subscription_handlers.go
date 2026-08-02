@@ -91,6 +91,19 @@ func getSubscriptionOrderStatus(c *gin.Context) {
 	httpapi.ApiSuccess(c, payload)
 }
 
+func cancelSubscriptionOrder(c *gin.Context) {
+	tradeNo := strings.TrimSpace(c.Param("trade_no"))
+	if tradeNo == "" {
+		httpapi.ApiErrorMsg(c, "invalid trade no")
+		return
+	}
+	if err := commerceapp.CancelPendingSubscriptionOrder(c.GetInt("id"), tradeNo); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, nil)
+}
+
 func getSubscriptionSelf(c *gin.Context) {
 	payload, err := commerceapp.BuildSubscriptionSelfPayload(c.GetInt("id"))
 	if err != nil {

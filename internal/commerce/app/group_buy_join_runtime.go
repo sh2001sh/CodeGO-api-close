@@ -91,7 +91,7 @@ func joinGroupBuyTx(tx *gorm.DB, userID int, groupBuyID int64, orderID int, expe
 	if err != nil {
 		return err
 	}
-	if !plan.GroupBuyEnabled {
+	if !supportsGroupBuyPlan(plan) {
 		return ErrGroupBuyPlanNotEnabled
 	}
 

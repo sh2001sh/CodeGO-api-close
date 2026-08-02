@@ -36,7 +36,6 @@ import {
 } from '@/lib/format'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn, truncateText } from '@/lib/utils'
-import { TruncatedText } from '@/components/truncated-text'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -45,7 +44,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DataTableColumnHeader } from '@/components/data-table/column-header'
 import { GroupBadge } from '@/components/group-badge'
 import {
@@ -53,6 +51,7 @@ import {
   dotColorMap,
   textColorMap,
 } from '@/components/status-badge'
+import { TruncatedText } from '@/components/truncated-text'
 import { getCodexUsage } from '../api'
 import { CHANNEL_STATUS_CONFIG, MODEL_FETCHABLE_TYPES } from '../constants'
 import {
@@ -67,8 +66,6 @@ import {
   parseModelsList,
   parseGroupsList,
   parseChannelSettings,
-  handleUpdateChannelField,
-  handleUpdateTagField,
   handleUpdateChannelBalance,
   isTagAggregateRow,
   type TagRow,
@@ -82,7 +79,6 @@ import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './dialogs/codex-usage-dialog'
-import { NumericSpinnerInput } from './numeric-spinner-input'
 
 function parseIonetMeta(otherInfo: string | null | undefined): null | {
   source?: string
@@ -184,116 +180,6 @@ function UpstreamUpdateTags({ channel }: { channel: Channel }) {
         />
       )}
     </div>
-  )
-}
-
-/**
- * Priority cell component with inline editing
- */
-function PriorityCell({ channel }: { channel: Channel }) {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const isTagRow = isTagAggregateRow(channel)
-  const priority = channel.priority
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [pendingValue, setPendingValue] = useState<number | null>(null)
-
-  // Tag row - editable with confirmation for all tag channels
-  if (isTagRow) {
-    const tag = channel.tag || ''
-    const channelCount = channel.children?.length || 0
-
-    return (
-      <>
-        <NumericSpinnerInput
-          value={priority ?? 0}
-          onChange={(value) => {
-            setPendingValue(value)
-            setConfirmOpen(true)
-          }}
-          min={-999}
-        />
-        <ConfirmDialog
-          open={confirmOpen}
-          onOpenChange={setConfirmOpen}
-          title={t('Confirm Batch Update')}
-          desc={`This will update the priority to ${pendingValue} for all ${channelCount} channel(s) with tag "${tag}". Continue?`}
-          confirmText='Update'
-          handleConfirm={() => {
-            if (pendingValue !== null) {
-              handleUpdateTagField(tag, 'priority', pendingValue, queryClient)
-            }
-            setConfirmOpen(false)
-          }}
-        />
-      </>
-    )
-  }
-
-  // Regular channel row - editable
-  return (
-    <NumericSpinnerInput
-      value={priority ?? 0}
-      onChange={(value) => {
-        handleUpdateChannelField(channel.id, 'priority', value, queryClient)
-      }}
-      min={-999}
-    />
-  )
-}
-
-/**
- * Weight cell component with inline editing
- */
-function WeightCell({ channel }: { channel: Channel }) {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const isTagRow = isTagAggregateRow(channel)
-  const weight = channel.weight
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [pendingValue, setPendingValue] = useState<number | null>(null)
-
-  // Tag row - editable with confirmation for all tag channels
-  if (isTagRow) {
-    const tag = channel.tag || ''
-    const channelCount = channel.children?.length || 0
-
-    return (
-      <>
-        <NumericSpinnerInput
-          value={weight ?? 0}
-          onChange={(value) => {
-            setPendingValue(value)
-            setConfirmOpen(true)
-          }}
-          min={0}
-        />
-        <ConfirmDialog
-          open={confirmOpen}
-          onOpenChange={setConfirmOpen}
-          title={t('Confirm Batch Update')}
-          desc={`This will update the weight to ${pendingValue} for all ${channelCount} channel(s) with tag "${tag}". Continue?`}
-          confirmText='Update'
-          handleConfirm={() => {
-            if (pendingValue !== null) {
-              handleUpdateTagField(tag, 'weight', pendingValue, queryClient)
-            }
-            setConfirmOpen(false)
-          }}
-        />
-      </>
-    )
-  }
-
-  // Regular channel row - editable
-  return (
-    <NumericSpinnerInput
-      value={weight ?? 0}
-      onChange={(value) => {
-        handleUpdateChannelField(channel.id, 'weight', value, queryClient)
-      }}
-      min={0}
-    />
   )
 }
 
@@ -960,27 +846,6 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
         return <StatusBadge label={tag} autoColor={tag} size='sm' />
       },
       size: 120,
-      enableSorting: false,
-    },
-
-    // Priority column
-    {
-      accessorKey: 'priority',
-      meta: { label: t('Priority'), mobileHidden: true },
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Priority')} />
-      ),
-      cell: ({ row }) => <PriorityCell channel={row.original} />,
-      size: 100,
-    },
-
-    // Weight column
-    {
-      accessorKey: 'weight',
-      meta: { label: t('Weight'), mobileHidden: true },
-      header: t('Weight'),
-      cell: ({ row }) => <WeightCell channel={row.original} />,
-      size: 90,
       enableSorting: false,
     },
 

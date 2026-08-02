@@ -63,7 +63,7 @@ var defaultTierSettings = []TierSetting{
 	{Name: "5-10 Claude 额度", MinUSD: 5.0, MaxUSD: 10.0, Probability: 0.03, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "10-20 Claude 额度", MinUSD: 10.0, MaxUSD: 20.0, Probability: 0.012, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "20-40 Claude 额度", MinUSD: 20.0, MaxUSD: 40.0, Probability: 0.006, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "40-80 Claude 额度", MinUSD: 40.0, MaxUSD: 80.0, Probability: 0.002, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "40-60 Claude 额度", MinUSD: 40.0, MaxUSD: 60.0, Probability: 0.001, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "充值九折卡", MinUSD: 0, MaxUSD: 0, Probability: 0.028, RewardType: "prop"},
 	{Name: "套餐九折卡", MinUSD: 0, MaxUSD: 0, Probability: 0.012, RewardType: "prop"},
 	{Name: "0.95 倍率卡", MinUSD: 0, MaxUSD: 0, Probability: 0.038, RewardType: "prop"},

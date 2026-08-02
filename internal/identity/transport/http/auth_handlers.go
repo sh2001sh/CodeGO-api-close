@@ -12,6 +12,7 @@ import (
 	"github.com/sh2001sh/new-api/i18n"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	"github.com/sh2001sh/new-api/internal/identity/sessionstate"
+	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 )
 
 func Login(c *gin.Context) {
@@ -78,10 +79,15 @@ func Register(c *gin.Context) {
 		handleAuthError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
+
+	user, err := identitystore.AuthenticateUserCredentials(req.Username, req.Password)
+	if err != nil {
+		handleAuthError(c, err)
+		return
+	}
+	if err := establishAuthenticatedSession(c, sessions.Default(c), identityapp.BuildAuthenticatedSessionUser(user)); err != nil {
+		handleAuthError(c, err)
+	}
 }
 
 func establishAuthenticatedSession(c *gin.Context, session sessions.Session, user *identityapp.AuthenticatedSessionUser) error {

@@ -69,32 +69,44 @@ func consumeBonusWalletQuotaCredits(userID int, amount int64) error {
 	}
 
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		remaining := amount
-		var credits []billingschema.BonusQuotaCredit
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").
-			Where("user_id = ? AND remaining_amount > 0", userID).
-			Order("id asc").
-			Find(&credits).Error; err != nil {
+		return ConsumeBonusWalletQuotaCreditsTx(tx, userID, amount)
+	})
+}
+
+// ConsumeBonusWalletQuotaCreditsTx consumes bonus provenance inside the caller's transaction.
+func ConsumeBonusWalletQuotaCreditsTx(tx *gorm.DB, userID int, amount int64) error {
+	if tx == nil || userID <= 0 || amount <= 0 {
+		return nil
+	}
+	if !tx.Migrator().HasTable(&billingschema.BonusQuotaCredit{}) {
+		return nil
+	}
+
+	remaining := amount
+	var credits []billingschema.BonusQuotaCredit
+	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+		Where("user_id = ? AND remaining_amount > 0", userID).
+		Order("id asc").
+		Find(&credits).Error; err != nil {
+		return err
+	}
+	for _, credit := range credits {
+		if remaining <= 0 {
+			break
+		}
+		use := credit.RemainingAmount
+		if use > remaining {
+			use = remaining
+		}
+		credit.RemainingAmount -= use
+		if credit.RemainingAmount <= 0 {
+			credit.RemainingAmount = 0
+			credit.Status = billingschema.BonusQuotaStatusExhausted
+		}
+		if err := tx.Save(&credit).Error; err != nil {
 			return err
 		}
-		for _, credit := range credits {
-			if remaining <= 0 {
-				break
-			}
-			use := credit.RemainingAmount
-			if use > remaining {
-				use = remaining
-			}
-			credit.RemainingAmount -= use
-			if credit.RemainingAmount <= 0 {
-				credit.RemainingAmount = 0
-				credit.Status = billingschema.BonusQuotaStatusExhausted
-			}
-			if err := tx.Save(&credit).Error; err != nil {
-				return err
-			}
-			remaining -= use
-		}
-		return nil
-	})
+		remaining -= use
+	}
+	return nil
 }

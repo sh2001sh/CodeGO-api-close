@@ -189,6 +189,9 @@ func maybeResetUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserS
 
 	if usesLegacySubscriptionPeriodicQuota(plan, sub) {
 		sub.AmountUsed = 0
+		if err := restoreSubscriptionLedgerBalanceAfterResetTx(tx, sub, fmt.Sprintf("periodic:%d:%d", sub.Id, base.Unix())); err != nil {
+			return err
+		}
 	} else {
 		sub.PeriodUsed = 0
 	}

@@ -27,17 +27,23 @@ export function formatDuration(
   const unit = plan?.duration_unit || 'month'
   const value = plan?.duration_value || 1
   const unitLabels: Record<string, string> = {
-    year: t('years'),
-    month: t('months'),
-    day: t('days'),
-    hour: t('hours'),
+    year: value === 1 ? t('year') : t('years'),
+    month: value === 1 ? t('month') : t('months'),
+    day: value === 1 ? t('day') : t('days'),
+    hour: value === 1 ? t('hour') : t('hours'),
     custom: t('Custom (seconds)'),
   }
   if (unit === 'custom') {
     const seconds = plan?.custom_seconds || 0
-    if (seconds >= 86400) return `${Math.floor(seconds / 86400)} ${t('days')}`
-    if (seconds >= 3600) return `${Math.floor(seconds / 3600)} ${t('hours')}`
-    return `${seconds} ${t('seconds')}`
+    if (seconds >= 86400) {
+      const days = Math.floor(seconds / 86400)
+      return `${days} ${days === 1 ? t('day') : t('days')}`
+    }
+    if (seconds >= 3600) {
+      const hours = Math.floor(seconds / 3600)
+      return `${hours} ${hours === 1 ? t('hour') : t('hours')}`
+    }
+    return `${seconds} ${seconds === 1 ? t('second') : t('seconds')}`
   }
   return `${value} ${unitLabels[unit] || unit}`
 }
@@ -52,10 +58,19 @@ export function formatResetPeriod(
   if (period === 'monthly') return t('Monthly')
   if (period === 'custom') {
     const seconds = Number(plan?.quota_reset_custom_seconds || 0)
-    if (seconds >= 86400) return `${Math.floor(seconds / 86400)} ${t('days')}`
-    if (seconds >= 3600) return `${Math.floor(seconds / 3600)} ${t('hours')}`
-    if (seconds >= 60) return `${Math.floor(seconds / 60)} ${t('minutes')}`
-    return `${seconds} ${t('seconds')}`
+    if (seconds >= 86400) {
+      const days = Math.floor(seconds / 86400)
+      return `${days} ${days === 1 ? t('day') : t('days')}`
+    }
+    if (seconds >= 3600) {
+      const hours = Math.floor(seconds / 3600)
+      return `${hours} ${hours === 1 ? t('hour') : t('hours')}`
+    }
+    if (seconds >= 60) {
+      const minutes = Math.floor(seconds / 60)
+      return `${minutes} ${minutes === 1 ? t('minute') : t('minutes')}`
+    }
+    return `${seconds} ${seconds === 1 ? t('second') : t('seconds')}`
   }
   return t('No Reset')
 }

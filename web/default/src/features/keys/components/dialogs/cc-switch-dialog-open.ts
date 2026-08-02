@@ -34,15 +34,9 @@ export interface WindowLike {
 }
 
 export function openDesktopImportDeepLink(
-  windowLike: WindowLike,
-  deepLink: string
+	windowLike: WindowLike,
+	deepLink: string
 ) {
-  const popup = windowLike.open('', '_blank', 'noopener,noreferrer')
-  if (popup) {
-    popup.location.href = deepLink
-    return 'popup' as const
-  }
-
-  windowLike.location.href = deepLink
-  return 'redirect' as const
+	windowLike.location.href = deepLink
+	return 'protocol' as const
 }

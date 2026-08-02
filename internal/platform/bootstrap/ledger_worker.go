@@ -4,6 +4,7 @@ import (
 	"context"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
+	bountyapp "github.com/sh2001sh/new-api/internal/bounty/app"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	platformapp "github.com/sh2001sh/new-api/internal/platform/app"
@@ -34,9 +35,11 @@ func startLedgerWorkerBackgroundTasks() {
 	startOptionSyncLoop()
 	billingapp.StartLedgerWorker(context.Background())
 	billingapp.StartOperationalSLOMonitor(context.Background())
+	commerceapp.StartDailyLuckyNumberTask()
 	auditprojection.StartReadModelWorker(context.Background())
 	commerceapp.StartSubscriptionMaintenanceTask()
 	commerceapp.StartGroupBuySettlementTask()
 	identityapp.StartImageWorkspaceCleanupTask()
+	bountyapp.StartBountyMaintenanceTask()
 	platformapp.StartIndexNowSubmissionTask(defaultweb.BuildFS())
 }

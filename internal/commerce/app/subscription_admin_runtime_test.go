@@ -1,6 +1,8 @@
 package app
 
 import (
+	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	"testing"
 	"time"
@@ -34,6 +36,20 @@ func TestResetAdminUserSubscriptionQuotaRuntime(t *testing.T) {
 		NextResetTime: now + 86400,
 	}
 	require.NoError(t, db.Create(sub).Error)
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+		AccountType: "subscription",
+		OwnerType:   "user_subscription",
+		OwnerID:     int64(sub.Id),
+		QuotaUnit:   "quota",
+	})
+	require.NoError(t, err)
+	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{
+		AccountID:      account.AccountID,
+		Amount:         1800,
+		IdempotencyKey: "subscription-admin-reset-test-initial-balance",
+		ReasonCode:     "test",
+	})
+	require.NoError(t, err)
 
 	reset, err := resetAdminUserSubscriptionQuotaRuntime(sub.Id, adminResetUserSubscriptionQuotaRuntimeInput{})
 	require.NoError(t, err)
@@ -41,6 +57,9 @@ func TestResetAdminUserSubscriptionQuotaRuntime(t *testing.T) {
 	assert.Zero(t, reset.AmountUsed)
 	assert.Zero(t, reset.PeriodUsed)
 	assert.Equal(t, "", reset.ModelUsage)
+	var snapshot billingschema.BillingBalanceSnapshot
+	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
+	assert.EqualValues(t, 3000, snapshot.AvailableBalance)
 
 	advanced, err := resetAdminUserSubscriptionQuotaRuntime(sub.Id, adminResetUserSubscriptionQuotaRuntimeInput{
 		AdvanceResetTime: true,

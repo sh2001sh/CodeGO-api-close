@@ -6,6 +6,13 @@ import (
 )
 
 func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin.HandlerFunc) {
+	walletRoute := apiRouter.Group("/wallet")
+	walletRoute.Use(middleware.UserAuth())
+	{
+		walletRoute.GET("/quota-conversions", getWalletQuotaConversions)
+		walletRoute.POST("/quota-conversions", middleware.CriticalRateLimit(), createWalletQuotaConversion)
+	}
+
 	subscriptionRoute := apiRouter.Group("/subscription")
 	subscriptionRoute.Use(middleware.UserAuth())
 	{
@@ -13,6 +20,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		subscriptionRoute.GET("/self", getSubscriptionSelf)
 		subscriptionRoute.GET("/self/claude-conversions", listSubscriptionClaudeConversions)
 		subscriptionRoute.GET("/orders/:trade_no", getSubscriptionOrderStatus)
+		subscriptionRoute.POST("/orders/:trade_no/cancel", middleware.CriticalRateLimit(), cancelSubscriptionOrder)
 		subscriptionRoute.PUT("/self/preference", updateSubscriptionPreference)
 		subscriptionRoute.POST("/self/claude-conversions", middleware.CriticalRateLimit(), createSubscriptionClaudeConversion)
 		subscriptionRoute.POST("/self/reset-opportunity/use", middleware.CriticalRateLimit(), useSubscriptionResetOpportunity)
@@ -73,6 +81,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	blindBoxRoute.Use(middleware.UserAuth())
 	{
 		blindBoxRoute.GET("/self", getBlindBoxSelf)
+		blindBoxRoute.GET("/history", getBlindBoxHistory)
 		blindBoxRoute.GET("/orders/:trade_no", getBlindBoxOrderStatus)
 		blindBoxRoute.POST("/amount", requestBlindBoxAmount)
 		blindBoxRoute.POST("/pay", middleware.CriticalRateLimit(), requestBlindBoxPay)
@@ -80,10 +89,29 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.POST("/props/:id/use", middleware.CriticalRateLimit(), useBlindBoxProp)
 	}
 
+	dailyLuckyNumberRoute := apiRouter.Group("/daily-lucky-number")
+	dailyLuckyNumberRoute.Use(middleware.UserAuth())
+	{
+		dailyLuckyNumberRoute.GET("/self", getDailyLuckyNumberSelf)
+		dailyLuckyNumberRoute.GET("/history", getDailyLuckyNumberHistory)
+		dailyLuckyNumberRoute.GET("/public-wins", getDailyLuckyNumberPublicWins)
+	}
+
+	dailyLuckyNumberAdminRoute := apiRouter.Group("/daily-lucky-number/admin")
+	dailyLuckyNumberAdminRoute.Use(middleware.AdminAuth())
+	{
+		dailyLuckyNumberAdminRoute.GET("/config", getAdminDailyLuckyNumberConfig)
+		dailyLuckyNumberAdminRoute.PUT("/config", updateAdminDailyLuckyNumberConfig)
+		dailyLuckyNumberAdminRoute.GET("/draws", listAdminDailyLuckyNumberDraws)
+		dailyLuckyNumberAdminRoute.POST("/draws/:id/retry", retryAdminDailyLuckyNumberDraw)
+		dailyLuckyNumberAdminRoute.POST("/backfill", backfillAdminDailyLuckyNumbers)
+	}
+
 	blindBoxAdminRoute := apiRouter.Group("/blind-box/admin")
 	blindBoxAdminRoute.Use(middleware.AdminAuth())
 	{
 		blindBoxAdminRoute.GET("/users/:id/overview", adminGetBlindBoxUserOverview)
+		blindBoxAdminRoute.POST("/users/:id/grants", adminGrantBlindBoxes)
 	}
 
 	apiRouter.POST("/blind-box/epay/notify", anonymousRequestBodyLimit, blindBoxEpayNotify)

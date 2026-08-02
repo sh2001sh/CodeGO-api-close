@@ -87,13 +87,13 @@ export function getBillingPreferenceFromFundingSourceOrder(
 
 export function getFundingSourceLabel(
   source: FundingSource,
-  _t: Translate
+  t: Translate
 ): string {
   switch (source) {
     case 'subscription':
-      return '订阅额度'
+      return t('Subscription quota')
     case 'wallet':
-      return '钱包余额'
+      return t('Wallet balance')
     default:
       return source
   }
@@ -101,13 +101,13 @@ export function getFundingSourceLabel(
 
 export function getFundingSourceDescription(
   source: FundingSource,
-  _t: Translate
+  t: Translate
 ): string {
   switch (source) {
     case 'subscription':
-      return '按订阅顺序逐个消耗的套餐额度'
+      return t('Consume plan quota in subscription order')
     case 'wallet':
-      return '账户当前可用的钱包余额'
+      return t('Currently available wallet balance')
     default:
       return ''
   }

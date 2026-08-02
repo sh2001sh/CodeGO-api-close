@@ -6,7 +6,9 @@ import (
 	"time"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	bountyschema "github.com/sh2001sh/new-api/internal/bounty/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	communityschema "github.com/sh2001sh/new-api/internal/community/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -42,7 +44,22 @@ func V2MigrationIDs() []string {
 		"20260711_gateway_execution_core",
 		"20260711_gateway_execution_trace",
 		"20260712_remove_pet_gamification",
-		"20260713_user_external_id",
+		"20260713_bounty_market",
+		"20260713_bounty_market_followups",
+		"20260713_bounty_delivery_summary",
+		"20260713_bounty_submission_version_index",
+		"20260714_user_external_id",
+		"20260715_blind_box_admin_grants",
+		"20260718_first_purchase_discount",
+		"20260718_community_resources",
+		"20260719_subscription_first_purchase_discount",
+		"20260720_wallet_quota_conversion",
+		"20260721_blind_box_zero_hour",
+		"20260724_gateway_route_pools",
+		"20260724_gateway_route_pool_auto_discovery",
+		"20260724_billing_funding_attribution",
+		"20260801_daily_lucky_number",
+		"20260802_gateway_route_pool_fault_domains",
 	}
 }
 
@@ -108,12 +125,73 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			}
 			return nil
 		}},
-		{ID: "20260713_user_external_id", Run: migrateUserExternalIDs},
+		{ID: "20260713_bounty_market", Run: func(tx *gorm.DB) error {
+			return bountyschema.AutoMigrateModels(tx)
+		}},
+		{ID: "20260713_bounty_market_followups", Run: func(tx *gorm.DB) error {
+			return bountyschema.AutoMigrateModels(tx)
+		}},
+		{ID: "20260713_bounty_delivery_summary", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&bountyschema.BountySubmission{})
+		}},
+		{ID: "20260713_bounty_submission_version_index", Run: func(tx *gorm.DB) error {
+			indexName := "uq_bounty_submissions_task_version"
+			if tx.Migrator().HasIndex(&bountyschema.BountySubmission{}, indexName) {
+				if err := tx.Migrator().DropIndex(&bountyschema.BountySubmission{}, indexName); err != nil {
+					return err
+				}
+			}
+			return tx.Migrator().CreateIndex(&bountyschema.BountySubmission{}, indexName)
+		}},
+		{ID: "20260714_user_external_id", Run: migrateUserExternalIDs},
+		{ID: "20260715_blind_box_admin_grants", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&commerceschema.BlindBoxOrder{}, &commerceschema.BlindBoxGrant{})
+		}},
+		{ID: "20260718_first_purchase_discount", Run: func(tx *gorm.DB) error {
+			return migrateFirstPurchaseDiscount(tx)
+		}},
+		{ID: "20260718_community_resources", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&communityschema.Resource{})
+		}},
+		{ID: "20260719_subscription_first_purchase_discount", Run: func(tx *gorm.DB) error {
+			return migrateSubscriptionFirstPurchaseDiscount(tx)
+		}},
+		{ID: "20260720_wallet_quota_conversion", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&commerceschema.WalletQuotaConversion{})
+		}},
+		{ID: "20260721_blind_box_zero_hour", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&commerceschema.BlindBoxZeroHourState{})
+		}},
+		{ID: "20260724_gateway_route_pools", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.RoutePool{}, &gatewayschema.RoutePoolMember{})
+		}},
+		{ID: "20260724_gateway_route_pool_auto_discovery", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.RoutePool{}, &gatewayschema.RoutePoolMember{})
+		}},
+		{ID: "20260724_billing_funding_attribution", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&billingschema.FundingSourcePolicy{}, &billingschema.FundingLot{}, &billingschema.FundingAllocation{}, &billingschema.RequestEconomics{})
+		}},
+		{ID: "20260801_daily_lucky_number", Run: migrateDailyLuckyNumber},
+		{ID: "20260802_gateway_route_pool_fault_domains", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.RoutePoolMember{})
+		}},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
 		err := db.Where("id = ?", step.ID).First(&applied).Error
 		if err == nil {
+			if step.ID == "20260715_blind_box_admin_grants" &&
+				(!db.Migrator().HasTable(&commerceschema.BlindBoxOrder{}) ||
+					!db.Migrator().HasTable(&commerceschema.BlindBoxGrant{})) {
+				if dryRun {
+					continue
+				}
+				if err := db.Transaction(func(tx *gorm.DB) error {
+					return step.Run(tx)
+				}); err != nil {
+					return fmt.Errorf("repair migration %s: %w", step.ID, err)
+				}
+			}
 			continue
 		}
 		if err != gorm.ErrRecordNotFound {
@@ -129,6 +207,42 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.Create(&schemaMigration{ID: step.ID}).Error
 		}); err != nil {
 			return fmt.Errorf("apply migration %s: %w", step.ID, err)
+		}
+	}
+	return nil
+}
+
+func migrateFirstPurchaseDiscount(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.TopUp{}) {
+		return tx.AutoMigrate(&commerceschema.TopUp{})
+	}
+	for _, field := range []string{"FirstPurchaseDiscountApplied", "FirstPurchaseDiscountMultiplier"} {
+		if tx.Migrator().HasColumn(&commerceschema.TopUp{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&commerceschema.TopUp{}, field); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSubscriptionFirstPurchaseDiscount(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.SubscriptionOrder{}) {
+		return tx.AutoMigrate(&commerceschema.SubscriptionOrder{})
+	}
+	for _, field := range []string{
+		"OriginalMoney",
+		"FirstPurchaseDiscountApplied",
+		"FirstPurchaseDiscountMultiplier",
+		"FirstPurchaseDiscountStartAt",
+		"FirstPurchaseDiscountEndAt",
+	} {
+		if tx.Migrator().HasColumn(&commerceschema.SubscriptionOrder{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&commerceschema.SubscriptionOrder{}, field); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -217,4 +331,70 @@ func migrateUserSubscription(tx *gorm.DB) error {
 		return tx.AutoMigrate(&commerceschema.UserSubscription{})
 	}
 	return ensureUserSubscriptionTableSQLiteTx(tx)
+}
+
+func migrateDailyLuckyNumber(tx *gorm.DB) error {
+	if !platformdb.UsingSQLite {
+		if err := addDailyLuckyNumberColumns(tx); err != nil {
+			return err
+		}
+		return tx.AutoMigrate(
+			&commerceschema.SubscriptionLuckyNumber{},
+			&commerceschema.SubscriptionLuckyDraw{},
+			&commerceschema.SubscriptionLuckyReward{},
+			&commerceschema.SubscriptionBlindBoxBenefitCycle{},
+		)
+	}
+	if err := migrateSubscriptionPlan(tx); err != nil {
+		return err
+	}
+	if err := migrateUserSubscription(tx); err != nil {
+		return err
+	}
+	if err := tx.AutoMigrate(&commerceschema.BlindBoxOrder{}); err != nil {
+		return err
+	}
+	return tx.AutoMigrate(
+		&commerceschema.SubscriptionLuckyNumber{},
+		&commerceschema.SubscriptionLuckyDraw{},
+		&commerceschema.SubscriptionLuckyReward{},
+		&commerceschema.SubscriptionBlindBoxBenefitCycle{},
+	)
+}
+
+// addDailyLuckyNumberColumns only appends the fields introduced by this
+// migration. Running AutoMigrate on established PostgreSQL tables can issue
+// type-changing DDL and then reuse an invalid prepared SELECT plan.
+func addDailyLuckyNumberColumns(tx *gorm.DB) error {
+	columns := []struct {
+		model  interface{}
+		fields []string
+	}{
+		{&commerceschema.SubscriptionPlan{}, []string{"MembershipTier", "LuckyDrawEnabled", "BlindBoxBenefitCount"}},
+		{&commerceschema.UserSubscription{}, []string{"LuckyBenefitCycle"}},
+		{&commerceschema.BlindBoxOrder{}, []string{"UserSubscriptionId", "BenefitCycle", "ExpiresAt"}},
+	}
+	for _, entry := range columns {
+		for _, field := range entry.fields {
+			if tx.Migrator().HasColumn(entry.model, field) {
+				continue
+			}
+			if err := tx.Migrator().AddColumn(entry.model, field); err != nil {
+				return err
+			}
+		}
+	}
+	for _, statement := range []string{
+		"CREATE INDEX IF NOT EXISTS idx_subscription_plans_membership_tier ON subscription_plans (membership_tier)",
+		"CREATE INDEX IF NOT EXISTS idx_subscription_plans_lucky_draw_enabled ON subscription_plans (lucky_draw_enabled)",
+		"CREATE INDEX IF NOT EXISTS idx_user_subscriptions_lucky_benefit_cycle ON user_subscriptions (lucky_benefit_cycle)",
+		"CREATE INDEX IF NOT EXISTS idx_blind_box_orders_user_subscription_id ON blind_box_orders (user_subscription_id)",
+		"CREATE INDEX IF NOT EXISTS idx_blind_box_orders_benefit_cycle ON blind_box_orders (benefit_cycle)",
+		"CREATE INDEX IF NOT EXISTS idx_blind_box_orders_expires_at ON blind_box_orders (expires_at)",
+	} {
+		if err := tx.Exec(statement).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -1,54 +1,35 @@
-# 主线目标
+# Main Goal
+发布当前每日幸运号与盲盒页面重构、奖励结算调整和相关回归测试，创建并构建 `v2.0.0-rc.34`。
 
-按需同步上游 `QuantumNous/new-api` 的关键更新到本地 `new-api`，以本地站点现有订阅/计费逻辑为主体，优先补齐计费安全、管理员订阅额度重置、会话 Cookie 安全、注册页重定向与低风险体验优化。
+# Current Status
+- 用户页已提供高可见的“查看完整规则”入口，首次进入页面自动打开规则弹窗。
+- 规则弹窗已拆分为摘要、匹配流程、匹配示例、倍率表、奖励计算、奖池和结算说明，内容支持中英文翻译。
+- 规则明确使用完整月卡编号最后四位，与当天全站统一四位幸运数字从右向左连续匹配，只结算最高命中档位。
+- Lite、Standard、Pro、Ultra 月卡倍率分别展示，并说明倍率应用顺序、奖励去向及四位全中奖池规则。
+- 购买、续费和升级月卡当前不会自动赠送盲盒；旧的规则面板已移除。
+- 弹窗已增加视口高度约束和 `min-h-0`，正文独立滚动，底部关闭按钮在 390px 和 320px 下保持可用。
+- 提交 `f94ba47f1` 已推送到 `v2-refactor-20260711`，annotated tag `v2.0.0-rc.34` 已推送。
+- `artifacts/` 与 `scripts/audit-upstream-api.ps1` 仍为明确排除的未跟踪文件。
+- 每日幸运号奖励已改为进入用户普通钱包，并保留账本幂等和到账日志；对应回归测试已同步验证钱包余额与日志。
+- 规则弹窗按登录用户的 `uid` 持久化首次访问标记，只在第一次进入时自动打开；后续通过内容首屏的高可见规则入口手动打开。
+- 规则入口已从页面右上角操作区移至标题下方的规则提示条，右上角仅保留刷新操作。
 
-# 当前状态
+# Verification
+- `bun run typecheck` 通过。
+- `bun run build` 通过，静态主题页生成完成。
+- 规则相关 TSX 和 i18n JSON 的格式、JSON 解析及 `git diff --check` 已通过。
+- `go test ./internal/commerce/app -run "TestDailyLucky" -count=1 -v` 通过。
+- `go vet ./internal/commerce/app` 通过。
+- Playwright 模拟接口验收通过：首次自动打开、关闭后再次打开、390px/320px 视口滚动、倍率与匹配章节可见、页面无横向溢出、控制台无错误。
+- 本地真实登录代理当前返回 `504`，因此浏览器交互验收使用了仅限测试上下文的接口模拟；未修改应用运行时逻辑。
+- 本次目标文件类型检查、Prettier、JSON.parse 和 `git diff --check` 通过；目标 ESLint 已无重复导入错误，仅保留 React Hooks/快速刷新警告。
+- 全量 commerce 包测试仍有两条既有 group-buy 断言失败，单独运行同样失败，与本次改动无交集。
+- GitHub Actions Docker run `30732013165` 成功完成 amd64/arm64、7 个服务镜像、manifest 创建和 cosign 签名；Release run `30732013174` 也已成功。
+- GHCR 版本根标签与 `latest` digest 为 `sha256:4bb4de47f3cd2851756b2bb746b65b8054401f64428c5537c564c488d6701d46`，根标签及 7 个服务标签均核验为 linux/amd64 + linux/arm64。
+- Playwright 模拟接口验收通过：首次自动弹出、刷新后不再弹出、规则入口可重新打开、390px 下正文滚动/关闭按钮可用、桌面布局入口清晰、无横向溢出且无控制台错误。
 
-- 已完成管理员手动重置订阅 quota：
-  - 后端新增 `POST /api/subscription/admin/user_subscriptions/:id/reset`
-  - 前端用户订阅管理弹窗新增 `Reset quota`
-- 已完成计费安全加固：
-  - 新增安全配额换算工具 `common/quota_math.go`
-  - 任务计费、文本计费、结算流程加入饱和转换与非负保护
-  - 图片请求 `n` 参数增加上限校验
-  - `max_tokens` 等高风险数值参数已补齐温和校验
-- 已完成 `56dbaab1d` 风格会话 Cookie 安全支持：
-  - 新增 `SESSION_COOKIE_SECURE`
-  - 新增 `SESSION_COOKIE_TRUSTED_URL`
-  - 会话 Cookie `Secure` 不再写死为 `false`
-- 已完成 `8f31b3059` 风格 `Intl` 语言码兼容：
-  - 保持本地 `zh/en/fr/ru/ja/vi` 语言代码方案
-  - 新增 `toIntlLocale()`，修复 `Intl` 与 `toLocaleString` 的本地化参数
-- 已完成 `3a876d6f3`：
-  - 已登录用户访问 `/(auth)/sign-up` 时重定向到 `/dashboard`
-- 已完成 OpenAI 与非 OpenAI 流式链路的断连停写补齐：
-  - 自定义 SSE / websocket 流在客户端断开后停止向下游写入
-  - `cohere / palm / xunfei / zhipu / coze / volcengine / ollama` 已补快速停写与防 goroutine 卡住
+# Next Step
+- `v2.0.0-rc.34` 已完成提交、推送、Actions 构建、签名和 GHCR 多架构核验；当前等待后续需求。
 
-# 关键上下文
-
-- 目标仓库：`E:\sh\Coding\cpa_bussiness\new-api`
-- 本地仓库不是上游可直接 merge 的祖先链，当前采用手工选择性移植
-- 本地 `model/subscription.go` 订阅结构已深度定制，重置逻辑必须同时清理：
-  - `AmountUsed`
-  - `PeriodUsed`
-  - `ModelUsage`
-- 这次前端吸收只做低风险兼容优化，没有改写现有主站信息架构
-- “断连停写”当前只解决下游继续写的问题，不承诺所有上游供应商都会被同步取消计费
-
-# 验证结果
-
-- `go test ./common -run "TestSaturatingInt64ToInt|TestSaturatingFloat64ToInt|TestValidateRedirectURL"` 通过
-- `go test ./dto ./relay/helper` 通过
-- `go test ./model -run "TestAdminResetUserSubscriptionQuota|TestUseUserSubscriptionResetOpportunity_ClearsCurrentSubscriptionAndLimitsMonthlyUsage"` 通过
-- `npm run typecheck`（`web/default`）通过
-- `go test ./relay/channel/cohere ./relay/channel/palm ./relay/channel/xunfei ./relay/channel/zhipu ./relay/channel/coze ./relay/channel/volcengine ./relay/channel/ollama -run "^$"` 通过
-- `go test ./relay/helper ./relay/channel/openai ./relay/channel/gemini ./relay/channel/dify ./relay/channel/baidu ./relay/channel/claude ./relay/channel/xai -run "^$"` 通过
-
-# 下一步
-
-- 若继续吸收上游，可下一步评估是否补“断连后尽快取消上游请求/任务”这类更深层优化，但这会更侵入计费与适配器逻辑
-
-# 阻塞项
-
-- 无当前代码阻塞
+# Blockers
+- 无发布链路阻塞；全量 commerce 测试的两条 group-buy 既有失败已保留记录，GHCR Registry API 直连因未提供凭据返回 `UNAUTHORIZED`，但本机 Docker 凭据核验已成功。

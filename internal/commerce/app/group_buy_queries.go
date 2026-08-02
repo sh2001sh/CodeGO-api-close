@@ -15,7 +15,7 @@ var (
 	ErrGroupBuyNotFound       = errors.New("group buy order not found")
 	ErrGroupBuyNotJoinable    = errors.New("group buy order is not joinable")
 	ErrGroupBuyAlreadyJoined  = errors.New("user already joined this group buy")
-	ErrGroupBuyPlanNotEnabled = errors.New("plan does not support group buy")
+	ErrGroupBuyPlanNotEnabled = errors.New("plan does not support collective benefit")
 )
 
 // BuildActiveGroupBuysPayload returns the active group-buy list payload used by the commerce API.
@@ -83,6 +83,9 @@ func listActiveGroupBuys(userID int) ([]commercedomain.GroupBuyListItem, error) 
 		return nil, err
 	}
 	for _, plan := range plans {
+		if !supportsGroupBuyPlan(&plan) {
+			continue
+		}
 		if _, ok := activePlanSet[plan.Id]; ok {
 			continue
 		}
@@ -201,7 +204,7 @@ func hydrateGroupBuyItems(orders []commerceschema.GroupBuyOrder, userID int) ([]
 	items := make([]commercedomain.GroupBuyListItem, 0, len(orders))
 	for _, order := range orders {
 		plan, ok := planMap[order.PlanId]
-		if !ok {
+		if !ok || !supportsGroupBuyPlan(&plan) {
 			continue
 		}
 		_, joined := joinedSet[order.Id]

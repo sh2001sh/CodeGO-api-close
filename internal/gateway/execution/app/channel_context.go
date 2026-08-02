@@ -55,6 +55,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 
 	httpctx.SetContextKey(c, constant.ContextKeyChannelKey, key)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelBaseUrl, channel.GetBaseURL())
+	c.Set("channel_fault_domain", gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL()))
 	httpctx.SetContextKey(c, constant.ContextKeySystemPromptOverride, false)
 
 	switch channel.Type {

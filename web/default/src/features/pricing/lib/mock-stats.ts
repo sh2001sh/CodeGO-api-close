@@ -271,7 +271,7 @@ const PROFILE_SPECS: Record<string, ProfileSpec> = {
   },
   large: {
     ttftRange: [600, 1_400],
-    throughputRange: [55, 95],
+    throughputRange: [30, 95],
     uptimeRange: [99.5, 99.95],
   },
   standard: {
@@ -339,7 +339,14 @@ export function buildGroupPerformance(model: PricingModel): GroupPerformance[] {
         ttft_p50_ms: Math.round(ttftP50),
         ttft_p95_ms: Math.round(ttftP50 * (1.6 + rand() * 0.4)),
         ttft_p99_ms: Math.round(ttftP50 * (2.4 + rand() * 0.6)),
-        throughput_tps: throughput === 0 ? 0 : Math.round(throughput * 10) / 10,
+        throughput_tps:
+          throughput === 0
+            ? 0
+            : Math.round(
+                (/gpt/i.test(model.model_name) && throughput > 55
+                  ? 50 + rand() * 20
+                  : throughput) * 10
+              ) / 10,
         uptime_30d_pct: Math.round(uptimePct * 100) / 100,
         request_volume_24h: requestVolume,
       }

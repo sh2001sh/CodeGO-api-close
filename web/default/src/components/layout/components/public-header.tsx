@@ -192,9 +192,8 @@ export function PublicHeader(props: PublicHeaderProps) {
           <nav
             className={cn(
               'flex items-center justify-between transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]',
-              scrolled
-                ? 'ios-floating-shell h-12 pr-1.5 pl-4'
-                : 'h-16 px-2'
+              scrolled ? 'ios-floating-shell h-12 pr-1.5 pl-4' : 'h-16 px-2',
+              !scrolled && props.className
             )}
           >
             {/* Logo */}
@@ -218,10 +217,14 @@ export function PublicHeader(props: PublicHeaderProps) {
               </div>
               <div className='flex flex-col leading-tight'>
                 <span className='text-sm font-semibold tracking-tight'>
-                  {loading ? <Skeleton className='h-4 w-16' /> : displaySiteName}
+                  {loading ? (
+                    <Skeleton className='h-4 w-16' />
+                  ) : (
+                    displaySiteName
+                  )}
                 </span>
                 {!loading ? (
-                  <span className='text-[10px] font-medium text-muted-foreground'>
+                  <span className='text-muted-foreground text-[10px] font-medium'>
                     {SITE_URL_HINT}
                   </span>
                 ) : (
@@ -244,10 +247,10 @@ export function PublicHeader(props: PublicHeaderProps) {
                       aria-disabled={link.disabled}
                       tabIndex={link.disabled ? -1 : undefined}
                       onClick={(event) => handleNavLinkClick(event, link)}
-                    className={cn(
-                      'text-muted-foreground hover:text-foreground rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200 dark:text-slate-300 dark:hover:text-slate-50',
-                      link.disabled && 'pointer-events-none opacity-50'
-                    )}
+                      className={cn(
+                        'text-muted-foreground hover:text-foreground rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200',
+                        link.disabled && 'pointer-events-none opacity-50'
+                      )}
                     >
                       {link.title}
                     </a>
@@ -262,8 +265,8 @@ export function PublicHeader(props: PublicHeaderProps) {
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200',
                       isActive
-                        ? 'text-foreground dark:text-slate-50'
-                        : 'text-muted-foreground hover:text-foreground dark:text-slate-300 dark:hover:text-slate-50',
+                        ? 'text-foreground'
+                        : 'text-muted-foreground hover:text-foreground',
                       link.disabled && 'pointer-events-none opacity-50'
                     )}
                   >

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowRightLeft, Loader2, Sparkles } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +14,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { createSubscriptionClaudeConversion } from '@/features/subscriptions/api'
 import {
   formatSubscriptionQuotaAmount,
@@ -36,7 +37,10 @@ interface SubscriptionClaudeConversionCardProps {
 }
 
 function buildRequestId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID()
   }
   return `subscription-claude-${Date.now()}`
@@ -55,15 +59,17 @@ function getEligibleSubscriptions(data?: SelfSubscriptionData | null) {
 
 function getPlanLabel(
   subscription: UserSubscription | undefined,
-  planTitles?: Record<number, { title: string; subtitle: string }>
+  planTitles: Record<number, { title: string; subtitle: string }> | undefined,
+  fallback: string
 ) {
-  if (!subscription) return '当前套餐'
-  return planTitles?.[subscription.plan_id]?.title || `套餐 #${subscription.id}`
+  if (!subscription) return fallback
+  return planTitles?.[subscription.plan_id]?.title || fallback
 }
 
 export function SubscriptionClaudeConversionCard(
   props: SubscriptionClaudeConversionCardProps
 ) {
+  const { t } = useTranslation()
   const eligibleSubscriptions = useMemo(
     () => getEligibleSubscriptions(props.subscriptionData),
     [props.subscriptionData]
@@ -75,7 +81,8 @@ export function SubscriptionClaudeConversionCard(
       ? `${config.ratio_numerator}:${config.ratio_denominator}`
       : '1:10'
 
-  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<number>(0)
+  const [selectedSubscriptionId, setSelectedSubscriptionId] =
+    useState<number>(0)
   const [sourceQuotaInput, setSourceQuotaInput] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -115,11 +122,14 @@ export function SubscriptionClaudeConversionCard(
       : 0
 
   const totalConvertibleQuota = eligibleSubscriptions.reduce((sum, item) => {
-    return sum + Number(item.subscription.conversion_preview?.max_source_quota || 0)
+    return (
+      sum + Number(item.subscription.conversion_preview?.max_source_quota || 0)
+    )
   }, 0)
   const totalPreviewClaudeQuota = eligibleSubscriptions.reduce((sum, item) => {
     return (
-      sum + Number(item.subscription.conversion_preview?.preview_claude_quota || 0)
+      sum +
+      Number(item.subscription.conversion_preview?.preview_claude_quota || 0)
     )
   }, 0)
 
@@ -142,11 +152,19 @@ export function SubscriptionClaudeConversionCard(
         requestId: buildRequestId(),
       })
       if (!result.success || !result.data) {
-        toast.error(result.message || '套餐转 Claude 失败')
+        toast.error(
+          result.message || t('Failed to convert plan quota to Claude quota.')
+        )
         return
       }
       toast.success(
-        `${getPlanLabel(selectedSubscription, props.planTitles)} 已转入 Claude 额度`
+        t('{{plan}} converted to Claude quota', {
+          plan: getPlanLabel(
+            selectedSubscription,
+            props.planTitles,
+            t('Current plan')
+          ),
+        })
       )
       setSourceQuotaInput('')
       setConfirmOpen(false)
@@ -155,7 +173,7 @@ export function SubscriptionClaudeConversionCard(
         window.dispatchEvent(new Event('subscription:changed'))
       }
     } catch {
-      toast.error('套餐转 Claude 失败')
+      toast.error(t('Failed to convert plan quota to Claude quota.'))
     } finally {
       setSubmitting(false)
     }
@@ -168,32 +186,39 @@ export function SubscriptionClaudeConversionCard(
           <div>
             <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
               <Sparkles className='text-primary h-4 w-4' />
-              套餐转 Claude
+              {t('Convert plan quota to Claude')}
             </div>
             <div className='text-muted-foreground mt-1 text-xs leading-5'>
-              仅支持生效中的非日卡套餐。转换输入以美元计，按 {ratioText}
-              折算为 Claude 永久额度，临时套餐额度会有损耗。
+              {t(
+                'Only active non-day plans are eligible. Enter USD and convert at {{ratio}} into permanent Claude quota; temporary plan quota may lose value.',
+                { ratio: ratioText }
+              )}
             </div>
           </div>
           <div className='border-border bg-muted text-muted-foreground rounded-full border px-3 py-1 text-xs'>
-            最多 {formatSubscriptionQuotaAmount(totalConvertibleQuota)}
+            {t('Maximum {{amount}}', {
+              amount: formatSubscriptionQuotaAmount(totalConvertibleQuota),
+            })}
           </div>
         </div>
 
         <div className='mt-3 grid gap-2 sm:grid-cols-3'>
           <QuickStat
-            label='可转套餐美元'
+            label={t('Convertible plan quota (USD)')}
             value={formatSubscriptionQuotaAmount(totalConvertibleQuota)}
           />
-          <QuickStat label='转换规则' value={ratioText} />
-          <QuickStat label='预计最多到账 Claude' value={formatQuota(totalPreviewClaudeQuota)} />
+          <QuickStat label={t('Conversion rule')} value={ratioText} />
+          <QuickStat
+            label={t('Estimated maximum Claude quota')}
+            value={formatQuota(totalPreviewClaudeQuota)}
+          />
         </div>
 
         <Button
           className='mt-3 w-full justify-between'
           render={<Link to='/wallet' search={{ wallet_type: 'claude' }} />}
         >
-          <span>去钱包转换</span>
+          <span>{t('Convert in wallet')}</span>
           <ArrowRightLeft className='h-4 w-4' />
         </Button>
       </div>
@@ -206,11 +231,13 @@ export function SubscriptionClaudeConversionCard(
         <div>
           <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
             <ArrowRightLeft className='text-primary h-4 w-4' />
-            套餐转 Claude
+            {t('Convert plan quota to Claude')}
           </div>
           <div className='text-muted-foreground mt-1 text-xs leading-5'>
-            仅支持生效中的非日卡套餐。输入按美元填写，当前规则 {ratioText}，
-            临时套餐额度转为永久 Claude 额度后不可撤销。
+            {t(
+              'Only active non-day plans are eligible. Enter USD at the current {{ratio}} ratio. Converting temporary plan quota into permanent Claude quota cannot be undone.',
+              { ratio: ratioText }
+            )}
           </div>
         </div>
         <div className='border-border bg-background/80 text-foreground rounded-full border px-3 py-1 text-xs font-semibold'>
@@ -220,15 +247,17 @@ export function SubscriptionClaudeConversionCard(
 
       {props.loading ? (
         <div className='border-border/70 bg-background/72 text-muted-foreground mt-3 rounded-2xl border px-3 py-6 text-center text-xs'>
-          正在加载可转换套餐...
+          {t('Loading convertible plans...')}
         </div>
       ) : !config?.enabled ? (
         <div className='border-border/70 bg-background/60 text-muted-foreground mt-3 rounded-2xl border border-dashed px-3 py-3 text-xs'>
-          当前未开启套餐转 Claude 功能。
+          {t('Plan-to-Claude conversion is currently disabled.')}
         </div>
       ) : eligibleSubscriptions.length === 0 ? (
         <div className='border-border/70 bg-background/60 text-muted-foreground mt-3 rounded-2xl border border-dashed px-3 py-3 text-xs'>
-          当前没有可转换的套餐。只有生效中的非日卡订阅才支持转换。
+          {t(
+            'No convertible plans are available. Only active non-day subscriptions are eligible.'
+          )}
         </div>
       ) : (
         <>
@@ -239,7 +268,9 @@ export function SubscriptionClaudeConversionCard(
                 <button
                   key={item.subscription.id}
                   type='button'
-                  onClick={() => setSelectedSubscriptionId(item.subscription.id)}
+                  onClick={() =>
+                    setSelectedSubscriptionId(item.subscription.id)
+                  }
                   className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
                     checked
                       ? 'border-foreground bg-background/80'
@@ -250,29 +281,30 @@ export function SubscriptionClaudeConversionCard(
                     <div className='min-w-0'>
                       <div className='text-foreground text-sm font-semibold'>
                         {props.planTitles?.[item.subscription.plan_id]?.title ||
-                          `套餐 #${item.subscription.id}`}
+                          t('Subscription #{{id}}', {
+                            id: item.subscription.id,
+                          })}
                       </div>
                       <div className='text-muted-foreground mt-1 text-xs'>
-                        {props.planTitles?.[item.subscription.plan_id]?.subtitle || '订阅'}
-                        {' '}
-                        · 到期：
+                        {props.planTitles?.[item.subscription.plan_id]
+                          ?.subtitle || t('Subscription')}{' '}
+                        · {t('Expires')}:{' '}
                         {formatDateTime(item.subscription.end_time)}
                       </div>
                     </div>
                     <div className='text-muted-foreground text-right text-xs'>
                       <div>
-                        最多可转
-                        {' '}
+                        {t('Maximum convertible')}{' '}
                         {formatSubscriptionQuotaAmount(
-                          item.subscription.conversion_preview?.max_source_quota || 0
+                          item.subscription.conversion_preview
+                            ?.max_source_quota || 0
                         )}
                       </div>
                       <div className='text-foreground mt-1'>
-                        最多到账
-                        {' '}
+                        {t('Maximum received')}{' '}
                         {formatQuota(
-                          item.subscription.conversion_preview?.preview_claude_quota ||
-                            0
+                          item.subscription.conversion_preview
+                            ?.preview_claude_quota || 0
                         )}
                       </div>
                     </div>
@@ -284,7 +316,7 @@ export function SubscriptionClaudeConversionCard(
 
           <div className='app-subtle-panel mt-3 px-3 py-3'>
             <div className='text-muted-foreground text-[11px] font-medium'>
-              输入转换美元
+              {t('Enter quota to convert (USD)')}
             </div>
             <div className='mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2'>
               <Input
@@ -293,7 +325,9 @@ export function SubscriptionClaudeConversionCard(
                 step='0.01'
                 value={sourceQuotaInput}
                 onChange={(event) => setSourceQuotaInput(event.target.value)}
-                placeholder={`最多 ${maxSourceQuotaUSD.toFixed(2)}`}
+                placeholder={t('Maximum {{amount}}', {
+                  amount: maxSourceQuotaUSD.toFixed(2),
+                })}
                 className='h-10'
               />
               <Button
@@ -301,28 +335,31 @@ export function SubscriptionClaudeConversionCard(
                 disabled={!canSubmit}
                 onClick={() => setConfirmOpen(true)}
               >
-                转换
+                {t('Convert')}
               </Button>
             </div>
             <div className='mt-2 grid gap-2 text-xs sm:grid-cols-2'>
               <QuickStat
-                label='本次扣减套餐美元'
+                label={t('Plan quota used for this conversion (USD)')}
                 value={formatSubscriptionQuotaAmount(sourceQuota)}
               />
-              <QuickStat label='预计到账 Claude' value={formatQuota(previewClaudeQuota || 0)} />
+              <QuickStat
+                label={t('Estimated Claude quota')}
+                value={formatQuota(previewClaudeQuota || 0)}
+              />
             </div>
             {selectedSubscription ? (
               <div className='text-muted-foreground mt-2 text-xs'>
-                转换后该订阅剩余可转美元约为
-                {' '}
+                {t('Approximate remaining convertible quota after conversion:')}{' '}
                 {formatSubscriptionQuotaAmount(
                   Math.max(0, maxSourceQuota - sourceQuota)
                 )}
               </div>
             ) : null}
             <div className='text-muted-foreground mt-2 text-xs leading-5'>
-              按美元输入只是为了更直观，后端仍按套餐原始额度结算。到账 Claude
-              永久额度按向下取整计算。
+              {t(
+                'USD input is for clarity; the backend still settles against the plan quota. Permanent Claude quota is rounded down.'
+              )}
             </div>
           </div>
         </>
@@ -330,12 +367,20 @@ export function SubscriptionClaudeConversionCard(
 
       {recentConversions.length > 0 ? (
         <div className='app-subtle-panel mt-3 px-3 py-3'>
-          <div className='text-foreground text-sm font-semibold'>最近转换记录</div>
+          <div className='text-foreground text-sm font-semibold'>
+            {t('Recent conversions')}
+          </div>
           <div className='mt-2 space-y-2'>
             {recentConversions.slice(0, 3).map((item) => (
-              <div key={item.id} className='flex items-center justify-between gap-3 text-xs'>
+              <div
+                key={item.id}
+                className='flex items-center justify-between gap-3 text-xs'
+              >
                 <div className='text-muted-foreground'>
-                  {formatDateTime(item.created_at)} · 订阅 #{item.user_subscription_id}
+                  {formatDateTime(item.created_at)} ·{' '}
+                  {t('Subscription #{{id}}', {
+                    id: item.user_subscription_id,
+                  })}
                 </div>
                 <div className='text-foreground font-medium'>
                   {formatSubscriptionQuotaAmount(item.source_quota)} →{' '}
@@ -350,19 +395,20 @@ export function SubscriptionClaudeConversionCard(
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认转换</AlertDialogTitle>
+            <AlertDialogTitle>{t('Confirm conversion')}</AlertDialogTitle>
             <AlertDialogDescription>
-              将从 {selectedPlanMeta?.title || '当前套餐'} 扣减
-              {' '}
-              {formatSubscriptionQuotaAmount(sourceQuota)}
-              ，预计到账 Claude 永久额度
-              {' '}
-              {formatQuota(previewClaudeQuota || 0)}
-              。提交后不可撤销。
+              {t(
+                'This will deduct {{amount}} from {{plan}} and credit approximately {{claude}} permanent Claude quota. This action cannot be undone.',
+                {
+                  amount: formatSubscriptionQuotaAmount(sourceQuota),
+                  plan: selectedPlanMeta?.title || t('Current plan'),
+                  claude: formatQuota(previewClaudeQuota || 0),
+                }
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
             <AlertDialogAction
               disabled={!canSubmit}
               onClick={(event) => {
@@ -370,8 +416,10 @@ export function SubscriptionClaudeConversionCard(
                 void submitConversion()
               }}
             >
-              {submitting ? <Loader2 className='mr-1 h-4 w-4 animate-spin' /> : null}
-              确认转换
+              {submitting ? (
+                <Loader2 className='mr-1 h-4 w-4 animate-spin' />
+              ) : null}
+              {t('Confirm conversion')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -383,7 +431,9 @@ export function SubscriptionClaudeConversionCard(
 function QuickStat(props: { label: string; value: string }) {
   return (
     <div className='app-subtle-panel px-3 py-3'>
-      <div className='text-muted-foreground text-[11px] font-medium'>{props.label}</div>
+      <div className='text-muted-foreground text-[11px] font-medium'>
+        {props.label}
+      </div>
       <div className='text-foreground mt-1 font-mono text-sm font-semibold tabular-nums'>
         {props.value}
       </div>

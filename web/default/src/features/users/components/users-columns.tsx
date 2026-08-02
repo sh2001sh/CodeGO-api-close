@@ -174,11 +174,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
 
         if (!hasActiveSubscription) {
           return (
-            <StatusBadge
-              label='无订阅'
-              variant='neutral'
-              copyable={false}
-            />
+            <StatusBadge label='无订阅' variant='neutral' copyable={false} />
           )
         }
 
@@ -254,6 +250,8 @@ export function useUsersColumns(): ColumnDef<User>[] {
         const affCount = user.aff_count || 0
         const affHistoryQuota = user.aff_history_quota || 0
         const inviterId = user.inviter_id || 0
+        const inviterExternalId = user.inviter_external_id || ''
+        const inviterLabel = inviterExternalId || String(inviterId)
 
         return (
           <div className='flex items-center gap-1.5 text-xs font-medium'>
@@ -294,11 +292,13 @@ export function useUsersColumns(): ColumnDef<User>[] {
                       <span className='text-muted-foreground cursor-help' />
                     }
                   >
-                    {t('Inviter')}: {inviterId}
+                    {t('Inviter')}: {inviterLabel}
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className='text-xs'>
-                      {t('Invited by user ID')} {inviterId}
+                      {inviterExternalId
+                        ? `邀请人公开 ID：${inviterExternalId}`
+                        : `${t('Invited by user ID')} ${inviterId}`}
                     </p>
                   </TooltipContent>
                 </Tooltip>

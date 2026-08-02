@@ -385,12 +385,9 @@ func desktopProviderDisplayName(tool string) string {
 
 func desktopToolIcon(tool string) string {
 	switch tool {
-	case DesktopToolCodex, DesktopToolClaude, DesktopToolGemini, DesktopToolOpenCode:
-		return "newapi"
-	case DesktopToolOpenClaw:
-		return "newapi"
-	case DesktopToolHermes:
-		return "newapi"
+	case DesktopToolCodex, DesktopToolClaude, DesktopToolGemini, DesktopToolOpenCode,
+		DesktopToolOpenClaw, DesktopToolHermes:
+		return "codego"
 	default:
 		return ""
 	}

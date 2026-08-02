@@ -173,7 +173,11 @@ func GetAllActiveUserSubscriptions(userID int) ([]commercedomain.SubscriptionSum
 	if err != nil {
 		return nil, err
 	}
-	return buildSubscriptionSummaries(ordered), nil
+	result, err := buildSubscriptionSummaries(ordered)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // GetAllUserSubscriptions returns every subscription snapshot for a user.
@@ -188,22 +192,66 @@ func GetAllUserSubscriptions(userID int) ([]commercedomain.SubscriptionSummary, 
 		Find(&subs).Error; err != nil {
 		return nil, err
 	}
-	return buildSubscriptionSummaries(subs), nil
+	result, err := buildSubscriptionSummaries(subs)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
-func buildSubscriptionSummaries(subs []commerceschema.UserSubscription) []commercedomain.SubscriptionSummary {
+func buildSubscriptionSummaries(subs []commerceschema.UserSubscription) ([]commercedomain.SubscriptionSummary, error) {
 	if len(subs) == 0 {
-		return []commercedomain.SubscriptionSummary{}
+		return []commercedomain.SubscriptionSummary{}, nil
+	}
+
+	numberMap := make(map[int]commerceschema.SubscriptionLuckyNumber)
+	if subscriptionLuckyNumberTableReady() {
+		ids := make([]int, 0, len(subs))
+		for _, sub := range subs {
+			ids = append(ids, sub.Id)
+		}
+		var numbers []commerceschema.SubscriptionLuckyNumber
+		if err := platformdb.DB.Where("user_subscription_id IN ?", ids).Find(&numbers).Error; err != nil {
+			return nil, err
+		}
+		for _, number := range numbers {
+			numberMap[number.UserSubscriptionId] = number
+		}
+	}
+
+	planIDs := make([]int, 0, len(subs))
+	seenPlanIDs := make(map[int]struct{}, len(subs))
+	for _, sub := range subs {
+		if _, ok := seenPlanIDs[sub.PlanId]; ok {
+			continue
+		}
+		seenPlanIDs[sub.PlanId] = struct{}{}
+		planIDs = append(planIDs, sub.PlanId)
+	}
+	var plans []commerceschema.SubscriptionPlan
+	if err := platformdb.DB.Where("id IN ?", planIDs).Find(&plans).Error; err != nil {
+		return nil, err
+	}
+	planMap := make(map[int]commerceschema.SubscriptionPlan, len(plans))
+	for _, plan := range plans {
+		planMap[plan.Id] = plan
 	}
 
 	result := make([]commercedomain.SubscriptionSummary, 0, len(subs))
 	for _, sub := range subs {
 		subCopy := sub
+		if plan, ok := planMap[sub.PlanId]; ok {
+			subCopy.MembershipTier = commercedomain.NormalizeSubscriptionMembershipTier(plan.MembershipTier)
+		}
+		if number, ok := numberMap[sub.Id]; ok {
+			numberCopy := number
+			subCopy.LuckyNumber = &numberCopy
+		}
 		result = append(result, commercedomain.SubscriptionSummary{
 			Subscription: &subCopy,
 		})
 	}
-	return result
+	return result, nil
 }
 
 func orderActiveUserSubscriptions(userID int, subs []commerceschema.UserSubscription) ([]commerceschema.UserSubscription, error) {

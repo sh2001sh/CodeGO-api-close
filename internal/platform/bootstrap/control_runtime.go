@@ -23,4 +23,5 @@ func startControlBackgroundTasks() {
 	gatewayexecutionapp.StartAutomaticChannelTestTask()
 	gatewayexecutionapp.StartCodexCredentialAutoRefreshTask()
 	gatewayroutingapp.StartChannelUpstreamModelUpdateTask()
+	gatewayroutingapp.StartAIHubRouterCostSyncTask()
 }

@@ -112,7 +112,7 @@ export function ModalitiesMatrix(props: {
             className={cn(
               'border-l px-3 py-2 text-center',
               enabled
-                ? 'bg-emerald-50/40 dark:bg-emerald-500/10'
+                ? 'bg-success/10'
                 : 'bg-background'
             )}
           >
@@ -120,7 +120,7 @@ export function ModalitiesMatrix(props: {
               className={cn(
                 'inline-flex items-center justify-center',
                 enabled
-                  ? 'text-emerald-700 dark:text-emerald-300'
+                  ? 'text-success'
                   : 'text-muted-foreground/40'
               )}
               aria-label={

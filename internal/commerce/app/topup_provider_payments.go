@@ -1,7 +1,6 @@
 package app
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -14,6 +13,7 @@ import (
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformgeneral "github.com/sh2001sh/new-api/internal/platform/general"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"

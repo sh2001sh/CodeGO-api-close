@@ -93,10 +93,10 @@ export function UsageChart(props: { points: UsagePoint[] }) {
                       relative rounded-t-2xl transition-all duration-200
                       ${isHovered ? 'shadow-lg' : ''}
                       ${isPeak
-                        ? 'bg-gradient-to-b from-orange-400 to-orange-600'
+                        ? 'bg-gradient-to-b from-primary/70 to-primary'
                         : isCurrent
-                          ? 'bg-gradient-to-b from-blue-400 to-blue-600'
-                          : 'bg-gradient-to-b from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700'
+                          ? 'bg-gradient-to-b from-muted-foreground/40 to-muted-foreground/70'
+                          : 'bg-gradient-to-b from-muted to-muted-foreground/20'
                       }
                     `}
                     style={{ height: `${height}%` }}

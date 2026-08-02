@@ -86,7 +86,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 		return nil, commercedomain.ErrBlindBoxSiteOpenLimitReached
 	}
 
-	orders, available, err := getOpenableBlindBoxOrdersTx(tx, userID, orderID)
+	orders, available, err := getOpenableBlindBoxOrdersTx(tx, userID, orderID, now)
 	if err != nil {
 		return nil, err
 	}
@@ -98,17 +98,27 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 	if err != nil {
 		return nil, err
 	}
+	zeroHourState, err := getOrCreateZeroHourStateTx(tx, userID)
+	if err != nil {
+		return nil, err
+	}
 	effectivePityThreshold := setting.PityThreshold
 	firstPurchaseStartUSD := setting.FirstPurchaseGuaranteeUSD
 
 	firstPurchaseOrderID := 0
-	if firstPurchaseStartUSD > 0 && len(orders) > 0 {
-		isFirstOrder, err := isFirstSuccessfulBlindBoxOrderTx(tx, userID, orders[0].Id)
-		if err != nil {
-			return nil, err
-		}
-		if isFirstOrder && orders[0].OpenedCount == 0 {
-			firstPurchaseOrderID = orders[0].Id
+	if firstPurchaseStartUSD > 0 {
+		for index := range orders {
+			if orders[index].Money <= 0 || orders[index].OpenedCount != 0 {
+				continue
+			}
+			isFirstOrder, err := isFirstSuccessfulBlindBoxOrderTx(tx, userID, orders[index].Id)
+			if err != nil {
+				return nil, err
+			}
+			if isFirstOrder {
+				firstPurchaseOrderID = orders[index].Id
+				break
+			}
 		}
 	}
 
@@ -133,6 +143,41 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			OrderId:    currentOrder.Id,
 			CreateTime: platformruntime.GetTimestamp(),
 		}
+		pityTriggered := pityState.ConsecutiveLowRewards+1 >= effectivePityThreshold
+		zeroHourHit := false
+		if !isFirstPurchaseOpen && !pityTriggered {
+			zeroHourHit, err = tryZeroHourRewardTx(tx, userID, zeroHourState)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if zeroHourHit {
+			record.RewardType = commerceschema.BlindBoxRewardTypeProp
+			record.RewardTitle = "1 小时 0 倍率卡"
+			record.RewardTier = "zero_hour_hidden"
+			record.RewardWalletType = ""
+			if err := tx.Create(&record).Error; err != nil {
+				return nil, err
+			}
+			prop, err := createBlindBoxPropTx(tx, userID, record.Id, record.RewardTitle)
+			if err != nil {
+				return nil, err
+			}
+			record.PropId = prop.Id
+			record.PropType = prop.PropType
+			record.PropStatus = prop.Status
+			if err := resetZeroHourProgressTx(tx, zeroHourState); err != nil {
+				return nil, err
+			}
+			pityState.ConsecutiveLowRewards = 0
+			records = append(records, record)
+			continue
+		}
+		if isPaidBlindBoxOrder(currentOrder) {
+			if err := addZeroHourProgressTx(tx, zeroHourState, zeroHourProgressPerPaidOpen); err != nil {
+				return nil, err
+			}
+		}
 
 		subscriptionHit := rand.Float64() < setting.SubscriptionPrizeProbability
 		if subscriptionHit {
@@ -151,7 +196,6 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			record.RewardUSD = 0
 			pityState.ConsecutiveLowRewards = 0
 		} else {
-			pityTriggered := pityState.ConsecutiveLowRewards >= effectivePityThreshold
 			rewardUSD := 0.0
 			tierName := "pity"
 			var tier blindboxsettings.TierSetting
@@ -275,6 +319,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				record.PropType = prop.PropType
 				record.PropStatus = prop.Status
 				record.PropExpiresAt = prop.ExpiresAt
+				pityState.ConsecutiveLowRewards++
 			}
 			records = append(records, record)
 			continue
@@ -334,9 +379,10 @@ func getOrCreateBlindBoxPityStateTx(tx *gorm.DB, userID int) (*commerceschema.Bl
 	return &state, nil
 }
 
-func getOpenableBlindBoxOrdersTx(tx *gorm.DB, userID int, orderID *int) ([]commerceschema.BlindBoxOrder, int, error) {
+func getOpenableBlindBoxOrdersTx(tx *gorm.DB, userID int, orderID *int, now int64) ([]commerceschema.BlindBoxOrder, int, error) {
 	query := tx.Set("gorm:query_option", "FOR UPDATE").
-		Where("user_id = ? AND status = ? AND opened_count < quantity", userID, constant.TopUpStatusSuccess)
+		Where("user_id = ? AND status = ? AND opened_count < quantity", userID, constant.TopUpStatusSuccess).
+		Where("source <> ? OR expires_at = 0 OR expires_at > ?", commerceschema.BlindBoxOrderSourceSubscriptionBenefit, now)
 	if orderID != nil {
 		query = query.Where("id = ?", *orderID)
 	}

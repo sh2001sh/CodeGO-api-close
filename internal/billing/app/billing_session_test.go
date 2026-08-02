@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
@@ -229,6 +230,39 @@ func TestBillingSessionRequestReplayDoesNotProjectWalletTwice(t *testing.T) {
 	require.Equal(t, 7000, userQuota)
 }
 
+func TestPreConsumeRelayBillingReusesSessionAcrossChannelRetry(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1016, 10_000)
+	seedToken(t, 2016, 1016, "sk-retry-billing", 10_000)
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		UserId:          1016,
+		TokenId:         2016,
+		TokenKey:        "sk-retry-billing",
+		OriginModelName: "gpt-5",
+		RequestId:       "req-retry-billing",
+		IsPlayground:    true,
+		ForcePreConsume: true,
+		UserSetting:     dto.UserSetting{BillingPreference: "wallet_only"},
+	}
+
+	require.Nil(t, PreConsumeRelayBilling(ctx, 3_000, info))
+	firstSession := info.Billing
+	require.NotNil(t, firstSession)
+	require.Nil(t, PreConsumeRelayBilling(ctx, 2_000, info))
+	require.Same(t, firstSession, info.Billing)
+
+	quota, err := identitystore.LoadUserQuota(1016, false)
+	require.NoError(t, err)
+	require.Equal(t, 7_000, quota)
+	require.NoError(t, RefundRelayBillingSync(ctx, info))
+
+	quota, err = identitystore.LoadUserQuota(1016, false)
+	require.NoError(t, err)
+	require.Equal(t, 10_000, quota)
+}
+
 func TestBridgeSeparatesWalletAndClaudeLedgerAccounts(t *testing.T) {
 	truncate(t)
 	require.NoError(t, platformdb.DB.Create(&identityschema.User{
@@ -318,6 +352,36 @@ func TestNewBillingSessionReturnsLocalWalletQuotaMessage(t *testing.T) {
 		"站内余额不足, 当前余额: "+logger.FormatQuota(750)+", 本次所需: "+logger.FormatQuota(2364),
 		apiErr.Error(),
 	)
+}
+
+func TestNewBillingSessionReturnsCombinedFundingMessage(t *testing.T) {
+	truncate(t)
+	previousHooks := subscriptionFundingHooks
+	RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
+		PreConsume: func(string, int, string, int64) (*SubscriptionFundingPreConsumeResult, error) {
+			return nil, errors.New("subscription quota insufficient")
+		},
+	})
+	t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
+	seedUser(t, 1005, 750)
+	seedToken(t, 2005, 1005, "sk-combined-insufficient", 10000)
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		UserId:          1005,
+		TokenId:         2005,
+		TokenKey:        "sk-combined-insufficient",
+		OriginModelName: "gpt-5",
+		RequestId:       "req-combined-insufficient",
+		IsPlayground:    true,
+		ForcePreConsume: true,
+	}
+
+	session, apiErr := NewBillingSession(ctx, info, 2364)
+	require.Nil(t, session)
+	require.NotNil(t, apiErr)
+	require.Equal(t, types.ErrorCodeInsufficientUserQuota, apiErr.GetErrorCode())
+	require.Equal(t, "套餐可用额度不足，且钱包余额不足", apiErr.Error())
 }
 
 func TestNewBillingSessionReturnsLocalClaudeQuotaMessage(t *testing.T) {

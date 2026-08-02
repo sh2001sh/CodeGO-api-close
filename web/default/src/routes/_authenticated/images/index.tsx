@@ -17,17 +17,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { DASHBOARD_DEFAULT_SECTION } from '@/features/dashboard/section-registry'
+import { isSidebarModuleEnabled } from '@/lib/nav-modules'
+import { Main } from '@/components/layout'
+import { ImageWorkspace } from '@/features/image-workspace'
+
 export const Route = createFileRoute('/_authenticated/images/')({
   beforeLoad: () => {
-    throw redirect({
-      to: '/dashboard/$section',
-      params: { section: DASHBOARD_DEFAULT_SECTION },
-    })
+    if (!isSidebarModuleEnabled('chat', 'images')) {
+      throw redirect({ to: '/dashboard' })
+    }
   },
   component: ImagesPage,
 })
 
 function ImagesPage() {
-  return null
+  return (
+    <Main className='p-0'>
+      <ImageWorkspace />
+    </Main>
+  )
 }

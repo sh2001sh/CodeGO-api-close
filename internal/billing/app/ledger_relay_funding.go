@@ -9,6 +9,7 @@ import (
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"gorm.io/gorm"
 )
 
@@ -133,6 +134,9 @@ func (f *LedgerRelayFunding) Settle(delta int) error {
 	})
 	if err == nil {
 		f.settlementID = settlement.SettlementID
+		if allocationErr := AllocateSettledFundingFIFO(f.requestID, f.accountID, int64(actualAmount)); allocationErr != nil {
+			platformobservability.SysError("attribute settled wallet funding source: " + allocationErr.Error())
+		}
 		return nil
 	}
 	if delta != 0 {

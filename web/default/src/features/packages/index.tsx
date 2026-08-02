@@ -17,13 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
-import { CircleAlert, Crown, RefreshCw } from 'lucide-react'
+import { Crown, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { TitledCard } from '@/components/ui/titled-card'
 import {
@@ -32,6 +28,7 @@ import {
 } from '@/components/page-transition'
 import { SubscriptionFuelDialog } from '@/features/subscriptions/components/dialogs/subscription-fuel-dialog'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
+import { PackageModelScopeNotice } from '@/features/subscriptions/components/package-model-scope-notice'
 import type {
   PlanRecord,
   SubscriptionPurchaseType,
@@ -88,6 +85,7 @@ function useGroupedPlans(plans: PlanRecord[]) {
 }
 
 export function PackagesPage() {
+  const { t } = useTranslation()
   const workspace = useWalletWorkspace()
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
   const [selectedPurchaseType, setSelectedPurchaseType] =
@@ -116,25 +114,8 @@ export function PackagesPage() {
     }
     return map
   }, [workspace.subscriptionData?.all_subscriptions])
-  const activeSubscriptions = useMemo(
-    () => workspace.subscriptionData?.subscriptions || [],
-    [workspace.subscriptionData?.subscriptions]
-  )
-  const activeMonthlyPlanIDs = useMemo(
-    () =>
-      new Set(
-        activeSubscriptions
-          .filter((item) => {
-            const plan = workspace.publicPlans.find(
-              (record) => record.plan.id === item.subscription.plan_id
-            )?.plan
-            return plan?.plan_type === 'monthly'
-          })
-          .map((item) => item.subscription.plan_id)
-      ),
-    [activeSubscriptions, workspace.publicPlans]
-  )
-  const shouldPrioritizeMonthlyPlans = activeMonthlyPlanIDs.size > 0
+  const currentSubscription = workspace.subscriptionData?.subscriptions[0]
+  const shouldPrioritizeMonthlyPlans = Boolean(currentSubscription)
   const primaryPlanZones: Array<{
     id: 'starter' | 'monthly'
     title: string
@@ -143,25 +124,33 @@ export function PackagesPage() {
     ? [
         {
           id: 'monthly',
-          title: '月卡专区',
-          description: '适合持续开发与团队日常调用。连续续费可按阶梯获得额外额度。',
+          title: t('Monthly plans'),
+          description: t(
+            'Suitable for ongoing development and team usage, with clear quota and validity.'
+          ),
         },
         {
           id: 'starter',
-          title: '新人专区',
-          description: '低门槛体验，限购 1 次。购买后 72 小时内升级月卡可获得额外额度奖励。',
+          title: t('Starter plans'),
+          description: t(
+            'Low-barrier trial, limited to one purchase. Upgrade to a monthly plan within 72 hours for bonus quota.'
+          ),
         },
       ]
     : [
         {
           id: 'starter',
-          title: '新人专区',
-          description: '低门槛体验，限购 1 次。购买后 72 小时内升级月卡可获得额外额度奖励。',
+          title: t('Starter plans'),
+          description: t(
+            'Low-barrier trial, limited to one purchase. Upgrade to a monthly plan within 72 hours for bonus quota.'
+          ),
         },
         {
           id: 'monthly',
-          title: '月卡专区',
-          description: '适合持续开发与团队日常调用。连续续费可按阶梯获得额外额度。',
+          title: t('Monthly plans'),
+          description: t(
+            'Suitable for ongoing development and team usage, with clear quota and validity.'
+          ),
         },
       ]
 
@@ -199,15 +188,17 @@ export function PackagesPage() {
   return (
     <>
       <WalletWorkspaceShell
-        title='套餐'
-        description='套餐额度仅适用于非 Claude 模型。按使用节奏选择新人体验卡、月卡或短期补量卡。'
+        title={t('Plans')}
+        description={t(
+          'Choose a plan based on your usage rhythm. Eligible plans can join the Collective Benefit Program and unlock additional quota by participation tier.'
+        )}
         canonicalPath='/packages'
         framedMain={false}
         main={
           <CardStaggerContainer className='space-y-4'>
             <CardStaggerItem>
               <CurrentPackagePanel
-                subscriptions={activeSubscriptions}
+                subscriptions={workspace.subscriptionData?.subscriptions || []}
                 plans={workspace.publicPlans}
                 loading={workspace.subscriptionLoading}
                 onFuel={openFuel}
@@ -216,8 +207,10 @@ export function PackagesPage() {
 
             <CardStaggerItem>
               <TitledCard
-                title='套餐购买'
-                description='先看基础额度和有效期，再看单买、2 人团、3 人团、5 人团各自能拿到的最终额度。'
+                title={t('Plan purchase')}
+                description={t(
+                  'Compare the price, base quota, and validity first. Plans marked for collective benefit also show the final quota available at each participation tier.'
+                )}
                 icon={<Crown className='h-4 w-4' />}
                 action={
                   <Button
@@ -232,21 +225,17 @@ export function PackagesPage() {
                         refreshing && 'animate-spin'
                       )}
                     />
-                    刷新
+                    {t('Refresh')}
                   </Button>
                 }
                 contentClassName='space-y-5'
               >
-                <Alert className='border-amber-200 bg-amber-50/70 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100'>
-                  <CircleAlert className='text-amber-600 dark:text-amber-300' />
-                  <AlertTitle>套餐使用范围</AlertTitle>
-                  <AlertDescription className='text-amber-900/80 dark:text-amber-100/75'>
-                    套餐额度仅可用于非 Claude 模型。调用 Claude 模型请使用独立 Claude
-                    额度，不会直接扣减套餐额度。
-                  </AlertDescription>
-                </Alert>
+                <PackageModelScopeNotice />
                 {primaryPlanZones.map((zone) => {
-                  if (zone.id === 'monthly' && groupedPlans.monthly.length === 0) {
+                  if (
+                    zone.id === 'monthly' &&
+                    groupedPlans.monthly.length === 0
+                  ) {
                     return null
                   }
                   return (
@@ -258,26 +247,27 @@ export function PackagesPage() {
                       loading={workspace.publicPlansLoading}
                       onPurchase={openPurchase}
                       purchaseCountMap={purchaseCountMap}
-                      currentSubscriptions={activeSubscriptions}
+                      currentSubscription={currentSubscription}
                       onFuel={openFuel}
                     />
                   )
                 })}
                 {groupedPlans.shortterm.length > 0 && (
                   <PlanZone
-                    title='短期补量专区'
-                    description='适合当天或本周高峰任务；支持拼团的套餐会在满员或 48 小时后统一补发赠额。'
+                    title={t('Short-term quota packs')}
+                    description={t(
+                      'Useful for daily or weekly peaks. Weekly plans may join collective benefit, while day passes activate immediately and do not participate.'
+                    )}
                     plans={groupedPlans.shortterm}
                     loading={workspace.publicPlansLoading}
                     onPurchase={openPurchase}
                     purchaseCountMap={purchaseCountMap}
-                    currentSubscriptions={activeSubscriptions}
+                    currentSubscription={currentSubscription}
                     onFuel={openFuel}
                   />
                 )}
               </TitledCard>
             </CardStaggerItem>
-
           </CardStaggerContainer>
         }
         sidebar={

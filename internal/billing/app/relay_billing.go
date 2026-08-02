@@ -14,6 +14,16 @@ import (
 )
 
 func PreConsumeRelayBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
+	if relayInfo != nil && relayInfo.Billing != nil {
+		if err := relayInfo.Billing.Reserve(preConsumedQuota); err != nil {
+			if apiErr, ok := err.(*types.NewAPIError); ok {
+				return apiErr
+			}
+			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		return nil
+	}
+
 	session, apiErr := NewBillingSession(c, relayInfo, preConsumedQuota)
 	if apiErr != nil {
 		return apiErr
@@ -64,6 +74,9 @@ func SettleRelayBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actu
 
 		if err := relayInfo.Billing.Settle(actualQuota); err != nil {
 			return err
+		}
+		if err := RecordRequestEconomics(relayInfo, actualQuota); err != nil {
+			platformobservability.SysError("record request economics: " + err.Error())
 		}
 		if session, ok := relayInfo.Billing.(*BillingSession); ok {
 			if funding, ok := session.funding.(settlementProjectionFunding); ok {

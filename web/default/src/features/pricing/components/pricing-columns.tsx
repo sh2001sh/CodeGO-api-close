@@ -122,15 +122,20 @@ export function usePricingColumns(
           : null
 
         return (
-          <div className='flex min-w-[200px] items-center gap-2'>
-            {vendorIcon}
-            <span className='truncate font-mono text-sm font-medium'>
+          <div className='flex max-w-[380px] min-w-[260px] items-start gap-2'>
+            <span className='mt-0.5 shrink-0'>{vendorIcon}</span>
+            <span
+              className='min-w-0 font-mono text-sm leading-relaxed font-medium break-all whitespace-normal'
+              title={model.model_name}
+            >
               {model.model_name}
             </span>
           </div>
         )
       },
-      minSize: 200,
+      size: 320,
+      minSize: 260,
+      maxSize: 380,
     },
 
     // Type column
@@ -171,7 +176,7 @@ export function usePricingColumns(
           if (dynamicSummary.isSpecialExpression) {
             return (
               <div className='max-w-[320px] min-w-[200px]'>
-                <div className='text-xs font-medium text-amber-700 dark:text-amber-300'>
+                <div className='text-warning text-xs font-medium'>
                   {t('Special billing expression')}
                 </div>
                 <div className='text-muted-foreground text-[11px]'>

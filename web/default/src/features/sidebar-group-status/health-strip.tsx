@@ -4,10 +4,10 @@ import type { SidebarGroupModelStatusItem, SidebarGroupStatusBucket } from './ty
 import { buildHealthSegments } from './presentation'
 
 const SEGMENT_CLASS = {
-  healthy: 'bg-emerald-500 dark:bg-emerald-400',
-  slow: 'bg-amber-500 dark:bg-amber-400',
-  critical: 'bg-rose-500 dark:bg-rose-400',
-  unknown: 'bg-slate-300 dark:bg-slate-600',
+  healthy: 'bg-success',
+  slow: 'bg-warning',
+  critical: 'bg-destructive',
+  unknown: 'bg-muted',
 } as const
 
 export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {

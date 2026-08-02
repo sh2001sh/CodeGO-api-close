@@ -82,6 +82,12 @@ func applyFirstPurchaseMinimumGuarantee(isFirstPurchaseOpen bool, ordinaryMinimu
 		return
 	}
 	switch *rewardType {
+	case commerceschema.BlindBoxRewardTypeProp:
+		if ordinaryMinimumUSD > 0 {
+			*rewardUSD = ordinaryMinimumUSD
+			*rewardType = commerceschema.BlindBoxRewardTypeQuota
+			*walletType = commerceschema.BlindBoxRewardWalletTypeDefault
+		}
 	case commerceschema.BlindBoxRewardTypeQuota:
 		if ordinaryMinimumUSD > 0 && *rewardUSD < ordinaryMinimumUSD {
 			*rewardUSD = ordinaryMinimumUSD
@@ -96,10 +102,32 @@ func applyFirstPurchaseMinimumGuarantee(isFirstPurchaseOpen bool, ordinaryMinimu
 }
 
 func pickBlindBoxTier(tiers []blindboxsettings.TierSetting) blindboxsettings.TierSetting {
+	return pickBlindBoxTierForRoll(tiers, rand.Float64())
+}
+
+func pickBlindBoxTierForRoll(tiers []blindboxsettings.TierSetting, roll float64) blindboxsettings.TierSetting {
 	if len(tiers) == 0 {
 		return blindboxsettings.TierSetting{Name: "fallback", MinUSD: 1, MaxUSD: 1, Probability: 1}
 	}
-	roll := rand.Float64()
+	totalProbability := 0.0
+	lastEligible := -1
+	for index, tier := range tiers {
+		if tier.Probability <= 0 {
+			continue
+		}
+		totalProbability += tier.Probability
+		lastEligible = index
+	}
+	if lastEligible == -1 {
+		return blindboxsettings.TierSetting{Name: "fallback", MinUSD: 1, MaxUSD: 1, Probability: 1}
+	}
+	if roll < 0 {
+		roll = 0
+	}
+	if roll >= 1 {
+		roll = math.Nextafter(1, 0)
+	}
+	roll *= totalProbability
 	cumulative := 0.0
 	for _, tier := range tiers {
 		if tier.Probability <= 0 {
@@ -110,7 +138,7 @@ func pickBlindBoxTier(tiers []blindboxsettings.TierSetting) blindboxsettings.Tie
 			return tier
 		}
 	}
-	return tiers[len(tiers)-1]
+	return tiers[lastEligible]
 }
 
 func randomTierRewardUSD(tier blindboxsettings.TierSetting) float64 {

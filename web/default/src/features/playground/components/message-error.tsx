@@ -48,7 +48,7 @@ export function MessageError({ message, className = '' }: MessageErrorProps) {
   if (message.errorCode === 'model_price_error') {
     return (
       <Alert variant='default' className={className}>
-        <AlertTriangle className='text-orange-500' />
+        <AlertTriangle className='text-destructive' />
         <AlertTitle>{t('Model Price Not Configured')}</AlertTitle>
         <AlertDescription className='space-y-2'>
           <p>{errorContent}</p>

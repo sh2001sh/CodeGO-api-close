@@ -53,7 +53,11 @@ import { registerFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useEmailVerification } from '@/features/auth/hooks/use-email-verification'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
-import { getAffiliateCode } from '@/features/auth/lib/storage'
+import {
+  getAffiliateCode,
+  removeAffiliateCode,
+  saveAffiliateCode,
+} from '@/features/auth/lib/storage'
 
 export function SignUpForm({
   className,
@@ -67,6 +71,13 @@ export function SignUpForm({
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
+  const initialAffiliateCode = useMemo(() => {
+    if (typeof window === 'undefined') return ''
+    return (
+      new URLSearchParams(window.location.search).get('aff')?.trim() ||
+      getAffiliateCode()
+    )
+  }, [])
 
   const { status } = useStatus()
   const {
@@ -76,7 +87,7 @@ export function SignUpForm({
     setTurnstileToken,
     validateTurnstile,
   } = useTurnstile()
-  const { redirectToLogin, handleLoginSuccess } = useAuthRedirect()
+  const { handleLoginSuccess } = useAuthRedirect()
   const {
     isSending: isSendingCode,
     secondsLeft,
@@ -92,12 +103,14 @@ export function SignUpForm({
     defaultValues: {
       username: '',
       email: '',
+      aff: initialAffiliateCode,
       password: '',
       confirmPassword: '',
     },
   })
 
   const emailValue = form.watch('email')
+  const affiliateCode = form.watch('aff')
   const emailVerificationRequired = !!status?.email_verification
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
@@ -130,6 +143,15 @@ export function SignUpForm({
     }
   }, [requiresLegalConsent])
 
+  useEffect(() => {
+    const normalizedAffiliateCode = affiliateCode.trim()
+    if (normalizedAffiliateCode) {
+      saveAffiliateCode(normalizedAffiliateCode)
+      return
+    }
+    removeAffiliateCode()
+  }, [affiliateCode])
+
   async function onSubmit(data: z.infer<typeof registerFormSchema>) {
     if (requiresLegalConsent && !agreedToLegal) {
       toast.error(legalConsentErrorMessage)
@@ -154,13 +176,14 @@ export function SignUpForm({
         password: data.password,
         email: data.email || undefined,
         verification_code: verificationCode || undefined,
-        aff: getAffiliateCode(),
+        aff_code: data.aff.trim() || undefined,
         turnstile: turnstileToken,
       })
 
       if (res?.success) {
-        toast.success(t('Account created! Please sign in'))
-        redirectToLogin()
+        removeAffiliateCode()
+        await handleLoginSuccess(res.data as { id?: number } | null)
+        toast.success(t('Account created!'))
       }
     } catch (_error) {
       // Errors are handled by global interceptor
@@ -220,6 +243,25 @@ export function SignUpForm({
         className={cn('grid gap-4', className)}
         {...props}
       >
+        <FormField
+          control={form.control}
+          name='aff'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>邀请码（可选）</FormLabel>
+              <FormControl>
+                <Input
+                  autoComplete='off'
+                  maxLength={32}
+                  placeholder='输入邀请码'
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
         <FormField
           control={form.control}
           name='username'

@@ -146,10 +146,7 @@ func createPreparedUser(db *gorm.DB, user *identityschema.User) error {
 }
 
 func isExternalIDConflict(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "external_id")
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "external_id")
 }
 
 func persistUserSettingUpdate(user *identityschema.User) error {

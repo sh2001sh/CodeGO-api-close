@@ -1,6 +1,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
@@ -18,6 +20,7 @@ const (
 	billingQuotaUnitQuota          = "quota"
 	billingAccountTypeWallet       = "wallet"
 	billingAccountTypeClaudeWallet = "claude_wallet"
+	billingReservationRequestIDMax = 64
 )
 
 type mirroredWalletStore struct {
@@ -206,7 +209,7 @@ func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey
 	if err := reconcileAccountBalanceTx(tx, account, userID, legacyBalance); err != nil {
 		return err
 	}
-	if _, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+	entry, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID:      account.AccountID,
 		Amount:         int64(amount),
 		IdempotencyKey: idempotencyKey,
@@ -215,10 +218,17 @@ func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey
 		ReferenceID:    fmt.Sprintf("%d", userID),
 		OperatorType:   "ledger_sync",
 		OperatorID:     idempotencyKey,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
-	return mirrored.applyDelta(tx, userID, amount)
+	if err := recordFundingLotTx(tx, account.AccountID, int64(amount), idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
+		return err
+	}
+	if err := mirrored.applyDelta(tx, userID, amount); err != nil {
+		return err
+	}
+	return nil
 }
 
 func ensureMirroredUserAccount(userID int, accountType string, legacyBalance int) (*billingschema.BillingAccount, error) {
@@ -364,7 +374,7 @@ func applyLedgerDelta(account *billingschema.BillingAccount, userID int, delta i
 
 	reservation, err := billingdomain.CreateReservation(billingdomain.CreateReservationParams{
 		AccountID:      account.AccountID,
-		RequestID:      fmt.Sprintf("ledger-sync:%s", operationID),
+		RequestID:      ledgerSyncRequestID(operationID),
 		ReservedAmount: int64(delta),
 		IdempotencyKey: fmt.Sprintf("ledger-reservation:%s", operationID),
 	})
@@ -399,7 +409,7 @@ func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, user
 
 	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
 		AccountID:      account.AccountID,
-		RequestID:      fmt.Sprintf("ledger-sync:%s", operationID),
+		RequestID:      ledgerSyncRequestID(operationID),
 		ReservedAmount: int64(delta),
 		IdempotencyKey: fmt.Sprintf("ledger-reservation:%s", operationID),
 	})
@@ -412,6 +422,17 @@ func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, user
 		IdempotencyKey: fmt.Sprintf("ledger-settlement:%s", operationID),
 	})
 	return err
+}
+
+func ledgerSyncRequestID(operationID string) string {
+	const prefix = "ledger-sync:"
+	requestID := prefix + operationID
+	if len(requestID) <= billingReservationRequestIDMax {
+		return requestID
+	}
+
+	digest := sha256.Sum256([]byte(operationID))
+	return prefix + hex.EncodeToString(digest[:24])
 }
 
 func getUserWalletQuotaTx(tx *gorm.DB, userID int) (int, error) {

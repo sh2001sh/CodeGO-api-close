@@ -21,6 +21,7 @@ import { Route as SetupIndexRouteImport } from './routes/setup/index'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as GuideIndexRouteImport } from './routes/guide/index'
 import { Route as DownloadIndexRouteImport } from './routes/download/index'
+import { Route as BountiesIndexRouteImport } from './routes/bounties/index'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as TopicsSlugRouteImport } from './routes/topics/$slug'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
@@ -28,6 +29,7 @@ import { Route as MiniappLandingRouteImport } from './routes/miniapp/landing'
 import { Route as DesktopAuthorizeRouteImport } from './routes/desktop/authorize'
 import { Route as ConsoleTopupRouteImport } from './routes/console/topup'
 import { Route as ConsoleLogRouteImport } from './routes/console/log'
+import { Route as BountiesTaskIdRouteImport } from './routes/bounties/$taskId'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
@@ -47,6 +49,7 @@ import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedUsageLogsIndexRouteImport } from './routes/_authenticated/usage-logs/index'
 import { Route as AuthenticatedSystemSettingsIndexRouteImport } from './routes/_authenticated/system-settings/index'
 import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
+import { Route as AuthenticatedRoutePoolsIndexRouteImport } from './routes/_authenticated/route-pools/index'
 import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/_authenticated/redemption-codes/index'
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile/index'
 import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_authenticated/playground/index'
@@ -59,6 +62,8 @@ import { Route as AuthenticatedImagesIndexRouteImport } from './routes/_authenti
 import { Route as AuthenticatedGroupStatusIndexRouteImport } from './routes/_authenticated/group-status/index'
 import { Route as AuthenticatedGroupBuyIndexRouteImport } from './routes/_authenticated/group-buy/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
+import { Route as AuthenticatedDailyLuckyNumberIndexRouteImport } from './routes/_authenticated/daily-lucky-number/index'
+import { Route as AuthenticatedCommunityResourcesIndexRouteImport } from './routes/_authenticated/community-resources/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedBlindBoxIndexRouteImport } from './routes/_authenticated/blind-box/index'
 import { Route as AuthenticatedUsageLogsSectionRouteImport } from './routes/_authenticated/usage-logs/$section'
@@ -66,6 +71,7 @@ import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authen
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
+import { Route as AuthenticatedBountiesAdminRouteImport } from './routes/_authenticated/bounties/admin'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
 import { Route as AuthenticatedSystemSettingsSiteIndexRouteImport } from './routes/_authenticated/system-settings/site/index'
 import { Route as AuthenticatedSystemSettingsSecurityIndexRouteImport } from './routes/_authenticated/system-settings/security/index'
@@ -140,6 +146,11 @@ const DownloadIndexRoute = DownloadIndexRouteImport.update({
   path: '/download/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BountiesIndexRoute = BountiesIndexRouteImport.update({
+  id: '/bounties/',
+  path: '/bounties/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AboutIndexRoute = AboutIndexRouteImport.update({
   id: '/about/',
   path: '/about/',
@@ -173,6 +184,11 @@ const ConsoleTopupRoute = ConsoleTopupRouteImport.update({
 const ConsoleLogRoute = ConsoleLogRouteImport.update({
   id: '/console/log',
   path: '/console/log',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BountiesTaskIdRoute = BountiesTaskIdRouteImport.update({
+  id: '/bounties/$taskId',
+  path: '/bounties/$taskId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedChat2linkRoute = AuthenticatedChat2linkRouteImport.update({
@@ -275,6 +291,12 @@ const AuthenticatedSubscriptionsIndexRoute =
     path: '/subscriptions/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedRoutePoolsIndexRoute =
+  AuthenticatedRoutePoolsIndexRouteImport.update({
+    id: '/route-pools/',
+    path: '/route-pools/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedRedemptionCodesIndexRoute =
   AuthenticatedRedemptionCodesIndexRouteImport.update({
     id: '/redemption-codes/',
@@ -346,6 +368,18 @@ const AuthenticatedDashboardIndexRoute =
     path: '/dashboard/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDailyLuckyNumberIndexRoute =
+  AuthenticatedDailyLuckyNumberIndexRouteImport.update({
+    id: '/daily-lucky-number/',
+    path: '/daily-lucky-number/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedCommunityResourcesIndexRoute =
+  AuthenticatedCommunityResourcesIndexRouteImport.update({
+    id: '/community-resources/',
+    path: '/community-resources/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChannelsIndexRoute =
   AuthenticatedChannelsIndexRouteImport.update({
     id: '/channels/',
@@ -387,6 +421,12 @@ const AuthenticatedChatChatIdRoute = AuthenticatedChatChatIdRouteImport.update({
   path: '/chat/$chatId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBountiesAdminRoute =
+  AuthenticatedBountiesAdminRouteImport.update({
+    id: '/bounties/admin',
+    path: '/bounties/admin',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const authUserResetRoute = authUserResetRouteImport.update({
   id: '/user/reset',
   path: '/user/reset',
@@ -496,6 +536,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/bounties/$taskId': typeof BountiesTaskIdRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/desktop/authorize': typeof DesktopAuthorizeRoute
@@ -503,12 +544,14 @@ export interface FileRoutesByFullPath {
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about/': typeof AboutIndexRoute
+  '/bounties/': typeof BountiesIndexRoute
   '/download/': typeof DownloadIndexRoute
   '/guide/': typeof GuideIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/setup/': typeof SetupIndexRoute
   '/topics/': typeof TopicsIndexRoute
   '/user/reset': typeof authUserResetRoute
+  '/bounties/admin': typeof AuthenticatedBountiesAdminRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -516,6 +559,8 @@ export interface FileRoutesByFullPath {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/blind-box/': typeof AuthenticatedBlindBoxIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/community-resources/': typeof AuthenticatedCommunityResourcesIndexRoute
+  '/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/group-buy/': typeof AuthenticatedGroupBuyIndexRoute
   '/group-status/': typeof AuthenticatedGroupStatusIndexRoute
@@ -528,6 +573,7 @@ export interface FileRoutesByFullPath {
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/profile/': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/route-pools/': typeof AuthenticatedRoutePoolsIndexRoute
   '/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
   '/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
@@ -567,6 +613,7 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/bounties/$taskId': typeof BountiesTaskIdRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/desktop/authorize': typeof DesktopAuthorizeRoute
@@ -574,12 +621,14 @@ export interface FileRoutesByTo {
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about': typeof AboutIndexRoute
+  '/bounties': typeof BountiesIndexRoute
   '/download': typeof DownloadIndexRoute
   '/guide': typeof GuideIndexRoute
   '/pricing': typeof PricingIndexRoute
   '/setup': typeof SetupIndexRoute
   '/topics': typeof TopicsIndexRoute
   '/user/reset': typeof authUserResetRoute
+  '/bounties/admin': typeof AuthenticatedBountiesAdminRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -587,6 +636,8 @@ export interface FileRoutesByTo {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/blind-box': typeof AuthenticatedBlindBoxIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
+  '/community-resources': typeof AuthenticatedCommunityResourcesIndexRoute
+  '/daily-lucky-number': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/group-buy': typeof AuthenticatedGroupBuyIndexRoute
   '/group-status': typeof AuthenticatedGroupStatusIndexRoute
@@ -599,6 +650,7 @@ export interface FileRoutesByTo {
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
   '/profile': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/route-pools': typeof AuthenticatedRoutePoolsIndexRoute
   '/subscriptions': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-settings': typeof AuthenticatedSystemSettingsIndexRoute
   '/usage-logs': typeof AuthenticatedUsageLogsIndexRoute
@@ -642,6 +694,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
+  '/bounties/$taskId': typeof BountiesTaskIdRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/desktop/authorize': typeof DesktopAuthorizeRoute
@@ -649,12 +702,14 @@ export interface FileRoutesById {
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about/': typeof AboutIndexRoute
+  '/bounties/': typeof BountiesIndexRoute
   '/download/': typeof DownloadIndexRoute
   '/guide/': typeof GuideIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/setup/': typeof SetupIndexRoute
   '/topics/': typeof TopicsIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
+  '/_authenticated/bounties/admin': typeof AuthenticatedBountiesAdminRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -662,6 +717,8 @@ export interface FileRoutesById {
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/_authenticated/blind-box/': typeof AuthenticatedBlindBoxIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/_authenticated/community-resources/': typeof AuthenticatedCommunityResourcesIndexRoute
+  '/_authenticated/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/group-buy/': typeof AuthenticatedGroupBuyIndexRoute
   '/_authenticated/group-status/': typeof AuthenticatedGroupStatusIndexRoute
@@ -674,6 +731,7 @@ export interface FileRoutesById {
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
   '/_authenticated/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/_authenticated/route-pools/': typeof AuthenticatedRoutePoolsIndexRoute
   '/_authenticated/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/_authenticated/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
   '/_authenticated/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
@@ -716,6 +774,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/bounties/$taskId'
     | '/console/log'
     | '/console/topup'
     | '/desktop/authorize'
@@ -723,12 +782,14 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about/'
+    | '/bounties/'
     | '/download/'
     | '/guide/'
     | '/pricing/'
     | '/setup/'
     | '/topics/'
     | '/user/reset'
+    | '/bounties/admin'
     | '/chat/$chatId'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -736,6 +797,8 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/blind-box/'
     | '/channels/'
+    | '/community-resources/'
+    | '/daily-lucky-number/'
     | '/dashboard/'
     | '/group-buy/'
     | '/group-status/'
@@ -748,6 +811,7 @@ export interface FileRouteTypes {
     | '/playground/'
     | '/profile/'
     | '/redemption-codes/'
+    | '/route-pools/'
     | '/subscriptions/'
     | '/system-settings/'
     | '/usage-logs/'
@@ -787,6 +851,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/bounties/$taskId'
     | '/console/log'
     | '/console/topup'
     | '/desktop/authorize'
@@ -794,12 +859,14 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about'
+    | '/bounties'
     | '/download'
     | '/guide'
     | '/pricing'
     | '/setup'
     | '/topics'
     | '/user/reset'
+    | '/bounties/admin'
     | '/chat/$chatId'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -807,6 +874,8 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/blind-box'
     | '/channels'
+    | '/community-resources'
+    | '/daily-lucky-number'
     | '/dashboard'
     | '/group-buy'
     | '/group-status'
@@ -819,6 +888,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/profile'
     | '/redemption-codes'
+    | '/route-pools'
     | '/subscriptions'
     | '/system-settings'
     | '/usage-logs'
@@ -861,6 +931,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/chat2link'
+    | '/bounties/$taskId'
     | '/console/log'
     | '/console/topup'
     | '/desktop/authorize'
@@ -868,12 +939,14 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about/'
+    | '/bounties/'
     | '/download/'
     | '/guide/'
     | '/pricing/'
     | '/setup/'
     | '/topics/'
     | '/(auth)/user/reset'
+    | '/_authenticated/bounties/admin'
     | '/_authenticated/chat/$chatId'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
@@ -881,6 +954,8 @@ export interface FileRouteTypes {
     | '/_authenticated/usage-logs/$section'
     | '/_authenticated/blind-box/'
     | '/_authenticated/channels/'
+    | '/_authenticated/community-resources/'
+    | '/_authenticated/daily-lucky-number/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/group-buy/'
     | '/_authenticated/group-status/'
@@ -893,6 +968,7 @@ export interface FileRouteTypes {
     | '/_authenticated/playground/'
     | '/_authenticated/profile/'
     | '/_authenticated/redemption-codes/'
+    | '/_authenticated/route-pools/'
     | '/_authenticated/subscriptions/'
     | '/_authenticated/system-settings/'
     | '/_authenticated/usage-logs/'
@@ -928,6 +1004,7 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  BountiesTaskIdRoute: typeof BountiesTaskIdRoute
   ConsoleLogRoute: typeof ConsoleLogRoute
   ConsoleTopupRoute: typeof ConsoleTopupRoute
   DesktopAuthorizeRoute: typeof DesktopAuthorizeRoute
@@ -935,6 +1012,7 @@ export interface RootRouteChildren {
   OauthProviderRoute: typeof OauthProviderRoute
   TopicsSlugRoute: typeof TopicsSlugRoute
   AboutIndexRoute: typeof AboutIndexRoute
+  BountiesIndexRoute: typeof BountiesIndexRoute
   DownloadIndexRoute: typeof DownloadIndexRoute
   GuideIndexRoute: typeof GuideIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
@@ -1029,6 +1107,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DownloadIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bounties/': {
+      id: '/bounties/'
+      path: '/bounties'
+      fullPath: '/bounties/'
+      preLoaderRoute: typeof BountiesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/about/': {
       id: '/about/'
       path: '/about'
@@ -1076,6 +1161,13 @@ declare module '@tanstack/react-router' {
       path: '/console/log'
       fullPath: '/console/log'
       preLoaderRoute: typeof ConsoleLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bounties/$taskId': {
+      id: '/bounties/$taskId'
+      path: '/bounties/$taskId'
+      fullPath: '/bounties/$taskId'
+      preLoaderRoute: typeof BountiesTaskIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/chat2link': {
@@ -1211,6 +1303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSubscriptionsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/route-pools/': {
+      id: '/_authenticated/route-pools/'
+      path: '/route-pools'
+      fullPath: '/route-pools/'
+      preLoaderRoute: typeof AuthenticatedRoutePoolsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/redemption-codes/': {
       id: '/_authenticated/redemption-codes/'
       path: '/redemption-codes'
@@ -1295,6 +1394,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/daily-lucky-number/': {
+      id: '/_authenticated/daily-lucky-number/'
+      path: '/daily-lucky-number'
+      fullPath: '/daily-lucky-number/'
+      preLoaderRoute: typeof AuthenticatedDailyLuckyNumberIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/community-resources/': {
+      id: '/_authenticated/community-resources/'
+      path: '/community-resources'
+      fullPath: '/community-resources/'
+      preLoaderRoute: typeof AuthenticatedCommunityResourcesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/channels/': {
       id: '/_authenticated/channels/'
       path: '/channels'
@@ -1342,6 +1455,13 @@ declare module '@tanstack/react-router' {
       path: '/chat/$chatId'
       fullPath: '/chat/$chatId'
       preLoaderRoute: typeof AuthenticatedChatChatIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/bounties/admin': {
+      id: '/_authenticated/bounties/admin'
+      path: '/bounties/admin'
+      fullPath: '/bounties/admin'
+      preLoaderRoute: typeof AuthenticatedBountiesAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/(auth)/user/reset': {
@@ -1536,6 +1656,7 @@ const AuthenticatedSystemSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
+  AuthenticatedBountiesAdminRoute: typeof AuthenticatedBountiesAdminRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1543,6 +1664,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
   AuthenticatedBlindBoxIndexRoute: typeof AuthenticatedBlindBoxIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
+  AuthenticatedCommunityResourcesIndexRoute: typeof AuthenticatedCommunityResourcesIndexRoute
+  AuthenticatedDailyLuckyNumberIndexRoute: typeof AuthenticatedDailyLuckyNumberIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedGroupBuyIndexRoute: typeof AuthenticatedGroupBuyIndexRoute
   AuthenticatedGroupStatusIndexRoute: typeof AuthenticatedGroupStatusIndexRoute
@@ -1555,6 +1678,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
   AuthenticatedRedemptionCodesIndexRoute: typeof AuthenticatedRedemptionCodesIndexRoute
+  AuthenticatedRoutePoolsIndexRoute: typeof AuthenticatedRoutePoolsIndexRoute
   AuthenticatedSubscriptionsIndexRoute: typeof AuthenticatedSubscriptionsIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
@@ -1565,6 +1689,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemSettingsRouteRoute:
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
+  AuthenticatedBountiesAdminRoute: AuthenticatedBountiesAdminRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
@@ -1572,6 +1697,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
   AuthenticatedBlindBoxIndexRoute: AuthenticatedBlindBoxIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
+  AuthenticatedCommunityResourcesIndexRoute:
+    AuthenticatedCommunityResourcesIndexRoute,
+  AuthenticatedDailyLuckyNumberIndexRoute:
+    AuthenticatedDailyLuckyNumberIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedGroupBuyIndexRoute: AuthenticatedGroupBuyIndexRoute,
   AuthenticatedGroupStatusIndexRoute: AuthenticatedGroupStatusIndexRoute,
@@ -1585,6 +1714,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
+  AuthenticatedRoutePoolsIndexRoute: AuthenticatedRoutePoolsIndexRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
@@ -1607,6 +1737,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  BountiesTaskIdRoute: BountiesTaskIdRoute,
   ConsoleLogRoute: ConsoleLogRoute,
   ConsoleTopupRoute: ConsoleTopupRoute,
   DesktopAuthorizeRoute: DesktopAuthorizeRoute,
@@ -1614,6 +1745,7 @@ const rootRouteChildren: RootRouteChildren = {
   OauthProviderRoute: OauthProviderRoute,
   TopicsSlugRoute: TopicsSlugRoute,
   AboutIndexRoute: AboutIndexRoute,
+  BountiesIndexRoute: BountiesIndexRoute,
   DownloadIndexRoute: DownloadIndexRoute,
   GuideIndexRoute: GuideIndexRoute,
   PricingIndexRoute: PricingIndexRoute,

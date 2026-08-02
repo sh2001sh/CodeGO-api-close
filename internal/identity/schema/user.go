@@ -56,6 +56,7 @@ type User struct {
 	AffQuota                     int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`
 	AffHistoryQuota              int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"`
 	InviterId                    int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	InviterExternalId            string         `json:"inviter_external_id,omitempty" gorm:"-"`
 	DeletedAt                    gorm.DeletedAt `gorm:"index"`
 	LinuxDOId                    string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting                      string         `json:"setting" gorm:"type:text;column:setting"`

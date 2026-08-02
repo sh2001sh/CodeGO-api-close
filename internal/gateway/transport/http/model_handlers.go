@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	"github.com/sh2001sh/new-api/types"
 )
@@ -30,6 +31,15 @@ func ListModels(c *gin.Context, modelType int) {
 			"message": "get user group failed",
 		})
 		return
+	}
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
+		filtered := userOpenAIModels[:0]
+		for _, model := range userOpenAIModels {
+			if !gatewaycontract.IsImageGenerationModel(model.Id) {
+				filtered = append(filtered, model)
+			}
+		}
+		userOpenAIModels = filtered
 	}
 
 	switch modelType {

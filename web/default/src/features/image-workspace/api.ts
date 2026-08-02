@@ -26,8 +26,12 @@ interface ImageWorkspaceItemsResponse {
   total?: number
 }
 
-export async function getImageWorkspaceModels(): Promise<ModelOption[]> {
-  const res = await api.get('/api/user/image-workspace/models')
+export async function getImageWorkspaceModels(
+  group?: string
+): Promise<ModelOption[]> {
+  const res = await api.get('/api/user/image-workspace/models', {
+    params: group ? { group } : undefined,
+  })
   const { data } = res
   if (!data.success || !Array.isArray(data.data)) {
     return []

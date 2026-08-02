@@ -78,18 +78,18 @@ type SubscriptionPlan struct {
 
 	MaxPurchasePerUser int `json:"max_purchase_per_user" gorm:"type:int;default:0"`
 
-	PlanType        string  `json:"plan_type" gorm:"type:varchar(20);default:'monthly';index"`
-	GroupBuyEnabled bool    `json:"group_buy_enabled" gorm:"default:false;index"`
-	GroupBuyBonus2  float64 `json:"group_buy_bonus_2" gorm:"column:group_buy_bonus2;type:decimal(10,2);default:0"`
-	GroupBuyBonus3  float64 `json:"group_buy_bonus_3" gorm:"column:group_buy_bonus3;type:decimal(10,2);default:0"`
-	GroupBuyBonus5  float64 `json:"group_buy_bonus_5" gorm:"column:group_buy_bonus5;type:decimal(10,2);default:0"`
-	RenewalBonus2   float64 `json:"renewal_bonus_2" gorm:"column:renewal_bonus2;type:decimal(8,4);default:0"`
-	RenewalBonus3   float64 `json:"renewal_bonus_3" gorm:"column:renewal_bonus3;type:decimal(8,4);default:0"`
-	RenewalBonus4   float64 `json:"renewal_bonus_4" gorm:"column:renewal_bonus4;type:decimal(8,4);default:0"`
-	FuelEnabled     bool    `json:"fuel_enabled" gorm:"default:false"`
-	FuelUnitPrice   float64 `json:"fuel_unit_price" gorm:"type:decimal(10,4);default:0"`
-	FuelMinQuota    int64   `json:"fuel_min_quota" gorm:"type:bigint;default:0"`
-	FuelQuotaStep   int64   `json:"fuel_quota_step" gorm:"type:bigint;default:0"`
+	PlanType             string  `json:"plan_type" gorm:"type:varchar(20);default:'monthly';index"`
+	MembershipTier       string  `json:"membership_tier" gorm:"type:varchar(16);default:'none';index"`
+	LuckyDrawEnabled     bool    `json:"lucky_draw_enabled" gorm:"default:false;index"`
+	BlindBoxBenefitCount int     `json:"blind_box_benefit_count" gorm:"type:int;default:0"`
+	GroupBuyEnabled      bool    `json:"group_buy_enabled" gorm:"default:false;index"`
+	GroupBuyBonus2       float64 `json:"group_buy_bonus_2" gorm:"column:group_buy_bonus2;type:decimal(10,2);default:0"`
+	GroupBuyBonus3       float64 `json:"group_buy_bonus_3" gorm:"column:group_buy_bonus3;type:decimal(10,2);default:0"`
+	GroupBuyBonus5       float64 `json:"group_buy_bonus_5" gorm:"column:group_buy_bonus5;type:decimal(10,2);default:0"`
+	FuelEnabled          bool    `json:"fuel_enabled" gorm:"default:false"`
+	FuelUnitPrice        float64 `json:"fuel_unit_price" gorm:"type:decimal(10,4);default:0"`
+	FuelMinQuota         int64   `json:"fuel_min_quota" gorm:"type:bigint;default:0"`
+	FuelQuotaStep        int64   `json:"fuel_quota_step" gorm:"type:bigint;default:0"`
 
 	UpgradeGroup string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
 	TotalAmount  int64  `json:"total_amount" gorm:"type:bigint;not null;default:0"`
@@ -154,10 +154,16 @@ func normalizeSubscriptionPlanType(planType string) string {
 
 // SubscriptionOrder records the payment transaction for a subscription purchase.
 type SubscriptionOrder struct {
-	Id     int     `json:"id"`
-	UserId int     `json:"user_id" gorm:"index"`
-	PlanId int     `json:"plan_id" gorm:"index"`
-	Money  float64 `json:"money"`
+	Id            int     `json:"id"`
+	UserId        int     `json:"user_id" gorm:"index"`
+	PlanId        int     `json:"plan_id" gorm:"index"`
+	Money         float64 `json:"money"`
+	OriginalMoney float64 `json:"original_money" gorm:"type:decimal(10,2);not null;default:0"`
+
+	FirstPurchaseDiscountApplied    bool    `json:"first_purchase_discount_applied" gorm:"not null;default:false;index"`
+	FirstPurchaseDiscountMultiplier float64 `json:"first_purchase_discount_multiplier" gorm:"type:decimal(8,4);not null;default:0"`
+	FirstPurchaseDiscountStartAt    int64   `json:"first_purchase_discount_start_at" gorm:"type:bigint;not null;default:0"`
+	FirstPurchaseDiscountEndAt      int64   `json:"first_purchase_discount_end_at" gorm:"type:bigint;not null;default:0"`
 
 	TradeNo              string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod        string  `json:"payment_method" gorm:"type:varchar(50)"`
@@ -196,12 +202,15 @@ type UserSubscription struct {
 	Status    string `json:"status" gorm:"type:varchar(32);index;index:idx_user_sub_active,priority:2"`
 	Source    string `json:"source" gorm:"type:varchar(32);default:'order'"`
 
-	LastResetTime int64  `json:"last_reset_time" gorm:"type:bigint;default:0"`
-	NextResetTime int64  `json:"next_reset_time" gorm:"type:bigint;default:0;index"`
-	UpgradeGroup  string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
-	PrevUserGroup string `json:"prev_user_group" gorm:"type:varchar(64);default:''"`
+	LastResetTime     int64  `json:"last_reset_time" gorm:"type:bigint;default:0"`
+	NextResetTime     int64  `json:"next_reset_time" gorm:"type:bigint;default:0;index"`
+	UpgradeGroup      string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
+	PrevUserGroup     string `json:"prev_user_group" gorm:"type:varchar(64);default:''"`
+	LuckyBenefitCycle string `json:"lucky_benefit_cycle" gorm:"type:varchar(128);default:''"`
 
 	ConversionPreview *SubscriptionClaudeConversionPreview `json:"conversion_preview,omitempty" gorm:"-"`
+	LuckyNumber       *SubscriptionLuckyNumber             `json:"lucky_number,omitempty" gorm:"-"`
+	MembershipTier    string                               `json:"membership_tier,omitempty" gorm:"-"`
 	CreatedAt         int64                                `json:"created_at" gorm:"bigint"`
 	UpdatedAt         int64                                `json:"updated_at" gorm:"bigint"`
 }

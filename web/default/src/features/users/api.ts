@@ -189,3 +189,18 @@ export async function getUserBlindBoxOverview(
   const res = await api.get(`/api/blind-box/admin/users/${userId}/overview`)
   return res.data
 }
+
+export async function grantUserBlindBoxes(
+  userId: number,
+  payload: {
+    quantity: number
+    reason?: string
+    idempotency_key: string
+  }
+): Promise<ApiResponse> {
+  const res = await api.post(
+    `/api/blind-box/admin/users/${userId}/grants`,
+    payload
+  )
+  return res.data
+}

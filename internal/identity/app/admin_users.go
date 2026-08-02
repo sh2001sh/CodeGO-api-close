@@ -65,6 +65,9 @@ func ListAdminUsers(pageInfo *platformpagination.PageInfo) (*platformpagination.
 	if err != nil {
 		return nil, err
 	}
+	if err := populateInviterExternalIDs(users); err != nil {
+		return nil, err
+	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
 	return pageInfo, nil
@@ -73,6 +76,9 @@ func ListAdminUsers(pageInfo *platformpagination.PageInfo) (*platformpagination.
 func SearchAdminUsers(keyword string, group string, pageInfo *platformpagination.PageInfo) (*platformpagination.PageInfo, error) {
 	users, total, err := identitystore.SearchUsers(keyword, group, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
+		return nil, err
+	}
+	if err := populateInviterExternalIDs(users); err != nil {
 		return nil, err
 	}
 	pageInfo.SetTotal(int(total))
@@ -88,7 +94,43 @@ func GetAdminUserDetail(targetUserID int, actorRole int) (*identityschema.User, 
 	if actorRole <= user.Role && actorRole != constant.RoleRootUser {
 		return nil, ErrUserNoPermissionSame
 	}
+	if err := populateInviterExternalIDs([]*identityschema.User{user}); err != nil {
+		return nil, err
+	}
 	return user, nil
+}
+
+func populateInviterExternalIDs(users []*identityschema.User) error {
+	inviterIDs := make([]int, 0, len(users))
+	seen := make(map[int]struct{}, len(users))
+	for _, user := range users {
+		if user == nil || user.InviterId <= 0 {
+			continue
+		}
+		if _, exists := seen[user.InviterId]; exists {
+			continue
+		}
+		seen[user.InviterId] = struct{}{}
+		inviterIDs = append(inviterIDs, user.InviterId)
+	}
+	if len(inviterIDs) == 0 {
+		return nil
+	}
+
+	var inviters []identityschema.User
+	if err := platformdb.DB.Select("id, external_id").Where("id IN ?", inviterIDs).Find(&inviters).Error; err != nil {
+		return err
+	}
+	externalIDs := make(map[int]string, len(inviters))
+	for _, inviter := range inviters {
+		externalIDs[inviter.Id] = inviter.ExternalId
+	}
+	for _, user := range users {
+		if user != nil {
+			user.InviterExternalId = externalIDs[user.InviterId]
+		}
+	}
+	return nil
 }
 
 func CreateAdminUser(req AdminUserMutateRequest, actorRole int) error {

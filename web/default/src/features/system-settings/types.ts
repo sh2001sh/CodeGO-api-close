@@ -231,12 +231,10 @@ export type BillingSettings = {
   PayMethods: string
   'payment_setting.amount_options': string
   'payment_setting.amount_discount': string
-  'payment_setting.subscription_booster_enabled': boolean
-  'payment_setting.subscription_booster_rate': number
-  'payment_setting.subscription_booster_min_quota': number
-  'payment_setting.subscription_booster_max_quota': number
-  'payment_setting.subscription_booster_quota_step': number
-  'payment_setting.subscription_booster_daily_limit': number
+  'payment_setting.first_purchase_discount_enabled': boolean
+  'payment_setting.first_purchase_discount_multiplier': number
+  'payment_setting.first_purchase_discount_start_at': number
+  'payment_setting.first_purchase_discount_end_at': number
   'payment_setting.compliance_confirmed': boolean
   'payment_setting.compliance_terms_version': string
   'payment_setting.compliance_confirmed_at': number

@@ -12,6 +12,7 @@ describe('submitDesktopImportRequest', () => {
         tokenId: 1,
         name: 'My Claude',
         models: {},
+        target: 'codego',
       },
       {
         createDesktopImportLink: async () => {
@@ -41,6 +42,7 @@ describe('submitDesktopImportRequest', () => {
         tokenId: null,
         name: 'My Codex',
         models: { model: 'gpt-5.5' },
+        target: 'codego',
       },
       {
         createDesktopImportLink: async () => {
@@ -70,6 +72,7 @@ describe('submitDesktopImportRequest', () => {
         tokenId: 8,
         name: 'My Gemini',
         models: { model: 'gemini-2.5-pro' },
+        target: 'codego',
       },
       {
         createDesktopImportLink: async () => ({
@@ -101,10 +104,12 @@ describe('submitDesktopImportRequest', () => {
         tokenId: 9,
         name: 'My Codex',
         models: { model: 'gpt-5.5' },
+        target: 'codego',
       },
       {
         createDesktopImportLink: async (payload) => {
           assert.deepEqual(payload, {
+            target: 'codego',
             tool: 'codex',
             token_id: 9,
             name: 'My Codex',
@@ -143,6 +148,47 @@ describe('submitDesktopImportRequest', () => {
     assert.deepEqual(openedLinks, ['codego://v1/import?resource=provider'])
   })
 
+  test('opens the CC Switch scheme for a CC Switch import', async () => {
+    const openedLinks: string[] = []
+    const result = await submitDesktopImportRequest(
+      {
+        app: 'codex',
+        tokenId: 9,
+        name: 'CodeGo',
+        models: { model: 'gpt-5.6-luna' },
+        target: 'ccswitch',
+      },
+      {
+        createDesktopImportLink: async (payload) => {
+          assert.equal(payload.target, 'ccswitch')
+          return {
+            success: true,
+            data: {
+              code: '',
+              deep_link:
+                'ccswitch://v1/import?resource=provider&app=codex&name=CodeGo&endpoint=https%3A%2F%2Fshu26.cfd%2Fv1&apiKey=sk-test&model=gpt-5.6-luna&enabled=true',
+              config_url: '',
+              expires_in_seconds: 0,
+              tool: 'codex',
+              token_name: 'CodeGo',
+              provider_name: 'CodeGo',
+            },
+          }
+        },
+        openDesktopImportDeepLink: (_windowLike, deepLink) => {
+          openedLinks.push(deepLink)
+        },
+        t: translate,
+        windowLike: { location: { href: '' }, open: () => null },
+      }
+    )
+
+    assert.deepEqual(result, { tone: 'success' })
+    assert.deepEqual(openedLinks, [
+      'ccswitch://v1/import?resource=provider&app=codex&name=CodeGo&endpoint=https%3A%2F%2Fshu26.cfd%2Fv1&apiKey=sk-test&model=gpt-5.6-luna&enabled=true',
+    ])
+  })
+
   test('falls back to a generic desktop-open error when the request throws', async () => {
     const result = await submitDesktopImportRequest(
       {
@@ -153,6 +199,7 @@ describe('submitDesktopImportRequest', () => {
           model: 'claude-sonnet-4',
           haikuModel: 'claude-haiku-4',
         },
+        target: 'codego',
       },
       {
         createDesktopImportLink: async () => {
@@ -175,6 +222,36 @@ describe('submitDesktopImportRequest', () => {
     })
   })
 
+  test('uses the CC Switch error when a CC Switch import request throws', async () => {
+    const result = await submitDesktopImportRequest(
+      {
+        app: 'claude',
+        tokenId: 5,
+        name: 'My Claude',
+        models: { model: 'claude-sonnet-4' },
+        target: 'ccswitch',
+      },
+      {
+        createDesktopImportLink: async () => {
+          throw new Error('network down')
+        },
+        openDesktopImportDeepLink: () => {
+          throw new Error('should not be called')
+        },
+        t: translate,
+        windowLike: {
+          location: { href: '' },
+          open: () => null,
+        },
+      }
+    )
+
+    assert.deepEqual(result, {
+      tone: 'error',
+      message: 'Failed to open CC Switch',
+    })
+  })
+
   test('supports the additional desktop tools exposed by the desktop app', async () => {
     const openedLinks: string[] = []
 
@@ -184,10 +261,12 @@ describe('submitDesktopImportRequest', () => {
         tokenId: 17,
         name: 'My OpenCode',
         models: { model: 'gpt-5.5' },
+        target: 'codego',
       },
       {
         createDesktopImportLink: async (payload) => {
           assert.deepEqual(payload, {
+            target: 'codego',
             tool: 'opencode',
             token_id: 17,
             name: 'My OpenCode',

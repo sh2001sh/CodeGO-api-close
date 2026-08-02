@@ -99,7 +99,7 @@ export function summarizeOpenResult(records: BlindBoxRecord[]) {
 
 export function resolveRewardTone(record: BlindBoxRecord) {
   if (record.reward_type === 'subscription' || record.is_pity) {
-    return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+    return 'border-primary/30 bg-primary/10 text-primary'
   }
   if (record.reward_type === 'claude_quota') {
     return 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300'
@@ -120,7 +120,7 @@ export function BlindBoxPrizeDialog(props: {
       <DialogContent className='w-[calc(100vw-1rem)] max-w-2xl overflow-hidden p-0'>
         <DialogHeader className='border-b px-5 py-4'>
           <DialogTitle className='flex items-center gap-2 text-base'>
-            <Trophy className='size-5 text-amber-500' />
+            <Trophy className='size-5 text-primary' />
             抽奖结果
           </DialogTitle>
         </DialogHeader>

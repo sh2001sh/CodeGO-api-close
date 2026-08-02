@@ -17,6 +17,22 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	blindBoxHistoryRetentionDays = 30
+	blindBoxHistoryDefaultSize   = 20
+	blindBoxHistoryMaxSize       = 50
+)
+
+// BlindBoxHistoryPage is the paginated, user-scoped blind-box history payload.
+type BlindBoxHistoryPage struct {
+	Page          int                                 `json:"page"`
+	PageSize      int                                 `json:"page_size"`
+	Total         int64                               `json:"total"`
+	RetentionDays int                                 `json:"retention_days"`
+	CutoffTime    int64                               `json:"cutoff_time"`
+	Records       []commerceschema.BlindBoxOpenRecord `json:"records"`
+}
+
 func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxOverview, error) {
 	if userID <= 0 {
 		return nil, errors.New("invalid userId")
@@ -56,7 +72,7 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 	if recentLimit <= 0 {
 		recentLimit = 20
 	}
-	if err := platformdb.DB.Where("user_id = ?", userID).
+	if err := platformdb.DB.Where("user_id = ? AND create_time >= ?", userID, blindBoxHistoryCutoff(now)).
 		Order("create_time desc, id desc").
 		Limit(recentLimit).
 		Find(&overview.RecentRecords).Error; err != nil {
@@ -91,6 +107,94 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 	}
 
 	return overview, nil
+}
+
+// GetBlindBoxStatistics returns all-time, user-scoped blind-box totals without
+// loading the complete opening history into memory.
+func GetBlindBoxStatistics(userID int) (*commercedomain.BlindBoxStatistics, error) {
+	if userID <= 0 {
+		return nil, errors.New("invalid userId")
+	}
+
+	type statisticRow struct {
+		RewardType   string
+		OpenedCount  int64
+		RewardUSD    float64
+		CreditAmount int64
+		PityWins     int64
+	}
+
+	var rows []statisticRow
+	if err := platformdb.DB.Model(&commerceschema.BlindBoxOpenRecord{}).
+		Select(`reward_type, COUNT(*) AS opened_count, COALESCE(SUM(reward_usd), 0) AS reward_usd, COALESCE(SUM(credit_amount), 0) AS credit_amount, COALESCE(SUM(CASE WHEN is_pity THEN 1 ELSE 0 END), 0) AS pity_wins`).
+		Where("user_id = ?", userID).
+		Group("reward_type").
+		Order("reward_type asc").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	statistics := &commercedomain.BlindBoxStatistics{
+		Rewards: make([]commercedomain.BlindBoxRewardStatistics, 0, len(rows)),
+	}
+	for _, row := range rows {
+		statistics.TotalOpened += row.OpenedCount
+		statistics.PityWins += row.PityWins
+		statistics.Rewards = append(statistics.Rewards, commercedomain.BlindBoxRewardStatistics{
+			RewardType:   row.RewardType,
+			OpenedCount:  row.OpenedCount,
+			RewardUSD:    row.RewardUSD,
+			CreditAmount: row.CreditAmount,
+		})
+	}
+	return statistics, nil
+}
+
+// ListBlindBoxHistory returns one page of the user's opening records from the last 30 days.
+func ListBlindBoxHistory(userID int, page int, pageSize int) (*BlindBoxHistoryPage, error) {
+	if userID <= 0 {
+		return nil, errors.New("invalid userId")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = blindBoxHistoryDefaultSize
+	}
+	if pageSize > blindBoxHistoryMaxSize {
+		pageSize = blindBoxHistoryMaxSize
+	}
+
+	cutoff := blindBoxHistoryCutoff(platformruntime.GetTimestamp())
+	query := platformdb.DB.Model(&commerceschema.BlindBoxOpenRecord{}).
+		Where("user_id = ? AND create_time >= ?", userID, cutoff)
+	result := &BlindBoxHistoryPage{
+		Page:          page,
+		PageSize:      pageSize,
+		RetentionDays: blindBoxHistoryRetentionDays,
+		CutoffTime:    cutoff,
+		Records:       []commerceschema.BlindBoxOpenRecord{},
+	}
+	if err := query.Count(&result.Total).Error; err != nil {
+		return nil, err
+	}
+	if err := query.Order("create_time desc, id desc").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&result.Records).Error; err != nil {
+		return nil, err
+	}
+	if err := attachBlindBoxPropStateTx(platformdb.DB, result.Records); err != nil {
+		return nil, err
+	}
+	for index := range result.Records {
+		normalizeBlindBoxOpenRecordDisplay(&result.Records[index])
+	}
+	return result, nil
+}
+
+func blindBoxHistoryCutoff(now int64) int64 {
+	return now - int64(blindBoxHistoryRetentionDays)*24*60*60
 }
 
 // IsBlindBoxFirstPurchaseEligible reports whether the user has no successful blind-box order yet.
@@ -181,6 +285,11 @@ func normalizeBlindBoxOpenRecordDisplay(record *commerceschema.BlindBoxOpenRecor
 	}
 	if record.RewardTier == "first_purchase" {
 		record.RewardTitle = formatFirstPurchaseBlindBoxRewardTitle(record.RewardUSD)
+	}
+	if record.RewardType == commerceschema.BlindBoxRewardTypeProp && record.PropType != "" {
+		if spec, ok := getBlindBoxPropSpecByType(record.PropType); ok {
+			record.RewardTitle = spec.Title
+		}
 	}
 	if record.RewardType == commerceschema.BlindBoxRewardTypeQuota && record.RewardTitle == "" {
 		record.RewardTitle = fmt.Sprintf("%.2f 美元奖励", record.RewardUSD)

@@ -27,10 +27,13 @@ import {
   RotateCw,
   Save,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { SubscriptionLuckySummary } from '@/features/daily-lucky-number/components/subscription-lucky-summary'
+import { useDailyLuckyNumberSelf } from '@/features/daily-lucky-number/hooks/use-daily-lucky-number'
 import { updateBillingPreference } from '@/features/subscriptions/api'
 import {
   getBillingPreferenceFromFundingSourceOrder,
@@ -51,10 +54,7 @@ import type {
 import { SubscriptionClaudeConversionCard } from '@/features/wallet/components/subscription-claude-conversion-card'
 import { useOverviewSubscriptionData } from './use-overview-subscription-data'
 
-const ALL_FUNDING_SOURCES: FundingSource[] = [
-  'subscription',
-  'wallet',
-]
+const ALL_FUNDING_SOURCES: FundingSource[] = ['subscription', 'wallet']
 
 function clampPercent(used: number, total: number): number {
   if (total <= 0) return 0
@@ -140,6 +140,7 @@ function getSubscriptionUsageStatus(
 }
 
 export function SubscriptionUsagePanel() {
+  const { t } = useTranslation()
   const {
     subscriptionData,
     plans,
@@ -156,6 +157,7 @@ export function SubscriptionUsagePanel() {
 
   const activeSubscriptions = subscriptionData?.subscriptions ?? []
   const hasActiveSubscriptions = activeSubscriptions.length > 0
+  const dailyLuckyQuery = useDailyLuckyNumberSelf(hasActiveSubscriptions)
 
   useEffect(() => {
     if (!subscriptionData) return
@@ -353,15 +355,10 @@ export function SubscriptionUsagePanel() {
                   >
                     <div className='min-w-0'>
                       <div className='text-foreground text-sm font-semibold'>
-                        {index + 1}.{' '}
-                        {getFundingSourceLabel(source, (value) =>
-                          String(value)
-                        )}
+                        {index + 1}. {getFundingSourceLabel(source, t)}
                       </div>
                       <p className='text-muted-foreground mt-1 text-xs'>
-                        {getFundingSourceDescription(source, (value) =>
-                          String(value)
-                        )}
+                        {getFundingSourceDescription(source, t)}
                       </p>
                     </div>
                     <div className='flex items-center gap-2'>
@@ -411,10 +408,7 @@ export function SubscriptionUsagePanel() {
                         onClick={() => toggleFundingSource(source)}
                         disabled={saving}
                       >
-                        启用{' '}
-                        {getFundingSourceLabel(source, (value) =>
-                          String(value)
-                        )}
+                        启用 {getFundingSourceLabel(source, t)}
                       </Button>
                     ))}
                   </div>
@@ -440,10 +434,10 @@ export function SubscriptionUsagePanel() {
                     const subscription = record.subscription
                     const meta = planMetaMap.get(subscription.plan_id)
                     const remainDays = getRemainingDays(subscription.end_time)
-                  const usageStatus = getSubscriptionUsageStatus(
-                    record,
-                    isMonthlyCardPlan(meta?.plan)
-                  )
+                    const usageStatus = getSubscriptionUsageStatus(
+                      record,
+                      isMonthlyCardPlan(meta?.plan)
+                    )
                     return (
                       <div
                         key={subscription.id}
@@ -545,7 +539,10 @@ export function SubscriptionUsagePanel() {
               planTitles={Object.fromEntries(
                 Array.from(planMetaMap.entries()).map(([id, value]) => [
                   id,
-                  { title: value.title || `套餐 #${id}`, subtitle: value.subtitle || '订阅' },
+                  {
+                    title: value.title || `套餐 #${id}`,
+                    subtitle: value.subtitle || '订阅',
+                  },
                 ])
               )}
             />
@@ -581,6 +578,9 @@ export function SubscriptionUsagePanel() {
                   periodRemain={periodRemain}
                   periodPercent={periodPercent}
                   isMonthlyPlan={isMonthlyPlan}
+                  plan={planMeta?.plan}
+                  luckyDraw={dailyLuckyQuery.data?.today_draw}
+                  luckyRewards={dailyLuckyQuery.data?.recent_rewards ?? []}
                 />
               )
             })}
@@ -605,6 +605,9 @@ function SubscriptionCard(props: {
   periodRemain: number
   periodPercent: number
   isMonthlyPlan: boolean
+  plan?: PlanRecord['plan']
+  luckyDraw?: import('@/features/daily-lucky-number/types').LuckyDrawView
+  luckyRewards: import('@/features/daily-lucky-number/types').LuckyRewardView[]
 }) {
   const subscription = props.record.subscription
   const usageStatus = getSubscriptionUsageStatus(
@@ -633,6 +636,16 @@ function SubscriptionCard(props: {
       </div>
       {usageStatus.note ? (
         <div className='text-warning mt-2 text-xs'>{usageStatus.note}</div>
+      ) : null}
+      {props.isMonthlyPlan && subscription.lucky_number ? (
+        <SubscriptionLuckySummary
+          className='border-border/70 mt-3 border-t pt-3'
+          compact
+          record={props.record}
+          plan={props.plan}
+          draw={props.luckyDraw}
+          rewards={props.luckyRewards}
+        />
       ) : null}
 
       <div className='mt-4 space-y-3'>

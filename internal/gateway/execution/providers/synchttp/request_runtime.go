@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,9 @@ func SetupAPIRequestHeader(info *relaycommon.RelayInfo, c *gin.Context, req *htt
 	}
 	req.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 	req.Set("Accept", c.Request.Header.Get("Accept"))
+	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
+		req.Set("X-Codex-Beta-Features", c.Request.Header.Get("X-Codex-Beta-Features"))
+	}
 	if info.IsStream && c.Request.Header.Get("Accept") == "" {
 		req.Set("Accept", "text/event-stream")
 	}
@@ -116,13 +120,14 @@ func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
 func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (*http.Response, error) {
 	var client *http.Client
 	var err error
+	responseHeaderTimeout := responseHeaderTimeoutForRequest(info)
 	if info.ChannelSetting.Proxy != "" {
-		client, err = platformhttpx.NewProxyHTTPClient(info.ChannelSetting.Proxy)
+		client, err = platformhttpx.NewProxyHTTPClientWithResponseHeaderTimeout(info.ChannelSetting.Proxy, responseHeaderTimeout)
 		if err != nil {
 			return nil, fmt.Errorf("new proxy http client failed: %w", err)
 		}
 	} else {
-		client = platformhttpx.GetHTTPClient()
+		client = platformhttpx.GetHTTPClientWithResponseHeaderTimeout(responseHeaderTimeout)
 	}
 
 	var stopPinger context.CancelFunc
@@ -143,6 +148,14 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
+		if isUpstreamResponseTimeout(err) {
+			return nil, types.NewError(
+				err,
+				types.ErrorCodeChannelResponseTimeExceeded,
+				types.ErrOptionWithStatusCode(http.StatusGatewayTimeout),
+				types.ErrOptionWithHideErrMsg("upstream response timed out"),
+			)
+		}
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
 	}
 	if resp == nil {
@@ -156,6 +169,36 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	_ = req.Body.Close()
 	_ = c.Request.Body.Close()
 	return resp, nil
+}
+
+func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration {
+	baseTimeout := time.Duration(platformconfig.RelayResponseHeaderTimeout) * time.Second
+	if baseTimeout <= 0 || info == nil || !relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
+		return baseTimeout
+	}
+	if info.GetEstimatePromptTokens() >= relaycommon.VeryLongContextPromptTokens {
+		return maxDuration(baseTimeout, 90*time.Second)
+	}
+	return maxDuration(baseTimeout, 75*time.Second)
+}
+
+func maxDuration(left, right time.Duration) time.Duration {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func isUpstreamResponseTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	var timeoutErr interface{ Timeout() bool }
+	if errors.As(err, &timeoutErr) && timeoutErr.Timeout() {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "timeout awaiting response headers") || strings.Contains(message, "response header timeout")
 }
 
 func DoAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (*http.Response, error) {

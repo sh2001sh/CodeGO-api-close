@@ -1169,29 +1169,6 @@ export function ChannelMutateDrawer({
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name='status'
-                  render={({ field }) => (
-                    <FormItem className='flex items-center justify-between rounded-lg border px-4 py-3'>
-                      <div className='space-y-0.5'>
-                        <FormLabel>{t('Enabled')}</FormLabel>
-                        <FormDescription className='text-xs'>
-                          {t('Enable or disable this channel')}
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value === 1}
-                          onCheckedChange={(checked) =>
-                            field.onChange(checked ? 1 : 2)
-                          }
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
                 {currentType === 1 && (
                   <FormField
                     control={form.control}
@@ -2459,60 +2436,6 @@ export function ChannelMutateDrawer({
                       icon={<Route className='h-4 w-4' />}
                     />
                     <div className='space-y-4'>
-                      <SubHeading
-                        title={t('Routing Strategy')}
-                        icon={<Route className='h-3.5 w-3.5' />}
-                      />
-                      <div className='grid gap-4 sm:grid-cols-2'>
-                        <FormField
-                          control={form.control}
-                          name='priority'
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>{t('Priority')}</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type='number'
-                                  placeholder='0'
-                                  {...field}
-                                  onChange={(e) =>
-                                    field.onChange(Number(e.target.value))
-                                  }
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                {t(FIELD_DESCRIPTIONS.PRIORITY)}
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name='weight'
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>{t('Weight')}</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type='number'
-                                  placeholder='0'
-                                  {...field}
-                                  onChange={(e) =>
-                                    field.onChange(Number(e.target.value))
-                                  }
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                {t(FIELD_DESCRIPTIONS.WEIGHT)}
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
                       <FormField
                         control={form.control}
                         name='test_model'
@@ -3135,7 +3058,8 @@ export function ChannelMutateDrawer({
                             <div className='space-y-0.5'>
                               <FormLabel>Claude 钱包渠道</FormLabel>
                               <FormDescription>
-                                标记后，此渠道的请求只从 Claude 额度扣费，不使用盲盒、套餐或普通余额。
+                                标记后，此渠道的请求只从 Claude
+                                额度扣费，不使用盲盒、套餐或普通余额。
                               </FormDescription>
                             </div>
                             <FormControl>
@@ -3403,7 +3327,9 @@ export function ChannelMutateDrawer({
         redirectSourceModels={redirectModelKeyList}
         customFetcher={!isEditing ? createModeFetcher : undefined}
         existingModelsOverride={
-          !isEditing ? parseModelsString(form.getValues('models') || '') : undefined
+          !isEditing
+            ? parseModelsString(form.getValues('models') || '')
+            : undefined
         }
       />
 

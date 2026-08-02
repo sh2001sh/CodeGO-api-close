@@ -18,10 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { PublicLayout } from '@/components/layout'
-import { SiteSeo } from '@/components/seo'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
+import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
+import { SiteSeo } from '@/components/seo'
 import {
   LoadingSkeleton,
   EmptyState,
@@ -35,8 +35,8 @@ import {
 } from './components'
 import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
 import { useFilters } from './hooks/use-filters'
-import { countFreeModels } from './lib/model-helpers'
 import { usePricingData } from './hooks/use-pricing-data'
+import { countFreeModels } from './lib/model-helpers'
 
 const pricingSeo = getPublicPageSeoEntry('/pricing')
 
@@ -187,7 +187,7 @@ export function Pricing() {
       />
       <PageTransition className='public-topbar-spacer mx-auto w-full max-w-[1800px] px-3 pb-8 sm:px-6 sm:pb-10 xl:px-8'>
         <div className='mx-auto mb-6 max-w-7xl sm:mb-10'>
-          <header className='grid gap-5 rounded-[28px] border border-border/70 bg-card/70 p-5 backdrop-blur-xl sm:p-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end'>
+          <header className='border-border bg-card grid gap-5 rounded-2xl border p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end'>
             <div>
               <p className='text-muted-foreground mb-4 text-[13px] font-medium tracking-wide'>
                 {t('Models Directory')}
@@ -202,7 +202,7 @@ export function Pricing() {
                 {totalFreeModels > 0 && (
                   <>
                     {t(', including')}{' '}
-                    <span className='font-semibold text-foreground'>
+                    <span className='text-foreground font-semibold'>
                       {totalFreeModels}
                     </span>{' '}
                     {t('free models')}
@@ -219,33 +219,37 @@ export function Pricing() {
                 className='mt-7 max-w-2xl'
               />
             </div>
-            <div className='grid grid-cols-3 gap-2 rounded-2xl border border-border/60 bg-background/55 p-3'>
-              {[
-                [models?.length || 0, t('Models')],
-                [totalFreeModels, t('Free')],
-                [visibleFreeModels, t('Visible')],
-              ].map(([value, label]) => (
-                <div key={String(label)} className='text-center'>
-                  <div className='text-xl font-semibold tabular-nums text-foreground'>
-                    {value}
+            {models?.length ? (
+              <div className='border-border/60 bg-background/55 grid grid-cols-3 gap-2 rounded-2xl border p-3'>
+                {[
+                  [models.length, t('Models')],
+                  [totalFreeModels, t('Free')],
+                  [visibleFreeModels, t('Visible')],
+                ].map(([value, label]) => (
+                  <div key={String(label)} className='text-center'>
+                    <div className='text-foreground text-xl font-semibold tabular-nums'>
+                      {value}
+                    </div>
+                    <div className='text-muted-foreground mt-1 text-[11px]'>
+                      {label}
+                    </div>
                   </div>
-                  <div className='mt-1 text-[11px] text-muted-foreground'>
-                    {label}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : null}
           </header>
         </div>
 
         <div className='mx-auto max-w-7xl'>
-          <PricingMarketHighlight
-            totalCount={models?.length || 0}
-            freeCount={totalFreeModels}
-            visibleFreeCount={visibleFreeModels}
-            activeGroupLabel={activeGroupLabel}
-            className='mb-4 sm:mb-5'
-          />
+          {models?.length ? (
+            <PricingMarketHighlight
+              totalCount={models.length}
+              freeCount={totalFreeModels}
+              visibleFreeCount={visibleFreeModels}
+              activeGroupLabel={activeGroupLabel}
+              className='mb-4 sm:mb-5'
+            />
+          ) : null}
 
           <div className='grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]'>
             <PricingSidebar

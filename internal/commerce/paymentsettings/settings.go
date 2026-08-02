@@ -11,6 +11,11 @@ type PaymentSetting struct {
 	AmountOptions  []int           `json:"amount_options"`
 	AmountDiscount map[int]float64 `json:"amount_discount"`
 
+	FirstPurchaseDiscountEnabled    bool    `json:"first_purchase_discount_enabled"`
+	FirstPurchaseDiscountMultiplier float64 `json:"first_purchase_discount_multiplier"`
+	FirstPurchaseDiscountStartAt    int64   `json:"first_purchase_discount_start_at"`
+	FirstPurchaseDiscountEndAt      int64   `json:"first_purchase_discount_end_at"`
+
 	ComplianceConfirmed    bool   `json:"compliance_confirmed"`
 	ComplianceTermsVersion string `json:"compliance_terms_version"`
 	ComplianceConfirmedAt  int64  `json:"compliance_confirmed_at"`
@@ -21,8 +26,9 @@ type PaymentSetting struct {
 const CurrentComplianceTermsVersion = "v1"
 
 var paymentSetting = PaymentSetting{
-	AmountOptions:  []int{10, 20, 50, 100, 200, 500},
-	AmountDiscount: map[int]float64{},
+	AmountOptions:                   []int{10, 20, 50, 100, 200, 500},
+	AmountDiscount:                  map[int]float64{},
+	FirstPurchaseDiscountMultiplier: 0.8,
 }
 
 var PayAddress = ""

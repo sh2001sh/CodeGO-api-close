@@ -121,6 +121,34 @@ func resetAutoGroupCircuitCacheForTest() error {
 // Lower effective user pricing is preferred unless that group/model is cooling.
 func OrderAutoGroups(userGroup string, model string) []string {
 	groups := GetUserAutoGroup(userGroup)
+	return orderGroupsByAutoPolicy(userGroup, model, groups)
+}
+
+// OrderAutoFallbackGroups returns user-permitted groups that were deliberately
+// left out of the configured automatic pool. They are only considered when no
+// configured automatic group can serve the requested model, which lets model-
+// specific groups such as Claude remain available without changing GPT routing.
+func OrderAutoFallbackGroups(userGroup string, model string, excluded []string) []string {
+	excludedSet := make(map[string]struct{}, len(excluded))
+	for _, group := range excluded {
+		excludedSet[group] = struct{}{}
+	}
+
+	usableGroups := GetUserUsableGroups(userGroup)
+	groups := make([]string, 0, len(usableGroups))
+	for group := range usableGroups {
+		if group == AutoGroupName {
+			continue
+		}
+		if _, exists := excludedSet[group]; exists {
+			continue
+		}
+		groups = append(groups, group)
+	}
+	return orderGroupsByAutoPolicy(userGroup, model, groups)
+}
+
+func orderGroupsByAutoPolicy(userGroup string, model string, groups []string) []string {
 	now := time.Now()
 	sort.SliceStable(groups, func(i, j int) bool {
 		leftCooling := isAutoGroupCooling(groups[i], model, now)

@@ -3,10 +3,10 @@ import {
   normalizePublicServerAddress,
 } from '@/lib/server-url'
 
-const DEFAULT_CODEX_MODEL = 'gpt-5.2'
+const DEFAULT_CODEX_MODEL = 'gpt-5.6-luna'
 const PLACEHOLDER_SERVER_URL = 'https://your-codexforall.example.com'
 const PLACEHOLDER_API_KEY = 'YOUR_CODEXFORALL_API_KEY'
-const CODEX_PROVIDER = 'codexforall'
+const CODEX_PROVIDER = 'CodeGo'
 
 type ScriptPlatform = 'windows' | 'linux'
 
@@ -40,12 +40,12 @@ function sanitizeLabel(value?: string): string {
 }
 
 function buildCodexProviderBlock(serverAddress: string): string {
-  return `# BEGIN CODEXFORALL MANAGED PROVIDER
+  return `# BEGIN CODEGO MANAGED PROVIDER
 [model_providers.${CODEX_PROVIDER}]
 name = "${CODEX_PROVIDER}"
 base_url = "${serverAddress}/v1"
 wire_api = "responses"
-# END CODEXFORALL MANAGED PROVIDER`
+# END CODEGO MANAGED PROVIDER`
 }
 
 function buildWindowsScript(
@@ -66,6 +66,7 @@ echo.
 set "CODEXFORALL_SERVER_URL=${serverAddress}"
 set "API_KEY=${apiKey}"
 set "MODEL=${model}"
+set "BACKUP_DIR=%USERPROFILE%\\.codego\\backups\\codex-cli"
 
 if "!API_KEY!"=="" goto :error_no_key
 if "!API_KEY!"=="__API_KEY__" goto :error_no_key
@@ -73,6 +74,20 @@ if "!API_KEY!"=="__API_KEY__" goto :error_no_key
 set "codexDir=%USERPROFILE%\\.codex"
 echo Config dir: !codexDir!
 echo.
+
+:menu
+echo 0. Exit
+echo 1. Configure CodeGo
+echo 2. Restore original configuration
+set /p "choice=Select [0-2]: "
+if "!choice!"=="0" exit /b 0
+if "!choice!"=="1" goto :configure
+if "!choice!"=="2" goto :restore
+echo Invalid selection.
+echo.
+goto :menu
+
+:configure
 
 if exist "!codexDir!" (
     for /f "usebackq delims=" %%a in (\`powershell -NoProfile -Command "[DateTime]::Now.ToString('yyyyMMdd_HHmmss')"\`) do set TIMESTAMP=%%a
@@ -82,15 +97,19 @@ if exist "!codexDir!" (
         set "TIMESTAMP=manual"
     )
 
-    if exist "!codexDir!\\config.toml" (
-        copy "!codexDir!\\config.toml" "!codexDir!\\config.toml.backup_!TIMESTAMP!" >nul 2>&1
-    )
-
 ) else (
     mkdir "!codexDir!" 2>nul
     if !errorlevel! neq 0 (
         goto :error_mkdir
     )
+)
+
+if not exist "!BACKUP_DIR!" mkdir "!BACKUP_DIR!" 2>nul
+if not exist "!BACKUP_DIR!\\config.toml.original.state" (
+  if exist "!codexDir!\\config.toml" (copy "!codexDir!\\config.toml" "!BACKUP_DIR!\\config.toml.original" >nul && echo file>"!BACKUP_DIR!\\config.toml.original.state") else (echo missing>"!BACKUP_DIR!\\config.toml.original.state")
+)
+if not exist "!BACKUP_DIR!\\auth.json.original.state" (
+  if exist "!codexDir!\\auth.json" (copy "!codexDir!\\auth.json" "!BACKUP_DIR!\\auth.json.original" >nul && echo file>"!BACKUP_DIR!\\auth.json.original.state") else (echo missing>"!BACKUP_DIR!\\auth.json.original.state")
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$configPath = Join-Path $env:USERPROFILE '.codex\\config.toml'; $dq = [char]34; $providerBlock = @('# BEGIN CODEXFORALL MANAGED PROVIDER','[model_providers.${CODEX_PROVIDER}]',[string]::Concat('name = ', $dq, '${CODEX_PROVIDER}', $dq),[string]::Concat('base_url = ', $dq, '${apiBase}', $dq),[string]::Concat('wire_api = ', $dq, 'responses', $dq),'# END CODEXFORALL MANAGED PROVIDER') -join [Environment]::NewLine; $existing = ''; if (Test-Path $configPath) { $existing = Get-Content -Raw -Encoding UTF8 $configPath }; $cleaned = $existing.TrimStart([char]0xFEFF); $managedMarker = '# BEGIN CODEXFORALL MANAGED PROVIDER'; $markerIndex = $cleaned.IndexOf($managedMarker, [System.StringComparison]::Ordinal); if ($markerIndex -gt 0) { $prefix = $cleaned.Substring(0, $markerIndex); $suffix = $cleaned.Substring($markerIndex); $prefixLines = @($prefix -split '\\r?\\n' | Where-Object { $_.Trim() -and -not $_.TrimStart().StartsWith('#') }); if ($prefixLines.Count -gt 0) { $allRepeated = $true; foreach ($line in $prefixLines) { if ($suffix.IndexOf($line, [System.StringComparison]::Ordinal) -lt 0) { $allRepeated = $false; break } }; if ($allRepeated) { $cleaned = $suffix.TrimStart() } } }; $patterns = @('(?ms)^# BEGIN CODEXFORALL MANAGED PROVIDER.*?^# END CODEXFORALL MANAGED PROVIDER\\s*','(?ms)^\\[model_providers\\.${CODEX_PROVIDER}\\]\\r?\\n.*?(?=^\\[|\\z)'); foreach ($pattern in $patterns) { $cleaned = [regex]::Replace($cleaned, $pattern, '') }; $cleaned = $cleaned.Trim(); $modelProviderLine = [string]::Concat('model_provider = ', $dq, '${CODEX_PROVIDER}', $dq); $modelLine = [string]::Concat('model = ', $dq, '${model}', $dq); if ([regex]::IsMatch($cleaned, '(?m)^model_provider\\s*=.*$')) { $cleaned = [regex]::Replace($cleaned, '(?m)^model_provider\\s*=.*$', [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $modelProviderLine }) } elseif ($cleaned.Length -gt 0) { $cleaned = $modelProviderLine + [Environment]::NewLine + [Environment]::NewLine + $cleaned } else { $cleaned = $modelProviderLine }; if ([regex]::IsMatch($cleaned, '(?m)^model\\s*=.*$')) { $cleaned = [regex]::Replace($cleaned, '(?m)^model\\s*=.*$', [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $modelLine }) } elseif ($cleaned.Length -gt 0) { $cleaned = $modelLine + [Environment]::NewLine + $cleaned } else { $cleaned = $modelLine }; $parts = @($cleaned.Trim(), $providerBlock.Trim()) | Where-Object { $_ }; $output = $parts -join ([Environment]::NewLine + [Environment]::NewLine); $encoding = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($configPath, $output + [Environment]::NewLine, $encoding)"
@@ -114,7 +133,7 @@ if !errorlevel! neq 0 (
 attrib +h "!codexDir!\\auth.json" >nul 2>&1
 
 echo.
-echo Codex configuration completed successfully.
+echo CodeGo configuration completed successfully. Original files are backed up in !BACKUP_DIR!.
 echo Double-click run is complete. Codex is now configured.
 echo.
 echo Files:
@@ -123,7 +142,21 @@ echo   - auth.json:  !codexDir!\\auth.json
 echo.
 echo Press any key to exit...
 pause >nul
-exit /b 0
+goto :menu
+
+:restore
+if not exist "!BACKUP_DIR!\\config.toml.original.state" (
+  echo No original CodeGo backup found.
+  pause >nul
+  goto :menu
+)
+for /f "usebackq delims=" %%s in ("!BACKUP_DIR!\\config.toml.original.state") do set "CONFIG_STATE=%%s"
+for /f "usebackq delims=" %%s in ("!BACKUP_DIR!\\auth.json.original.state") do set "AUTH_STATE=%%s"
+if "!CONFIG_STATE!"=="file" (copy /y "!BACKUP_DIR!\\config.toml.original" "!codexDir!\\config.toml" >nul) else (del /f /q "!codexDir!\\config.toml" >nul 2>&1)
+if "!AUTH_STATE!"=="file" (copy /y "!BACKUP_DIR!\\auth.json.original" "!codexDir!\\auth.json" >nul) else (del /f /q "!codexDir!\\auth.json" >nul 2>&1)
+echo Original Codex configuration restored.
+pause >nul
+goto :menu
 
 :error_no_key
 echo ERROR: API Key not set.
@@ -165,20 +198,52 @@ API_BASE="\${SERVER_URL%/}/v1"
 API_KEY="${apiKey}"
 MODEL="${model}"
 
-TARGET_DIR="\${HOME}/.config/codexforall"
+TARGET_DIR="\${HOME}/.config/codego"
 TARGET_FILE="\${TARGET_DIR}/codex-env.sh"
 CODEX_DIR="\${HOME}/.codex"
 CODEX_CONFIG_FILE="\${CODEX_DIR}/config.toml"
 CODEX_AUTH_FILE="\${CODEX_DIR}/auth.json"
 PROFILE_FILE="\${HOME}/.bashrc"
-SOURCE_LINE='[ -f "$HOME/.config/codexforall/codex-env.sh" ] && source "$HOME/.config/codexforall/codex-env.sh"'
+SOURCE_LINE='[ -f "$HOME/.config/codego/codex-env.sh" ] && source "$HOME/.config/codego/codex-env.sh"'
+BACKUP_DIR="\${HOME}/.codego/backups/codex-cli"
 
 if [[ "\${SHELL:-}" == */zsh ]]; then
   PROFILE_FILE="\${HOME}/.zshrc"
 fi
 
-mkdir -p "\${TARGET_DIR}"
-mkdir -p "\${CODEX_DIR}"
+backup_original() {
+  mkdir -p "\${BACKUP_DIR}"
+  for name in config.toml auth.json; do
+    state="\${BACKUP_DIR}/\${name}.original.state"
+    source="\${CODEX_DIR}/\${name}"
+    [[ -f "\${state}" ]] && continue
+    if [[ -f "\${source}" ]]; then cp "\${source}" "\${BACKUP_DIR}/\${name}.original"; printf 'file' > "\${state}"; else printf 'missing' > "\${state}"; fi
+  done
+  if [[ ! -f "\${BACKUP_DIR}/codex-env.sh.original.state" ]]; then
+    if [[ -f "\${TARGET_FILE}" ]]; then cp "\${TARGET_FILE}" "\${BACKUP_DIR}/codex-env.sh.original"; printf 'file' > "\${BACKUP_DIR}/codex-env.sh.original.state"; else printf 'missing' > "\${BACKUP_DIR}/codex-env.sh.original.state"; fi
+  fi
+}
+
+restore_original() {
+  [[ -f "\${BACKUP_DIR}/config.toml.original.state" ]] || { printf 'No original CodeGo backup found.\\n'; return; }
+  mkdir -p "\${CODEX_DIR}" "\${TARGET_DIR}"
+  for name in config.toml auth.json; do
+    state="$(cat "\${BACKUP_DIR}/\${name}.original.state")"
+    target="\${CODEX_DIR}/\${name}"
+    [[ "\${state}" == file ]] && cp "\${BACKUP_DIR}/\${name}.original" "\${target}" || rm -f "\${target}"
+  done
+  env_state="$(cat "\${BACKUP_DIR}/codex-env.sh.original.state")"
+  [[ "\${env_state}" == file ]] && cp "\${BACKUP_DIR}/codex-env.sh.original" "\${TARGET_FILE}" || rm -f "\${TARGET_FILE}"
+  if [[ -f "\${PROFILE_FILE}" ]]; then
+    grep -vxF "\${SOURCE_LINE}" "\${PROFILE_FILE}" > "\${PROFILE_FILE}.codego-tmp" || true
+    mv "\${PROFILE_FILE}.codego-tmp" "\${PROFILE_FILE}"
+  fi
+  printf 'Original Codex configuration restored.\\n'
+}
+
+configure_codego() {
+mkdir -p "\${TARGET_DIR}" "\${CODEX_DIR}"
+backup_original
 
 PYTHON_BIN="python3"
 if ! command -v "\${PYTHON_BIN}" >/dev/null 2>&1; then
@@ -211,7 +276,7 @@ ${codexProviderBlock}
 existing = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
 existing = existing.lstrip("\ufeff")
 cleaned = existing
-managed_marker = "# BEGIN CODEXFORALL MANAGED PROVIDER"
+managed_marker = "# BEGIN CODEGO MANAGED PROVIDER"
 marker_index = cleaned.find(managed_marker)
 if marker_index > 0:
     prefix = cleaned[:marker_index]
@@ -224,7 +289,7 @@ if marker_index > 0:
     if prefix_lines and all(line in suffix for line in prefix_lines):
         cleaned = suffix.lstrip()
 patterns = [
-    r"(?ms)^# BEGIN CODEXFORALL MANAGED PROVIDER.*?^# END CODEXFORALL MANAGED PROVIDER\\s*",
+    r"(?ms)^# BEGIN CODEGO MANAGED PROVIDER.*?^# END CODEGO MANAGED PROVIDER\\s*",
     r"(?ms)^\\[model_providers\\.${CODEX_PROVIDER}\\]\\r?\\n.*?(?=^\\[|\\Z)",
 ]
 for pattern in patterns:
@@ -280,11 +345,23 @@ if ! grep -qxF "\${SOURCE_LINE}" "\${PROFILE_FILE}"; then
   printf '\\n%s\\n' "\${SOURCE_LINE}" >> "\${PROFILE_FILE}"
 fi
 
-printf 'Codex configuration completed successfully.\\n'
+printf 'CodeGo configuration completed successfully. Original files are backed up in %s.\\n' "\${BACKUP_DIR}"
 printf 'Config file: %s\\n' "\${CODEX_CONFIG_FILE}"
 printf 'Environment file: %s\\n' "\${TARGET_FILE}"
 printf 'Auth file: %s\\n' "\${CODEX_AUTH_FILE}"
 printf 'Run: source "%s"\\n' "\${PROFILE_FILE}"
+}
+
+while true; do
+  printf '\\n0. Exit\\n1. Configure CodeGo\\n2. Restore original configuration\\nSelect [0-2]: '
+  read -r choice
+  case "\${choice}" in
+    0) exit 0 ;;
+    1) configure_codego ;;
+    2) restore_original ;;
+    *) printf 'Invalid selection.\\n' ;;
+  esac
+done
 `
 }
 

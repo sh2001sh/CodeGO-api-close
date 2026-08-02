@@ -48,6 +48,9 @@ func ActivateBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp,
 		if prop.Status != commerceschema.BlindBoxPropStatusAvailable {
 			return errors.New("this prop cannot be activated")
 		}
+		if prop.PropType == commerceschema.BlindBoxPropTypeZeroHourMultiplier && hasActiveZeroHourPropTx(tx, userID) {
+			return errors.New("zero-hour prop is already active")
+		}
 		prop.Status = commerceschema.BlindBoxPropStatusActive
 		prop.ActivatedAt = now
 		prop.ExpiresAt = now + prop.DurationSeconds
@@ -287,6 +290,13 @@ func blindBoxPropSpecs() []commerceschema.BlindBoxPropSpec {
 			DiscountRate:    0.10,
 			Multiplier:      0.90,
 			DurationSeconds: 24 * 60 * 60,
+			Activatable:     true,
+		},
+		{
+			PropType:        commerceschema.BlindBoxPropTypeZeroHourMultiplier,
+			Title:           "1 小时 0 倍率卡",
+			Multiplier:      0,
+			DurationSeconds: zeroHourDurationSeconds,
 			Activatable:     true,
 		},
 	}

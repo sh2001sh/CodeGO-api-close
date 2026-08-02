@@ -16,7 +16,7 @@ func GetUserSelf(c *gin.Context) {
 }
 
 func GetUserModels(c *gin.Context) {
-	models, err := identityapp.ListUserModels(c.GetInt("id"))
+	models, err := identityapp.ListUserModelsForGroup(c.GetInt("id"), c.Query("group"))
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

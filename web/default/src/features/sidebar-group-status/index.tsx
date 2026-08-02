@@ -85,7 +85,7 @@ export function SidebarGroupStatusPage() {
               {items.map((group) => (
                 <section
                   key={group.group}
-                  className='rounded-[28px] border border-border/70 bg-card/55 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.05)] backdrop-blur-sm dark:bg-card/40 dark:shadow-[0_14px_28px_rgba(0,0,0,0.18)]'
+                  className='app-page-shell p-4'
                 >
                   <div className='mb-4 flex items-end justify-between gap-3'>
                     <div className='space-y-1'>
@@ -132,14 +132,14 @@ function OverviewPanel(props: {
       value: String(props.summary.groups),
       hint: '当前可查看的分组数',
       icon: Layers3,
-      tone: 'text-sky-600 dark:text-sky-400',
+      tone: 'text-muted-foreground',
     },
     {
       label: '正常模型',
       value: String(props.summary.healthyModels),
       hint: `共 ${props.summary.models} 个模型`,
       icon: CheckCircle2,
-      tone: 'text-emerald-600 dark:text-emerald-400',
+      tone: 'text-success',
     },
     {
       label: '缓慢模型',
@@ -149,7 +149,7 @@ function OverviewPanel(props: {
           ? '暂无采样窗口'
           : `${formatSampleWindowLabel(props.summary.sampleWindow)} 成功率窗口`,
       icon: AlertTriangle,
-      tone: 'text-amber-600 dark:text-amber-400',
+      tone: 'text-warning',
     },
     {
       label: '故障模型',
@@ -159,14 +159,14 @@ function OverviewPanel(props: {
           ? '暂无采样窗口'
           : `${formatSampleWindowLabel(props.summary.sampleWindow)} 成功率窗口`,
       icon: AlertTriangle,
-      tone: 'text-rose-600 dark:text-rose-400',
+      tone: 'text-destructive',
     },
     {
       label: '观测中模型',
       value: String(props.summary.unknownModels),
       hint: '暂无足够请求样本',
       icon: Rows3,
-      tone: 'text-slate-600 dark:text-slate-300',
+      tone: 'text-muted-foreground',
     },
   ]
 

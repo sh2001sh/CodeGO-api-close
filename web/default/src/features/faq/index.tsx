@@ -1,17 +1,17 @@
-import { ChevronRight, Code2, MessageSquareQuote, Search } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
+import { ChevronRight, Code2, MessageSquareQuote, Search } from 'lucide-react'
+import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
-import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 
 const faqs = [
   {
     q: 'Code Go 是什么？',
-    a: 'Code Go 是一个围绕 AI Coding 工作流构建的平台，帮助你把使用过程持续积累下来。',
+    a: 'Code Go 是一个围绕 AI 编程工作流构建的平台，帮助你把使用过程持续积累下来。',
   },
   {
     q: 'Code Go 的核心理念是什么？',
-    a: '让 AI Coding 的每一步，都算数。',
+    a: '让 AI 编程的每一步，都算数。',
   },
   {
     q: 'Code Go 适合哪些人？',
@@ -23,7 +23,7 @@ const faqs = [
   },
   {
     q: '为什么要强调长期积累感？',
-    a: '因为 AI Coding 不只是一次性完成任务，更重要的是持续使用和持续进步。',
+    a: '因为 AI 编程不只是一次性完成任务，更重要的是持续使用和持续进步。',
   },
   {
     q: 'Code Go 和普通 AI API 平台有什么区别？',
@@ -54,17 +54,17 @@ export function FAQPage() {
           })),
         }}
       />
-      <main className='px-6 pb-16 pt-28 md:px-10 md:pt-32'>
+      <main className='px-6 pt-28 pb-16 md:px-10 md:pt-32'>
         <div className='mx-auto max-w-5xl'>
           <div className='max-w-3xl space-y-4'>
-            <div className='inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-300'>
+            <div className='border-border bg-muted text-muted-foreground inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold'>
               <Search className='size-3.5' />
               {faqSeo.eyebrow}
             </div>
-            <h1 className='text-4xl font-semibold tracking-tight text-foreground'>
+            <h1 className='text-foreground text-4xl font-semibold tracking-tight'>
               {faqSeo.h1}
             </h1>
-            <p className='text-base leading-8 text-muted-foreground'>
+            <p className='text-muted-foreground text-base leading-8'>
               {faqSeo.intro}
             </p>
           </div>
@@ -73,12 +73,12 @@ export function FAQPage() {
             {faqs.map((item) => (
               <section
                 key={item.q}
-                className='rounded-3xl border border-border bg-card p-6 text-card-foreground'
+                className='border-border bg-card text-card-foreground rounded-3xl border p-6'
               >
-                <div className='text-lg font-semibold text-foreground'>
+                <div className='text-foreground text-lg font-semibold'>
                   {item.q}
                 </div>
-                <p className='mt-3 text-sm leading-7 text-muted-foreground'>
+                <p className='text-muted-foreground mt-3 text-sm leading-7'>
                   {item.a}
                 </p>
               </section>
@@ -88,33 +88,33 @@ export function FAQPage() {
           <div className='mt-10 grid gap-4 md:grid-cols-2'>
             <Link
               to='/guide'
-              className='rounded-3xl border border-border bg-card p-6 transition-colors hover:bg-muted/40'
+              className='border-border bg-card hover:bg-muted/40 rounded-3xl border p-6 transition-colors'
             >
               <div className='flex items-center gap-2 text-sm font-semibold'>
-                <Code2 className='size-4 text-amber-600' />
+                <Code2 className='text-muted-foreground size-4' />
                 使用说明
               </div>
-              <p className='mt-3 text-sm leading-7 text-muted-foreground'>
+              <p className='text-muted-foreground mt-3 text-sm leading-7'>
                 看实际使用流程、脚本下载和平台入口。
               </p>
               <div className='mt-4 inline-flex items-center gap-1 text-sm font-medium'>
-                前往 Guide
+                查看使用说明
                 <ChevronRight className='size-4' />
               </div>
             </Link>
             <Link
               to='/about'
-              className='rounded-3xl border border-border bg-card p-6 transition-colors hover:bg-muted/40'
+              className='border-border bg-card hover:bg-muted/40 rounded-3xl border p-6 transition-colors'
             >
               <div className='flex items-center gap-2 text-sm font-semibold'>
-                <MessageSquareQuote className='size-4 text-violet-600' />
+                <MessageSquareQuote className='text-muted-foreground size-4' />
                 关于 Code Go
               </div>
-              <p className='mt-3 text-sm leading-7 text-muted-foreground'>
+              <p className='text-muted-foreground mt-3 text-sm leading-7'>
                 看品牌概念、核心卖点和公开表达口径。
               </p>
               <div className='mt-4 inline-flex items-center gap-1 text-sm font-medium'>
-                前往 About
+                了解 Code Go
                 <ChevronRight className='size-4' />
               </div>
             </Link>

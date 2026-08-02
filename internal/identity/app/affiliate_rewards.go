@@ -11,6 +11,7 @@ import (
 
 type AffiliateInviteeRewardStatus struct {
 	InviteeId                int    `json:"invitee_id"`
+	InviteeExternalId        string `json:"invitee_external_id"`
 	InviteeUsername          string `json:"invitee_username"`
 	InviteeDisplayName       string `json:"invitee_display_name"`
 	CreatedAt                int64  `json:"created_at"`
@@ -40,7 +41,7 @@ func GetAffiliateRewardsOverview(userID int) (*AffiliateRewardsOverview, error) 
 	}
 
 	var invitees []identityschema.User
-	if err := platformdb.DB.Select("id, username, display_name, created_at").
+	if err := platformdb.DB.Select("id, external_id, username, display_name, created_at").
 		Where("inviter_id = ?", userID).
 		Order("created_at desc, id desc").
 		Find(&invitees).Error; err != nil {
@@ -79,6 +80,7 @@ func GetAffiliateRewardsOverview(userID int) (*AffiliateRewardsOverview, error) 
 	for _, invitee := range invitees {
 		status := AffiliateInviteeRewardStatus{
 			InviteeId:          invitee.Id,
+			InviteeExternalId:  invitee.ExternalId,
 			InviteeUsername:    invitee.Username,
 			InviteeDisplayName: invitee.DisplayName,
 			CreatedAt:          invitee.CreatedAt,

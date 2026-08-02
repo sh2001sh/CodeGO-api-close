@@ -14,3 +14,18 @@ type BlindBoxOverview struct {
 	PurchasedThisMonth     int                                 `json:"purchased_this_month"`
 	RecentRecords          []commerceschema.BlindBoxOpenRecord `json:"recent_records"`
 }
+
+// BlindBoxRewardStatistics summarizes one category of rewards opened by a user.
+type BlindBoxRewardStatistics struct {
+	RewardType   string  `json:"reward_type"`
+	OpenedCount  int64   `json:"opened_count"`
+	RewardUSD    float64 `json:"reward_usd"`
+	CreditAmount int64   `json:"credit_amount"`
+}
+
+// BlindBoxStatistics summarizes the user's full blind-box opening history.
+type BlindBoxStatistics struct {
+	TotalOpened int64                      `json:"total_opened"`
+	PityWins    int64                      `json:"pity_wins"`
+	Rewards     []BlindBoxRewardStatistics `json:"rewards"`
+}

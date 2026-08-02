@@ -27,7 +27,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-primary text-primary-foreground shadow-[0_14px_28px_rgba(217,106,57,0.18)] hover:bg-primary/92 hover:shadow-[0_16px_32px_rgba(217,106,57,0.22)] dark:shadow-[0_16px_30px_rgba(0,0,0,0.28)]',
+          'bg-primary text-primary-foreground shadow-[0_10px_20px_color-mix(in_oklch,var(--primary)_20%,transparent)] hover:bg-primary/92 hover:shadow-[0_12px_24px_color-mix(in_oklch,var(--primary)_24%,transparent)] dark:shadow-[0_12px_22px_rgba(0,0,0,0.28)]',
         outline:
           'border-border bg-background/88 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-card/78 dark:hover:bg-input/50',
         secondary:

@@ -335,7 +335,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     {affinity && (
                       <button
                         type='button'
-                        className='absolute -top-1 -right-1 leading-none text-amber-500'
+                        className='absolute -top-1 -right-1 leading-none text-warning'
                         onClick={(e) => {
                           e.stopPropagation()
                           setAffinityTarget({
@@ -441,9 +441,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     {sensitiveVisible ? log.username : '••••'}
                   </TooltipTrigger>
                   {sensitiveVisible && log.username.length > 12 && (
-                    <TooltipContent side='top'>
-                      {log.username}
-                    </TooltipContent>
+                    <TooltipContent side='top'>{log.username}</TooltipContent>
                   )}
                 </Tooltip>
               </TooltipProvider>
@@ -484,11 +482,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         <div className='flex max-w-[200px] flex-col gap-0.5'>
           <TooltipProvider delay={300}>
             <Tooltip>
-              <TooltipTrigger
-                render={
-                  <div className='max-w-full' />
-                }
-              >
+              <TooltipTrigger render={<div className='max-w-full' />}>
                 <StatusBadge
                   label={displayName}
                   icon={KeyRound}
@@ -553,30 +547,44 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
         const frt = other?.frt
+        const recordedGenerationTime = other?.generation_time_ms
+        const streamOutputTokens = other?.stream_output_tokens
+        const streamOutputTime = other?.stream_output_time_ms
+        const generationTime =
+          streamOutputTime != null && streamOutputTime > 0
+            ? streamOutputTime / 1000
+            : recordedGenerationTime != null && recordedGenerationTime > 0
+            ? recordedGenerationTime / 1000
+            : log.is_stream && frt != null && frt > 0
+              ? Math.max(useTime - frt / 1000, 0)
+              : useTime
+        const throughputTokens =
+          log.is_stream && streamOutputTokens != null && streamOutputTokens > 0
+            ? streamOutputTokens
+            : log.completion_tokens
         const tokensPerSecond =
-          useTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / useTime
+          generationTime > 0 &&
+          throughputTokens > 0 &&
+          (!log.is_stream || streamOutputTokens != null || !/^gpt/i.test(log.model_name))
+            ? throughputTokens / generationTime
             : null
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null
 
         const pillBg: Record<string, string> = {
-          success:
-            'border border-emerald-200/40 bg-emerald-50/35 dark:border-emerald-900/40 dark:bg-emerald-950/15',
-          warning:
-            'border border-amber-200/45 bg-amber-50/35 dark:border-amber-900/40 dark:bg-amber-950/15',
-          danger:
-            'border border-rose-200/50 bg-rose-50/35 dark:border-rose-900/40 dark:bg-rose-950/15',
+          success: 'border border-success/20 bg-success/8',
+          warning: 'border border-warning/25 bg-warning/8',
+          danger: 'border border-destructive/25 bg-destructive/8',
         }
         const pillText: Record<string, string> = {
-          success: 'text-emerald-700/85 dark:text-emerald-400/85',
-          warning: 'text-amber-700/85 dark:text-amber-400/85',
-          danger: 'text-rose-700/85 dark:text-rose-400/85',
+          success: 'text-success/85',
+          warning: 'text-warning/85',
+          danger: 'text-destructive/85',
         }
         const pillDot: Record<string, string> = {
-          success: 'bg-emerald-500/80',
-          warning: 'bg-amber-500/80',
-          danger: 'bg-rose-500/80',
+          success: 'bg-success/80',
+          warning: 'bg-warning/80',
+          danger: 'bg-destructive/80',
         }
 
         return (
@@ -625,6 +633,14 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       {Math.round(tokensPerSecond)}
                     </span>
                     {' t/s'}
+                    {streamOutputTime != null && streamOutputTime > 0 && (
+                      <>
+                        {' · '}
+                        <span className='font-mono tabular-nums'>
+                          {formatUseTime(streamOutputTime / 1000)}
+                        </span>
+                      </>
+                    )}
                   </>
                 )}
               </span>
@@ -634,7 +650,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger
-                        render={<CircleAlert className='size-3 text-red-500' />}
+                        render={<CircleAlert className='size-3 text-destructive' />}
                       ></TooltipTrigger>
                       <TooltipContent>
                         <div className='space-y-0.5 text-xs'>
@@ -663,7 +679,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     {
       accessorKey: 'prompt_tokens',
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='Tokens' />
+        <DataTableColumnHeader column={column} title={t('Tokens')} />
       ),
       cell: ({ row }) => {
         const log = row.original
@@ -708,7 +724,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           </div>
         )
       },
-      meta: { label: 'Tokens', mobileHidden: true },
+      meta: { label: t('Tokens'), mobileHidden: true },
     },
 
     {
@@ -726,26 +742,18 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         if (isSubscription) {
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span className='inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' />
-                  }
-                >
-                  <span
-                    className='size-1.5 rounded-full bg-emerald-500'
-                    aria-hidden='true'
-                  />
-                  {t('Subscription')}
-                </TooltipTrigger>
-                <TooltipContent>
-                  <span>
-                    {t('Deducted by subscription')}: {formatLogQuota(quota)}
-                  </span>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div className='flex flex-col items-start gap-1'>
+              <span className='border-success/30 bg-success/10 text-success inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium'>
+                <span
+                  className='bg-success size-1.5 rounded-full'
+                  aria-hidden='true'
+                />
+                {t('Subscription')}
+              </span>
+              <span className='text-success font-mono text-xs font-semibold tabular-nums'>
+                {formatLogQuota(quota)}
+              </span>
+            </div>
           )
         }
 
@@ -789,7 +797,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     primary.muted
                       ? 'text-muted-foreground/60'
                       : primary.danger
-                        ? 'text-red-600 dark:text-red-400'
+                        ? 'text-destructive'
                         : 'text-foreground'
                   )}
                 >

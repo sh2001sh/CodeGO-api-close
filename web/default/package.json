@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "rsbuild dev",
-    "build": "rsbuild build && node --experimental-strip-types scripts/generate-search-pages.mjs && node --experimental-strip-types scripts/generate-public-pages.mjs",
-    "build:check": "tsc -b && rsbuild build && node --experimental-strip-types scripts/generate-search-pages.mjs && node --experimental-strip-types scripts/generate-public-pages.mjs",
+    "build": "rsbuild build && node --experimental-strip-types scripts/generate-search-pages.mjs && node scripts/generate-sitemap.mjs",
+    "build:check": "tsc -b && rsbuild build && node --experimental-strip-types scripts/generate-search-pages.mjs && node scripts/generate-sitemap.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "rsbuild preview",

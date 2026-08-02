@@ -1,6 +1,7 @@
 package http
 
 import (
+	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	stdhttp "net/http"
 	"strconv"
@@ -8,6 +9,20 @@ import (
 	"github.com/gin-gonic/gin"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 )
+
+func getBlindBoxHistory(c *gin.Context) {
+	pageInfo := platformpagination.GetPageQuery(c)
+	payload, err := commerceapp.ListBlindBoxHistory(
+		c.GetInt("id"),
+		pageInfo.GetPage(),
+		pageInfo.GetPageSize(),
+	)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, payload)
+}
 
 func getBlindBoxSelf(c *gin.Context) {
 	payload, err := commerceapp.BuildBlindBoxSelfPayload(c.GetInt("id"))
@@ -30,6 +45,28 @@ func adminGetBlindBoxUserOverview(c *gin.Context) {
 		return
 	}
 	httpapi.ApiSuccess(c, payload)
+}
+
+func adminGrantBlindBoxes(c *gin.Context) {
+	userID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || userID <= 0 {
+		httpapi.ApiErrorMsg(c, "invalid user id")
+		return
+	}
+	var req commerceapp.AdminBlindBoxGrantRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "invalid request")
+		return
+	}
+	result, err := commerceapp.GrantBlindBoxes(userID, c.GetInt("id"), req)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{
+		"grant": result.Grant,
+		"order": result.Order,
+	})
 }
 
 func useBlindBoxProp(c *gin.Context) {

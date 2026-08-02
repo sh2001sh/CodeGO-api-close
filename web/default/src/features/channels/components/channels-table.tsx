@@ -62,7 +62,6 @@ const route = getRouteApi('/_authenticated/channels/')
 const CHANNEL_SORTABLE_COLUMNS = new Set<ChannelSortBy>([
   'id',
   'name',
-  'priority',
   'balance',
   'response_time',
   'test_time',

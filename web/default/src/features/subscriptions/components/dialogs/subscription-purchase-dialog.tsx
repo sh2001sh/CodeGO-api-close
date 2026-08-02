@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  CalendarClock,
-  CheckCircle2,
-  CircleSlash,
+	CalendarClock,
+	CheckCircle2,
+	CircleAlert,
+	CircleSlash,
   Crown,
   ExternalLink,
   Layers3,
@@ -748,6 +749,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
                 </div>
               </div>
             </div>
+
+            <Alert className='border-amber-200 bg-amber-50/70 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100'>
+              <CircleAlert className='text-amber-600 dark:text-amber-300' />
+              <AlertDescription className='text-amber-900/80 dark:text-amber-100/75'>
+                套餐额度仅可用于非 Claude 模型。Claude 模型使用独立 Claude
+                额度，不会直接扣减本套餐额度。
+              </AlertDescription>
+            </Alert>
 
             {limitReached ? (
               <Alert variant='destructive'>

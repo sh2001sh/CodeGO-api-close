@@ -1,9 +1,9 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	"testing"
 )
@@ -27,6 +27,30 @@ func TestGetAllUsersReturnsPagedAdminList(t *testing.T) {
 	response := decodeAPIResponse(t, recorder)
 	if !response.Success {
 		t.Fatalf("expected success response, got %#v", response)
+	}
+}
+
+func TestSearchUsersMatchesExternalUserID(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	user := &identityschema.User{
+		Id:         1,
+		ExternalId: "7KM4QZ",
+		Username:   "external-id-user",
+		Password:   "password123",
+		Role:       constant.RoleCommonUser,
+		Status:     constant.UserStatusEnabled,
+		Group:      "default",
+	}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+
+	users, total, err := identitystore.SearchUsers(user.ExternalId, "", 0, 10)
+	if err != nil {
+		t.Fatalf("search users: %v", err)
+	}
+	if total != 1 || len(users) != 1 || users[0].Id != user.Id {
+		t.Fatalf("expected external ID search to return user, got total=%d users=%#v", total, users)
 	}
 }
 

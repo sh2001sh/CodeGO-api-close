@@ -110,10 +110,12 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 	}
 	prepareRoutePoolAffinity(c, detail.Pool.ID, group, modelName)
 	if probe := reserveRoutePoolRecoveryProbe(probes, modelName); probe != nil {
+		gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeNormal)
 		return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 	}
 	if len(healthy) == 0 {
 		if probe := reserveRoutePoolLastResortProbe(lastResortProbes, modelName); probe != nil {
+			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
 			return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 		}
 		return nil, true, nil

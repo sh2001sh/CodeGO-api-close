@@ -9,6 +9,11 @@ import (
 
 const routeDecisionContextKey = "route_decision_audit"
 
+const (
+	RouteDecisionProbeNormal     = "normal"
+	RouteDecisionProbeLastResort = "last_resort"
+)
+
 // RouteDecision is an internal-only record attached to the existing request audit log.
 // It contains identifiers, not provider credentials or channel names.
 type RouteDecision struct {
@@ -24,6 +29,7 @@ type RouteDecision struct {
 	AffinityHit     bool     `json:"affinity_hit"`
 	Fallback        bool     `json:"fallback"`
 	HealthState     string   `json:"health_state,omitempty"`
+	ProbeMode       string   `json:"probe_mode,omitempty"`
 }
 
 // MarkAutomaticPool records that the selected channel came from the cost and
@@ -89,6 +95,17 @@ func RecordRouteDecisionRetry(c *gin.Context) {
 		decision.RetryCount++
 		decision.Fallback = true
 	})
+}
+
+// SetRouteDecisionProbeMode records the recovery probe path used for this
+// request. It is emitted only in administrator audit metadata.
+func SetRouteDecisionProbeMode(c *gin.Context, mode string) {
+	switch mode {
+	case RouteDecisionProbeNormal, RouteDecisionProbeLastResort:
+		updateRouteDecision(c, func(decision *RouteDecision) {
+			decision.ProbeMode = mode
+		})
+	}
 }
 
 // GetRouteDecision returns a copy suitable for administrators' log metadata.

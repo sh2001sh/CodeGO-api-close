@@ -3,7 +3,6 @@ import {
 	CalendarClock,
 	CheckCircle2,
 	CircleAlert,
-	CircleSlash,
   Crown,
   ExternalLink,
   Layers3,
@@ -32,7 +31,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-	cancelSubscriptionOrder,
 	getSubscriptionOrderStatus,
   paySubscriptionCreem,
   paySubscriptionEpay,
@@ -284,26 +282,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
     [paymentMethods, selectedEpayMethod, t]
 	)
 
-	const cancelPendingPayment = () => {
-		const orderId = paymentTracker.orderId
-		if (orderId && paymentTracker.orderStatus?.status !== 'success') {
-      void cancelSubscriptionOrder(orderId)
-		}
-		setPaymentTracker((current) => ({
-			...current,
-			stage: 'cancelled',
-			message: '已取消未支付订单。',
-		}))
-	}
-
 	const handleOpenChange = (open: boolean) => {
-		if (
-      !open &&
-      paymentTracker.stage === 'pending' &&
-      paymentTracker.orderStatus?.status !== 'success'
-    ) {
-			cancelPendingPayment()
-		}
 		props.onOpenChange(open)
 	}
 
@@ -556,17 +535,17 @@ export function SubscriptionPurchaseDialog(props: Props) {
         title: '支付成功',
         tone: 'border-success/20 bg-success/5',
       },
-      failed: {
-        icon: <XCircle className='text-destructive h-5 w-5' />,
-        title: '支付失败',
-        tone: 'border-destructive/20 bg-destructive/5',
-      },
-      cancelled: {
-        icon: <CircleSlash className='text-muted-foreground h-5 w-5' />,
-        title: '已取消等待',
-        tone: 'border-border/70 bg-muted/40',
-      },
-      idle: {
+		failed: {
+			icon: <XCircle className='text-destructive h-5 w-5' />,
+			title: '支付失败',
+			tone: 'border-destructive/20 bg-destructive/5',
+		},
+		cancelled: {
+			icon: <XCircle className='text-muted-foreground h-5 w-5' />,
+			title: '已停止等待',
+			tone: 'border-border/70 bg-muted/40',
+		},
+		idle: {
         icon: null,
         title: '',
         tone: '',
@@ -636,9 +615,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
           {paymentTracker.stage === 'pending' ? (
             <Button
               variant='ghost'
-			  onClick={cancelPendingPayment}
+			  onClick={() => handleOpenChange(false)}
             >
-              取消等待
+              稍后查看
             </Button>
           ) : (
 			<Button variant='default' onClick={() => handleOpenChange(false)}>

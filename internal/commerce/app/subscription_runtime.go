@@ -84,7 +84,7 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 			}
 			return nil
 		}
-		if order.Status != constant.TopUpStatusPending {
+		if order.Status != constant.TopUpStatusPending && order.Status != constant.TopUpStatusExpired {
 			return commerceschema.ErrSubscriptionOrderStatusInvalid
 		}
 

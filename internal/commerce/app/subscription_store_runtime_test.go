@@ -195,6 +195,33 @@ func TestCompleteSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T
 	assert.Zero(t, topUpCount)
 }
 
+func TestCompleteSubscriptionOrder_RestoresExpiredOrderAfterVerifiedPayment(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	insertSubscriptionResetAppTestUser(t, 492, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 493, 0, int64(platformruntime.QuotaPerUnit)*10)
+	insertSubscriptionStoreTestOrder(t, "sub-late-payment-order", 492, plan.Id, commerceschema.PaymentProviderXunhu)
+	require.NoError(t, db.Model(&commerceschema.SubscriptionOrder{}).
+		Where("trade_no = ?", "sub-late-payment-order").
+		Updates(map[string]any{
+			"status":              constant.TopUpStatusExpired,
+			"fulfillment_status": commerceschema.SubscriptionOrderFulfillmentPending,
+		}).Error)
+
+	require.NoError(t, CompleteSubscriptionOrder(
+		"sub-late-payment-order",
+		`{"status":"OD"}`,
+		commerceschema.PaymentProviderXunhu,
+		commerceschema.PaymentMethodXunhu,
+	))
+
+	var order commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", "sub-late-payment-order").First(&order).Error)
+	assert.Equal(t, constant.TopUpStatusSuccess, order.Status)
+	assert.Equal(t, commerceschema.SubscriptionOrderFulfillmentPending, order.FulfillmentStatus)
+	assert.Equal(t, commerceschema.PaymentMethodXunhu, order.PaymentMethod)
+}
+
 func TestPaidSubscriptionOrderRequiresWorkflowFulfillment(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 

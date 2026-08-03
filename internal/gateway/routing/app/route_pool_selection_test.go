@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -100,4 +101,23 @@ func TestRoutePoolPrimaryCostCandidatesReserveCostlyFallback(t *testing.T) {
 	assert.Len(t, candidates, 2)
 	assert.Equal(t, 39, candidates[0].channel.Id)
 	assert.Equal(t, 44, candidates[1].channel.Id)
+}
+
+func TestRoutePoolLastResortProbeReservesCoolingCandidate(t *testing.T) {
+	channelID := 9_876_543
+	modelName := "gpt-last-resort-route-pool"
+	for range 3 {
+		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelID, modelName, time.Minute)
+	}
+
+	probe := reserveRoutePoolLastResortProbe([]scoredRoutePoolCandidate{{
+		channel:      &gatewayschema.Channel{Id: channelID},
+		channelProbe: true,
+	}}, modelName)
+	assert.NotNil(t, probe)
+	assert.Equal(t, channelID, probe.channel.Id)
+	assert.Nil(t, reserveRoutePoolLastResortProbe([]scoredRoutePoolCandidate{{
+		channel:      &gatewayschema.Channel{Id: channelID},
+		channelProbe: true,
+	}}, modelName))
 }

@@ -30,6 +30,23 @@ func TestChannelHealthCoolingAndRecovery(t *testing.T) {
 	require.Greater(t, state.TTFTEWMAMilliseconds, float64(0))
 }
 
+func TestChannelHealthLastResortProbeRecoversBeforeCooldownExpiry(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	for range channelHealthRetryableFailureThreshold {
+		RecordChannelRetryableFailure(42, "gpt-last-resort")
+	}
+	require.True(t, IsChannelCooling(42, "gpt-last-resort"))
+	require.True(t, TryStartChannelLastResortProbe(42, "gpt-last-resort"))
+	require.False(t, TryStartChannelLastResortProbe(42, "gpt-last-resort"))
+
+	RecordChannelSuccess(42, "gpt-last-resort", 0)
+	require.True(t, TryStartChannelLastResortProbe(42, "gpt-last-resort"))
+	RecordChannelSuccess(42, "gpt-last-resort", 0)
+	require.False(t, IsChannelCooling(42, "gpt-last-resort"))
+}
+
 func TestChannelHealthCoolsForLowShortTermSuccessRate(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
@@ -197,6 +214,24 @@ func TestFaultDomainSharesCooldownAndRecoversThroughHalfOpenProbes(t *testing.T)
 	require.True(t, TryStartFaultDomainRecoveryProbe(domain, "gpt-test"))
 	RecordFaultDomainSuccess(domain, "gpt-test")
 	require.False(t, IsFaultDomainCooling(domain, "gpt-test"))
+}
+
+func TestFaultDomainLastResortProbeRecoversBeforeCooldownExpiry(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	domain := ChannelFaultDomain(1, "https://last-resort.example/v1")
+	for requestID := range 3 {
+		RecordFaultDomainRetryableFailure(domain, "gpt-last-resort", strconv.Itoa(requestID+1), 15*time.Second)
+	}
+	require.True(t, IsFaultDomainCooling(domain, "gpt-last-resort"))
+	require.True(t, TryStartFaultDomainLastResortProbe(domain, "gpt-last-resort"))
+	require.False(t, TryStartFaultDomainLastResortProbe(domain, "gpt-last-resort"))
+
+	RecordFaultDomainSuccess(domain, "gpt-last-resort")
+	require.True(t, TryStartFaultDomainLastResortProbe(domain, "gpt-last-resort"))
+	RecordFaultDomainSuccess(domain, "gpt-last-resort")
+	require.False(t, IsFaultDomainCooling(domain, "gpt-last-resort"))
 }
 
 func expireChannelHealthForTest(t *testing.T, channelID int, model string) {

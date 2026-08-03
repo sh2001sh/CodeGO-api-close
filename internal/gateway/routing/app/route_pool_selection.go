@@ -63,6 +63,7 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 	now := time.Now()
 	healthy := make([]scoredRoutePoolCandidate, 0, len(candidates))
 	probes := make([]scoredRoutePoolCandidate, 0, len(candidates))
+	lastResortProbes := make([]scoredRoutePoolCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		if channelAlreadyUsed(c, candidate.Channel.Id) {
 			continue
@@ -70,19 +71,22 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
 		faultDomain := routePoolFaultDomain(candidate.Member, candidate.Channel)
 		domainHealth, domainFound := gatewayruntime.GetFaultDomainHealth(faultDomain, modelName)
-		if domainFound && gatewayruntime.IsFaultDomainCooling(faultDomain, modelName) {
+		channelCooling := found && ((health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now)) ||
+			(health.State == gatewayruntime.ChannelHealthHalfOpen && (health.CoolingUntil.After(now) || health.RecoveryProbeUntil.After(now))))
+		domainCooling := domainFound && ((domainHealth.State == gatewayruntime.ChannelHealthCooling && domainHealth.CoolingUntil.After(now)) ||
+			(domainHealth.State == gatewayruntime.ChannelHealthHalfOpen && (domainHealth.CoolingUntil.After(now) || domainHealth.RecoveryProbeUntil.After(now))))
+		cost := routePoolModelCost(candidate.Member, modelName)
+		if channelCooling || domainCooling {
+			lastResortProbes = append(lastResortProbes, scoredRoutePoolCandidate{
+				channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), cost: cost,
+				faultDomain: faultDomain, channelProbe: channelCooling, domainProbe: domainCooling,
+			})
 			continue
 		}
 		if found && (health.State == gatewayruntime.ChannelHealthCooling || health.State == gatewayruntime.ChannelHealthHalfOpen) {
-			if (health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now)) ||
-				(health.State == gatewayruntime.ChannelHealthHalfOpen && health.RecoveryProbeUntil.After(now)) {
-				continue
-			}
-			cost := routePoolModelCost(candidate.Member, modelName)
 			probes = append(probes, scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), probe: true, cost: cost, faultDomain: faultDomain, channelProbe: true, domainProbe: domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen)})
 			continue
 		}
-		cost := routePoolModelCost(candidate.Member, modelName)
 		scored := scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), cost: cost, faultDomain: faultDomain}
 		if domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen) {
 			scored.probe = true
@@ -95,6 +99,7 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 
 	applyRoutePoolTTFTPenalty(healthy, modelName)
 	applyRoutePoolTTFTPenalty(probes, modelName)
+	applyRoutePoolTTFTPenalty(lastResortProbes, modelName)
 	primaryHealthy := routePoolPrimaryCostCandidates(healthy)
 	primaryProbes := routePoolPrimaryCostCandidates(probes)
 	if len(primaryHealthy) > 0 {
@@ -108,12 +113,33 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 		return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 	}
 	if len(healthy) == 0 {
+		if probe := reserveRoutePoolLastResortProbe(lastResortProbes, modelName); probe != nil {
+			return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
+		}
 		return nil, true, nil
 	}
 	if sticky := getRoutePoolStickyCandidate(c, healthy, modelName); sticky != nil {
 		return selectRoutePoolCandidate(c, detail.Pool.ID, sticky), true, nil
 	}
 	return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy)), true, nil
+}
+
+// reserveRoutePoolLastResortProbe permits one cooling candidate only after
+// normal candidates and expired-circuit probes have both been exhausted.
+func reserveRoutePoolLastResortProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
+	for len(probes) > 0 {
+		probe := chooseLowestRoutePoolCandidate(probes)
+		if probe == nil {
+			return nil
+		}
+		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelLastResortProbe(probe.channel.Id, modelName)
+		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainLastResortProbe(probe.faultDomain, modelName)
+		if channelReady && domainReady {
+			return probe
+		}
+		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
+	}
+	return nil
 }
 
 func reserveRoutePoolRecoveryProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {

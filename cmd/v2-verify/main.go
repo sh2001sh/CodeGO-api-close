@@ -107,13 +107,16 @@ func migrationTableName() string {
 
 func countMissingUserAccounts(ctx context.Context, accountType string) (int, error) {
 	return countMissingAccounts(ctx, &identityschema.User{}, func(record *identityschema.User) billingOwner {
+		if !userAccountRequiresVerification(record, accountType) {
+			return billingOwner{}
+		}
 		return billingOwner{OwnerType: "user", OwnerID: int64(record.Id), AccountType: accountType}
 	})
 }
 
 func countMissingTokenAccounts(ctx context.Context) (int, error) {
 	return countMissingAccounts(ctx, &identityschema.Token{}, func(record *identityschema.Token) billingOwner {
-		if record.UnlimitedQuota {
+		if record.UnlimitedQuota || (record.RemainQuota == 0 && record.UsedQuota == 0) {
 			return billingOwner{}
 		}
 		return billingOwner{OwnerType: "token", OwnerID: int64(record.Id), AccountType: "token"}
@@ -122,8 +125,25 @@ func countMissingTokenAccounts(ctx context.Context) (int, error) {
 
 func countMissingSubscriptionAccounts(ctx context.Context) (int, error) {
 	return countMissingAccounts(ctx, &commerceschema.UserSubscription{}, func(record *commerceschema.UserSubscription) billingOwner {
+		if record.AmountTotal == 0 && record.AmountUsed == 0 && record.PeriodAmount == 0 && record.PeriodUsed == 0 {
+			return billingOwner{}
+		}
 		return billingOwner{OwnerType: "user_subscription", OwnerID: int64(record.Id), AccountType: "subscription"}
 	})
+}
+
+func userAccountRequiresVerification(user *identityschema.User, accountType string) bool {
+	if user == nil {
+		return false
+	}
+	switch accountType {
+	case "wallet":
+		return user.Quota != 0 || user.UsedQuota != 0
+	case "claude_wallet":
+		return user.ClaudeQuota != 0
+	default:
+		return false
+	}
 }
 
 type billingOwner struct {

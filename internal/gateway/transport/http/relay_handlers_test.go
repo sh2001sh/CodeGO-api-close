@@ -24,6 +24,14 @@ type relayErrorEnvelope struct {
 	} `json:"error"`
 }
 
+func TestRefundRelayBillingSkipsRequestsWithoutRelayInfo(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	apiErr := types.NewErrorWithStatusCode(errors.New("service busy"), types.ErrorCodeServiceBusy, http.StatusServiceUnavailable)
+
+	require.Same(t, apiErr, refundRelayBillingIfNeeded(ctx, nil, apiErr))
+}
+
 func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

@@ -211,8 +211,8 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 }
 
 func refundRelayBillingIfNeeded(c *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.NewAPIError) *types.NewAPIError {
-	if apiErr == nil {
-		return nil
+	if apiErr == nil || relayInfo == nil {
+		return apiErr
 	}
 	apiErr = billingapp.NormalizeViolationFeeError(apiErr)
 	if relayInfo.Billing != nil {

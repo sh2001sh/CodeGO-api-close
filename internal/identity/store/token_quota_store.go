@@ -17,6 +17,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var ErrTokenQuotaInsufficient = errors.New("token quota is insufficient")
+
 func AdjustTokenQuota(tokenID int, tokenKey string, delta int) error {
 	if delta == 0 {
 		return nil
@@ -50,6 +52,19 @@ func decreaseTokenQuota(tokenID int, tokenKey string, quota int) error {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
+	result := platformdb.DB.Model(&identityschema.Token{}).
+		Where("id = ? AND remain_quota >= ?", tokenID, quota).
+		Updates(map[string]any{
+			"remain_quota":  gorm.Expr("remain_quota - ?", quota),
+			"used_quota":    gorm.Expr("used_quota + ?", quota),
+			"accessed_time": platformruntime.GetTimestamp(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrTokenQuotaInsufficient
+	}
 	if platformcache.RedisEnabled {
 		gopool.Go(func() {
 			if err := cacheAdjustTokenQuota(tokenKey, -int64(quota)); err != nil {
@@ -57,11 +72,7 @@ func decreaseTokenQuota(tokenID int, tokenKey string, quota int) error {
 			}
 		})
 	}
-	return platformdb.DB.Model(&identityschema.Token{}).Where("id = ?", tokenID).Updates(map[string]any{
-		"remain_quota":  gorm.Expr("remain_quota - ?", quota),
-		"used_quota":    gorm.Expr("used_quota + ?", quota),
-		"accessed_time": platformruntime.GetTimestamp(),
-	}).Error
+	return nil
 }
 
 func cacheAdjustTokenQuota(key string, delta int64) error {

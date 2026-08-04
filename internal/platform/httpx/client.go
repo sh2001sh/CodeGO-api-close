@@ -98,7 +98,11 @@ func sharedHTTPClientOrDefault() *http.Client {
 // GetHTTPClientWithResponseHeaderTimeout returns a shared client for a
 // request-specific first-byte budget. The global client remains unchanged.
 func GetHTTPClientWithResponseHeaderTimeout(responseHeaderTimeout time.Duration) *http.Client {
-	if responseHeaderTimeout <= relayResponseHeaderTimeout() {
+	// The request-specific timeout may be lower than the global relay budget
+	// (for example, the 20s GPT first-byte budget). Reuse the global client
+	// only when the budgets are identical; otherwise its transport would
+	// silently restore the global timeout.
+	if responseHeaderTimeout <= 0 || responseHeaderTimeout == relayResponseHeaderTimeout() {
 		return sharedHTTPClientOrDefault()
 	}
 	responseHeaderTimeoutClientMu.Lock()
@@ -147,7 +151,7 @@ func NewProxyHTTPClient(proxyURL string) (*http.Client, error) {
 // NewProxyHTTPClientWithResponseHeaderTimeout applies a request-specific
 // first-byte budget while retaining proxy connection reuse.
 func NewProxyHTTPClientWithResponseHeaderTimeout(proxyURL string, responseHeaderTimeout time.Duration) (*http.Client, error) {
-	if responseHeaderTimeout <= relayResponseHeaderTimeout() {
+	if responseHeaderTimeout <= 0 || responseHeaderTimeout == relayResponseHeaderTimeout() {
 		return NewProxyHTTPClient(proxyURL)
 	}
 	return newProxyHTTPClient(proxyURL, responseHeaderTimeout)

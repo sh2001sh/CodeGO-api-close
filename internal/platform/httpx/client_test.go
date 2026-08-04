@@ -79,15 +79,23 @@ func TestRequestSpecificResponseHeaderTimeoutUsesDedicatedSharedClient(t *testin
 	InitHTTPClient()
 
 	standard := GetHTTPClientWithResponseHeaderTimeout(45 * time.Second)
+	fast := GetHTTPClientWithResponseHeaderTimeout(20 * time.Second)
 	adaptive := GetHTTPClientWithResponseHeaderTimeout(90 * time.Second)
 	require.Same(t, GetHTTPClient(), standard)
+	require.NotSame(t, standard, fast)
+	require.Same(t, fast, GetHTTPClientWithResponseHeaderTimeout(20*time.Second))
 	require.NotSame(t, standard, adaptive)
 	require.Same(t, adaptive, GetHTTPClientWithResponseHeaderTimeout(90*time.Second))
+	assertSpecificClientResponseHeaderTimeout(t, fast, 20*time.Second)
+	assertSpecificClientResponseHeaderTimeout(t, adaptive, 90*time.Second)
+}
 
-	transport, ok := adaptive.Transport.(*http.Transport)
+func assertSpecificClientResponseHeaderTimeout(t *testing.T, client *http.Client, expected time.Duration) {
+	t.Helper()
+	transport, ok := client.Transport.(*http.Transport)
 	require.True(t, ok)
-	require.Equal(t, 90*time.Second, transport.ResponseHeaderTimeout)
-	require.Equal(t, 90*time.Second, transport.TLSHandshakeTimeout)
+	require.Equal(t, expected, transport.ResponseHeaderTimeout)
+	require.Equal(t, expected, transport.TLSHandshakeTimeout)
 }
 
 func assertClientResponseHeaderTimeout(t *testing.T, client *http.Client) {

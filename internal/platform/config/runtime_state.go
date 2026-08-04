@@ -31,4 +31,5 @@ var RelayTimeout int
 var RelayResponseHeaderTimeout int
 var RelayMaxIdleConns int
 var RelayMaxIdleConnsPerHost int
+var RelayMaxConcurrentRequests int
 var TrustedProxies []string

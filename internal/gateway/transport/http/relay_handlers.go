@@ -19,6 +19,7 @@ import (
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
+	platformconcurrency "github.com/sh2001sh/new-api/internal/platform/concurrency"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	requestsettings "github.com/sh2001sh/new-api/internal/platform/requestsettings"
@@ -171,6 +172,22 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		return
 	}
+
+	releaseRelaySlot, admitted, admissionStats := platformconcurrency.TryAcquireRelaySlot()
+	if !admitted {
+		if admissionStats.Rejected == 1 || admissionStats.Rejected%100 == 0 {
+			logger.LogWarn(c, fmt.Sprintf("relay admission rejected: active=%d capacity=%d rejected=%d", admissionStats.Active, admissionStats.Capacity, admissionStats.Rejected))
+		}
+		c.Header("Retry-After", "1")
+		newAPIError = types.NewErrorWithStatusCode(
+			errors.New(types.ServiceBusyMessage),
+			types.ErrorCodeServiceBusy,
+			http.StatusServiceUnavailable,
+			types.ErrOptionWithSkipRetry(),
+		)
+		return
+	}
+	defer releaseRelaySlot()
 
 	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {

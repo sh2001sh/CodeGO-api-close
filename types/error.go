@@ -86,9 +86,11 @@ const (
 	// quota error
 	ErrorCodeInsufficientUserQuota      ErrorCode = "insufficient_user_quota"
 	ErrorCodePreConsumeTokenQuotaFailed ErrorCode = "pre_consume_token_quota_failed"
+	ErrorCodeServiceBusy                ErrorCode = "service_busy"
 )
 
 const ModelUnavailableMessage = "当前模型服务暂不可用，请稍后重试"
+const ServiceBusyMessage = "服务当前繁忙，请稍后重试"
 
 type NewAPIError struct {
 	Err            error

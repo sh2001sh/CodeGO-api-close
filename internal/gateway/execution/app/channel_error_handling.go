@@ -53,15 +53,15 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	if failureClass == upstreamFailureIncompleteStream {
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 		recordChannelTransientFailure(c, channelError.ChannelId, modelName, err)
-		if shouldRecordIncompleteStreamFaultDomainFailure(c) {
-			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), modelName, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err))
+		if shouldRecordIncompleteStreamFaultDomainFailure(c, err) {
+			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), modelName, channelError.ChannelId, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err))
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
 		cooldown := retryableFailureCooldown(c, err)
 		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
-		if shouldRecordFaultDomainFailure(c) {
-			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), c.GetString(constant.RequestIdKey), cooldown)
+		if shouldRecordFaultDomainFailure(c, err) {
+			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), channelError.ChannelId, c.GetString(constant.RequestIdKey), cooldown)
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
@@ -144,11 +144,14 @@ func retryableFailureCooldown(c *gin.Context, err *types.NewAPIError) time.Durat
 	return gatewayruntime.RetryableFailureCooldown(err.StatusCode)
 }
 
-func shouldRecordFaultDomainFailure(c *gin.Context) bool {
-	return !gatewayruntime.IsLongContextRequest(c)
+func shouldRecordFaultDomainFailure(c *gin.Context, err *types.NewAPIError) bool {
+	return !gatewayruntime.IsLongContextRequest(c) && isProviderWideTransientFailure(err)
 }
 
-func shouldRecordIncompleteStreamFaultDomainFailure(c *gin.Context) bool {
+func shouldRecordIncompleteStreamFaultDomainFailure(c *gin.Context, err *types.NewAPIError) bool {
+	if !isProviderWideTransientFailure(err) {
+		return false
+	}
 	if !gatewayruntime.IsLongContextRequest(c) {
 		return true
 	}
@@ -156,6 +159,13 @@ func shouldRecordIncompleteStreamFaultDomainFailure(c *gin.Context) bool {
 	// started. Before any content is sent, however, repeated disconnects are an
 	// upstream-path failure and should protect the shared fault domain.
 	return !c.GetBool(string(constant.ContextKeyStreamContentDelivered))
+}
+
+func isProviderWideTransientFailure(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)
 }
 
 func coolModelScopedUpstreamFailure(channelID int, modelName string, requestID string, err *types.NewAPIError) bool {

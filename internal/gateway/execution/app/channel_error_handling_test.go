@@ -55,20 +55,22 @@ func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)
-	require.True(t, shouldRecordFaultDomainFailure(context))
+	err := types.NewErrorWithStatusCode(errors.New("upstream timeout"), types.ErrorCodeChannelResponseTimeExceeded, http.StatusGatewayTimeout)
+	require.True(t, shouldRecordFaultDomainFailure(context, err))
 
 	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
-	require.False(t, shouldRecordFaultDomainFailure(context))
+	require.False(t, shouldRecordFaultDomainFailure(context, err))
 }
 
 func TestIncompleteStreamWithoutContentCoolsLongContextFaultDomain(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)
 	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	err := types.NewErrorWithStatusCode(errors.New("upstream stream closed"), types.ErrorCodeChannelResponseTimeExceeded, http.StatusGatewayTimeout)
 
-	require.True(t, shouldRecordIncompleteStreamFaultDomainFailure(context))
+	require.True(t, shouldRecordIncompleteStreamFaultDomainFailure(context, err))
 	context.Set(string(constant.ContextKeyStreamContentDelivered), true)
-	require.False(t, shouldRecordIncompleteStreamFaultDomainFailure(context))
+	require.False(t, shouldRecordIncompleteStreamFaultDomainFailure(context, err))
 }
 
 func TestIsModelScopedUpstreamFailure(t *testing.T) {

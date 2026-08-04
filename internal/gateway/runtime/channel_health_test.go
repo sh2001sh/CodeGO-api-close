@@ -260,6 +260,21 @@ func TestFaultDomainLastResortProbeRecoversBeforeCooldownExpiry(t *testing.T) {
 	require.False(t, IsFaultDomainCooling(domain, "gpt-last-resort"))
 }
 
+func TestFaultDomainPromotesOnlyDistinctChannelFailures(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	domain := ChannelFaultDomain(1, "https://shared.example/v1")
+	for requestID := 1; requestID <= 3; requestID++ {
+		require.False(t, RecordFaultDomainChannelFailure(domain, "gpt-provider-scope", 50, strconv.Itoa(requestID), 15*time.Second))
+	}
+	require.False(t, IsFaultDomainCooling(domain, "gpt-provider-scope"))
+
+	require.False(t, RecordFaultDomainChannelFailure(domain, "gpt-provider-scope", 52, "request-4", 15*time.Second))
+	require.True(t, RecordFaultDomainChannelFailure(domain, "gpt-provider-scope", 53, "request-5", 15*time.Second))
+	require.True(t, IsFaultDomainCooling(domain, "gpt-provider-scope"))
+}
+
 func expireChannelHealthForTest(t *testing.T, channelID int, model string) {
 	t.Helper()
 	require.NoError(t, getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {

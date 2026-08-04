@@ -43,24 +43,25 @@ const (
 // ChannelHealth captures the shared routing health for one channel/model pair.
 // It deliberately excludes provider credentials and other user-visible details.
 type ChannelHealth struct {
-	ChannelID                    int       `json:"channel_id"`
-	Model                        string    `json:"model"`
-	State                        string    `json:"state"`
-	ConsecutiveRetryableFailures int       `json:"consecutive_retryable_failures"`
-	RecoveryProbeSuccesses       int       `json:"recovery_probe_successes"`
-	RecoveryProbeUntil           time.Time `json:"recovery_probe_until"`
-	CoolingUntil                 time.Time `json:"cooling_until"`
-	SuccessRate2m                float64   `json:"success_rate_2m"`
-	SuccessRate5m                float64   `json:"success_rate_5m"`
-	SuccessRate15m               float64   `json:"success_rate_15m"`
-	TTFTEWMAMilliseconds         float64   `json:"ttft_ewma_ms"`
-	TTFTSamples                  int       `json:"ttft_samples"`
-	TTFTP50Milliseconds          float64   `json:"ttft_p50_ms"`
-	TTFTP95Milliseconds          float64   `json:"ttft_p95_ms"`
-	TTFTRecentMilliseconds       []int64   `json:"ttft_recent_ms"`
-	LastSuccessAt                time.Time `json:"last_success_at"`
-	LastFailureAt                time.Time `json:"last_failure_at"`
-	LastFailureRequestID         string    `json:"last_failure_request_id"`
+	ChannelID                    int                  `json:"channel_id"`
+	Model                        string               `json:"model"`
+	State                        string               `json:"state"`
+	ConsecutiveRetryableFailures int                  `json:"consecutive_retryable_failures"`
+	RecoveryProbeSuccesses       int                  `json:"recovery_probe_successes"`
+	RecoveryProbeUntil           time.Time            `json:"recovery_probe_until"`
+	CoolingUntil                 time.Time            `json:"cooling_until"`
+	SuccessRate2m                float64              `json:"success_rate_2m"`
+	SuccessRate5m                float64              `json:"success_rate_5m"`
+	SuccessRate15m               float64              `json:"success_rate_15m"`
+	TTFTEWMAMilliseconds         float64              `json:"ttft_ewma_ms"`
+	TTFTSamples                  int                  `json:"ttft_samples"`
+	TTFTP50Milliseconds          float64              `json:"ttft_p50_ms"`
+	TTFTP95Milliseconds          float64              `json:"ttft_p95_ms"`
+	TTFTRecentMilliseconds       []int64              `json:"ttft_recent_ms"`
+	LastSuccessAt                time.Time            `json:"last_success_at"`
+	LastFailureAt                time.Time            `json:"last_failure_at"`
+	LastFailureRequestID         string               `json:"last_failure_request_id"`
+	FaultDomainFailures          []FaultDomainFailure `json:"fault_domain_failures,omitempty"`
 
 	Window2StartedAt  time.Time `json:"window_2_started_at"`
 	Window2Requests   int       `json:"window_2_requests"`
@@ -71,6 +72,13 @@ type ChannelHealth struct {
 	Window15StartedAt time.Time `json:"window_15_started_at"`
 	Window15Requests  int       `json:"window_15_requests"`
 	Window15Successes int       `json:"window_15_successes"`
+}
+
+// FaultDomainFailure records the last transient failure observed for one
+// channel inside a provider fault domain. It is only used for scope detection.
+type FaultDomainFailure struct {
+	ChannelID  int       `json:"channel_id"`
+	OccurredAt time.Time `json:"occurred_at"`
 }
 
 var (

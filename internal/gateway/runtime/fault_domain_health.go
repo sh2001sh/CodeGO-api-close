@@ -12,6 +12,7 @@ import (
 const (
 	faultDomainHealthKeyPrefix  = "fault-domain\x00"
 	faultDomainFailureThreshold = 3
+	faultDomainFailureWindow    = 15 * time.Second
 )
 
 // ChannelFaultDomain derives a shared transient-failure boundary without
@@ -108,6 +109,65 @@ func RecordFaultDomainRetryableFailure(domain, model, requestID string, cooldown
 		state.State = ChannelHealthCooling
 		return state, nil
 	})
+}
+
+// RecordFaultDomainChannelFailure promotes a transient failure to provider
+// scope only after the same model fails on three distinct channels in a short
+// window. A single API key or route group therefore cools only itself, while a
+// genuine shared-provider incident still prevents a retry storm.
+func RecordFaultDomainChannelFailure(domain, model string, channelID int, requestID string, cooldown time.Duration) bool {
+	if domain == "" || model == "" || channelID <= 0 {
+		return false
+	}
+	lock := faultDomainHealthLock(domain)
+	lock.Lock()
+	defer lock.Unlock()
+
+	now := time.Now().UTC()
+	providerWide := false
+	_ = getChannelHealthCache().UpdateWithTTL(faultDomainHealthKey(domain, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+		state.Model = model
+		state.FaultDomainFailures = recordFaultDomainFailureChannel(state.FaultDomainFailures, channelID, now)
+		if len(state.FaultDomainFailures) < faultDomainFailureThreshold {
+			return state, nil
+		}
+		providerWide = true
+		if requestID != "" && state.LastFailureRequestID == requestID {
+			return state, nil
+		}
+		state.LastFailureAt = now
+		state.LastFailureRequestID = requestID
+		state.ConsecutiveRetryableFailures = max(state.ConsecutiveRetryableFailures+1, faultDomainFailureThreshold)
+		state.RecoveryProbeSuccesses = 0
+		state.RecoveryProbeUntil = time.Time{}
+		state.CoolingUntil = now.Add(adaptiveChannelCooldown(cooldown, faultDomainBackoffLevel(state.ConsecutiveRetryableFailures)))
+		state.State = ChannelHealthCooling
+		return state, nil
+	})
+	return providerWide
+}
+
+func recordFaultDomainFailureChannel(failures []FaultDomainFailure, channelID int, now time.Time) []FaultDomainFailure {
+	cutoff := now.Add(-faultDomainFailureWindow)
+	filtered := failures[:0]
+	matched := false
+	for _, failure := range failures {
+		if failure.OccurredAt.Before(cutoff) {
+			continue
+		}
+		if failure.ChannelID == channelID {
+			if !matched {
+				filtered = append(filtered, FaultDomainFailure{ChannelID: channelID, OccurredAt: now})
+				matched = true
+			}
+			continue
+		}
+		filtered = append(filtered, failure)
+	}
+	if !matched {
+		filtered = append(filtered, FaultDomainFailure{ChannelID: channelID, OccurredAt: now})
+	}
+	return filtered
 }
 
 func faultDomainBackoffLevel(failures int) int {

@@ -121,3 +121,34 @@ func TestRoutePoolLastResortProbeReservesCoolingCandidate(t *testing.T) {
 		channelProbe: true,
 	}}, modelName))
 }
+
+func TestRoutePoolLastResortProbePrefersReliableCandidateOverLowerCost(t *testing.T) {
+	probe := chooseBestRoutePoolLastResortProbe([]scoredRoutePoolCandidate{
+		{
+			channel: &gatewayschema.Channel{Id: 50},
+			cost:    0.04,
+			health: gatewayruntime.ChannelHealth{
+				Window5Requests:              20,
+				Window5Successes:             12,
+				SuccessRate5m:                60,
+				ConsecutiveRetryableFailures: 3,
+				LastSuccessAt:                time.Now().Add(-10 * time.Minute),
+				CoolingUntil:                 time.Now().Add(15 * time.Second),
+			},
+		},
+		{
+			channel: &gatewayschema.Channel{Id: 52},
+			cost:    0.08,
+			health: gatewayruntime.ChannelHealth{
+				Window5Requests:  20,
+				Window5Successes: 19,
+				SuccessRate5m:    95,
+				LastSuccessAt:    time.Now().Add(-time.Minute),
+				CoolingUntil:     time.Now().Add(5 * time.Second),
+			},
+		},
+	})
+
+	assert.NotNil(t, probe)
+	assert.Equal(t, 52, probe.channel.Id)
+}

@@ -131,6 +131,29 @@ func (r *SubscriptionLuckyReward) BeforeUpdate(_ *gorm.DB) error {
 	return nil
 }
 
+// SubscriptionLuckyRewardNotification is the durable, per-reward user notice.
+// A unique reward reference makes notification creation idempotent with reward settlement.
+type SubscriptionLuckyRewardNotification struct {
+	Id        int   `json:"id"`
+	RewardId  int   `json:"reward_id" gorm:"uniqueIndex"`
+	UserId    int   `json:"user_id" gorm:"index:idx_lucky_reward_notification_user_read"`
+	ReadAt    int64 `json:"read_at" gorm:"index:idx_lucky_reward_notification_user_read"`
+	CreatedAt int64 `json:"created_at" gorm:"bigint"`
+	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
+}
+
+func (n *SubscriptionLuckyRewardNotification) BeforeCreate(_ *gorm.DB) error {
+	now := platformruntime.GetTimestamp()
+	n.CreatedAt = now
+	n.UpdatedAt = now
+	return nil
+}
+
+func (n *SubscriptionLuckyRewardNotification) BeforeUpdate(_ *gorm.DB) error {
+	n.UpdatedAt = platformruntime.GetTimestamp()
+	return nil
+}
+
 // SubscriptionBlindBoxBenefitCycle records the idempotent blind-box entitlement for a subscription cycle.
 type SubscriptionBlindBoxBenefitCycle struct {
 	Id                 int    `json:"id"`

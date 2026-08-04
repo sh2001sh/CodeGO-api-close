@@ -95,6 +95,18 @@ export interface LuckyRewardPage {
   records: LuckyRewardView[]
 }
 
+export interface LuckyRewardNotification {
+  id: number
+  reward: LuckyRewardView
+  read_at: number
+  created_at: number
+}
+
+export interface LuckyRewardNotificationPage {
+  unread_count: number
+  items: LuckyRewardNotification[]
+}
+
 export interface LuckyPublicWinPage {
   page: number
   page_size: number
@@ -184,6 +196,8 @@ export interface LuckyBackfillResult {
 
 export type DailyLuckySelfResponse = ApiResponse<LuckyNumberSelfPayload>
 export type DailyLuckyHistoryResponse = ApiResponse<LuckyRewardPage>
+export type DailyLuckyRewardNotificationResponse =
+  ApiResponse<LuckyRewardNotificationPage>
 export type DailyLuckyPublicWinsResponse = ApiResponse<LuckyPublicWinPage>
 export type DailyLuckyAdminResponse = ApiResponse<LuckyDrawAdminPayload>
 export type DailyLuckyConfigResponse = ApiResponse<DailyLuckyConfig>

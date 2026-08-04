@@ -376,6 +376,37 @@ func TestTokenFullKeyAddsOpenAIPrefix(t *testing.T) {
 	}
 }
 
+func TestAddTokenLeavesAccessedTimeUnset(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	ctx, recorder := newAuthenticatedContext(t, stdhttp.MethodPost, "/api/token/", map[string]any{
+		"name":            "unused-token",
+		"expired_time":    -1,
+		"remain_quota":    100,
+		"unlimited_quota": false,
+	}, 7)
+
+	AddToken(ctx)
+
+	if recorder.Code != stdhttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected token creation to succeed, got %s", response.Message)
+	}
+
+	var token identityschema.Token
+	if err := db.Where("user_id = ? AND name = ?", 7, "unused-token").First(&token).Error; err != nil {
+		t.Fatalf("failed to load created token: %v", err)
+	}
+	if token.CreatedTime == 0 {
+		t.Fatal("expected created_time to be set")
+	}
+	if token.AccessedTime != 0 {
+		t.Fatalf("expected accessed_time to remain unset, got %d", token.AccessedTime)
+	}
+}
+
 func TestTokenAutoMigrateUsesVarchar128KeyColumn(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 

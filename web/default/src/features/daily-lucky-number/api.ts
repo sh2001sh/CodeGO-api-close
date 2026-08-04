@@ -6,6 +6,7 @@ import type {
   DailyLuckyConfigResponse,
   DailyLuckyHistoryResponse,
   DailyLuckyPublicWinsResponse,
+  DailyLuckyRewardNotificationResponse,
   DailyLuckySelfResponse,
 } from './types'
 
@@ -22,6 +23,19 @@ export async function getDailyLuckyNumberHistory(
     params: { page, page_size: pageSize },
   })
   return response.data
+}
+
+export async function getDailyLuckyRewardNotifications(): Promise<DailyLuckyRewardNotificationResponse> {
+  const response = await api.get('/api/daily-lucky-number/notifications', {
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
+  return response.data
+}
+
+export async function markAllDailyLuckyRewardNotificationsRead(): Promise<void> {
+  await api.post('/api/daily-lucky-number/notifications/read-all', undefined, {
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
 }
 
 export async function getDailyLuckyNumberPublicWins(
@@ -42,7 +56,10 @@ export async function getAdminDailyLuckyNumberConfig(): Promise<DailyLuckyConfig
 export async function updateAdminDailyLuckyNumberConfig(
   payload: Partial<DailyLuckyConfig>
 ): Promise<DailyLuckyConfigResponse> {
-  const response = await api.put('/api/daily-lucky-number/admin/config', payload)
+  const response = await api.put(
+    '/api/daily-lucky-number/admin/config',
+    payload
+  )
   return response.data
 }
 

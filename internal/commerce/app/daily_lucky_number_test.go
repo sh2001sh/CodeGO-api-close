@@ -23,6 +23,7 @@ func prepareDailyLuckyNumberTestDB(t *testing.T) {
 		&commerceschema.SubscriptionLuckyNumber{},
 		&commerceschema.SubscriptionLuckyDraw{},
 		&commerceschema.SubscriptionLuckyReward{},
+		&commerceschema.SubscriptionLuckyRewardNotification{},
 		&commerceschema.SubscriptionBlindBoxBenefitCycle{},
 	))
 }
@@ -194,6 +195,20 @@ func TestDailyLuckyRewardSettlementWritesLedgerOnce(t *testing.T) {
 	require.NoError(t, db.Where("user_id = ? AND type = ?", user.Id, auditschema.LogTypeTopup).Find(&logs).Error)
 	require.Len(t, logs, 1)
 	require.Contains(t, logs[0].Content, "每日幸运号中奖到账")
+	var notifications []commerceschema.SubscriptionLuckyRewardNotification
+	require.NoError(t, db.Where("user_id = ?", user.Id).Find(&notifications).Error)
+	require.Len(t, notifications, 1)
+	require.Equal(t, reward.Id, notifications[0].RewardId)
+
+	notificationPage, err := ListDailyLuckyRewardNotifications(user.Id, 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), notificationPage.UnreadCount)
+	require.Len(t, notificationPage.Items, 1)
+	require.Equal(t, reward.Id, notificationPage.Items[0].Reward.Reward.Id)
+	require.NoError(t, MarkDailyLuckyRewardNotificationRead(user.Id, notifications[0].Id))
+	notificationPage, err = ListDailyLuckyRewardNotifications(user.Id, 10)
+	require.NoError(t, err)
+	require.Zero(t, notificationPage.UnreadCount)
 }
 
 func TestSubscriptionPurchaseDoesNotGrantBlindBoxBenefits(t *testing.T) {

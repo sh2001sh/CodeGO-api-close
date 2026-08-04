@@ -27,6 +27,7 @@ import { NotificationButton } from '@/components/notification-button'
 import { NotificationDialog } from '@/components/notification-dialog'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { LuckyRewardNotifier } from '@/features/daily-lucky-number/components/lucky-reward-notifier'
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import { type TopNavLink } from '../types'
 import { Header } from './header'
@@ -141,6 +142,7 @@ export function AppHeader({
               </div>
             )}
             {showSearch && <Search />}
+            <LuckyRewardNotifier />
             {showNotifications && (
               <NotificationButton
                 unreadCount={notifications.unreadCount}

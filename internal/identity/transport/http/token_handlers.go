@@ -210,7 +210,7 @@ func AddToken(c *gin.Context) {
 		Name:               token.Name,
 		Key:                key,
 		CreatedTime:        platformruntime.GetTimestamp(),
-		AccessedTime:       platformruntime.GetTimestamp(),
+		AccessedTime:       0,
 		ExpiredTime:        token.ExpiredTime,
 		RemainQuota:        token.RemainQuota,
 		UnlimitedQuota:     token.UnlimitedQuota,

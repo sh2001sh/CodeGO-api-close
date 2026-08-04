@@ -95,6 +95,9 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		dailyLuckyNumberRoute.GET("/self", getDailyLuckyNumberSelf)
 		dailyLuckyNumberRoute.GET("/history", getDailyLuckyNumberHistory)
 		dailyLuckyNumberRoute.GET("/public-wins", getDailyLuckyNumberPublicWins)
+		dailyLuckyNumberRoute.GET("/notifications", getDailyLuckyRewardNotifications)
+		dailyLuckyNumberRoute.POST("/notifications/read-all", middleware.CriticalRateLimit(), markAllDailyLuckyRewardNotificationsRead)
+		dailyLuckyNumberRoute.POST("/notifications/:id/read", middleware.CriticalRateLimit(), markDailyLuckyRewardNotificationRead)
 	}
 
 	dailyLuckyNumberAdminRoute := apiRouter.Group("/daily-lucky-number/admin")

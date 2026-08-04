@@ -1,23 +1,23 @@
 # Main Goal
-Repair the full-release verifier's lazy-account false positive and upgrade all four v2 services together.
+Add durable, user-visible notifications for daily lucky-number rewards without changing draw rules or reward amounts.
 
 # Current Work
-- The verifier now requires a billing account only for balances or historical usage that must already have been migrated.
-- `VERSION` is prepared as `v2.0.0-rc.34.8`.
+- Lucky-reward notifications are implemented and ready to release.
+- The web app shows an actionable winning toast after login and a persistent unread trophy entry in the app header.
 
 # Key Context
-- Gateway currently runs `v2.0.0-rc.34.7`; control, ledger, and workflow run `v2.0.0-rc.34.6`.
-- The prior full deployment rolled back safely because new zero-balance users, tokens, and subscriptions are designed to create ledger accounts lazily.
-- The production database backup and prior ledger backfill were completed before this release.
-- Deployment script `/mnt/codego-data/deploy-rc34.7.sh` has verified migration, verification, health checks, and rollback behavior.
+- Production runs `v2.0.0-rc.34.8` across gateway, control, ledger, and workflow.
+- Lucky-number probability, reward values, and historical draws must not change in this task.
+- Existing reward settlement is idempotent through the wallet credit key; notifications require a unique reward reference for equivalent protection.
 
 # Verification
-- `go test ./cmd/v2-verify` passed.
-- `go test ./internal/gateway/runtime ./internal/gateway/routing/app` passed.
-- `git diff --check` passed.
+- `go test ./internal/commerce/app -run "TestDailyLuckyRewardSettlementWritesLedgerOnce|TestListDailyLuckyNumberPublicWinsIncludesEverySettledMatch" -count=1` passed.
+- `go test ./internal/platform/store ./cmd/v2-verify -count=1` passed.
+- Frontend ESLint, typecheck, and production build passed.
+- The full commerce app suite still has two pre-existing group-buy settlement assertion failures, unrelated to lucky notifications.
 
 # Next Actions
-- Commit and tag `v2.0.0-rc.34.8`, push to GitHub, wait for multi-architecture images, then deploy all four v2 services with the existing guarded deployment process.
+- Commit only the lucky-notification files, then push and build a new image when requested.
 
 # Blockers
-- Awaiting remote image build after the release is pushed.
+- None.

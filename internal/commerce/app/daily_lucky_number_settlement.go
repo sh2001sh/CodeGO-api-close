@@ -97,11 +97,26 @@ func settleDailyLuckyReward(rewardID int) error {
 		if err := recordLuckyRewardLogTx(tx, userID, &reward); err != nil {
 			return err
 		}
+		if err := createLuckyRewardNotificationTx(tx, userID, reward.Id); err != nil {
+			return err
+		}
 		reward.CreditStatus = commerceschema.SubscriptionLuckyRewardCreditCredited
 		reward.CreditError = ""
 		reward.CreditedAt = platformruntime.GetTimestamp()
 		return tx.Save(&reward).Error
 	})
+}
+
+func createLuckyRewardNotificationTx(tx *gorm.DB, userID, rewardID int) error {
+	if tx == nil || userID <= 0 || rewardID <= 0 {
+		return errors.New("invalid lucky reward notification params")
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(
+		&commerceschema.SubscriptionLuckyRewardNotification{
+			RewardId: rewardID,
+			UserId:   userID,
+		},
+	).Error
 }
 
 func recordLuckyRewardLogTx(tx *gorm.DB, userID int, reward *commerceschema.SubscriptionLuckyReward) error {

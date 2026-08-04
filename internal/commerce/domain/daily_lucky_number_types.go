@@ -82,6 +82,18 @@ type LuckyRewardPage struct {
 	Records  []LuckyRewardView `json:"records"`
 }
 
+type LuckyRewardNotification struct {
+	Id        int             `json:"id"`
+	Reward    LuckyRewardView `json:"reward"`
+	ReadAt    int64           `json:"read_at"`
+	CreatedAt int64           `json:"created_at"`
+}
+
+type LuckyRewardNotificationPage struct {
+	UnreadCount int64                     `json:"unread_count"`
+	Items       []LuckyRewardNotification `json:"items"`
+}
+
 type LuckyPublicWinPage struct {
 	Page     int              `json:"page"`
 	PageSize int              `json:"page_size"`

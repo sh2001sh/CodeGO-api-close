@@ -274,8 +274,11 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         <DataTableColumnHeader column={column} title={t('Last Used')} />
       ),
       cell: ({ row }) => {
+        const apiKey = row.original
         const accessedTime = row.getValue('accessed_time') as number
-        if (!accessedTime) {
+        const isLegacyUnusedKey =
+          accessedTime === apiKey.created_time && apiKey.used_quota === 0
+        if (!accessedTime || isLegacyUnusedKey) {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
         return (

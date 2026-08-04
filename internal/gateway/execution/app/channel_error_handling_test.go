@@ -28,6 +28,18 @@ func TestIsModelUnavailableError(t *testing.T) {
 	)))
 }
 
+func TestCapacityResponseIsRetryableInsteadOfModelScoped(t *testing.T) {
+	err := types.NewOpenAIError(
+		errors.New("selected model is at capacity. Please try a different model."),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusServiceUnavailable,
+	)
+
+	require.Equal(t, upstreamFailureTransient, classifyUpstreamFailure(err))
+	require.False(t, IsModelScopedUpstreamFailure(err))
+	require.True(t, isRetryableChannelFailure(err))
+}
+
 func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)

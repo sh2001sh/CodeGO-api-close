@@ -34,6 +34,22 @@ func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldRetryCapacityBeforeResponseDelivery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ctx.Set("original_model", "gpt-5.6-sol")
+	err := types.NewOpenAIError(
+		errors.New("selected model is at capacity. Please try a different model."),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusServiceUnavailable,
+	)
+
+	require.True(t, shouldRetry(ctx, err, 1))
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
 func TestShouldRetryGPTFailureOnlyWithinInitialWindow(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	err := types.NewOpenAIError(errors.New("upstream timeout"), types.ErrorCodeBadResponseStatusCode, http.StatusGatewayTimeout)

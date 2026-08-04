@@ -21,6 +21,9 @@ func classifyUpstreamFailure(err *types.NewAPIError) upstreamFailureClass {
 	if err == nil {
 		return upstreamFailureUnknown
 	}
+	if isUpstreamCapacityFailure(err) {
+		return upstreamFailureTransient
+	}
 	if IsModelUnavailableError(err) || err.StatusCode == http.StatusServiceUnavailable {
 		return upstreamFailureModelUnavailable
 	}
@@ -42,6 +45,23 @@ func classifyUpstreamFailure(err *types.NewAPIError) upstreamFailureClass {
 		return upstreamFailureTransient
 	}
 	return upstreamFailureUnknown
+}
+
+// isUpstreamCapacityFailure identifies a temporary provider capacity response.
+// It must remain narrower than a generic 503 so account exhaustion and genuine
+// model-not-found responses keep their existing model-scoped handling.
+func isUpstreamCapacityFailure(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return containsAny(message,
+		"selected model is at capacity",
+		"model is at capacity",
+		"try a different model",
+		"try another model",
+		"temporarily overloaded",
+	)
 }
 
 // isIncompleteResponsesStreamMessage identifies a Responses API stream that

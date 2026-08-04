@@ -121,7 +121,8 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 }
 
 func recordChannelTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
-	if err != nil && !gatewayruntime.IsLongContextRequest(c) && isGatewayFailureStatus(err.StatusCode) {
+	if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
+		(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
 		gatewayruntime.RecordChannelGatewayFailure(channelID, modelName, err.StatusCode)
 		return
 	}

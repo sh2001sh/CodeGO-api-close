@@ -41,7 +41,7 @@ func TestResponseHeaderTimeoutForRequest(t *testing.T) {
 		promptTokens int
 		expected     time.Duration
 	}{
-		{name: "short gpt request", model: "gpt-5.6-sol", promptTokens: 99_999, expected: 45 * time.Second},
+		{name: "short gpt request", model: "gpt-5.6-sol", promptTokens: 99_999, expected: relaycommon.GPTNonLongContextFirstByteTimeout},
 		{name: "long gpt request", model: "gpt-5.6-sol", promptTokens: 100_000, expected: 75 * time.Second},
 		{name: "very long gpt request", model: "gpt-5.6-sol", promptTokens: 200_000, expected: 90 * time.Second},
 		{name: "non gpt request", model: "claude-opus", promptTokens: 200_000, expected: 45 * time.Second},

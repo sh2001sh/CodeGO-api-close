@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
@@ -58,7 +59,7 @@ func TestShouldRetryGPTFailureOnlyWithinInitialWindow(t *testing.T) {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 		ctx.Set("original_model", "gpt-5.6-sol")
-		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-gptRetryFailureWindow+time.Second))
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-relaycommon.GPTInitialFailureRetryWindow+time.Second))
 
 		require.True(t, shouldRetry(ctx, err, 1))
 	})
@@ -67,7 +68,7 @@ func TestShouldRetryGPTFailureOnlyWithinInitialWindow(t *testing.T) {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 		ctx.Set("original_model", "gpt-5.6-sol")
-		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-gptRetryFailureWindow-time.Second))
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-relaycommon.GPTInitialFailureRetryWindow-time.Second))
 
 		require.False(t, shouldRetry(ctx, err, 1))
 	})
@@ -76,7 +77,7 @@ func TestShouldRetryGPTFailureOnlyWithinInitialWindow(t *testing.T) {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 		ctx.Set("original_model", "claude-opus-5")
-		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-gptRetryFailureWindow-time.Second))
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-relaycommon.GPTInitialFailureRetryWindow-time.Second))
 
 		require.True(t, shouldRetry(ctx, err, 1))
 	})

@@ -173,13 +173,27 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 
 func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration {
 	baseTimeout := time.Duration(platformconfig.RelayResponseHeaderTimeout) * time.Second
-	if baseTimeout <= 0 || info == nil || !relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
+	if baseTimeout <= 0 || info == nil {
+		return baseTimeout
+	}
+	if strings.HasPrefix(strings.ToLower(info.OriginModelName), "gpt-") &&
+		!relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
+		return minDuration(baseTimeout, relaycommon.GPTNonLongContextFirstByteTimeout)
+	}
+	if !relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
 		return baseTimeout
 	}
 	if info.GetEstimatePromptTokens() >= relaycommon.VeryLongContextPromptTokens {
 		return maxDuration(baseTimeout, 90*time.Second)
 	}
 	return maxDuration(baseTimeout, 75*time.Second)
+}
+
+func minDuration(left, right time.Duration) time.Duration {
+	if left < right {
+		return left
+	}
+	return right
 }
 
 func maxDuration(left, right time.Duration) time.Duration {

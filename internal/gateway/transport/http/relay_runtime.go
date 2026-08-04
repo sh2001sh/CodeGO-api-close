@@ -29,8 +29,6 @@ import (
 	"github.com/sh2001sh/new-api/types"
 )
 
-const gptRetryFailureWindow = 30 * time.Second
-
 func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
 	return gatewayexecutionapp.ExecuteRelay(c, info)
 }
@@ -175,7 +173,7 @@ func withinGPTRetryFailureWindow(c *gin.Context) bool {
 	if startTime.IsZero() {
 		return true
 	}
-	return time.Since(startTime) <= gptRetryFailureWindow
+	return time.Since(startTime) <= relaycommon.GPTInitialFailureRetryWindow
 }
 
 func canRetryResponsesStreamBeforeContent(c *gin.Context) bool {

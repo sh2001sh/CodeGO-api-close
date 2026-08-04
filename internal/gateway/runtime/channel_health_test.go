@@ -107,6 +107,32 @@ func TestChannelHealthUsesLongerShortCooldownForIncompleteStreams(t *testing.T) 
 	require.WithinDuration(t, time.Now().Add(15*time.Second), state.CoolingUntil, time.Second)
 }
 
+func TestChannelHealthCoolsGatewayFailuresAfterTwoConsecutiveRequests(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	RecordChannelGatewayFailure(42, "gpt-gateway", 502)
+	require.False(t, IsChannelCooling(42, "gpt-gateway"))
+	RecordChannelGatewayFailure(42, "gpt-gateway", 502)
+
+	state, found := GetChannelHealth(42, "gpt-gateway")
+	require.True(t, found)
+	require.Equal(t, ChannelHealthCooling, state.State)
+	require.WithinDuration(t, time.Now().Add(channelHealthBadGatewayCooldown), state.CoolingUntil, time.Second)
+}
+
+func TestChannelHealthUsesShorterGatewayTimeoutCooldown(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	RecordChannelGatewayFailure(42, "gpt-timeout", 504)
+	RecordChannelGatewayFailure(42, "gpt-timeout", 504)
+
+	state, found := GetChannelHealth(42, "gpt-timeout")
+	require.True(t, found)
+	require.WithinDuration(t, time.Now().Add(channelHealthGatewayTimeoutCooldown), state.CoolingUntil, time.Second)
+}
+
 func TestChannelHealthShortCooldownEscalatesAfterRepeatedFailures(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })

@@ -1,23 +1,24 @@
 # Main Goal
-Add durable, user-visible notifications for daily lucky-number rewards without changing draw rules or reward amounts.
+Reduce GPT first-token tail latency during upstream gateway instability.
 
 # Current Work
-- Lucky-reward notifications are implemented and ready to release.
-- The web app shows an actionable winning toast after login and a persistent unread trophy entry in the app header.
+- Added model-level rapid cooldown for consecutive non-long-context 502/504/524 failures.
+- Automatic route pools skip cooling candidates and retain controlled half-open recovery probes.
 
 # Key Context
-- Production runs `v2.0.0-rc.34.8` across gateway, control, ledger, and workflow.
-- Lucky-number probability, reward values, and historical draws must not change in this task.
-- Existing reward settlement is idempotent through the wallet credit key; notifications require a unique reward reference for equivalent protection.
+- Two consecutive 502 failures cool a channel/model pair for 8 seconds; two consecutive 504/524 failures cool it for 15 seconds.
+- One transient failure remains degraded, preserving normal traffic and avoiding unnecessary cooling.
+- 429, model-unavailable, and long-context timeout behavior remains unchanged.
+- Fault-domain behavior remains separate so channels retain redundancy where upstream fault domains differ.
 
 # Verification
-- `go test ./internal/commerce/app -run "TestDailyLuckyRewardSettlementWritesLedgerOnce|TestListDailyLuckyNumberPublicWinsIncludesEverySettledMatch" -count=1` passed.
-- `go test ./internal/platform/store ./cmd/v2-verify -count=1` passed.
-- Frontend ESLint, typecheck, and production build passed.
-- The full commerce app suite still has two pre-existing group-buy settlement assertion failures, unrelated to lucky notifications.
+- `go test ./internal/gateway/runtime -count=1` passed.
+- `go test ./internal/gateway/execution/app -count=1` passed.
+- `go test ./internal/gateway/routing/app ./internal/gateway/transport/http -count=1` passed.
+- Focused `go test ./internal/gateway/...` routing, health, and retry tests passed.
 
 # Next Actions
-- Commit only the lucky-notification files, then push and build a new image when requested.
+- Commit the gateway cooldown policy, release as the next rc.34 version, then trigger and verify the multi-arch image build.
 
 # Blockers
 - None.

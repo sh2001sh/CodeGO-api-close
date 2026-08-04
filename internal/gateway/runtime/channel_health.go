@@ -19,7 +19,10 @@ const (
 
 	channelHealthFailureThreshold          = 5
 	channelHealthRetryableFailureThreshold = 3
+	channelHealthGatewayFailureThreshold   = 2
 	channelHealthShortCooldown             = 15 * time.Second
+	channelHealthBadGatewayCooldown        = 8 * time.Second
+	channelHealthGatewayTimeoutCooldown    = 15 * time.Second
 	channelHealthIncompleteStreamCooldown  = 15 * time.Second
 	channelHealthRateLimitCooldown         = 30 * time.Second
 	channelHealthLongContextTimeout        = 45 * time.Second
@@ -194,11 +197,25 @@ func RecordChannelRetryableFailure(channelID int, model string) {
 // cooldown for a transient failure. Repeated failures in the rolling window
 // still escalate to the longer circuit cooldown.
 func RecordChannelRetryableFailureWithCooldown(channelID int, model string, shortCooldown time.Duration) {
+	recordChannelRetryableFailure(channelID, model, shortCooldown, channelHealthRetryableFailureThreshold)
+}
+
+// RecordChannelGatewayFailure rapidly isolates a model route after two
+// consecutive gateway failures. A single transient failure remains degraded so
+// healthy traffic can demonstrate that the route is still usable.
+func RecordChannelGatewayFailure(channelID int, model string, statusCode int) {
+	recordChannelRetryableFailure(channelID, model, RetryableFailureCooldown(statusCode), channelHealthGatewayFailureThreshold)
+}
+
+func recordChannelRetryableFailure(channelID int, model string, shortCooldown time.Duration, failureThreshold int) {
 	if channelID <= 0 || model == "" {
 		return
 	}
 	if shortCooldown <= 0 {
 		shortCooldown = channelHealthShortCooldown
+	}
+	if failureThreshold <= 0 {
+		failureThreshold = channelHealthRetryableFailureThreshold
 	}
 	lock := channelHealthLock(channelID)
 	lock.Lock()
@@ -213,8 +230,8 @@ func RecordChannelRetryableFailureWithCooldown(channelID int, model string, shor
 		state.ConsecutiveRetryableFailures++
 		state.RecoveryProbeSuccesses = 0
 		state.RecoveryProbeUntil = time.Time{}
-		escalated := shouldCoolForShortTermFailureRate(state) || state.ConsecutiveRetryableFailures >= channelHealthRetryableFailureThreshold
-		backoffLevel := retryableFailureBackoffLevel(state.ConsecutiveRetryableFailures)
+		escalated := shouldCoolForShortTermFailureRate(state) || state.ConsecutiveRetryableFailures >= failureThreshold
+		backoffLevel := retryableFailureBackoffLevel(state.ConsecutiveRetryableFailures, failureThreshold)
 		if state.CoolingUntil.After(now) && state.State != ChannelHealthHalfOpen {
 			if escalated {
 				state.CoolingUntil = now.Add(adaptiveChannelCooldown(shortCooldown, backoffLevel))
@@ -232,11 +249,11 @@ func RecordChannelRetryableFailureWithCooldown(channelID int, model string, shor
 	})
 }
 
-func retryableFailureBackoffLevel(failures int) int {
-	if failures <= channelHealthRetryableFailureThreshold {
+func retryableFailureBackoffLevel(failures int, failureThreshold int) int {
+	if failures <= failureThreshold {
 		return 1
 	}
-	return failures - channelHealthRetryableFailureThreshold + 1
+	return failures - failureThreshold + 1
 }
 
 // TryStartChannelRecoveryProbe reserves a single expired circuit for a real
@@ -278,12 +295,16 @@ func adaptiveChannelCooldown(base time.Duration, failures int) time.Duration {
 }
 
 // RetryableFailureCooldown selects a short circuit duration without exposing
-// channel-specific rules. Rate limits and gateway timeouts recover more slowly
-// than connection and transient 5xx errors.
+// channel-specific rules. Gateway timeouts need a brief pause, while rate
+// limits still recover more slowly than transient upstream failures.
 func RetryableFailureCooldown(statusCode int) time.Duration {
 	switch statusCode {
-	case 429, 504, 524:
+	case 429:
 		return channelHealthRateLimitCooldown
+	case 504, 524:
+		return channelHealthGatewayTimeoutCooldown
+	case 502:
+		return channelHealthBadGatewayCooldown
 	default:
 		return channelHealthShortCooldown
 	}

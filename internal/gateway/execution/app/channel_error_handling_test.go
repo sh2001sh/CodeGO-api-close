@@ -35,7 +35,9 @@ func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
 	timeout := types.NewErrorWithStatusCode(errors.New("timeout awaiting response headers"), types.ErrorCodeChannelResponseTimeExceeded, http.StatusGatewayTimeout)
 
 	require.Equal(t, 45*time.Second, retryableFailureCooldown(context, timeout))
-	require.Equal(t, 30*time.Second, retryableFailureCooldown(nil, timeout))
+	require.Equal(t, 15*time.Second, retryableFailureCooldown(nil, timeout))
+	badGateway := types.NewOpenAIError(errors.New("upstream stream closed"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway)
+	require.Equal(t, 8*time.Second, retryableFailureCooldown(nil, badGateway))
 }
 
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {

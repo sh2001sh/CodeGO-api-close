@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
+	"net/http"
 	"time"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -50,14 +51,14 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	// cooling so subsequent requests choose another healthy route.
 	if failureClass == upstreamFailureIncompleteStream {
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
-		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, modelName, gatewayruntime.IncompleteStreamCooldown())
+		recordChannelTransientFailure(c, channelError.ChannelId, modelName, err)
 		if shouldRecordIncompleteStreamFaultDomainFailure(c) {
-			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), modelName, c.GetString(constant.RequestIdKey), gatewayruntime.IncompleteStreamCooldown())
+			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), modelName, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err))
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
 		cooldown := retryableFailureCooldown(c, err)
-		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, c.GetString("original_model"), cooldown)
+		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
 		if shouldRecordFaultDomainFailure(c) {
 			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), c.GetString(constant.RequestIdKey), cooldown)
 		}
@@ -117,6 +118,18 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			other,
 		)
 	}
+}
+
+func recordChannelTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
+	if err != nil && !gatewayruntime.IsLongContextRequest(c) && isGatewayFailureStatus(err.StatusCode) {
+		gatewayruntime.RecordChannelGatewayFailure(channelID, modelName, err.StatusCode)
+		return
+	}
+	gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelID, modelName, retryableFailureCooldown(c, err))
+}
+
+func isGatewayFailureStatus(statusCode int) bool {
+	return statusCode == http.StatusBadGateway || statusCode == http.StatusGatewayTimeout || statusCode == 524
 }
 
 func retryableFailureCooldown(c *gin.Context, err *types.NewAPIError) time.Duration {

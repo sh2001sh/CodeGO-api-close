@@ -51,6 +51,8 @@ services:
       AIHUB_ROUTER_COST_SYNC_INTERVAL_SECONDS: ${AIHUB_ROUTER_COST_SYNC_INTERVAL_SECONDS:-60}
       AIHUB_ROUTER_COST_SYNC_MAX_AGE_SECONDS: ${AIHUB_ROUTER_COST_SYNC_MAX_AGE_SECONDS:-180}
       AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER: ${AIHUB_ROUTER_COST_SYNC_MAX_MULTIPLIER:-0.10}
+      AIHUB_ROUTER_CODEGO_FEEDBACK_PATH: ${AIHUB_ROUTER_CODEGO_FEEDBACK_PATH:-/var/run/aihub-router-feedback/events.jsonl}
+      AIHUB_ROUTER_CHANNEL_KEY_MAP: ${AIHUB_ROUTER_CHANNEL_KEY_MAP:-}
     ports:
       - "${CONTROL_PORT:-3000}:3000"
     volumes:
@@ -83,6 +85,8 @@ services:
       NODE_NAME: ${GATEWAY_NODE_NAME:-gateway-api-1}
     ports:
       - "${GATEWAY_PORT:-3001}:3001"
+    volumes:
+      - ${AIHUB_ROUTER_FEEDBACK_DIR:-/mnt/codego-data/aihub-router/feedback}:/var/run/aihub-router-feedback
     depends_on: *runtime-depends-on
     restart: unless-stopped
 

@@ -24,6 +24,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 	modelName := c.GetString("original_model")
 	failureClass := classifyUpstreamFailure(err)
+	gatewayruntime.RecordAIHubHealthFailure(c, channelError.ChannelId, modelName, err.StatusCode, string(failureClass))
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
 	if modelScopedFailure && modelName != "" {
 		group := selectedChannelGroup(c)

@@ -260,6 +260,9 @@ func selectRoutePoolCandidate(c *gin.Context, poolID int64, candidate *scoredRou
 	if c != nil {
 		gatewayruntime.MarkAutomaticPool(c)
 		c.Set(routePoolContextKey, RoutePoolSelection{PoolID: poolID, ProcurementCostMultiplier: candidate.cost})
+		if candidate.faultDomain != "" {
+			c.Set("channel_fault_domain", candidate.faultDomain)
+		}
 	}
 	return candidate.channel
 }

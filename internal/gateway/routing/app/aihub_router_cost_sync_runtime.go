@@ -129,6 +129,7 @@ func runAIHubRouterCostSyncTaskOnce(
 	now time.Time,
 ) {
 	updates := make(map[int]float64, len(sources))
+	faultDomains := make(map[int]string, len(sources))
 	for _, source := range sources {
 		snapshot, err := readAIHubRouterRouteSnapshot(source, now, maxAge, maxMultiplier)
 		if err != nil {
@@ -138,6 +139,7 @@ func runAIHubRouterCostSyncTaskOnce(
 			continue
 		}
 		updates[snapshot.ChannelID] = snapshot.Multiplier
+		faultDomains[snapshot.ChannelID] = fmt.Sprintf("aihub:%d", snapshot.GroupID)
 	}
 	if len(updates) == 0 {
 		return
@@ -148,9 +150,14 @@ func runAIHubRouterCostSyncTaskOnce(
 		platformobservability.SysLog(fmt.Sprintf("AIHubRouter cost sync update failed: %v", err))
 		return
 	}
-	if changed > 0 || len(missing) > 0 {
+	domainChanged, domainMissing, err := gatewaystore.UpdateRoutePoolMemberFaultDomains(faultDomains)
+	if err != nil {
+		platformobservability.SysLog(fmt.Sprintf("AIHubRouter fault-domain sync failed: %v", err))
+		return
+	}
+	if changed > 0 || domainChanged > 0 || len(missing) > 0 || len(domainMissing) > 0 {
 		platformobservability.SysLog(fmt.Sprintf(
-			"AIHubRouter cost sync completed: updated_members=%d missing_channels=%v", changed, missing,
+			"AIHubRouter cost sync completed: updated_members=%d fault_domains=%d missing_channels=%v missing_domains=%v", changed, domainChanged, missing, domainMissing,
 		))
 	}
 }

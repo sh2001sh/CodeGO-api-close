@@ -5,7 +5,6 @@ import (
 	"fmt"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
-	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	"strings"
 
@@ -14,149 +13,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
-
-// PreConsumeUserSubscription pre-consumes quota from an active subscription.
-func PreConsumeUserSubscription(requestID string, userID int, modelName string, amount int64) (*commercedomain.SubscriptionPreConsumeResult, error) {
-	if userID <= 0 {
-		return nil, errors.New("invalid userId")
-	}
-	if strings.TrimSpace(requestID) == "" {
-		return nil, errors.New("requestId is empty")
-	}
-	if amount <= 0 {
-		return nil, errors.New("amount must be > 0")
-	}
-
-	now := commercestore.GetDBTimestamp()
-	result := &commercedomain.SubscriptionPreConsumeResult{}
-	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		record := &commerceschema.SubscriptionPreConsumeRecord{}
-		query := tx.Where("request_id = ?", requestID).Limit(1).Find(record)
-		if query.Error != nil {
-			return query.Error
-		}
-		if query.RowsAffected > 0 {
-			if record.Status == "refunded" {
-				return errors.New("subscription pre-consume already refunded")
-			}
-			sub := &commerceschema.UserSubscription{}
-			if err := tx.Where("id = ?", record.UserSubscriptionId).First(sub).Error; err != nil {
-				return err
-			}
-			result.UserSubscriptionId = sub.Id
-			result.PreConsumed = record.PreConsumed
-			result.AmountTotal = sub.AmountTotal
-			result.AmountUsedBefore = sub.AmountUsed
-			result.AmountUsedAfter = sub.AmountUsed
-			return nil
-		}
-
-		var subs []commerceschema.UserSubscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("user_id = ? AND status = ? AND end_time > ?", userID, "active", now).
-			Order("end_time asc, id asc").
-			Find(&subs).Error; err != nil {
-			return errors.New("no active subscription")
-		}
-		if len(subs) == 0 {
-			return errors.New("no active subscription")
-		}
-
-		ordered, err := orderActiveUserSubscriptionsTx(tx, userID, subs)
-		if err != nil {
-			return err
-		}
-		for _, candidate := range ordered {
-			sub := candidate
-			plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)
-			if err != nil {
-				return err
-			}
-			if err := maybeResetUserSubscriptionWithPlanTx(tx, &sub, plan, now); err != nil {
-				return err
-			}
-
-			if sub.AmountTotal > 0 {
-				available, ledgerBacked, err := subscriptionLedgerAvailableQuotaTx(tx, &sub)
-				if err != nil {
-					return err
-				}
-				if ledgerBacked && available < amount {
-					continue
-				}
-				if !ledgerBacked && sub.AmountTotal-sub.AmountUsed < amount {
-					continue
-				}
-			}
-			usedBefore := sub.AmountUsed
-
-			periodAmount := getSubscriptionPeriodAmount(plan, &sub)
-			if !usesLegacySubscriptionPeriodicQuota(plan, &sub) && periodAmount > 0 {
-				periodRemain := periodAmount - sub.PeriodUsed
-				if periodRemain < amount {
-					continue
-				}
-			}
-
-			trimmedModelName := strings.TrimSpace(modelName)
-			if trimmedModelName != "" {
-				modelLimits := sub.GetModelLimitsMap()
-				if modelLimit, ok := modelLimits[trimmedModelName]; ok && modelLimit > 0 {
-					modelUsage := sub.GetModelUsageMap()
-					if modelUsage[trimmedModelName]+amount > modelLimit {
-						continue
-					}
-				}
-			}
-
-			record = &commerceschema.SubscriptionPreConsumeRecord{
-				RequestId:          requestID,
-				UserId:             userID,
-				UserSubscriptionId: sub.Id,
-				ModelName:          trimmedModelName,
-				PreConsumed:        amount,
-				Status:             "consumed",
-			}
-			if err := tx.Create(record).Error; err != nil {
-				dup := &commerceschema.SubscriptionPreConsumeRecord{}
-				if err2 := tx.Where("request_id = ?", requestID).First(dup).Error; err2 == nil {
-					if dup.Status == "refunded" {
-						return errors.New("subscription pre-consume already refunded")
-					}
-					result.UserSubscriptionId = sub.Id
-					result.PreConsumed = dup.PreConsumed
-					result.AmountTotal = sub.AmountTotal
-					result.AmountUsedBefore = sub.AmountUsed
-					result.AmountUsedAfter = sub.AmountUsed
-					return nil
-				}
-				return err
-			}
-			if err := reserveSubscriptionLedgerTx(tx, &sub, record); err != nil {
-				return err
-			}
-
-			if err := applySubscriptionUsageDelta(plan, &sub, record.ModelName, amount); err != nil {
-				return err
-			}
-			if err := tx.Save(&sub).Error; err != nil {
-				return err
-			}
-
-			result.UserSubscriptionId = sub.Id
-			result.PreConsumed = amount
-			result.AmountTotal = sub.AmountTotal
-			result.AmountUsedBefore = usedBefore
-			result.AmountUsedAfter = sub.AmountUsed
-			return nil
-		}
-		return fmt.Errorf("subscription quota insufficient, need=%d", amount)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
 
 func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscription, record *commerceschema.SubscriptionPreConsumeRecord) error {
 	if sub == nil || record == nil || sub.AmountTotal <= 0 {
@@ -172,11 +28,11 @@ func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscripti
 		return err
 	}
 
-	var entryCount int64
-	if err := tx.Model(&billingschema.BillingLedgerEntry{}).Where("account_id = ?", account.AccountID).Count(&entryCount).Error; err != nil {
+	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
+	if err != nil {
 		return err
 	}
-	if entryCount == 0 {
+	if !ledgerBacked {
 		available := sub.AmountTotal - sub.AmountUsed
 		if available > 0 {
 			if _, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
@@ -200,6 +56,18 @@ func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscripti
 		IdempotencyKey: "subscription:" + record.RequestId + ":reserve",
 	})
 	return err
+}
+
+func subscriptionLedgerHasEntriesTx(tx *gorm.DB, accountID string) (bool, error) {
+	if tx == nil || strings.TrimSpace(accountID) == "" {
+		return false, nil
+	}
+	var entry billingschema.BillingLedgerEntry
+	query := tx.Select("entry_id").Where("account_id = ?", accountID).Limit(1).Find(&entry)
+	if query.Error != nil {
+		return false, query.Error
+	}
+	return query.RowsAffected > 0, nil
 }
 
 // ReserveAdditionalSubscriptionQuota reserves a confirmed extra amount for a request.

@@ -9,6 +9,9 @@ services:
     image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-db-migrate
     environment: &migration-environment
       SQL_DSN: ${SQL_DSN:?set SQL_DSN in .env}
+      SQL_MAX_OPEN_CONNS: ${SQL_MAX_OPEN_CONNS:-20}
+      SQL_MAX_IDLE_CONNS: ${SQL_MAX_IDLE_CONNS:-5}
+      SQL_MAX_LIFETIME: ${SQL_MAX_LIFETIME:-300}
       TZ: ${TZ:-Asia/Shanghai}
       NODE_TYPE: master
     depends_on:
@@ -40,6 +43,9 @@ services:
     image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-control-api
     environment: &runtime-environment
       SQL_DSN: ${SQL_DSN:?set SQL_DSN in .env}
+      SQL_MAX_OPEN_CONNS: ${SQL_MAX_OPEN_CONNS:-20}
+      SQL_MAX_IDLE_CONNS: ${SQL_MAX_IDLE_CONNS:-5}
+      SQL_MAX_LIFETIME: ${SQL_MAX_LIFETIME:-300}
       REDIS_CONN_STRING: ${REDIS_CONN_STRING:?set REDIS_CONN_STRING in .env}
       TZ: ${TZ:-Asia/Shanghai}
       NODE_TYPE: master

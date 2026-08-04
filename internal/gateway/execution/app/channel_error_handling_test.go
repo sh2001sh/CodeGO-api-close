@@ -40,6 +40,18 @@ func TestCapacityResponseIsRetryableInsteadOfModelScoped(t *testing.T) {
 	require.True(t, isRetryableChannelFailure(err))
 }
 
+func TestDatabaseConnectionExhaustionIsRetryableTransientFailure(t *testing.T) {
+	err := types.NewOpenAIError(
+		errors.New("failed to connect to database: remaining connection slots are reserved (SQLSTATE 53300)"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusForbidden,
+	)
+
+	require.Equal(t, upstreamFailureTransient, classifyUpstreamFailure(err))
+	require.False(t, IsModelScopedUpstreamFailure(err))
+	require.True(t, isRetryableChannelFailure(err))
+}
+
 func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)

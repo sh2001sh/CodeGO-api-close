@@ -41,6 +41,11 @@ func TestSanitizeUpstreamQuotaErrorMessage(t *testing.T) {
 			expected: UpstreamQuotaGenericMessage,
 		},
 		{
+			name:     "sanitize upstream database connection exhaustion",
+			input:    "unexpected status 403 Forbidden: failed to connect to database: FATAL: remaining connection slots are reserved for non-replication superuser connections (SQLSTATE 53300)",
+			expected: UpstreamQuotaGenericMessage,
+		},
+		{
 			name:     "keep local site balance message",
 			input:    "站内余额不足, 当前余额: 0.000750, 本次所需: 0.002364 (request id: abc)",
 			expected: "站内余额不足, 当前余额: 0.000750, 本次所需: 0.002364 (request id: abc)",

@@ -12,8 +12,9 @@ var (
 	maskIPPattern     = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
 	maskAPIKeyPattern = regexp.MustCompile(`(['"]?)api_key:([^\s'"]+)(['"]?)`)
 
-	upstreamQuotaLeakPattern   = regexp.MustCompile(`(?i)(status_code\s*=\s*403.*(?:预扣费额度失败|用户剩余额度|需要预扣费额度)|(?:预扣费额度失败|用户剩余额度|需要预扣费额度).*(?:request id\s*:|status_code\s*=)|用户额度不足[^\n]*(?:剩余额度|余额)[^\n]*(?:request id\s*:|status_code\s*=)|\binsufficient[\s_]+(?:quota|balance)\b|pre-?consume.*quota.*(?:request id\s*:|status_code\s*=))`)
-	upstreamUnavailablePattern = regexp.MustCompile(`(?i)(\bno\s+available\s+(?:channel|route|provider|model)\b|\bno\s+(?:enabled|valid)\s+(?:channel|route|provider)\b|\b(?:model|service|channel|provider|upstream)\b[^\n]{0,80}\b(?:unavailable|not available|not found|not exist|not supported|temporarily unavailable)\b|(?:没有|无)可用(?:的)?(?:渠道|路由|供应商|模型)|(?:渠道|路由|模型|服务).{0,40}(?:不可用|不存在|不支持))`)
+	upstreamQuotaLeakPattern           = regexp.MustCompile(`(?i)(status_code\s*=\s*403.*(?:预扣费额度失败|用户剩余额度|需要预扣费额度)|(?:预扣费额度失败|用户剩余额度|需要预扣费额度).*(?:request id\s*:|status_code\s*=)|用户额度不足[^\n]*(?:剩余额度|余额)[^\n]*(?:request id\s*:|status_code\s*=)|\binsufficient[\s_]+(?:quota|balance)\b|pre-?consume.*quota.*(?:request id\s*:|status_code\s*=))`)
+	upstreamUnavailablePattern         = regexp.MustCompile(`(?i)(\bno\s+available\s+(?:channel|route|provider|model)\b|\bno\s+(?:enabled|valid)\s+(?:channel|route|provider)\b|\b(?:model|service|channel|provider|upstream)\b[^\n]{0,80}\b(?:unavailable|not available|not found|not exist|not supported|temporarily unavailable)\b|(?:没有|无)可用(?:的)?(?:渠道|路由|供应商|模型)|(?:渠道|路由|模型|服务).{0,40}(?:不可用|不存在|不支持))`)
+	upstreamDatabaseUnavailablePattern = regexp.MustCompile(`(?i)(remaining\s+connection\s+slots|too\s+many\s+connections|connection\s+pool[^\n]{0,80}(?:exhausted|full|unavailable)|failed\s+to\s+connect\s+to[^\n]{0,80}\bdatabase\b|sqlstate\s*[:=]?\s*53300)`)
 )
 
 const UpstreamQuotaGenericMessage = "当前模型服务暂不可用，请稍后重试"
@@ -145,7 +146,9 @@ func IsUpstreamProviderUnavailableMessage(message string) bool {
 	if message == "" {
 		return false
 	}
-	return upstreamQuotaLeakPattern.MatchString(message) || upstreamUnavailablePattern.MatchString(message)
+	return upstreamQuotaLeakPattern.MatchString(message) ||
+		upstreamUnavailablePattern.MatchString(message) ||
+		upstreamDatabaseUnavailablePattern.MatchString(message)
 }
 
 // SanitizeUpstreamQuotaErrorMessage is kept for callers that only need the legacy name.

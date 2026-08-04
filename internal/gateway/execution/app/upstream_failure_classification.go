@@ -61,6 +61,10 @@ func isUpstreamCapacityFailure(err *types.NewAPIError) bool {
 		"try a different model",
 		"try another model",
 		"temporarily overloaded",
+		"remaining connection slots",
+		"too many connections",
+		"connection pool exhausted",
+		"sqlstate 53300",
 	)
 }
 

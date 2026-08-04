@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/glebarez/sqlite"
 	auditdomain "github.com/sh2001sh/new-api/internal/audit/domain"
@@ -26,6 +27,18 @@ import (
 	"time"
 )
 
+const (
+	defaultSQLMaxIdleConnections = 5
+	defaultSQLMaxOpenConnections = 20
+	defaultSQLMaxLifetimeSeconds = 300
+)
+
+type sqlPoolConfig struct {
+	maxIdle         int
+	maxOpen         int
+	maxLifetimeSecs int
+}
+
 // InitPrimaryDB initializes the primary application database.
 func InitPrimaryDB() error {
 	db, err := openDatabase("SQL_DSN", false)
@@ -47,9 +60,7 @@ func InitPrimaryDB() error {
 	if err != nil {
 		return err
 	}
-	sqlDB.SetMaxIdleConns(platformconfig.GetEnvOrDefaultInt("SQL_MAX_IDLE_CONNS", 100))
-	sqlDB.SetMaxOpenConns(platformconfig.GetEnvOrDefaultInt("SQL_MAX_OPEN_CONNS", 1000))
-	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(platformconfig.GetEnvOrDefaultInt("SQL_MAX_LIFETIME", 60)))
+	configureSQLPool(sqlDB)
 
 	if !platformconfig.IsMasterNode {
 		return nil
@@ -89,9 +100,7 @@ func InitLogDB() error {
 	if err != nil {
 		return err
 	}
-	sqlDB.SetMaxIdleConns(platformconfig.GetEnvOrDefaultInt("SQL_MAX_IDLE_CONNS", 100))
-	sqlDB.SetMaxOpenConns(platformconfig.GetEnvOrDefaultInt("SQL_MAX_OPEN_CONNS", 1000))
-	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(platformconfig.GetEnvOrDefaultInt("SQL_MAX_LIFETIME", 60)))
+	configureSQLPool(sqlDB)
 
 	if !platformconfig.IsMasterNode {
 		return nil
@@ -103,6 +112,45 @@ func InitLogDB() error {
 
 	platformobservability.SysLog("database migration started")
 	return migrateLogDB()
+}
+
+func configureSQLPool(sqlDB *sql.DB) {
+	if sqlDB == nil {
+		return
+	}
+	config := resolveSQLPoolConfig()
+	sqlDB.SetMaxIdleConns(config.maxIdle)
+	sqlDB.SetMaxOpenConns(config.maxOpen)
+	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(config.maxLifetimeSecs))
+	platformobservability.SysLog(fmt.Sprintf(
+		"database connection pool configured: max_open=%d max_idle=%d max_lifetime=%ds",
+		config.maxOpen,
+		config.maxIdle,
+		config.maxLifetimeSecs,
+	))
+}
+
+func resolveSQLPoolConfig() sqlPoolConfig {
+	maxOpen := platformconfig.GetEnvOrDefaultInt("SQL_MAX_OPEN_CONNS", defaultSQLMaxOpenConnections)
+	if maxOpen <= 0 {
+		maxOpen = defaultSQLMaxOpenConnections
+	}
+	maxIdle := platformconfig.GetEnvOrDefaultInt("SQL_MAX_IDLE_CONNS", defaultSQLMaxIdleConnections)
+	if maxIdle < 0 {
+		maxIdle = defaultSQLMaxIdleConnections
+	}
+	if maxIdle > maxOpen {
+		maxIdle = maxOpen
+	}
+	maxLifetimeSecs := platformconfig.GetEnvOrDefaultInt("SQL_MAX_LIFETIME", defaultSQLMaxLifetimeSeconds)
+	if maxLifetimeSecs <= 0 {
+		maxLifetimeSecs = defaultSQLMaxLifetimeSeconds
+	}
+	return sqlPoolConfig{
+		maxIdle:         maxIdle,
+		maxOpen:         maxOpen,
+		maxLifetimeSecs: maxLifetimeSecs,
+	}
 }
 
 // CloseDatabases closes the primary and log database handles.

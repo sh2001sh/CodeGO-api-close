@@ -19,7 +19,6 @@ import (
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
-	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	requestsettings "github.com/sh2001sh/new-api/internal/platform/requestsettings"
@@ -227,6 +226,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		logger.LogInfo(c, fmt.Sprintf("妯″瀷 %s 鍏嶈垂锛岃烦杩囬鎵ｈ垂", relayInfo.OriginModelName))
 	}
 
+	retryTimes := gatewayroutingapp.EffectiveRetryTimes(relayInfo.TokenGroup)
 	retryParam := &gatewayroutingapp.RetryParam{
 		Ctx:        c,
 		TokenGroup: relayInfo.TokenGroup,
@@ -237,7 +237,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.LastError = nil
 	streamFailureCircuitChecked := false
 
-	for ; retryParam.GetRetry() <= platformconfig.RetryTimes; retryParam.IncreaseRetry() {
+	for ; retryParam.GetRetry() <= retryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
@@ -313,7 +313,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError,
 		)
 
-		if !shouldRetry(c, newAPIError, platformconfig.RetryTimes-retryParam.GetRetry()) {
+		if !shouldRetry(c, newAPIError, retryTimes-retryParam.GetRetry()) {
 			break
 		}
 		relaycommon.RecordRouteDecisionRetry(c)

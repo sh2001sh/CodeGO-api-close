@@ -10,6 +10,7 @@ import (
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,19 @@ func TestNormalizeTokenGroupDefaultsToAuto(t *testing.T) {
 	assert.Equal(t, AutoGroupName, NormalizeTokenGroup(""))
 	assert.Equal(t, AutoGroupName, NormalizeTokenGroup("  "))
 	assert.Equal(t, "premium", NormalizeTokenGroup(" premium "))
+}
+
+func TestEffectiveRetryTimesProvidesOneAutomaticRetry(t *testing.T) {
+	original := platformconfig.RetryTimes
+	t.Cleanup(func() { platformconfig.RetryTimes = original })
+
+	platformconfig.RetryTimes = 0
+	assert.Equal(t, 1, EffectiveRetryTimes(AutoGroupName))
+	assert.Equal(t, 1, EffectiveRetryTimes("default"))
+	assert.Equal(t, 0, EffectiveRetryTimes(""))
+
+	platformconfig.RetryTimes = 2
+	assert.Equal(t, 2, EffectiveRetryTimes(AutoGroupName))
 }
 
 func TestGetHealthySatisfiedChannelFallsBackAfterPrimaryCooldown(t *testing.T) {

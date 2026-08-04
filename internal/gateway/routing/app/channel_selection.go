@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,21 @@ type RetryParam struct {
 	ModelName    string
 	Retry        *int
 	resetNextTry bool
+}
+
+// EffectiveRetryTimes keeps implicit channel selection resilient when the
+// global retry option is left at its legacy zero default. Explicit channel
+// requests still stop in shouldRetry; all other relay requests get one bounded
+// retry so a transient upstream timeout can move to a healthy channel.
+func EffectiveRetryTimes(tokenGroup string) int {
+	retryTimes := platformconfig.RetryTimes
+	if retryTimes < 0 {
+		return 0
+	}
+	if strings.TrimSpace(tokenGroup) != "" && retryTimes == 0 {
+		return 1
+	}
+	return retryTimes
 }
 
 var selectRandomSatisfiedChannel = gatewaystore.GetRandomSatisfiedChannel

@@ -36,9 +36,13 @@ func TestRunLedgerWorkerBatchRebuildsSnapshotAndPublishesEvents(t *testing.T) {
 	require.NoError(t, err)
 	_, err = billingdomain.SettleReservation(billingdomain.SettleReservationParams{ReservationID: reservation.ReservationID, ActualAmount: 250, IdempotencyKey: "settle-42"})
 	require.NoError(t, err)
+	secondAccount, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{AccountType: "wallet", OwnerType: "user", OwnerID: 43})
+	require.NoError(t, err)
+	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{AccountID: secondAccount.AccountID, Amount: 500, IdempotencyKey: "credit-43"})
+	require.NoError(t, err)
 
 	require.NoError(t, db.Model(&billingschema.BillingBalanceSnapshot{}).Where("account_id = ?", account.AccountID).Updates(map[string]any{"available_balance": 0, "consumed_total": 0}).Error)
-	processed, err := RunLedgerWorkerBatch(context.Background(), 10)
+	processed, err := processLedgerOutboxAccount(context.Background(), account.AccountID)
 	require.NoError(t, err)
 	require.Equal(t, 3, processed)
 
@@ -50,19 +54,11 @@ func TestRunLedgerWorkerBatchRebuildsSnapshotAndPublishesEvents(t *testing.T) {
 
 	var pending int64
 	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).Where("status = ?", billingschema.BillingOutboxStatusPending).Count(&pending).Error)
+	require.Equal(t, int64(1), pending)
+
+	processed, err = RunLedgerWorkerBatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).Where("status = ?", billingschema.BillingOutboxStatusPending).Count(&pending).Error)
 	require.Zero(t, pending)
-}
-
-func TestGroupLedgerOutboxEventsCollapsesSameAccount(t *testing.T) {
-	batches := groupLedgerOutboxEvents([]billingschema.BillingOutboxEvent{
-		{EventID: "event-1", AccountID: "account-a"},
-		{EventID: "event-2", AccountID: "account-b"},
-		{EventID: "event-3", AccountID: "account-a"},
-	})
-
-	require.Len(t, batches, 2)
-	require.Equal(t, "account-a", batches[0].AccountID)
-	require.Equal(t, []string{"event-1", "event-3"}, batches[0].EventIDs)
-	require.Equal(t, "account-b", batches[1].AccountID)
-	require.Equal(t, []string{"event-2"}, batches[1].EventIDs)
 }

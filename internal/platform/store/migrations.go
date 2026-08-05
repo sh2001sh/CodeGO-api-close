@@ -29,8 +29,9 @@ func (schemaMigration) TableName() string {
 }
 
 type schemaMigrationStep struct {
-	ID  string
-	Run func(*gorm.DB) error
+	ID           string
+	Run          func(*gorm.DB) error
+	RunOutsideTx func(*gorm.DB) error
 }
 
 // V2MigrationIDs returns the ordered migration contract required by CodeGo v2.
@@ -61,6 +62,7 @@ func V2MigrationIDs() []string {
 		"20260801_daily_lucky_number",
 		"20260802_gateway_route_pool_fault_domains",
 		"20260804_daily_lucky_reward_notifications",
+		"20260805_billing_outbox_pending_lookup",
 	}
 }
 
@@ -179,6 +181,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260804_daily_lucky_reward_notifications", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&commerceschema.SubscriptionLuckyRewardNotification{})
 		}},
+		{ID: "20260805_billing_outbox_pending_lookup", RunOutsideTx: migratePendingOutboxLookupIndex},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -204,6 +207,15 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		if dryRun {
 			continue
 		}
+		if step.RunOutsideTx != nil {
+			if err := step.RunOutsideTx(db); err != nil {
+				return fmt.Errorf("apply migration %s: %w", step.ID, err)
+			}
+			if err := db.Create(&schemaMigration{ID: step.ID}).Error; err != nil {
+				return fmt.Errorf("record migration %s: %w", step.ID, err)
+			}
+			continue
+		}
 		if err := db.Transaction(func(tx *gorm.DB) error {
 			if err := step.Run(tx); err != nil {
 				return err
@@ -214,6 +226,27 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}
 	}
 	return nil
+}
+
+// migratePendingOutboxLookupIndex keeps the ledger worker's pending-event
+// query index-only instead of repeatedly scanning the full outbox table.
+// PostgreSQL requires CONCURRENTLY outside a transaction to avoid blocking
+// relay billing while the index is built on a busy production table.
+func migratePendingOutboxLookupIndex(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&billingschema.BillingOutboxEvent{}) {
+		return nil
+	}
+	if platformdb.UsingPostgreSQL {
+		return db.Exec(`
+			CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_pending_created
+			ON billing.outbox_events (created_at, event_id) INCLUDE (account_id)
+			WHERE status = 'pending'
+		`).Error
+	}
+	return db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_created
+		ON billing_outbox_events (status, created_at, event_id)
+	`).Error
 }
 
 func migrateFirstPurchaseDiscount(tx *gorm.DB) error {

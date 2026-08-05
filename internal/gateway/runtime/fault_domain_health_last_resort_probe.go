@@ -10,7 +10,9 @@ func TryStartFaultDomainLastResortProbe(domain, model string) bool {
 		return false
 	}
 	lock := faultDomainHealthLock(domain)
-	lock.Lock()
+	if !lock.TryLock() {
+		return false
+	}
 	defer lock.Unlock()
 
 	now := time.Now().UTC()

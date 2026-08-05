@@ -249,8 +249,12 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	select {
 	case <-ticker.C:
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
+		cancel()
+		closeTimedOutStream(resp)
 	case <-streamingMaxTimer(maxTimer):
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
+		cancel()
+		closeTimedOutStream(resp)
 	case <-stopChan:
 	case <-c.Request.Context().Done():
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
@@ -268,4 +272,13 @@ func streamingMaxTimer(timer *time.Timer) <-chan time.Time {
 		return nil
 	}
 	return timer.C
+}
+
+// closeTimedOutStream interrupts Scanner.Scan immediately instead of waiting
+// for an upstream connection that has already exceeded its stream budget.
+func closeTimedOutStream(resp *http.Response) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+	_ = resp.Body.Close()
 }

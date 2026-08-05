@@ -271,7 +271,12 @@ func TryStartChannelRecoveryProbe(channelID int, model string) bool {
 		return false
 	}
 	lock := channelHealthLock(channelID)
-	lock.Lock()
+	// A recovery probe is optional. Waiting behind a busy health update turns
+	// an all-cooling pool into a long request queue, so another request can
+	// try again after the current update/probe finishes.
+	if !lock.TryLock() {
+		return false
+	}
 	defer lock.Unlock()
 
 	now := time.Now().UTC()

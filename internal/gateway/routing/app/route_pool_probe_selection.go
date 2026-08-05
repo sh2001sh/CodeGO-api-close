@@ -5,11 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 )
-
-const routePoolProbeWaitDuration = 750 * time.Millisecond
 
 // reserveRoutePoolLastResortProbe permits one cooling candidate only after
 // normal candidates and expired-circuit probes have both been exhausted.
@@ -43,20 +40,6 @@ func reserveRoutePoolRecoveryProbe(probes []scoredRoutePoolCandidate, modelName 
 		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
 	}
 	return nil
-}
-
-func waitForRoutePoolProbe(c *gin.Context) bool {
-	if c == nil || c.Request == nil {
-		return false
-	}
-	timer := time.NewTimer(routePoolProbeWaitDuration)
-	defer timer.Stop()
-	select {
-	case <-c.Request.Context().Done():
-		return false
-	case <-timer.C:
-		return true
-	}
 }
 
 // chooseBestRoutePoolLastResortProbe favors demonstrated recovery history.

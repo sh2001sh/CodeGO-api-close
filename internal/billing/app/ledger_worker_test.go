@@ -52,3 +52,17 @@ func TestRunLedgerWorkerBatchRebuildsSnapshotAndPublishesEvents(t *testing.T) {
 	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).Where("status = ?", billingschema.BillingOutboxStatusPending).Count(&pending).Error)
 	require.Zero(t, pending)
 }
+
+func TestGroupLedgerOutboxEventsCollapsesSameAccount(t *testing.T) {
+	batches := groupLedgerOutboxEvents([]billingschema.BillingOutboxEvent{
+		{EventID: "event-1", AccountID: "account-a"},
+		{EventID: "event-2", AccountID: "account-b"},
+		{EventID: "event-3", AccountID: "account-a"},
+	})
+
+	require.Len(t, batches, 2)
+	require.Equal(t, "account-a", batches[0].AccountID)
+	require.Equal(t, []string{"event-1", "event-3"}, batches[0].EventIDs)
+	require.Equal(t, "account-b", batches[1].AccountID)
+	require.Equal(t, []string{"event-2"}, batches[1].EventIDs)
+}

@@ -11,7 +11,9 @@ func TryStartChannelLastResortProbe(channelID int, model string) bool {
 		return false
 	}
 	lock := channelHealthLock(channelID)
-	lock.Lock()
+	if !lock.TryLock() {
+		return false
+	}
 	defer lock.Unlock()
 
 	now := time.Now().UTC()

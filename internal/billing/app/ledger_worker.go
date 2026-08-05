@@ -54,16 +54,42 @@ func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 	}
 
 	processed := 0
-	for _, event := range events {
-		if err := processLedgerOutboxEvent(ctx, event.EventID); err != nil {
-			if markErr := markLedgerOutboxFailure(ctx, event.EventID, err); markErr != nil {
-				return processed, fmt.Errorf("process ledger event: %w; mark failure: %v", err, markErr)
+	for _, batch := range groupLedgerOutboxEvents(events) {
+		count, err := processLedgerOutboxAccountBatch(ctx, batch)
+		if err != nil {
+			if markErr := markLedgerOutboxBatchFailure(ctx, batch.EventIDs, err); markErr != nil {
+				return processed, fmt.Errorf("process ledger account batch: %w; mark failure: %v", err, markErr)
 			}
 			continue
 		}
-		processed++
+		processed += count
 	}
 	return processed, nil
+}
+
+type ledgerOutboxAccountBatch struct {
+	AccountID string
+	EventIDs  []string
+}
+
+// groupLedgerOutboxEvents preserves the oldest-event order while collapsing
+// repeated updates for one account into a single snapshot rebuild.
+func groupLedgerOutboxEvents(events []billingschema.BillingOutboxEvent) []ledgerOutboxAccountBatch {
+	batches := make([]ledgerOutboxAccountBatch, 0, len(events))
+	indexes := make(map[string]int, len(events))
+	for _, event := range events {
+		if event.AccountID == "" || event.EventID == "" {
+			continue
+		}
+		index, found := indexes[event.AccountID]
+		if !found {
+			indexes[event.AccountID] = len(batches)
+			batches = append(batches, ledgerOutboxAccountBatch{AccountID: event.AccountID})
+			index = len(batches) - 1
+		}
+		batches[index].EventIDs = append(batches[index].EventIDs, event.EventID)
+	}
+	return batches
 }
 
 // RebuildBalanceSnapshot recalculates one account projection from immutable ledger data.
@@ -79,32 +105,53 @@ func RebuildBalanceSnapshot(ctx context.Context, accountID string) error {
 	})
 }
 
-func processLedgerOutboxEvent(ctx context.Context, eventID string) error {
-	return platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var event billingschema.BillingOutboxEvent
+func processLedgerOutboxAccountBatch(ctx context.Context, batch ledgerOutboxAccountBatch) (int, error) {
+	if batch.AccountID == "" || len(batch.EventIDs) == 0 {
+		return 0, nil
+	}
+
+	processed := 0
+	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var events []billingschema.BillingOutboxEvent
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("event_id = ?", eventID).
-			First(&event).Error; err != nil {
+			Where("event_id IN ? AND status = ?", batch.EventIDs, billingschema.BillingOutboxStatusPending).
+			Find(&events).Error; err != nil {
 			return err
 		}
-		if event.Status == billingschema.BillingOutboxStatusPublished {
+		if len(events) == 0 {
 			return nil
 		}
-		if err := rebuildBalanceSnapshotTx(tx, event.AccountID); err != nil {
+		if err := rebuildBalanceSnapshotTx(tx, batch.AccountID); err != nil {
 			return err
 		}
+
+		eventIDs := make([]string, 0, len(events))
+		for _, event := range events {
+			eventIDs = append(eventIDs, event.EventID)
+		}
 		now := time.Now().UTC()
-		return tx.Model(&event).Updates(map[string]any{
-			"status":       billingschema.BillingOutboxStatusPublished,
-			"published_at": &now,
-			"last_error":   "",
-		}).Error
+		result := tx.Model(&billingschema.BillingOutboxEvent{}).
+			Where("event_id IN ? AND status = ?", eventIDs, billingschema.BillingOutboxStatusPending).
+			Updates(map[string]any{
+				"status":       billingschema.BillingOutboxStatusPublished,
+				"published_at": &now,
+				"last_error":   "",
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		processed = int(result.RowsAffected)
+		return nil
 	})
+	return processed, err
 }
 
-func markLedgerOutboxFailure(ctx context.Context, eventID string, cause error) error {
+func markLedgerOutboxBatchFailure(ctx context.Context, eventIDs []string, cause error) error {
+	if len(eventIDs) == 0 {
+		return nil
+	}
 	return platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
-		Where("event_id = ?", eventID).
+		Where("event_id IN ? AND status = ?", eventIDs, billingschema.BillingOutboxStatusPending).
 		Updates(map[string]any{
 			"attempts":   gorm.Expr("attempts + ?", 1),
 			"last_error": cause.Error(),
@@ -119,22 +166,10 @@ func rebuildBalanceSnapshotTx(tx *gorm.DB, accountID string) error {
 		return err
 	}
 
-	var existing billingschema.BillingBalanceSnapshot
-	if err := tx.Where("account_id = ?", accountID).First(&existing).Error; err != nil && err != gorm.ErrRecordNotFound {
-		return err
-	}
-
 	snapshot, err := aggregateExpectedBalanceSnapshot(tx, accountID)
 	if err != nil {
 		return err
 	}
-	if snapshotDiffers(existing, snapshot) {
-		platformobservability.SysError(fmt.Sprintf(
-			"ledger snapshot reconciliation mismatch account_id=%s actual=%+v expected=%+v",
-			accountID, existing, snapshot,
-		))
-	}
-
 	return tx.Save(&snapshot).Error
 }
 

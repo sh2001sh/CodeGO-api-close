@@ -71,8 +71,12 @@ func selectAutomaticPoolChannelWithProbeWait(c *gin.Context, group, modelName st
 		if channelAlreadyUsed(c, candidate.Channel.Id) {
 			continue
 		}
-		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
 		faultDomain := routePoolFaultDomain(candidate.Member, candidate.Channel)
+		if gatewayruntime.IsFaultDomainExcluded(c, faultDomain) {
+			gatewayruntime.ExcludeRouteDecisionCandidate(c, "failed_fault_domain")
+			continue
+		}
+		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
 		domainHealth, domainFound := gatewayruntime.GetFaultDomainHealth(faultDomain, modelName)
 		channelCooling := found && ((health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now)) ||
 			(health.State == gatewayruntime.ChannelHealthHalfOpen && (health.CoolingUntil.After(now) || health.RecoveryProbeUntil.After(now))))

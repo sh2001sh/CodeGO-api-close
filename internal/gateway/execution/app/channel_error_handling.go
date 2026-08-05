@@ -26,6 +26,12 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	failureClass := classifyUpstreamFailure(err)
 	gatewayruntime.RecordAIHubHealthFailure(c, channelError.ChannelId, modelName, err.StatusCode, string(failureClass))
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
+	if isRetryableChannelFailure(err) && !modelScopedFailure {
+		// A retry must leave the complete upstream fault domain. Channel IDs
+		// can represent different keys on the same provider host.
+		gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
+		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+	}
 	if modelScopedFailure && modelName != "" {
 		group := selectedChannelGroup(c)
 		alternative, lookupErr := gatewaystore.HasAlternativeEnabledAbility(channelError.ChannelId, group, modelName)

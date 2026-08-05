@@ -150,7 +150,7 @@ func getHealthySatisfiedChannelWithContext(c *gin.Context, group string, modelNa
 	var degradedCandidate *gatewayschema.Channel
 	seenPriorities := make(map[int64]struct{})
 	for priorityRetry := retry; priorityRetry < retry+16; priorityRetry++ {
-		healthy, degraded, priority, found, err := getHealthySatisfiedChannelAtPriority(group, modelName, priorityRetry)
+		healthy, degraded, priority, found, err := getHealthySatisfiedChannelAtPriority(c, group, modelName, priorityRetry)
 		if err != nil {
 			return nil, err
 		}
@@ -171,12 +171,16 @@ func getHealthySatisfiedChannelWithContext(c *gin.Context, group string, modelNa
 	return degradedCandidate, nil
 }
 
-func getHealthySatisfiedChannelAtPriority(group string, modelName string, retry int) (healthy *gatewayschema.Channel, degraded *gatewayschema.Channel, priority int64, found bool, err error) {
+func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelName string, retry int) (healthy *gatewayschema.Channel, degraded *gatewayschema.Channel, priority int64, found bool, err error) {
 	const maxSelectionAttempts = 16
 	for attempt := 0; attempt < maxSelectionAttempts; attempt++ {
 		channel, err := selectRandomSatisfiedChannel(group, modelName, retry)
 		if err != nil || channel == nil {
 			return nil, degraded, priority, found, err
+		}
+		faultDomain := gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL())
+		if gatewayruntime.IsFaultDomainExcluded(c, faultDomain) {
+			continue
 		}
 		if !found {
 			priority = channel.GetPriority()

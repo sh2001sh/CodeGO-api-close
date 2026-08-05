@@ -2,9 +2,31 @@ package runtime
 
 import (
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 )
+
+// StreamMaxDuration returns the absolute upstream stream budget. GPT requests
+// use a shorter normal budget and a longer budget for large prompts; other
+// protocols retain their existing idle-time behavior until they gain a
+// protocol-specific total-duration policy.
+func StreamMaxDuration(model string, promptTokens int) time.Duration {
+	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-") {
+		return 0
+	}
+	if promptTokens >= LongContextPromptTokenThreshold {
+		if constant.StreamingLongContextMaxDuration > 0 {
+			return time.Duration(constant.StreamingLongContextMaxDuration) * time.Second
+		}
+		return 540 * time.Second
+	}
+	if constant.StreamingMaxDuration > 0 {
+		return time.Duration(constant.StreamingMaxDuration) * time.Second
+	}
+	return 240 * time.Second
+}
 
 const (
 	LongContextPromptTokenThreshold = 100_000

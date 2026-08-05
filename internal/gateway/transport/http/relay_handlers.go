@@ -283,8 +283,27 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 
+		faultDomain := c.GetString("channel_fault_domain")
+		releaseFaultDomainSlot, admitted, _ := relaycommon.TryAcquireFaultDomainSlot(faultDomain, relayInfo.OriginModelName)
+		if !admitted {
+			relaycommon.ExcludeFaultDomain(c, faultDomain)
+			relaycommon.ExcludeRouteDecisionCandidate(c, "fault_domain_capacity")
+			newAPIError = types.NewErrorWithStatusCode(
+				errors.New("upstream fault domain is at capacity"),
+				types.ErrorCodeGetChannelFailed,
+				http.StatusServiceUnavailable,
+			)
+			if retryTimes-retryParam.GetRetry() > 0 {
+				relaycommon.RecordRouteDecisionRetry(c)
+				gatewayroutingapp.RecordAutoGroupFailure(c, relayInfo.OriginModelName)
+				continue
+			}
+			break
+		}
+
 		addUsedChannel(c, channel.Id)
 		if bodyErr := restoreRelayRequestBody(c); bodyErr != nil {
+			releaseFaultDomainSlot(true, 0)
 			newAPIError = bodyErr
 			break
 		}
@@ -292,6 +311,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		if !currentPriceData.FreeModel {
 			newAPIError = billingapp.PreConsumeRelayBilling(c, currentPriceData.QuotaToPreConsume, relayInfo)
 			if newAPIError != nil {
+				releaseFaultDomainSlot(true, 0)
 				break
 			}
 		}
@@ -305,6 +325,13 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = geminiRelayHandler(c, relayInfo)
 		default:
 			newAPIError = relayHandler(c, relayInfo)
+		}
+		if releaseFaultDomainSlot != nil {
+			if newAPIError == nil {
+				releaseFaultDomainSlot(true, 0)
+			} else {
+				releaseFaultDomainSlot(false, newAPIError.StatusCode)
+			}
 		}
 
 		if newAPIError == nil {

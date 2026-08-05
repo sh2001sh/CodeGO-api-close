@@ -53,14 +53,20 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	}()
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	streamingMaxDuration := relaycommon.StreamMaxDuration(info.OriginModelName, info.GetEstimatePromptTokens())
 	var (
 		stopChan   = make(chan bool, 3)
 		scanner    = NewStreamScanner(resp.Body)
 		ticker     = time.NewTicker(streamingTimeout)
+		maxTimer   *time.Timer
 		pingTicker *time.Ticker
 		writeMutex sync.Mutex
 		wg         sync.WaitGroup
 	)
+	if streamingMaxDuration > 0 {
+		maxTimer = time.NewTimer(streamingMaxDuration)
+		defer maxTimer.Stop()
+	}
 
 	generalSettings := platformgeneral.GetSetting()
 	pingEnabled := generalSettings.PingIntervalEnabled && !info.DisablePing
@@ -243,6 +249,8 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	select {
 	case <-ticker.C:
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
+	case <-streamingMaxTimer(maxTimer):
+		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
 	case <-stopChan:
 	case <-c.Request.Context().Done():
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
@@ -253,4 +261,11 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	} else {
 		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
 	}
+}
+
+func streamingMaxTimer(timer *time.Timer) <-chan time.Time {
+	if timer == nil {
+		return nil
+	}
+	return timer.C
 }

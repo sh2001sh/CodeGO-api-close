@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-	CalendarClock,
-	CheckCircle2,
-	CircleAlert,
+  CalendarClock,
+  CheckCircle2,
+  CircleAlert,
   Crown,
   ExternalLink,
   Layers3,
@@ -31,7 +31,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-	getSubscriptionOrderStatus,
+  getSubscriptionOrderStatus,
+  cancelSubscriptionOrder,
   paySubscriptionCreem,
   paySubscriptionEpay,
   paySubscriptionStripe,
@@ -277,14 +278,29 @@ export function SubscriptionPurchaseDialog(props: Props) {
     }
   }, [paymentTracker.orderId, paymentTracker.stage, props.open])
 
-	const selectedEpayMethodLabel = useMemo(
+  const selectedEpayMethodLabel = useMemo(
     () => getMethodLabel(selectedEpayMethod, paymentMethods, t),
     [paymentMethods, selectedEpayMethod, t]
-	)
+  )
 
-	const handleOpenChange = (open: boolean) => {
-		props.onOpenChange(open)
-	}
+  const handleOpenChange = (open: boolean) => {
+    if (open) {
+      props.onOpenChange(true)
+      return
+    }
+    if (paying) return
+
+    const isUnpaidOrder =
+      paymentTracker.stage === 'pending' &&
+      paymentTracker.orderId &&
+      paymentTracker.orderStatus?.status !== 'success'
+    if (!isUnpaidOrder) {
+      props.onOpenChange(false)
+      return
+    }
+
+    void cancelPendingPayment()
+  }
 
   if (!plan || !planRecord) return null
 
@@ -413,6 +429,36 @@ export function SubscriptionPurchaseDialog(props: Props) {
     toast.success('支付请求已发起')
   }
 
+  const cancelPendingPayment = async () => {
+    if (
+      !paymentTracker.orderId ||
+      paymentTracker.orderStatus?.status === 'success'
+    ) {
+      props.onOpenChange(false)
+      return
+    }
+
+    setPaying(true)
+    try {
+      const response = await cancelSubscriptionOrder(paymentTracker.orderId)
+      if (!response.success) {
+        toast.error(response.message || '取消支付失败，请稍后重试')
+        return
+      }
+      setPaymentTracker((current) => ({
+        ...current,
+        stage: 'cancelled',
+        message: '订单已取消，预留的套餐折扣卡已退回。',
+      }))
+      toast.success('订单已取消，套餐折扣卡已退回')
+      props.onOpenChange(false)
+    } catch {
+      toast.error('取消支付失败，请稍后重试')
+    } finally {
+      setPaying(false)
+    }
+  }
+
   const handlePayStripe = async () => {
     setPaying(true)
     try {
@@ -535,17 +581,17 @@ export function SubscriptionPurchaseDialog(props: Props) {
         title: '支付成功',
         tone: 'border-success/20 bg-success/5',
       },
-		failed: {
-			icon: <XCircle className='text-destructive h-5 w-5' />,
-			title: '支付失败',
-			tone: 'border-destructive/20 bg-destructive/5',
-		},
-		cancelled: {
-			icon: <XCircle className='text-muted-foreground h-5 w-5' />,
-			title: '已停止等待',
-			tone: 'border-border/70 bg-muted/40',
-		},
-		idle: {
+      failed: {
+        icon: <XCircle className='text-destructive h-5 w-5' />,
+        title: '支付失败',
+        tone: 'border-destructive/20 bg-destructive/5',
+      },
+      cancelled: {
+        icon: <XCircle className='text-muted-foreground h-5 w-5' />,
+        title: '已停止等待',
+        tone: 'border-border/70 bg-muted/40',
+      },
+      idle: {
         icon: null,
         title: '',
         tone: '',
@@ -565,7 +611,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
           </div>
           <div className='min-w-0'>
             <div className='text-foreground text-sm font-semibold'>
-            {isFulfilling ? '正在发放套餐权益' : statusConfig.title}
+              {isFulfilling ? '正在发放套餐权益' : statusConfig.title}
             </div>
             <p className='text-muted-foreground mt-1 text-sm leading-6'>
               {paymentTracker.message}
@@ -614,13 +660,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
 
           {paymentTracker.stage === 'pending' ? (
             <Button
-              variant='ghost'
-			  onClick={() => handleOpenChange(false)}
+              variant='outline'
+              onClick={() => void cancelPendingPayment()}
+              disabled={paying}
             >
-              稍后查看
+              取消支付
             </Button>
           ) : (
-			<Button variant='default' onClick={() => handleOpenChange(false)}>
+            <Button variant='default' onClick={() => handleOpenChange(false)}>
               关闭
             </Button>
           )}
@@ -630,7 +677,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
   }
 
   return (
-	<Dialog open={props.open} onOpenChange={handleOpenChange}>
+    <Dialog open={props.open} onOpenChange={handleOpenChange}>
       <DialogContent className='flex max-h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl'>
         <DialogHeader className='border-border/70 border-b px-4 py-4 sm:px-5'>
           <DialogTitle className='flex items-center gap-2 text-lg'>

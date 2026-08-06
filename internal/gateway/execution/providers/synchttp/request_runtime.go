@@ -176,6 +176,14 @@ func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration 
 	if baseTimeout <= 0 || info == nil {
 		return baseTimeout
 	}
+	if info.RelayMode == gatewaycontract.RelayModeImagesGenerations ||
+		info.RelayMode == gatewaycontract.RelayModeImagesEdits {
+		imageTimeout := time.Duration(platformconfig.ImageResponseHeaderTimeout) * time.Second
+		if imageTimeout <= 0 {
+			return baseTimeout
+		}
+		return maxDuration(baseTimeout, imageTimeout)
+	}
 	if strings.HasPrefix(strings.ToLower(info.OriginModelName), "gpt-") &&
 		!relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
 		return minDuration(baseTimeout, relaycommon.GPTNonLongContextFirstByteTimeout)

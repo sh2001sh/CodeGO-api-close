@@ -88,6 +88,7 @@ func initEnvironment() {
 	platformconfig.BatchUpdateInterval = platformconfig.GetEnvOrDefaultInt("BATCH_UPDATE_INTERVAL", 5)
 	platformconfig.RelayTimeout = platformconfig.GetEnvOrDefaultInt("RELAY_TIMEOUT", 0)
 	platformconfig.RelayResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("RELAY_RESPONSE_HEADER_TIMEOUT", 45)
+	platformconfig.ImageResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("IMAGE_RESPONSE_HEADER_TIMEOUT", 120)
 	platformconfig.RelayMaxIdleConns = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_IDLE_CONNS", 500)
 	platformconfig.RelayMaxIdleConnsPerHost = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_IDLE_CONNS_PER_HOST", 100)
 	platformconfig.RelayMaxConcurrentRequests = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONCURRENT_REQUESTS", 400)

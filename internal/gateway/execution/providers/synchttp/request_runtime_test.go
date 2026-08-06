@@ -32,24 +32,32 @@ func TestIsUpstreamResponseTimeout(t *testing.T) {
 
 func TestResponseHeaderTimeoutForRequest(t *testing.T) {
 	previous := platformconfig.RelayResponseHeaderTimeout
+	previousImage := platformconfig.ImageResponseHeaderTimeout
 	platformconfig.RelayResponseHeaderTimeout = 45
-	t.Cleanup(func() { platformconfig.RelayResponseHeaderTimeout = previous })
+	platformconfig.ImageResponseHeaderTimeout = 120
+	t.Cleanup(func() {
+		platformconfig.RelayResponseHeaderTimeout = previous
+		platformconfig.ImageResponseHeaderTimeout = previousImage
+	})
 
 	testCases := []struct {
 		name         string
 		model        string
 		promptTokens int
 		expected     time.Duration
+		relayMode    int
 	}{
 		{name: "short gpt request", model: "gpt-5.6-sol", promptTokens: 99_999, expected: relaycommon.GPTNonLongContextFirstByteTimeout},
 		{name: "long gpt request", model: "gpt-5.6-sol", promptTokens: 100_000, expected: 75 * time.Second},
 		{name: "very long gpt request", model: "gpt-5.6-sol", promptTokens: 200_000, expected: 90 * time.Second},
 		{name: "non gpt request", model: "claude-opus", promptTokens: 200_000, expected: 45 * time.Second},
+		{name: "image generation uses image timeout", model: "gpt-image-2", expected: 120 * time.Second, relayMode: gatewaycontract.RelayModeImagesGenerations},
+		{name: "image edit uses image timeout", model: "gpt-image-2", expected: 120 * time.Second, relayMode: gatewaycontract.RelayModeImagesEdits},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			info := &relaycommon.RelayInfo{OriginModelName: testCase.model}
+			info := &relaycommon.RelayInfo{OriginModelName: testCase.model, RelayMode: testCase.relayMode}
 			info.SetEstimatePromptTokens(testCase.promptTokens)
 			require.Equal(t, testCase.expected, responseHeaderTimeoutForRequest(info))
 		})

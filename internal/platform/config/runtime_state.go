@@ -29,6 +29,12 @@ var RelayTimeout int
 // RelayResponseHeaderTimeout bounds outbound connection, TLS, and response-header waits
 // without limiting a stream after the upstream has started responding.
 var RelayResponseHeaderTimeout int
+
+// ImageResponseHeaderTimeout bounds the initial wait for synchronous image
+// generation/edit responses. Image providers commonly spend longer preparing
+// an image before sending response headers, so text-model first-byte limits do
+// not apply to these endpoints.
+var ImageResponseHeaderTimeout int
 var RelayMaxIdleConns int
 var RelayMaxIdleConnsPerHost int
 var RelayMaxConcurrentRequests int

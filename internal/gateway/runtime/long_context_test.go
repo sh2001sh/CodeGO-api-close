@@ -108,4 +108,8 @@ func TestStreamFirstOutputTimeoutSkipsImageGenerationModels(t *testing.T) {
 	for _, model := range []string{"gpt-image-1", "dall-e-3", "flux-1.1-pro", "imagen-3.0-generate"} {
 		require.Zero(t, StreamFirstOutputTimeoutForRequest(nil, model, 1_000), model)
 	}
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	MarkImageGenerationRequest(context)
+	require.Zero(t, StreamFirstOutputTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
 }

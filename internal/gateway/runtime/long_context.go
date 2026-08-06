@@ -47,7 +47,7 @@ func StreamFirstOutputTimeoutForRequest(c *gin.Context, model string, promptToke
 	// Image generation streams commonly spend the first tens of seconds
 	// rendering and do not emit text/reasoning tokens. They must retain the
 	// existing stream budget instead of being treated as stalled GPT text.
-	if gatewaycontract.IsImageGenerationModel(model) {
+	if IsImageGenerationRequest(c) || gatewaycontract.IsImageGenerationModel(model) {
 		return 0
 	}
 	if !isGPTModel(model) {
@@ -69,8 +69,21 @@ const (
 	LongContextPromptTokenThreshold = 100_000
 	VeryLongContextPromptTokens     = 200_000
 
-	longContextRequestContextKey = "long_context_gpt_request"
+	longContextRequestContextKey     = "long_context_gpt_request"
+	imageGenerationRequestContextKey = "image_generation_request"
 )
+
+// MarkImageGenerationRequest disables text-stream first-output deadlines for
+// requests whose output is rendered media rather than tokens.
+func MarkImageGenerationRequest(c *gin.Context) {
+	if c != nil {
+		c.Set(imageGenerationRequestContextKey, true)
+	}
+}
+
+func IsImageGenerationRequest(c *gin.Context) bool {
+	return c != nil && c.GetBool(imageGenerationRequestContextKey)
+}
 
 // IsLongContextGPTRequest reports whether a GPT request needs the long-context
 // reliability policy before its upstream response begins streaming.

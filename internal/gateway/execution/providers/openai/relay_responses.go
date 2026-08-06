@@ -103,6 +103,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var preOutputEvents []bufferedResponsesStreamEvent
 	preOutputEventsBuffered := 0
 	preOutputBytes := 0
+	if responsesRequestUsesImageGeneration(info) {
+		relaycommon.MarkImageGenerationRequest(c)
+	}
 	firstOutputTimeout := relaycommon.StreamFirstOutputTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
 	var firstOutputTimer *time.Timer
 	if firstOutputTimeout > 0 {
@@ -271,6 +274,25 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	info.ConversationResponseText = responseTextBuilder.String()
 
 	return usage, nil
+}
+
+func responsesRequestUsesImageGeneration(info *relaycommon.RelayInfo) bool {
+	if info == nil {
+		return false
+	}
+	if gatewaycontract.IsImageGenerationModel(info.OriginModelName) {
+		return true
+	}
+	request, ok := info.Request.(*dto.OpenAIResponsesRequest)
+	if !ok {
+		return false
+	}
+	for _, tool := range request.GetToolsMap() {
+		if strings.EqualFold(strings.TrimSpace(platformencoding.Interface2String(tool["type"])), "image_generation") {
+			return true
+		}
+	}
+	return false
 }
 
 func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, size *int, response dto.ResponsesStreamResponse, data string) error {

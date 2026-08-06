@@ -61,6 +61,61 @@ func TestGetHealthySatisfiedChannelFallsBackAfterPrimaryCooldown(t *testing.T) {
 	require.Contains(t, retries, 1)
 }
 
+func TestGetHealthySatisfiedChannelUsesLastResortWhenEveryRouteCools(t *testing.T) {
+	const modelName = "gpt-route-last-resort-test"
+	priority := int64(3)
+	originalSelector := selectRandomSatisfiedChannel
+	t.Cleanup(func() {
+		selectRandomSatisfiedChannel = originalSelector
+		gatewayruntime.RecordChannelSuccess(42, modelName, 0)
+	})
+
+	selectRandomSatisfiedChannel = func(_ string, _ string, _ int) (*gatewayschema.Channel, error) {
+		return &gatewayschema.Channel{Id: 42, Priority: &priority}, nil
+	}
+	gatewayruntime.CoolChannelModelForUpstreamFailure(42, modelName)
+
+	channel, err := getHealthySatisfiedChannel("default", modelName, 0)
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 42, channel.Id)
+}
+
+func TestAutoSelectionChecksHealthyFallbackBeforeLastResort(t *testing.T) {
+	const modelName = "gpt-auto-last-resort-order-test"
+	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
+	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()
+	originalSelector := selectRandomSatisfiedChannel
+	priority := int64(3)
+	t.Cleanup(func() {
+		require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(originalAutoGroups))
+		require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		selectRandomSatisfiedChannel = originalSelector
+		gatewayruntime.RecordChannelSuccess(42, modelName, 0)
+	})
+
+	require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(`["low","fallback"]`))
+	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"low":"低价","fallback":"备用"}`))
+	selectRandomSatisfiedChannel = func(group string, _ string, _ int) (*gatewayschema.Channel, error) {
+		if group == "low" {
+			return &gatewayschema.Channel{Id: 42, Priority: &priority}, nil
+		}
+		return &gatewayschema.Channel{Id: 39, Priority: &priority}, nil
+	}
+	gatewayruntime.CoolChannelModelForUpstreamFailure(42, modelName)
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	channel, group, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        context,
+		TokenGroup: AutoGroupName,
+		ModelName:  modelName,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 39, channel.Id)
+	require.Equal(t, "fallback", group)
+}
+
 func TestCacheSelectionSkipsCoolingChannelEvenWithLegacyProbeContext(t *testing.T) {
 	const modelName = "gpt-route-no-user-probe-test"
 	primaryPriority := int64(3)

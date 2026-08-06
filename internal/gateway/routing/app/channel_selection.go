@@ -104,7 +104,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 			}
 			logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: %d", autoGroup, priorityRetry)
 
-			channel, _ = getHealthySatisfiedChannelWithContext(param.Ctx, autoGroup, param.ModelName, priorityRetry)
+			channel, _ = getHealthySatisfiedChannelWithMode(param.Ctx, autoGroup, param.ModelName, priorityRetry, false)
 			if channel == nil {
 				gatewayruntime.ExcludeRouteDecisionCandidate(param.Ctx, "no_healthy_channel")
 				logger.LogDebug(param.Ctx, "No available channel in group %s for model %s at priorityRetry %d, trying next group", autoGroup, param.ModelName, priorityRetry)
@@ -128,6 +128,22 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 			}
 			break
 		}
+		// Only after every automatic group has no healthy candidate may a
+		// cooling channel be used as a last-resort recovery probe. This keeps a
+		// temporarily bad cheap group from masking a healthy fallback group.
+		if channel == nil {
+			for i, autoGroup := range candidateGroups {
+				channel, _ = getHealthySatisfiedChannelWithMode(param.Ctx, autoGroup, param.ModelName, 0, true)
+				if channel == nil {
+					continue
+				}
+				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i)
+				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, autoGroup)
+				selectGroup = autoGroup
+				gatewayruntime.SelectRouteDecisionCandidate(param.Ctx, autoGroup, channel.Id, false)
+				break
+			}
+		}
 	} else {
 		channel, err = getHealthySatisfiedChannelWithContext(param.Ctx, param.TokenGroup, param.ModelName, param.GetRetry())
 		if channel != nil {
@@ -144,6 +160,10 @@ func getHealthySatisfiedChannel(group string, modelName string, retry int) (*gat
 }
 
 func getHealthySatisfiedChannelWithContext(c *gin.Context, group string, modelName string, retry int) (*gatewayschema.Channel, error) {
+	return getHealthySatisfiedChannelWithMode(c, group, modelName, retry, true)
+}
+
+func getHealthySatisfiedChannelWithMode(c *gin.Context, group string, modelName string, retry int, allowLastResort bool) (*gatewayschema.Channel, error) {
 	if channel, managed, err := selectAutomaticPoolChannel(c, group, modelName); err != nil || managed {
 		return channel, err
 	}
@@ -168,7 +188,31 @@ func getHealthySatisfiedChannelWithContext(c *gin.Context, group string, modelNa
 			degradedCandidate = degraded
 		}
 	}
-	return degradedCandidate, nil
+	if degradedCandidate != nil || !allowLastResort {
+		return degradedCandidate, nil
+	}
+	return selectLegacyLastResortChannel(c, group, modelName, retry), nil
+}
+
+// selectLegacyLastResortChannel keeps one recovery path available when every
+// channel for a model is in an active cooldown. It is only called after the
+// normal candidate scan found no healthy or degraded route.
+func selectLegacyLastResortChannel(c *gin.Context, group, modelName string, retry int) *gatewayschema.Channel {
+	for priorityRetry := retry; priorityRetry < retry+16; priorityRetry++ {
+		channel, err := selectRandomSatisfiedChannel(group, modelName, priorityRetry)
+		if err != nil || channel == nil || channelAlreadyUsed(c, channel.Id) {
+			continue
+		}
+		health, found := gatewayruntime.GetChannelHealth(channel.Id, modelName)
+		if !found || health.State != gatewayruntime.ChannelHealthCooling || !health.CoolingUntil.After(time.Now()) {
+			continue
+		}
+		if gatewayruntime.TryStartChannelLastResortProbe(channel.Id, modelName) && c != nil {
+			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
+		}
+		return channel
+	}
+	return nil
 }
 
 func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelName string, retry int) (healthy *gatewayschema.Channel, degraded *gatewayschema.Channel, priority int64, found bool, err error) {

@@ -58,30 +58,37 @@ func MarkLongContextRequest(c *gin.Context, model string, promptTokens int) {
 	MarkLongContextRequestWithContinuation(c, model, promptTokens, false)
 }
 
-// MarkLongContextRequestWithContinuation classifies a GPT Responses history
-// continuation as long-context even before a successful upstream usage sample
-// is available. The request body itself is not retained.
-func MarkLongContextRequestWithContinuation(c *gin.Context, model string, promptTokens int, hasPreviousResponse bool) {
+// MarkLongContextRequestWithContinuation classifies a GPT Responses session
+// as long-context before a successful upstream usage sample is available. A
+// prompt_cache_key is itself a stable upstream conversation/session signal;
+// previous_response_id is optional in Codex fork/continue flows.
+func MarkLongContextRequestWithContinuation(c *gin.Context, model string, promptTokens int, hasConversationState bool) {
 	if c == nil {
 		return
 	}
 	if observed := ConversationPromptHighWaterFromContext(c, model); observed > promptTokens {
 		promptTokens = observed
 	}
-	c.Set(longContextRequestContextKey, hasPreviousResponse && isGPTModel(model) || IsLongContextGPTRequest(model, promptTokens))
+	c.Set(longContextRequestContextKey, hasConversationState && isGPTModel(model) || IsLongContextGPTRequest(model, promptTokens))
 }
 
-// IsResponsesHistoryContinuation reports whether a parsed Responses request
-// references upstream-restored conversation history.
-func IsResponsesHistoryContinuation(request dto.Request) bool {
+// IsResponsesConversationRequest reports whether a parsed Responses request
+// carries a stable conversation/session signal. The raw key value is never
+// retained; only its presence is used for timeout classification.
+func IsResponsesConversationRequest(request dto.Request) bool {
 	switch request := request.(type) {
 	case *dto.OpenAIResponsesRequest:
-		return strings.TrimSpace(request.PreviousResponseID) != ""
+		return strings.TrimSpace(request.PreviousResponseID) != "" || hasJSONValue(request.PromptCacheKey)
 	case *dto.OpenAIResponsesCompactionRequest:
 		return strings.TrimSpace(request.PreviousResponseID) != ""
 	default:
 		return false
 	}
+}
+
+func hasJSONValue(value []byte) bool {
+	trimmed := strings.TrimSpace(string(value))
+	return trimmed != "" && trimmed != "null" && trimmed != `""`
 }
 
 func IsLongContextRequest(c *gin.Context) bool {

@@ -25,14 +25,15 @@ func TestResponsesHistoryContinuationUsesLongContextPolicy(t *testing.T) {
 	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	request := &dto.OpenAIResponsesRequest{PreviousResponseID: "resp_previous"}
 
-	require.True(t, IsResponsesHistoryContinuation(request))
-	MarkLongContextRequestWithContinuation(context, "gpt-5.6-sol", 1_000, IsResponsesHistoryContinuation(request))
+	require.True(t, IsResponsesConversationRequest(request))
+	MarkLongContextRequestWithContinuation(context, "gpt-5.6-sol", 1_000, IsResponsesConversationRequest(request))
 	require.True(t, IsLongContextRequest(context))
 }
 
 func TestNewResponsesRequestDoesNotUseContinuationPolicy(t *testing.T) {
 	request := &dto.OpenAIResponsesRequest{}
-	require.False(t, IsResponsesHistoryContinuation(request))
+	require.False(t, IsResponsesConversationRequest(request))
+	require.True(t, IsResponsesConversationRequest(&dto.OpenAIResponsesRequest{PromptCacheKey: []byte(`"session"`)}))
 }
 
 func TestMarkLongContextRequest(t *testing.T) {

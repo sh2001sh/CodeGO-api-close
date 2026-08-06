@@ -232,7 +232,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 	relayInfo.SetEstimatePromptTokens(tokens)
-	relaycommon.MarkLongContextRequestWithContinuation(c, relayInfo.OriginModelName, tokens, relaycommon.IsResponsesHistoryContinuation(request))
+	relaycommon.MarkLongContextRequestWithContinuation(c, relayInfo.OriginModelName, tokens, relaycommon.IsResponsesConversationRequest(request))
 
 	priceData, err := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
 	if err != nil {

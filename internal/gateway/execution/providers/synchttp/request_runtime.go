@@ -184,10 +184,6 @@ func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration 
 		}
 		return maxDuration(baseTimeout, imageTimeout)
 	}
-	if strings.HasPrefix(strings.ToLower(info.OriginModelName), "gpt-") &&
-		!relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
-		return minDuration(baseTimeout, relaycommon.GPTNonLongContextFirstByteTimeout)
-	}
 	if !relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
 		return baseTimeout
 	}
@@ -195,13 +191,6 @@ func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration 
 		return maxDuration(baseTimeout, 90*time.Second)
 	}
 	return maxDuration(baseTimeout, 75*time.Second)
-}
-
-func minDuration(left, right time.Duration) time.Duration {
-	if left < right {
-		return left
-	}
-	return right
 }
 
 func maxDuration(left, right time.Duration) time.Duration {

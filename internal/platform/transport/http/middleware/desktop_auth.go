@@ -27,9 +27,13 @@ func DesktopAuth() func(c *gin.Context) {
 			c.Abort()
 			return
 		}
+		if rejectDesktopInvalidTokenFlood(c, authorization) {
+			return
+		}
 
 		device, err := identityapp.ValidateDesktopDeviceAccessToken(authorization)
 		if err != nil {
+			recordDesktopInvalidTokenFailure(c, authorization)
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"success": false,

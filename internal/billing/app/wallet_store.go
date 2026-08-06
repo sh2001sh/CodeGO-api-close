@@ -70,6 +70,9 @@ func getLedgerBackedWalletBalance(userID int, accountType string, legacyRead fun
 
 	var snapshot billingschema.BillingBalanceSnapshot
 	if err := platformdb.DB.Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || isMissingBillingSchema(err) {
+			return legacyRead()
+		}
 		return 0, err
 	}
 	return int(snapshot.AvailableBalance), nil

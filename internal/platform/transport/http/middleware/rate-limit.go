@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformratelimit "github.com/sh2001sh/new-api/internal/platform/ratelimit"
 )
 
@@ -26,9 +27,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 	key := "rateLimit:" + mark + c.ClientIP()
 	listLength, err := rdb.LLen(ctx, key).Result()
 	if err != nil {
-		fmt.Println(err.Error())
-		c.Status(http.StatusInternalServerError)
-		c.Abort()
+		platformobservability.SysLog(fmt.Sprintf("redis rate limiter unavailable: %v", err))
 		return
 	}
 	if listLength < int64(maxRequestNum) {
@@ -38,17 +37,13 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		oldTimeStr, _ := rdb.LIndex(ctx, key, -1).Result()
 		oldTime, err := time.Parse(timeFormat, oldTimeStr)
 		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
+			platformobservability.SysLog(fmt.Sprintf("redis rate limiter timestamp invalid: %v", err))
 			return
 		}
 		nowTimeStr := time.Now().Format(timeFormat)
 		nowTime, err := time.Parse(timeFormat, nowTimeStr)
 		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
+			platformobservability.SysLog(fmt.Sprintf("redis rate limiter clock parse failed: %v", err))
 			return
 		}
 		// time.Since will return negative number!
@@ -76,7 +71,7 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 }
 
 func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
-	if platformcache.RedisEnabled {
+	if platformcache.RedisEnabled && platformcache.RDB != nil {
 		return func(c *gin.Context) {
 			redisRateLimiter(c, maxRequestNum, duration, mark)
 		}
@@ -123,7 +118,7 @@ func enforceGlobalAuthenticatedAPIRateLimit(c *gin.Context) bool {
 	if key == "" {
 		return true
 	}
-	if platformcache.RedisEnabled {
+	if platformcache.RedisEnabled && platformcache.RDB != nil {
 		allowed, err := platformratelimit.NewRedisLimiter(c.Request.Context(), platformcache.RDB).Allow(
 			c.Request.Context(),
 			"rateLimit:GA:"+key,
@@ -132,9 +127,8 @@ func enforceGlobalAuthenticatedAPIRateLimit(c *gin.Context) bool {
 			platformratelimit.WithRequested(1),
 		)
 		if err != nil {
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
-			return false
+			platformobservability.SysLog(fmt.Sprintf("authenticated API rate limiter unavailable: %v", err))
+			return true
 		}
 		if !allowed {
 			c.Status(http.StatusTooManyRequests)
@@ -188,7 +182,7 @@ func UploadRateLimit() func(c *gin.Context) {
 // instead of client IP, making it resistant to proxy rotation attacks.
 // Must be used AFTER authentication middleware (UserAuth).
 func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
-	if platformcache.RedisEnabled {
+	if platformcache.RedisEnabled && platformcache.RDB != nil {
 		return func(c *gin.Context) {
 			userId := c.GetInt("id")
 			if userId == 0 {
@@ -225,9 +219,7 @@ func userRedisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, key
 	rdb := platformcache.RDB
 	listLength, err := rdb.LLen(ctx, key).Result()
 	if err != nil {
-		fmt.Println(err.Error())
-		c.Status(http.StatusInternalServerError)
-		c.Abort()
+		platformobservability.SysLog(fmt.Sprintf("redis user rate limiter unavailable: %v", err))
 		return
 	}
 	if listLength < int64(maxRequestNum) {
@@ -237,17 +229,13 @@ func userRedisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, key
 		oldTimeStr, _ := rdb.LIndex(ctx, key, -1).Result()
 		oldTime, err := time.Parse(timeFormat, oldTimeStr)
 		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
+			platformobservability.SysLog(fmt.Sprintf("redis user rate limiter timestamp invalid: %v", err))
 			return
 		}
 		nowTimeStr := time.Now().Format(timeFormat)
 		nowTime, err := time.Parse(timeFormat, nowTimeStr)
 		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
+			platformobservability.SysLog(fmt.Sprintf("redis user rate limiter clock parse failed: %v", err))
 			return
 		}
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {

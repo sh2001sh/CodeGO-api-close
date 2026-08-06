@@ -1,9 +1,10 @@
 package app
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"context"
 	"errors"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	"strings"
 
 	auditdomain "github.com/sh2001sh/new-api/internal/audit/domain"
 	"github.com/sh2001sh/new-api/internal/audit/projection"
@@ -53,5 +54,17 @@ func ListUserQuotaDates(userID int, startTimestamp int64, endTimestamp int64) ([
 	if endTimestamp-startTimestamp > maxUserQuotaRangeSeconds {
 		return nil, errors.New("时间跨度不能超过 1 个月")
 	}
-	return projection.GetQuotaDataByUserID(userID, startTimestamp, endTimestamp)
+	rows, err := projection.GetQuotaDataByUserID(userID, startTimestamp, endTimestamp)
+	if isMissingAuditProjection(err) {
+		return []*auditdomain.QuotaData{}, nil
+	}
+	return rows, err
+}
+
+func isMissingAuditProjection(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table") || strings.Contains(message, "does not exist")
 }

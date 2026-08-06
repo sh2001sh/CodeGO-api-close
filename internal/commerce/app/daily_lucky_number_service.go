@@ -321,7 +321,9 @@ func buildLuckyRewardViews(rewards []commerceschema.SubscriptionLuckyReward) ([]
 	for _, reward := range rewards {
 		draw, ok := drawMap[reward.DrawId]
 		if !ok {
-			return nil, errors.New("lucky draw not found for reward")
+			// Historical rewards can outlive a deleted or failed draw row. Keep
+			// the notification/history endpoint readable and omit only that row.
+			continue
 		}
 		result = append(result, commercedomain.LuckyRewardView{
 			Reward:        luckyRewardRecord(&reward),

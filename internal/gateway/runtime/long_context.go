@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 )
 
 // StreamMaxDuration returns the absolute upstream stream budget. GPT requests
@@ -43,6 +44,12 @@ func StreamMaxDurationForRequest(c *gin.Context, model string, promptTokens int)
 // stream to become useful. Long-context continuations receive a larger
 // bootstrap budget because the upstream may restore hidden history first.
 func StreamFirstOutputTimeoutForRequest(c *gin.Context, model string, promptTokens int) time.Duration {
+	// Image generation streams commonly spend the first tens of seconds
+	// rendering and do not emit text/reasoning tokens. They must retain the
+	// existing stream budget instead of being treated as stalled GPT text.
+	if gatewaycontract.IsImageGenerationModel(model) {
+		return 0
+	}
 	if !isGPTModel(model) {
 		return 0
 	}

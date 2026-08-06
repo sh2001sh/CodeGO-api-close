@@ -103,3 +103,9 @@ func TestConversationPromptHighWaterKeepsSmallGPTConversationAtNormalDuration(t 
 
 	require.False(t, IsLongContextRequest(context))
 }
+
+func TestStreamFirstOutputTimeoutSkipsImageGenerationModels(t *testing.T) {
+	for _, model := range []string{"gpt-image-1", "dall-e-3", "flux-1.1-pro", "imagen-3.0-generate"} {
+		require.Zero(t, StreamFirstOutputTimeoutForRequest(nil, model, 1_000), model)
+	}
+}

@@ -85,6 +85,14 @@ func TestIncompleteStreamWithoutContentCoolsLongContextFaultDomain(t *testing.T)
 	require.False(t, shouldRecordIncompleteStreamFaultDomainFailure(context, err))
 }
 
+func TestLocalStreamMaxDurationIsNotTreatedAsUpstreamFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+	relaycommon.MarkLocalStreamMaxDurationExceeded(context)
+
+	require.True(t, isLocalStreamMaxDuration(context))
+}
+
 func TestIsModelScopedUpstreamFailure(t *testing.T) {
 	require.True(t, IsModelScopedUpstreamFailure(types.NewOpenAIError(
 		errors.New("insufficient_user_quota"), types.ErrorCodeBadResponseStatusCode, http.StatusServiceUnavailable,

@@ -53,7 +53,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	}()
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
-	streamingMaxDuration := relaycommon.StreamMaxDuration(info.OriginModelName, info.GetEstimatePromptTokens())
+	streamingMaxDuration := relaycommon.StreamMaxDurationForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
 	var (
 		stopChan   = make(chan bool, 3)
 		scanner    = NewStreamScanner(resp.Body)
@@ -252,7 +252,8 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 		cancel()
 		closeTimedOutStream(resp)
 	case <-streamingMaxTimer(maxTimer):
-		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
+		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonMaxDuration, nil)
+		relaycommon.MarkLocalStreamMaxDurationExceeded(c)
 		cancel()
 		closeTimedOutStream(resp)
 	case <-stopChan:

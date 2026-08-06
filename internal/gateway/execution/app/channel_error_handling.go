@@ -24,9 +24,12 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 	modelName := c.GetString("original_model")
 	failureClass := classifyUpstreamFailure(err)
-	gatewayruntime.RecordAIHubHealthFailure(c, channelError.ChannelId, modelName, err.StatusCode, string(failureClass))
+	localMaxDuration := isLocalStreamMaxDuration(c)
+	if !localMaxDuration {
+		gatewayruntime.RecordAIHubHealthFailure(c, channelError.ChannelId, modelName, err.StatusCode, string(failureClass))
+	}
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
-	if isRetryableChannelFailure(err) && !modelScopedFailure {
+	if !localMaxDuration && isRetryableChannelFailure(err) && !modelScopedFailure {
 		// A retry must leave the complete upstream fault domain. Channel IDs
 		// can represent different keys on the same provider host.
 		gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
@@ -56,14 +59,14 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	// A partial Responses stream must never be retried in the current request:
 	// clients may have already received output. It still needs model-level
 	// cooling so subsequent requests choose another healthy route.
-	if failureClass == upstreamFailureIncompleteStream {
+	if failureClass == upstreamFailureIncompleteStream && !localMaxDuration {
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 		recordChannelTransientFailure(c, channelError.ChannelId, modelName, err)
 		if shouldRecordIncompleteStreamFaultDomainFailure(c, err) {
 			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), modelName, channelError.ChannelId, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err))
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
-	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
+	} else if !localMaxDuration && isRetryableChannelFailure(err) && !modelScopedFailure {
 		cooldown := retryableFailureCooldown(c, err)
 		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
 		if shouldRecordFaultDomainFailure(c, err) {
@@ -87,6 +90,9 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["error_code"] = err.GetErrorCode()
 		other["status_code"] = err.StatusCode
 		other["upstream_failure_class"] = failureClass
+		if localMaxDuration {
+			other["local_stream_max_duration"] = true
+		}
 		other["channel_id"] = channelID
 		other["channel_name"] = c.GetString("channel_name")
 		other["channel_type"] = c.GetInt("channel_type")
@@ -125,6 +131,10 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			other,
 		)
 	}
+}
+
+func isLocalStreamMaxDuration(c *gin.Context) bool {
+	return gatewayruntime.IsLocalStreamMaxDurationExceeded(c)
 }
 
 func recordChannelTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {

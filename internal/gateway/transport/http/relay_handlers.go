@@ -327,7 +327,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = relayHandler(c, relayInfo)
 		}
 		if releaseFaultDomainSlot != nil {
-			if newAPIError == nil {
+			if newAPIError == nil || relaycommon.IsLocalStreamMaxDurationExceeded(c) {
 				releaseFaultDomainSlot(true, 0)
 			} else {
 				releaseFaultDomainSlot(false, newAPIError.StatusCode)

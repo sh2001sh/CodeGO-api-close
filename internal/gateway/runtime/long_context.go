@@ -13,7 +13,7 @@ import (
 // protocols retain their existing idle-time behavior until they gain a
 // protocol-specific total-duration policy.
 func StreamMaxDuration(model string, promptTokens int) time.Duration {
-	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-") {
+	if !isGPTModel(model) {
 		return 0
 	}
 	if promptTokens >= LongContextPromptTokenThreshold {
@@ -28,6 +28,16 @@ func StreamMaxDuration(model string, promptTokens int) time.Duration {
 	return 240 * time.Second
 }
 
+// StreamMaxDurationForRequest applies the same tiering as StreamMaxDuration,
+// including an affinity-scoped upstream usage high-water mark for Responses
+// requests that only carry a small delta locally.
+func StreamMaxDurationForRequest(c *gin.Context, model string, promptTokens int) time.Duration {
+	if c != nil && IsLongContextRequest(c) && isGPTModel(model) {
+		return StreamMaxDuration(model, LongContextPromptTokenThreshold)
+	}
+	return StreamMaxDuration(model, promptTokens)
+}
+
 const (
 	LongContextPromptTokenThreshold = 100_000
 	VeryLongContextPromptTokens     = 200_000
@@ -38,8 +48,7 @@ const (
 // IsLongContextGPTRequest reports whether a GPT request needs the long-context
 // reliability policy before its upstream response begins streaming.
 func IsLongContextGPTRequest(model string, promptTokens int) bool {
-	return promptTokens >= LongContextPromptTokenThreshold &&
-		strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-")
+	return promptTokens >= LongContextPromptTokenThreshold && isGPTModel(model)
 }
 
 // MarkLongContextRequest records the request classification for route retries
@@ -48,9 +57,16 @@ func MarkLongContextRequest(c *gin.Context, model string, promptTokens int) {
 	if c == nil {
 		return
 	}
+	if observed := ConversationPromptHighWaterFromContext(c, model); observed > promptTokens {
+		promptTokens = observed
+	}
 	c.Set(longContextRequestContextKey, IsLongContextGPTRequest(model, promptTokens))
 }
 
 func IsLongContextRequest(c *gin.Context) bool {
 	return c != nil && c.GetBool(longContextRequestContextKey)
+}
+
+func isGPTModel(model string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-")
 }

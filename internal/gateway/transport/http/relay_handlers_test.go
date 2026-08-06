@@ -105,6 +105,19 @@ func TestShouldRetryResponsesStreamBeforeContentDespiteLifecycleEvent(t *testing
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldRetryLateResponsesStreamBeforeSemanticContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set("original_model", "gpt-5.6-sol")
+	httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-2*relaycommon.GPTInitialFailureRetryWindow))
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	err := types.NewOpenAIError(errors.New("upstream produced no semantic output"), types.ErrorCodeChannelResponseTimeExceeded, http.StatusGatewayTimeout)
+
+	require.True(t, shouldRetry(ctx, err, 1))
+}
+
 func TestFinalizeRelayErrorMasksChineseUpstreamQuotaLeak(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

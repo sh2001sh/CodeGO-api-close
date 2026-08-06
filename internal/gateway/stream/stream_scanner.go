@@ -53,16 +53,22 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	}()
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	firstByteTimeout := relaycommon.StreamFirstOutputTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
 	streamingMaxDuration := relaycommon.StreamMaxDurationForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
 	var (
-		stopChan   = make(chan bool, 3)
-		scanner    = NewStreamScanner(resp.Body)
-		ticker     = time.NewTicker(streamingTimeout)
-		maxTimer   *time.Timer
-		pingTicker *time.Ticker
-		writeMutex sync.Mutex
-		wg         sync.WaitGroup
+		stopChan       = make(chan bool, 3)
+		scanner        = NewStreamScanner(resp.Body)
+		ticker         = time.NewTicker(streamingTimeout)
+		firstByteTimer *time.Timer
+		maxTimer       *time.Timer
+		pingTicker     *time.Ticker
+		writeMutex     sync.Mutex
+		wg             sync.WaitGroup
 	)
+	if firstByteTimeout > 0 {
+		firstByteTimer = time.NewTimer(firstByteTimeout)
+		defer firstByteTimer.Stop()
+	}
 	if streamingMaxDuration > 0 {
 		maxTimer = time.NewTimer(streamingMaxDuration)
 		defer maxTimer.Stop()
@@ -222,6 +228,14 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 				continue
 			}
 			if !strings.HasPrefix(data, "[DONE]") {
+				if firstByteTimer != nil {
+					if !firstByteTimer.Stop() {
+						select {
+						case <-firstByteTimer.C:
+						default:
+						}
+					}
+				}
 				info.SetFirstResponseTime()
 				info.ReceivedResponseCount++
 				select {
@@ -247,6 +261,10 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	})
 
 	select {
+	case <-streamingFirstByteTimer(firstByteTimer):
+		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, fmt.Errorf("first byte timeout after %s", firstByteTimeout))
+		cancel()
+		closeTimedOutStream(resp)
 	case <-ticker.C:
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
 		cancel()
@@ -266,6 +284,13 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	} else {
 		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
 	}
+}
+
+func streamingFirstByteTimer(timer *time.Timer) <-chan time.Time {
+	if timer == nil {
+		return nil
+	}
+	return timer.C
 }
 
 func streamingMaxTimer(timer *time.Timer) <-chan time.Time {

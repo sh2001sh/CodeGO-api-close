@@ -68,13 +68,20 @@ func TestConversationPromptHighWaterClassifiesResponsesDeltaAsLongContext(t *tes
 	require.True(t, IsLongContextRequest(context))
 	oldNormal := constant.StreamingMaxDuration
 	oldLong := constant.StreamingLongContextMaxDuration
+	oldFirstByte := constant.StreamingFirstByteTimeout
+	oldLongFirstByte := constant.StreamingLongContextFirstByteTimeout
 	constant.StreamingMaxDuration = 240
 	constant.StreamingLongContextMaxDuration = 540
+	constant.StreamingFirstByteTimeout = 45
+	constant.StreamingLongContextFirstByteTimeout = 90
 	t.Cleanup(func() {
 		constant.StreamingMaxDuration = oldNormal
 		constant.StreamingLongContextMaxDuration = oldLong
+		constant.StreamingFirstByteTimeout = oldFirstByte
+		constant.StreamingLongContextFirstByteTimeout = oldLongFirstByte
 	})
 	require.Equal(t, 540*time.Second, StreamMaxDurationForRequest(context, "gpt-5.6-sol", 1_000))
+	require.Equal(t, 90*time.Second, StreamFirstOutputTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
 }
 
 func TestConversationPromptHighWaterKeepsSmallGPTConversationAtNormalDuration(t *testing.T) {

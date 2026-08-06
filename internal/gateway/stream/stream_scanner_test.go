@@ -53,11 +53,14 @@ func (r *blockingReader) Close() error {
 
 func TestScanResponseMarksMaximumDurationSeparatelyFromIdleTimeout(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
+	oldFirstByteTimeout := constant.StreamingFirstByteTimeout
 	oldMaxDuration := constant.StreamingMaxDuration
 	constant.StreamingTimeout = 5
+	constant.StreamingFirstByteTimeout = 0
 	constant.StreamingMaxDuration = 1
 	t.Cleanup(func() {
 		constant.StreamingTimeout = oldTimeout
+		constant.StreamingFirstByteTimeout = oldFirstByteTimeout
 		constant.StreamingMaxDuration = oldMaxDuration
 	})
 
@@ -73,4 +76,31 @@ func TestScanResponseMarksMaximumDurationSeparatelyFromIdleTimeout(t *testing.T)
 	require.Less(t, time.Since(started), 3*time.Second)
 	require.Equal(t, gatewaycontract.StreamEndReasonMaxDuration, info.StreamStatus.EndReason)
 	require.True(t, relaycommon.IsLocalStreamMaxDurationExceeded(context))
+}
+
+func TestScanResponseStopsBeforeIdleTimeoutWhenFirstByteIsMissing(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldFirstByteTimeout := constant.StreamingFirstByteTimeout
+	oldMaxDuration := constant.StreamingMaxDuration
+	constant.StreamingTimeout = 5
+	constant.StreamingFirstByteTimeout = 1
+	constant.StreamingMaxDuration = 10
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingFirstByteTimeout = oldFirstByteTimeout
+		constant.StreamingMaxDuration = oldMaxDuration
+	})
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request, _ = http.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil)
+	body := &blockingReader{closed: make(chan struct{})}
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+
+	started := time.Now()
+	ScanResponse(context, &http.Response{Body: body}, info, func(string, *Result) {})
+
+	require.Less(t, time.Since(started), 3*time.Second)
+	require.Equal(t, gatewaycontract.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+	require.False(t, relaycommon.IsLocalStreamMaxDurationExceeded(context))
 }

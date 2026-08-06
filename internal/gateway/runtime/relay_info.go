@@ -87,17 +87,18 @@ type TokenCountMeta struct {
 }
 
 type RelayInfo struct {
-	TokenId           int
-	TokenKey          string
-	TokenGroup        string
-	UserId            int
-	UsingGroup        string // 使用的分组，当auto跨分组重试时，会变动
-	UserGroup         string // 用户所在分组
-	TokenUnlimited    bool
-	StartTime         time.Time
-	FirstResponseTime time.Time
-	isFirstResponse   bool
-	StreamPacer       *StreamPacer
+	TokenId               int
+	TokenKey              string
+	TokenGroup            string
+	UserId                int
+	UsingGroup            string // 使用的分组，当auto跨分组重试时，会变动
+	UserGroup             string // 用户所在分组
+	TokenUnlimited        bool
+	StartTime             time.Time
+	FirstResponseTime     time.Time
+	firstSemanticResponse bool
+	isFirstResponse       bool
+	StreamPacer           *StreamPacer
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool
@@ -666,6 +667,17 @@ func (info *RelayInfo) SetFirstResponseTime() {
 		info.FirstResponseTime = time.Now()
 		info.isFirstResponse = false
 	}
+}
+
+// SetFirstSemanticResponseTime records the first model-visible output. SSE
+// lifecycle events such as response.created are intentionally excluded.
+func (info *RelayInfo) SetFirstSemanticResponseTime() {
+	if info == nil || info.firstSemanticResponse {
+		return
+	}
+	info.FirstResponseTime = time.Now()
+	info.isFirstResponse = false
+	info.firstSemanticResponse = true
 }
 
 func (info *RelayInfo) HasSendResponse() bool {

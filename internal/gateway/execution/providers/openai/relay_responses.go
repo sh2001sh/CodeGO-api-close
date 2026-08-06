@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	helper "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -15,7 +16,19 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
+	"time"
 )
+
+const (
+	responsesPreOutputEventLimit = 32
+	responsesPreOutputByteLimit  = 256 << 10
+)
+
+type bufferedResponsesStreamEvent struct {
+	response dto.ResponsesStreamResponse
+	data     string
+}
 
 func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	defer platformhttpx.CloseResponseBodyGracefully(resp)
@@ -83,7 +96,30 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
-	var sawResponseCompleted bool
+	var sawSemanticOutput atomic.Bool
+	var sawResponseCompleted atomic.Bool
+	var firstOutputTimedOut atomic.Bool
+	var preOutputBufferErr error
+	var preOutputEvents []bufferedResponsesStreamEvent
+	preOutputEventsBuffered := 0
+	preOutputBytes := 0
+	firstOutputTimeout := relaycommon.StreamFirstOutputTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
+	var firstOutputTimer *time.Timer
+	if firstOutputTimeout > 0 {
+		firstOutputTimer = time.AfterFunc(firstOutputTimeout, func() {
+			if !sawSemanticOutput.Load() && !sawResponseCompleted.Load() {
+				firstOutputTimedOut.Store(true)
+				if info.StreamStatus != nil {
+					info.StreamStatus.SetEndReason(
+						gatewaycontract.StreamEndReasonTimeout,
+						fmt.Errorf("semantic output timeout after %s", firstOutputTimeout),
+					)
+				}
+				_ = resp.Body.Close()
+			}
+		})
+		defer firstOutputTimer.Stop()
+	}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -94,17 +130,51 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sr.Error(err)
 			return
 		}
-		if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
-			logger.LogError(c, "failed to write responses stream response: "+err.Error())
+		semanticOutput := hasResponsesStreamContent(streamResponse)
+		if semanticOutput {
+			if sawSemanticOutput.CompareAndSwap(false, true) {
+				info.SetFirstSemanticResponseTime()
+				if firstOutputTimer != nil {
+					firstOutputTimer.Stop()
+				}
+				if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents); err != nil {
+					logger.LogError(c, "failed to flush responses lifecycle events: "+err.Error())
+					sr.Stop(err)
+					return
+				}
+				preOutputEvents = nil
+			}
+			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+				logger.LogError(c, "failed to write responses stream response: "+err.Error())
+				sr.Stop(err)
+				return
+			}
+			c.Set(string(constant.ContextKeyStreamContentDelivered), true)
+		} else if streamResponse.Type == "response.completed" {
+			sawResponseCompleted.Store(true)
+			if firstOutputTimer != nil {
+				firstOutputTimer.Stop()
+			}
+			if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents); err != nil {
+				logger.LogError(c, "failed to flush responses lifecycle events: "+err.Error())
+				sr.Stop(err)
+				return
+			}
+			preOutputEvents = nil
+			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+				logger.LogError(c, "failed to write responses stream response: "+err.Error())
+				sr.Stop(err)
+				return
+			}
+		} else if err := appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, streamResponse, data); err != nil {
+			preOutputBufferErr = err
 			sr.Stop(err)
 			return
-		}
-		if hasResponsesStreamContent(streamResponse) {
-			c.Set(string(constant.ContextKeyStreamContentDelivered), true)
+		} else {
+			preOutputEventsBuffered++
 		}
 		switch streamResponse.Type {
 		case "response.completed":
-			sawResponseCompleted = true
 			sr.Done()
 			if streamResponse.Response != nil {
 				if streamResponse.Response.Usage != nil {
@@ -145,8 +215,32 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		}
 	})
+	c.Set("responses_stream_lifecycle", map[string]interface{}{
+		"received_events":            info.ReceivedResponseCount,
+		"semantic_output_seen":       sawSemanticOutput.Load(),
+		"response_completed_seen":    sawResponseCompleted.Load(),
+		"pre_output_events_buffered": preOutputEventsBuffered,
+		"first_output_timeout_ms":    firstOutputTimeout.Milliseconds(),
+		"first_output_timed_out":     firstOutputTimedOut.Load(),
+	})
 
-	if !sawResponseCompleted {
+	if preOutputBufferErr != nil {
+		return nil, types.NewOpenAIError(
+			preOutputBufferErr,
+			types.ErrorCodeChannelResponseTimeExceeded,
+			http.StatusGatewayTimeout,
+		)
+	}
+
+	if firstOutputTimedOut.Load() && !sawSemanticOutput.Load() {
+		return nil, types.NewOpenAIError(
+			fmt.Errorf("upstream produced no semantic output before %s", firstOutputTimeout),
+			types.ErrorCodeChannelResponseTimeExceeded,
+			http.StatusGatewayTimeout,
+		)
+	}
+
+	if !sawResponseCompleted.Load() {
 		options := make([]types.NewAPIErrorOptions, 0, 1)
 		if c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
 			options = append(options, types.ErrOptionWithSkipRetry())
@@ -179,8 +273,30 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	return usage, nil
 }
 
+func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, size *int, response dto.ResponsesStreamResponse, data string) error {
+	if len(*events) >= responsesPreOutputEventLimit || *size+len(data) > responsesPreOutputByteLimit {
+		return fmt.Errorf("responses stream exceeded pre-output lifecycle buffer")
+	}
+	*events = append(*events, bufferedResponsesStreamEvent{response: response, data: data})
+	*size += len(data)
+	return nil
+}
+
+func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayInfo, events []bufferedResponsesStreamEvent) error {
+	for _, event := range events {
+		if err := sendResponsesStreamData(c, info, event.response, event.data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func hasResponsesStreamContent(streamResponse dto.ResponsesStreamResponse) bool {
-	return streamResponse.Delta != "" && strings.HasSuffix(streamResponse.Type, ".delta")
+	if streamResponse.Delta != "" && strings.HasSuffix(streamResponse.Type, ".delta") {
+		return true
+	}
+	return streamResponse.Type == "response.output_item.added" &&
+		streamResponse.Item != nil && streamResponse.Item.Type == "function_call"
 }
 
 func responsesOutputText(response *dto.OpenAIResponsesResponse) string {

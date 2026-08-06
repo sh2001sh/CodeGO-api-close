@@ -1,6 +1,8 @@
 package constant
 
 var StreamingTimeout int
+var StreamingFirstByteTimeout int
+var StreamingLongContextFirstByteTimeout int
 var StreamingMaxDuration int
 var StreamingLongContextMaxDuration int
 var DifyDebug bool

@@ -39,6 +39,25 @@ func StreamMaxDurationForRequest(c *gin.Context, model string, promptTokens int)
 	return StreamMaxDuration(model, promptTokens)
 }
 
+// StreamFirstOutputTimeoutForRequest returns the bounded wait for a GPT
+// stream to become useful. Long-context continuations receive a larger
+// bootstrap budget because the upstream may restore hidden history first.
+func StreamFirstOutputTimeoutForRequest(c *gin.Context, model string, promptTokens int) time.Duration {
+	if !isGPTModel(model) {
+		return 0
+	}
+	if (c != nil && IsLongContextRequest(c)) || promptTokens >= LongContextPromptTokenThreshold {
+		if constant.StreamingLongContextFirstByteTimeout > 0 {
+			return time.Duration(constant.StreamingLongContextFirstByteTimeout) * time.Second
+		}
+		return 90 * time.Second
+	}
+	if constant.StreamingFirstByteTimeout > 0 {
+		return time.Duration(constant.StreamingFirstByteTimeout) * time.Second
+	}
+	return 45 * time.Second
+}
+
 const (
 	LongContextPromptTokenThreshold = 100_000
 	VeryLongContextPromptTokens     = 200_000

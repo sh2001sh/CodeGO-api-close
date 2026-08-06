@@ -110,6 +110,9 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		if circuit, ok := gatewayruntime.UserStreamFailureCircuitAuditFromContext(c); ok {
 			adminInfo["user_stream_failure_circuit"] = circuit
 		}
+		if lifecycle, ok := c.Get("responses_stream_lifecycle"); ok {
+			adminInfo["responses_stream_lifecycle"] = lifecycle
+		}
 		other["admin_info"] = adminInfo
 
 		startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)

@@ -137,7 +137,10 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		!canRetryResponsesStreamBeforeContent(c) {
 		return false
 	}
-	if !withinGPTRetryFailureWindow(c) {
+	// Responses lifecycle frames do not contain model-visible output. A stalled
+	// upstream may emit those frames long before it fails, so keep the retry
+	// path available until semantic content is delivered.
+	if !canRetryResponsesStreamBeforeContent(c) && !withinGPTRetryFailureWindow(c) {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {

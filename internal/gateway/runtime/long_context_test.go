@@ -19,6 +19,22 @@ func TestLongContextGPTRequestClassification(t *testing.T) {
 	require.False(t, IsLongContextGPTRequest("claude-opus", VeryLongContextPromptTokens))
 }
 
+func TestResponsesHistoryContinuationUsesLongContextPolicy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	request := &dto.OpenAIResponsesRequest{PreviousResponseID: "resp_previous"}
+
+	require.True(t, IsResponsesHistoryContinuation(request))
+	MarkLongContextRequestWithContinuation(context, "gpt-5.6-sol", 1_000, IsResponsesHistoryContinuation(request))
+	require.True(t, IsLongContextRequest(context))
+}
+
+func TestNewResponsesRequestDoesNotUseContinuationPolicy(t *testing.T) {
+	request := &dto.OpenAIResponsesRequest{}
+	require.False(t, IsResponsesHistoryContinuation(request))
+}
+
 func TestMarkLongContextRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())

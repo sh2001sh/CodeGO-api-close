@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	"github.com/sh2001sh/new-api/dto"
 )
 
 // StreamMaxDuration returns the absolute upstream stream budget. GPT requests
@@ -54,13 +55,33 @@ func IsLongContextGPTRequest(model string, promptTokens int) bool {
 // MarkLongContextRequest records the request classification for route retries
 // and channel health handling. It stores no request content.
 func MarkLongContextRequest(c *gin.Context, model string, promptTokens int) {
+	MarkLongContextRequestWithContinuation(c, model, promptTokens, false)
+}
+
+// MarkLongContextRequestWithContinuation classifies a GPT Responses history
+// continuation as long-context even before a successful upstream usage sample
+// is available. The request body itself is not retained.
+func MarkLongContextRequestWithContinuation(c *gin.Context, model string, promptTokens int, hasPreviousResponse bool) {
 	if c == nil {
 		return
 	}
 	if observed := ConversationPromptHighWaterFromContext(c, model); observed > promptTokens {
 		promptTokens = observed
 	}
-	c.Set(longContextRequestContextKey, IsLongContextGPTRequest(model, promptTokens))
+	c.Set(longContextRequestContextKey, hasPreviousResponse && isGPTModel(model) || IsLongContextGPTRequest(model, promptTokens))
+}
+
+// IsResponsesHistoryContinuation reports whether a parsed Responses request
+// references upstream-restored conversation history.
+func IsResponsesHistoryContinuation(request dto.Request) bool {
+	switch request := request.(type) {
+	case *dto.OpenAIResponsesRequest:
+		return strings.TrimSpace(request.PreviousResponseID) != ""
+	case *dto.OpenAIResponsesCompactionRequest:
+		return strings.TrimSpace(request.PreviousResponseID) != ""
+	default:
+		return false
+	}
 }
 
 func IsLongContextRequest(c *gin.Context) bool {

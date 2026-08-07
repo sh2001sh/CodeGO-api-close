@@ -47,6 +47,54 @@ func GetUserClaudeWalletQuota(userID int) (int, error) {
 	})
 }
 
+// SynchronizeWalletQuotaProjectionsTx aligns the legacy wallet columns with
+// their existing ledger snapshots before an operation that must update both.
+// The snapshot is already the user-facing balance after an account exists.
+func SynchronizeWalletQuotaProjectionsTx(tx *gorm.DB, userID, walletQuota, claudeQuota int) (int, int, error) {
+	if tx == nil || userID <= 0 {
+		return 0, 0, errors.New("invalid wallet projection synchronization")
+	}
+	canonicalWallet, err := canonicalWalletBalanceTx(tx, userID, billingAccountTypeWallet, walletQuota)
+	if err != nil {
+		return 0, 0, err
+	}
+	canonicalClaude, err := canonicalWalletBalanceTx(tx, userID, billingAccountTypeClaudeWallet, claudeQuota)
+	if err != nil {
+		return 0, 0, err
+	}
+	if canonicalWallet != walletQuota {
+		if err := tx.Model(&identityschema.User{}).Where("id = ?", userID).UpdateColumn("quota", canonicalWallet).Error; err != nil {
+			return 0, 0, err
+		}
+	}
+	if canonicalClaude != claudeQuota {
+		if err := tx.Model(&identityschema.User{}).Where("id = ?", userID).UpdateColumn("claude_quota", canonicalClaude).Error; err != nil {
+			return 0, 0, err
+		}
+	}
+	return canonicalWallet, canonicalClaude, nil
+}
+
+func canonicalWalletBalanceTx(tx *gorm.DB, userID int, accountType string, legacyBalance int) (int, error) {
+	var account billingschema.BillingAccount
+	err := tx.Where("owner_type = ? AND owner_id = ? AND account_type = ? AND quota_unit = ?", billingOwnerTypeUser, userID, accountType, billingQuotaUnitQuota).First(&account).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return legacyBalance, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	var snapshot billingschema.BillingBalanceSnapshot
+	err = tx.Where("account_id = ?", account.AccountID).First(&snapshot).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return legacyBalance, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return int(snapshot.AvailableBalance), nil
+}
+
 // getLedgerBackedWalletBalance treats the ledger snapshot as canonical after the
 // account has been bootstrapped. The legacy user column remains a compatibility
 // projection for code paths that have not yet been migrated.

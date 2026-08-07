@@ -91,6 +91,12 @@ func ConvertWalletQuota(userID int, req CreateWalletQuotaConversionRequest) (*co
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userID).First(&user).Error; err != nil {
 			return err
 		}
+		walletQuota, claudeQuota, err := billingapp.SynchronizeWalletQuotaProjectionsTx(tx, userID, user.Quota, user.ClaudeQuota)
+		if err != nil {
+			return err
+		}
+		user.Quota = walletQuota
+		user.ClaudeQuota = claudeQuota
 
 		existing := commerceschema.WalletQuotaConversion{}
 		if err := tx.Where("request_id = ?", requestID).First(&existing).Error; err == nil {

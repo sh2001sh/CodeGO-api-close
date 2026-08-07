@@ -4,10 +4,12 @@ import (
 	"testing"
 
 	"github.com/sh2001sh/new-api/constant"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestConvertWalletQuotaSupportsBothDirectionsAndIdempotency(t *testing.T) {
@@ -95,4 +97,36 @@ func TestConvertWalletQuotaRejectsInexactAndInsufficientAmounts(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&commerceschema.WalletQuotaConversion{}).Count(&count).Error)
 	require.Zero(t, count)
+}
+
+func TestConvertWalletQuotaUsesLedgerBalanceShownToUser(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{
+		Id:       9913,
+		Username: "wallet-conversion-ledger-balance",
+		Status:   constant.UserStatusEnabled,
+		Quota:    100,
+	}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return billingapp.CreditWalletQuotaTx(tx, user.Id, 300, "wallet-conversion-ledger-credit", "test_credit")
+	}))
+	// Reproduce an asynchronous compatibility projection lag: the page reads
+	// the ledger snapshot (400), while the old conversion path read 100 here.
+	require.NoError(t, db.Model(&identityschema.User{}).Where("id = ?", user.Id).UpdateColumn("quota", 100).Error)
+
+	conversion, err := ConvertWalletQuota(user.Id, CreateWalletQuotaConversionRequest{
+		Direction:   commerceschema.WalletQuotaConversionStandardToClaude,
+		SourceQuota: 400,
+		RequestId:   "wallet-conversion-ledger-consistent",
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, conversion.TargetQuota)
+
+	var saved identityschema.User
+	require.NoError(t, db.Where("id = ?", user.Id).First(&saved).Error)
+	require.Zero(t, saved.Quota)
+	require.EqualValues(t, 100, saved.ClaudeQuota)
+	require.Zero(t, loadCommerceBillingSnapshot(t, user.Id, "wallet").AvailableBalance)
+	require.EqualValues(t, 100, loadCommerceBillingSnapshot(t, user.Id, "claude_wallet").AvailableBalance)
 }

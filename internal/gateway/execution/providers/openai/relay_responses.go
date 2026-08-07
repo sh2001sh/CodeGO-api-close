@@ -90,9 +90,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	defer platformhttpx.CloseResponseBodyGracefully(resp)
+	helper.MarkAttemptConnected(c)
 	// Responses streams often begin with lifecycle events before model content.
 	// A disconnect in that phase can be retried without duplicating output.
 	c.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	helper.MarkAttemptBootstrap(c)
 
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
@@ -147,12 +149,12 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				}
 				preOutputEvents = nil
 			}
+			helper.MarkSemanticCommitted(c)
 			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
 				logger.LogError(c, "failed to write responses stream response: "+err.Error())
 				sr.Stop(err)
 				return
 			}
-			c.Set(string(constant.ContextKeyStreamContentDelivered), true)
 		} else if streamResponse.Type == "response.completed" {
 			sawResponseCompleted.Store(true)
 			if firstOutputTimer != nil {
@@ -262,6 +264,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	info.ConversationResponseText = responseTextBuilder.String()
+	helper.MarkAttemptCompleted(c)
 
 	return usage, nil
 }

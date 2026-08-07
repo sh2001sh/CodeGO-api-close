@@ -214,7 +214,7 @@ func (e *NewAPIError) shouldSanitizeUpstreamProviderError() bool {
 	}
 	return e.StatusCode == http.StatusUnauthorized ||
 		e.StatusCode == http.StatusForbidden ||
-		e.StatusCode == http.StatusServiceUnavailable ||
+		(e.StatusCode >= http.StatusInternalServerError && e.StatusCode <= 599) ||
 		platformtext.IsUpstreamProviderUnavailableMessage(e.Error())
 }
 

@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
@@ -101,8 +102,31 @@ func TestShouldRetryResponsesStreamBeforeContentDespiteLifecycleEvent(t *testing
 	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
 	require.True(t, shouldRetry(ctx, err, 1))
 
-	ctx.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	gatewaystream.MarkSemanticCommitted(ctx)
 	require.False(t, shouldRetry(ctx, err, 1))
+}
+
+func TestFinalizeRelayErrorWritesSanitizedResponsesStreamErrorAfterCommit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyIsStream, true)
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	apiErr := types.NewOpenAIError(
+		errors.New("upstream channel #67 responses stream closed before response.completed (request id: hidden)"),
+		types.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	)
+
+	finalizeRelayError(ctx, types.RelayFormatOpenAI, nil, apiErr, "downstream")
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "event: error")
+	require.Contains(t, recorder.Body.String(), types.ModelUnavailableMessage)
+	require.Contains(t, recorder.Body.String(), "downstream")
+	require.NotContains(t, recorder.Body.String(), "channel #67")
+	require.NotContains(t, recorder.Body.String(), "hidden")
 }
 
 func TestShouldNotRetryAfterClientDisconnect(t *testing.T) {

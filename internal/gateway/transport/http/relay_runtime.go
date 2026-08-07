@@ -24,6 +24,7 @@ import (
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"github.com/sh2001sh/new-api/types"
@@ -183,8 +184,7 @@ func withinGPTRetryFailureWindow(c *gin.Context) bool {
 }
 
 func canRetryResponsesStreamBeforeContent(c *gin.Context) bool {
-	return c.GetBool(string(constant.ContextKeyResponsesStreamRetrySafe)) &&
-		!c.GetBool(string(constant.ContextKeyStreamContentDelivered))
+	return gatewaystream.CanRetryResponsesBeforeSemanticOutput(c)
 }
 
 func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *websocket.Conn, apiErr *types.NewAPIError, requestID string) {
@@ -193,6 +193,28 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 	}
 	logger.LogError(c, fmt.Sprintf("relay error: %s", platformtext.LocalLogPreview(apiErr.Error())))
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
+		if !httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) || c.GetBool(string(constant.ContextKeyClientGone)) {
+			return
+		}
+		apiErr.SanitizeDownstreamResponse()
+		rawMessageWithRequestID := platformtext.MessageWithRequestID(apiErr.Error(), requestID)
+		if types.IsRemoteProviderError(apiErr) {
+			rawMessageWithRequestID = platformtext.SanitizeUpstreamProviderErrorMessage(rawMessageWithRequestID)
+		}
+		apiErr.SetMessage(rawMessageWithRequestID)
+		switch relayFormat {
+		case types.RelayFormatOpenAIRealtime:
+			relaycommon.WssError(c, ws, apiErr.ToOpenAIError())
+		case types.RelayFormatClaude:
+			if err := gatewaystream.WriteClaudeStreamError(c, apiErr.ToClaudeError()); err != nil {
+				logger.LogError(c, "write claude stream error failed: "+err.Error())
+			}
+		default:
+			responses := c.Request != nil && strings.HasPrefix(c.Request.URL.Path, "/v1/responses")
+			if err := gatewaystream.WriteOpenAIStreamError(c, apiErr.ToOpenAIError(), responses); err != nil {
+				logger.LogError(c, "write openai stream error failed: "+err.Error())
+			}
+		}
 		return
 	}
 	apiErr.SanitizeDownstreamResponse()

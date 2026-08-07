@@ -12,6 +12,7 @@ import (
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
@@ -68,6 +69,12 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	// clients may have already received output. It still needs model-level
 	// cooling so subsequent requests choose another healthy route.
 	if failureClass == upstreamFailureIncompleteStream && !localMaxDuration && !clientGone {
+		// A stream which ended before semantic output is safe to replay, but a
+		// retry must leave the failed upstream domain instead of cycling through
+		// different keys backed by the same provider path.
+		if shouldExcludeFaultDomainForIncompleteStream(c) {
+			gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
+		}
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 		recordChannelTransientFailure(c, channelError.ChannelId, modelName, err)
 		if shouldRecordIncompleteStreamFaultDomainFailure(c, err) {
@@ -110,6 +117,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 		adminInfo := make(map[string]interface{})
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
+		adminInfo["attempt_stage"] = gatewaystream.AttemptStageFromContext(c)
 		if httpctx.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
 			adminInfo["is_multi_key"] = true
 			adminInfo["multi_key_index"] = httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
@@ -189,6 +197,10 @@ func shouldRecordIncompleteStreamFaultDomainFailure(c *gin.Context, err *types.N
 	// started. Before any content is sent, however, repeated disconnects are an
 	// upstream-path failure and should protect the shared fault domain.
 	return !c.GetBool(string(constant.ContextKeyStreamContentDelivered))
+}
+
+func shouldExcludeFaultDomainForIncompleteStream(c *gin.Context) bool {
+	return c != nil && !c.GetBool(string(constant.ContextKeyStreamContentDelivered))
 }
 
 func isProviderWideTransientFailure(err *types.NewAPIError) bool {

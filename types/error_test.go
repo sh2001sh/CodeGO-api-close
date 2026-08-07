@@ -62,6 +62,21 @@ func TestRemoteForbiddenResponseIsSanitizedForDownstream(t *testing.T) {
 	require.Equal(t, ModelUnavailableMessage, apiErr.ToOpenAIError().Message)
 }
 
+func TestRemoteGatewayFailureIsSanitizedForDownstream(t *testing.T) {
+	t.Parallel()
+
+	apiErr := NewOpenAIError(
+		fmt.Errorf("responses stream closed before response.completed (upstream request id: hidden)"),
+		ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	)
+	apiErr.SanitizeDownstreamResponse()
+
+	require.Equal(t, http.StatusServiceUnavailable, apiErr.StatusCode)
+	require.Equal(t, ErrorCodeGetChannelFailed, apiErr.GetErrorCode())
+	require.Equal(t, ModelUnavailableMessage, apiErr.ToOpenAIError().Message)
+}
+
 func TestNewAPIErrorStatusStringsKeepLocalQuotaMessage(t *testing.T) {
 	t.Parallel()
 

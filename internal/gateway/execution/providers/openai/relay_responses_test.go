@@ -12,6 +12,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
@@ -79,6 +80,7 @@ func TestOaiResponsesStreamHandlerAllowsRetryBeforeContent(t *testing.T) {
 	require.False(t, types.IsSkipRetryError(err))
 	require.True(t, c.GetBool(string(constant.ContextKeyResponsesStreamRetrySafe)))
 	require.False(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
+	require.Equal(t, gatewaystream.AttemptStageBootstrap, gatewaystream.AttemptStageFromContext(c))
 	require.Empty(t, recorder.Body.String())
 }
 
@@ -147,6 +149,7 @@ func TestOaiResponsesStreamHandlerFlushesLifecycleBeforeSemanticOutput(t *testin
 	require.Greater(t, delta, created)
 	require.Greater(t, completed, delta)
 	require.True(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
+	require.Equal(t, gatewaystream.AttemptStageCompleted, gatewaystream.AttemptStageFromContext(c))
 }
 
 func TestOaiResponsesStreamHandlerDoesNotFailWhenLifecycleBufferOverflows(t *testing.T) {

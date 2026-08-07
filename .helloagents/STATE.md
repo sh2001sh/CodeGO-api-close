@@ -1,26 +1,23 @@
 # Main Goal
-Reduce GPT first-token tail latency and prevent upstream capacity responses from reaching downstream users.
+Rebuild GPT streaming failure handling so safely replayable upstream failures switch routes, while all unrecoverable upstream errors remain sanitized to the existing user-facing 503 contract.
 
 # Current Work
-- Added model-level rapid cooldown for consecutive non-long-context 502/504/524 failures.
-- Classified explicit upstream capacity messages as transient retryable failures.
-- Automatic route pools skip cooling candidates and retain controlled half-open recovery probes.
-
-# Key Context
-- Two consecutive 502 failures cool a channel/model pair for 8 seconds; two consecutive 504/524 failures cool it for 15 seconds.
-- One transient failure remains degraded, preserving normal traffic and avoiding unnecessary cooling.
-- 429, model-unavailable, and long-context timeout behavior remains unchanged.
-- Capacity messages such as `selected model is at capacity` retry before response delivery and use the short channel cooldown policy.
-- Fault-domain behavior remains separate so channels retain redundancy where upstream fault domains differ.
+- Implemented Phase 1 of `docs/gpt-stream-routing-redesign.md`; changes are local and uncommitted.
+- Added `AttemptStage` as the request-scoped source of truth for selected, connected, bootstrap, semantic-committed, and completed Responses stream states.
+- A Responses stream with lifecycle-only events can retry. Once a text delta or tool call is about to be written, it becomes non-replayable before the write to avoid duplicate output.
+- Pre-semantic incomplete streams exclude the current fault domain before retry. Post-semantic failures do not replay.
+- Unrecoverable remote 5xx failures are normalized to the existing sanitized HTTP 503 message before downstream response commitment. A committed stream emits an equivalent sanitized SSE error event instead of silently closing.
+- Admin error audit now includes `attempt_stage`; upstream/channel details remain internal.
 
 # Verification
-- `go test ./internal/gateway/runtime -count=1` passed.
-- `go test ./internal/gateway/execution/app -count=1` passed.
-- `go test ./internal/gateway/routing/app ./internal/gateway/transport/http -count=1` passed.
-- Focused `go test ./internal/gateway/...` routing, health, and retry tests passed.
+- `go test ./internal/gateway/...` passed.
+- `go test ./types` passed.
+- `git diff --check` passed.
+- `go test ./...` has one unrelated existing failure: `internal/commerce/transport/http: TestGetSubscriptionOrderStatusReturnsOrderPayload`; it receives `Standard月卡` and fails its stale expected payload assertion.
 
 # Next Actions
-- Commit the capacity classification, release as the next rc.34 version, then trigger and verify the multi-arch image build.
+- Review and commit only the gateway/error changes plus `docs/gpt-stream-routing-redesign.md`; do not include `artifacts/` or `scripts/audit-upstream-api.ps1`.
+- Push and build only after an explicit release request, then verify the stage and retry audit fields in production.
 
 # Blockers
-- None.
+- No implementation blocker. Full-repository test baseline needs the unrelated subscription order test expectation corrected separately.

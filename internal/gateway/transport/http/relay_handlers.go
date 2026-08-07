@@ -17,6 +17,7 @@ import (
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	platformconcurrency "github.com/sh2001sh/new-api/internal/platform/concurrency"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
@@ -262,6 +263,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		relayInfo.InitChannelMeta(c)
+		gatewaystream.BeginRelayAttempt(c)
 		if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) && !streamFailureCircuitChecked {
 			streamFailureCircuitChecked = true
 			if _, blocked := relaycommon.UserStreamFailureRetryAfter(c, relayInfo.OriginModelName); blocked {

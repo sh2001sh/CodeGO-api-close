@@ -85,6 +85,15 @@ func TestIncompleteStreamWithoutContentCoolsLongContextFaultDomain(t *testing.T)
 	require.False(t, shouldRecordIncompleteStreamFaultDomainFailure(context, err))
 }
 
+func TestIncompleteStreamExcludesFaultDomainOnlyBeforeSemanticContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+
+	require.True(t, shouldExcludeFaultDomainForIncompleteStream(context))
+	context.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	require.False(t, shouldExcludeFaultDomainForIncompleteStream(context))
+}
+
 func TestLocalStreamMaxDurationIsNotTreatedAsUpstreamFailure(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)

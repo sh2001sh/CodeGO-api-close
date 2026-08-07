@@ -73,6 +73,10 @@ const (
 	// ContextKeyStreamContentDelivered is set once retrying would duplicate text
 	// or tool arguments already delivered to the client.
 	ContextKeyStreamContentDelivered ContextKey = "stream_content_delivered"
+	// ContextKeyRelayAttemptStage is the authoritative downstream commitment
+	// stage for a single upstream attempt. It prevents retry decisions from
+	// inferring replay safety from unrelated response-writer details.
+	ContextKeyRelayAttemptStage ContextKey = "relay_attempt_stage"
 	// ContextKeyClientGone marks a downstream connection that was cancelled or
 	// closed. Such a disconnect must not be attributed to an upstream channel.
 	ContextKeyClientGone ContextKey = "client_gone"

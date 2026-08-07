@@ -118,9 +118,13 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 		return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 	}
 	if len(healthy) == 0 {
-		if retry > 0 && c != nil && c.GetBool(string(constant.ContextKeyRateLimitRetry)) {
-			if probe := reserveRoutePoolRateLimitRetryProbe(lastResortProbes, modelName); probe != nil {
-				gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeRateLimit)
+		if retry > 0 {
+			if probe := reserveRoutePoolEmergencyRetryProbe(lastResortProbes, modelName); probe != nil {
+				probeMode := gatewayruntime.RouteDecisionProbeEmergency
+				if c != nil && c.GetBool(string(constant.ContextKeyRateLimitRetry)) {
+					probeMode = gatewayruntime.RouteDecisionProbeRateLimit
+				}
+				gatewayruntime.SetRouteDecisionProbeMode(c, probeMode)
 				return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 			}
 		}

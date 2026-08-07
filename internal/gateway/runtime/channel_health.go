@@ -28,7 +28,7 @@ const (
 	channelHealthLongContextTimeout        = 45 * time.Second
 	channelHealthCooldownDuration          = 2 * time.Minute
 	channelHealthProbeLeaseDuration        = 10 * time.Second
-	channelHealthRateLimitProbeSlots       = 2
+	channelHealthEmergencyProbeSlots       = 2
 	channelHealthTTL                       = 20 * time.Minute
 	channelModelUnavailableTTL             = 5 * time.Minute
 	channelModelUpstreamFailureTTL         = 2 * time.Minute
@@ -275,11 +275,11 @@ func TryStartChannelRecoveryProbe(channelID int, model string) bool {
 	return tryStartChannelProbe(channelID, model, 1, true)
 }
 
-// TryStartChannelRateLimitRetryProbe admits a second bounded probe slot when
-// a retry follows an upstream 429. Cooling remains in force for normal route
-// selection; only this already-failing request can use the extra slot.
-func TryStartChannelRateLimitRetryProbe(channelID int, model string) bool {
-	return tryStartChannelProbe(channelID, model, channelHealthRateLimitProbeSlots, false)
+// TryStartChannelEmergencyRetryProbe admits a second bounded probe slot for a
+// retry after a transient upstream failure. Cooling remains in force for
+// normal route selection; only the already-failing request can use this slot.
+func TryStartChannelEmergencyRetryProbe(channelID int, model string) bool {
+	return tryStartChannelProbe(channelID, model, channelHealthEmergencyProbeSlots, false)
 }
 
 func tryStartChannelProbe(channelID int, model string, maxSlots int, requireExpired bool) bool {

@@ -32,18 +32,18 @@ func reserveRoutePoolLastResortProbe(probes []scoredRoutePoolCandidate, modelNam
 	return nil
 }
 
-// reserveRoutePoolRateLimitRetryProbe is a bounded escape hatch for a retry
-// after an upstream 429. The failed fault domain has already been excluded
-// from the request context, so this chooses the best remaining recovery route
+// reserveRoutePoolEmergencyRetryProbe is a bounded escape hatch for a retry
+// after a transient upstream error. The failed fault domain has already been
+// excluded from the request context, so it chooses the best remaining route
 // while allowing one extra channel/domain probe slot.
-func reserveRoutePoolRateLimitRetryProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
+func reserveRoutePoolEmergencyRetryProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
 	for len(probes) > 0 {
 		probe := chooseBestRoutePoolLastResortProbe(probes)
 		if probe == nil {
 			return nil
 		}
-		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelRateLimitRetryProbe(probe.channel.Id, modelName)
-		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainRateLimitRetryProbe(probe.faultDomain, modelName)
+		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelEmergencyRetryProbe(probe.channel.Id, modelName)
+		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainEmergencyRetryProbe(probe.faultDomain, modelName)
 		if channelReady && domainReady {
 			return probe
 		}

@@ -13,6 +13,7 @@ const (
 	RouteDecisionProbeNormal     = "normal"
 	RouteDecisionProbeLastResort = "last_resort"
 	RouteDecisionProbeRateLimit  = "rate_limit_retry"
+	RouteDecisionProbeEmergency  = "emergency_retry"
 )
 
 // RouteDecision is an internal-only record attached to the existing request audit log.
@@ -102,7 +103,7 @@ func RecordRouteDecisionRetry(c *gin.Context) {
 // request. It is emitted only in administrator audit metadata.
 func SetRouteDecisionProbeMode(c *gin.Context, mode string) {
 	switch mode {
-	case RouteDecisionProbeNormal, RouteDecisionProbeLastResort, RouteDecisionProbeRateLimit:
+	case RouteDecisionProbeNormal, RouteDecisionProbeLastResort, RouteDecisionProbeRateLimit, RouteDecisionProbeEmergency:
 		updateRouteDecision(c, func(decision *RouteDecision) {
 			decision.ProbeMode = mode
 		})

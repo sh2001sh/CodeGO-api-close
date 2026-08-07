@@ -153,7 +153,7 @@ func TestRoutePoolLastResortProbePrefersReliableCandidateOverLowerCost(t *testin
 	assert.Equal(t, 52, probe.channel.Id)
 }
 
-func TestRoutePoolRateLimitRetryProbeAllowsOnlyBoundedExtraSlot(t *testing.T) {
+func TestRoutePoolEmergencyRetryProbeAllowsOnlyBoundedExtraSlot(t *testing.T) {
 	channelID := 9_876_544
 	modelName := "gpt-rate-limit-route-pool"
 	for range 3 {
@@ -168,7 +168,7 @@ func TestRoutePoolRateLimitRetryProbeAllowsOnlyBoundedExtraSlot(t *testing.T) {
 		},
 	}}
 
-	assert.NotNil(t, reserveRoutePoolRateLimitRetryProbe(candidate, modelName))
-	assert.NotNil(t, reserveRoutePoolRateLimitRetryProbe(candidate, modelName))
-	assert.Nil(t, reserveRoutePoolRateLimitRetryProbe(candidate, modelName))
+	assert.NotNil(t, reserveRoutePoolEmergencyRetryProbe(candidate, modelName))
+	assert.NotNil(t, reserveRoutePoolEmergencyRetryProbe(candidate, modelName))
+	assert.Nil(t, reserveRoutePoolEmergencyRetryProbe(candidate, modelName))
 }

@@ -7,8 +7,8 @@ func TryStartFaultDomainLastResortProbe(domain, model string) bool {
 	return tryStartFaultDomainProbe(domain, model, 1, false)
 }
 
-// TryStartFaultDomainRateLimitRetryProbe admits one additional bounded probe
-// slot for a retry after a 429 without reopening normal domain traffic.
-func TryStartFaultDomainRateLimitRetryProbe(domain, model string) bool {
-	return tryStartFaultDomainProbe(domain, model, channelHealthRateLimitProbeSlots, false)
+// TryStartFaultDomainEmergencyRetryProbe admits one additional bounded probe
+// slot for a transient retry without reopening normal domain traffic.
+func TryStartFaultDomainEmergencyRetryProbe(domain, model string) bool {
+	return tryStartFaultDomainProbe(domain, model, channelHealthEmergencyProbeSlots, false)
 }

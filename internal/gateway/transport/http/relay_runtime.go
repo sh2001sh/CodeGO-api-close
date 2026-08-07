@@ -186,6 +186,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if gatewayexecutionapp.IsModelScopedUpstreamFailure(openaiErr) {
 		return c.GetBool("model_unavailable_with_alternative")
 	}
+	if gatewayexecutionapp.IsUpstreamCredentialRejectedError(openaiErr) {
+		return true
+	}
 	code := openaiErr.StatusCode
 	if code >= 200 && code < 300 {
 		return false

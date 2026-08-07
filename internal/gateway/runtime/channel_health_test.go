@@ -47,6 +47,26 @@ func TestChannelHealthLastResortProbeRecoversBeforeCooldownExpiry(t *testing.T) 
 	require.False(t, IsChannelCooling(42, "gpt-last-resort"))
 }
 
+func TestChannelCredentialCooldownRequiresHalfOpenRecovery(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	RecordChannelCredentialFailure(42)
+	require.True(t, IsChannelCredentialCooling(42))
+	require.False(t, TryStartChannelCredentialRecoveryProbe(42))
+
+	require.NoError(t, getChannelHealthCache().UpdateWithTTL(channelHealthKey(42, channelCredentialHealthModel), channelCredentialHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+		state.CoolingUntil = time.Now().Add(-time.Second)
+		return state, nil
+	}))
+	require.True(t, TryStartChannelCredentialRecoveryProbe(42))
+	RecordChannelCredentialSuccess(42)
+	require.False(t, IsChannelCredentialCooling(42))
+	require.True(t, TryStartChannelCredentialRecoveryProbe(42))
+	RecordChannelCredentialSuccess(42)
+	require.False(t, IsChannelCredentialCooling(42))
+}
+
 func TestChannelHealthCoolsForLowShortTermSuccessRate(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })

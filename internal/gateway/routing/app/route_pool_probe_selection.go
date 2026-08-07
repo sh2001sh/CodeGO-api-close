@@ -17,9 +17,13 @@ func reserveRoutePoolLastResortProbe(probes []scoredRoutePoolCandidate, modelNam
 			return nil
 		}
 		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelLastResortProbe(probe.channel.Id, modelName)
+		credentialReady := !probe.credentialProbe || gatewayruntime.TryStartChannelCredentialRecoveryProbe(probe.channel.Id)
 		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainLastResortProbe(probe.faultDomain, modelName)
-		if channelReady && domainReady {
+		if channelReady && credentialReady && domainReady {
 			return probe
+		}
+		if credentialReady && (!channelReady || !domainReady) {
+			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, "__channel_credentials__")
 		}
 		if channelReady && !domainReady {
 			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, modelName)
@@ -43,9 +47,13 @@ func reserveRoutePoolEmergencyRetryProbe(probes []scoredRoutePoolCandidate, mode
 			return nil
 		}
 		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelEmergencyRetryProbe(probe.channel.Id, modelName)
+		credentialReady := !probe.credentialProbe || gatewayruntime.TryStartChannelCredentialRecoveryProbe(probe.channel.Id)
 		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainEmergencyRetryProbe(probe.faultDomain, modelName)
-		if channelReady && domainReady {
+		if channelReady && credentialReady && domainReady {
 			return probe
+		}
+		if credentialReady && (!channelReady || !domainReady) {
+			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, "__channel_credentials__")
 		}
 		if channelReady && !domainReady {
 			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, modelName)
@@ -65,9 +73,13 @@ func reserveRoutePoolRecoveryProbe(probes []scoredRoutePoolCandidate, modelName 
 			return nil
 		}
 		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelRecoveryProbe(probe.channel.Id, modelName)
+		credentialReady := !probe.credentialProbe || gatewayruntime.TryStartChannelCredentialRecoveryProbe(probe.channel.Id)
 		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainRecoveryProbe(probe.faultDomain, modelName)
-		if channelReady && domainReady {
+		if channelReady && credentialReady && domainReady {
 			return probe
+		}
+		if credentialReady && (!channelReady || !domainReady) {
+			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, "__channel_credentials__")
 		}
 		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
 	}

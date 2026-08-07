@@ -364,6 +364,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 				ttft = 0
 			}
 			relaycommon.RecordChannelSuccess(channel.Id, relayInfo.OriginModelName, ttft)
+			relaycommon.RecordChannelCredentialSuccess(channel.Id)
 			relaycommon.RecordFaultDomainSuccess(c.GetString("channel_fault_domain"), relayInfo.OriginModelName)
 			relaycommon.RecordAIHubHealthSuccess(c, channel.Id, relayInfo.OriginModelName, ttft)
 			relayInfo.LastError = nil

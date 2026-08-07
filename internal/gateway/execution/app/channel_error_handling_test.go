@@ -40,6 +40,18 @@ func TestCapacityResponseIsRetryableInsteadOfModelScoped(t *testing.T) {
 	require.True(t, isRetryableChannelFailure(err))
 }
 
+func TestExplicitUpstreamCredentialRejectionIsRetryable(t *testing.T) {
+	err := types.NewOpenAIError(
+		errors.New("Upstream access forbidden, please contact administrator"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusForbidden,
+	)
+
+	require.Equal(t, upstreamFailureCredentialRejected, classifyUpstreamFailure(err))
+	require.True(t, IsUpstreamCredentialRejectedError(err))
+	require.True(t, isRetryableChannelFailure(err))
+}
+
 func TestDatabaseConnectionExhaustionIsRetryableTransientFailure(t *testing.T) {
 	err := types.NewOpenAIError(
 		errors.New("failed to connect to database: remaining connection slots are reserved (SQLSTATE 53300)"),

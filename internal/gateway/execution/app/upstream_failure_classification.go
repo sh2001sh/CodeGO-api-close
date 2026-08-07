@@ -10,11 +10,12 @@ import (
 type upstreamFailureClass string
 
 const (
-	upstreamFailureUnknown          upstreamFailureClass = "unknown"
-	upstreamFailureModelUnavailable upstreamFailureClass = "model_unavailable"
-	upstreamFailureAccountExhausted upstreamFailureClass = "account_exhausted"
-	upstreamFailureIncompleteStream upstreamFailureClass = "incomplete_stream"
-	upstreamFailureTransient        upstreamFailureClass = "transient"
+	upstreamFailureUnknown            upstreamFailureClass = "unknown"
+	upstreamFailureModelUnavailable   upstreamFailureClass = "model_unavailable"
+	upstreamFailureAccountExhausted   upstreamFailureClass = "account_exhausted"
+	upstreamFailureCredentialRejected upstreamFailureClass = "credential_rejected"
+	upstreamFailureIncompleteStream   upstreamFailureClass = "incomplete_stream"
+	upstreamFailureTransient          upstreamFailureClass = "transient"
 )
 
 func classifyUpstreamFailure(err *types.NewAPIError) upstreamFailureClass {
@@ -24,13 +25,15 @@ func classifyUpstreamFailure(err *types.NewAPIError) upstreamFailureClass {
 	if isUpstreamCapacityFailure(err) {
 		return upstreamFailureTransient
 	}
-	if IsModelUnavailableError(err) || err.StatusCode == http.StatusServiceUnavailable {
-		return upstreamFailureModelUnavailable
-	}
-
 	message := strings.ToLower(err.Error())
 	if containsAny(message, "insufficient", "quota", "balance", "billing", "payment required") || err.StatusCode == http.StatusPaymentRequired {
 		return upstreamFailureAccountExhausted
+	}
+	if IsUpstreamCredentialRejectedError(err) {
+		return upstreamFailureCredentialRejected
+	}
+	if IsModelUnavailableError(err) || err.StatusCode == http.StatusServiceUnavailable {
+		return upstreamFailureModelUnavailable
 	}
 	if isIncompleteResponsesStreamMessage(message) {
 		return upstreamFailureIncompleteStream
@@ -45,6 +48,28 @@ func classifyUpstreamFailure(err *types.NewAPIError) upstreamFailureClass {
 		return upstreamFailureTransient
 	}
 	return upstreamFailureUnknown
+}
+
+// IsUpstreamCredentialRejectedError matches only explicit upstream account or
+// credential rejections. Generic 401/403 responses can be request-specific,
+// so status codes alone must not cool an entire channel.
+func IsUpstreamCredentialRejectedError(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return containsAny(message,
+		"upstream access forbidden",
+		"please contact administrator",
+		"invalid api key",
+		"invalid_api_key",
+		"api key expired",
+		"credential has expired",
+		"authentication failed",
+		"account has been disabled",
+		"account is disabled",
+		"account has been deactivated",
+	)
 }
 
 // isUpstreamCapacityFailure identifies a temporary provider capacity response.
@@ -113,7 +138,7 @@ func isRetryableChannelFailure(err *types.NewAPIError) bool {
 		return false
 	}
 	failureClass := classifyUpstreamFailure(err)
-	if failureClass == upstreamFailureIncompleteStream || failureClass == upstreamFailureTransient {
+	if failureClass == upstreamFailureCredentialRejected || failureClass == upstreamFailureIncompleteStream || failureClass == upstreamFailureTransient {
 		return true
 	}
 	return types.IsChannelError(err) || err.StatusCode == http.StatusTooManyRequests || err.StatusCode >= http.StatusInternalServerError

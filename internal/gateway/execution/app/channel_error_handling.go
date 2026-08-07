@@ -34,7 +34,8 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.RecordAIHubHealthFailure(c, channelError.ChannelId, modelName, err.StatusCode, string(failureClass))
 	}
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
-	if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure {
+	credentialRejected := failureClass == upstreamFailureCredentialRejected
+	if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected {
 		// A retry must leave the complete upstream fault domain. Channel IDs
 		// can represent different keys on the same provider host.
 		gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
@@ -60,7 +61,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		} else {
 			platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 是唯一可用路由，保留渠道与模型路由", channelError.ChannelName, channelError.ChannelId, modelName))
 		}
-	} else if !clientGone && ShouldDisableChannel(err) && channelError.AutoBan {
+	} else if !clientGone && !credentialRejected && ShouldDisableChannel(err) && channelError.AutoBan {
 		gopool.Go(func() {
 			DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
@@ -81,6 +82,10 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), modelName, channelError.ChannelId, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err))
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+	} else if credentialRejected && !localMaxDuration && !clientGone {
+		gatewayruntime.RecordChannelCredentialFailure(channelError.ChannelId)
+		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）被上游拒绝访问，已进行凭据级短冷却并切换备用渠道", channelError.ChannelName, channelError.ChannelId))
 	} else if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure {
 		cooldown := retryableFailureCooldown(c, err)
 		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)

@@ -28,14 +28,15 @@ const (
 )
 
 type scoredRoutePoolCandidate struct {
-	channel      *gatewayschema.Channel
-	score        float64
-	probe        bool
-	cost         float64
-	health       gatewayruntime.ChannelHealth
-	faultDomain  string
-	channelProbe bool
-	domainProbe  bool
+	channel         *gatewayschema.Channel
+	score           float64
+	probe           bool
+	cost            float64
+	health          gatewayruntime.ChannelHealth
+	faultDomain     string
+	channelProbe    bool
+	credentialProbe bool
+	domainProbe     bool
 }
 
 // RoutePoolSelection is request-local and consumed only by settlement code.
@@ -73,6 +74,11 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 			continue
 		}
 		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
+		credentialCooling := gatewayruntime.IsChannelCredentialCooling(candidate.Channel.Id)
+		if credentialCooling {
+			gatewayruntime.ExcludeRouteDecisionCandidate(c, "channel_credential_cooling")
+			continue
+		}
 		domainHealth, domainFound := gatewayruntime.GetFaultDomainHealth(faultDomain, modelName)
 		channelCooling := found && ((health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now)) ||
 			(health.State == gatewayruntime.ChannelHealthHalfOpen && (health.CoolingUntil.After(now) || health.RecoveryProbeUntil.After(now))))
@@ -87,11 +93,18 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 			})
 			continue
 		}
+		credentialProbe := gatewayruntime.NeedsChannelCredentialRecoveryProbe(candidate.Channel.Id)
 		if found && (health.State == gatewayruntime.ChannelHealthCooling || health.State == gatewayruntime.ChannelHealthHalfOpen) {
-			probes = append(probes, scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), probe: true, cost: cost, faultDomain: faultDomain, channelProbe: true, domainProbe: domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen)})
+			probes = append(probes, scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), probe: true, cost: cost, faultDomain: faultDomain, channelProbe: true, credentialProbe: credentialProbe, domainProbe: domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen)})
 			continue
 		}
 		scored := scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), cost: cost, faultDomain: faultDomain}
+		if credentialProbe {
+			scored.probe = true
+			scored.credentialProbe = true
+			probes = append(probes, scored)
+			continue
+		}
 		if domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen) {
 			scored.probe = true
 			scored.domainProbe = true

@@ -7,7 +7,6 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -265,15 +264,20 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.InitChannelMeta(c)
 		if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) && !streamFailureCircuitChecked {
 			streamFailureCircuitChecked = true
-			if retryAfterSeconds, blocked := relaycommon.UserStreamFailureRetryAfter(c, relayInfo.OriginModelName); blocked {
-				c.Header("Retry-After", strconv.Itoa(retryAfterSeconds))
-				newAPIError = types.NewErrorWithStatusCode(
-					errors.New(types.ModelUnavailableMessage),
-					types.ErrorCodeGetChannelFailed,
-					http.StatusServiceUnavailable,
-					types.ErrOptionWithSkipRetry(),
-				)
-				break
+			if _, blocked := relaycommon.UserStreamFailureRetryAfter(c, relayInfo.OriginModelName); blocked {
+				// A repeated incomplete stream is a signal to leave the currently
+				// selected route, not a reason to reject the next Codex turn. No
+				// semantic output has been sent for this request, so a bounded
+				// cross-domain retry is safe.
+				relaycommon.InvalidateChannelAffinityForCurrentRequest(c)
+				addUsedChannel(c, channel.Id)
+				relaycommon.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
+				relaycommon.ExcludeRouteDecisionCandidate(c, "user_stream_circuit")
+				if retryTimes-retryParam.GetRetry() > 0 {
+					relaycommon.RecordRouteDecisionRetry(c)
+					gatewayroutingapp.RecordAutoGroupFailure(c, relayInfo.OriginModelName)
+					continue
+				}
 			}
 		}
 

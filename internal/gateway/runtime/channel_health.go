@@ -28,6 +28,7 @@ const (
 	channelHealthLongContextTimeout        = 45 * time.Second
 	channelHealthCooldownDuration          = 2 * time.Minute
 	channelHealthProbeLeaseDuration        = 10 * time.Second
+	channelHealthRateLimitProbeSlots       = 2
 	channelHealthTTL                       = 20 * time.Minute
 	channelModelUnavailableTTL             = 5 * time.Minute
 	channelModelUpstreamFailureTTL         = 2 * time.Minute
@@ -49,6 +50,7 @@ type ChannelHealth struct {
 	ConsecutiveRetryableFailures int                  `json:"consecutive_retryable_failures"`
 	RecoveryProbeSuccesses       int                  `json:"recovery_probe_successes"`
 	RecoveryProbeUntil           time.Time            `json:"recovery_probe_until"`
+	RecoveryProbeSlots           int                  `json:"recovery_probe_slots,omitempty"`
 	CoolingUntil                 time.Time            `json:"cooling_until"`
 	SuccessRate2m                float64              `json:"success_rate_2m"`
 	SuccessRate5m                float64              `json:"success_rate_5m"`
@@ -158,6 +160,7 @@ func RecordChannelModelUnavailable(channelID int, model string, requestID string
 		state.LastFailureRequestID = requestID
 		state.ConsecutiveRetryableFailures++
 		state.RecoveryProbeSuccesses = 0
+		state.RecoveryProbeSlots = 0
 		if state.ConsecutiveRetryableFailures >= channelHealthFailureThreshold {
 			state.State = ChannelHealthCooling
 			state.CoolingUntil = now.Add(channelModelUnavailableTTL)
@@ -187,6 +190,7 @@ func CoolChannelModelForUpstreamFailure(channelID int, model string) bool {
 		state.State = ChannelHealthCooling
 		state.ConsecutiveRetryableFailures = 0
 		state.RecoveryProbeSuccesses = 0
+		state.RecoveryProbeSlots = 0
 		state.CoolingUntil = now.Add(channelModelUpstreamFailureTTL)
 		state.LastFailureAt = now
 		state.RecoveryProbeSuccesses = 0
@@ -238,6 +242,7 @@ func recordChannelRetryableFailure(channelID int, model string, shortCooldown ti
 		state.ConsecutiveRetryableFailures++
 		state.RecoveryProbeSuccesses = 0
 		state.RecoveryProbeUntil = time.Time{}
+		state.RecoveryProbeSlots = 0
 		escalated := shouldCoolForShortTermFailureRate(state) || state.ConsecutiveRetryableFailures >= failureThreshold
 		backoffLevel := retryableFailureBackoffLevel(state.ConsecutiveRetryableFailures, failureThreshold)
 		if state.CoolingUntil.After(now) && state.State != ChannelHealthHalfOpen {
@@ -267,6 +272,17 @@ func retryableFailureBackoffLevel(failures int, failureThreshold int) int {
 // TryStartChannelRecoveryProbe reserves a single expired circuit for a real
 // request. The lease prevents a burst of concurrent callers from reopening it.
 func TryStartChannelRecoveryProbe(channelID int, model string) bool {
+	return tryStartChannelProbe(channelID, model, 1, true)
+}
+
+// TryStartChannelRateLimitRetryProbe admits a second bounded probe slot when
+// a retry follows an upstream 429. Cooling remains in force for normal route
+// selection; only this already-failing request can use the extra slot.
+func TryStartChannelRateLimitRetryProbe(channelID int, model string) bool {
+	return tryStartChannelProbe(channelID, model, channelHealthRateLimitProbeSlots, false)
+}
+
+func tryStartChannelProbe(channelID int, model string, maxSlots int, requireExpired bool) bool {
 	if channelID <= 0 || model == "" {
 		return false
 	}
@@ -282,15 +298,47 @@ func TryStartChannelRecoveryProbe(channelID int, model string) bool {
 	now := time.Now().UTC()
 	started := false
 	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
-		if !found || (state.State != ChannelHealthCooling && state.State != ChannelHealthHalfOpen) || state.CoolingUntil.After(now) || state.RecoveryProbeUntil.After(now) {
+		if !found || (state.State != ChannelHealthCooling && state.State != ChannelHealthHalfOpen) {
+			return state, nil
+		}
+		if requireExpired && state.CoolingUntil.After(now) {
+			return state, nil
+		}
+		if !state.RecoveryProbeUntil.After(now) {
+			state.RecoveryProbeSlots = 0
+		}
+		if state.RecoveryProbeSlots >= maxSlots {
 			return state, nil
 		}
 		state.State = ChannelHealthHalfOpen
 		state.RecoveryProbeUntil = now.Add(channelHealthProbeLeaseDuration)
+		state.RecoveryProbeSlots++
 		started = true
 		return state, nil
 	})
 	return started
+}
+
+// ReleaseChannelProbe returns a slot when a paired fault-domain probe could
+// not be acquired. It prevents partial selection from consuming the retry
+// budget until the lease expires.
+func ReleaseChannelProbe(channelID int, model string) {
+	if channelID <= 0 || model == "" {
+		return
+	}
+	lock := channelHealthLock(channelID)
+	lock.Lock()
+	defer lock.Unlock()
+	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
+		if !found || state.RecoveryProbeSlots <= 0 {
+			return state, nil
+		}
+		state.RecoveryProbeSlots--
+		if state.RecoveryProbeSlots == 0 {
+			state.RecoveryProbeUntil = time.Time{}
+		}
+		return state, nil
+	})
 }
 
 func adaptiveChannelCooldown(base time.Duration, failures int) time.Duration {
@@ -369,11 +417,14 @@ func RecordChannelSuccess(channelID int, model string, ttft time.Duration) {
 			return state, nil
 		}
 		if state.State == ChannelHealthCooling && state.CoolingUntil.After(now) {
+			state.RecoveryProbeUntil = time.Time{}
+			state.RecoveryProbeSlots = 0
 			return state, nil
 		}
 		if state.State == ChannelHealthHalfOpen || state.State == ChannelHealthCooling {
 			state.RecoveryProbeSuccesses++
 			state.RecoveryProbeUntil = time.Time{}
+			state.RecoveryProbeSlots = 0
 			if state.RecoveryProbeSuccesses < 2 {
 				state.State = ChannelHealthCooling
 				state.CoolingUntil = now
@@ -382,6 +433,7 @@ func RecordChannelSuccess(channelID int, model string, ttft time.Duration) {
 		}
 		state.ConsecutiveRetryableFailures = 0
 		state.RecoveryProbeSuccesses = 0
+		state.RecoveryProbeSlots = 0
 		state.State = ChannelHealthHealthy
 		state.CoolingUntil = time.Time{}
 		return state, nil

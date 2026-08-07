@@ -210,6 +210,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 			case <-ctx.Done():
 				return
 			case <-c.Request.Context().Done():
+				MarkClientGone(c)
 				info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
 				return
 			default:
@@ -276,6 +277,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 		closeTimedOutStream(resp)
 	case <-stopChan:
 	case <-c.Request.Context().Done():
+		MarkClientGone(c)
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
 	}
 

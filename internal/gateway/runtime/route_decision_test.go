@@ -19,9 +19,13 @@ func TestSetRouteDecisionProbeMode(t *testing.T) {
 	decision, found := GetRouteDecision(context)
 	require.True(t, found)
 	require.Equal(t, RouteDecisionProbeLastResort, decision.ProbeMode)
+	SetRouteDecisionProbeMode(context, RouteDecisionProbeRateLimit)
+	decision, found = GetRouteDecision(context)
+	require.True(t, found)
+	require.Equal(t, RouteDecisionProbeRateLimit, decision.ProbeMode)
 
 	SetRouteDecisionProbeMode(context, "invalid")
 	decision, found = GetRouteDecision(context)
 	require.True(t, found)
-	require.Equal(t, RouteDecisionProbeLastResort, decision.ProbeMode)
+	require.Equal(t, RouteDecisionProbeRateLimit, decision.ProbeMode)
 }

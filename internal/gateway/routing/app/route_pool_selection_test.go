@@ -152,3 +152,23 @@ func TestRoutePoolLastResortProbePrefersReliableCandidateOverLowerCost(t *testin
 	assert.NotNil(t, probe)
 	assert.Equal(t, 52, probe.channel.Id)
 }
+
+func TestRoutePoolRateLimitRetryProbeAllowsOnlyBoundedExtraSlot(t *testing.T) {
+	channelID := 9_876_544
+	modelName := "gpt-rate-limit-route-pool"
+	for range 3 {
+		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelID, modelName, time.Minute)
+	}
+	candidate := []scoredRoutePoolCandidate{{
+		channel:      &gatewayschema.Channel{Id: channelID},
+		channelProbe: true,
+		health: gatewayruntime.ChannelHealth{
+			SuccessRate5m: 95,
+			LastSuccessAt: time.Now().Add(-time.Minute),
+		},
+	}}
+
+	assert.NotNil(t, reserveRoutePoolRateLimitRetryProbe(candidate, modelName))
+	assert.NotNil(t, reserveRoutePoolRateLimitRetryProbe(candidate, modelName))
+	assert.Nil(t, reserveRoutePoolRateLimitRetryProbe(candidate, modelName))
+}

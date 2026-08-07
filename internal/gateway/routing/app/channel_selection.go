@@ -164,7 +164,7 @@ func getHealthySatisfiedChannelWithContext(c *gin.Context, group string, modelNa
 }
 
 func getHealthySatisfiedChannelWithMode(c *gin.Context, group string, modelName string, retry int, allowLastResort bool) (*gatewayschema.Channel, error) {
-	if channel, managed, err := selectAutomaticPoolChannel(c, group, modelName); err != nil || managed {
+	if channel, managed, err := selectAutomaticPoolChannel(c, group, modelName, retry); err != nil || managed {
 		return channel, err
 	}
 	var degradedCandidate *gatewayschema.Channel

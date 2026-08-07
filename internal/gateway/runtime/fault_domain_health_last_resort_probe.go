@@ -1,30 +1,14 @@
 package runtime
 
-import "time"
-
 // TryStartFaultDomainLastResortProbe reserves one cooling fault domain for a
 // real request when every route-pool candidate is cooling. The lease keeps a
 // shared upstream from receiving a concurrent recovery burst.
 func TryStartFaultDomainLastResortProbe(domain, model string) bool {
-	if domain == "" || model == "" {
-		return false
-	}
-	lock := faultDomainHealthLock(domain)
-	if !lock.TryLock() {
-		return false
-	}
-	defer lock.Unlock()
+	return tryStartFaultDomainProbe(domain, model, 1, false)
+}
 
-	now := time.Now().UTC()
-	started := false
-	_ = getChannelHealthCache().UpdateWithTTL(faultDomainHealthKey(domain, model), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
-		if !found || (state.State != ChannelHealthCooling && state.State != ChannelHealthHalfOpen) || state.RecoveryProbeUntil.After(now) {
-			return state, nil
-		}
-		state.State = ChannelHealthHalfOpen
-		state.RecoveryProbeUntil = now.Add(channelHealthProbeLeaseDuration)
-		started = true
-		return state, nil
-	})
-	return started
+// TryStartFaultDomainRateLimitRetryProbe admits one additional bounded probe
+// slot for a retry after a 429 without reopening normal domain traffic.
+func TryStartFaultDomainRateLimitRetryProbe(domain, model string) bool {
+	return tryStartFaultDomainProbe(domain, model, channelHealthRateLimitProbeSlots, false)
 }

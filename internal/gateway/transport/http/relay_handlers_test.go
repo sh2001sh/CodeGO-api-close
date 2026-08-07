@@ -105,6 +105,16 @@ func TestShouldRetryResponsesStreamBeforeContentDespiteLifecycleEvent(t *testing
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldNotRetryAfterClientDisconnect(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set(string(constant.ContextKeyClientGone), true)
+	err := types.NewOpenAIError(errors.New("responses stream closed before response.completed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
 func TestShouldRetryLateResponsesStreamBeforeSemanticContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

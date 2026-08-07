@@ -57,7 +57,19 @@ func SetEventStreamHeaders(c *gin.Context) {
 }
 
 func IsClientGone(c *gin.Context) bool {
-	return c == nil || c.Request == nil || c.Request.Context().Err() != nil
+	if c == nil || c.Request == nil || c.Request.Context().Err() != nil {
+		MarkClientGone(c)
+		return true
+	}
+	return false
+}
+
+// MarkClientGone records a downstream disconnect for the relay error path.
+// It is intentionally request-local and never exposed to API consumers.
+func MarkClientGone(c *gin.Context) {
+	if c != nil {
+		c.Set(string(constant.ContextKeyClientGone), true)
+	}
 }
 
 func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {

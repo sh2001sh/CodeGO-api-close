@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -31,6 +32,23 @@ func TestCloseTimedOutStreamClosesResponseBody(t *testing.T) {
 	body := &closeTrackingReader{}
 	closeTimedOutStream(&http.Response{Body: body})
 	require.True(t, body.closed)
+}
+
+func TestIsClientGoneMarksRequestContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	request := httptest.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil)
+	requestContext, cancel := contextWithCancel(request.Context())
+	request = request.WithContext(requestContext)
+	context.Request = request
+	cancel()
+
+	require.True(t, IsClientGone(context))
+	require.True(t, context.GetBool(string(constant.ContextKeyClientGone)))
+}
+
+func contextWithCancel(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithCancel(parent)
 }
 
 type blockingReader struct {

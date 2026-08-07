@@ -50,6 +50,10 @@ func IsFaultDomainCooling(domain, model string) bool {
 // TryStartFaultDomainRecoveryProbe reserves one expired domain circuit for a
 // real request, preventing same-domain channels from probing concurrently.
 func TryStartFaultDomainRecoveryProbe(domain, model string) bool {
+	return tryStartFaultDomainProbe(domain, model, 1, true)
+}
+
+func tryStartFaultDomainProbe(domain, model string, maxSlots int, requireExpired bool) bool {
 	if domain == "" || model == "" {
 		return false
 	}
@@ -62,15 +66,46 @@ func TryStartFaultDomainRecoveryProbe(domain, model string) bool {
 	now := time.Now().UTC()
 	started := false
 	_ = getChannelHealthCache().UpdateWithTTL(faultDomainHealthKey(domain, model), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
-		if !found || (state.State != ChannelHealthCooling && state.State != ChannelHealthHalfOpen) || state.CoolingUntil.After(now) || state.RecoveryProbeUntil.After(now) {
+		if !found || (state.State != ChannelHealthCooling && state.State != ChannelHealthHalfOpen) {
+			return state, nil
+		}
+		if requireExpired && state.CoolingUntil.After(now) {
+			return state, nil
+		}
+		if !state.RecoveryProbeUntil.After(now) {
+			state.RecoveryProbeSlots = 0
+		}
+		if state.RecoveryProbeSlots >= maxSlots {
 			return state, nil
 		}
 		state.State = ChannelHealthHalfOpen
 		state.RecoveryProbeUntil = now.Add(channelHealthProbeLeaseDuration)
+		state.RecoveryProbeSlots++
 		started = true
 		return state, nil
 	})
 	return started
+}
+
+// ReleaseFaultDomainProbe returns a slot when a paired channel probe cannot be
+// acquired, preventing a partial fault-domain reservation from leaking.
+func ReleaseFaultDomainProbe(domain, model string) {
+	if domain == "" || model == "" {
+		return
+	}
+	lock := faultDomainHealthLock(domain)
+	lock.Lock()
+	defer lock.Unlock()
+	_ = getChannelHealthCache().UpdateWithTTL(faultDomainHealthKey(domain, model), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
+		if !found || state.RecoveryProbeSlots <= 0 {
+			return state, nil
+		}
+		state.RecoveryProbeSlots--
+		if state.RecoveryProbeSlots == 0 {
+			state.RecoveryProbeUntil = time.Time{}
+		}
+		return state, nil
+	})
 }
 
 // RecordFaultDomainRetryableFailure opens a domain circuit only after three
@@ -95,6 +130,7 @@ func RecordFaultDomainRetryableFailure(domain, model, requestID string, cooldown
 		state.ConsecutiveRetryableFailures++
 		state.RecoveryProbeSuccesses = 0
 		state.RecoveryProbeUntil = time.Time{}
+		state.RecoveryProbeSlots = 0
 		backoffLevel := faultDomainBackoffLevel(state.ConsecutiveRetryableFailures)
 		if state.CoolingUntil.After(now) && state.State != ChannelHealthHalfOpen {
 			if state.ConsecutiveRetryableFailures >= faultDomainFailureThreshold {
@@ -142,6 +178,7 @@ func RecordFaultDomainChannelFailure(domain, model string, channelID int, reques
 		state.ConsecutiveRetryableFailures = max(state.ConsecutiveRetryableFailures+1, faultDomainFailureThreshold)
 		state.RecoveryProbeSuccesses = 0
 		state.RecoveryProbeUntil = time.Time{}
+		state.RecoveryProbeSlots = 0
 		state.CoolingUntil = now.Add(adaptiveChannelCooldown(cooldown, faultDomainBackoffLevel(state.ConsecutiveRetryableFailures)))
 		state.State = ChannelHealthCooling
 		return state, nil
@@ -194,11 +231,14 @@ func RecordFaultDomainSuccess(domain, model string) {
 		state.Model = model
 		state.LastSuccessAt = now
 		if state.State == ChannelHealthCooling && state.CoolingUntil.After(now) {
+			state.RecoveryProbeUntil = time.Time{}
+			state.RecoveryProbeSlots = 0
 			return state, nil
 		}
 		if state.State == ChannelHealthHalfOpen || state.State == ChannelHealthCooling {
 			state.RecoveryProbeSuccesses++
 			state.RecoveryProbeUntil = time.Time{}
+			state.RecoveryProbeSlots = 0
 			if state.RecoveryProbeSuccesses < 2 {
 				state.State = ChannelHealthCooling
 				state.CoolingUntil = now
@@ -208,6 +248,7 @@ func RecordFaultDomainSuccess(domain, model string) {
 		state.ConsecutiveRetryableFailures = 0
 		state.RecoveryProbeSuccesses = 0
 		state.RecoveryProbeUntil = time.Time{}
+		state.RecoveryProbeSlots = 0
 		state.State = ChannelHealthHealthy
 		state.CoolingUntil = time.Time{}
 		return state, nil

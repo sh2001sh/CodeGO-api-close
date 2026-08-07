@@ -50,7 +50,7 @@ type routePoolAffinity struct {
 
 // selectAutomaticPoolChannel returns managed=true when the group has an enabled
 // automatic pool. In that case priority and weight are deliberately ignored.
-func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatewayschema.Channel, bool, error) {
+func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry int) (*gatewayschema.Channel, bool, error) {
 	detail, err := gatewaystore.LoadEnabledRoutePool(group)
 	if err != nil || detail == nil {
 		return nil, detail != nil, err
@@ -118,6 +118,12 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 		return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 	}
 	if len(healthy) == 0 {
+		if retry > 0 && c != nil && c.GetBool(string(constant.ContextKeyRateLimitRetry)) {
+			if probe := reserveRoutePoolRateLimitRetryProbe(lastResortProbes, modelName); probe != nil {
+				gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeRateLimit)
+				return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
+			}
+		}
 		if probe := reserveRoutePoolLastResortProbe(lastResortProbes, modelName); probe != nil {
 			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
 			return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil

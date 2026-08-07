@@ -73,6 +73,12 @@ const (
 	// ContextKeyStreamContentDelivered is set once retrying would duplicate text
 	// or tool arguments already delivered to the client.
 	ContextKeyStreamContentDelivered ContextKey = "stream_content_delivered"
+	// ContextKeyClientGone marks a downstream connection that was cancelled or
+	// closed. Such a disconnect must not be attributed to an upstream channel.
+	ContextKeyClientGone ContextKey = "client_gone"
+	// ContextKeyRateLimitRetry marks a retry following an upstream 429. Automatic
+	// pools may use the bounded cross-fault-domain emergency probe in this case.
+	ContextKeyRateLimitRetry ContextKey = "rate_limit_retry"
 
 	// ContextKeyImageWorkspaceCaptureResponse indicates the current request should
 	// capture the JSON response body for image workspace persistence.

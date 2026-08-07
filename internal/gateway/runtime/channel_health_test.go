@@ -148,6 +148,18 @@ func TestChannelHealthShortCooldownEscalatesAfterRepeatedFailures(t *testing.T) 
 	require.WithinDuration(t, time.Now().Add(2*channelHealthShortCooldown), state.CoolingUntil, time.Second)
 }
 
+func TestChannelHealthAllowsBoundedRateLimitRetryProbeSlots(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	for range channelHealthRetryableFailureThreshold {
+		RecordChannelRetryableFailureWithCooldown(42, "gpt-rate-limit", time.Minute)
+	}
+	require.True(t, TryStartChannelRateLimitRetryProbe(42, "gpt-rate-limit"))
+	require.True(t, TryStartChannelRateLimitRetryProbe(42, "gpt-rate-limit"))
+	require.False(t, TryStartChannelRateLimitRetryProbe(42, "gpt-rate-limit"))
+}
+
 func TestChannelHealthCoolsSlowFirstTokenRouteBriefly(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })

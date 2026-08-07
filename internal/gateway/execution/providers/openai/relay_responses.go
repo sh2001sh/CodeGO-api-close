@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	responsesPreOutputEventLimit = 32
-	responsesPreOutputByteLimit  = 256 << 10
+	responsesPreOutputEventLimit = 128
+	responsesPreOutputByteLimit  = 1 << 20
 )
 
 type bufferedResponsesStreamEvent struct {
@@ -99,9 +99,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var sawSemanticOutput atomic.Bool
 	var sawResponseCompleted atomic.Bool
 	var firstOutputTimedOut atomic.Bool
-	var preOutputBufferErr error
 	var preOutputEvents []bufferedResponsesStreamEvent
 	preOutputEventsBuffered := 0
+	preOutputEventsDropped := 0
 	preOutputBytes := 0
 	if responsesRequestUsesImageGeneration(info) {
 		relaycommon.MarkImageGenerationRequest(c)
@@ -169,12 +169,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				sr.Stop(err)
 				return
 			}
-		} else if err := appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, streamResponse, data); err != nil {
-			preOutputBufferErr = err
-			sr.Stop(err)
-			return
 		} else {
-			preOutputEventsBuffered++
+			preOutputEventsDropped += appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, streamResponse, data)
+			preOutputEventsBuffered = len(preOutputEvents)
 		}
 		switch streamResponse.Type {
 		case "response.completed":
@@ -223,17 +220,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		"semantic_output_seen":       sawSemanticOutput.Load(),
 		"response_completed_seen":    sawResponseCompleted.Load(),
 		"pre_output_events_buffered": preOutputEventsBuffered,
+		"pre_output_events_dropped":  preOutputEventsDropped,
 		"first_output_timeout_ms":    firstOutputTimeout.Milliseconds(),
 		"first_output_timed_out":     firstOutputTimedOut.Load(),
 	})
-
-	if preOutputBufferErr != nil {
-		return nil, types.NewOpenAIError(
-			preOutputBufferErr,
-			types.ErrorCodeChannelResponseTimeExceeded,
-			http.StatusGatewayTimeout,
-		)
-	}
 
 	if firstOutputTimedOut.Load() && !sawSemanticOutput.Load() {
 		return nil, types.NewOpenAIError(
@@ -295,13 +285,29 @@ func responsesRequestUsesImageGeneration(info *relaycommon.RelayInfo) bool {
 	return false
 }
 
-func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, size *int, response dto.ResponsesStreamResponse, data string) error {
+// appendBufferedResponsesStreamEvent keeps lifecycle data bounded until the
+// first model-visible event. Overflowing lifecycle-only events are discarded,
+// not treated as an upstream failure, so large Responses continuations remain
+// retry-safe and can still reach their first output.
+func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, size *int, response dto.ResponsesStreamResponse, data string) (dropped int) {
+	if len(data) > responsesPreOutputByteLimit {
+		return 1
+	}
+	for len(*events) > 0 && (len(*events) >= responsesPreOutputEventLimit || *size+len(data) > responsesPreOutputByteLimit) {
+		dropIndex := 0
+		if (*events)[0].response.Type == "response.created" && len(*events) > 1 {
+			dropIndex = 1
+		}
+		*size -= len((*events)[dropIndex].data)
+		*events = append((*events)[:dropIndex], (*events)[dropIndex+1:]...)
+		dropped++
+	}
 	if len(*events) >= responsesPreOutputEventLimit || *size+len(data) > responsesPreOutputByteLimit {
-		return fmt.Errorf("responses stream exceeded pre-output lifecycle buffer")
+		return dropped + 1
 	}
 	*events = append(*events, bufferedResponsesStreamEvent{response: response, data: data})
 	*size += len(data)
-	return nil
+	return dropped
 }
 
 func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayInfo, events []bufferedResponsesStreamEvent) error {

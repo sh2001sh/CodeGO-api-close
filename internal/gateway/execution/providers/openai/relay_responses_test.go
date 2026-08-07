@@ -149,6 +149,37 @@ func TestOaiResponsesStreamHandlerFlushesLifecycleBeforeSemanticOutput(t *testin
 	require.True(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
 }
 
+func TestOaiResponsesStreamHandlerDoesNotFailWhenLifecycleBufferOverflows(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	var body strings.Builder
+	body.WriteString(`data: {"type":"response.created","response":{"id":"resp_123"}}` + "\n\n")
+	for index := 0; index < responsesPreOutputEventLimit+8; index++ {
+		body.WriteString(`data: {"type":"response.in_progress","response":{"id":"resp_123"}}` + "\n\n")
+	}
+	body.WriteString(`data: {"type":"response.output_text.delta","delta":"hello"}` + "\n\n")
+	body.WriteString(`data: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}` + "\n\n")
+	body.WriteString("data: [DONE]\n\n")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body.String())), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+
+	require.Nil(t, err)
+	require.NotNil(t, usage)
+	require.Equal(t, 15, usage.TotalTokens)
+	require.Contains(t, recorder.Body.String(), `event: response.created`)
+	require.Contains(t, recorder.Body.String(), `event: response.output_text.delta`)
+	lifecycle, ok := c.Get("responses_stream_lifecycle")
+	require.True(t, ok)
+	require.Greater(t, lifecycle.(map[string]interface{})["pre_output_events_dropped"].(int), 0)
+}
+
 func TestOaiResponsesStreamHandlerSucceedsAfterResponseCompleted(t *testing.T) {
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)

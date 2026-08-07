@@ -48,6 +48,12 @@ var relayUpgrader = websocket.Upgrader{
 	},
 }
 
+const (
+	routeSelectionExhaustedContextKey = "route_selection_exhausted"
+	maxRouteSelectionWaitRetries      = 2
+	routeSelectionRetryDelay          = 500 * time.Millisecond
+)
+
 func addUsedChannel(c *gin.Context, channelID int) {
 	useChannel := c.GetStringSlice("use_channel")
 	useChannel = append(useChannel, fmt.Sprintf("%d", channelID))
@@ -93,6 +99,7 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 		}, nil
 	}
 
+	c.Set(routeSelectionExhaustedContextKey, false)
 	channel, selectGroup, err := gatewayroutingapp.CacheGetRandomSatisfiedChannel(retryParam)
 	if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
 		info.RoutePoolID = selection.PoolID
@@ -100,6 +107,8 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 	}
 	info.PriceData.GroupRatioInfo = relaycommon.HandleGroupRatio(c, info)
 	if err != nil {
+		c.Set(routeSelectionExhaustedContextKey, true)
+		gatewayruntime.ExcludeRouteDecisionCandidate(c, "no_selectable_candidate")
 		return nil, types.NewError(
 			fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）：%s", selectGroup, info.OriginModelName, err.Error()),
 			types.ErrorCodeGetChannelFailed,
@@ -107,6 +116,8 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 		)
 	}
 	if channel == nil {
+		c.Set(routeSelectionExhaustedContextKey, true)
+		gatewayruntime.ExcludeRouteDecisionCandidate(c, "no_selectable_candidate")
 		return nil, types.NewError(
 			fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName),
 			types.ErrorCodeGetChannelFailed,
@@ -119,6 +130,25 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 		return nil, newAPIError
 	}
 	return channel, nil
+}
+
+func shouldWaitForRouteSelection(c *gin.Context, attempt int) bool {
+	return c != nil && c.Request != nil &&
+		!c.GetBool(string(constant.ContextKeyClientGone)) &&
+		c.GetBool(routeSelectionExhaustedContextKey) &&
+		attempt < maxRouteSelectionWaitRetries
+}
+
+func waitForRouteSelection(c *gin.Context, attempt int) bool {
+	delay := time.Duration(attempt+1) * routeSelectionRetryDelay
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-c.Request.Context().Done():
+		return false
+	}
 }
 
 func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {

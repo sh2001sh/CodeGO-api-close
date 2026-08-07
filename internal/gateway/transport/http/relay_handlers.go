@@ -17,6 +17,7 @@ import (
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	platformconcurrency "github.com/sh2001sh/new-api/internal/platform/concurrency"
@@ -256,7 +257,20 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 
 	for ; retryParam.GetRetry() <= retryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
-		channel, channelErr := getChannel(c, relayInfo, retryParam)
+		var (
+			channel    *gatewayschema.Channel
+			channelErr *types.NewAPIError
+		)
+		for selectionAttempt := 0; ; selectionAttempt++ {
+			channel, channelErr = getChannel(c, relayInfo, retryParam)
+			if channelErr == nil || !shouldWaitForRouteSelection(c, selectionAttempt) {
+				break
+			}
+			relaycommon.RecordRouteDecisionRetry(c)
+			if !waitForRouteSelection(c, selectionAttempt) {
+				break
+			}
+		}
 		if channelErr != nil {
 			logger.LogError(c, channelErr.Error())
 			newAPIError = channelErr

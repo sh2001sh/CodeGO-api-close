@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
@@ -150,6 +151,23 @@ func TestShouldRetryLateResponsesStreamBeforeSemanticContent(t *testing.T) {
 	err := types.NewOpenAIError(errors.New("upstream produced no semantic output"), types.ErrorCodeChannelResponseTimeExceeded, http.StatusGatewayTimeout)
 
 	require.True(t, shouldRetry(ctx, err, 1))
+}
+
+func TestRouteSelectionWaitIsLimitedAndHonorsCancellation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	requestContext, cancel := context.WithCancel(context.Background())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(requestContext)
+	ctx.Set(routeSelectionExhaustedContextKey, true)
+
+	require.True(t, shouldWaitForRouteSelection(ctx, 0))
+	require.True(t, shouldWaitForRouteSelection(ctx, 1))
+	require.False(t, shouldWaitForRouteSelection(ctx, 2))
+
+	cancel()
+	started := time.Now()
+	require.False(t, waitForRouteSelection(ctx, 0))
+	require.Less(t, time.Since(started), 100*time.Millisecond)
 }
 
 func TestFinalizeRelayErrorMasksChineseUpstreamQuotaLeak(t *testing.T) {

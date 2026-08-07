@@ -1,25 +1,22 @@
 # Main Goal
-Prevent GPT stream-scanner worker leaks and cancellation delays from exhausting routing candidates after upstream disconnects, especially on channels 67 and 32.
+Prevent GPT stream worker leaks and automatic-route candidate exhaustion from returning avoidable Codex 503 responses.
 
 # Current Work
-- Commit `a913c56e8` is deployed to production and introduced safe pre-semantic retries plus sanitized terminal 503 behavior.
-- Local follow-up refactors `ScanResponse` so scanner, data delivery, and SSE ping lifecycles have explicit cancellation and completion signals.
-- Any handler, ping, or worker failure now wakes the main flow and closes the upstream response body, interrupting a blocked `Scanner.Scan` immediately instead of waiting for the idle timeout.
-- The data worker owns all downstream writes. The ping worker only queues a bounded ping signal, eliminating the former detached ping-write goroutine and write-mutex retention risk.
-- Normal `[DONE]`/EOF still drains already-read frames; abnormal ends cancel stream pacing and data workers.
-- Stream pacing and flushing now consume the request-scoped worker cancellation context.
-- Added regression tests for normal frame draining, idle-timeout cancellation, and handler-stop interruption of a blocked upstream scanner.
+- Stream lifecycle repair is committed as `d57c72e19` and deployed: production gateway runs `sha-d57c72e-gateway-api-amd64`; rollback container is `new-api-v2-gateway-pre-sha-d57c72e-20260807T085510Z`.
+- The scanner now closes an upstream body after any handler/ping/worker stop, owns writes in one data worker, and cancels pacing on abnormal ends. Normal `[DONE]`/EOF drains already-read frames.
+- Diagnosed user `chuyuxuan` (internal ID 2704): its main Responses streams succeed and are recorded in the usage log, but follow-up Codex requests hit an all-cooling/probe-capacity window and returned an immediate sanitized 503 before a channel was selected.
+- Local follow-up adds two context-aware route-selection waits (500ms then 1s) only before a channel is acquired. It records `no_selectable_candidate` in the internal route audit and does not replay semantic output or change image-generation behavior.
 
 # Verification
-- `go test ./internal/gateway/... -count=1` passed.
-- `go test ./internal/gateway/stream -count=5` passed.
+- `go test ./internal/gateway/... -count=1` passed after the route-selection change.
+- `go test ./internal/gateway/stream -count=5` passed for the scanner repair.
 - `git diff --check` passed.
-- Full-repository test still has the pre-existing `internal/commerce/transport/http: TestGetSubscriptionOrderStatusReturnsOrderPayload` expectation failure; unrelated to this gateway change.
+- Full-repository test baseline still has the unrelated stale subscription-order expectation failure.
 
 # Next Actions
-- Commit only the stream lifecycle files and push to trigger the gateway image build.
-- Deploy only `new-api-v2-gateway`, retaining the existing rollback container.
-- Observe production for at least 15 minutes: no `timeout waiting for goroutines to exit`, channels 67/32 502/504, candidate exhaustion/503, retry recovery chains, and gateway restarts.
+- Commit and push the bounded route-selection wait.
+- Deploy only the resulting gateway image, retaining the current rollback container.
+- Observe channel 67/32 worker shutdown logs, candidate exhaustion, user 2704's Codex follow-ups, and gateway restart count for at least 15 minutes.
 
 # Blockers
 - No active implementation blocker.

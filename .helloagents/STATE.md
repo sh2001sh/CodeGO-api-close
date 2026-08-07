@@ -1,23 +1,25 @@
 # Main Goal
-Rebuild GPT streaming failure handling so safely replayable upstream failures switch routes, while all unrecoverable upstream errors remain sanitized to the existing user-facing 503 contract.
+Prevent GPT stream-scanner worker leaks and cancellation delays from exhausting routing candidates after upstream disconnects, especially on channels 67 and 32.
 
 # Current Work
-- Implemented Phase 1 of `docs/gpt-stream-routing-redesign.md`; changes are local and uncommitted.
-- Added `AttemptStage` as the request-scoped source of truth for selected, connected, bootstrap, semantic-committed, and completed Responses stream states.
-- A Responses stream with lifecycle-only events can retry. Once a text delta or tool call is about to be written, it becomes non-replayable before the write to avoid duplicate output.
-- Pre-semantic incomplete streams exclude the current fault domain before retry. Post-semantic failures do not replay.
-- Unrecoverable remote 5xx failures are normalized to the existing sanitized HTTP 503 message before downstream response commitment. A committed stream emits an equivalent sanitized SSE error event instead of silently closing.
-- Admin error audit now includes `attempt_stage`; upstream/channel details remain internal.
+- Commit `a913c56e8` is deployed to production and introduced safe pre-semantic retries plus sanitized terminal 503 behavior.
+- Local follow-up refactors `ScanResponse` so scanner, data delivery, and SSE ping lifecycles have explicit cancellation and completion signals.
+- Any handler, ping, or worker failure now wakes the main flow and closes the upstream response body, interrupting a blocked `Scanner.Scan` immediately instead of waiting for the idle timeout.
+- The data worker owns all downstream writes. The ping worker only queues a bounded ping signal, eliminating the former detached ping-write goroutine and write-mutex retention risk.
+- Normal `[DONE]`/EOF still drains already-read frames; abnormal ends cancel stream pacing and data workers.
+- Stream pacing and flushing now consume the request-scoped worker cancellation context.
+- Added regression tests for normal frame draining, idle-timeout cancellation, and handler-stop interruption of a blocked upstream scanner.
 
 # Verification
-- `go test ./internal/gateway/...` passed.
-- `go test ./types` passed.
+- `go test ./internal/gateway/... -count=1` passed.
+- `go test ./internal/gateway/stream -count=5` passed.
 - `git diff --check` passed.
-- `go test ./...` has one unrelated existing failure: `internal/commerce/transport/http: TestGetSubscriptionOrderStatusReturnsOrderPayload`; it receives `Standard月卡` and fails its stale expected payload assertion.
+- Full-repository test still has the pre-existing `internal/commerce/transport/http: TestGetSubscriptionOrderStatusReturnsOrderPayload` expectation failure; unrelated to this gateway change.
 
 # Next Actions
-- Review and commit only the gateway/error changes plus `docs/gpt-stream-routing-redesign.md`; do not include `artifacts/` or `scripts/audit-upstream-api.ps1`.
-- Push and build only after an explicit release request, then verify the stage and retry audit fields in production.
+- Commit only the stream lifecycle files and push to trigger the gateway image build.
+- Deploy only `new-api-v2-gateway`, retaining the existing rollback container.
+- Observe production for at least 15 minutes: no `timeout waiting for goroutines to exit`, channels 67/32 502/504, candidate exhaustion/503, retry recovery chains, and gateway restarts.
 
 # Blockers
-- No implementation blocker. Full-repository test baseline needs the unrelated subscription order test expectation corrected separately.
+- No active implementation blocker.

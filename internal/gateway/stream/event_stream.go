@@ -35,6 +35,9 @@ func FlushWriter(c *gin.Context) (err error) {
 	if c.Request != nil && c.Request.Context().Err() != nil {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
+	if err := StreamWorkerContext(c).Err(); err != nil {
+		return fmt.Errorf("stream worker context done: %w", err)
+	}
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {

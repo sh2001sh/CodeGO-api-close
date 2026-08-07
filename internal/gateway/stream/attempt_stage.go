@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
@@ -109,4 +110,24 @@ func setAttemptStage(c *gin.Context, stage AttemptStage) {
 	if c != nil {
 		c.Set(string(constant.ContextKeyRelayAttemptStage), stage)
 	}
+}
+
+func SetStreamWorkerContext(c *gin.Context, ctx context.Context) {
+	if c != nil && ctx != nil {
+		c.Set(string(constant.ContextKeyStreamWorkerContext), ctx)
+	}
+}
+
+func StreamWorkerContext(c *gin.Context) context.Context {
+	if c != nil {
+		if value, ok := c.Get(string(constant.ContextKeyStreamWorkerContext)); ok {
+			if ctx, ok := value.(context.Context); ok && ctx != nil {
+				return ctx
+			}
+		}
+		if c.Request != nil {
+			return c.Request.Context()
+		}
+	}
+	return context.Background()
 }

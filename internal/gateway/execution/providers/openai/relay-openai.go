@@ -140,7 +140,7 @@ func paceChatStream(c *gin.Context, info *relaycommon.RelayInfo, data string) er
 		text.WriteString(choice.Delta.GetContentString())
 		text.WriteString(choice.Delta.GetReasoningContent())
 	}
-	return info.StreamPacer.Pace(c.Request.Context(), text.String())
+	return info.StreamPacer.Pace(helper.StreamWorkerContext(c), text.String())
 }
 
 func splitChatStreamData(info *relaycommon.RelayInfo, data string) ([]string, error) {

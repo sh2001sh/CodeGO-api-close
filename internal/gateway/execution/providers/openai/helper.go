@@ -269,7 +269,7 @@ func sendResponsesStreamData(c *gin.Context, info *relaycommon.RelayInfo, stream
 		if err != nil {
 			return err
 		}
-		if err := info.StreamPacer.Pace(c.Request.Context(), delta); err != nil {
+		if err := info.StreamPacer.Pace(helper.StreamWorkerContext(c), delta); err != nil {
 			return err
 		}
 		if err := helper.ResponseChunkData(c, part, string(partData)); err != nil {

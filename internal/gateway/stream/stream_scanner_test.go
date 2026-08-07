@@ -2,9 +2,11 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,4 +123,81 @@ func TestScanResponseStopsBeforeIdleTimeoutWhenFirstByteIsMissing(t *testing.T) 
 	require.Less(t, time.Since(started), 3*time.Second)
 	require.Equal(t, gatewaycontract.StreamEndReasonTimeout, info.StreamStatus.EndReason)
 	require.False(t, relaycommon.IsLocalStreamMaxDurationExceeded(context))
+}
+
+func TestScanResponseDrainsReadFramesBeforeReturning(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 5
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil)
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+	var received []string
+	body := "data: first\n\ndata: second\n\ndata: [DONE]\n\n"
+
+	ScanResponse(context, &http.Response{Body: io.NopCloser(strings.NewReader(body))}, info, func(data string, _ *Result) {
+		received = append(received, data)
+		time.Sleep(25 * time.Millisecond)
+	})
+
+	require.Equal(t, []string{"first", "second"}, received)
+	require.Equal(t, gatewaycontract.StreamEndReasonDone, info.StreamStatus.EndReason)
+}
+
+func TestScanResponseCancelsBlockedDataWorkerAfterIdleTimeout(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldFirstByteTimeout := constant.StreamingFirstByteTimeout
+	oldMaxDuration := constant.StreamingMaxDuration
+	constant.StreamingTimeout = 1
+	constant.StreamingFirstByteTimeout = 0
+	constant.StreamingMaxDuration = 10
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingFirstByteTimeout = oldFirstByteTimeout
+		constant.StreamingMaxDuration = oldMaxDuration
+	})
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil)
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	go func() {
+		_, _ = io.WriteString(writer, "data: first\n\n")
+	}()
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+
+	started := time.Now()
+	ScanResponse(context, &http.Response{Body: reader}, info, func(string, *Result) {
+		<-StreamWorkerContext(context).Done()
+	})
+
+	require.Less(t, time.Since(started), 3*time.Second)
+	require.Equal(t, gatewaycontract.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+}
+
+func TestScanResponseInterruptsBlockedScannerWhenHandlerStops(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 5
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil)
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	go func() {
+		_, _ = io.WriteString(writer, "data: first\n\n")
+	}()
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+
+	started := time.Now()
+	ScanResponse(context, &http.Response{Body: reader}, info, func(_ string, result *Result) {
+		result.Stop(errors.New("downstream write failed"))
+	})
+
+	require.Less(t, time.Since(started), time.Second)
+	require.Equal(t, gatewaycontract.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
 }

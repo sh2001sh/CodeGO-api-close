@@ -11,10 +11,19 @@ import (
 // reserveRoutePoolLastResortProbe permits one cooling candidate only after
 // normal candidates and expired-circuit probes have both been exhausted.
 func reserveRoutePoolLastResortProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
+	// Keep a fail-open candidate so a burst arriving while all probe leases are
+	// occupied does not turn a temporary circuit state into a 503 outage. The
+	// candidate is still selected by the reliability score; only the probe
+	// lease is bypassed for this bounded last-resort request.
+	var failOpen *scoredRoutePoolCandidate
 	for len(probes) > 0 {
 		probe := chooseBestRoutePoolLastResortProbe(probes)
 		if probe == nil {
-			return nil
+			break
+		}
+		if failOpen == nil {
+			candidate := *probe
+			failOpen = &candidate
 		}
 		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelLastResortProbe(probe.channel.Id, modelName)
 		credentialReady := !probe.credentialProbe || gatewayruntime.TryStartChannelCredentialRecoveryProbe(probe.channel.Id)
@@ -33,7 +42,7 @@ func reserveRoutePoolLastResortProbe(probes []scoredRoutePoolCandidate, modelNam
 		}
 		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
 	}
-	return nil
+	return failOpen
 }
 
 // reserveRoutePoolEmergencyRetryProbe is a bounded escape hatch for a retry

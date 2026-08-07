@@ -103,7 +103,7 @@ func TestRoutePoolPrimaryCostCandidatesReserveCostlyFallback(t *testing.T) {
 	assert.Equal(t, 44, candidates[1].channel.Id)
 }
 
-func TestRoutePoolLastResortProbeReservesCoolingCandidate(t *testing.T) {
+func TestRoutePoolLastResortProbeFailsOpenWhenProbeLeaseIsBusy(t *testing.T) {
 	channelID := 9_876_543
 	modelName := "gpt-last-resort-route-pool"
 	for range 3 {
@@ -116,10 +116,14 @@ func TestRoutePoolLastResortProbeReservesCoolingCandidate(t *testing.T) {
 	}}, modelName)
 	assert.NotNil(t, probe)
 	assert.Equal(t, channelID, probe.channel.Id)
-	assert.Nil(t, reserveRoutePoolLastResortProbe([]scoredRoutePoolCandidate{{
+	// A concurrent request must still get a bounded real attempt instead of a
+	// synthetic 503 merely because the first probe owns the lease.
+	failOpen := reserveRoutePoolLastResortProbe([]scoredRoutePoolCandidate{{
 		channel:      &gatewayschema.Channel{Id: channelID},
 		channelProbe: true,
-	}}, modelName))
+	}}, modelName)
+	assert.NotNil(t, failOpen)
+	assert.Equal(t, channelID, failOpen.channel.Id)
 }
 
 func TestRoutePoolLastResortProbePrefersReliableCandidateOverLowerCost(t *testing.T) {

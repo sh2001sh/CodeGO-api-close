@@ -47,6 +47,10 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		} else if alternative {
 			cooling := coolModelScopedUpstreamFailure(channelError.ChannelId, modelName, c.GetString(constant.RequestIdKey), err)
 			c.Set("model_unavailable_with_alternative", true)
+			// A prompt-cache affinity is valuable only while its selected route is
+			// usable. Keeping it after a model-scoped rejection makes Codex return
+			// the same 503 without ever reaching its configured fallback routes.
+			gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 			if cooling {
 				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 上游不可用，已临时冷却该模型路由并切换备用渠道", channelError.ChannelName, channelError.ChannelId, modelName))
 			} else {

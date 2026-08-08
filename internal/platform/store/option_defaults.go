@@ -162,6 +162,7 @@ func buildDefaultOptionMap() map[string]string {
 		"ModelRequestRateLimitEnabled":  strconv.FormatBool(requestsettings.ModelRequestRateLimitEnabled),
 		"CheckSensitiveOnPromptEnabled": strconv.FormatBool(requestsettings.CheckSensitiveOnPromptEnabled),
 		"StopOnSensitiveEnabled":        strconv.FormatBool(requestsettings.StopOnSensitiveEnabled),
+		"PromptSafetyEnabled":           strconv.FormatBool(requestsettings.PromptSafetyEnabled),
 		"SensitiveWords":                requestsettings.SensitiveWordsToString(),
 		"StreamCacheQueueLength":        strconv.Itoa(requestsettings.StreamCacheQueueLength),
 		"AutomaticDisableKeywords":      platformops.AutomaticDisableKeywordsToString(),

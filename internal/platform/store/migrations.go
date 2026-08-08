@@ -60,6 +60,7 @@ func V2MigrationIDs() []string {
 		"20260724_billing_funding_attribution",
 		"20260801_daily_lucky_number",
 		"20260802_gateway_route_pool_fault_domains",
+		"20260808_commerce_invoice_requests",
 	}
 }
 
@@ -174,6 +175,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260801_daily_lucky_number", Run: migrateDailyLuckyNumber},
 		{ID: "20260802_gateway_route_pool_fault_domains", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.RoutePoolMember{})
+		}},
+		{ID: "20260808_commerce_invoice_requests", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&commerceschema.InvoiceRequest{})
 		}},
 	}
 	for _, step := range steps {

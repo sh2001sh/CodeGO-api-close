@@ -12,6 +12,7 @@ import (
 var CheckSensitiveEnabled = true
 var CheckSensitiveOnPromptEnabled = true
 var StopOnSensitiveEnabled = true
+var PromptSafetyEnabled = true
 var StreamCacheQueueLength = 0
 
 var SensitiveWords = []string{
@@ -104,4 +105,9 @@ func SensitiveWordsFromString(s string) {
 // ShouldCheckPromptSensitive reports whether prompt-sensitive-word checks are enabled.
 func ShouldCheckPromptSensitive() bool {
 	return CheckSensitiveEnabled && CheckSensitiveOnPromptEnabled
+}
+
+// ShouldRunPromptSafety reports whether local jailbreak screening is active.
+func ShouldRunPromptSafety() bool {
+	return PromptSafetyEnabled
 }

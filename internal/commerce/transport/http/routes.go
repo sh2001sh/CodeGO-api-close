@@ -57,6 +57,21 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	apiRouter.GET("/subscription/xunhu/notify", SubscriptionXunhuNotify)
 	apiRouter.GET("/subscription/xunhu/return", SubscriptionXunhuReturn)
 
+	invoiceRoute := apiRouter.Group("/invoices")
+	invoiceRoute.Use(middleware.UserAuth())
+	{
+		invoiceRoute.GET("/eligible-orders", listInvoiceEligibleOrders)
+		invoiceRoute.GET("/requests", listSelfInvoiceRequests)
+		invoiceRoute.POST("/requests", middleware.CriticalRateLimit(), createInvoiceRequest)
+	}
+
+	invoiceAdminRoute := apiRouter.Group("/invoices/admin")
+	invoiceAdminRoute.Use(middleware.AdminAuth())
+	{
+		invoiceAdminRoute.GET("/requests", listAdminInvoiceRequests)
+		invoiceAdminRoute.PUT("/requests/:id", updateAdminInvoiceRequest)
+	}
+
 	packagesRoute := apiRouter.Group("/packages")
 	packagesRoute.Use(middleware.UserAuth())
 	{

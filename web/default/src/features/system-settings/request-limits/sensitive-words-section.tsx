@@ -39,6 +39,7 @@ import { useUpdateOption } from '../hooks/use-update-option'
 const sensitiveSchema = z.object({
   CheckSensitiveEnabled: z.boolean(),
   CheckSensitiveOnPromptEnabled: z.boolean(),
+  PromptSafetyEnabled: z.boolean(),
   SensitiveWords: z.string().optional(),
 })
 
@@ -119,6 +120,28 @@ export function SensitiveWordsSection({
                       {t(
                         'When enabled, prompts are scanned before reaching upstream models.'
                       )}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='PromptSafetyEnabled'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                  <div className='space-y-0.5'>
+                    <FormLabel className='text-base'>本地越狱预筛</FormLabel>
+                    <FormDescription>
+                      对提示词做限长本地规则扫描；可疑请求累积 24
+                      小时风险分，并在重复绕过时拦截。正常请求不会调用外部审核服务。
                     </FormDescription>
                   </div>
                   <FormControl>

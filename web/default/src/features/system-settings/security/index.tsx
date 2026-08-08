@@ -31,6 +31,7 @@ const defaultSecuritySettings: SecuritySettings = {
   ModelRequestRateLimitGroup: '',
   CheckSensitiveEnabled: false,
   CheckSensitiveOnPromptEnabled: false,
+  PromptSafetyEnabled: true,
   SensitiveWords: '',
   'fetch_setting.enable_ssrf_protection': true,
   'fetch_setting.allow_private_ip': false,

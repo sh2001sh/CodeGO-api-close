@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -141,6 +142,7 @@ func RelayNotFound(c *gin.Context) {
 
 func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	requestID := c.GetString(constant.RequestIdKey)
+	requestPreparationStartedAt := time.Now()
 
 	var (
 		newAPIError *types.NewAPIError
@@ -190,12 +192,18 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		defer releaseSlot()
 	}
+	preflightStartedAt := time.Now()
+	requestPreparationDuration := preflightStartedAt.Sub(requestPreparationStartedAt)
+	var tokenPreparationDuration time.Duration
+	var billingPreparationDuration time.Duration
+	preflightLogged := false
 
 	needSensitiveCheck := requestsettings.ShouldCheckPromptSensitive()
+	needPromptSafety := requestsettings.ShouldRunPromptSafety()
 	needCountToken := constant.CountToken
 
 	var meta *types.TokenCountMeta
-	if needSensitiveCheck || needCountToken {
+	if needSensitiveCheck || needPromptSafety || needCountToken {
 		meta = request.GetTokenCountMeta()
 	} else {
 		meta = fastTokenCountMetaForPricing(request)
@@ -205,12 +213,25 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		contains, words := identityapp.CheckSensitiveText(meta.CombineText)
 		if contains {
 			logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
-			newAPIError = types.NewError(err, types.ErrorCodeSensitiveWordsDetected)
+			newAPIError = types.NewErrorWithStatusCode(errors.New("请求未通过内容安全检查"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 			return
 		}
 	}
 
+	if needPromptSafety && meta != nil {
+		decision := identityapp.EvaluatePromptSafety(c.GetInt("id"), meta.CombineText)
+		if decision.LocalRisk > 0 {
+			logger.LogWarn(c, fmt.Sprintf("prompt safety risk detected: user=%d score=%d labels=%s", c.GetInt("id"), decision.RiskScore, strings.Join(decision.Labels, ",")))
+		}
+		if decision.Block {
+			newAPIError = types.NewErrorWithStatusCode(errors.New("请求未通过内容安全检查"), types.ErrorCodePromptBlocked, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			return
+		}
+	}
+
+	tokenPreparationStartedAt := time.Now()
 	tokens, err := tokenx.EstimateRequestToken(c, meta, relayInfo)
+	tokenPreparationDuration = time.Since(tokenPreparationStartedAt)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeCountTokenFailed)
 		return
@@ -273,10 +294,16 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if !currentPriceData.FreeModel {
+			billingPreparationStartedAt := time.Now()
 			newAPIError = billingapp.PreConsumeRelayBilling(c, currentPriceData.QuotaToPreConsume, relayInfo)
+			billingPreparationDuration += time.Since(billingPreparationStartedAt)
 			if newAPIError != nil {
 				break
 			}
+		}
+		if !preflightLogged {
+			logSlowRelayPreflight(c, relayInfo, time.Since(preflightStartedAt), requestPreparationDuration, tokenPreparationDuration, billingPreparationDuration)
+			preflightLogged = true
 		}
 
 		switch relayFormat {
@@ -324,6 +351,27 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		retryLogStr := fmt.Sprintf("retry channels: %s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
 	}
+}
+
+// logSlowRelayPreflight records only aggregate timing for requests that spend
+// meaningful time in CodeGo before the first upstream attempt. It deliberately
+// excludes request content and credentials.
+func logSlowRelayPreflight(c *gin.Context, info *relaycommon.RelayInfo, total, requestPreparation, tokenPreparation, billingPreparation time.Duration) {
+	const slowPreflightThreshold = 250 * time.Millisecond
+	if total < slowPreflightThreshold || info == nil {
+		return
+	}
+
+	logger.LogInfo(c, fmt.Sprintf(
+		"relay preflight slow: request_id=%s model=%s channel=%d total_ms=%d request_ms=%d token_ms=%d billing_ms=%d",
+		info.RequestId,
+		info.OriginModelName,
+		c.GetInt("channel_id"),
+		total.Milliseconds(),
+		requestPreparation.Milliseconds(),
+		tokenPreparation.Milliseconds(),
+		billingPreparation.Milliseconds(),
+	))
 }
 
 func upgradeRelayWebsocket(c *gin.Context, relayFormat types.RelayFormat) (*websocket.Conn, error) {

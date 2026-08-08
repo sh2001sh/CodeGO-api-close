@@ -103,6 +103,8 @@ func applyOptionValue(key string, value string) (err error) {
 			requestsettings.ModelRequestRateLimitEnabled = boolValue
 		case "StopOnSensitiveEnabled":
 			requestsettings.StopOnSensitiveEnabled = boolValue
+		case "PromptSafetyEnabled":
+			requestsettings.PromptSafetyEnabled = boolValue
 		case "SMTPSSLEnabled":
 			platformconfig.SMTPSSLEnabled = boolValue
 		case "SMTPForceAuthLogin":

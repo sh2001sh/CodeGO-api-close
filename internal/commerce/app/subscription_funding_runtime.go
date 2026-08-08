@@ -27,6 +27,9 @@ func PreConsumeUserSubscription(requestID string, userID int, modelName string, 
 		return nil, errors.New("amount must be > 0")
 	}
 
+	releaseUserLock := subscriptionPreConsumeLocks.Lock(userID)
+	defer releaseUserLock()
+
 	now := commercestore.GetDBTimestamp()
 	result := &commercedomain.SubscriptionPreConsumeResult{}
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {

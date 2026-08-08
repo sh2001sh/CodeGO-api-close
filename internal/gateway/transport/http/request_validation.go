@@ -140,6 +140,11 @@ func getAndValidateResponsesRequest(c *gin.Context) (*dto.OpenAIResponsesRequest
 	if request.Input == nil {
 		return nil, errors.New("input is required")
 	}
+	if removed, err := request.StripUnsupportedInputNamespaces(); err != nil {
+		return nil, fmt.Errorf("normalize responses input: %w", err)
+	} else if removed {
+		logger.LogInfo(c, "removed unsupported namespace metadata from responses input")
+	}
 	if err := validateMaxTokenField("max_output_tokens", request.MaxOutputTokens); err != nil {
 		return nil, err
 	}

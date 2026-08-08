@@ -164,7 +164,7 @@ func getHealthySatisfiedChannelWithContext(c *gin.Context, group string, modelNa
 }
 
 func getHealthySatisfiedChannelWithMode(c *gin.Context, group string, modelName string, retry int, allowLastResort bool) (*gatewayschema.Channel, error) {
-	if channel, managed, err := selectAutomaticPoolChannel(c, group, modelName, retry); err != nil || managed {
+	if channel, managed, err := selectAutomaticPoolChannel(c, group, modelName, retry, allowLastResort); err != nil || managed {
 		return channel, err
 	}
 	var degradedCandidate *gatewayschema.Channel
@@ -198,17 +198,24 @@ func getHealthySatisfiedChannelWithMode(c *gin.Context, group string, modelName 
 // channel for a model is in an active cooldown. It is only called after the
 // normal candidate scan found no healthy or degraded route.
 func selectLegacyLastResortChannel(c *gin.Context, group, modelName string, retry int) *gatewayschema.Channel {
+	requestType := gatewayruntime.RequestTypeFromContext(c)
 	for priorityRetry := retry; priorityRetry < retry+16; priorityRetry++ {
 		channel, err := selectRandomSatisfiedChannel(group, modelName, priorityRetry)
 		if err != nil || channel == nil || channelAlreadyUsed(c, channel.Id) {
 			continue
 		}
-		health, found := gatewayruntime.GetChannelHealth(channel.Id, modelName)
+		health, found := gatewayruntime.GetChannelHealth(channel.Id, modelName, requestType)
 		if !found || health.State != gatewayruntime.ChannelHealthCooling || !health.CoolingUntil.After(time.Now()) {
 			continue
 		}
-		if gatewayruntime.TryStartChannelLastResortProbe(channel.Id, modelName) && c != nil {
+		if gatewayruntime.TryStartChannelLastResortProbe(channel.Id, modelName, requestType) && c != nil {
 			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
+		} else if c != nil && gatewayruntime.AcquireAllCoolingFallback(c, group, modelName, requestType) {
+			// A busy probe lease must not make the model unavailable. The caller
+			// may use this bounded cooling fallback while the owner recovers.
+			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
+		} else if c != nil {
+			return nil
 		}
 		return channel
 	}
@@ -217,6 +224,7 @@ func selectLegacyLastResortChannel(c *gin.Context, group, modelName string, retr
 
 func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelName string, retry int) (healthy *gatewayschema.Channel, degraded *gatewayschema.Channel, priority int64, found bool, err error) {
 	const maxSelectionAttempts = 16
+	requestType := gatewayruntime.RequestTypeFromContext(c)
 	for attempt := 0; attempt < maxSelectionAttempts; attempt++ {
 		channel, err := selectRandomSatisfiedChannel(group, modelName, retry)
 		if err != nil || channel == nil {
@@ -230,7 +238,7 @@ func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelNam
 			priority = channel.GetPriority()
 			found = true
 		}
-		health, healthFound := gatewayruntime.GetChannelHealth(channel.Id, modelName)
+		health, healthFound := gatewayruntime.GetChannelHealth(channel.Id, modelName, requestType)
 		if healthFound && health.State == gatewayruntime.ChannelHealthCooling {
 			if !health.CoolingUntil.After(time.Now()) && degraded == nil {
 				// When legacy routing is still in use, an expired circuit may be

@@ -41,6 +41,9 @@ type ErrorCode string
 const (
 	ErrorCodeInvalidRequest         ErrorCode = "invalid_request"
 	ErrorCodeSensitiveWordsDetected ErrorCode = "sensitive_words_detected"
+	ErrorCodePromptGuardBlocked     ErrorCode = "prompt_guard_blocked"
+	ErrorCodePromptGuardUnavailable ErrorCode = "prompt_guard_unavailable"
+	ErrorCodePromptGuardInvalid     ErrorCode = "prompt_guard_invalid_response"
 	ErrorCodeViolationFeeGrokCSAM   ErrorCode = "violation_fee.grok.csam"
 
 	// new api error

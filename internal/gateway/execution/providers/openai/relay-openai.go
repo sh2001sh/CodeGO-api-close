@@ -12,6 +12,7 @@ import (
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	securityaudit "github.com/sh2001sh/new-api/internal/gateway/securityaudit"
 	helper "github.com/sh2001sh/new-api/internal/gateway/stream"
 	gatewaytranslation "github.com/sh2001sh/new-api/internal/gateway/translation"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
@@ -499,6 +500,11 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 					errChan <- fmt.Errorf("error unmarshalling message: %v", err)
 					return
 				}
+				if auditError := checkRealtimePromptAudit(c, info, message); auditError != nil {
+					relaycommon.WssError(c, clientConn, auditError.ToOpenAIError())
+					errChan <- fmt.Errorf("realtime prompt audit stopped request: %s", auditError.GetErrorCode())
+					return
+				}
 
 				if realtimeEvent.Type == dto.RealtimeEventTypeSessionUpdate {
 					if realtimeEvent.Session != nil {
@@ -659,6 +665,48 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 	// check usage total tokens, if 0, use local usage
 
 	return nil, sumUsage
+}
+
+func checkRealtimePromptAudit(c *gin.Context, info *relaycommon.RelayInfo, message []byte) *types.NewAPIError {
+	service := securityaudit.DefaultService()
+	if service == nil || service.Mode() == securityaudit.ModeOff {
+		return nil
+	}
+	group, model := "", ""
+	if info != nil {
+		group = info.TokenGroup
+		model = info.OriginModelName
+	}
+	decision := service.Check(c.Request.Context(), securityaudit.Request{
+		RequestID: c.GetString(constant.RequestIdKey), Group: group, Protocol: "openai_realtime",
+		Model: model, Body: message, Stage: "websocket_frame",
+	})
+	if decision.AllowNextStage {
+		return nil
+	}
+	switch decision.Kind {
+	case securityaudit.DecisionBlock:
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("提示词安全审计拒绝了该请求，请调整输入后重试"),
+			types.ErrorCodePromptGuardBlocked,
+			http.StatusForbidden,
+			types.ErrOptionWithSkipRetry(),
+		)
+	case securityaudit.DecisionInvalid:
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("提示词安全审计返回无效结果，请稍后重试"),
+			types.ErrorCodePromptGuardInvalid,
+			http.StatusServiceUnavailable,
+			types.ErrOptionWithSkipRetry(),
+		)
+	default:
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("提示词安全审计暂时不可用，请稍后重试"),
+			types.ErrorCodePromptGuardUnavailable,
+			http.StatusServiceUnavailable,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
 }
 
 func preConsumeUsage(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.RealtimeUsage, totalUsage *dto.RealtimeUsage) error {

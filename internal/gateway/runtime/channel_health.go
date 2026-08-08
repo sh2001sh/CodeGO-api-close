@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -35,10 +34,7 @@ const (
 	channelHealthShortWindow               = 2 * time.Minute
 	channelHealthShortMinRequests          = 5
 	channelHealthShortMaxSuccess           = 40.0
-	channelHealthSlowTTFTSamples           = 3
-	channelHealthSlowTTFTThreshold         = 12 * time.Second
 	channelHealthTTFTWindow                = 20
-	channelHealthSlowTTFTP95               = 15 * time.Second
 )
 
 // ChannelHealth captures the shared routing health for one channel/model pair.
@@ -46,6 +42,7 @@ const (
 type ChannelHealth struct {
 	ChannelID                    int                  `json:"channel_id"`
 	Model                        string               `json:"model"`
+	RequestType                  RequestType          `json:"request_type"`
 	State                        string               `json:"state"`
 	ConsecutiveRetryableFailures int                  `json:"consecutive_retryable_failures"`
 	RecoveryProbeSuccesses       int                  `json:"recovery_probe_successes"`
@@ -89,14 +86,14 @@ var (
 	channelHealthLocks     [64]sync.Mutex
 )
 
-func channelHealthKey(channelID int, model string) string {
-	return strconv.Itoa(channelID) + "\x00" + model
+func channelHealthKey(channelID int, model string, requestTypes ...RequestType) string {
+	return strconv.Itoa(channelID) + "\x00" + model + "\x00" + string(normalizedRequestType(requestTypes...))
 }
 
 func getChannelHealthCache() *cachex.HybridCache[ChannelHealth] {
 	channelHealthCacheOnce.Do(func() {
 		channelHealthCache = cachex.NewHybridCache[ChannelHealth](cachex.HybridCacheConfig[ChannelHealth]{
-			Namespace:  cachex.Namespace("new-api:channel_health:v1"),
+			Namespace:  cachex.Namespace("new-api:channel_health:v2"),
 			Redis:      platformcache.RDB,
 			RedisCodec: cachex.JSONCodec[ChannelHealth]{},
 			RedisEnabled: func() bool {
@@ -118,24 +115,24 @@ func channelHealthLock(channelID int) *sync.Mutex {
 }
 
 // GetChannelHealth returns the last shared health state for a channel/model pair.
-func GetChannelHealth(channelID int, model string) (ChannelHealth, bool) {
+func GetChannelHealth(channelID int, model string, requestTypes ...RequestType) (ChannelHealth, bool) {
 	if channelID <= 0 || model == "" {
 		return ChannelHealth{}, false
 	}
-	state, found, err := getChannelHealthCache().Get(channelHealthKey(channelID, model))
+	state, found, err := getChannelHealthCache().Get(channelHealthKey(channelID, model, requestTypes...))
 	return state, found && err == nil
 }
 
 // IsChannelCooling reports whether routing must skip the channel/model pair.
-func IsChannelCooling(channelID int, model string) bool {
-	state, found := GetChannelHealth(channelID, model)
+func IsChannelCooling(channelID int, model string, requestTypes ...RequestType) bool {
+	state, found := GetChannelHealth(channelID, model, requestTypes...)
 	return found && state.CoolingUntil.After(time.Now())
 }
 
 // RecordChannelModelUnavailable opens the model circuit only after five
 // distinct request IDs fail consecutively. Repeated retries of one request
 // count once so a single request cannot exhaust the error budget.
-func RecordChannelModelUnavailable(channelID int, model string, requestID string) bool {
+func RecordChannelModelUnavailable(channelID int, model string, requestID string, requestTypes ...RequestType) bool {
 	if channelID <= 0 || model == "" {
 		return false
 	}
@@ -145,9 +142,10 @@ func RecordChannelModelUnavailable(channelID int, model string, requestID string
 
 	now := time.Now().UTC()
 	cooling := false
-	err := getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+	err := getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model, requestTypes...), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
 		state.ChannelID = channelID
 		state.Model = model
+		state.RequestType = normalizedRequestType(requestTypes...)
 		state.LastFailureAt = now
 		recordChannelHealthWindow(&state, now, false)
 		if state.CoolingUntil.After(now) {
@@ -175,7 +173,7 @@ func RecordChannelModelUnavailable(channelID int, model string, requestID string
 
 // CoolChannelModelForUpstreamFailure immediately isolates one failing model
 // route while leaving the channel available for every other model.
-func CoolChannelModelForUpstreamFailure(channelID int, model string) bool {
+func CoolChannelModelForUpstreamFailure(channelID int, model string, requestTypes ...RequestType) bool {
 	if channelID <= 0 || model == "" {
 		return false
 	}
@@ -184,9 +182,10 @@ func CoolChannelModelForUpstreamFailure(channelID int, model string) bool {
 	defer lock.Unlock()
 
 	now := time.Now().UTC()
-	err := getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+	err := getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model, requestTypes...), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
 		state.ChannelID = channelID
 		state.Model = model
+		state.RequestType = normalizedRequestType(requestTypes...)
 		state.State = ChannelHealthCooling
 		state.ConsecutiveRetryableFailures = 0
 		state.RecoveryProbeSuccesses = 0
@@ -201,25 +200,25 @@ func CoolChannelModelForUpstreamFailure(channelID int, model string) bool {
 }
 
 // RecordChannelRetryableFailure advances the shared circuit for a retryable upstream error.
-func RecordChannelRetryableFailure(channelID int, model string) {
-	RecordChannelRetryableFailureWithCooldown(channelID, model, channelHealthShortCooldown)
+func RecordChannelRetryableFailure(channelID int, model string, requestTypes ...RequestType) {
+	RecordChannelRetryableFailureWithCooldown(channelID, model, channelHealthShortCooldown, requestTypes...)
 }
 
 // RecordChannelRetryableFailureWithCooldown applies a short model-level
 // cooldown for a transient failure. Repeated failures in the rolling window
 // still escalate to the longer circuit cooldown.
-func RecordChannelRetryableFailureWithCooldown(channelID int, model string, shortCooldown time.Duration) {
-	recordChannelRetryableFailure(channelID, model, shortCooldown, channelHealthRetryableFailureThreshold)
+func RecordChannelRetryableFailureWithCooldown(channelID int, model string, shortCooldown time.Duration, requestTypes ...RequestType) {
+	recordChannelRetryableFailure(channelID, model, shortCooldown, channelHealthRetryableFailureThreshold, requestTypes...)
 }
 
 // RecordChannelGatewayFailure rapidly isolates a model route after two
 // consecutive gateway failures. A single transient failure remains degraded so
 // healthy traffic can demonstrate that the route is still usable.
-func RecordChannelGatewayFailure(channelID int, model string, statusCode int) {
-	recordChannelRetryableFailure(channelID, model, RetryableFailureCooldown(statusCode), channelHealthGatewayFailureThreshold)
+func RecordChannelGatewayFailure(channelID int, model string, statusCode int, requestTypes ...RequestType) {
+	recordChannelRetryableFailure(channelID, model, RetryableFailureCooldown(statusCode), channelHealthGatewayFailureThreshold, requestTypes...)
 }
 
-func recordChannelRetryableFailure(channelID int, model string, shortCooldown time.Duration, failureThreshold int) {
+func recordChannelRetryableFailure(channelID int, model string, shortCooldown time.Duration, failureThreshold int, requestTypes ...RequestType) {
 	if channelID <= 0 || model == "" {
 		return
 	}
@@ -234,9 +233,10 @@ func recordChannelRetryableFailure(channelID int, model string, shortCooldown ti
 	defer lock.Unlock()
 
 	now := time.Now().UTC()
-	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model, requestTypes...), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
 		state.ChannelID = channelID
 		state.Model = model
+		state.RequestType = normalizedRequestType(requestTypes...)
 		state.LastFailureAt = now
 		recordChannelHealthWindow(&state, now, false)
 		state.ConsecutiveRetryableFailures++
@@ -271,18 +271,18 @@ func retryableFailureBackoffLevel(failures int, failureThreshold int) int {
 
 // TryStartChannelRecoveryProbe reserves a single expired circuit for a real
 // request. The lease prevents a burst of concurrent callers from reopening it.
-func TryStartChannelRecoveryProbe(channelID int, model string) bool {
-	return tryStartChannelProbe(channelID, model, 1, true)
+func TryStartChannelRecoveryProbe(channelID int, model string, requestTypes ...RequestType) bool {
+	return tryStartChannelProbe(channelID, model, 1, true, requestTypes...)
 }
 
 // TryStartChannelEmergencyRetryProbe admits a second bounded probe slot for a
 // retry after a transient upstream failure. Cooling remains in force for
 // normal route selection; only the already-failing request can use this slot.
-func TryStartChannelEmergencyRetryProbe(channelID int, model string) bool {
-	return tryStartChannelProbe(channelID, model, channelHealthEmergencyProbeSlots, false)
+func TryStartChannelEmergencyRetryProbe(channelID int, model string, requestTypes ...RequestType) bool {
+	return tryStartChannelProbe(channelID, model, channelHealthEmergencyProbeSlots, false, requestTypes...)
 }
 
-func tryStartChannelProbe(channelID int, model string, maxSlots int, requireExpired bool) bool {
+func tryStartChannelProbe(channelID int, model string, maxSlots int, requireExpired bool, requestTypes ...RequestType) bool {
 	if channelID <= 0 || model == "" {
 		return false
 	}
@@ -297,7 +297,7 @@ func tryStartChannelProbe(channelID int, model string, maxSlots int, requireExpi
 
 	now := time.Now().UTC()
 	started := false
-	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
+	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model, requestTypes...), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
 		if !found || (state.State != ChannelHealthCooling && state.State != ChannelHealthHalfOpen) {
 			return state, nil
 		}
@@ -322,14 +322,14 @@ func tryStartChannelProbe(channelID int, model string, maxSlots int, requireExpi
 // ReleaseChannelProbe returns a slot when a paired fault-domain probe could
 // not be acquired. It prevents partial selection from consuming the retry
 // budget until the lease expires.
-func ReleaseChannelProbe(channelID int, model string) {
+func ReleaseChannelProbe(channelID int, model string, requestTypes ...RequestType) {
 	if channelID <= 0 || model == "" {
 		return
 	}
 	lock := channelHealthLock(channelID)
 	lock.Lock()
 	defer lock.Unlock()
-	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
+	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model, requestTypes...), channelHealthTTL, func(state ChannelHealth, found bool) (ChannelHealth, error) {
 		if !found || state.RecoveryProbeSlots <= 0 {
 			return state, nil
 		}
@@ -389,131 +389,4 @@ func shouldCoolForShortTermFailureRate(state ChannelHealth) bool {
 	}
 	failures := state.Window2Requests - state.Window2Successes
 	return failures >= 3 && state.SuccessRate2m <= channelHealthShortMaxSuccess
-}
-
-// RecordChannelSuccess requires two successful half-open probes before restoring
-// normal traffic. Normal healthy routes continue to recover immediately.
-func RecordChannelSuccess(channelID int, model string, ttft time.Duration) {
-	if channelID <= 0 || model == "" {
-		return
-	}
-	lock := channelHealthLock(channelID)
-	lock.Lock()
-	defer lock.Unlock()
-
-	now := time.Now().UTC()
-	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
-		state.ChannelID = channelID
-		state.Model = model
-		state.LastSuccessAt = now
-		recordChannelHealthWindow(&state, now, true)
-		if ttft > 0 {
-			recordChannelTTFT(&state, float64(ttft.Milliseconds()))
-		}
-		if isSlowChannelTTFT(state) {
-			state.State = ChannelHealthCooling
-			state.CoolingUntil = now.Add(channelHealthShortCooldown)
-			state.RecoveryProbeSuccesses = 0
-			return state, nil
-		}
-		if state.State == ChannelHealthCooling && state.CoolingUntil.After(now) {
-			state.RecoveryProbeUntil = time.Time{}
-			state.RecoveryProbeSlots = 0
-			return state, nil
-		}
-		if state.State == ChannelHealthHalfOpen || state.State == ChannelHealthCooling {
-			state.RecoveryProbeSuccesses++
-			state.RecoveryProbeUntil = time.Time{}
-			state.RecoveryProbeSlots = 0
-			if state.RecoveryProbeSuccesses < 2 {
-				state.State = ChannelHealthCooling
-				state.CoolingUntil = now
-				return state, nil
-			}
-		}
-		state.ConsecutiveRetryableFailures = 0
-		state.RecoveryProbeSuccesses = 0
-		state.RecoveryProbeSlots = 0
-		state.State = ChannelHealthHealthy
-		state.CoolingUntil = time.Time{}
-		return state, nil
-	})
-}
-
-func recordChannelTTFT(state *ChannelHealth, value float64) {
-	if state == nil || value <= 0 {
-		return
-	}
-	state.TTFTSamples++
-	if state.TTFTEWMAMilliseconds == 0 {
-		state.TTFTEWMAMilliseconds = value
-	} else {
-		state.TTFTEWMAMilliseconds = state.TTFTEWMAMilliseconds*0.8 + value*0.2
-	}
-	state.TTFTRecentMilliseconds = append(state.TTFTRecentMilliseconds, int64(value))
-	if len(state.TTFTRecentMilliseconds) > channelHealthTTFTWindow {
-		state.TTFTRecentMilliseconds = state.TTFTRecentMilliseconds[len(state.TTFTRecentMilliseconds)-channelHealthTTFTWindow:]
-	}
-	samples := append([]int64(nil), state.TTFTRecentMilliseconds...)
-	sort.Slice(samples, func(i int, j int) bool { return samples[i] < samples[j] })
-	state.TTFTP50Milliseconds = percentile(samples, 50)
-	state.TTFTP95Milliseconds = percentile(samples, 95)
-}
-
-func isSlowChannelTTFT(state ChannelHealth) bool {
-	if state.TTFTSamples >= channelHealthSlowTTFTSamples && state.TTFTEWMAMilliseconds >= float64(channelHealthSlowTTFTThreshold.Milliseconds()) {
-		return true
-	}
-	return len(state.TTFTRecentMilliseconds) >= 5 && state.TTFTP95Milliseconds >= float64(channelHealthSlowTTFTP95.Milliseconds())
-}
-
-func percentile(samples []int64, percentage int) float64 {
-	if len(samples) == 0 {
-		return 0
-	}
-	index := (len(samples)*percentage + 99) / 100
-	if index > 0 {
-		index--
-	}
-	return float64(samples[index])
-}
-
-func recordChannelHealthWindow(state *ChannelHealth, now time.Time, success bool) {
-	if state.Window2StartedAt.IsZero() || now.Sub(state.Window2StartedAt) >= channelHealthShortWindow {
-		state.Window2StartedAt = now
-		state.Window2Requests = 0
-		state.Window2Successes = 0
-	}
-	if state.Window5StartedAt.IsZero() || now.Sub(state.Window5StartedAt) >= 5*time.Minute {
-		state.Window5StartedAt = now
-		state.Window5Requests = 0
-		state.Window5Successes = 0
-	}
-	if state.Window15StartedAt.IsZero() || now.Sub(state.Window15StartedAt) >= 15*time.Minute {
-		state.Window15StartedAt = now
-		state.Window15Requests = 0
-		state.Window15Successes = 0
-	}
-	state.Window2Requests++
-	state.Window5Requests++
-	state.Window15Requests++
-	if success {
-		state.Window2Successes++
-		state.Window5Successes++
-		state.Window15Successes++
-	}
-	state.SuccessRate2m = float64(state.Window2Successes) / float64(state.Window2Requests) * 100
-	state.SuccessRate5m = float64(state.Window5Successes) / float64(state.Window5Requests) * 100
-	state.SuccessRate15m = float64(state.Window15Successes) / float64(state.Window15Requests) * 100
-}
-
-func resetChannelHealthForTest() error {
-	if channelHealthCache != nil {
-		if err := channelHealthCache.Purge(); err != nil {
-			return err
-		}
-	}
-	channelHealthCacheOnce = sync.Once{}
-	channelHealthCache = nil
-	return nil
 }

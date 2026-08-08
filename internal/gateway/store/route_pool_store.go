@@ -174,8 +174,8 @@ func InvalidateRoutePoolCache() {
 
 // UpdateRoutePoolMemberCostMultipliers updates explicitly configured member costs
 // without changing their enabled state or model-specific manual overrides.
-// Missing channels are returned so external cost synchronizers cannot silently
-// report a successful update for an unconfigured route-pool member.
+// Missing channels are returned so callers cannot silently report a successful
+// update for an unconfigured route-pool member.
 func UpdateRoutePoolMemberCostMultipliers(updates map[int]float64, epsilon float64) (int, []int, error) {
 	if len(updates) == 0 {
 		return 0, nil, nil

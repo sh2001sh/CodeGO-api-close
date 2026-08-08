@@ -133,6 +133,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 }
 
 func shouldWaitForRouteSelection(c *gin.Context, attempt int) bool {
+	if budget := gatewayruntime.RequestBudgetFromContext(c); budget != nil && budget.Remaining(time.Now()) <= routeSelectionRetryDelay {
+		return false
+	}
 	return c != nil && c.Request != nil &&
 		!c.GetBool(string(constant.ContextKeyClientGone)) &&
 		c.GetBool(routeSelectionExhaustedContextKey) &&
@@ -162,6 +165,10 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		return false
 	}
 	if retryTimes <= 0 {
+		return false
+	}
+	if budget := gatewayruntime.RequestBudgetFromContext(c); budget != nil && !budget.CanRetry(time.Now()) {
+		gatewayruntime.ExcludeRouteDecisionCandidate(c, "request_budget_exhausted")
 		return false
 	}
 	if _, ok := c.Get("specific_channel_id"); ok {

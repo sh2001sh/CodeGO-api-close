@@ -180,18 +180,18 @@ func TestChannelHealthAllowsBoundedEmergencyRetryProbeSlots(t *testing.T) {
 	require.False(t, TryStartChannelEmergencyRetryProbe(42, "gpt-rate-limit"))
 }
 
-func TestChannelHealthCoolsSlowFirstTokenRouteBriefly(t *testing.T) {
+func TestChannelHealthTracksSlowFirstTokenWithoutCooling(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
 
-	for range channelHealthSlowTTFTSamples {
-		RecordChannelSuccess(42, "gpt-slow-ttft", channelHealthSlowTTFTThreshold+time.Second)
+	for range 3 {
+		RecordChannelSuccess(42, "gpt-slow-ttft", 13*time.Second)
 	}
 	state, found := GetChannelHealth(42, "gpt-slow-ttft")
 	require.True(t, found)
-	require.Equal(t, channelHealthSlowTTFTSamples, state.TTFTSamples)
-	require.Equal(t, ChannelHealthCooling, state.State)
-	require.WithinDuration(t, time.Now().Add(channelHealthShortCooldown), state.CoolingUntil, time.Second)
+	require.Equal(t, 3, state.TTFTSamples)
+	require.Equal(t, ChannelHealthHealthy, state.State)
+	require.True(t, state.CoolingUntil.IsZero())
 }
 
 func TestChannelHealthTracksRecentTTFTPercentiles(t *testing.T) {
@@ -205,7 +205,7 @@ func TestChannelHealthTracksRecentTTFTPercentiles(t *testing.T) {
 	require.True(t, found)
 	require.EqualValues(t, 1_000, state.TTFTP50Milliseconds)
 	require.EqualValues(t, 20_000, state.TTFTP95Milliseconds)
-	require.Equal(t, ChannelHealthCooling, state.State)
+	require.Equal(t, ChannelHealthHealthy, state.State)
 }
 
 func TestModelUnavailableCoolsAfterFiveDistinctRequests(t *testing.T) {

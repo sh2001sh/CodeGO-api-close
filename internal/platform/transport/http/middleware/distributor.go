@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -34,12 +35,17 @@ type ModelRequest struct {
 
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		defer gatewayruntime.ReleaseAllCoolingFallbacks(c)
 		var channel *gatewayschema.Channel
 		channelId, ok := httpctx.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
+		}
+		gatewayruntime.InitializeRequestProfile(c, modelRequest.Model, c.Request.URL.Path, requestProfileHint(c))
+		if httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime).IsZero() {
+			httpctx.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		}
 		if ok {
 			id, err := strconv.Atoi(channelId.(string))
@@ -120,15 +126,15 @@ func Distribute() func(c *gin.Context) {
 					preferred, err := gatewaystore.GetCachedChannel(preferredChannelID)
 					if err == nil && preferred != nil {
 						if preferred.Status != constant.ChannelStatusEnabled ||
-							gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model) ||
-							gatewayroutingapp.ShouldMigrateAutomaticPoolAffinity(usingGroup, modelRequest.Model, preferred.Id) {
+							gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model, gatewayruntime.RequestTypeFromContext(c)) ||
+							gatewayroutingapp.ShouldMigrateAutomaticPoolAffinity(c, usingGroup, modelRequest.Model, preferred.Id) {
 							gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 							gatewayruntime.ExcludeRouteDecisionCandidate(c, "stale_affinity")
 						} else if usingGroup == "auto" {
 							userGroup := httpctx.GetContextKeyString(c, constant.ContextKeyUserGroup)
 							autoGroups := gatewayroutingapp.GetUserAutoGroup(userGroup)
 							for _, g := range autoGroups {
-								if gatewaystore.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) && !gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model) {
+								if gatewaystore.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) && !gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model, gatewayruntime.RequestTypeFromContext(c)) {
 									selectGroup = g
 									httpctx.SetContextKey(c, constant.ContextKeyAutoGroup, g)
 									channel = preferred
@@ -173,7 +179,6 @@ func Distribute() func(c *gin.Context) {
 				}
 			}
 		}
-		httpctx.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
@@ -187,6 +192,33 @@ func Distribute() func(c *gin.Context) {
 // 鏍规嵁 Content-Type 鑷姩澶勭悊锛?// - application/json
 // - application/x-www-form-urlencoded
 // - multipart/form-data
+type routingProfilePayload struct {
+	Stream             *bool           `json:"stream"`
+	Tools              json.RawMessage `json:"tools"`
+	Functions          json.RawMessage `json:"functions"`
+	PromptCacheKey     json.RawMessage `json:"prompt_cache_key"`
+	PreviousResponseID string          `json:"previous_response_id"`
+	Conversation       json.RawMessage `json:"conversation"`
+}
+
+func requestProfileHint(c *gin.Context) gatewayruntime.RequestProfileHint {
+	var payload routingProfilePayload
+	if err := platformhttpx.UnmarshalBodyReusable(c, &payload); err != nil {
+		return gatewayruntime.RequestProfileHint{}
+	}
+	return gatewayruntime.RequestProfileHint{
+		IsStream:         payload.Stream != nil && *payload.Stream,
+		HasTools:         hasRoutingProfileJSON(payload.Tools) || hasRoutingProfileJSON(payload.Functions),
+		HasCacheAffinity: hasRoutingProfileJSON(payload.PromptCacheKey),
+		HasUpstreamState: strings.TrimSpace(payload.PreviousResponseID) != "" || hasRoutingProfileJSON(payload.Conversation),
+	}
+}
+
+func hasRoutingProfileJSON(value json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(value))
+	return trimmed != "" && trimmed != "null" && trimmed != "[]" && trimmed != "{}" && trimmed != `""`
+}
+
 func getModelFromRequest(c *gin.Context) (*ModelRequest, error) {
 	var modelRequest ModelRequest
 	err := platformhttpx.UnmarshalBodyReusable(c, &modelRequest)

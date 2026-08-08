@@ -19,7 +19,6 @@ const (
 	routePoolProbeRate             = 0.02
 	routePoolCostRecoveryProbeRate = 0.12
 	routePoolCostRecoveryGap       = 0.33
-	routePoolFallbackCostThreshold = 0.12
 	routePoolContextKey            = "automatic_route_pool_selection"
 
 	routePoolAffinityContextKey = "automatic_route_pool_affinity"
@@ -51,7 +50,7 @@ type routePoolAffinity struct {
 
 // selectAutomaticPoolChannel returns managed=true when the group has an enabled
 // automatic pool. In that case priority and weight are deliberately ignored.
-func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry int) (*gatewayschema.Channel, bool, error) {
+func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry int, allowLastResort bool) (*gatewayschema.Channel, bool, error) {
 	detail, err := gatewaystore.LoadEnabledRoutePool(group)
 	if err != nil || detail == nil {
 		return nil, detail != nil, err
@@ -61,78 +60,32 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 		return nil, true, err
 	}
 	now := time.Now()
-	healthy := make([]scoredRoutePoolCandidate, 0, len(candidates))
-	probes := make([]scoredRoutePoolCandidate, 0, len(candidates))
-	lastResortProbes := make([]scoredRoutePoolCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		if channelAlreadyUsed(c, candidate.Channel.Id) {
-			continue
-		}
-		faultDomain := routePoolFaultDomain(candidate.Member, candidate.Channel)
-		if gatewayruntime.IsFaultDomainExcluded(c, faultDomain) {
-			gatewayruntime.ExcludeRouteDecisionCandidate(c, "failed_fault_domain")
-			continue
-		}
-		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
-		credentialCooling := gatewayruntime.IsChannelCredentialCooling(candidate.Channel.Id)
-		if credentialCooling {
-			gatewayruntime.ExcludeRouteDecisionCandidate(c, "channel_credential_cooling")
-			continue
-		}
-		domainHealth, domainFound := gatewayruntime.GetFaultDomainHealth(faultDomain, modelName)
-		channelCooling := found && ((health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now)) ||
-			(health.State == gatewayruntime.ChannelHealthHalfOpen && (health.CoolingUntil.After(now) || health.RecoveryProbeUntil.After(now))))
-		domainCooling := domainFound && ((domainHealth.State == gatewayruntime.ChannelHealthCooling && domainHealth.CoolingUntil.After(now)) ||
-			(domainHealth.State == gatewayruntime.ChannelHealthHalfOpen && (domainHealth.CoolingUntil.After(now) || domainHealth.RecoveryProbeUntil.After(now))))
-		cost := routePoolModelCost(candidate.Member, modelName)
-		if channelCooling || domainCooling {
-			lastResortProbes = append(lastResortProbes, scoredRoutePoolCandidate{
-				channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), cost: cost,
-				health:      health,
-				faultDomain: faultDomain, channelProbe: channelCooling, domainProbe: domainCooling,
-			})
-			continue
-		}
-		credentialProbe := gatewayruntime.NeedsChannelCredentialRecoveryProbe(candidate.Channel.Id)
-		if found && (health.State == gatewayruntime.ChannelHealthCooling || health.State == gatewayruntime.ChannelHealthHalfOpen) {
-			probes = append(probes, scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), probe: true, cost: cost, faultDomain: faultDomain, channelProbe: true, credentialProbe: credentialProbe, domainProbe: domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen)})
-			continue
-		}
-		scored := scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), cost: cost, faultDomain: faultDomain}
-		if credentialProbe {
-			scored.probe = true
-			scored.credentialProbe = true
-			probes = append(probes, scored)
-			continue
-		}
-		if domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen) {
-			scored.probe = true
-			scored.domainProbe = true
-			probes = append(probes, scored)
-			continue
-		}
-		healthy = append(healthy, scored)
-	}
+	requestType := gatewayruntime.RequestTypeFromContext(c)
+	healthy, probes, lastResortProbes := buildRoutePoolCandidateSets(c, candidates, modelName, requestType, now)
 
-	applyRoutePoolTTFTPenalty(healthy, modelName)
-	applyRoutePoolTTFTPenalty(probes, modelName)
-	applyRoutePoolTTFTPenalty(lastResortProbes, modelName)
-	primaryHealthy := routePoolPrimaryCostCandidates(healthy)
-	primaryProbes := routePoolPrimaryCostCandidates(probes)
-	if len(primaryHealthy) > 0 {
-		healthy = primaryHealthy
-		probes = primaryProbes
-	} else if len(primaryProbes) > 0 {
-		probes = primaryProbes
-	}
+	applyRoutePoolTTFTPenalty(healthy, modelName, requestType)
+	applyRoutePoolTTFTPenalty(probes, modelName, requestType)
+	applyRoutePoolTTFTPenalty(lastResortProbes, modelName, requestType)
+	healthy = routePoolPreferredHealthTier(healthy)
 	prepareRoutePoolAffinity(c, detail.Pool.ID, group, modelName)
-	if probe := reserveRoutePoolRecoveryProbe(probes, modelName); probe != nil {
+	// Healthy routes always win. Recovery probes are only used when no stable
+	// route is available, so a half-open member cannot displace live capacity.
+	if len(healthy) > 0 {
+		if sticky := getRoutePoolStickyCandidate(c, healthy, modelName); sticky != nil {
+			return selectRoutePoolCandidate(c, detail.Pool.ID, sticky), true, nil
+		}
+		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy)), true, nil
+	}
+	if !allowLastResort {
+		return nil, true, nil
+	}
+	if probe := reserveRoutePoolRecoveryProbe(probes, modelName, requestType); probe != nil {
 		gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeNormal)
 		return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 	}
 	if len(healthy) == 0 {
 		if retry > 0 {
-			if probe := reserveRoutePoolEmergencyRetryProbe(lastResortProbes, modelName); probe != nil {
+			if probe := reserveRoutePoolEmergencyRetryProbe(lastResortProbes, modelName, requestType); probe != nil {
 				probeMode := gatewayruntime.RouteDecisionProbeEmergency
 				if c != nil && c.GetBool(string(constant.ContextKeyRateLimitRetry)) {
 					probeMode = gatewayruntime.RouteDecisionProbeRateLimit
@@ -141,16 +94,23 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 				return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 			}
 		}
-		if probe := reserveRoutePoolLastResortProbe(lastResortProbes, modelName); probe != nil {
+		if probe := reserveRoutePoolLastResortProbe(lastResortProbes, modelName, requestType); probe != nil {
 			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
 			return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
 		}
+		// The probe lease is a concurrency guard, not an availability gate. If
+		// another request owns it, keep the model usable with the best known
+		// cooling route rather than returning an avoidable 503.
+		if fallback := chooseBestRoutePoolLastResortProbe(lastResortProbes); fallback != nil {
+			if !gatewayruntime.AcquireAllCoolingFallback(c, group, modelName, requestType) {
+				return nil, true, nil
+			}
+			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
+			return selectRoutePoolCandidate(c, detail.Pool.ID, fallback), true, nil
+		}
 		return nil, true, nil
 	}
-	if sticky := getRoutePoolStickyCandidate(c, healthy, modelName); sticky != nil {
-		return selectRoutePoolCandidate(c, detail.Pool.ID, sticky), true, nil
-	}
-	return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy)), true, nil
+	return nil, true, nil
 }
 
 func removeRoutePoolCandidate(candidates []scoredRoutePoolCandidate, channelID int) []scoredRoutePoolCandidate {
@@ -197,7 +157,7 @@ func RecordAutomaticPoolAffinity(c *gin.Context, selectedChannelID int) {
 
 // ShouldMigrateAutomaticPoolAffinity permits explicit cache affinity to escape
 // an unhealthy automatic-pool member without making healthy sessions drift.
-func ShouldMigrateAutomaticPoolAffinity(group, modelName string, channelID int) bool {
+func ShouldMigrateAutomaticPoolAffinity(c *gin.Context, group, modelName string, channelID int) bool {
 	detail, err := gatewaystore.LoadEnabledRoutePool(group)
 	if err != nil || detail == nil || channelID <= 0 {
 		return false
@@ -207,10 +167,11 @@ func ShouldMigrateAutomaticPoolAffinity(group, modelName string, channelID int) 
 		return false
 	}
 	now := time.Now()
+	requestType := gatewayruntime.RequestTypeFromContext(c)
 	healthy := make([]scoredRoutePoolCandidate, 0, len(candidates))
 	var current *scoredRoutePoolCandidate
 	for _, candidate := range candidates {
-		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
+		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName, requestType)
 		if found && health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now) {
 			continue
 		}
@@ -227,7 +188,7 @@ func ShouldMigrateAutomaticPoolAffinity(group, modelName string, channelID int) 
 	if current == nil || len(healthy) < 2 {
 		return false
 	}
-	applyRoutePoolTTFTPenalty(healthy, modelName)
+	applyRoutePoolTTFTPenalty(healthy, modelName, requestType)
 	for index := range healthy {
 		if healthy[index].channel.Id == channelID {
 			current = &healthy[index]
@@ -238,8 +199,8 @@ func ShouldMigrateAutomaticPoolAffinity(group, modelName string, channelID int) 
 	if best == nil || best.channel.Id == channelID {
 		return false
 	}
-	health, _ := gatewayruntime.GetChannelHealth(channelID, modelName)
-	if routePoolHardMigrationRequired(health, routePoolMedianTTFT(healthy, modelName)) {
+	health, _ := gatewayruntime.GetChannelHealth(channelID, modelName, requestType)
+	if routePoolHardMigrationRequired(health, routePoolMedianTTFT(healthy, modelName, requestType)) {
 		return true
 	}
 	return (health.State == gatewayruntime.ChannelHealthDegraded || routePoolReliabilityNeedsMigration(health)) &&
@@ -296,16 +257,19 @@ func chooseRoutePoolHealthyCandidate(candidates []scoredRoutePoolCandidate) *sco
 	return &selected
 }
 
-// routePoolPrimaryCostCandidates keeps costly routes as an explicit fallback.
-// They are eligible only after no affordable healthy route remains.
-func routePoolPrimaryCostCandidates(candidates []scoredRoutePoolCandidate) []scoredRoutePoolCandidate {
-	primary := make([]scoredRoutePoolCandidate, 0, len(candidates))
+// routePoolPreferredHealthTier keeps cost inside the selected stability tier.
+// A degraded cheap route must not mask a healthy, more expensive alternative.
+func routePoolPreferredHealthTier(candidates []scoredRoutePoolCandidate) []scoredRoutePoolCandidate {
+	stable := make([]scoredRoutePoolCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		if candidate.cost <= routePoolFallbackCostThreshold {
-			primary = append(primary, candidate)
+		if candidate.health.State != gatewayruntime.ChannelHealthDegraded {
+			stable = append(stable, candidate)
 		}
 	}
-	return primary
+	if len(stable) > 0 {
+		return stable
+	}
+	return candidates
 }
 
 // routePoolRecoveryProbeRate lets a clearly cheaper model route demonstrate
@@ -366,8 +330,9 @@ func getRoutePoolStickyCandidate(c *gin.Context, candidates []scoredRoutePoolCan
 		gatewayruntime.InvalidatePreferredChannel(affinity.CacheKey)
 		return nil
 	}
-	health, _ := gatewayruntime.GetChannelHealth(channelID, modelName)
-	if routePoolHardMigrationRequired(health, routePoolMedianTTFT(candidates, modelName)) {
+	requestType := gatewayruntime.RequestTypeFromContext(c)
+	health, _ := gatewayruntime.GetChannelHealth(channelID, modelName, requestType)
+	if routePoolHardMigrationRequired(health, routePoolMedianTTFT(candidates, modelName, requestType)) {
 		gatewayruntime.InvalidatePreferredChannel(affinity.CacheKey)
 		return nil
 	}

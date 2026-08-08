@@ -7,7 +7,43 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func resetFaultDomainConcurrencyForTest(t *testing.T) {
+	t.Helper()
+	faultDomainConcurrency.Lock()
+	faultDomainConcurrency.states = make(map[string]*faultDomainConcurrencyState)
+	faultDomainConcurrency.Unlock()
+	t.Cleanup(func() {
+		faultDomainConcurrency.Lock()
+		faultDomainConcurrency.states = make(map[string]*faultDomainConcurrencyState)
+		faultDomainConcurrency.Unlock()
+	})
+}
+
+func TestFaultDomainConcurrencyIsIsolatedByRequestType(t *testing.T) {
+	resetFaultDomainConcurrencyForTest(t)
+	domain := "test-request-type-isolation-domain"
+	model := "gpt-test-request-type-isolation"
+	releases := make([]func(bool, int), 0, faultDomainInitialConcurrency)
+	for i := 0; i < faultDomainInitialConcurrency; i++ {
+		release, acquired, _ := TryAcquireFaultDomainSlot(domain, model, RequestTypeChatShortStream)
+		require.True(t, acquired)
+		releases = append(releases, release)
+	}
+	defer func() {
+		for _, release := range releases {
+			release(true, 0)
+		}
+	}()
+
+	_, acquired, _ := TryAcquireFaultDomainSlot(domain, model, RequestTypeChatShortStream)
+	require.False(t, acquired)
+	longRelease, acquired, _ := TryAcquireFaultDomainSlot(domain, model, RequestTypeChatLongStream)
+	require.True(t, acquired)
+	longRelease(true, 0)
+}
+
 func TestFaultDomainConcurrencyShrinksAfterTransientFailures(t *testing.T) {
+	resetFaultDomainConcurrencyForTest(t)
 	domain := "test-concurrency-domain"
 	model := "gpt-test-concurrency"
 	for i := 0; i < faultDomainConcurrencyFailureThreshold; i++ {

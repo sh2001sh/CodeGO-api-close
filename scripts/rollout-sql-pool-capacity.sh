@@ -8,8 +8,6 @@ backup_dir="${1:?pass a writable backup directory}"
 postgres_container="${POSTGRES_CONTAINER:-postgres}"
 postgres_max_connections="${POSTGRES_MAX_CONNECTIONS:-300}"
 suffix="pre-sql-pool-$(date -u +%Y%m%dT%H%M%SZ)"
-aihub_logs="${AIHUB_LOGS_DIR:-/mnt/codego-data/aihub-router/logs}"
-aihub_feedback="${AIHUB_FEEDBACK_DIR:-/mnt/codego-data/aihub-router/feedback}"
 
 services=(
   "new-api-v2-workflow|30|10"
@@ -68,14 +66,6 @@ for service in "${services[@]}"; do
   deployed_names+=("$name")
 
   run_args=(--detach --name "$name" --network host --restart unless-stopped --log-opt max-size=20m --log-opt max-file=5 --env-file "${backup_dir}/${name}.env")
-  case "$name" in
-    new-api-v2-control)
-      run_args+=(-v "${aihub_logs}:/var/run/aihub-router:ro")
-      ;;
-    new-api-v2-gateway)
-      run_args+=(-v "${aihub_feedback}:/var/run/aihub-router-feedback:ro")
-      ;;
-  esac
   docker run "${run_args[@]}" "$image" >/dev/null
 
   for _ in $(seq 1 30); do

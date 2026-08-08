@@ -46,16 +46,16 @@ func routePoolReliabilityPenalty(rate float64) float64 {
 func routePoolConservativeSuccessRate(health gatewayruntime.ChannelHealth) float64 {
 	requests := health.Window5Requests
 	successes := health.Window5Successes
-	if requests < 20 || successes < 0 || successes > requests {
+	if requests <= 0 || successes < 0 || successes > requests {
 		return health.SuccessRate5m
 	}
-	p := float64(successes) / float64(requests)
-	z := 1.96
-	denominator := 1 + z*z/float64(requests)
-	center := p + z*z/(2*float64(requests))
-	margin := z * math.Sqrt((p*(1-p)+z*z/(4*float64(requests)))/float64(requests))
-	lowerBound := (center - margin) / denominator * 100
-	return health.SuccessRate5m*0.8 + lowerBound*0.2
+	alpha := 19.0 + float64(successes)
+	beta := 1.0 + float64(requests-successes)
+	total := alpha + beta
+	mean := alpha / total
+	variance := alpha * beta / (total * total * (total + 1))
+	lowerBound := math.Max(0, mean-1.96*math.Sqrt(variance))
+	return lowerBound * 100
 }
 
 func routePoolModelCost(member gatewayschema.RoutePoolMember, modelName string) float64 {
@@ -69,13 +69,13 @@ func routePoolModelCost(member gatewayschema.RoutePoolMember, modelName string) 
 	return cost
 }
 
-func applyRoutePoolTTFTPenalty(candidates []scoredRoutePoolCandidate, modelName string) {
+func applyRoutePoolTTFTPenalty(candidates []scoredRoutePoolCandidate, modelName string, requestTypes ...gatewayruntime.RequestType) {
 	if len(candidates) < 2 {
 		return
 	}
 	values := make([]float64, 0, len(candidates))
 	for _, candidate := range candidates {
-		health, found := gatewayruntime.GetChannelHealth(candidate.channel.Id, modelName)
+		health, found := gatewayruntime.GetChannelHealth(candidate.channel.Id, modelName, requestTypes...)
 		if found && health.TTFTP95Milliseconds > 0 {
 			values = append(values, health.TTFTP95Milliseconds)
 		}
@@ -89,7 +89,7 @@ func applyRoutePoolTTFTPenalty(candidates []scoredRoutePoolCandidate, modelName 
 		return
 	}
 	for index := range candidates {
-		health, found := gatewayruntime.GetChannelHealth(candidates[index].channel.Id, modelName)
+		health, found := gatewayruntime.GetChannelHealth(candidates[index].channel.Id, modelName, requestTypes...)
 		if !found || health.TTFTP95Milliseconds <= 0 {
 			continue
 		}
@@ -103,10 +103,10 @@ func applyRoutePoolTTFTPenalty(candidates []scoredRoutePoolCandidate, modelName 
 	}
 }
 
-func routePoolMedianTTFT(candidates []scoredRoutePoolCandidate, modelName string) float64 {
+func routePoolMedianTTFT(candidates []scoredRoutePoolCandidate, modelName string, requestTypes ...gatewayruntime.RequestType) float64 {
 	values := make([]float64, 0, len(candidates))
 	for _, candidate := range candidates {
-		health, found := gatewayruntime.GetChannelHealth(candidate.channel.Id, modelName)
+		health, found := gatewayruntime.GetChannelHealth(candidate.channel.Id, modelName, requestTypes...)
 		if found && health.TTFTP95Milliseconds > 0 {
 			values = append(values, health.TTFTP95Milliseconds)
 		}

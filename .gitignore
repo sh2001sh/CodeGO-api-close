@@ -37,6 +37,7 @@ data/
 .gopath
 .tmp/
 .playwright-cli/
+artifacts/
 output/playwright/
 web/default/.playwright-cli/
 web/default/output/playwright/

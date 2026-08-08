@@ -30,7 +30,7 @@ func TestRoutePoolFaultDomainUsesConfiguredValueBeforeUpstreamHost(t *testing.T)
 	baseURL := "https://proxy.example/v1"
 	channel.BaseURL = &baseURL
 
-	assert.Equal(t, "aihub:63", routePoolFaultDomain(gatewayschema.RoutePoolMember{FaultDomain: " AIHub:63 "}, channel))
+	assert.Equal(t, "provider:primary", routePoolFaultDomain(gatewayschema.RoutePoolMember{FaultDomain: " Provider:Primary "}, channel))
 	assert.Equal(t, "1:proxy.example", routePoolFaultDomain(gatewayschema.RoutePoolMember{}, channel))
 }
 
@@ -47,7 +47,7 @@ func TestRoutePoolConservativeSuccessRatePenalizesSmallFailureSamples(t *testing
 		Window5Requests:  20,
 		Window5Successes: 20,
 		SuccessRate5m:    100,
-	}), 95.0)
+	}), 90.0)
 }
 
 func TestRoutePoolHysteresisKeepsStickyChannelForSmallImprovement(t *testing.T) {
@@ -91,19 +91,18 @@ func TestRoutePoolRecoveryProbeRateKeepsBaseRateForSimilarCost(t *testing.T) {
 	assert.Equal(t, routePoolProbeRate, rate)
 }
 
-func TestRoutePoolPrimaryCostCandidatesReserveCostlyFallback(t *testing.T) {
-	candidates := routePoolPrimaryCostCandidates([]scoredRoutePoolCandidate{
-		{channel: &gatewayschema.Channel{Id: 39}, cost: 0.08},
-		{channel: &gatewayschema.Channel{Id: 51}, cost: 0.15},
-		{channel: &gatewayschema.Channel{Id: 44}, cost: 0.12},
+func TestRoutePoolPreferredHealthTierChoosesStabilityBeforeCost(t *testing.T) {
+	candidates := routePoolPreferredHealthTier([]scoredRoutePoolCandidate{
+		{channel: &gatewayschema.Channel{Id: 39}, cost: 0.08, health: gatewayruntime.ChannelHealth{State: gatewayruntime.ChannelHealthDegraded}},
+		{channel: &gatewayschema.Channel{Id: 51}, cost: 0.15, health: gatewayruntime.ChannelHealth{State: gatewayruntime.ChannelHealthHealthy}},
+		{channel: &gatewayschema.Channel{Id: 44}, cost: 0.12, health: gatewayruntime.ChannelHealth{State: gatewayruntime.ChannelHealthDegraded}},
 	})
 
-	assert.Len(t, candidates, 2)
-	assert.Equal(t, 39, candidates[0].channel.Id)
-	assert.Equal(t, 44, candidates[1].channel.Id)
+	assert.Len(t, candidates, 1)
+	assert.Equal(t, 51, candidates[0].channel.Id)
 }
 
-func TestRoutePoolLastResortProbeFailsOpenWhenProbeLeaseIsBusy(t *testing.T) {
+func TestRoutePoolLastResortProbeRejectsConcurrentProbeWhenLeaseIsBusy(t *testing.T) {
 	channelID := 9_876_543
 	modelName := "gpt-last-resort-route-pool"
 	for range 3 {
@@ -116,14 +115,11 @@ func TestRoutePoolLastResortProbeFailsOpenWhenProbeLeaseIsBusy(t *testing.T) {
 	}}, modelName)
 	assert.NotNil(t, probe)
 	assert.Equal(t, channelID, probe.channel.Id)
-	// A concurrent request must still get a bounded real attempt instead of a
-	// synthetic 503 merely because the first probe owns the lease.
-	failOpen := reserveRoutePoolLastResortProbe([]scoredRoutePoolCandidate{{
+	concurrentProbe := reserveRoutePoolLastResortProbe([]scoredRoutePoolCandidate{{
 		channel:      &gatewayschema.Channel{Id: channelID},
 		channelProbe: true,
 	}}, modelName)
-	assert.NotNil(t, failOpen)
-	assert.Equal(t, channelID, failOpen.channel.Id)
+	assert.Nil(t, concurrentProbe)
 }
 
 func TestRoutePoolLastResortProbePrefersReliableCandidateOverLowerCost(t *testing.T) {

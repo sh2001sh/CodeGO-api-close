@@ -39,12 +39,12 @@ type FaultDomainConcurrencySnapshot struct {
 // TryAcquireFaultDomainSlot reserves one in-flight upstream request. The
 // lease must be released after the upstream attempt completes. Capacity is
 // process-local and intentionally shared by all channels using one domain.
-func TryAcquireFaultDomainSlot(domain, model string) (release func(success bool, statusCode int), acquired bool, snapshot FaultDomainConcurrencySnapshot) {
+func TryAcquireFaultDomainSlot(domain, model string, requestTypes ...RequestType) (release func(success bool, statusCode int), acquired bool, snapshot FaultDomainConcurrencySnapshot) {
 	domain = normalizeFaultDomain(domain)
 	if domain == "" || model == "" {
 		return func(bool, int) {}, true, FaultDomainConcurrencySnapshot{Domain: domain, Model: model}
 	}
-	key := domain + "\x00" + model
+	key := domain + "\x00" + model + "\x00" + string(normalizedRequestType(requestTypes...))
 	faultDomainConcurrency.Lock()
 	state := faultDomainConcurrency.states[key]
 	if state == nil {

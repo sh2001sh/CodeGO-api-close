@@ -81,6 +81,32 @@ func TestGetHealthySatisfiedChannelUsesLastResortWhenEveryRouteCools(t *testing.
 	require.Equal(t, 42, channel.Id)
 }
 
+func TestLegacyLastResortKeepsModelAvailableWhenProbeLeaseIsBusy(t *testing.T) {
+	const modelName = "gpt-route-busy-probe-fallback-test"
+	priority := int64(1)
+	channelID := 9_876_545
+	originalSelector := selectRandomSatisfiedChannel
+	t.Cleanup(func() {
+		selectRandomSatisfiedChannel = originalSelector
+		gatewayruntime.RecordChannelSuccess(channelID, modelName, 0)
+	})
+
+	selectRandomSatisfiedChannel = func(_ string, _ string, _ int) (*gatewayschema.Channel, error) {
+		return &gatewayschema.Channel{Id: channelID, Priority: &priority}, nil
+	}
+	for range 3 {
+		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelID, modelName, time.Minute)
+	}
+
+	requestType := gatewayruntime.RequestTypeFromContext(nil)
+	require.True(t, gatewayruntime.TryStartChannelLastResortProbe(channelID, modelName, requestType))
+
+	channel, err := getHealthySatisfiedChannel("default", modelName, 0)
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, channelID, channel.Id)
+}
+
 func TestAutoSelectionChecksHealthyFallbackBeforeLastResort(t *testing.T) {
 	const modelName = "gpt-auto-last-resort-order-test"
 	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()

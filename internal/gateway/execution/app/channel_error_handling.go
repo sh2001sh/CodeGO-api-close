@@ -25,13 +25,11 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 	modelName := c.GetString("original_model")
 	failureClass := classifyUpstreamFailure(err)
+	gatewayruntime.FinishRouteDecisionAttempt(c, false, err.StatusCode, string(failureClass), string(gatewaystream.AttemptStageFromContext(c)))
 	localMaxDuration := isLocalStreamMaxDuration(c)
 	clientGone := c.GetBool(string(constant.ContextKeyClientGone))
 	if err.StatusCode == http.StatusTooManyRequests && !clientGone {
 		c.Set(string(constant.ContextKeyRateLimitRetry), true)
-	}
-	if !localMaxDuration && !clientGone {
-		gatewayruntime.RecordAIHubHealthFailure(c, channelError.ChannelId, modelName, err.StatusCode, string(failureClass))
 	}
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
 	credentialRejected := failureClass == upstreamFailureCredentialRejected
@@ -47,7 +45,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		if lookupErr != nil {
 			platformobservability.SysError(fmt.Sprintf("检查通道「%s」（#%d）的模型 %s 备用路由失败：%v", channelError.ChannelName, channelError.ChannelId, modelName, lookupErr))
 		} else if alternative {
-			cooling := coolModelScopedUpstreamFailure(channelError.ChannelId, modelName, c.GetString(constant.RequestIdKey), err)
+			cooling := coolModelScopedUpstreamFailure(channelError.ChannelId, modelName, c.GetString(constant.RequestIdKey), err, gatewayruntime.RequestTypeFromContext(c))
 			c.Set("model_unavailable_with_alternative", true)
 			// A prompt-cache affinity is valuable only while its selected route is
 			// usable. Keeping it after a model-scoped rejection makes Codex return
@@ -56,7 +54,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			if cooling {
 				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 上游不可用，已临时冷却该模型路由并切换备用渠道", channelError.ChannelName, channelError.ChannelId, modelName))
 			} else {
-				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 第 %d 次连续失败，保留试错空间", channelError.ChannelName, channelError.ChannelId, modelName, channelHealthFailureCount(channelError.ChannelId, modelName)))
+				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 第 %d 次连续失败，保留试错空间", channelError.ChannelName, channelError.ChannelId, modelName, channelHealthFailureCount(c, channelError.ChannelId, modelName)))
 			}
 		} else {
 			platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 是唯一可用路由，保留渠道与模型路由", channelError.ChannelName, channelError.ChannelId, modelName))
@@ -79,7 +77,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 		recordChannelTransientFailure(c, channelError.ChannelId, modelName, err)
 		if shouldRecordIncompleteStreamFaultDomainFailure(c, err) {
-			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), modelName, channelError.ChannelId, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err))
+			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), modelName, channelError.ChannelId, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err), gatewayruntime.RequestTypeFromContext(c))
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	} else if credentialRejected && !localMaxDuration && !clientGone {
@@ -90,7 +88,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		cooldown := retryableFailureCooldown(c, err)
 		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
 		if shouldRecordFaultDomainFailure(c, err) {
-			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), channelError.ChannelId, c.GetString(constant.RequestIdKey), cooldown)
+			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), channelError.ChannelId, c.GetString(constant.RequestIdKey), cooldown, gatewayruntime.RequestTypeFromContext(c))
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
@@ -167,10 +165,10 @@ func isLocalStreamMaxDuration(c *gin.Context) bool {
 func recordChannelTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
 	if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
 		(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
-		gatewayruntime.RecordChannelGatewayFailure(channelID, modelName, err.StatusCode)
+		gatewayruntime.RecordChannelGatewayFailure(channelID, modelName, err.StatusCode, gatewayruntime.RequestTypeFromContext(c))
 		return
 	}
-	gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelID, modelName, retryableFailureCooldown(c, err))
+	gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelID, modelName, retryableFailureCooldown(c, err), gatewayruntime.RequestTypeFromContext(c))
 }
 
 func isGatewayFailureStatus(statusCode int) bool {
@@ -215,15 +213,15 @@ func isProviderWideTransientFailure(err *types.NewAPIError) bool {
 	return isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)
 }
 
-func coolModelScopedUpstreamFailure(channelID int, modelName string, requestID string, err *types.NewAPIError) bool {
+func coolModelScopedUpstreamFailure(channelID int, modelName string, requestID string, err *types.NewAPIError, requestType gatewayruntime.RequestType) bool {
 	if IsModelUnavailableError(err) {
-		return gatewayruntime.RecordChannelModelUnavailable(channelID, modelName, requestID)
+		return gatewayruntime.RecordChannelModelUnavailable(channelID, modelName, requestID, requestType)
 	}
-	return gatewayruntime.CoolChannelModelForUpstreamFailure(channelID, modelName)
+	return gatewayruntime.CoolChannelModelForUpstreamFailure(channelID, modelName, requestType)
 }
 
-func channelHealthFailureCount(channelID int, modelName string) int {
-	state, found := gatewayruntime.GetChannelHealth(channelID, modelName)
+func channelHealthFailureCount(c *gin.Context, channelID int, modelName string) int {
+	state, found := gatewayruntime.GetChannelHealth(channelID, modelName, gatewayruntime.RequestTypeFromContext(c))
 	if !found {
 		return 0
 	}

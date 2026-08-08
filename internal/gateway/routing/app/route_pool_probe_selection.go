@@ -10,24 +10,15 @@ import (
 
 // reserveRoutePoolLastResortProbe permits one cooling candidate only after
 // normal candidates and expired-circuit probes have both been exhausted.
-func reserveRoutePoolLastResortProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
-	// Keep a fail-open candidate so a burst arriving while all probe leases are
-	// occupied does not turn a temporary circuit state into a 503 outage. The
-	// candidate is still selected by the reliability score; only the probe
-	// lease is bypassed for this bounded last-resort request.
-	var failOpen *scoredRoutePoolCandidate
+func reserveRoutePoolLastResortProbe(probes []scoredRoutePoolCandidate, modelName string, requestTypes ...gatewayruntime.RequestType) *scoredRoutePoolCandidate {
 	for len(probes) > 0 {
 		probe := chooseBestRoutePoolLastResortProbe(probes)
 		if probe == nil {
 			break
 		}
-		if failOpen == nil {
-			candidate := *probe
-			failOpen = &candidate
-		}
-		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelLastResortProbe(probe.channel.Id, modelName)
+		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelLastResortProbe(probe.channel.Id, modelName, requestTypes...)
 		credentialReady := !probe.credentialProbe || gatewayruntime.TryStartChannelCredentialRecoveryProbe(probe.channel.Id)
-		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainLastResortProbe(probe.faultDomain, modelName)
+		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainLastResortProbe(probe.faultDomain, modelName, requestTypes...)
 		if channelReady && credentialReady && domainReady {
 			return probe
 		}
@@ -35,60 +26,66 @@ func reserveRoutePoolLastResortProbe(probes []scoredRoutePoolCandidate, modelNam
 			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, "__channel_credentials__")
 		}
 		if channelReady && !domainReady {
-			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, modelName)
+			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, modelName, requestTypes...)
 		}
 		if domainReady && !channelReady {
-			gatewayruntime.ReleaseFaultDomainProbe(probe.faultDomain, modelName)
-		}
-		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
-	}
-	return failOpen
-}
-
-// reserveRoutePoolEmergencyRetryProbe is a bounded escape hatch for a retry
-// after a transient upstream error. The failed fault domain has already been
-// excluded from the request context, so it chooses the best remaining route
-// while allowing one extra channel/domain probe slot.
-func reserveRoutePoolEmergencyRetryProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
-	for len(probes) > 0 {
-		probe := chooseBestRoutePoolLastResortProbe(probes)
-		if probe == nil {
-			return nil
-		}
-		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelEmergencyRetryProbe(probe.channel.Id, modelName)
-		credentialReady := !probe.credentialProbe || gatewayruntime.TryStartChannelCredentialRecoveryProbe(probe.channel.Id)
-		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainEmergencyRetryProbe(probe.faultDomain, modelName)
-		if channelReady && credentialReady && domainReady {
-			return probe
-		}
-		if credentialReady && (!channelReady || !domainReady) {
-			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, "__channel_credentials__")
-		}
-		if channelReady && !domainReady {
-			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, modelName)
-		}
-		if domainReady && !channelReady {
-			gatewayruntime.ReleaseFaultDomainProbe(probe.faultDomain, modelName)
+			gatewayruntime.ReleaseFaultDomainProbe(probe.faultDomain, modelName, requestTypes...)
 		}
 		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
 	}
 	return nil
 }
 
-func reserveRoutePoolRecoveryProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
+// reserveRoutePoolEmergencyRetryProbe is a bounded escape hatch for a retry
+// after a transient upstream error. The failed fault domain has already been
+// excluded from the request context, so it chooses the best remaining route
+// while allowing one extra channel/domain probe slot.
+func reserveRoutePoolEmergencyRetryProbe(probes []scoredRoutePoolCandidate, modelName string, requestTypes ...gatewayruntime.RequestType) *scoredRoutePoolCandidate {
 	for len(probes) > 0 {
-		probe := chooseLowestRoutePoolCandidate(probes)
+		probe := chooseBestRoutePoolLastResortProbe(probes)
 		if probe == nil {
 			return nil
 		}
-		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelRecoveryProbe(probe.channel.Id, modelName)
+		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelEmergencyRetryProbe(probe.channel.Id, modelName, requestTypes...)
 		credentialReady := !probe.credentialProbe || gatewayruntime.TryStartChannelCredentialRecoveryProbe(probe.channel.Id)
-		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainRecoveryProbe(probe.faultDomain, modelName)
+		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainEmergencyRetryProbe(probe.faultDomain, modelName, requestTypes...)
 		if channelReady && credentialReady && domainReady {
 			return probe
 		}
 		if credentialReady && (!channelReady || !domainReady) {
 			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, "__channel_credentials__")
+		}
+		if channelReady && !domainReady {
+			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, modelName, requestTypes...)
+		}
+		if domainReady && !channelReady {
+			gatewayruntime.ReleaseFaultDomainProbe(probe.faultDomain, modelName, requestTypes...)
+		}
+		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
+	}
+	return nil
+}
+
+func reserveRoutePoolRecoveryProbe(probes []scoredRoutePoolCandidate, modelName string, requestTypes ...gatewayruntime.RequestType) *scoredRoutePoolCandidate {
+	for len(probes) > 0 {
+		probe := chooseLowestRoutePoolCandidate(probes)
+		if probe == nil {
+			return nil
+		}
+		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelRecoveryProbe(probe.channel.Id, modelName, requestTypes...)
+		credentialReady := !probe.credentialProbe || gatewayruntime.TryStartChannelCredentialRecoveryProbe(probe.channel.Id)
+		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainRecoveryProbe(probe.faultDomain, modelName, requestTypes...)
+		if channelReady && credentialReady && domainReady {
+			return probe
+		}
+		if credentialReady && (!channelReady || !domainReady) {
+			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, "__channel_credentials__")
+		}
+		if channelReady && !domainReady {
+			gatewayruntime.ReleaseChannelProbe(probe.channel.Id, modelName, requestTypes...)
+		}
+		if domainReady && !channelReady {
+			gatewayruntime.ReleaseFaultDomainProbe(probe.faultDomain, modelName, requestTypes...)
 		}
 		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
 	}

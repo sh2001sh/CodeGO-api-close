@@ -17,14 +17,14 @@ import (
 )
 
 type verificationReport struct {
-	MissingMigrations        []string
-	MissingWalletAccounts    int
-	MissingClaudeAccounts    int
-	MissingTokenAccounts     int
-	MissingSubscriptionFunds int
-	InconsistentLedgers      int
-	PendingOutboxEvents      int64
-	LegacyBlindBoxCredits    int64
+	MissingMigrations                  []string
+	UnmaterializedWalletAccounts       int
+	UnmaterializedClaudeWalletAccounts int
+	UnmaterializedTokenAccounts        int
+	UnmaterializedSubscriptionAccounts int
+	InconsistentLedgers                int
+	PendingOutboxEvents                int64
+	LegacyBlindBoxCredits              int64
 }
 
 func main() {
@@ -69,16 +69,16 @@ func verify(ctx context.Context) (verificationReport, error) {
 	}
 
 	var err error
-	if report.MissingWalletAccounts, err = countMissingUserAccounts(ctx, "wallet"); err != nil {
+	if report.UnmaterializedWalletAccounts, err = countUnmaterializedUserAccounts(ctx, "wallet"); err != nil {
 		return report, err
 	}
-	if report.MissingClaudeAccounts, err = countMissingUserAccounts(ctx, "claude_wallet"); err != nil {
+	if report.UnmaterializedClaudeWalletAccounts, err = countUnmaterializedUserAccounts(ctx, "claude_wallet"); err != nil {
 		return report, err
 	}
-	if report.MissingTokenAccounts, err = countMissingTokenAccounts(ctx); err != nil {
+	if report.UnmaterializedTokenAccounts, err = countUnmaterializedTokenAccounts(ctx); err != nil {
 		return report, err
 	}
-	if report.MissingSubscriptionFunds, err = countMissingSubscriptionAccounts(ctx); err != nil {
+	if report.UnmaterializedSubscriptionAccounts, err = countUnmaterializedSubscriptionAccounts(ctx); err != nil {
 		return report, err
 	}
 	if report.InconsistentLedgers, err = billingapp.CountLedgerInconsistencies(ctx); err != nil {
@@ -105,14 +105,14 @@ func migrationTableName() string {
 	return "platform_schema_migrations"
 }
 
-func countMissingUserAccounts(ctx context.Context, accountType string) (int, error) {
-	return countMissingAccounts(ctx, &identityschema.User{}, func(record *identityschema.User) billingOwner {
+func countUnmaterializedUserAccounts(ctx context.Context, accountType string) (int, error) {
+	return countUnmaterializedAccounts(ctx, &identityschema.User{}, func(record *identityschema.User) billingOwner {
 		return billingOwner{OwnerType: "user", OwnerID: int64(record.Id), AccountType: accountType}
 	})
 }
 
-func countMissingTokenAccounts(ctx context.Context) (int, error) {
-	return countMissingAccounts(ctx, &identityschema.Token{}, func(record *identityschema.Token) billingOwner {
+func countUnmaterializedTokenAccounts(ctx context.Context) (int, error) {
+	return countUnmaterializedAccounts(ctx, &identityschema.Token{}, func(record *identityschema.Token) billingOwner {
 		if record.UnlimitedQuota {
 			return billingOwner{}
 		}
@@ -120,8 +120,8 @@ func countMissingTokenAccounts(ctx context.Context) (int, error) {
 	})
 }
 
-func countMissingSubscriptionAccounts(ctx context.Context) (int, error) {
-	return countMissingAccounts(ctx, &commerceschema.UserSubscription{}, func(record *commerceschema.UserSubscription) billingOwner {
+func countUnmaterializedSubscriptionAccounts(ctx context.Context) (int, error) {
+	return countUnmaterializedAccounts(ctx, &commerceschema.UserSubscription{}, func(record *commerceschema.UserSubscription) billingOwner {
 		return billingOwner{OwnerType: "user_subscription", OwnerID: int64(record.Id), AccountType: "subscription"}
 	})
 }
@@ -132,11 +132,13 @@ type billingOwner struct {
 	AccountType string
 }
 
-func countMissingAccounts[T any](ctx context.Context, model *T, ownerFor func(*T) billingOwner) (int, error) {
+// countUnmaterializedAccounts reports records that will create a ledger account on first use.
+// They are expected in a lazy-account system and must not fail deployment verification.
+func countUnmaterializedAccounts[T any](ctx context.Context, model *T, ownerFor func(*T) billingOwner) (int, error) {
 	if !platformdb.DB.Migrator().HasTable(model) {
 		return 0, nil
 	}
-	missing := 0
+	unmaterialized := 0
 	var records []T
 	err := platformdb.DB.WithContext(ctx).Order("id asc").FindInBatches(&records, 500, func(tx *gorm.DB, _ int) error {
 		for index := range records {
@@ -151,20 +153,16 @@ func countMissingAccounts[T any](ctx context.Context, model *T, ownerFor func(*T
 				return err
 			}
 			if count == 0 {
-				missing++
+				unmaterialized++
 			}
 		}
 		return nil
 	}).Error
-	return missing, err
+	return unmaterialized, err
 }
 
 func (report verificationReport) hasFailures(strict bool) bool {
 	return len(report.MissingMigrations) > 0 ||
-		report.MissingWalletAccounts > 0 ||
-		report.MissingClaudeAccounts > 0 ||
-		report.MissingTokenAccounts > 0 ||
-		report.MissingSubscriptionFunds > 0 ||
 		report.InconsistentLedgers > 0 ||
 		(strict && (report.PendingOutboxEvents > 0 || report.LegacyBlindBoxCredits > 0))
 }
@@ -174,10 +172,10 @@ func printReport(report verificationReport) {
 	for _, id := range report.MissingMigrations {
 		fmt.Printf("  %s\n", id)
 	}
-	fmt.Printf("missing wallet accounts: %d\n", report.MissingWalletAccounts)
-	fmt.Printf("missing Claude wallet accounts: %d\n", report.MissingClaudeAccounts)
-	fmt.Printf("missing token accounts: %d\n", report.MissingTokenAccounts)
-	fmt.Printf("missing subscription accounts: %d\n", report.MissingSubscriptionFunds)
+	fmt.Printf("unmaterialized wallet accounts: %d\n", report.UnmaterializedWalletAccounts)
+	fmt.Printf("unmaterialized Claude wallet accounts: %d\n", report.UnmaterializedClaudeWalletAccounts)
+	fmt.Printf("unmaterialized token accounts: %d\n", report.UnmaterializedTokenAccounts)
+	fmt.Printf("unmaterialized subscription accounts: %d\n", report.UnmaterializedSubscriptionAccounts)
 	fmt.Printf("inconsistent ledger snapshots: %d\n", report.InconsistentLedgers)
 	fmt.Printf("pending ledger outbox events: %d\n", report.PendingOutboxEvents)
 	fmt.Printf("remaining legacy blind-box credits: %d\n", report.LegacyBlindBoxCredits)

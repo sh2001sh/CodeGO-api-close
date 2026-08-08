@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func TestVerifyReportsMissingBackfillAccounts(t *testing.T) {
+func TestVerifyReportsUnmaterializedAccountsWithoutFailing(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	originalDB := platformdb.DB
@@ -55,10 +55,13 @@ func TestVerifyReportsMissingBackfillAccounts(t *testing.T) {
 	report, err := verify(context.Background())
 	require.NoError(t, err)
 	require.Empty(t, report.MissingMigrations)
-	require.Equal(t, 1, report.MissingWalletAccounts)
-	require.Equal(t, 1, report.MissingClaudeAccounts)
-	require.Equal(t, 1, report.MissingTokenAccounts)
-	require.Equal(t, 1, report.MissingSubscriptionFunds)
+	require.Equal(t, 1, report.UnmaterializedWalletAccounts)
+	require.Equal(t, 1, report.UnmaterializedClaudeWalletAccounts)
+	require.Equal(t, 1, report.UnmaterializedTokenAccounts)
+	require.Equal(t, 1, report.UnmaterializedSubscriptionAccounts)
 	require.EqualValues(t, 1, report.LegacyBlindBoxCredits)
 	require.True(t, report.hasFailures(true))
+
+	report.LegacyBlindBoxCredits = 0
+	require.False(t, report.hasFailures(true))
 }

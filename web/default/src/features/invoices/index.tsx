@@ -140,7 +140,9 @@ export function Invoices() {
             </div>
           </section>
 
-          {user?.role === ROLE.SUPER_ADMIN ? <InvoiceAdminPanel /> : null}
+          {user?.role !== undefined && user.role >= ROLE.ADMIN ? (
+            <InvoiceAdminPanel />
+          ) : null}
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

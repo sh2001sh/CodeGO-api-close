@@ -13,6 +13,7 @@ import {
   Radio,
   ShieldCheck,
   RefreshCcw,
+  ReceiptText,
   ScrollText,
   Settings,
   Sparkles,
@@ -99,6 +100,11 @@ export function useSidebarData(): SidebarData {
             title: t('Wallet'),
             url: '/wallet',
             icon: Gem,
+          },
+          {
+            title: '电子发票',
+            url: '/invoices',
+            icon: ReceiptText,
           },
           {
             title: t('Blind box'),

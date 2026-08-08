@@ -262,9 +262,9 @@ export function InvoiceAdminPanel() {
                   </NativeSelect>
                 </label>
                 <label className='grid gap-1.5 text-sm font-medium'>
-                  HTTPS 下载链接{' '}
+                  HTTPS 下载链接
                   <span className='text-muted-foreground font-normal'>
-                    可选
+                    必填，用户将从申请记录中下载
                   </span>
                   <Input
                     type='url'
@@ -272,7 +272,7 @@ export function InvoiceAdminPanel() {
                     onChange={(event) =>
                       updateDraft('document_url', event.target.value)
                     }
-                    placeholder='https://...'
+                    placeholder='https://发票文件或电子发票平台的 HTTPS 地址'
                   />
                 </label>
               </>

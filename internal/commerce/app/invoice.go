@@ -293,6 +293,9 @@ func validateInvoiceAdminInput(input *UpdateInvoiceRequestInput) error {
 	if input.Status == commerceschema.InvoiceStatusIssued && input.DeliveryMethod != commerceschema.InvoiceDeliveryEmail && input.DeliveryMethod != commerceschema.InvoiceDeliveryDownload {
 		return errors.New("请选择发放方式")
 	}
+	if input.Status == commerceschema.InvoiceStatusIssued && input.DocumentURL == "" {
+		return errors.New("已开具发票必须填写 HTTPS 下载地址")
+	}
 	if input.Status == commerceschema.InvoiceStatusRejected && input.AdminNote == "" {
 		return errors.New("驳回申请需要填写原因")
 	}
@@ -311,6 +314,9 @@ func validateInvoiceAdminInput(input *UpdateInvoiceRequestInput) error {
 func invoiceOrderKey(sourceType, tradeNo string) string { return sourceType + ":" + tradeNo }
 
 func notifyInvoiceIssued(request *commerceschema.InvoiceRequest) {
+	if request == nil || request.DeliveryMethod != commerceschema.InvoiceDeliveryEmail {
+		return
+	}
 	content := fmt.Sprintf("<p>您的发票申请已处理完成，发票号码：<strong>%s</strong>。</p>", html.EscapeString(request.InvoiceNumber))
 	if request.DocumentURL != "" {
 		content += fmt.Sprintf("<p><a href=\"%s\">下载电子发票</a></p>", html.EscapeString(request.DocumentURL))

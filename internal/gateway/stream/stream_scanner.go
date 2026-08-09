@@ -25,6 +25,11 @@ const (
 	DefaultPingInterval         = 10 * time.Second
 )
 
+type scannedEvent struct {
+	data       string
+	receivedAt time.Time
+}
+
 func getScannerBufferSize() int {
 	if constant.StreamScannerMaxBufferMB > 0 {
 		return constant.StreamScannerMaxBufferMB << 20
@@ -104,7 +109,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	scannerDone := make(chan struct{})
 	dataDone := make(chan struct{})
 	pingDone := make(chan struct{})
-	dataChan := make(chan string, 10)
+	dataChan := make(chan scannedEvent, 10)
 	pingRequests := make(chan struct{}, 1)
 
 	if pingEnabled && pingTicker != nil {
@@ -159,12 +164,13 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 				// frames must still be delivered before this worker returns.
 				streamDone = nil
 				pingRequests = nil
-			case data, ok := <-dataChan:
+			case event, ok := <-dataChan:
 				if !ok {
 					return
 				}
 				sr.reset()
-				dataHandler(data, sr)
+				sr.setReceivedAt(event.receivedAt)
+				dataHandler(event.data, sr)
 				if sr.IsStopped() {
 					stop(true)
 					return
@@ -234,7 +240,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 			info.SetFirstResponseTime()
 			info.ReceivedResponseCount++
 			select {
-			case dataChan <- data:
+			case dataChan <- scannedEvent{data: data, receivedAt: time.Now()}:
 			case <-streamCtx.Done():
 				return
 			case <-c.Request.Context().Done():

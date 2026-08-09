@@ -138,6 +138,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		semanticOutput := hasResponsesStreamContent(streamResponse)
 		if semanticOutput {
 			if sawSemanticOutput.CompareAndSwap(false, true) {
+				if info.FirstByteTrace != nil {
+					info.FirstByteTrace.MarkFirstSemanticReadAt(sr.ReceivedAt())
+				}
 				info.SetFirstSemanticResponseTime()
 				if firstOutputTimer != nil {
 					firstOutputTimer.Stop()

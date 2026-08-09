@@ -135,14 +135,19 @@ func TestScanResponseDrainsReadFramesBeforeReturning(t *testing.T) {
 	context.Request = httptest.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil)
 	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
 	var received []string
+	var receivedAt []time.Time
 	body := "data: first\n\ndata: second\n\ndata: [DONE]\n\n"
 
-	ScanResponse(context, &http.Response{Body: io.NopCloser(strings.NewReader(body))}, info, func(data string, _ *Result) {
+	ScanResponse(context, &http.Response{Body: io.NopCloser(strings.NewReader(body))}, info, func(data string, result *Result) {
 		received = append(received, data)
+		receivedAt = append(receivedAt, result.ReceivedAt())
 		time.Sleep(25 * time.Millisecond)
 	})
 
 	require.Equal(t, []string{"first", "second"}, received)
+	require.Len(t, receivedAt, 2)
+	require.False(t, receivedAt[0].IsZero())
+	require.False(t, receivedAt[1].IsZero())
 	require.Equal(t, gatewaycontract.StreamEndReasonDone, info.StreamStatus.EndReason)
 }
 

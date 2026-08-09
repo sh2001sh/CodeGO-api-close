@@ -18,6 +18,7 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 	trace.routeSelectedAt = startedAt.Add(65 * time.Millisecond)
 	trace.upstreamStartAt = startedAt.Add(80 * time.Millisecond)
 	trace.firstEventAt = startedAt.Add(900 * time.Millisecond)
+	trace.firstSemanticReadAt = startedAt.Add(940 * time.Millisecond)
 	trace.firstSemanticAt = startedAt.Add(950 * time.Millisecond)
 
 	require.Equal(t, map[string]int64{
@@ -30,10 +31,24 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 		"dispatch_ms":                      15,
 		"upstream_first_event_ms":          820,
 		"event_to_semantic_ms":             50,
+		"upstream_first_semantic_read_ms":  860,
+		"semantic_read_to_handler_ms":      10,
 		"upstream_first_semantic_event_ms": 870,
 		"total_raw_event_ms":               900,
 		"total_ms":                         950,
 	}, trace.Snapshot())
+}
+
+func TestFirstByteTraceSeparatesScannerReadFromHandler(t *testing.T) {
+	startedAt := time.Unix(1_700_000_000, 0)
+	trace := NewFirstByteTrace(startedAt)
+	trace.upstreamStartAt = startedAt.Add(100 * time.Millisecond)
+	trace.MarkFirstSemanticReadAt(startedAt.Add(800 * time.Millisecond))
+	trace.firstSemanticAt = startedAt.Add(825 * time.Millisecond)
+
+	snapshot := trace.Snapshot()
+	require.Equal(t, int64(700), snapshot["upstream_first_semantic_read_ms"])
+	require.Equal(t, int64(25), snapshot["semantic_read_to_handler_ms"])
 }
 
 func TestFirstByteTraceReturnsNilWithoutAnUpstreamEvent(t *testing.T) {

@@ -1,10 +1,15 @@
 package stream
 
-import gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+import (
+	"time"
+
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+)
 
 type Result struct {
-	status  *gatewaycontract.StreamStatus
-	stopped bool
+	status     *gatewaycontract.StreamStatus
+	stopped    bool
+	receivedAt time.Time
 }
 
 func newResult(status *gatewaycontract.StreamStatus) *Result {
@@ -35,6 +40,17 @@ func (r *Result) IsStopped() bool {
 	return r.stopped
 }
 
+// ReceivedAt is the instant when the scanner read this SSE frame from the
+// upstream response body. It excludes downstream handler scheduling time.
+func (r *Result) ReceivedAt() time.Time {
+	return r.receivedAt
+}
+
+func (r *Result) setReceivedAt(receivedAt time.Time) {
+	r.receivedAt = receivedAt
+}
+
 func (r *Result) reset() {
 	r.stopped = false
+	r.receivedAt = time.Time{}
 }

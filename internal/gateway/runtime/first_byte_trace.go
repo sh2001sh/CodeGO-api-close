@@ -8,16 +8,17 @@ import (
 // FirstByteTrace separates gateway work from the wait for the first upstream
 // stream event. It deliberately stores no request content or upstream identity.
 type FirstByteTrace struct {
-	mu               sync.RWMutex
-	startedAt        time.Time
-	requestValidAt   time.Time
-	admittedAt       time.Time
-	relayInfoReadyAt time.Time
-	preflightDoneAt  time.Time
-	routeSelectedAt  time.Time
-	upstreamStartAt  time.Time
-	firstEventAt     time.Time
-	firstSemanticAt  time.Time
+	mu                  sync.RWMutex
+	startedAt           time.Time
+	requestValidAt      time.Time
+	admittedAt          time.Time
+	relayInfoReadyAt    time.Time
+	preflightDoneAt     time.Time
+	routeSelectedAt     time.Time
+	upstreamStartAt     time.Time
+	firstEventAt        time.Time
+	firstSemanticReadAt time.Time
+	firstSemanticAt     time.Time
 }
 
 func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
@@ -36,6 +37,19 @@ func (t *FirstByteTrace) MarkUpstreamStart()    { t.mark(&t.upstreamStartAt) }
 func (t *FirstByteTrace) MarkFirstEvent()       { t.mark(&t.firstEventAt) }
 func (t *FirstByteTrace) MarkFirstSemanticEvent() {
 	t.mark(&t.firstSemanticAt)
+}
+
+// MarkFirstSemanticReadAt records when the scanner received the first
+// model-visible SSE frame, before handler scheduling and JSON decoding.
+func (t *FirstByteTrace) MarkFirstSemanticReadAt(receivedAt time.Time) {
+	if t == nil || receivedAt.IsZero() {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.firstSemanticReadAt.IsZero() {
+		t.firstSemanticReadAt = receivedAt
+	}
 }
 
 func (t *FirstByteTrace) mark(target *time.Time) {
@@ -69,6 +83,8 @@ func (t *FirstByteTrace) Snapshot() map[string]int64 {
 		"dispatch_ms":                      durationMilliseconds(t.routeSelectedAt, t.upstreamStartAt),
 		"upstream_first_event_ms":          durationMilliseconds(t.upstreamStartAt, t.firstEventAt),
 		"event_to_semantic_ms":             durationMilliseconds(t.firstEventAt, t.firstSemanticAt),
+		"upstream_first_semantic_read_ms":  durationMilliseconds(t.upstreamStartAt, t.firstSemanticReadAt),
+		"semantic_read_to_handler_ms":      durationMilliseconds(t.firstSemanticReadAt, t.firstSemanticAt),
 		"upstream_first_semantic_event_ms": durationMilliseconds(t.upstreamStartAt, t.firstSemanticAt),
 		"total_raw_event_ms":               durationMilliseconds(t.startedAt, t.firstEventAt),
 		"total_ms":                         durationMilliseconds(t.startedAt, t.firstSemanticAt),

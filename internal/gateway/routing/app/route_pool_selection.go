@@ -24,6 +24,7 @@ const (
 	routePoolAffinityContextKey = "automatic_route_pool_affinity"
 	routePoolAffinityTTL        = 3 * time.Minute
 	routePoolSwitchImprovement  = 0.15
+	routePoolLatencyCostPremium = 0.15
 )
 
 type scoredRoutePoolCandidate struct {
@@ -176,9 +177,10 @@ func ShouldMigrateAutomaticPoolAffinity(c *gin.Context, group, modelName string,
 			continue
 		}
 		scored := scoredRoutePoolCandidate{
-			channel: candidate.Channel,
-			score:   effectiveRoutePoolCost(candidate.Member, modelName, health),
-			cost:    routePoolModelCost(candidate.Member, modelName),
+			channel:     candidate.Channel,
+			faultDomain: routePoolFaultDomain(candidate.Member, candidate.Channel),
+			score:       effectiveRoutePoolCost(candidate.Member, modelName, health),
+			cost:        routePoolModelCost(candidate.Member, modelName),
 		}
 		healthy = append(healthy, scored)
 		if candidate.Channel.Id == channelID {
@@ -195,16 +197,34 @@ func ShouldMigrateAutomaticPoolAffinity(c *gin.Context, group, modelName string,
 			break
 		}
 	}
-	best := chooseLowestRoutePoolCandidate(healthy)
+	best := chooseDifferentFaultDomainRoutePoolCandidate(healthy, current)
 	if best == nil || best.channel.Id == channelID {
 		return false
 	}
 	health, _ := gatewayruntime.GetChannelHealth(channelID, modelName, requestType)
-	if routePoolHardMigrationRequired(health, routePoolMedianTTFT(healthy, modelName, requestType)) {
+	medianTTFT := routePoolMedianTTFT(healthy, modelName, requestType)
+	if routePoolHardMigrationRequired(health, medianTTFT) {
+		return true
+	}
+	if routePoolLatencyMigrationRequired(health, medianTTFT) && best.cost <= current.cost*(1+routePoolLatencyCostPremium) {
 		return true
 	}
 	return (health.State == gatewayruntime.ChannelHealthDegraded || routePoolReliabilityNeedsMigration(health)) &&
 		best.score <= current.score*(1-routePoolSwitchImprovement)
+}
+
+func chooseDifferentFaultDomainRoutePoolCandidate(candidates []scoredRoutePoolCandidate, current *scoredRoutePoolCandidate) *scoredRoutePoolCandidate {
+	if current == nil || current.channel == nil || current.faultDomain == "" {
+		return nil
+	}
+	alternatives := make([]scoredRoutePoolCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.channel == nil || candidate.channel.Id == current.channel.Id || candidate.faultDomain == current.faultDomain {
+			continue
+		}
+		alternatives = append(alternatives, candidate)
+	}
+	return chooseLowestRoutePoolCandidate(routePoolPreferredHealthTier(alternatives))
 }
 
 func selectRoutePoolCandidate(c *gin.Context, poolID int64, candidate *scoredRoutePoolCandidate) *gatewayschema.Channel {

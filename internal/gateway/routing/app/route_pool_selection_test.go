@@ -59,6 +59,31 @@ func TestRoutePoolHysteresisKeepsStickyChannelForSmallImprovement(t *testing.T) 
 	assert.True(t, clearlyBetter.score <= sticky.score*(1-routePoolSwitchImprovement))
 }
 
+func TestRoutePoolLatencyMigrationRequiresReliableSlowLatencyEvidence(t *testing.T) {
+	slow := gatewayruntime.ChannelHealth{TTFTSamples: 20, TTFTP95Milliseconds: 15_100}
+	assert.True(t, routePoolLatencyMigrationRequired(slow, 10_000))
+
+	insufficientSamples := slow
+	insufficientSamples.TTFTSamples = 19
+	assert.False(t, routePoolLatencyMigrationRequired(insufficientSamples, 10_000))
+
+	withinNormalRange := slow
+	withinNormalRange.TTFTP95Milliseconds = 15_000
+	assert.False(t, routePoolLatencyMigrationRequired(withinNormalRange, 10_000))
+}
+
+func TestRoutePoolLatencyMigrationRequiresDifferentFaultDomain(t *testing.T) {
+	current := &scoredRoutePoolCandidate{channel: &gatewayschema.Channel{Id: 72}, faultDomain: "provider-a", cost: 0.05}
+	candidate := chooseDifferentFaultDomainRoutePoolCandidate([]scoredRoutePoolCandidate{
+		*current,
+		{channel: &gatewayschema.Channel{Id: 73}, faultDomain: "provider-a", cost: 0.04},
+		{channel: &gatewayschema.Channel{Id: 74}, faultDomain: "provider-b", cost: 0.055},
+	}, current)
+
+	assert.NotNil(t, candidate)
+	assert.Equal(t, 74, candidate.channel.Id)
+}
+
 func TestEffectiveRoutePoolCostStronglyPenalizesPoorReliability(t *testing.T) {
 	poor := effectiveRoutePoolCost(gatewayschema.RoutePoolMember{CostMultiplier: 1}, "gpt-test", gatewayruntime.ChannelHealth{
 		Window5Requests: 20, Window5Successes: 18, SuccessRate5m: 90,

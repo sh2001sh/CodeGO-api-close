@@ -131,6 +131,10 @@ func routePoolHardMigrationRequired(health gatewayruntime.ChannelHealth, medianT
 	return medianTTFT > 0 && health.TTFTP95Milliseconds > medianTTFT*2.5
 }
 
+func routePoolLatencyMigrationRequired(health gatewayruntime.ChannelHealth, medianTTFT float64) bool {
+	return health.TTFTSamples >= 20 && medianTTFT > 0 && health.TTFTP95Milliseconds > medianTTFT*1.5
+}
+
 func routePoolReliabilityNeedsMigration(health gatewayruntime.ChannelHealth) bool {
 	return health.Window5Requests >= 20 && health.SuccessRate5m < 95
 }

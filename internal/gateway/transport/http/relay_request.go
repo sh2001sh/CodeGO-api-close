@@ -29,6 +29,7 @@ import (
 
 func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	requestID := c.GetString(constant.RequestIdKey)
+	firstByteTrace := relaycommon.NewFirstByteTrace(httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime))
 
 	var (
 		newAPIError *types.NewAPIError
@@ -61,6 +62,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		return
 	}
+	firstByteTrace.MarkRequestValidated()
 
 	releaseRelaySlot, admitted, admissionStats := platformconcurrency.TryAcquireRelaySlot()
 	if !admitted {
@@ -77,13 +79,15 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 	defer releaseRelaySlot()
+	firstByteTrace.MarkAdmitted()
 
 	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
-	relayInfo.FirstByteTrace.MarkRelayInfoReady()
+	relayInfo.FirstByteTrace = firstByteTrace
+	firstByteTrace.MarkRelayInfoReady()
 	if auditErr := checkPromptAudit(c, relayFormat, request, relayInfo); auditErr != nil {
 		newAPIError = auditErr
 		return

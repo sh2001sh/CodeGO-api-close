@@ -10,6 +10,8 @@ import (
 type FirstByteTrace struct {
 	mu               sync.RWMutex
 	startedAt        time.Time
+	requestValidAt   time.Time
+	admittedAt       time.Time
 	relayInfoReadyAt time.Time
 	preflightDoneAt  time.Time
 	routeSelectedAt  time.Time
@@ -24,11 +26,13 @@ func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
 	return &FirstByteTrace{startedAt: startedAt}
 }
 
-func (t *FirstByteTrace) MarkRelayInfoReady() { t.mark(&t.relayInfoReadyAt) }
-func (t *FirstByteTrace) MarkPreflightDone()  { t.mark(&t.preflightDoneAt) }
-func (t *FirstByteTrace) MarkRouteSelected()  { t.mark(&t.routeSelectedAt) }
-func (t *FirstByteTrace) MarkUpstreamStart()  { t.mark(&t.upstreamStartAt) }
-func (t *FirstByteTrace) MarkFirstEvent()     { t.mark(&t.firstEventAt) }
+func (t *FirstByteTrace) MarkRequestValidated() { t.mark(&t.requestValidAt) }
+func (t *FirstByteTrace) MarkAdmitted()         { t.mark(&t.admittedAt) }
+func (t *FirstByteTrace) MarkRelayInfoReady()   { t.mark(&t.relayInfoReadyAt) }
+func (t *FirstByteTrace) MarkPreflightDone()    { t.mark(&t.preflightDoneAt) }
+func (t *FirstByteTrace) MarkRouteSelected()    { t.mark(&t.routeSelectedAt) }
+func (t *FirstByteTrace) MarkUpstreamStart()    { t.mark(&t.upstreamStartAt) }
+func (t *FirstByteTrace) MarkFirstEvent()       { t.mark(&t.firstEventAt) }
 
 func (t *FirstByteTrace) mark(target *time.Time) {
 	if t == nil {
@@ -53,6 +57,9 @@ func (t *FirstByteTrace) Snapshot() map[string]int64 {
 	}
 	return map[string]int64{
 		"ingress_ms":              durationMilliseconds(t.startedAt, t.relayInfoReadyAt),
+		"request_validation_ms":   durationMilliseconds(t.startedAt, t.requestValidAt),
+		"admission_ms":            durationMilliseconds(t.requestValidAt, t.admittedAt),
+		"relay_info_ms":           durationMilliseconds(t.admittedAt, t.relayInfoReadyAt),
 		"preflight_ms":            durationMilliseconds(t.relayInfoReadyAt, t.preflightDoneAt),
 		"route_selection_ms":      durationMilliseconds(t.preflightDoneAt, t.routeSelectedAt),
 		"dispatch_ms":             durationMilliseconds(t.routeSelectedAt, t.upstreamStartAt),

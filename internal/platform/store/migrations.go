@@ -63,6 +63,7 @@ func V2MigrationIDs() []string {
 		"20260802_gateway_route_pool_fault_domains",
 		"20260804_daily_lucky_reward_notifications",
 		"20260805_billing_outbox_pending_lookup",
+		"20260808_commerce_invoice_requests",
 	}
 }
 
@@ -182,6 +183,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&commerceschema.SubscriptionLuckyRewardNotification{})
 		}},
 		{ID: "20260805_billing_outbox_pending_lookup", RunOutsideTx: migratePendingOutboxLookupIndex},
+		{ID: "20260808_commerce_invoice_requests", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&commerceschema.InvoiceRequest{})
+		}},
 	}
 	for _, step := range steps {
 		var applied schemaMigration

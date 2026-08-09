@@ -67,6 +67,7 @@ func setupCommerceHTTPTestDB(t *testing.T) *gorm.DB {
 		&commerceschema.SubscriptionResetOpportunityLedger{},
 		&commerceschema.GroupBuyOrder{},
 		&commerceschema.GroupBuyMember{},
+		&commerceschema.InvoiceRequest{},
 	); err != nil {
 		t.Fatalf("failed to migrate commerce http tables: %v", err)
 	}

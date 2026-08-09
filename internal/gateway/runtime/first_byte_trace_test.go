@@ -29,3 +29,12 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 func TestFirstByteTraceReturnsNilWithoutAnUpstreamEvent(t *testing.T) {
 	require.Nil(t, NewFirstByteTrace(time.Now()).Snapshot())
 }
+
+func TestRelayInfoMarksTraceForFirstSemanticResponse(t *testing.T) {
+	startedAt := time.Now().Add(-time.Second)
+	info := &RelayInfo{StartTime: startedAt, FirstByteTrace: NewFirstByteTrace(startedAt)}
+
+	info.SetFirstSemanticResponseTime()
+
+	require.NotNil(t, info.FirstByteTrace.Snapshot())
+}

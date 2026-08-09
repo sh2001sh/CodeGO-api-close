@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBlockingPromptAuditRejectsRealtimeBeforeRelay(t *testing.T) {
+func TestBlockingPromptAuditSkipsRealtime(t *testing.T) {
 	service := securityaudit.NewService(securityaudit.Config{
 		Mode:   securityaudit.ModeBlocking,
 		Groups: []string{"guarded"},
@@ -28,12 +28,10 @@ func TestBlockingPromptAuditRejectsRealtimeBeforeRelay(t *testing.T) {
 
 	err := checkPromptAuditWithService(ctx, types.RelayFormatOpenAIRealtime, nil, info, service)
 
-	require.NotNil(t, err)
-	require.Equal(t, types.ErrorCodePromptGuardUnavailable, err.GetErrorCode())
-	require.Equal(t, http.StatusServiceUnavailable, err.StatusCode)
+	require.Nil(t, err)
 }
 
-func TestBlockingPromptAuditAllowsRealtimeOutsideConfiguredGroups(t *testing.T) {
+func TestBlockingPromptAuditSkipsRealtimeOutsideConfiguredGroups(t *testing.T) {
 	service := securityaudit.NewService(securityaudit.Config{
 		Mode:   securityaudit.ModeBlocking,
 		Groups: []string{"guarded"},

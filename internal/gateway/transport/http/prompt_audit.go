@@ -40,13 +40,11 @@ func checkPromptAuditWithService(
 	if relayFormat == types.RelayFormatOpenAIImage || gatewaycontract.IsImageGenerationModel(model) {
 		return nil
 	}
-	if relayFormat == types.RelayFormatOpenAIRealtime && service.IsBlockingForGroup(group) {
-		return types.NewErrorWithStatusCode(
-			errors.New("Realtime 暂不支持阻断式提示词安全审计，请稍后重试"),
-			types.ErrorCodePromptGuardUnavailable,
-			http.StatusServiceUnavailable,
-			types.ErrOptionWithSkipRetry(),
-		)
+	// Realtime has a distinct session protocol and cannot safely be held for a
+	// synchronous Guard decision. Skip it rather than turning audit coverage
+	// into a user-visible 503.
+	if relayFormat == types.RelayFormatOpenAIRealtime {
+		return nil
 	}
 	var body []byte
 	if storage, err := platformhttpx.GetBodyStorage(c); err == nil {

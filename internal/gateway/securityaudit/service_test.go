@@ -3,6 +3,7 @@ package securityaudit
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -11,6 +12,15 @@ type fakeScanner struct {
 	result *GuardResult
 	err    error
 	calls  int
+}
+
+type captureScanner struct {
+	inputs chan string
+}
+
+func (s *captureScanner) Scan(_ context.Context, _ Endpoint, input string, _ []string) (*GuardResult, error) {
+	s.inputs <- input
+	return &GuardResult{Safety: "Safe", Action: "allow"}, nil
 }
 
 func (f *fakeScanner) Scan(context.Context, Endpoint, string, []string) (*GuardResult, error) {
@@ -74,4 +84,27 @@ func TestOffServiceDoesNotCallScanner(t *testing.T) {
 	decision := service.Check(context.Background(), Request{FallbackText: "anything"})
 	require.True(t, decision.AllowNextStage)
 	require.Zero(t, scanner.calls)
+}
+
+func TestAsyncServiceUsesLatestTurnOnly(t *testing.T) {
+	scanner := &captureScanner{inputs: make(chan string, 1)}
+	config := blockingConfig()
+	config.Mode = ModeAsync
+	config.LatestTurnOnly = true
+	config.QueueCapacity = 1
+	config.WorkerCount = 1
+	service := NewService(config, scanner)
+
+	service.Check(context.Background(), Request{
+		Protocol: "openai_chat",
+		Body:     []byte(`{"messages":[{"role":"user","content":"old private context"},{"role":"assistant","content":"prior answer"},{"role":"user","content":"current request"}]}`),
+	})
+
+	select {
+	case input := <-scanner.inputs:
+		require.NotContains(t, input, "old private context")
+		require.Contains(t, input, "current request")
+	case <-time.After(time.Second):
+		t.Fatal("async audit worker did not scan the queued request")
+	}
 }

@@ -130,7 +130,7 @@ func (s *Service) Metrics() MetricsSnapshot {
 
 func (s *Service) runWorker() {
 	for request := range s.queue {
-		snapshot, err := ExtractSnapshot(request, false)
+		snapshot, err := ExtractSnapshot(request, s.config.LatestTurnOnly)
 		if errors.Is(err, errNoPromptText) {
 			continue
 		}

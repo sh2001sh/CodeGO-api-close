@@ -47,6 +47,9 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	if relayInfo.HasSendResponse() {
 		other["frt"] = float64(relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds())
 	}
+	if trace := relayInfo.FirstByteTrace.Snapshot(); trace != nil {
+		other["first_byte_trace"] = trace
+	}
 	other["generation_time_ms"] = time.Since(relayInfo.StartTime).Milliseconds()
 	if relayInfo.HasSendResponse() {
 		other["generation_time_ms"] = time.Since(relayInfo.FirstResponseTime).Milliseconds()

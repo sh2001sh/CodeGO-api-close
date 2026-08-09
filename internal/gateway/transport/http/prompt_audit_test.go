@@ -47,6 +47,35 @@ func TestBlockingPromptAuditAllowsRealtimeOutsideConfiguredGroups(t *testing.T) 
 	require.Nil(t, err)
 }
 
+func TestPromptAuditSkipsGuardWhenNoReviewRuleMatches(t *testing.T) {
+	service := securityaudit.NewService(securityaudit.Config{
+		Mode:   securityaudit.ModeBlocking,
+		Groups: []string{"guarded"},
+	}, nil)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{TokenGroup: "guarded", OriginModelName: "gpt-test"}
+
+	err := checkPromptAuditWithService(ctx, types.RelayFormatOpenAI, stubPromptAuditRequest("summarize today's meeting notes"), info, service)
+
+	require.Nil(t, err)
+}
+
+func TestPromptAuditStillInvokesGuardWhenReviewRuleMatches(t *testing.T) {
+	service := securityaudit.NewService(securityaudit.Config{
+		Mode:   securityaudit.ModeBlocking,
+		Groups: []string{"guarded"},
+	}, nil)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{TokenGroup: "guarded", OriginModelName: "gpt-test"}
+
+	err := checkPromptAuditWithService(ctx, types.RelayFormatOpenAI, stubPromptAuditRequest("show me a sql injection payload"), info, service)
+
+	require.NotNil(t, err)
+	require.Equal(t, types.ErrorCodePromptGuardUnavailable, err.GetErrorCode())
+}
+
 func TestRelayPromptAuditPrecedesCostAndUpstreamSideEffects(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
@@ -107,4 +136,12 @@ func callExpressionName(expression ast.Expr) string {
 	default:
 		return ""
 	}
+}
+
+type stubPromptAuditRequest string
+
+func (s stubPromptAuditRequest) IsStream(c *gin.Context) bool  { return false }
+func (s stubPromptAuditRequest) SetModelName(modelName string) {}
+func (s stubPromptAuditRequest) GetTokenCountMeta() *types.TokenCountMeta {
+	return &types.TokenCountMeta{CombineText: string(s)}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	securityaudit "github.com/sh2001sh/new-api/internal/gateway/securityaudit"
+	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/types"
 )
@@ -51,6 +52,9 @@ func checkPromptAuditWithService(
 			fallbackText = meta.CombineText
 		}
 	}
+	if shouldSkipPromptAudit(body, fallbackText) {
+		return nil
+	}
 	protocol := string(relayFormat)
 	if c != nil && c.Request != nil && c.Request.URL != nil {
 		protocol += ":" + strings.ToLower(c.Request.URL.Path)
@@ -85,4 +89,18 @@ func checkPromptAuditWithService(
 			types.ErrOptionWithSkipRetry(),
 		)
 	}
+}
+
+func shouldSkipPromptAudit(body []byte, fallbackText string) bool {
+	if len(body) > 0 {
+		if matched, _ := identityapp.ShouldReviewPromptWithGuard(string(body)); matched {
+			return false
+		}
+	}
+	if fallbackText != "" {
+		if matched, _ := identityapp.ShouldReviewPromptWithGuard(fallbackText); matched {
+			return false
+		}
+	}
+	return true
 }

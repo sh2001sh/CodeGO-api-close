@@ -331,6 +331,8 @@ func applyOptionValue(key string, value string) (err error) {
 		platformruntime.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "SensitiveWords":
 		requestsettings.SensitiveWordsFromString(value)
+	case "PromptAuditReviewRules":
+		requestsettings.PromptAuditReviewRulesFromString(value)
 	case "AutomaticDisableKeywords":
 		platformops.SetAutomaticDisableKeywordsFromString(value)
 	case "AutomaticDisableStatusCodes":

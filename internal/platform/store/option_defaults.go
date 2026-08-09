@@ -163,6 +163,7 @@ func buildDefaultOptionMap() map[string]string {
 		"CheckSensitiveOnPromptEnabled": strconv.FormatBool(requestsettings.CheckSensitiveOnPromptEnabled),
 		"StopOnSensitiveEnabled":        strconv.FormatBool(requestsettings.StopOnSensitiveEnabled),
 		"SensitiveWords":                requestsettings.SensitiveWordsToString(),
+		"PromptAuditReviewRules":        requestsettings.PromptAuditReviewRulesToString(),
 		"StreamCacheQueueLength":        strconv.Itoa(requestsettings.StreamCacheQueueLength),
 		"AutomaticDisableKeywords":      platformops.AutomaticDisableKeywordsToString(),
 		"AutomaticDisableStatusCodes":   gatewaystore.AutomaticDisableStatusCodesToString(),

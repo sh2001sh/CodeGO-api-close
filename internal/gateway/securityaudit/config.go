@@ -10,10 +10,12 @@ import (
 )
 
 const (
-	defaultTimeout       = 3 * time.Second
-	defaultInputLimit    = 4000
-	defaultQueueCapacity = 4096
-	defaultWorkerCount   = 2
+	defaultTimeout            = 1500 * time.Millisecond
+	defaultInputLimit         = 2000
+	defaultQueueCapacity      = 256
+	defaultWorkerCount        = 1
+	defaultGlobalConcurrency  = 1
+	defaultPerNodeConcurrency = 1
 )
 
 var allScannerIDs = []string{
@@ -69,12 +71,12 @@ func ConfigFromEnv() (Config, error) {
 		Mode:               normalizeMode(os.Getenv("PROMPT_AUDIT_MODE")),
 		Groups:             splitCSV(os.Getenv("PROMPT_AUDIT_GROUPS")),
 		Scanners:           normalizeScanners(splitCSV(os.Getenv("PROMPT_AUDIT_SCANNERS"))),
-		LatestTurnOnly:     envBool("PROMPT_AUDIT_LATEST_TURN_ONLY", false),
+		LatestTurnOnly:     envBool("PROMPT_AUDIT_LATEST_TURN_ONLY", true),
 		BlockControversial: envBool("PROMPT_AUDIT_BLOCK_CONTROVERSIAL", false),
 		QueueCapacity:      envInt("PROMPT_AUDIT_QUEUE_CAPACITY", defaultQueueCapacity),
 		WorkerCount:        envInt("PROMPT_AUDIT_WORKERS", defaultWorkerCount),
-		GlobalConcurrency:  envInt("PROMPT_AUDIT_GLOBAL_CONCURRENCY", 64),
-		PerNodeConcurrency: envInt("PROMPT_AUDIT_PER_NODE_CONCURRENCY", 16),
+		GlobalConcurrency:  envInt("PROMPT_AUDIT_GLOBAL_CONCURRENCY", defaultGlobalConcurrency),
+		PerNodeConcurrency: envInt("PROMPT_AUDIT_PER_NODE_CONCURRENCY", defaultPerNodeConcurrency),
 	}
 	if raw := strings.TrimSpace(os.Getenv("PROMPT_AUDIT_ENDPOINTS_JSON")); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &cfg.Endpoints); err != nil {
@@ -109,10 +111,10 @@ func normalizeConfig(cfg *Config) {
 		cfg.WorkerCount = defaultWorkerCount
 	}
 	if cfg.GlobalConcurrency <= 0 {
-		cfg.GlobalConcurrency = 64
+		cfg.GlobalConcurrency = defaultGlobalConcurrency
 	}
 	if cfg.PerNodeConcurrency <= 0 {
-		cfg.PerNodeConcurrency = 16
+		cfg.PerNodeConcurrency = defaultPerNodeConcurrency
 	}
 	for index := range cfg.Endpoints {
 		endpoint := &cfg.Endpoints[index]

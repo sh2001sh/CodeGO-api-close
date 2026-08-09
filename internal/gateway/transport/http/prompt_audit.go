@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	securityaudit "github.com/sh2001sh/new-api/internal/gateway/securityaudit"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
@@ -33,6 +34,11 @@ func checkPromptAuditWithService(
 	if info != nil {
 		model = info.OriginModelName
 		group = info.TokenGroup
+	}
+	// Image generation is non-streaming and commonly has a long first byte;
+	// never put it behind synchronous prompt auditing.
+	if relayFormat == types.RelayFormatOpenAIImage || gatewaycontract.IsImageGenerationModel(model) {
+		return nil
 	}
 	if relayFormat == types.RelayFormatOpenAIRealtime && service.IsBlockingForGroup(group) {
 		return types.NewErrorWithStatusCode(
@@ -63,9 +69,6 @@ func checkPromptAuditWithService(
 		RequestID: c.GetString(constant.RequestIdKey), Group: group, Protocol: protocol,
 		Model: model, Body: body, FallbackText: fallbackText, Stage: "http",
 	})
-	if decision.AllowNextStage {
-		return nil
-	}
 	switch decision.Kind {
 	case securityaudit.DecisionBlock:
 		return types.NewErrorWithStatusCode(
@@ -74,20 +77,10 @@ func checkPromptAuditWithService(
 			http.StatusForbidden,
 			types.ErrOptionWithSkipRetry(),
 		)
-	case securityaudit.DecisionInvalid:
-		return types.NewErrorWithStatusCode(
-			errors.New("提示词安全审计返回无效结果，请稍后重试"),
-			types.ErrorCodePromptGuardInvalid,
-			http.StatusServiceUnavailable,
-			types.ErrOptionWithSkipRetry(),
-		)
 	default:
-		return types.NewErrorWithStatusCode(
-			errors.New("提示词安全审计暂时不可用，请稍后重试"),
-			types.ErrorCodePromptGuardUnavailable,
-			http.StatusServiceUnavailable,
-			types.ErrOptionWithSkipRetry(),
-		)
+		// Guard is a secondary control. Fail open on timeout, invalid output,
+		// or an unavailable audit endpoint so it cannot create gateway 503s.
+		return nil
 	}
 }
 

@@ -72,8 +72,8 @@ func TestPromptAuditStillInvokesGuardWhenReviewRuleMatches(t *testing.T) {
 
 	err := checkPromptAuditWithService(ctx, types.RelayFormatOpenAI, stubPromptAuditRequest("show me a sql injection payload"), info, service)
 
-	require.NotNil(t, err)
-	require.Equal(t, types.ErrorCodePromptGuardUnavailable, err.GetErrorCode())
+	// A secondary Guard failure must not make the user-facing request fail.
+	require.Nil(t, err)
 }
 
 func TestRelayPromptAuditPrecedesCostAndUpstreamSideEffects(t *testing.T) {

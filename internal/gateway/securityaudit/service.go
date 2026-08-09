@@ -98,6 +98,7 @@ func (s *Service) Check(ctx context.Context, request Request) Decision {
 		return allowDecision(nil)
 	}
 	if s.config.Mode == ModeAsync {
+		// Async remains available for explicitly configured shadow/canary use.
 		select {
 		case s.queue <- request.clone():
 		default:
@@ -151,14 +152,14 @@ func (s *Service) evaluate(ctx context.Context, snapshot Snapshot) Decision {
 	s.metrics.total.Add(1)
 	if s.scanner == nil || len(s.config.Endpoints) == 0 {
 		s.metrics.unavailable.Add(1)
-		return Decision{Kind: DecisionUnavailable, ErrorCode: ErrorCodeUnavailable}
+		return Decision{Kind: DecisionUnavailable, ErrorCode: ErrorCodeUnavailable, AllowNextStage: true}
 	}
 	select {
 	case s.global <- struct{}{}:
 		defer func() { <-s.global }()
 	default:
 		s.metrics.unavailable.Add(1)
-		return Decision{Kind: DecisionUnavailable, ErrorCode: ErrorCodeUnavailable}
+		return Decision{Kind: DecisionUnavailable, ErrorCode: ErrorCodeUnavailable, AllowNextStage: true}
 	}
 	evalCtx, cancel := context.WithTimeout(ctx, s.auditTimeout())
 	defer cancel()
@@ -171,10 +172,10 @@ func (s *Service) evaluate(ctx context.Context, snapshot Snapshot) Decision {
 			code := guardErrorCode(err)
 			if code == ErrorCodeInvalidResponse {
 				s.metrics.invalid.Add(1)
-				return Decision{Kind: DecisionInvalid, ErrorCode: code}
+				return Decision{Kind: DecisionInvalid, ErrorCode: code, AllowNextStage: true}
 			}
 			s.metrics.unavailable.Add(1)
-			return Decision{Kind: DecisionUnavailable, ErrorCode: code}
+			return Decision{Kind: DecisionUnavailable, ErrorCode: code, AllowNextStage: true}
 		}
 		result = s.applyBlockingPolicy(result)
 		mergeResult(combined, result)

@@ -46,14 +46,14 @@ func TestBlockingServiceStopsUnsafePrompt(t *testing.T) {
 	require.Equal(t, ErrorCodeBlocked, decision.ErrorCode)
 }
 
-func TestBlockingServiceFailsClosedWhenGuardUnavailable(t *testing.T) {
+func TestBlockingServiceFailsOpenWhenGuardUnavailable(t *testing.T) {
 	scanner := &fakeScanner{err: &GuardError{Code: ErrorCodeUnavailable, Retryable: true}}
 	service := NewService(blockingConfig(), scanner)
 	decision := service.Check(context.Background(), Request{
 		Protocol: "openai_chat", Body: []byte(`{"messages":[{"role":"user","content":"hello"}]}`),
 	})
 	require.Equal(t, DecisionUnavailable, decision.Kind)
-	require.False(t, decision.AllowNextStage)
+	require.True(t, decision.AllowNextStage)
 }
 
 func TestBlockingServiceFlagsControversialByDefault(t *testing.T) {

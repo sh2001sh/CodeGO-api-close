@@ -136,10 +136,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			return
 		}
 		semanticOutput := hasResponsesStreamContent(streamResponse)
+		textOutput := isResponsesTextDelta(streamResponse)
 		if semanticOutput {
 			if sawSemanticOutput.CompareAndSwap(false, true) {
 				if info.FirstByteTrace != nil {
-					info.FirstByteTrace.MarkFirstSemanticReadAt(sr.ReceivedAt())
+					info.FirstByteTrace.MarkFirstSemanticReadAt(sr.ReceivedAt(), textOutput)
 				}
 				info.SetFirstSemanticResponseTime()
 				if firstOutputTimer != nil {
@@ -151,6 +152,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					return
 				}
 				preOutputEvents = nil
+			}
+			if textOutput && info.FirstByteTrace != nil {
+				info.FirstByteTrace.MarkFirstTextReadAt(sr.ReceivedAt())
+				info.FirstByteTrace.MarkFirstTextEvent()
 			}
 			helper.MarkSemanticCommitted(c)
 			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
@@ -331,6 +336,10 @@ func hasResponsesStreamContent(streamResponse dto.ResponsesStreamResponse) bool 
 	}
 	return streamResponse.Type == "response.output_item.added" &&
 		streamResponse.Item != nil && streamResponse.Item.Type == "function_call"
+}
+
+func isResponsesTextDelta(streamResponse dto.ResponsesStreamResponse) bool {
+	return streamResponse.Type == "response.output_text.delta" && streamResponse.Delta != ""
 }
 
 func responsesOutputText(response *dto.OpenAIResponsesResponse) string {

@@ -230,6 +230,20 @@ func TestOaiResponsesStreamHandlerSucceedsAfterResponseCompleted(t *testing.T) {
 	require.Equal(t, "hello", info.ConversationResponseText)
 }
 
+func TestIsResponsesTextDelta(t *testing.T) {
+	require.True(t, isResponsesTextDelta(dto.ResponsesStreamResponse{
+		Type:  "response.output_text.delta",
+		Delta: "text",
+	}))
+	require.False(t, isResponsesTextDelta(dto.ResponsesStreamResponse{
+		Type:  "response.reasoning.delta",
+		Delta: "reasoning",
+	}))
+	require.False(t, isResponsesTextDelta(dto.ResponsesStreamResponse{
+		Type: "response.output_text.delta",
+	}))
+}
+
 func TestIsPaceableResponsesTextDelta(t *testing.T) {
 	testCases := []struct {
 		name string

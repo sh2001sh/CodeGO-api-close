@@ -20,6 +20,10 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 	trace.firstEventAt = startedAt.Add(900 * time.Millisecond)
 	trace.firstSemanticReadAt = startedAt.Add(940 * time.Millisecond)
 	trace.firstSemanticAt = startedAt.Add(950 * time.Millisecond)
+	trace.firstTextReadAt = startedAt.Add(945 * time.Millisecond)
+	trace.firstTextAt = startedAt.Add(951 * time.Millisecond)
+	trace.firstSemanticIsText = true
+	trace.semanticKindMarked = true
 
 	require.Equal(t, map[string]int64{
 		"ingress_ms":                       20,
@@ -33,6 +37,9 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 		"event_to_semantic_ms":             50,
 		"upstream_first_semantic_read_ms":  860,
 		"semantic_read_to_handler_ms":      10,
+		"first_semantic_is_text":           1,
+		"upstream_first_text_read_ms":      865,
+		"text_read_to_handler_ms":          6,
 		"upstream_first_semantic_event_ms": 870,
 		"total_raw_event_ms":               900,
 		"total_ms":                         950,
@@ -43,12 +50,28 @@ func TestFirstByteTraceSeparatesScannerReadFromHandler(t *testing.T) {
 	startedAt := time.Unix(1_700_000_000, 0)
 	trace := NewFirstByteTrace(startedAt)
 	trace.upstreamStartAt = startedAt.Add(100 * time.Millisecond)
-	trace.MarkFirstSemanticReadAt(startedAt.Add(800 * time.Millisecond))
+	trace.MarkFirstSemanticReadAt(startedAt.Add(800*time.Millisecond), false)
 	trace.firstSemanticAt = startedAt.Add(825 * time.Millisecond)
 
 	snapshot := trace.Snapshot()
 	require.Equal(t, int64(700), snapshot["upstream_first_semantic_read_ms"])
 	require.Equal(t, int64(25), snapshot["semantic_read_to_handler_ms"])
+	require.Equal(t, int64(0), snapshot["first_semantic_is_text"])
+}
+
+func TestFirstByteTraceSeparatesTextFromOtherDeltas(t *testing.T) {
+	startedAt := time.Unix(1_700_000_000, 0)
+	trace := NewFirstByteTrace(startedAt)
+	trace.upstreamStartAt = startedAt.Add(100 * time.Millisecond)
+	trace.firstSemanticAt = startedAt.Add(600 * time.Millisecond)
+	trace.MarkFirstSemanticReadAt(startedAt.Add(550*time.Millisecond), false)
+	trace.MarkFirstTextReadAt(startedAt.Add(800 * time.Millisecond))
+	trace.firstTextAt = startedAt.Add(810 * time.Millisecond)
+
+	snapshot := trace.Snapshot()
+	require.Equal(t, int64(0), snapshot["first_semantic_is_text"])
+	require.Equal(t, int64(700), snapshot["upstream_first_text_read_ms"])
+	require.Equal(t, int64(10), snapshot["text_read_to_handler_ms"])
 }
 
 func TestFirstByteTraceReturnsNilWithoutAnUpstreamEvent(t *testing.T) {

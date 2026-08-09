@@ -19,6 +19,10 @@ type FirstByteTrace struct {
 	firstEventAt        time.Time
 	firstSemanticReadAt time.Time
 	firstSemanticAt     time.Time
+	firstTextReadAt     time.Time
+	firstTextAt         time.Time
+	firstSemanticIsText bool
+	semanticKindMarked  bool
 }
 
 func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
@@ -41,7 +45,7 @@ func (t *FirstByteTrace) MarkFirstSemanticEvent() {
 
 // MarkFirstSemanticReadAt records when the scanner received the first
 // model-visible SSE frame, before handler scheduling and JSON decoding.
-func (t *FirstByteTrace) MarkFirstSemanticReadAt(receivedAt time.Time) {
+func (t *FirstByteTrace) MarkFirstSemanticReadAt(receivedAt time.Time, isText bool) {
 	if t == nil || receivedAt.IsZero() {
 		return
 	}
@@ -49,7 +53,26 @@ func (t *FirstByteTrace) MarkFirstSemanticReadAt(receivedAt time.Time) {
 	defer t.mu.Unlock()
 	if t.firstSemanticReadAt.IsZero() {
 		t.firstSemanticReadAt = receivedAt
+		t.firstSemanticIsText = isText
+		t.semanticKindMarked = true
 	}
+}
+
+// MarkFirstTextReadAt records when the scanner received the first visible
+// output-text delta, excluding reasoning and lifecycle frames.
+func (t *FirstByteTrace) MarkFirstTextReadAt(receivedAt time.Time) {
+	if t == nil || receivedAt.IsZero() {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.firstTextReadAt.IsZero() {
+		t.firstTextReadAt = receivedAt
+	}
+}
+
+func (t *FirstByteTrace) MarkFirstTextEvent() {
+	t.mark(&t.firstTextAt)
 }
 
 func (t *FirstByteTrace) mark(target *time.Time) {
@@ -73,7 +96,7 @@ func (t *FirstByteTrace) Snapshot() map[string]int64 {
 	if t.firstSemanticAt.IsZero() {
 		return nil
 	}
-	return map[string]int64{
+	snapshot := map[string]int64{
 		"ingress_ms":                       durationMilliseconds(t.startedAt, t.relayInfoReadyAt),
 		"request_validation_ms":            durationMilliseconds(t.startedAt, t.requestValidAt),
 		"admission_ms":                     durationMilliseconds(t.requestValidAt, t.admittedAt),
@@ -89,6 +112,18 @@ func (t *FirstByteTrace) Snapshot() map[string]int64 {
 		"total_raw_event_ms":               durationMilliseconds(t.startedAt, t.firstEventAt),
 		"total_ms":                         durationMilliseconds(t.startedAt, t.firstSemanticAt),
 	}
+	if t.semanticKindMarked {
+		if t.firstSemanticIsText {
+			snapshot["first_semantic_is_text"] = 1
+		} else {
+			snapshot["first_semantic_is_text"] = 0
+		}
+	}
+	if !t.firstTextReadAt.IsZero() {
+		snapshot["upstream_first_text_read_ms"] = durationMilliseconds(t.upstreamStartAt, t.firstTextReadAt)
+		snapshot["text_read_to_handler_ms"] = durationMilliseconds(t.firstTextReadAt, t.firstTextAt)
+	}
+	return snapshot
 }
 
 func durationMilliseconds(start, end time.Time) int64 {

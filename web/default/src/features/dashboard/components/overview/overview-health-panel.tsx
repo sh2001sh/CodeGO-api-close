@@ -27,25 +27,27 @@ import {
   formatUptimePct,
 } from '@/features/performance-metrics/lib/format'
 import type { PerfModelSummary } from '@/features/performance-metrics/types'
+import { useAuthStore } from '@/stores/auth-store'
 
 const PERFORMANCE_WINDOW_HOURS = 24
 
 type WeightedMetric = 'avg_latency_ms' | 'avg_tps' | 'success_rate'
 
-function simpleAverage(
+function weightedAverage(
   rows: PerfModelSummary[],
   metric: WeightedMetric,
   isValid: (value: number) => boolean
 ): number {
-  let total = 0
-  let count = 0
+  let weightedTotal = 0
+  let weightSum = 0
   for (const row of rows) {
     const value = Number(row[metric])
-    if (!isValid(value)) continue
-    total += value
-    count++
+    const weight = Number(row.request_count)
+    if (!isValid(value) || !Number.isFinite(weight) || weight <= 0) continue
+    weightedTotal += value * weight
+    weightSum += weight
   }
-  return count > 0 ? total / count : NaN
+  return weightSum > 0 ? weightedTotal / weightSum : NaN
 }
 
 function resolveOverallStatus(successRate: number) {
@@ -56,9 +58,16 @@ function resolveOverallStatus(successRate: number) {
 }
 
 export function OverviewHealthPanel() {
+  const currentGroup = useAuthStore((state) => state.auth.user?.group || '')
   const metricsQuery = useQuery({
-    queryKey: ['perf-metrics-summary', PERFORMANCE_WINDOW_HOURS, 'overview'],
-    queryFn: () => getPerfMetricsSummary(PERFORMANCE_WINDOW_HOURS),
+    queryKey: [
+      'perf-metrics-summary',
+      PERFORMANCE_WINDOW_HOURS,
+      currentGroup,
+      'overview',
+    ],
+    queryFn: () =>
+      getPerfMetricsSummary(PERFORMANCE_WINDOW_HOURS, currentGroup || undefined),
     staleTime: 60 * 1000,
     retry: false,
   })
@@ -77,10 +86,10 @@ export function OverviewHealthPanel() {
   const summary = useMemo(() => {
     return {
       avgLatencyMs: Math.round(
-        simpleAverage(models, 'avg_latency_ms', (v) => Number.isFinite(v) && v > 0)
+        weightedAverage(models, 'avg_latency_ms', (v) => Number.isFinite(v) && v > 0)
       ),
-      avgTps: simpleAverage(models, 'avg_tps', (v) => Number.isFinite(v) && v > 0),
-      successRate: simpleAverage(models, 'success_rate', Number.isFinite),
+      avgTps: weightedAverage(models, 'avg_tps', (v) => Number.isFinite(v) && v > 0),
+      successRate: weightedAverage(models, 'success_rate', Number.isFinite),
     }
   }, [models])
 
@@ -129,7 +138,7 @@ export function OverviewHealthPanel() {
       <div className='flex items-start justify-between gap-3'>
         <div>
           <div className='text-muted-foreground text-[11px] font-medium tracking-[0.16em] uppercase'>
-            平台健康
+            {currentGroup ? currentGroup + ' 分组' : '平台健康'}
           </div>
           <div className='text-foreground mt-1 text-xl font-semibold tracking-tight'>
             今天的主要状态

@@ -335,7 +335,9 @@ func QuerySummaryByGroupModels(hours int, groups []string) ([]GroupModelSummary,
 		results = append(results, GroupModelSummary{
 			Group:        key.group,
 			ModelName:    key.model,
+			AvgLatencyMs: avg(total.totalLatencyMs, total.requestCount),
 			SuccessRate:  math.Round(successRate(total)*100) / 100,
+			AvgTps:       math.Round(avgTps(total)*100) / 100,
 			RequestCount: total.requestCount,
 		})
 	}

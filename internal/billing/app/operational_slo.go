@@ -25,7 +25,7 @@ func BuildOperationalSLO(ctx context.Context, hours int) (OperationalSLO, error)
 	if hours <= 0 {
 		hours = 24
 	}
-	summary, err := auditapp.BuildPerfMetricsSummary(hours)
+	summary, err := auditapp.BuildPerfMetricsSummary(hours, "")
 	if err != nil {
 		return OperationalSLO{}, err
 	}

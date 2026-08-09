@@ -21,6 +21,13 @@ import { FileCheck2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -109,99 +116,105 @@ export function InvoiceAdminPanel() {
   const isIssued = draft.status === 'issued'
 
   return (
-    <section className='border-border mt-8 border-t pt-6'>
-      <div className='mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center'>
-        <div>
-          <h2 className='text-base font-semibold'>发票审核</h2>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            仅管理员可查看抬头、税号和接收邮箱。
-          </p>
+    <Card className='bg-card/95'>
+      <CardHeader className='gap-3 border-b'>
+        <div className='flex flex-col justify-between gap-3 sm:flex-row sm:items-start'>
+          <div>
+            <CardTitle>发票审核</CardTitle>
+            <CardDescription className='mt-1'>
+              仅管理员可查看抬头、税号和接收邮箱，并登记发票号码或驳回原因。
+            </CardDescription>
+          </div>
+          <NativeSelect
+            value={status}
+            onChange={(event) =>
+              setStatus(event.target.value as InvoiceStatus | 'all')
+            }
+            className='w-full sm:w-36'
+          >
+            <option value='pending'>待处理</option>
+            <option value='issued'>已开具</option>
+            <option value='rejected'>已驳回</option>
+            <option value='all'>全部</option>
+          </NativeSelect>
         </div>
-        <NativeSelect
-          value={status}
-          onChange={(event) =>
-            setStatus(event.target.value as InvoiceStatus | 'all')
-          }
-        >
-          <option value='pending'>待处理</option>
-          <option value='issued'>已开具</option>
-          <option value='rejected'>已驳回</option>
-          <option value='all'>全部</option>
-        </NativeSelect>
-      </div>
-
-      <div className='border-border overflow-hidden rounded-lg border'>
-        {requests.isLoading ? (
-          <p className='text-muted-foreground py-8 text-center text-sm'>
-            正在加载申请...
-          </p>
-        ) : null}
-        {requests.isError ? (
-          <p className='text-destructive py-8 text-center text-sm'>
-            申请数据加载失败
-          </p>
-        ) : null}
-        {requests.data ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>申请人 / 订单</TableHead>
-                <TableHead>开票信息</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>提交时间</TableHead>
-                <TableHead className='text-right'>处理</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requests.data.items.map((request) => (
-                <TableRow key={request.id}>
-                  <TableCell>
-                    <div className='font-medium'>
-                      用户 #{request.user_id} · {request.order_title}
-                    </div>
-                    <div className='text-muted-foreground text-xs'>
-                      {request.trade_no} · {request.currency}{' '}
-                      {request.order_amount.toFixed(2)}
-                    </div>
-                  </TableCell>
-                  <TableCell className='whitespace-normal'>
-                    <div>{request.title}</div>
-                    <div className='text-muted-foreground text-xs'>
-                      {request.invoice_type === 'enterprise'
-                        ? `${request.tax_number} · `
-                        : ''}
-                      {request.email}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <InvoiceStatusBadge status={request.status} />
-                  </TableCell>
-                  <TableCell>{formatTime(request.created_at)}</TableCell>
-                  <TableCell className='text-right'>
-                    <Button
-                      size='sm'
-                      variant='outline'
-                      onClick={() => openReview(request)}
-                    >
-                      处理
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {requests.data.items.length === 0 ? (
+      </CardHeader>
+      <CardContent>
+        <div className='border-border overflow-hidden rounded-2xl border bg-background/75'>
+          {requests.isLoading ? (
+            <p className='text-muted-foreground py-10 text-center text-sm'>
+              正在加载申请...
+            </p>
+          ) : null}
+          {requests.isError ? (
+            <p className='text-destructive py-10 text-center text-sm'>
+              申请数据加载失败
+            </p>
+          ) : null}
+          {requests.data ? (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={5}
-                    className='text-muted-foreground h-24 text-center'
-                  >
-                    没有符合筛选条件的申请
-                  </TableCell>
+                  <TableHead>申请人 / 订单</TableHead>
+                  <TableHead>开票信息</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>提交时间</TableHead>
+                  <TableHead className='text-right'>处理</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        ) : null}
-      </div>
+              </TableHeader>
+              <TableBody>
+                {requests.data.items.map((request) => (
+                  <TableRow key={request.id}>
+                    <TableCell className='align-top whitespace-normal'>
+                      <div className='font-medium'>
+                        用户 #{request.user_id} · {request.order_title}
+                      </div>
+                      <div className='text-muted-foreground text-xs'>
+                        {request.trade_no} · {request.currency}{' '}
+                        {request.order_amount.toFixed(2)}
+                      </div>
+                    </TableCell>
+                    <TableCell className='align-top whitespace-normal'>
+                      <div>{request.title}</div>
+                      <div className='text-muted-foreground text-xs'>
+                        {request.invoice_type === 'enterprise'
+                          ? request.tax_number + ' · '
+                          : ''}
+                        {request.email}
+                      </div>
+                    </TableCell>
+                    <TableCell className='align-top'>
+                      <InvoiceStatusBadge status={request.status} />
+                    </TableCell>
+                    <TableCell className='align-top whitespace-normal'>
+                      {formatTime(request.created_at)}
+                    </TableCell>
+                    <TableCell className='text-right align-top'>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => openReview(request)}
+                      >
+                        处理
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {requests.data.items.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className='text-muted-foreground h-28 text-center'
+                    >
+                      没有符合筛选条件的申请
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          ) : null}
+        </div>
+      </CardContent>
 
       <Dialog
         open={Boolean(selected)}
@@ -308,6 +321,6 @@ export function InvoiceAdminPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </Card>
   )
 }

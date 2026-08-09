@@ -96,6 +96,7 @@ type RelayInfo struct {
 	TokenUnlimited        bool
 	StartTime             time.Time
 	FirstResponseTime     time.Time
+	FirstByteTrace        *FirstByteTrace
 	firstSemanticResponse bool
 	isFirstResponse       bool
 	StreamPacer           *StreamPacer
@@ -494,6 +495,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 
 		StartTime:         startTime,
 		FirstResponseTime: startTime.Add(-time.Second),
+		FirstByteTrace:    NewFirstByteTrace(startTime),
 		StreamPacer:       NewStreamPacer(httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel)),
 		ThinkingContentInfo: ThinkingContentInfo{
 			IsFirstThinkingContent:  true,
@@ -665,6 +667,9 @@ func (info *RelayInfo) GetEstimatePromptTokens() int {
 func (info *RelayInfo) SetFirstResponseTime() {
 	if info.isFirstResponse {
 		info.FirstResponseTime = time.Now()
+		if info.FirstByteTrace != nil {
+			info.FirstByteTrace.MarkFirstEvent()
+		}
 		info.isFirstResponse = false
 	}
 }

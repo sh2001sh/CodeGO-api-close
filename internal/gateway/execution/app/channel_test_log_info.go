@@ -31,6 +31,9 @@ func buildGatewayTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = relayInfo.UpstreamModelName
 	}
+	if trace := relayInfo.FirstByteTrace.Snapshot(); trace != nil {
+		other["first_byte_trace"] = trace
+	}
 	if httpctx.GetContextKeyBool(ctx, constant.ContextKeySystemPromptOverride) {
 		other["is_system_prompt_overwritten"] = true
 	}

@@ -83,6 +83,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
+	relayInfo.FirstByteTrace.MarkRelayInfoReady()
 	if auditErr := checkPromptAudit(c, relayFormat, request, relayInfo); auditErr != nil {
 		newAPIError = auditErr
 		return
@@ -157,6 +158,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
 	streamFailureCircuitChecked := false
+	relayInfo.FirstByteTrace.MarkPreflightDone()
 
 	for ; retryParam.GetRetry() <= retryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
@@ -179,6 +181,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = channelErr
 			break
 		}
+		relayInfo.FirstByteTrace.MarkRouteSelected()
 		relayInfo.InitChannelMeta(c)
 		gatewaystream.BeginRelayAttempt(c)
 		if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) && !streamFailureCircuitChecked {
@@ -250,6 +253,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		relaycommon.UpdateRouteDecisionBudget(c, requestBudget)
 		relaycommon.StartRouteDecisionAttempt(c, relayInfo.RetryIndex, channel.Id, faultDomain)
+		relayInfo.FirstByteTrace.MarkUpstreamStart()
 
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:

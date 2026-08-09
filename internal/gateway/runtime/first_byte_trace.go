@@ -17,6 +17,7 @@ type FirstByteTrace struct {
 	routeSelectedAt  time.Time
 	upstreamStartAt  time.Time
 	firstEventAt     time.Time
+	firstSemanticAt  time.Time
 }
 
 func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
@@ -33,6 +34,9 @@ func (t *FirstByteTrace) MarkPreflightDone()    { t.mark(&t.preflightDoneAt) }
 func (t *FirstByteTrace) MarkRouteSelected()    { t.mark(&t.routeSelectedAt) }
 func (t *FirstByteTrace) MarkUpstreamStart()    { t.mark(&t.upstreamStartAt) }
 func (t *FirstByteTrace) MarkFirstEvent()       { t.mark(&t.firstEventAt) }
+func (t *FirstByteTrace) MarkFirstSemanticEvent() {
+	t.mark(&t.firstSemanticAt)
+}
 
 func (t *FirstByteTrace) mark(target *time.Time) {
 	if t == nil {
@@ -52,19 +56,22 @@ func (t *FirstByteTrace) Snapshot() map[string]int64 {
 	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	if t.firstEventAt.IsZero() {
+	if t.firstSemanticAt.IsZero() {
 		return nil
 	}
 	return map[string]int64{
-		"ingress_ms":              durationMilliseconds(t.startedAt, t.relayInfoReadyAt),
-		"request_validation_ms":   durationMilliseconds(t.startedAt, t.requestValidAt),
-		"admission_ms":            durationMilliseconds(t.requestValidAt, t.admittedAt),
-		"relay_info_ms":           durationMilliseconds(t.admittedAt, t.relayInfoReadyAt),
-		"preflight_ms":            durationMilliseconds(t.relayInfoReadyAt, t.preflightDoneAt),
-		"route_selection_ms":      durationMilliseconds(t.preflightDoneAt, t.routeSelectedAt),
-		"dispatch_ms":             durationMilliseconds(t.routeSelectedAt, t.upstreamStartAt),
-		"upstream_first_event_ms": durationMilliseconds(t.upstreamStartAt, t.firstEventAt),
-		"total_ms":                durationMilliseconds(t.startedAt, t.firstEventAt),
+		"ingress_ms":                       durationMilliseconds(t.startedAt, t.relayInfoReadyAt),
+		"request_validation_ms":            durationMilliseconds(t.startedAt, t.requestValidAt),
+		"admission_ms":                     durationMilliseconds(t.requestValidAt, t.admittedAt),
+		"relay_info_ms":                    durationMilliseconds(t.admittedAt, t.relayInfoReadyAt),
+		"preflight_ms":                     durationMilliseconds(t.relayInfoReadyAt, t.preflightDoneAt),
+		"route_selection_ms":               durationMilliseconds(t.preflightDoneAt, t.routeSelectedAt),
+		"dispatch_ms":                      durationMilliseconds(t.routeSelectedAt, t.upstreamStartAt),
+		"upstream_first_event_ms":          durationMilliseconds(t.upstreamStartAt, t.firstEventAt),
+		"event_to_semantic_ms":             durationMilliseconds(t.firstEventAt, t.firstSemanticAt),
+		"upstream_first_semantic_event_ms": durationMilliseconds(t.upstreamStartAt, t.firstSemanticAt),
+		"total_raw_event_ms":               durationMilliseconds(t.startedAt, t.firstEventAt),
+		"total_ms":                         durationMilliseconds(t.startedAt, t.firstSemanticAt),
 	}
 }
 

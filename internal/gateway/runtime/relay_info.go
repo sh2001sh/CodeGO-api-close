@@ -669,6 +669,9 @@ func (info *RelayInfo) SetFirstResponseTime() {
 		info.FirstResponseTime = time.Now()
 		if info.FirstByteTrace != nil {
 			info.FirstByteTrace.MarkFirstEvent()
+			if info.RelayFormat != types.RelayFormatOpenAIResponses {
+				info.FirstByteTrace.MarkFirstSemanticEvent()
+			}
 		}
 		info.isFirstResponse = false
 	}
@@ -682,7 +685,7 @@ func (info *RelayInfo) SetFirstSemanticResponseTime() {
 	}
 	info.FirstResponseTime = time.Now()
 	if info.FirstByteTrace != nil {
-		info.FirstByteTrace.MarkFirstEvent()
+		info.FirstByteTrace.MarkFirstSemanticEvent()
 	}
 	info.isFirstResponse = false
 	info.firstSemanticResponse = true

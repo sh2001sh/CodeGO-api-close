@@ -17,7 +17,7 @@ function Get-Percentile {
 function Format-StageSummary {
     param([string]$Label, [object[]]$Records)
 
-    $metrics = @("ingress_ms", "request_validation_ms", "admission_ms", "relay_info_ms", "preflight_ms", "route_selection_ms", "dispatch_ms", "upstream_first_event_ms", "total_ms")
+    $metrics = @("ingress_ms", "request_validation_ms", "admission_ms", "relay_info_ms", "preflight_ms", "route_selection_ms", "dispatch_ms", "upstream_first_event_ms", "event_to_semantic_ms", "upstream_first_semantic_event_ms", "total_raw_event_ms", "total_ms")
     $summary = [ordered]@{ scope = $Label; samples = $Records.Count }
     foreach ($metric in $metrics) {
         $values = @($Records | ForEach-Object { [double]$_.trace.$metric })

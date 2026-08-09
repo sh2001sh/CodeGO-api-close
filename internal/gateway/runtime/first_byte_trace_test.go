@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,17 +18,21 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 	trace.routeSelectedAt = startedAt.Add(65 * time.Millisecond)
 	trace.upstreamStartAt = startedAt.Add(80 * time.Millisecond)
 	trace.firstEventAt = startedAt.Add(900 * time.Millisecond)
+	trace.firstSemanticAt = startedAt.Add(950 * time.Millisecond)
 
 	require.Equal(t, map[string]int64{
-		"ingress_ms":              20,
-		"request_validation_ms":   10,
-		"admission_ms":            5,
-		"relay_info_ms":           5,
-		"preflight_ms":            20,
-		"route_selection_ms":      25,
-		"dispatch_ms":             15,
-		"upstream_first_event_ms": 820,
-		"total_ms":                900,
+		"ingress_ms":                       20,
+		"request_validation_ms":            10,
+		"admission_ms":                     5,
+		"relay_info_ms":                    5,
+		"preflight_ms":                     20,
+		"route_selection_ms":               25,
+		"dispatch_ms":                      15,
+		"upstream_first_event_ms":          820,
+		"event_to_semantic_ms":             50,
+		"upstream_first_semantic_event_ms": 870,
+		"total_raw_event_ms":               900,
+		"total_ms":                         950,
 	}, trace.Snapshot())
 }
 
@@ -42,4 +47,23 @@ func TestRelayInfoMarksTraceForFirstSemanticResponse(t *testing.T) {
 	info.SetFirstSemanticResponseTime()
 
 	require.NotNil(t, info.FirstByteTrace.Snapshot())
+}
+
+func TestRelayInfoSeparatesResponsesLifecycleAndSemanticOutput(t *testing.T) {
+	startedAt := time.Now().Add(-time.Second)
+	info := &RelayInfo{
+		StartTime:       startedAt,
+		RelayFormat:     types.RelayFormatOpenAIResponses,
+		FirstByteTrace:  NewFirstByteTrace(startedAt),
+		isFirstResponse: true,
+	}
+	info.FirstByteTrace.MarkUpstreamStart()
+
+	info.SetFirstResponseTime()
+	require.Nil(t, info.FirstByteTrace.Snapshot())
+
+	info.SetFirstSemanticResponseTime()
+	trace := info.FirstByteTrace.Snapshot()
+	require.NotNil(t, trace)
+	require.GreaterOrEqual(t, trace["event_to_semantic_ms"], int64(0))
 }

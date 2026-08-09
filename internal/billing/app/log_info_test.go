@@ -28,6 +28,7 @@ func TestGenerateTextOtherInfoIncludesFirstByteTrace(t *testing.T) {
 	relayInfo.FirstByteTrace.MarkRouteSelected()
 	relayInfo.FirstByteTrace.MarkUpstreamStart()
 	relayInfo.FirstByteTrace.MarkFirstEvent()
+	relayInfo.FirstByteTrace.MarkFirstSemanticEvent()
 
 	other := GenerateTextOtherInfo(ctx, relayInfo, 1, 1, 1, 0, 0, 0, 1)
 

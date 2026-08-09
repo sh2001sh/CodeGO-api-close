@@ -21,6 +21,7 @@ import {
   Users,
   HandCoins,
   LibraryBig,
+  ReceiptText,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
@@ -99,6 +100,11 @@ export function useSidebarData(): SidebarData {
             title: t('Wallet'),
             url: '/wallet',
             icon: Gem,
+          },
+          {
+            title: '电子发票',
+            url: '/invoices',
+            icon: ReceiptText,
           },
           {
             title: t('Blind box'),

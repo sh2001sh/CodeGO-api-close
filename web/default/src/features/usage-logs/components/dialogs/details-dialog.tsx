@@ -401,6 +401,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
+  const streamStartMs = other?.response_start_ms ?? other?.frt ?? 0
   const typeConfig = getLogTypeConfig(props.log.type)
 
   const isViolation = isViolationFeeLog(other)
@@ -596,18 +597,35 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     >
                       {formatUseTime(props.log.use_time)}
                       {props.log.is_stream &&
-                        other?.frt != null &&
-                        other.frt > 0 && (
+                        ((other?.response_start_ms != null &&
+                          other.response_start_ms > 0) ||
+                          (other?.frt != null && other.frt > 0)) && (
                           <span
                             className={cn(
                               'font-normal',
                               timingTextColorClass(
-                                getFirstResponseTimeColor(other.frt / 1000)
+                                getFirstResponseTimeColor(streamStartMs / 1000)
                               )
                             )}
                           >
                             {' '}
-                            (FRT: {formatUseTime(other.frt / 1000)})
+                            {other.response_start_ms != null &&
+                              other.response_start_ms > 0 && (
+                                <>
+                                  ({t('Response started')}:{' '}
+                                  {formatUseTime(
+                                    other.response_start_ms / 1000
+                                  )}
+                                  )
+                                </>
+                              )}
+                            {other.frt != null && other.frt > 0 && (
+                              <>
+                                {' '}
+                                ({t('First token')}:{' '}
+                                {formatUseTime(other.frt / 1000)})
+                              </>
+                            )}
                           </span>
                         )}
                     </span>

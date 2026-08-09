@@ -547,6 +547,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
         const frt = other?.frt
+        const responseStartMs = other?.response_start_ms
+        const displayedStreamStartMs =
+          responseStartMs != null && responseStartMs > 0 ? responseStartMs : frt
         const recordedGenerationTime = other?.generation_time_ms
         const streamOutputTokens = other?.stream_output_tokens
         const streamOutputTime = other?.stream_output_time_ms
@@ -569,7 +572,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             ? throughputTokens / generationTime
             : null
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
-        const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null
+        const streamStartVariant = displayedStreamStartMs
+          ? getFirstResponseTimeColor(displayedStreamStartMs / 1000)
+          : null
 
         const pillBg: Record<string, string> = {
           success: 'border border-success/20 bg-success/8',
@@ -607,16 +612,30 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 {formatUseTime(useTime)}
               </span>
               {log.is_stream &&
-                (frt != null && frt > 0 ? (
-                  <span
-                    className={cn(
-                      'inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
-                      pillBg[frtVariant!],
-                      pillText[frtVariant!]
-                    )}
-                  >
-                    {formatUseTime(frt / 1000)}
-                  </span>
+                (displayedStreamStartMs != null &&
+                displayedStreamStartMs > 0 ? (
+                  <TooltipProvider delay={300}>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            className={cn(
+                              'inline-flex cursor-help items-center rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
+                              pillBg[streamStartVariant!],
+                              pillText[streamStartVariant!]
+                            )}
+                          />
+                        }
+                      >
+                        {formatUseTime(displayedStreamStartMs / 1000)}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {responseStartMs != null && responseStartMs > 0
+                          ? t('Response started')
+                          : t('First token')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 ) : (
                   <span className='border-border/60 text-muted-foreground/50 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px]'>
                     N/A

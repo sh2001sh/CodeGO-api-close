@@ -49,6 +49,11 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 	if trace := relayInfo.FirstByteTrace.Snapshot(); trace != nil {
 		other["first_byte_trace"] = trace
+		if responseStartMs := trace["total_raw_event_ms"]; responseStartMs > 0 {
+			// A Responses lifecycle event confirms that the request reached the
+			// model service, but is not necessarily visible model text.
+			other["response_start_ms"] = responseStartMs
+		}
 	}
 	other["generation_time_ms"] = time.Since(relayInfo.StartTime).Milliseconds()
 	if relayInfo.HasSendResponse() {

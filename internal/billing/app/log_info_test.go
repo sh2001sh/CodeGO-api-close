@@ -33,6 +33,8 @@ func TestGenerateTextOtherInfoIncludesFirstByteTrace(t *testing.T) {
 	other := GenerateTextOtherInfo(ctx, relayInfo, 1, 1, 1, 0, 0, 0, 1)
 
 	require.Contains(t, other, "first_byte_trace")
+	require.Contains(t, other, "response_start_ms")
+	require.Greater(t, other["response_start_ms"].(int64), int64(0))
 	trace, ok := other["first_byte_trace"].(map[string]int64)
 	require.True(t, ok)
 	require.Greater(t, trace["total_ms"], int64(0))

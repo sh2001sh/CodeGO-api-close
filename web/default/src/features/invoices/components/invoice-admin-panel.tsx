@@ -96,7 +96,6 @@ export function InvoiceAdminPanel() {
         queryKey: ['invoice-eligible-orders'],
       })
     },
-    onError: () => toast.error('处理失败，请检查开票信息'),
   })
 
   const openReview = (request: InvoiceRequest) => {
@@ -114,6 +113,7 @@ export function InvoiceAdminPanel() {
     value: AdminDraft[K]
   ) => setDraft((current) => ({ ...current, [key]: value }))
   const isIssued = draft.status === 'issued'
+  const rejectionReasonRequired = !isIssued && !draft.admin_note.trim()
 
   return (
     <Card className='bg-card/95'>
@@ -294,7 +294,9 @@ export function InvoiceAdminPanel() {
               {isIssued ? '内部备注' : '驳回原因'}{' '}
               {isIssued ? (
                 <span className='text-muted-foreground font-normal'>可选</span>
-              ) : null}
+              ) : (
+                <span className='text-destructive font-normal'>必填</span>
+              )}
               <Textarea
                 value={draft.admin_note}
                 onChange={(event) =>
@@ -304,12 +306,17 @@ export function InvoiceAdminPanel() {
                 rows={3}
               />
             </label>
+            {rejectionReasonRequired ? (
+              <p className='text-destructive text-sm' role='alert'>
+                请填写驳回原因后再提交，用户将能够在申请记录中看到该原因。
+              </p>
+            ) : null}
           </div>
           <DialogFooter showCloseButton>
             <Button
               variant={isIssued ? 'default' : 'destructive'}
               onClick={() => update.mutate()}
-              disabled={update.isPending}
+              disabled={update.isPending || rejectionReasonRequired}
             >
               {isIssued ? <FileCheck2 /> : <XCircle />}
               {update.isPending

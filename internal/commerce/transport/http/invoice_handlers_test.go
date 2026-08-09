@@ -89,3 +89,27 @@ func TestAdminIssueInvoiceRequest(t *testing.T) {
 		t.Fatalf("expected issued request, got %#v", reloaded)
 	}
 }
+
+func TestAdminRejectInvoiceRequest(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	request := &commerceschema.InvoiceRequest{UserID: 92, SourceType: commerceschema.InvoiceSourceTopUp, TradeNo: "admin-reject-1", OrderAmount: 18, Currency: "CNY", OrderTitle: "钱包充值", InvoiceType: commerceschema.InvoiceTypePersonal, Title: "测试用户", Email: "invoice@example.com", Status: commerceschema.InvoiceStatusPending}
+	if err := db.Create(request).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	body := map[string]any{"status": commerceschema.InvoiceStatusRejected, "admin_note": "抬头信息与订单不一致"}
+	ctx, recorder := newCommerceContext(t, "PUT", "/api/invoices/admin/requests/1", body, 1)
+	ctx.Params = append(ctx.Params, gin.Param{Key: "id", Value: "1"})
+	updateAdminInvoiceRequest(ctx)
+	if response := decodeCommerceResponse(t, recorder); !response.Success {
+		t.Fatalf("expected rejection success, got %#v", response)
+	}
+
+	var reloaded commerceschema.InvoiceRequest
+	if err := db.First(&reloaded, request.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Status != commerceschema.InvoiceStatusRejected || reloaded.AdminNote != "抬头信息与订单不一致" || reloaded.HandledBy != 1 {
+		t.Fatalf("expected rejected request with reviewer details, got %#v", reloaded)
+	}
+}

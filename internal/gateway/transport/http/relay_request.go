@@ -88,10 +88,6 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 	relayInfo.FirstByteTrace = firstByteTrace
 	firstByteTrace.MarkRelayInfoReady()
-	if auditErr := checkPromptAudit(c, relayFormat, request, relayInfo); auditErr != nil {
-		newAPIError = auditErr
-		return
-	}
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
 		if relayFormat == types.RelayFormatOpenAIImage || gatewaycontract.IsImageGenerationModel(relayInfo.OriginModelName) {
 			newAPIError = types.NewErrorWithStatusCode(errors.New("0 倍率分组不支持生图模型"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
@@ -124,6 +120,10 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 				return
 			}
 		}
+	}
+	if auditErr := checkPromptAudit(c, relayFormat, request, relayInfo); auditErr != nil {
+		newAPIError = auditErr
+		return
 	}
 
 	tokens, err := tokenx.EstimateRequestToken(c, meta, relayInfo)

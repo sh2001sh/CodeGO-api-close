@@ -97,6 +97,13 @@ func TestRetryCurrentChannelOnlyBeforeDownstreamOutput(t *testing.T) {
 	context.Set(string(constant.ContextKeyResponseBodyDelivered), false)
 	context.Set(string(constant.ContextKeyRequestStartTime), time.Now().Add(-currentChannelRetryMaxElapsed-time.Millisecond))
 	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, fastTransportFailure))
+
+	headerTimeout := types.NewErrorWithStatusCode(
+		errors.New("timeout awaiting response headers"),
+		types.ErrorCodeChannelResponseTimeExceeded,
+		http.StatusGatewayTimeout,
+	)
+	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, headerTimeout))
 }
 
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {

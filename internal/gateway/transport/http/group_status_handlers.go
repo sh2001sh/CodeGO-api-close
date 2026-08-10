@@ -26,3 +26,23 @@ func GetUserGroupStatus(c *gin.Context) {
 		"data":    data,
 	})
 }
+
+func GetUserGroupOverview(c *gin.Context) {
+	userID := c.GetInt("id")
+	_, hasUser := c.Get("id")
+
+	data, err := gatewayroutingapp.BuildUserGroupOverview(userID, hasUser, parsePerfMetricsHours(c.Query("hours")))
+	if err != nil {
+		c.JSON(stdhttp.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(stdhttp.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    data,
+	})
+}

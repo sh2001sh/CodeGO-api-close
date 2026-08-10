@@ -33,6 +33,7 @@ func RegisterUserRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gi
 		{
 			selfRoute.GET("/self/groups", gatewayhttp.GetUserGroups)
 			selfRoute.GET("/self/group-status", gatewayhttp.GetUserGroupStatus)
+			selfRoute.GET("/self/group-overview", gatewayhttp.GetUserGroupOverview)
 			selfRoute.GET("/self", GetUserSelf)
 			selfRoute.GET("/models", GetUserModels)
 			selfRoute.GET("/image-workspace/models", GetImageWorkspaceModels)

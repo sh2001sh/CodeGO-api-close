@@ -15,9 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 */
-import { Download, FileCheck2, FileClock, FileX2, Mail } from 'lucide-react'
+import { FileCheck2, FileClock, FileX2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -67,47 +66,14 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   )
 }
 
-function DeliveryCell({ request }: { request: InvoiceRequest }) {
-  if (request.status === 'issued' && request.document_url) {
-    return (
-      <Button
-        size='sm'
-        variant='outline'
-        render={
-          <a
-            href={request.document_url}
-            target='_blank'
-            rel='noreferrer'
-            title='下载电子发票'
-          />
-        }
-      >
-        <Download />
-        下载发票
-      </Button>
-    )
-  }
-
-  if (request.status === 'issued' && request.delivery_method === 'email') {
-    return (
-      <span className='text-muted-foreground inline-flex items-center gap-1 text-xs'>
-        <Mail className='size-3.5' />
-        邮箱发送
-      </span>
-    )
-  }
-
-  return <span className='text-muted-foreground text-xs'>-</span>
-}
-
 export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
   if (requests.length === 0) {
     return (
-      <div className='flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed bg-muted/20 px-6 text-center'>
+      <div className='bg-muted/20 flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-6 text-center'>
         <FileClock className='text-muted-foreground size-5' />
         <p className='font-medium'>暂无发票申请记录</p>
         <p className='text-muted-foreground max-w-md text-sm'>
-          提交申请后，处理结果、发票号码和交付方式都会显示在这里。
+          提交申请后，处理结果和发票号码会显示在这里。
         </p>
       </div>
     )
@@ -145,9 +111,7 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
               </div>
               <div>
                 <div className='text-muted-foreground text-xs'>发票号码</div>
-                <div className='mt-1'>
-                  {request.invoice_number || '待开具'}
-                </div>
+                <div className='mt-1'>{request.invoice_number || '待开具'}</div>
               </div>
             </div>
             {request.status === 'rejected' && request.admin_note ? (
@@ -155,9 +119,6 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                 {request.admin_note}
               </div>
             ) : null}
-            <div className='flex justify-end'>
-              <DeliveryCell request={request} />
-            </div>
           </div>
         ))}
       </div>
@@ -170,7 +131,6 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
               <TableHead>状态</TableHead>
               <TableHead>申请时间</TableHead>
               <TableHead>发票号码</TableHead>
-              <TableHead className='text-right'>交付</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -200,9 +160,6 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                       {request.admin_note}
                     </div>
                   ) : null}
-                </TableCell>
-                <TableCell className='text-right align-top'>
-                  <DeliveryCell request={request} />
                 </TableCell>
               </TableRow>
             ))}

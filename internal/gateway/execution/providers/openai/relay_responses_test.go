@@ -152,6 +152,43 @@ func TestOaiResponsesStreamHandlerFlushesLifecycleBeforeSemanticOutput(t *testin
 	require.Equal(t, gatewaystream.AttemptStageCompleted, gatewaystream.AttemptStageFromContext(c))
 }
 
+func TestOaiResponsesStreamHandlerFlushesRemoteCompactionOutput(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_compact"}}`,
+		``,
+		`data: {"type":"response.output_item.added","item":{"id":"ctc_123","type":"compaction","status":"completed"}}`,
+		``,
+		`data: {"type":"response.output_item.done","item":{"id":"ctc_123","type":"compaction","status":"completed"}}`,
+		``,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+
+	require.Nil(t, err)
+	require.Equal(t, 15, usage.TotalTokens)
+	output := recorder.Body.String()
+	created := strings.Index(output, `event: response.created`)
+	compaction := strings.Index(output, `event: response.output_item.added`)
+	completed := strings.Index(output, `event: response.completed`)
+	require.GreaterOrEqual(t, created, 0)
+	require.Greater(t, compaction, created)
+	require.Greater(t, completed, compaction)
+	require.True(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
+}
+
 func TestOaiResponsesStreamHandlerDoesNotFailWhenLifecycleBufferOverflows(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	constant.StreamingTimeout = 30
@@ -241,6 +278,17 @@ func TestIsResponsesTextDelta(t *testing.T) {
 	}))
 	require.False(t, isResponsesTextDelta(dto.ResponsesStreamResponse{
 		Type: "response.output_text.delta",
+	}))
+}
+
+func TestHasResponsesStreamContentRecognizesRemoteCompactionOutput(t *testing.T) {
+	require.True(t, hasResponsesStreamContent(dto.ResponsesStreamResponse{
+		Type: dto.ResponsesOutputTypeItemAdded,
+		Item: &dto.ResponsesOutput{Type: "compaction"},
+	}))
+	require.False(t, hasResponsesStreamContent(dto.ResponsesStreamResponse{
+		Type: dto.ResponsesOutputTypeItemDone,
+		Item: &dto.ResponsesOutput{Type: "compaction"},
 	}))
 }
 

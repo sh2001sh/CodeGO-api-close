@@ -49,6 +49,15 @@ export interface UptimeGroupResult {
   monitors: UptimeMonitor[]
 }
 
+export type UserGroupOverviewItem = {
+  group: string
+  avg_latency_ms: number | null
+  success_rate: number | null
+  avg_tps: number | null
+  request_count: number
+  active_model_count: number
+}
+
 // ============================================================================
 // Dashboard Filter Types
 // ============================================================================

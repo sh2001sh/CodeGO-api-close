@@ -2,18 +2,13 @@ package app
 
 import (
 	"errors"
-	"fmt"
-	"html"
 	"net/mail"
-	"net/url"
 	"sort"
 	"strings"
 
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
-	platformnotify "github.com/sh2001sh/new-api/internal/platform/notifyx"
-	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
@@ -47,11 +42,9 @@ type CreateInvoiceRequestInput struct {
 }
 
 type UpdateInvoiceRequestInput struct {
-	Status         string `json:"status"`
-	InvoiceNumber  string `json:"invoice_number"`
-	DeliveryMethod string `json:"delivery_method"`
-	DocumentURL    string `json:"document_url"`
-	AdminNote      string `json:"admin_note"`
+	Status        string `json:"status"`
+	InvoiceNumber string `json:"invoice_number"`
+	AdminNote     string `json:"admin_note"`
 }
 
 // ListInvoiceEligibleOrders returns paid orders that the user may invoice.
@@ -182,14 +175,12 @@ func UpdateAdminInvoiceRequest(id int64, adminID int, input UpdateInvoiceRequest
 		return nil, err
 	}
 	var result commerceschema.InvoiceRequest
-	notifyIssued := false
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").First(&result, id).Error; err != nil {
 			return err
 		}
-		notifyIssued = result.Status != commerceschema.InvoiceStatusIssued && input.Status == commerceschema.InvoiceStatusIssued
 		result.Status, result.InvoiceNumber = input.Status, input.InvoiceNumber
-		result.DeliveryMethod, result.DocumentURL, result.AdminNote, result.HandledBy = input.DeliveryMethod, input.DocumentURL, input.AdminNote, adminID
+		result.AdminNote, result.HandledBy = input.AdminNote, adminID
 		if input.Status == commerceschema.InvoiceStatusIssued && result.IssuedAt == 0 {
 			result.IssuedAt = platformruntime.GetTimestamp()
 		}
@@ -197,9 +188,6 @@ func UpdateAdminInvoiceRequest(id int64, adminID int, input UpdateInvoiceRequest
 	})
 	if err != nil {
 		return nil, err
-	}
-	if notifyIssued {
-		notifyInvoiceIssued(&result)
 	}
 	return &result, nil
 }
@@ -283,27 +271,15 @@ func validateInvoiceAdminInput(input *UpdateInvoiceRequestInput) error {
 		return errors.New("invalid invoice request")
 	}
 	input.Status, input.InvoiceNumber = strings.TrimSpace(input.Status), strings.TrimSpace(input.InvoiceNumber)
-	input.DeliveryMethod, input.DocumentURL, input.AdminNote = strings.TrimSpace(input.DeliveryMethod), strings.TrimSpace(input.DocumentURL), strings.TrimSpace(input.AdminNote)
+	input.AdminNote = strings.TrimSpace(input.AdminNote)
 	if input.Status != commerceschema.InvoiceStatusIssued && input.Status != commerceschema.InvoiceStatusRejected {
 		return errors.New("请选择处理结果")
 	}
 	if input.Status == commerceschema.InvoiceStatusIssued && input.InvoiceNumber == "" {
 		return errors.New("已开具发票必须填写发票号码")
 	}
-	if input.Status == commerceschema.InvoiceStatusIssued && input.DeliveryMethod != commerceschema.InvoiceDeliveryEmail && input.DeliveryMethod != commerceschema.InvoiceDeliveryDownload {
-		return errors.New("请选择发放方式")
-	}
-	if input.Status == commerceschema.InvoiceStatusIssued && input.DocumentURL == "" {
-		return errors.New("已开具发票必须填写 HTTPS 下载地址")
-	}
 	if input.Status == commerceschema.InvoiceStatusRejected && input.AdminNote == "" {
 		return errors.New("驳回申请需要填写原因")
-	}
-	if input.DocumentURL != "" {
-		parsed, err := url.ParseRequestURI(input.DocumentURL)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-			return errors.New("下载地址必须是 HTTPS 链接")
-		}
 	}
 	if len([]rune(input.AdminNote)) > 1000 || len([]rune(input.InvoiceNumber)) > 128 {
 		return errors.New("处理信息过长")
@@ -312,16 +288,3 @@ func validateInvoiceAdminInput(input *UpdateInvoiceRequestInput) error {
 }
 
 func invoiceOrderKey(sourceType, tradeNo string) string { return sourceType + ":" + tradeNo }
-
-func notifyInvoiceIssued(request *commerceschema.InvoiceRequest) {
-	if request == nil || request.DeliveryMethod != commerceschema.InvoiceDeliveryEmail {
-		return
-	}
-	content := fmt.Sprintf("<p>您的发票申请已处理完成，发票号码：<strong>%s</strong>。</p>", html.EscapeString(request.InvoiceNumber))
-	if request.DocumentURL != "" {
-		content += fmt.Sprintf("<p><a href=\"%s\">下载电子发票</a></p>", html.EscapeString(request.DocumentURL))
-	}
-	if err := platformnotify.SendEmail("CodeGo 电子发票已开具", request.Email, content); err != nil {
-		platformobservability.SysLog(fmt.Sprintf("invoice request %d email notification failed: %v", request.ID, err))
-	}
-}

@@ -334,8 +334,13 @@ func hasResponsesStreamContent(streamResponse dto.ResponsesStreamResponse) bool 
 	if streamResponse.Delta != "" && strings.HasSuffix(streamResponse.Type, ".delta") {
 		return true
 	}
-	return streamResponse.Type == "response.output_item.added" &&
-		streamResponse.Item != nil && streamResponse.Item.Type == "function_call"
+	if streamResponse.Type != dto.ResponsesOutputTypeItemAdded || streamResponse.Item == nil {
+		return false
+	}
+	// Remote compaction v2 produces a compaction output item rather than text.
+	// It is client-visible semantic output and must leave the lifecycle buffer
+	// immediately, otherwise a later upstream disconnect yields zero items.
+	return streamResponse.Item.Type == "function_call" || streamResponse.Item.Type == "compaction"
 }
 
 func isResponsesTextDelta(streamResponse dto.ResponsesStreamResponse) bool {

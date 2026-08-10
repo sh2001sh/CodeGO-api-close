@@ -66,14 +66,14 @@ func TestInvoiceEligibleOrdersSkipSubscriptionTopUpMirror(t *testing.T) {
 	}
 }
 
-func TestAdminIssueInvoiceRequest(t *testing.T) {
+func TestAdminIssueInvoiceRequestNeedsOnlyInvoiceNumber(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 	request := &commerceschema.InvoiceRequest{UserID: 91, SourceType: commerceschema.InvoiceSourceTopUp, TradeNo: "admin-issue-1", OrderAmount: 18, Currency: "CNY", OrderTitle: "钱包充值", InvoiceType: commerceschema.InvoiceTypePersonal, Title: "测试用户", Email: "invoice@example.com", Status: commerceschema.InvoiceStatusPending}
 	if err := db.Create(request).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	body := map[string]any{"status": commerceschema.InvoiceStatusIssued, "invoice_number": "01234567", "delivery_method": commerceschema.InvoiceDeliveryEmail, "document_url": "https://invoice.example.com/download/1.pdf"}
+	body := map[string]any{"status": commerceschema.InvoiceStatusIssued, "invoice_number": "01234567"}
 	ctx, recorder := newCommerceContext(t, "PUT", "/api/invoices/admin/requests/1", body, 1)
 	ctx.Params = append(ctx.Params, gin.Param{Key: "id", Value: "1"})
 	updateAdminInvoiceRequest(ctx)

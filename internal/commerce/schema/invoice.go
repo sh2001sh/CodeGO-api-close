@@ -15,9 +15,6 @@ const (
 	InvoiceStatusPending  = "pending"
 	InvoiceStatusIssued   = "issued"
 	InvoiceStatusRejected = "rejected"
-
-	InvoiceDeliveryEmail    = "email"
-	InvoiceDeliveryDownload = "download"
 )
 
 // InvoiceRequest is a user-submitted request for a paid commerce order.

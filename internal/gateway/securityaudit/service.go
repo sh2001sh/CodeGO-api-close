@@ -11,13 +11,14 @@ import (
 )
 
 type MetricsSnapshot struct {
-	Total       int64
-	Allowed     int64
-	Flagged     int64
-	Blocked     int64
-	Unavailable int64
-	Invalid     int64
-	Dropped     int64
+	Total       int64 `json:"total"`
+	Allowed     int64 `json:"allowed"`
+	Flagged     int64 `json:"flagged"`
+	Blocked     int64 `json:"blocked"`
+	Unavailable int64 `json:"unavailable"`
+	Timeouts    int64 `json:"timeouts"`
+	Invalid     int64 `json:"invalid"`
+	Dropped     int64 `json:"dropped"`
 }
 
 type auditMetrics struct {
@@ -26,6 +27,7 @@ type auditMetrics struct {
 	flagged     atomic.Int64
 	blocked     atomic.Int64
 	unavailable atomic.Int64
+	timeouts    atomic.Int64
 	invalid     atomic.Int64
 	dropped     atomic.Int64
 }
@@ -35,6 +37,7 @@ type Service struct {
 	scanner Scanner
 	queue   chan Request
 	metrics auditMetrics
+	history *auditHistory
 
 	global chan struct{}
 	nodeMu sync.Mutex
@@ -71,6 +74,7 @@ func NewService(config Config, scanner Scanner) *Service {
 	service := &Service{
 		config: config, scanner: scanner,
 		global: make(chan struct{}, config.GlobalConcurrency), nodes: make(map[string]chan struct{}),
+		history: newAuditHistory(defaultAuditHistoryCapacity),
 	}
 	if config.Mode == ModeAsync {
 		service.queue = make(chan Request, config.QueueCapacity)
@@ -125,8 +129,16 @@ func (s *Service) Metrics() MetricsSnapshot {
 	return MetricsSnapshot{
 		Total: s.metrics.total.Load(), Allowed: s.metrics.allowed.Load(), Flagged: s.metrics.flagged.Load(),
 		Blocked: s.metrics.blocked.Load(), Unavailable: s.metrics.unavailable.Load(), Invalid: s.metrics.invalid.Load(),
-		Dropped: s.metrics.dropped.Load(),
+		Timeouts: s.metrics.timeouts.Load(), Dropped: s.metrics.dropped.Load(),
 	}
+}
+
+// AuditRecords returns the newest bounded set of redacted Guard decisions.
+func (s *Service) AuditRecords(limit int) []AuditRecord {
+	if s == nil || s.history == nil {
+		return nil
+	}
+	return s.history.records(limit)
 }
 
 func (s *Service) runWorker() {
@@ -150,32 +162,35 @@ func (s *Service) runWorker() {
 
 func (s *Service) evaluate(ctx context.Context, snapshot Snapshot) Decision {
 	s.metrics.total.Add(1)
+	startedAt := time.Now()
 	if s.scanner == nil || len(s.config.Endpoints) == 0 {
 		s.metrics.unavailable.Add(1)
-		return Decision{Kind: DecisionUnavailable, ErrorCode: ErrorCodeUnavailable, AllowNextStage: true}
+		return s.recordDecision(snapshot, Decision{Kind: DecisionUnavailable, ErrorCode: ErrorCodeUnavailable, AllowNextStage: true}, startedAt)
 	}
 	select {
 	case s.global <- struct{}{}:
 		defer func() { <-s.global }()
 	default:
 		s.metrics.unavailable.Add(1)
-		return Decision{Kind: DecisionUnavailable, ErrorCode: ErrorCodeUnavailable, AllowNextStage: true}
+		return s.recordDecision(snapshot, Decision{Kind: DecisionUnavailable, ErrorCode: ErrorCodeUnavailable, AllowNextStage: true}, startedAt)
 	}
 	evalCtx, cancel := context.WithTimeout(ctx, s.auditTimeout())
 	defer cancel()
 	chunks := splitRunes(snapshot.ScanText, s.minimumInputLimit())
 	combined := &GuardResult{Action: "allow", Chunks: len(chunks)}
-	startedAt := time.Now()
 	for _, chunk := range chunks {
 		result, err := s.scanChunk(evalCtx, chunk)
 		if err != nil {
 			code := guardErrorCode(err)
 			if code == ErrorCodeInvalidResponse {
 				s.metrics.invalid.Add(1)
-				return Decision{Kind: DecisionInvalid, ErrorCode: code, AllowNextStage: true}
+				return s.recordDecision(snapshot, Decision{Kind: DecisionInvalid, ErrorCode: code, AllowNextStage: true}, startedAt)
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				s.metrics.timeouts.Add(1)
 			}
 			s.metrics.unavailable.Add(1)
-			return Decision{Kind: DecisionUnavailable, ErrorCode: code, AllowNextStage: true}
+			return s.recordDecision(snapshot, Decision{Kind: DecisionUnavailable, ErrorCode: code, AllowNextStage: true}, startedAt)
 		}
 		result = s.applyBlockingPolicy(result)
 		mergeResult(combined, result)
@@ -189,14 +204,21 @@ func (s *Service) evaluate(ctx context.Context, snapshot Snapshot) Decision {
 		s.metrics.blocked.Add(1)
 		decision := Decision{Kind: DecisionBlock, ErrorCode: ErrorCodeBlocked, Result: combined}
 		platformobservability.SysLog(formatAuditLog(snapshot, decision))
-		return decision
+		return s.recordDecision(snapshot, decision, startedAt)
 	case "warn":
 		s.metrics.flagged.Add(1)
-		return Decision{Kind: DecisionFlag, AllowNextStage: true, Result: combined}
+		return s.recordDecision(snapshot, Decision{Kind: DecisionFlag, AllowNextStage: true, Result: combined}, startedAt)
 	default:
 		s.metrics.allowed.Add(1)
-		return allowDecision(combined)
+		return s.recordDecision(snapshot, allowDecision(combined), startedAt)
 	}
+}
+
+func (s *Service) recordDecision(snapshot Snapshot, decision Decision, startedAt time.Time) Decision {
+	if s.history != nil {
+		s.history.add(newAuditRecord(snapshot, decision, time.Since(startedAt)))
+	}
+	return decision
 }
 
 func (s *Service) applyBlockingPolicy(result *GuardResult) *GuardResult {

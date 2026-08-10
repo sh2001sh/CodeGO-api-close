@@ -17,7 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
-import type { QuotaDataItem, UptimeGroupResult } from './types'
+import type {
+  QuotaDataItem,
+  UserGroupOverviewItem,
+  UptimeGroupResult,
+} from './types'
 
 // ============================================================================
 // Dashboard APIs
@@ -66,5 +70,14 @@ export async function getUptimeStatus() {
   const res = await api.get<{ success: boolean; data: UptimeGroupResult[] }>(
     '/api/uptime/status'
   )
+  return res.data
+}
+
+export async function getUserGroupOverview(hours = 24) {
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data: UserGroupOverviewItem[]
+  }>('/api/user/self/group-overview', { params: { hours } })
   return res.data
 }

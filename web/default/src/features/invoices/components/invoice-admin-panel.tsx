@@ -48,7 +48,6 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { getAdminInvoiceRequests, updateAdminInvoiceRequest } from '../api'
 import type {
-  InvoiceDeliveryMethod,
   InvoiceRequest,
   InvoiceStatus,
   UpdateInvoiceRequestPayload,
@@ -60,8 +59,6 @@ type AdminDraft = UpdateInvoiceRequestPayload
 const emptyDraft = (): AdminDraft => ({
   status: 'issued',
   invoice_number: '',
-  delivery_method: 'email',
-  document_url: '',
   admin_note: '',
 })
 
@@ -84,7 +81,21 @@ export function InvoiceAdminPanel() {
     queryFn: () => getAdminInvoiceRequests(status),
   })
   const update = useMutation({
-    mutationFn: () => updateAdminInvoiceRequest(selected!.id, draft),
+    mutationFn: () =>
+      updateAdminInvoiceRequest(
+        selected!.id,
+        draft.status === 'issued'
+          ? {
+              status: 'issued',
+              invoice_number: draft.invoice_number,
+              admin_note: '',
+            }
+          : {
+              status: 'rejected',
+              invoice_number: '',
+              admin_note: draft.admin_note,
+            }
+      ),
     onSuccess: () => {
       toast.success(draft.status === 'issued' ? '已登记开票信息' : '已驳回申请')
       setSelected(null)
@@ -103,8 +114,6 @@ export function InvoiceAdminPanel() {
     setDraft({
       status: 'issued',
       invoice_number: request.invoice_number,
-      delivery_method: request.delivery_method || 'email',
-      document_url: request.document_url,
       admin_note: request.admin_note,
     })
   }
@@ -113,6 +122,7 @@ export function InvoiceAdminPanel() {
     value: AdminDraft[K]
   ) => setDraft((current) => ({ ...current, [key]: value }))
   const isIssued = draft.status === 'issued'
+  const invoiceNumberRequired = isIssued && !draft.invoice_number.trim()
   const rejectionReasonRequired = !isIssued && !draft.admin_note.trim()
 
   return (
@@ -140,7 +150,7 @@ export function InvoiceAdminPanel() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className='border-border overflow-hidden rounded-2xl border bg-background/75'>
+        <div className='border-border bg-background/75 overflow-hidden rounded-2xl border'>
           {requests.isLoading ? (
             <p className='text-muted-foreground py-10 text-center text-sm'>
               正在加载申请...
@@ -247,65 +257,39 @@ export function InvoiceAdminPanel() {
               </NativeSelect>
             </label>
             {isIssued ? (
-              <>
-                <label className='grid gap-1.5 text-sm font-medium'>
-                  发票号码
-                  <Input
-                    value={draft.invoice_number}
-                    onChange={(event) =>
-                      updateDraft('invoice_number', event.target.value)
-                    }
-                    maxLength={128}
-                  />
-                </label>
-                <label className='grid gap-1.5 text-sm font-medium'>
-                  发放方式
-                  <NativeSelect
-                    value={draft.delivery_method}
-                    onChange={(event) =>
-                      updateDraft(
-                        'delivery_method',
-                        event.target.value as InvoiceDeliveryMethod
-                      )
-                    }
-                    className='w-full'
-                  >
-                    <option value='email'>发送至申请邮箱</option>
-                    <option value='download'>提供下载链接</option>
-                  </NativeSelect>
-                </label>
-                <label className='grid gap-1.5 text-sm font-medium'>
-                  HTTPS 下载链接
-                  <span className='text-muted-foreground font-normal'>
-                    必填，用户将从申请记录中下载
-                  </span>
-                  <Input
-                    type='url'
-                    value={draft.document_url}
-                    onChange={(event) =>
-                      updateDraft('document_url', event.target.value)
-                    }
-                    placeholder='https://发票文件或电子发票平台的 HTTPS 地址'
-                  />
-                </label>
-              </>
-            ) : null}
-            <label className='grid gap-1.5 text-sm font-medium'>
-              {isIssued ? '内部备注' : '驳回原因'}{' '}
-              {isIssued ? (
-                <span className='text-muted-foreground font-normal'>可选</span>
-              ) : (
+              <label className='grid gap-1.5 text-sm font-medium'>
+                发票号码
+                <Input
+                  value={draft.invoice_number}
+                  onChange={(event) =>
+                    updateDraft('invoice_number', event.target.value)
+                  }
+                  maxLength={128}
+                  autoFocus
+                />
+                <span className='text-muted-foreground font-normal'>
+                  电子税务局将自动向申请邮箱发送电子发票，本站不再另行发送。
+                </span>
+              </label>
+            ) : (
+              <label className='grid gap-1.5 text-sm font-medium'>
+                驳回原因{' '}
                 <span className='text-destructive font-normal'>必填</span>
-              )}
-              <Textarea
-                value={draft.admin_note}
-                onChange={(event) =>
-                  updateDraft('admin_note', event.target.value)
-                }
-                maxLength={1000}
-                rows={3}
-              />
-            </label>
+                <Textarea
+                  value={draft.admin_note}
+                  onChange={(event) =>
+                    updateDraft('admin_note', event.target.value)
+                  }
+                  maxLength={1000}
+                  rows={3}
+                />
+              </label>
+            )}
+            {invoiceNumberRequired ? (
+              <p className='text-destructive text-sm' role='alert'>
+                请填写发票号码后再确认开具。
+              </p>
+            ) : null}
             {rejectionReasonRequired ? (
               <p className='text-destructive text-sm' role='alert'>
                 请填写驳回原因后再提交，用户将能够在申请记录中看到该原因。
@@ -316,7 +300,11 @@ export function InvoiceAdminPanel() {
             <Button
               variant={isIssued ? 'default' : 'destructive'}
               onClick={() => update.mutate()}
-              disabled={update.isPending || rejectionReasonRequired}
+              disabled={
+                update.isPending ||
+                invoiceNumberRequired ||
+                rejectionReasonRequired
+              }
             >
               {isIssued ? <FileCheck2 /> : <XCircle />}
               {update.isPending

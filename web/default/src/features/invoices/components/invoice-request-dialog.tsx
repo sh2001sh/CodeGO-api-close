@@ -185,7 +185,7 @@ export function InvoiceRequestDialog({
                 className={
                   form.invoice_type === 'personal'
                     ? 'border-primary bg-primary/8 ring-primary/15 rounded-2xl border px-4 py-4 text-left ring-3'
-                    : 'bg-background/75 border-border/80 rounded-2xl border px-4 py-4 text-left transition-colors hover:bg-muted/30'
+                    : 'bg-background/75 border-border/80 hover:bg-muted/30 rounded-2xl border px-4 py-4 text-left transition-colors'
                 }
               >
                 <div className='flex items-start gap-3'>
@@ -206,7 +206,7 @@ export function InvoiceRequestDialog({
                 className={
                   form.invoice_type === 'enterprise'
                     ? 'border-primary bg-primary/8 ring-primary/15 rounded-2xl border px-4 py-4 text-left ring-3'
-                    : 'bg-background/75 border-border/80 rounded-2xl border px-4 py-4 text-left transition-colors hover:bg-muted/30'
+                    : 'bg-background/75 border-border/80 hover:bg-muted/30 rounded-2xl border px-4 py-4 text-left transition-colors'
                 }
               >
                 <div className='flex items-start gap-3'>
@@ -269,7 +269,8 @@ export function InvoiceRequestDialog({
               ) : null}
 
               <label className='grid gap-1.5 text-sm font-medium sm:col-span-2'>
-                备注 <span className='text-muted-foreground font-normal'>可选</span>
+                备注{' '}
+                <span className='text-muted-foreground font-normal'>可选</span>
                 <Textarea
                   value={form.remark}
                   onChange={(event) => update('remark', event.target.value)}
@@ -284,10 +285,9 @@ export function InvoiceRequestDialog({
           <div className='bg-muted/35 border-border/80 text-muted-foreground flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm leading-6'>
             <CircleAlert className='mt-0.5 size-4 shrink-0' />
             <div className='space-y-1'>
-              <p className='font-medium text-foreground'>交付说明</p>
+              <p className='text-foreground font-medium'>交付说明</p>
               <p>
-                已开具的电子发票通常会发送到接收邮箱；管理员也可能提供 HTTPS
-                下载链接。每笔订单仅可申请一次。
+                发票开具后，电子税务局会自动发送到接收邮箱；本站不另行发送邮件或提供下载链接。每笔订单仅可申请一次。
               </p>
               <p className='inline-flex items-center gap-1.5 text-xs'>
                 <Mail className='size-3.5' />

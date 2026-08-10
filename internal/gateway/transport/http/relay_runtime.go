@@ -256,6 +256,9 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 	if apiErr == nil {
 		return
 	}
+	if c != nil && c.GetBool(string(constant.ContextKeyClientGone)) {
+		return
+	}
 	logger.LogError(c, fmt.Sprintf("relay error: %s", platformtext.LocalLogPreview(apiErr.Error())))
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
 		if !httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) || c.GetBool(string(constant.ContextKeyClientGone)) {

@@ -225,6 +225,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		}
 	})
+	// The scanner may observe a downstream cancellation while it is unwinding
+	// its workers. Synchronize that state before classifying an incomplete
+	// Responses stream so a client disconnect neither cools the channel nor
+	// becomes a synthetic 503 in relay telemetry.
+	helper.IsClientGone(c)
 	c.Set("responses_stream_lifecycle", map[string]interface{}{
 		"received_events":            info.ReceivedResponseCount,
 		"semantic_output_seen":       sawSemanticOutput.Load(),

@@ -130,6 +130,23 @@ func TestFinalizeRelayErrorWritesSanitizedResponsesStreamErrorAfterCommit(t *tes
 	require.NotContains(t, recorder.Body.String(), "hidden")
 }
 
+func TestFinalizeRelayErrorSkipsCancelledClient(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set(string(constant.ContextKeyClientGone), true)
+	apiErr := types.NewOpenAIError(
+		errors.New("responses stream closed before response.completed"),
+		types.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	)
+
+	finalizeRelayError(ctx, types.RelayFormatOpenAI, nil, apiErr, "downstream")
+
+	require.Empty(t, recorder.Body.String())
+}
+
 func TestShouldNotRetryAfterClientDisconnect(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

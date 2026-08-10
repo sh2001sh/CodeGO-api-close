@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -140,6 +141,40 @@ func TestAutoSelectionChecksHealthyFallbackBeforeLastResort(t *testing.T) {
 	require.NotNil(t, channel)
 	require.Equal(t, 39, channel.Id)
 	require.Equal(t, "fallback", group)
+}
+
+func TestAutoRetryStaysWithinInitiallySelectedGroup(t *testing.T) {
+	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
+	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()
+	originalSelector := selectRandomSatisfiedChannel
+	t.Cleanup(func() {
+		require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(originalAutoGroups))
+		require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		selectRandomSatisfiedChannel = originalSelector
+	})
+
+	require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(`["low","fallback"]`))
+	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"low":"低价","fallback":"备用"}`))
+	calledGroups := make([]string, 0, 1)
+	selectRandomSatisfiedChannel = func(group string, _ string, _ int) (*gatewayschema.Channel, error) {
+		calledGroups = append(calledGroups, group)
+		return nil, nil
+	}
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(string(constant.ContextKeyAutoGroup), "low")
+	retry := 1
+	channel, group, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        context,
+		TokenGroup: AutoGroupName,
+		ModelName:  "gpt-auto-retry-stays-group",
+		Retry:      &retry,
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, channel)
+	require.Equal(t, "low", group)
+	require.Equal(t, []string{"low"}, calledGroups)
 }
 
 func TestCacheSelectionSkipsCoolingChannelEvenWithLegacyProbeContext(t *testing.T) {

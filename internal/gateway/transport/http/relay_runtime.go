@@ -101,6 +101,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 
 	c.Set(routeSelectionExhaustedContextKey, false)
 	channel, selectGroup, err := gatewayroutingapp.CacheGetRandomSatisfiedChannel(retryParam)
+	if err == nil && channel == nil {
+		channel, selectGroup = retryFallbackChannel(c, retryParam, selectGroup)
+	}
 	if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
 		info.RoutePoolID = selection.PoolID
 		info.ProcurementCostMultiplier = selection.ProcurementCostMultiplier
@@ -130,6 +133,28 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 		return nil, newAPIError
 	}
 	return channel, nil
+}
+
+func retryFallbackChannel(c *gin.Context, retryParam *gatewayroutingapp.RetryParam, selectGroup string) (*gatewayschema.Channel, string) {
+	if c == nil || retryParam == nil || retryParam.GetRetry() <= 0 {
+		return nil, selectGroup
+	}
+	channelID := httpctx.GetContextKeyInt(c, constant.ContextKeyRetryFallbackChannelID)
+	if channelID <= 0 {
+		return nil, selectGroup
+	}
+	httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, 0)
+	channel, err := gatewaystore.GetCachedChannel(channelID)
+	if err != nil || channel == nil {
+		return nil, selectGroup
+	}
+	if retryParam.TokenGroup == gatewayroutingapp.AutoGroupName {
+		if selected := httpctx.GetContextKeyString(c, constant.ContextKeyAutoGroup); selected != "" {
+			selectGroup = selected
+		}
+	}
+	gatewayruntime.SelectRouteDecisionCandidate(c, selectGroup, channelID, false)
+	return channel, selectGroup
 }
 
 func shouldWaitForRouteSelection(c *gin.Context, attempt int) bool {

@@ -33,8 +33,11 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	}
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
 	credentialRejected := failureClass == upstreamFailureCredentialRejected
-	retrySameMultiKeyChannel := shouldRetrySameMultiKeyChannel(c, channelError, err)
-	if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected && !retrySameMultiKeyChannel {
+	retryFallbackChannel := shouldRetryCurrentChannelIfNoAlternative(c, err)
+	if retryFallbackChannel {
+		httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, channelError.ChannelId)
+	}
+	if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected {
 		// A retry must leave the complete upstream fault domain. Channel IDs
 		// can represent different keys on the same provider host.
 		gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
@@ -85,7 +88,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.RecordChannelCredentialFailure(channelError.ChannelId)
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）被上游拒绝访问，已进行凭据级短冷却并切换备用渠道", channelError.ChannelName, channelError.ChannelId))
-	} else if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !retrySameMultiKeyChannel {
+	} else if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure {
 		cooldown := retryableFailureCooldown(c, err)
 		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
 		if shouldRecordFaultDomainFailure(c, err) {
@@ -94,8 +97,8 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
 
-	if retrySameMultiKeyChannel {
-		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）首包超时，保留一次同渠道多密钥重试", channelError.ChannelName, channelError.ChannelId))
+	if retryFallbackChannel {
+		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）首包超时，当前分组无备用渠道时允许重试一次", channelError.ChannelName, channelError.ChannelId))
 	}
 
 	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
@@ -163,11 +166,11 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	}
 }
 
-// shouldRetrySameMultiKeyChannel leaves one early header timeout available for
-// the same multi-key channel. It is safe only before any downstream output is
-// committed; a subsequent failure follows the normal cross-domain path.
-func shouldRetrySameMultiKeyChannel(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) bool {
-	if c == nil || err == nil || !channelError.IsMultiKey || c.GetBool(string(constant.ContextKeyClientGone)) {
+// shouldRetryCurrentChannelIfNoAlternative enables one fallback to the first
+// channel after an early header timeout. Selection still prefers a healthy
+// alternate in the current group and never replays committed output.
+func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIError) bool {
+	if c == nil || err == nil || c.GetBool(string(constant.ContextKeyClientGone)) {
 		return false
 	}
 	if err.GetErrorCode() != types.ErrorCodeChannelResponseTimeExceeded {

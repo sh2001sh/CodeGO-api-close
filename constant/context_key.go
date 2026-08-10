@@ -42,6 +42,9 @@ const (
 	ContextKeyAutoGroup           ContextKey = "auto_group"
 	ContextKeyAutoGroupIndex      ContextKey = "auto_group_index"
 	ContextKeyAutoGroupRetryIndex ContextKey = "auto_group_retry_index"
+	// ContextKeyRetryFallbackChannelID keeps the first failed channel available
+	// for one retry when its original group has no alternate healthy route.
+	ContextKeyRetryFallbackChannelID ContextKey = "retry_fallback_channel_id"
 
 	/* user related keys */
 	ContextKeyUserId      ContextKey = "id"

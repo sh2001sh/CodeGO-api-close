@@ -86,6 +86,16 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 		fallbackGroups := OrderAutoFallbackGroups(userGroup, param.ModelName, autoGroups)
 		candidateGroups := append(append([]string{}, autoGroups...), fallbackGroups...)
 		gatewayruntime.UpdateRouteDecisionCandidates(param.Ctx, len(candidateGroups))
+		if param.GetRetry() > 0 {
+			if selectedGroup := httpctx.GetContextKeyString(param.Ctx, constant.ContextKeyAutoGroup); selectedGroup != "" {
+				channel, _ = getHealthySatisfiedChannelWithMode(param.Ctx, selectedGroup, param.ModelName, param.GetRetry(), false)
+				if channel != nil {
+					httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, selectedGroup)
+					gatewayruntime.SelectRouteDecisionCandidate(param.Ctx, selectedGroup, channel.Id, false)
+				}
+				return channel, selectedGroup, nil
+			}
+		}
 
 		startGroupIndex := 0
 		crossGroupRetry := httpctx.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
@@ -230,6 +240,9 @@ func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelNam
 		if err != nil || channel == nil {
 			return nil, degraded, priority, found, err
 		}
+		if retryFallbackChannelID(c) == channel.Id {
+			continue
+		}
 		faultDomain := gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL())
 		if gatewayruntime.IsFaultDomainExcluded(c, faultDomain) {
 			continue
@@ -257,4 +270,11 @@ func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelNam
 		return channel, degraded, priority, true, nil
 	}
 	return nil, degraded, priority, found, nil
+}
+
+func retryFallbackChannelID(c *gin.Context) int {
+	if c == nil {
+		return 0
+	}
+	return httpctx.GetContextKeyInt(c, constant.ContextKeyRetryFallbackChannelID)
 }

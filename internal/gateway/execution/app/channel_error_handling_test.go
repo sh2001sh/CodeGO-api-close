@@ -76,7 +76,7 @@ func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
 	require.Equal(t, 8*time.Second, retryableFailureCooldown(nil, badGateway))
 }
 
-func TestRetrySameMultiKeyChannelOnlyBeforeDownstreamOutput(t *testing.T) {
+func TestRetryCurrentChannelOnlyBeforeDownstreamOutput(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)
 	timeout := types.NewErrorWithStatusCode(
@@ -84,17 +84,15 @@ func TestRetrySameMultiKeyChannelOnlyBeforeDownstreamOutput(t *testing.T) {
 		types.ErrorCodeChannelResponseTimeExceeded,
 		http.StatusGatewayTimeout,
 	)
-	multiKey := types.ChannelError{IsMultiKey: true}
 	context.Set("use_channel", []string{"72"})
 
-	require.True(t, shouldRetrySameMultiKeyChannel(context, multiKey, timeout))
-	require.False(t, shouldRetrySameMultiKeyChannel(context, types.ChannelError{}, timeout))
+	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, timeout))
 	context.Set("use_channel", []string{"72", "73"})
-	require.False(t, shouldRetrySameMultiKeyChannel(context, multiKey, timeout))
+	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, timeout))
 	context.Set("use_channel", []string{"72"})
 
 	context.Set(string(constant.ContextKeyResponseBodyDelivered), true)
-	require.False(t, shouldRetrySameMultiKeyChannel(context, multiKey, timeout))
+	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, timeout))
 }
 
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {

@@ -51,7 +51,7 @@ func ChannelHasExclusiveEnabledAbility(channelID int) (bool, error) {
 }
 
 // HasAlternativeEnabledAbility reports whether another enabled channel can
-// serve the same group/model pair.
+// serve the same group/model pair outside an automatic route pool.
 func HasAlternativeEnabledAbility(channelID int, group string, modelName string) (bool, error) {
 	if channelID <= 0 || group == "" || modelName == "" {
 		return false, nil
@@ -70,6 +70,30 @@ func HasAlternativeEnabledAbility(channelID int, group string, modelName string)
 		Where(groupColumn+" = ? AND model IN ? AND enabled = ? AND channel_id <> ?", group, models, true, channelID).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// HasAlternativeSelectableRoute reports whether the active group has another
+// channel that the selector may actually use. An enabled route pool is
+// authoritative: channels outside it, or disabled pool members, cannot keep a
+// failing sole pool member eligible for cooldown.
+func HasAlternativeSelectableRoute(channelID int, group string, modelName string) (bool, error) {
+	if channelID <= 0 || group == "" || modelName == "" {
+		return false, nil
+	}
+	detail, err := LoadEnabledRoutePool(group)
+	if err != nil || detail == nil {
+		return false, err
+	}
+	candidates, err := LoadRoutePoolCandidates(group, modelName, detail)
+	if err != nil {
+		return false, err
+	}
+	for _, candidate := range candidates {
+		if candidate.Channel != nil && candidate.Channel.Id != channelID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // LoadAlternativeEnabledChannels loads enabled alternatives for one group/model

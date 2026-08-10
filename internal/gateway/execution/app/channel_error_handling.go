@@ -33,11 +33,12 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	}
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
 	credentialRejected := failureClass == upstreamFailureCredentialRejected
+	preserveOnlyRoute := shouldPreserveOnlyRoute(c, channelError.ChannelId, modelName, modelScopedFailure, credentialRejected, err)
 	retryFallbackChannel := shouldRetryCurrentChannelIfNoAlternative(c, err)
 	if retryFallbackChannel {
 		httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, channelError.ChannelId)
 	}
-	if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected {
+	if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected && !preserveOnlyRoute {
 		// A retry must leave the complete upstream fault domain. Channel IDs
 		// can represent different keys on the same provider host.
 		gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
@@ -45,7 +46,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	}
 	if modelScopedFailure && modelName != "" && !clientGone {
 		group := selectedChannelGroup(c)
-		alternative, lookupErr := gatewaystore.HasAlternativeEnabledAbility(channelError.ChannelId, group, modelName)
+		alternative, lookupErr := gatewaystore.HasAlternativeSelectableRoute(channelError.ChannelId, group, modelName)
 		if lookupErr != nil {
 			platformobservability.SysError(fmt.Sprintf("检查通道「%s」（#%d）的模型 %s 备用路由失败：%v", channelError.ChannelName, channelError.ChannelId, modelName, lookupErr))
 		} else if alternative {
@@ -63,7 +64,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		} else {
 			platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 是唯一可用路由，保留渠道与模型路由", channelError.ChannelName, channelError.ChannelId, modelName))
 		}
-	} else if !clientGone && !credentialRejected && ShouldDisableChannel(err) && channelError.AutoBan {
+	} else if !clientGone && !credentialRejected && !preserveOnlyRoute && ShouldDisableChannel(err) && channelError.AutoBan {
 		gopool.Go(func() {
 			DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
@@ -71,7 +72,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	// A partial Responses stream must never be retried in the current request:
 	// clients may have already received output. It still needs model-level
 	// cooling so subsequent requests choose another healthy route.
-	if failureClass == upstreamFailureIncompleteStream && !localMaxDuration && !clientGone {
+	if failureClass == upstreamFailureIncompleteStream && !localMaxDuration && !clientGone && !preserveOnlyRoute {
 		// A stream which ended before semantic output is safe to replay, but a
 		// retry must leave the failed upstream domain instead of cycling through
 		// different keys backed by the same provider path.
@@ -88,7 +89,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.RecordChannelCredentialFailure(channelError.ChannelId)
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）被上游拒绝访问，已进行凭据级短冷却并切换备用渠道", channelError.ChannelName, channelError.ChannelId))
-	} else if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure {
+	} else if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !preserveOnlyRoute {
 		cooldown := retryableFailureCooldown(c, err)
 		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
 		if shouldRecordFaultDomainFailure(c, err) {
@@ -99,6 +100,9 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 	if retryFallbackChannel {
 		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）首包超时，当前分组无备用渠道时允许重试一次", channelError.ChannelName, channelError.ChannelId))
+	}
+	if preserveOnlyRoute {
+		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 是当前分组唯一可用路由，保留后续探测，不进入冷却", channelError.ChannelName, channelError.ChannelId, modelName))
 	}
 
 	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
@@ -164,6 +168,19 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			other,
 		)
 	}
+}
+
+func shouldPreserveOnlyRoute(c *gin.Context, channelID int, modelName string, modelScopedFailure bool, credentialRejected bool, err *types.NewAPIError) bool {
+	if c == nil || err == nil || channelID <= 0 || modelName == "" || modelScopedFailure || credentialRejected ||
+		c.GetBool(string(constant.ContextKeyClientGone)) || !isRetryableChannelFailure(err) {
+		return false
+	}
+	alternative, lookupErr := gatewaystore.HasAlternativeSelectableRoute(channelID, selectedChannelGroup(c), modelName)
+	if lookupErr != nil {
+		platformobservability.SysError(fmt.Sprintf("检查通道 #%d 的模型 %s 唯一路由状态失败：%v", channelID, modelName, lookupErr))
+		return false
+	}
+	return !alternative
 }
 
 const currentChannelRetryMaxElapsed = 3 * time.Second

@@ -86,6 +86,22 @@ export interface ChannelAffinityInfo {
 }
 
 export interface LogOtherData {
+  first_byte_trace?: {
+    request_validation_ms?: number
+    admission_ms?: number
+    relay_info_ms?: number
+    preflight_ms?: number
+    route_selection_ms?: number
+    request_body_restore_ms?: number
+    billing_reservation_ms?: number
+    dispatch_ms?: number
+    request_conversion_ms?: number
+    upstream_request_setup_ms?: number
+    upstream_response_headers_ms?: number
+    headers_to_first_event_ms?: number
+    upstream_first_event_ms?: number
+    event_to_semantic_ms?: number
+  }
   admin_info?: {
     is_multi_key?: boolean
     multi_key_index?: number

@@ -133,6 +133,11 @@ function formatRatio(ratio: number | undefined): string {
   return ratio.toFixed(4)
 }
 
+function formatTraceDuration(milliseconds: number | undefined): string {
+  if (milliseconds == null) return '-'
+  return formatUseTime(milliseconds / 1000)
+}
+
 function BillingBreakdown(props: {
   log: UsageLog
   other: LogOtherData
@@ -402,6 +407,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
   const streamStartMs = other?.response_start_ms ?? other?.frt ?? 0
+  const timingTrace = other?.first_byte_trace
+  const hasDetailedTiming =
+    timingTrace?.request_body_restore_ms != null ||
+    timingTrace?.billing_reservation_ms != null ||
+    timingTrace?.request_conversion_ms != null ||
+    timingTrace?.upstream_request_setup_ms != null ||
+    timingTrace?.upstream_response_headers_ms != null ||
+    timingTrace?.headers_to_first_event_ms != null
   const typeConfig = getLogTypeConfig(props.log.type)
 
   const isViolation = isViolationFeeLog(other)
@@ -570,7 +583,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   value={
                     <span className='flex items-center gap-1'>
                       <Globe
-                        className='size-3 text-warning'
+                        className='text-warning size-3'
                         aria-hidden='true'
                       />
                       {props.log.ip}
@@ -634,6 +647,81 @@ export function DetailsDialog(props: DetailsDialogProps) {
               )}
             </div>
 
+            {props.isAdmin && timingTrace && hasDetailedTiming && (
+              <DetailSection label={t('Gateway Timing Breakdown')}>
+                <DetailRow
+                  label={t('Request Validation')}
+                  value={formatTraceDuration(timingTrace.request_validation_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Admission')}
+                  value={formatTraceDuration(timingTrace.admission_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Relay Info')}
+                  value={formatTraceDuration(timingTrace.relay_info_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Preflight')}
+                  value={formatTraceDuration(timingTrace.preflight_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Route Selection')}
+                  value={formatTraceDuration(timingTrace.route_selection_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Dispatch')}
+                  value={formatTraceDuration(timingTrace.dispatch_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Request Body Restore')}
+                  value={formatTraceDuration(
+                    timingTrace.request_body_restore_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Billing Reservation')}
+                  value={formatTraceDuration(
+                    timingTrace.billing_reservation_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Request Conversion')}
+                  value={formatTraceDuration(timingTrace.request_conversion_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Upstream Request Setup')}
+                  value={formatTraceDuration(
+                    timingTrace.upstream_request_setup_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Upstream Response Headers')}
+                  value={formatTraceDuration(
+                    timingTrace.upstream_response_headers_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Headers to First Event')}
+                  value={formatTraceDuration(
+                    timingTrace.headers_to_first_event_ms
+                  )}
+                  mono
+                />
+              </DetailSection>
+            )}
+
             {/* Request conversion (admin only, not for refund) */}
             {showConversion && (
               <DetailSection label={t('Request Conversion')}>
@@ -647,7 +735,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     aria-label={t('Copy to clipboard')}
                   >
                     {copiedText === conversionLabel ? (
-                      <Check className='size-3 text-success' />
+                      <Check className='text-success size-3' />
                     ) : (
                       <Copy className='size-3' />
                     )}
@@ -740,7 +828,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   />
                 ))}
                 {showLegacyTopupWarning && (
-                  <div className='flex items-start gap-1.5 text-xs text-warning'>
+                  <div className='text-warning flex items-start gap-1.5 text-xs'>
                     <Info
                       className='mt-0.5 size-3.5 shrink-0'
                       aria-hidden='true'
@@ -896,9 +984,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   value={
                     <span className='flex items-center gap-1'>
                       {other.admin_info.local_count_tokens ? (
-                        <Monitor className='size-3 text-info' />
+                        <Monitor className='text-info size-3' />
                       ) : (
-                        <Cloud className='size-3 text-success' />
+                        <Cloud className='text-success size-3' />
                       )}
                       <span className='text-xs'>
                         {other.admin_info.local_count_tokens
@@ -1047,7 +1135,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     aria-label={t('Copy to clipboard')}
                   >
                     {copiedText === details ? (
-                      <Check className='size-3 text-success' />
+                      <Check className='text-success size-3' />
                     ) : (
                       <Copy className='size-3' />
                     )}

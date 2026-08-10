@@ -145,6 +145,9 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 		}
 	}
 
+	if info != nil && info.FirstByteTrace != nil {
+		info.FirstByteTrace.MarkUpstreamRequestReady()
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
@@ -160,6 +163,9 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")
+	}
+	if info != nil && info.FirstByteTrace != nil {
+		info.FirstByteTrace.MarkUpstreamResponseHeaders()
 	}
 
 	if upID := resp.Header.Get(constant.RequestIdKey); upID != "" {

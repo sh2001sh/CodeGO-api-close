@@ -8,21 +8,28 @@ import (
 // FirstByteTrace separates gateway work from the wait for the first upstream
 // stream event. It deliberately stores no request content or upstream identity.
 type FirstByteTrace struct {
-	mu                  sync.RWMutex
-	startedAt           time.Time
-	requestValidAt      time.Time
-	admittedAt          time.Time
-	relayInfoReadyAt    time.Time
-	preflightDoneAt     time.Time
-	routeSelectedAt     time.Time
-	upstreamStartAt     time.Time
-	firstEventAt        time.Time
-	firstSemanticReadAt time.Time
-	firstSemanticAt     time.Time
-	firstTextReadAt     time.Time
-	firstTextAt         time.Time
-	firstSemanticIsText bool
-	semanticKindMarked  bool
+	mu                        sync.RWMutex
+	startedAt                 time.Time
+	requestValidAt            time.Time
+	admittedAt                time.Time
+	relayInfoReadyAt          time.Time
+	preflightDoneAt           time.Time
+	routeSelectedAt           time.Time
+	requestBodyRestoreStartAt time.Time
+	requestBodyRestoreDoneAt  time.Time
+	billingReserveStartAt     time.Time
+	billingReserveDoneAt      time.Time
+	upstreamStartAt           time.Time
+	requestConversionDoneAt   time.Time
+	upstreamRequestReadyAt    time.Time
+	upstreamResponseHeadersAt time.Time
+	firstEventAt              time.Time
+	firstSemanticReadAt       time.Time
+	firstSemanticAt           time.Time
+	firstTextReadAt           time.Time
+	firstTextAt               time.Time
+	firstSemanticIsText       bool
+	semanticKindMarked        bool
 }
 
 func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
@@ -37,8 +44,23 @@ func (t *FirstByteTrace) MarkAdmitted()         { t.mark(&t.admittedAt) }
 func (t *FirstByteTrace) MarkRelayInfoReady()   { t.mark(&t.relayInfoReadyAt) }
 func (t *FirstByteTrace) MarkPreflightDone()    { t.mark(&t.preflightDoneAt) }
 func (t *FirstByteTrace) MarkRouteSelected()    { t.mark(&t.routeSelectedAt) }
-func (t *FirstByteTrace) MarkUpstreamStart()    { t.mark(&t.upstreamStartAt) }
-func (t *FirstByteTrace) MarkFirstEvent()       { t.mark(&t.firstEventAt) }
+func (t *FirstByteTrace) MarkRequestBodyRestoreStarted() {
+	t.mark(&t.requestBodyRestoreStartAt)
+}
+func (t *FirstByteTrace) MarkRequestBodyRestoreDone() { t.mark(&t.requestBodyRestoreDoneAt) }
+func (t *FirstByteTrace) MarkBillingReserveStarted()  { t.mark(&t.billingReserveStartAt) }
+func (t *FirstByteTrace) MarkBillingReserveDone()     { t.mark(&t.billingReserveDoneAt) }
+func (t *FirstByteTrace) MarkUpstreamStart()          { t.mark(&t.upstreamStartAt) }
+func (t *FirstByteTrace) MarkRequestConversionDone() {
+	t.mark(&t.requestConversionDoneAt)
+}
+func (t *FirstByteTrace) MarkUpstreamRequestReady() {
+	t.mark(&t.upstreamRequestReadyAt)
+}
+func (t *FirstByteTrace) MarkUpstreamResponseHeaders() {
+	t.mark(&t.upstreamResponseHeadersAt)
+}
+func (t *FirstByteTrace) MarkFirstEvent() { t.mark(&t.firstEventAt) }
 func (t *FirstByteTrace) MarkFirstSemanticEvent() {
 	t.mark(&t.firstSemanticAt)
 }
@@ -111,6 +133,24 @@ func (t *FirstByteTrace) Snapshot() map[string]int64 {
 		"upstream_first_semantic_event_ms": durationMilliseconds(t.upstreamStartAt, t.firstSemanticAt),
 		"total_raw_event_ms":               durationMilliseconds(t.startedAt, t.firstEventAt),
 		"total_ms":                         durationMilliseconds(t.startedAt, t.firstSemanticAt),
+	}
+	if !t.requestBodyRestoreStartAt.IsZero() && !t.requestBodyRestoreDoneAt.IsZero() {
+		snapshot["request_body_restore_ms"] = durationMilliseconds(t.requestBodyRestoreStartAt, t.requestBodyRestoreDoneAt)
+	}
+	if !t.billingReserveStartAt.IsZero() && !t.billingReserveDoneAt.IsZero() {
+		snapshot["billing_reservation_ms"] = durationMilliseconds(t.billingReserveStartAt, t.billingReserveDoneAt)
+	}
+	if !t.upstreamStartAt.IsZero() && !t.requestConversionDoneAt.IsZero() {
+		snapshot["request_conversion_ms"] = durationMilliseconds(t.upstreamStartAt, t.requestConversionDoneAt)
+	}
+	if !t.requestConversionDoneAt.IsZero() && !t.upstreamRequestReadyAt.IsZero() {
+		snapshot["upstream_request_setup_ms"] = durationMilliseconds(t.requestConversionDoneAt, t.upstreamRequestReadyAt)
+	}
+	if !t.upstreamRequestReadyAt.IsZero() && !t.upstreamResponseHeadersAt.IsZero() {
+		snapshot["upstream_response_headers_ms"] = durationMilliseconds(t.upstreamRequestReadyAt, t.upstreamResponseHeadersAt)
+	}
+	if !t.upstreamResponseHeadersAt.IsZero() && !t.firstEventAt.IsZero() {
+		snapshot["headers_to_first_event_ms"] = durationMilliseconds(t.upstreamResponseHeadersAt, t.firstEventAt)
 	}
 	if t.semanticKindMarked {
 		if t.firstSemanticIsText {

@@ -118,6 +118,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		info.UpstreamRequestBodySize = size
 		requestBody = body
 	}
+	if info.FirstByteTrace != nil {
+		info.FirstByteTrace.MarkRequestConversionDone()
+	}
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {

@@ -16,7 +16,14 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 	trace.relayInfoReadyAt = startedAt.Add(20 * time.Millisecond)
 	trace.preflightDoneAt = startedAt.Add(40 * time.Millisecond)
 	trace.routeSelectedAt = startedAt.Add(65 * time.Millisecond)
+	trace.requestBodyRestoreStartAt = startedAt.Add(66 * time.Millisecond)
+	trace.requestBodyRestoreDoneAt = startedAt.Add(68 * time.Millisecond)
+	trace.billingReserveStartAt = startedAt.Add(68 * time.Millisecond)
+	trace.billingReserveDoneAt = startedAt.Add(75 * time.Millisecond)
 	trace.upstreamStartAt = startedAt.Add(80 * time.Millisecond)
+	trace.requestConversionDoneAt = startedAt.Add(85 * time.Millisecond)
+	trace.upstreamRequestReadyAt = startedAt.Add(90 * time.Millisecond)
+	trace.upstreamResponseHeadersAt = startedAt.Add(880 * time.Millisecond)
 	trace.firstEventAt = startedAt.Add(900 * time.Millisecond)
 	trace.firstSemanticReadAt = startedAt.Add(940 * time.Millisecond)
 	trace.firstSemanticAt = startedAt.Add(950 * time.Millisecond)
@@ -33,6 +40,12 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 		"preflight_ms":                     20,
 		"route_selection_ms":               25,
 		"dispatch_ms":                      15,
+		"request_body_restore_ms":          2,
+		"billing_reservation_ms":           7,
+		"request_conversion_ms":            5,
+		"upstream_request_setup_ms":        5,
+		"upstream_response_headers_ms":     790,
+		"headers_to_first_event_ms":        20,
 		"upstream_first_event_ms":          820,
 		"event_to_semantic_ms":             50,
 		"upstream_first_semantic_read_ms":  860,

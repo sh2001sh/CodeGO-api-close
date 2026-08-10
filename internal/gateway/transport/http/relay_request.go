@@ -231,14 +231,19 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		addUsedChannel(c, channel.Id)
-		if bodyErr := restoreRelayRequestBody(c); bodyErr != nil {
+		relayInfo.FirstByteTrace.MarkRequestBodyRestoreStarted()
+		bodyErr := restoreRelayRequestBody(c)
+		relayInfo.FirstByteTrace.MarkRequestBodyRestoreDone()
+		if bodyErr != nil {
 			releaseFaultDomainSlot(true, 0)
 			newAPIError = bodyErr
 			break
 		}
 
 		if !currentPriceData.FreeModel {
+			relayInfo.FirstByteTrace.MarkBillingReserveStarted()
 			newAPIError = billingapp.PreConsumeRelayBilling(c, currentPriceData.QuotaToPreConsume, relayInfo)
+			relayInfo.FirstByteTrace.MarkBillingReserveDone()
 			if newAPIError != nil {
 				releaseFaultDomainSlot(true, 0)
 				break

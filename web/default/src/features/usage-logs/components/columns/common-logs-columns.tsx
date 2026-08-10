@@ -548,8 +548,14 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const other = parseLogOther(log.other)
         const frt = other?.frt
         const responseStartMs = other?.response_start_ms
+        const upstreamFirstEventMs =
+          other?.first_byte_trace?.upstream_first_event_ms
         const displayedStreamStartMs =
-          responseStartMs != null && responseStartMs > 0 ? responseStartMs : frt
+          upstreamFirstEventMs != null && upstreamFirstEventMs > 0
+            ? upstreamFirstEventMs
+            : responseStartMs != null && responseStartMs > 0
+              ? responseStartMs
+              : frt
         const recordedGenerationTime = other?.generation_time_ms
         const streamOutputTokens = other?.stream_output_tokens
         const streamOutputTime = other?.stream_output_time_ms

@@ -636,9 +636,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                         {formatUseTime(displayedStreamStartMs / 1000)}
                       </TooltipTrigger>
                       <TooltipContent>
-                        {responseStartMs != null && responseStartMs > 0
-                          ? t('Response started')
-                          : t('First token')}
+                        {t('Channel first event')}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

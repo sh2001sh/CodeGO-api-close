@@ -23,13 +23,20 @@ type LedgerRelayFunding struct {
 	accountID   string
 	source      string
 
-	reservationID string
-	settlementID  string
-	reserved      int
-	legacyHeld    int
+	reservationID  string
+	settlementID   string
+	reserved       int
+	legacyHeld     int
+	initialBalance *int
 }
 
 func NewLedgerRelayFunding(userID int, requestID string, source string) (*LedgerRelayFunding, error) {
+	return NewLedgerRelayFundingWithInitialBalance(userID, requestID, source, nil)
+}
+
+// NewLedgerRelayFundingWithInitialBalance reuses a balance read during funding
+// selection so the reservation path does not load the same wallet twice.
+func NewLedgerRelayFundingWithInitialBalance(userID int, requestID string, source string, initialBalance *int) (*LedgerRelayFunding, error) {
 	if userID <= 0 {
 		return nil, fmt.Errorf("invalid user id")
 	}
@@ -37,7 +44,7 @@ func NewLedgerRelayFunding(userID int, requestID string, source string) (*Ledger
 		return nil, fmt.Errorf("request id is required for ledger billing")
 	}
 
-	funding := &LedgerRelayFunding{userID: userID, requestID: requestID, source: source}
+	funding := &LedgerRelayFunding{userID: userID, requestID: requestID, source: source, initialBalance: initialBalance}
 	switch source {
 	case BillingSourceWallet:
 		funding.accountType = billingAccountTypeWallet
@@ -191,9 +198,15 @@ func (f *LedgerRelayFunding) ensureAccount() (*billingschema.BillingAccount, err
 		return &billingschema.BillingAccount{AccountID: f.accountID}, nil
 	}
 
-	legacyBalance, err := f.legacyBalance()
-	if err != nil {
-		return nil, err
+	legacyBalance := 0
+	if f.initialBalance != nil {
+		legacyBalance = *f.initialBalance
+	} else {
+		var err error
+		legacyBalance, err = f.legacyBalance()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return ensureMirroredUserAccount(f.userID, f.accountType, legacyBalance)
 }

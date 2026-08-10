@@ -101,6 +101,8 @@ export interface LogOtherData {
     headers_to_first_event_ms?: number
     upstream_first_event_ms?: number
     event_to_semantic_ms?: number
+    upstream_first_semantic_event_ms?: number
+    total_ms?: number
   }
   admin_info?: {
     is_multi_key?: boolean

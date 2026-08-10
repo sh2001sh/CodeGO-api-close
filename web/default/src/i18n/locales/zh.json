@@ -113,6 +113,8 @@
     "Comparable": "可对比",
     "Faster response": "响应更快",
     "First token": "首个令牌",
+    "Channel first event": "通道首事件",
+    "Channel first semantic output": "通道首个语义输出",
     "Response started": "响应开始",
     "Gateway Timing Breakdown": "网关耗时拆分",
     "Request Validation": "请求校验",

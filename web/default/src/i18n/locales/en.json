@@ -113,6 +113,8 @@
     "Comparable": "Comparable",
     "Faster response": "Faster response",
     "First token": "First token",
+    "Channel first event": "Channel first event",
+    "Channel first semantic output": "Channel first semantic output",
     "Response started": "Response started",
     "Gateway Timing Breakdown": "Gateway Timing Breakdown",
     "Request Validation": "Request Validation",

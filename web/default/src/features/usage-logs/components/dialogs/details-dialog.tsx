@@ -719,6 +719,20 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   )}
                   mono
                 />
+                <DetailRow
+                  label={t('Channel first event')}
+                  value={formatTraceDuration(
+                    timingTrace.upstream_first_event_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Channel first semantic output')}
+                  value={formatTraceDuration(
+                    timingTrace.upstream_first_semantic_event_ms
+                  )}
+                  mono
+                />
               </DetailSection>
             )}
 

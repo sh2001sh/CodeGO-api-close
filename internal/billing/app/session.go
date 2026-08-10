@@ -475,7 +475,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 			)
 		}
 		relayInfo.UserQuota = userQuota
-		funding, err := NewLedgerRelayFunding(relayInfo.UserId, relayInfo.RequestId, BillingSourceWallet)
+		funding, err := NewLedgerRelayFundingWithInitialBalance(relayInfo.UserId, relayInfo.RequestId, BillingSourceWallet, &userQuota)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}
@@ -504,7 +504,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 			)
 		}
 		relayInfo.UserQuota = claudeQuota
-		funding, err := NewLedgerRelayFunding(relayInfo.UserId, relayInfo.RequestId, BillingSourceClaudeWallet)
+		funding, err := NewLedgerRelayFundingWithInitialBalance(relayInfo.UserId, relayInfo.RequestId, BillingSourceClaudeWallet, &claudeQuota)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}

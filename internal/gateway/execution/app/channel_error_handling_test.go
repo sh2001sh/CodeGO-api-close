@@ -79,20 +79,24 @@ func TestRetryableFailureCooldownExtendsLongContextHeaderTimeout(t *testing.T) {
 func TestRetryCurrentChannelOnlyBeforeDownstreamOutput(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)
-	timeout := types.NewErrorWithStatusCode(
-		errors.New("timeout awaiting response headers"),
-		types.ErrorCodeChannelResponseTimeExceeded,
-		http.StatusGatewayTimeout,
+	fastTransportFailure := types.NewErrorWithStatusCode(
+		errors.New("connection reset by peer"),
+		types.ErrorCodeDoRequestFailed,
+		http.StatusBadGateway,
 	)
 	context.Set("use_channel", []string{"72"})
+	context.Set(string(constant.ContextKeyRequestStartTime), time.Now())
 
-	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, timeout))
+	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, fastTransportFailure))
 	context.Set("use_channel", []string{"72", "73"})
-	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, timeout))
+	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, fastTransportFailure))
 	context.Set("use_channel", []string{"72"})
 
 	context.Set(string(constant.ContextKeyResponseBodyDelivered), true)
-	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, timeout))
+	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, fastTransportFailure))
+	context.Set(string(constant.ContextKeyResponseBodyDelivered), false)
+	context.Set(string(constant.ContextKeyRequestStartTime), time.Now().Add(-currentChannelRetryMaxElapsed-time.Millisecond))
+	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, fastTransportFailure))
 }
 
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {

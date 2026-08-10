@@ -166,14 +166,21 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	}
 }
 
-// shouldRetryCurrentChannelIfNoAlternative enables one fallback to the first
-// channel after an early header timeout. Selection still prefers a healthy
-// alternate in the current group and never replays committed output.
+const currentChannelRetryMaxElapsed = 3 * time.Second
+
+// shouldRetryCurrentChannelIfNoAlternative enables one fallback only for a
+// fast pre-output transport failure. A response-header timeout already spent
+// the first-byte budget waiting on that channel, so retrying it would mostly
+// add another long wait instead of recovering a transient connection fault.
 func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIError) bool {
 	if c == nil || err == nil || c.GetBool(string(constant.ContextKeyClientGone)) {
 		return false
 	}
-	if err.GetErrorCode() != types.ErrorCodeChannelResponseTimeExceeded {
+	startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+	if startTime.IsZero() || time.Since(startTime) > currentChannelRetryMaxElapsed {
+		return false
+	}
+	if err.GetErrorCode() != types.ErrorCodeDoRequestFailed && err.StatusCode != http.StatusBadGateway {
 		return false
 	}
 	if len(c.GetStringSlice("use_channel")) != 1 {

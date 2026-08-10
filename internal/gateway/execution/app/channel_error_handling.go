@@ -192,6 +192,18 @@ func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIE
 	if c == nil || err == nil || c.GetBool(string(constant.ContextKeyClientGone)) {
 		return false
 	}
+	// Responses lifecycle events are buffered until semantic output. An
+	// incomplete stream in this phase is safe to replay even after a longer
+	// upstream wait, provided ordinary selection found no other route. This
+	// preserves one recovery path for a sole candidate without duplicating
+	// client-visible output.
+	if gatewaystream.CanRetryResponsesBeforeSemanticOutput(c) &&
+		(err.StatusCode == http.StatusBadGateway || err.StatusCode == http.StatusGatewayTimeout || err.StatusCode == 524) {
+		if budget := gatewayruntime.RequestBudgetFromContext(c); budget != nil && !budget.CanRetry(time.Now()) {
+			return false
+		}
+		return len(c.GetStringSlice("use_channel")) == 1
+	}
 	if err.GetErrorCode() != types.ErrorCodeChannelResponseTimeExceeded && err.StatusCode != http.StatusGatewayTimeout && err.StatusCode != 524 {
 		startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
 		if startTime.IsZero() || time.Since(startTime) > currentChannelRetryMaxElapsed {

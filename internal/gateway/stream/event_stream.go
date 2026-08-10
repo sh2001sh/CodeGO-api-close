@@ -111,6 +111,9 @@ func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data st
 	c.Render(-1, CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 	c.Render(-1, CustomEvent{Data: fmt.Sprintf("data: %s", data)})
 	err := FlushWriter(c)
+	if err != nil && IsClientGone(c) {
+		return err
+	}
 	if err == nil {
 		markResponseBodyDelivered(c)
 	}

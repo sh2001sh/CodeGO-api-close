@@ -81,8 +81,14 @@ func HasAlternativeSelectableRoute(channelID int, group string, modelName string
 		return false, nil
 	}
 	detail, err := LoadEnabledRoutePool(group)
-	if err != nil || detail == nil {
+	if err != nil {
 		return false, err
+	}
+	if detail == nil {
+		// Legacy groups are still selected from abilities directly. Treating an
+		// absent pool as no fallback makes a failed channel look like the only
+		// route and turns recoverable provider errors into downstream 503s.
+		return HasAlternativeEnabledAbility(channelID, group, modelName)
 	}
 	candidates, err := LoadRoutePoolCandidates(group, modelName, detail)
 	if err != nil {

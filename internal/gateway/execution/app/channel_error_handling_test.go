@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
@@ -112,6 +113,25 @@ func TestRetryCurrentChannelOnlyBeforeDownstreamOutput(t *testing.T) {
 		http.StatusGatewayTimeout,
 	)
 	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, providerTimeout))
+}
+
+func TestRetryCurrentChannelForResponsesBeforeSemanticOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+	context.Set("use_channel", []string{"72"})
+	context.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	context.Set(string(constant.ContextKeyRelayAttemptStage), gatewaystream.AttemptStageBootstrap)
+	context.Set(string(constant.ContextKeyRequestStartTime), time.Now().Add(-30*time.Second))
+
+	streamClosed := types.NewOpenAIError(
+		errors.New("responses stream closed before response.completed"),
+		types.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	)
+	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, streamClosed))
+
+	context.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, streamClosed))
 }
 
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {

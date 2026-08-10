@@ -90,6 +90,11 @@ func TestHasAlternativeSelectableRouteHonorsRoutePoolMembership(t *testing.T) {
 			Group: "default", Model: "gpt-test", ChannelId: channelID, Enabled: true,
 		}).Error)
 	}
+
+	legacyAlternative, err := HasAlternativeSelectableRoute(1, "default", "gpt-test")
+	require.NoError(t, err)
+	require.True(t, legacyAlternative)
+
 	pool := gatewayschema.RoutePool{Name: "default", Group: "default", Enabled: true}
 	require.NoError(t, db.Create(&pool).Error)
 	require.NoError(t, db.Create(&gatewayschema.RoutePoolMember{

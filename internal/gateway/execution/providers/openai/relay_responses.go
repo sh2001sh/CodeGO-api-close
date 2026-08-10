@@ -226,10 +226,14 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		}
 	})
 	// The scanner may observe a downstream cancellation while it is unwinding
-	// its workers. Synchronize that state before classifying an incomplete
-	// Responses stream so a client disconnect neither cools the channel nor
-	// becomes a synthetic 503 in relay telemetry.
-	helper.IsClientGone(c)
+	// its workers. StreamStatus is the synchronized outcome of those workers,
+	// so use it to reliably propagate client-gone to the main relay path before
+	// classifying an incomplete stream.
+	if info.StreamStatus != nil && info.StreamStatus.EndReason == gatewaycontract.StreamEndReasonClientGone {
+		helper.MarkClientGone(c)
+	} else {
+		helper.IsClientGone(c)
+	}
 	c.Set("responses_stream_lifecycle", map[string]interface{}{
 		"received_events":            info.ReceivedResponseCount,
 		"semantic_output_seen":       sawSemanticOutput.Load(),

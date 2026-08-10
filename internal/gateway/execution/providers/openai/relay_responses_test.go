@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -82,6 +83,30 @@ func TestOaiResponsesStreamHandlerAllowsRetryBeforeContent(t *testing.T) {
 	require.False(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
 	require.Equal(t, gatewaystream.AttemptStageBootstrap, gatewaystream.AttemptStageFromContext(c))
 	require.Empty(t, recorder.Body.String())
+}
+
+func TestOaiResponsesStreamHandlerMarksCancelledClient(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	requestContext, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reader, writer := io.Pipe()
+	go func() {
+		_, _ = io.WriteString(writer, `data: {"type":"response.created","response":{"id":"resp_123"}}`+"\n\n")
+		cancel()
+		_ = writer.Close()
+	}()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(requestContext)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: reader, Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	_, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{IsStream: true}, resp)
+
+	require.NotNil(t, err)
+	require.True(t, c.GetBool(string(constant.ContextKeyClientGone)))
 }
 
 func TestOaiResponsesStreamHandlerTimesOutBeforeSemanticOutput(t *testing.T) {

@@ -147,8 +147,8 @@ func printHelp() {
 
 func initConstantEnv() {
 	constant.StreamingTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_TIMEOUT", 300)
-	constant.StreamingFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_FIRST_BYTE_TIMEOUT", 45)
-	constant.StreamingLongContextFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_FIRST_BYTE_TIMEOUT", 90)
+	constant.StreamingFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_FIRST_BYTE_TIMEOUT", 0)
+	constant.StreamingLongContextFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_FIRST_BYTE_TIMEOUT", 0)
 	constant.StreamingMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_MAX_DURATION", 240)
 	constant.StreamingLongContextMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_MAX_DURATION", 540)
 	constant.DifyDebug = platformconfig.GetEnvOrDefaultBool("DIFY_DEBUG", true)

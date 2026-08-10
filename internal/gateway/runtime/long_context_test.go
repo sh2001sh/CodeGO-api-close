@@ -113,3 +113,20 @@ func TestStreamFirstOutputTimeoutSkipsImageGenerationModels(t *testing.T) {
 	MarkImageGenerationRequest(context)
 	require.Zero(t, StreamFirstOutputTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
 }
+
+func TestStreamFirstOutputTimeoutIsDisabledWithoutExplicitConfiguration(t *testing.T) {
+	oldFirstByte := constant.StreamingFirstByteTimeout
+	oldLongFirstByte := constant.StreamingLongContextFirstByteTimeout
+	constant.StreamingFirstByteTimeout = 0
+	constant.StreamingLongContextFirstByteTimeout = 0
+	t.Cleanup(func() {
+		constant.StreamingFirstByteTimeout = oldFirstByte
+		constant.StreamingLongContextFirstByteTimeout = oldLongFirstByte
+	})
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	MarkLongContextRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold)
+	require.Zero(t, StreamFirstOutputTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
+	require.Zero(t, StreamFirstOutputTimeoutForRequest(nil, "gpt-5.6-sol", 1_000))
+}

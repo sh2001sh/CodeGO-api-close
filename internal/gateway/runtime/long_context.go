@@ -40,9 +40,9 @@ func StreamMaxDurationForRequest(c *gin.Context, model string, promptTokens int)
 	return StreamMaxDuration(model, promptTokens)
 }
 
-// StreamFirstOutputTimeoutForRequest returns the bounded wait for a GPT
-// stream to become useful. Long-context continuations receive a larger
-// bootstrap budget because the upstream may restore hidden history first.
+// StreamFirstOutputTimeoutForRequest returns an optional wait for a GPT stream
+// to become useful. It is disabled by default so an upstream that is still
+// restoring conversation state can apply its own timeout and recovery policy.
 func StreamFirstOutputTimeoutForRequest(c *gin.Context, model string, promptTokens int) time.Duration {
 	// Image generation streams commonly spend the first tens of seconds
 	// rendering and do not emit text/reasoning tokens. They must retain the
@@ -57,12 +57,12 @@ func StreamFirstOutputTimeoutForRequest(c *gin.Context, model string, promptToke
 		if constant.StreamingLongContextFirstByteTimeout > 0 {
 			return time.Duration(constant.StreamingLongContextFirstByteTimeout) * time.Second
 		}
-		return 90 * time.Second
+		return 0
 	}
 	if constant.StreamingFirstByteTimeout > 0 {
 		return time.Duration(constant.StreamingFirstByteTimeout) * time.Second
 	}
-	return 45 * time.Second
+	return 0
 }
 
 const (

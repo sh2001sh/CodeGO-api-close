@@ -101,12 +101,14 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 		}
 		// The probe lease is a concurrency guard, not an availability gate. If
 		// another request owns it, keep the model usable with the best known
-		// cooling route rather than returning an avoidable 503.
+		// cooling route rather than returning an avoidable 503. The lease is
+		// best-effort here: an all-cooling pool must still leave one request
+		// path available for the provider's own recovery and retry policy.
 		if fallback := chooseBestRoutePoolLastResortProbe(lastResortProbes); fallback != nil {
-			if !gatewayruntime.AcquireAllCoolingFallback(c, group, modelName, requestType) {
-				return nil, true, nil
+			if c != nil {
+				_ = gatewayruntime.AcquireAllCoolingFallback(c, group, modelName, requestType)
+				gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
 			}
-			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
 			return selectRoutePoolCandidate(c, detail.Pool.ID, fallback), true, nil
 		}
 		return nil, true, nil

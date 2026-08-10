@@ -208,17 +208,31 @@ func RecordChannelRetryableFailure(channelID int, model string, requestTypes ...
 // cooldown for a transient failure. Repeated failures in the rolling window
 // still escalate to the longer circuit cooldown.
 func RecordChannelRetryableFailureWithCooldown(channelID int, model string, shortCooldown time.Duration, requestTypes ...RequestType) {
-	recordChannelRetryableFailure(channelID, model, shortCooldown, channelHealthRetryableFailureThreshold, requestTypes...)
+	recordChannelRetryableFailure(channelID, model, "", shortCooldown, channelHealthRetryableFailureThreshold, requestTypes...)
+}
+
+// RecordChannelRetryableFailureForRequest records at most one transient
+// failure for a channel/model pair per downstream request. A gateway retry is
+// not independent evidence that the route became unhealthy.
+func RecordChannelRetryableFailureForRequest(channelID int, model, requestID string, shortCooldown time.Duration, requestTypes ...RequestType) {
+	recordChannelRetryableFailure(channelID, model, requestID, shortCooldown, channelHealthRetryableFailureThreshold, requestTypes...)
 }
 
 // RecordChannelGatewayFailure rapidly isolates a model route after two
 // consecutive gateway failures. A single transient failure remains degraded so
 // healthy traffic can demonstrate that the route is still usable.
 func RecordChannelGatewayFailure(channelID int, model string, statusCode int, requestTypes ...RequestType) {
-	recordChannelRetryableFailure(channelID, model, RetryableFailureCooldown(statusCode), channelHealthGatewayFailureThreshold, requestTypes...)
+	recordChannelRetryableFailure(channelID, model, "", RetryableFailureCooldown(statusCode), channelHealthGatewayFailureThreshold, requestTypes...)
 }
 
-func recordChannelRetryableFailure(channelID int, model string, shortCooldown time.Duration, failureThreshold int, requestTypes ...RequestType) {
+// RecordChannelGatewayFailureForRequest applies gateway-failure health
+// accounting once per downstream request while retaining status-specific
+// cooldowns for genuinely separate failures.
+func RecordChannelGatewayFailureForRequest(channelID int, model, requestID string, statusCode int, requestTypes ...RequestType) {
+	recordChannelRetryableFailure(channelID, model, requestID, RetryableFailureCooldown(statusCode), channelHealthGatewayFailureThreshold, requestTypes...)
+}
+
+func recordChannelRetryableFailure(channelID int, model, requestID string, shortCooldown time.Duration, failureThreshold int, requestTypes ...RequestType) {
 	if channelID <= 0 || model == "" {
 		return
 	}
@@ -237,7 +251,13 @@ func recordChannelRetryableFailure(channelID int, model string, shortCooldown ti
 		state.ChannelID = channelID
 		state.Model = model
 		state.RequestType = normalizedRequestType(requestTypes...)
+		if requestID != "" && state.LastFailureRequestID == requestID {
+			return state, nil
+		}
 		state.LastFailureAt = now
+		if requestID != "" {
+			state.LastFailureRequestID = requestID
+		}
 		recordChannelHealthWindow(&state, now, false)
 		state.ConsecutiveRetryableFailures++
 		state.RecoveryProbeSuccesses = 0

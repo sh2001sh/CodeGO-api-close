@@ -87,9 +87,10 @@ func initEnvironment() {
 	platformconfig.SyncFrequency = platformconfig.GetEnvOrDefaultInt("SYNC_FREQUENCY", 60)
 	platformconfig.BatchUpdateInterval = platformconfig.GetEnvOrDefaultInt("BATCH_UPDATE_INTERVAL", 5)
 	platformconfig.RelayTimeout = platformconfig.GetEnvOrDefaultInt("RELAY_TIMEOUT", 0)
-	// Keep ordinary text relay header waits below the GPT retry window so a
-	// failed first attempt can still move to a healthy route.
-	platformconfig.RelayResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("RELAY_RESPONSE_HEADER_TIMEOUT", 20)
+	// Text providers own their bootstrap timeout and retry policy. A gateway
+	// response-header deadline would otherwise cancel a still-recovering relay
+	// and turn the local cancellation into a false provider failure.
+	platformconfig.RelayResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("RELAY_RESPONSE_HEADER_TIMEOUT", 0)
 	platformconfig.ImageResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("IMAGE_RESPONSE_HEADER_TIMEOUT", 120)
 	platformconfig.RelayMaxIdleConns = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_IDLE_CONNS", 500)
 	platformconfig.RelayMaxIdleConnsPerHost = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_IDLE_CONNS_PER_HOST", 100)

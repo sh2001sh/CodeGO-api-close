@@ -179,7 +179,7 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 
 func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration {
 	baseTimeout := time.Duration(platformconfig.RelayResponseHeaderTimeout) * time.Second
-	if baseTimeout <= 0 || info == nil {
+	if info == nil {
 		return baseTimeout
 	}
 	if info.RelayMode == gatewaycontract.RelayModeImagesGenerations ||
@@ -189,6 +189,9 @@ func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration 
 			return baseTimeout
 		}
 		return maxDuration(baseTimeout, imageTimeout)
+	}
+	if baseTimeout <= 0 {
+		return 0
 	}
 	if !relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
 		return baseTimeout

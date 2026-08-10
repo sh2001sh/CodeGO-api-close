@@ -192,7 +192,7 @@ func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIE
 	if c == nil || err == nil || c.GetBool(string(constant.ContextKeyClientGone)) {
 		return false
 	}
-	if err.GetErrorCode() != types.ErrorCodeChannelResponseTimeExceeded {
+	if err.GetErrorCode() != types.ErrorCodeChannelResponseTimeExceeded && err.StatusCode != http.StatusGatewayTimeout && err.StatusCode != 524 {
 		startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
 		if startTime.IsZero() || time.Since(startTime) > currentChannelRetryMaxElapsed {
 			return false
@@ -216,12 +216,13 @@ func isLocalStreamMaxDuration(c *gin.Context) bool {
 }
 
 func recordChannelTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
+	requestID := c.GetString(constant.RequestIdKey)
 	if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
 		(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
-		gatewayruntime.RecordChannelGatewayFailure(channelID, modelName, err.StatusCode, gatewayruntime.RequestTypeFromContext(c))
+		gatewayruntime.RecordChannelGatewayFailureForRequest(channelID, modelName, requestID, err.StatusCode, gatewayruntime.RequestTypeFromContext(c))
 		return
 	}
-	gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelID, modelName, retryableFailureCooldown(c, err), gatewayruntime.RequestTypeFromContext(c))
+	gatewayruntime.RecordChannelRetryableFailureForRequest(channelID, modelName, requestID, retryableFailureCooldown(c, err), gatewayruntime.RequestTypeFromContext(c))
 }
 
 func isGatewayFailureStatus(statusCode int) bool {

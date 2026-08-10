@@ -101,8 +101,20 @@ func TestLegacyLastResortKeepsModelAvailableWhenProbeLeaseIsBusy(t *testing.T) {
 
 	requestType := gatewayruntime.RequestTypeFromContext(nil)
 	require.True(t, gatewayruntime.TryStartChannelLastResortProbe(channelID, modelName, requestType))
+	leases := make([]*gin.Context, 0, 3)
+	for range 3 {
+		lease, _ := gin.CreateTestContext(httptest.NewRecorder())
+		require.True(t, gatewayruntime.AcquireAllCoolingFallback(lease, "default", modelName, requestType))
+		leases = append(leases, lease)
+	}
+	t.Cleanup(func() {
+		for _, lease := range leases {
+			gatewayruntime.ReleaseAllCoolingFallbacks(lease)
+		}
+	})
 
-	channel, err := getHealthySatisfiedChannel("default", modelName, 0)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	channel, err := getHealthySatisfiedChannelWithContext(context, "default", modelName, 0)
 	require.NoError(t, err)
 	require.NotNil(t, channel)
 	require.Equal(t, channelID, channel.Id)

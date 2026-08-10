@@ -26,8 +26,9 @@ var BatchUpdateInterval int
 
 var RelayTimeout int
 
-// RelayResponseHeaderTimeout bounds outbound connection, TLS, and response-header waits
-// without limiting a stream after the upstream has started responding.
+// RelayResponseHeaderTimeout optionally bounds text-model response-header waits.
+// Zero delegates first-response timing to the provider while connection and TLS
+// establishment retain their independent safety deadline.
 var RelayResponseHeaderTimeout int
 
 // ImageResponseHeaderTimeout bounds the initial wait for synchronous image

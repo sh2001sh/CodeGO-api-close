@@ -104,6 +104,14 @@ func TestRetryCurrentChannelOnlyBeforeDownstreamOutput(t *testing.T) {
 		http.StatusGatewayTimeout,
 	)
 	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, headerTimeout))
+
+	context.Set(string(constant.ContextKeyRequestStartTime), time.Now().Add(-30*time.Second))
+	providerTimeout := types.NewOpenAIError(
+		errors.New("provider timed out"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusGatewayTimeout,
+	)
+	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, providerTimeout))
 }
 
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {

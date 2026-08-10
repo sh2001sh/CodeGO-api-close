@@ -153,6 +153,22 @@ func TestChannelHealthUsesShorterGatewayTimeoutCooldown(t *testing.T) {
 	require.WithinDuration(t, time.Now().Add(channelHealthGatewayTimeoutCooldown), state.CoolingUntil, time.Second)
 }
 
+func TestChannelHealthDoesNotDoubleCountRetryOfSameRequest(t *testing.T) {
+	require.NoError(t, resetChannelHealthForTest())
+	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })
+
+	RecordChannelGatewayFailureForRequest(42, "gpt-request-idempotency", "request-1", 504)
+	RecordChannelGatewayFailureForRequest(42, "gpt-request-idempotency", "request-1", 504)
+
+	state, found := GetChannelHealth(42, "gpt-request-idempotency")
+	require.True(t, found)
+	require.Equal(t, 1, state.ConsecutiveRetryableFailures)
+	require.False(t, IsChannelCooling(42, "gpt-request-idempotency"))
+
+	RecordChannelGatewayFailureForRequest(42, "gpt-request-idempotency", "request-2", 504)
+	require.True(t, IsChannelCooling(42, "gpt-request-idempotency"))
+}
+
 func TestChannelHealthShortCooldownEscalatesAfterRepeatedFailures(t *testing.T) {
 	require.NoError(t, resetChannelHealthForTest())
 	t.Cleanup(func() { require.NoError(t, resetChannelHealthForTest()) })

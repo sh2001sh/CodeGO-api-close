@@ -220,12 +220,12 @@ func selectLegacyLastResortChannel(c *gin.Context, group, modelName string, retr
 		}
 		if gatewayruntime.TryStartChannelLastResortProbe(channel.Id, modelName, requestType) && c != nil {
 			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
-		} else if c != nil && gatewayruntime.AcquireAllCoolingFallback(c, group, modelName, requestType) {
-			// A busy probe lease must not make the model unavailable. The caller
-			// may use this bounded cooling fallback while the owner recovers.
-			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
 		} else if c != nil {
-			return nil
+			// A busy recovery lease is not grounds to reject the request. Keep a
+			// single best-known route available so all temporary circuits do not
+			// become a synchronized 503 wave.
+			_ = gatewayruntime.AcquireAllCoolingFallback(c, group, modelName, requestType)
+			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
 		}
 		return channel
 	}

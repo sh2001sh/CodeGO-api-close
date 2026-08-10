@@ -23,6 +23,8 @@ var (
 	responseHeaderTimeoutClientMu sync.Mutex
 )
 
+const outboundConnectionTimeout = 10 * time.Second
+
 func relayResponseHeaderTimeout() time.Duration {
 	if platformconfig.RelayResponseHeaderTimeout <= 0 {
 		return 0
@@ -44,10 +46,12 @@ func newOutboundTransportWithResponseHeaderTimeout(proxyFunc func(*http.Request)
 	}
 	if responseHeaderTimeout > 0 {
 		transport.ResponseHeaderTimeout = responseHeaderTimeout
-		transport.TLSHandshakeTimeout = responseHeaderTimeout
-		if transport.DialContext == nil {
-			transport.DialContext = (&net.Dialer{Timeout: responseHeaderTimeout}).DialContext
-		}
+	}
+	// Do not couple connection establishment to the optional response-header
+	// budget. Disabling the latter must not permit stalled TCP/TLS handshakes.
+	transport.TLSHandshakeTimeout = outboundConnectionTimeout
+	if transport.DialContext == nil {
+		transport.DialContext = (&net.Dialer{Timeout: outboundConnectionTimeout}).DialContext
 	}
 	if platformconfig.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = platformconfig.InsecureTLSConfig

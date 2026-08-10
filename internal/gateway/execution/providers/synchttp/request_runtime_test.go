@@ -64,6 +64,23 @@ func TestResponseHeaderTimeoutForRequest(t *testing.T) {
 	}
 }
 
+func TestResponseHeaderTimeoutCanBeDisabledForTextWithoutAffectingImages(t *testing.T) {
+	previous := platformconfig.RelayResponseHeaderTimeout
+	previousImage := platformconfig.ImageResponseHeaderTimeout
+	t.Cleanup(func() {
+		platformconfig.RelayResponseHeaderTimeout = previous
+		platformconfig.ImageResponseHeaderTimeout = previousImage
+	})
+
+	platformconfig.RelayResponseHeaderTimeout = 0
+	platformconfig.ImageResponseHeaderTimeout = 120
+
+	text := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", RelayMode: gatewaycontract.RelayModeResponses}
+	image := &relaycommon.RelayInfo{OriginModelName: "gpt-image-2", RelayMode: gatewaycontract.RelayModeImagesGenerations}
+	require.Zero(t, responseHeaderTimeoutForRequest(text))
+	require.Equal(t, 120*time.Second, responseHeaderTimeoutForRequest(image))
+}
+
 func TestSetupAPIRequestHeaderForwardsRemoteCompactionFeature(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

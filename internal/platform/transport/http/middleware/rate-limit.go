@@ -32,7 +32,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 	}
 	if listLength < int64(maxRequestNum) {
 		rdb.LPush(ctx, key, time.Now().Format(timeFormat))
-		rdb.Expire(ctx, key, platformconfig.RateLimitKeyExpirationDuration)
+		rdb.Expire(ctx, key, rateLimitKeyExpiration(duration))
 	} else {
 		oldTimeStr, _ := rdb.LIndex(ctx, key, -1).Result()
 		oldTime, err := time.Parse(timeFormat, oldTimeStr)
@@ -49,16 +49,24 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		// time.Since will return negative number!
 		// See: https://stackoverflow.com/questions/50970900/why-is-time-since-returning-negative-durations-on-windows
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
-			rdb.Expire(ctx, key, platformconfig.RateLimitKeyExpirationDuration)
+			rdb.Expire(ctx, key, rateLimitKeyExpiration(duration))
 			c.Status(http.StatusTooManyRequests)
 			c.Abort()
 			return
 		} else {
 			rdb.LPush(ctx, key, time.Now().Format(timeFormat))
 			rdb.LTrim(ctx, key, 0, int64(maxRequestNum-1))
-			rdb.Expire(ctx, key, platformconfig.RateLimitKeyExpirationDuration)
+			rdb.Expire(ctx, key, rateLimitKeyExpiration(duration))
 		}
 	}
+}
+
+func rateLimitKeyExpiration(duration int64) time.Duration {
+	window := time.Duration(duration) * time.Second
+	if window > platformconfig.RateLimitKeyExpirationDuration {
+		return window
+	}
+	return platformconfig.RateLimitKeyExpirationDuration
 }
 
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
@@ -168,6 +176,20 @@ func CriticalRateLimit() func(c *gin.Context) {
 		return rateLimitFactory(platformconfig.CriticalRateLimitNum, platformconfig.CriticalRateLimitDuration, "CT")
 	}
 	return defNext
+}
+
+// RegistrationRateLimit protects account creation from automated bursts while
+// keeping a reasonable allowance for shared residential networks.
+func RegistrationRateLimit() gin.HandlerFunc {
+	burstLimiter := rateLimitFactory(3, 10*60, "RG10")
+	dailyLimiter := rateLimitFactory(5, 24*60*60, "RG24")
+	return func(c *gin.Context) {
+		burstLimiter(c)
+		if c.IsAborted() {
+			return
+		}
+		dailyLimiter(c)
+	}
 }
 
 func DownloadRateLimit() func(c *gin.Context) {

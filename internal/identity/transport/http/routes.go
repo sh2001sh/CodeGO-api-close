@@ -15,7 +15,7 @@ func RegisterUserRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gi
 
 	userRoute := apiRouter.Group("/user")
 	{
-		userRoute.POST("/register", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, middleware.TurnstileCheck(), Register)
+		userRoute.POST("/register", middleware.RegistrationRateLimit(), anonymousRequestBodyLimit, middleware.RegistrationTurnstileCheck(), Register)
 		userRoute.POST("/login", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, middleware.TurnstileCheck(), Login)
 		userRoute.POST("/login/2fa", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, Verify2FALogin)
 		userRoute.POST("/passkey/login/begin", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, PasskeyLoginBegin)

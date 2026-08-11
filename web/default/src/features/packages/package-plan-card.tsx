@@ -168,6 +168,9 @@ export function PackagePlanCard(props: {
                   {t('Final quota by tier')}
                 </span>
               </div>
+              <div className='text-primary text-xs leading-relaxed'>
+                {t('Payment automatically joins the current collective benefit queue.')}
+              </div>
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-muted-foreground'>
                   {translateCollectiveTierLabel(2, t)}
@@ -272,17 +275,6 @@ export function PackagePlanCard(props: {
             {limitReached ? t('Purchase limit reached') : actionLabel}
             {!limitReached && <ArrowRight className='ml-1 h-4 w-4' />}
           </Button>
-          {groupBuyEnabled && (
-            <Button
-              variant='outline'
-              className='w-full'
-              disabled={limitReached || props.record.action === 'disabled'}
-              onClick={() => props.onPurchase('group_buy')}
-            >
-              <Layers3 className='mr-1 h-4 w-4' />
-              {t('Participate in collective benefit')}
-            </Button>
-          )}
           {limitReached && (
             <div className='text-muted-foreground text-center text-xs'>
               {t('Limit reached ({{current}}/{{limit}})', {

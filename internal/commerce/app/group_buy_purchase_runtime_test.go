@@ -35,6 +35,44 @@ func TestValidateGroupBuyPurchaseRejectsDayPass(t *testing.T) {
 	assert.ErrorIs(t, err, ErrGroupBuyPlanNotEnabled)
 }
 
+func TestNormalizeSubscriptionPurchaseAutomaticallyJoinsEligibleGroupBuy(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	plan := &commerceschema.SubscriptionPlan{
+		Id:              9798,
+		Title:           "集享月卡",
+		DurationUnit:    commerceschema.SubscriptionDurationMonth,
+		DurationValue:   1,
+		PlanType:        commerceschema.SubscriptionPlanTypeMonthly,
+		Enabled:         true,
+		GroupBuyEnabled: true,
+	}
+	require.NoError(t, db.Create(plan).Error)
+
+	purchaseType, groupBuyID, err := NormalizeSubscriptionPurchaseFields(97990, SubscriptionPurchaseFields{PlanID: plan.Id})
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseTypeGroupBuy, purchaseType)
+	assert.Zero(t, groupBuyID)
+}
+
+func TestNormalizeSubscriptionPurchaseKeepsDayPassOutsideGroupBuy(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	plan := &commerceschema.SubscriptionPlan{
+		Id:              9797,
+		Title:           "日卡",
+		DurationUnit:    commerceschema.SubscriptionDurationDay,
+		DurationValue:   1,
+		PlanType:        commerceschema.SubscriptionPlanTypeDaily,
+		Enabled:         true,
+		GroupBuyEnabled: true,
+	}
+	require.NoError(t, db.Create(plan).Error)
+
+	purchaseType, groupBuyID, err := NormalizeSubscriptionPurchaseFields(97989, SubscriptionPurchaseFields{PlanID: plan.Id})
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseTypeNormal, purchaseType)
+	assert.Zero(t, groupBuyID)
+}
+
 func TestSettleGroupBuyOrderAddsBonusToSubscriptionInsteadOfWallet(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 

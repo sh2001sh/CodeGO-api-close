@@ -32,6 +32,9 @@ const schema = z.object({
   enabled: z.boolean(),
   unitPrice: z.coerce.number().min(0),
   expireDays: z.coerce.number().int().min(1).max(365),
+  registrationRewardEnabled: z.boolean(),
+  registrationRewardStartAt: z.string(),
+  registrationRewardEndAt: z.string(),
   dailyLimit: z.coerce.number().int().min(1),
   monthlyLimit: z.coerce.number().int().min(1),
   dailyOpenLimit: z.coerce.number().int().min(1),
@@ -109,6 +112,18 @@ function stringifyJson(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
+function formatDateTimeLocal(timestamp: number): string {
+  if (!timestamp) return ''
+  const date = new Date(timestamp * 1000)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 16)
+}
+
+function parseDateTimeLocal(value: string): number {
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : 0
+}
+
 export function BlindBoxSettingsSection({
   defaultValues,
 }: {
@@ -116,6 +131,9 @@ export function BlindBoxSettingsSection({
     enabled: boolean
     unitPrice: number
     expireDays: number
+    registrationRewardEnabled: boolean
+    registrationRewardStartAt: number
+    registrationRewardEndAt: number
     dailyLimit: number
     monthlyLimit: number
     dailyOpenLimit: number
@@ -137,6 +155,13 @@ export function BlindBoxSettingsSection({
       enabled: defaultValues.enabled,
       unitPrice: defaultValues.unitPrice,
       expireDays: defaultValues.expireDays,
+      registrationRewardEnabled: defaultValues.registrationRewardEnabled,
+      registrationRewardStartAt: formatDateTimeLocal(
+        defaultValues.registrationRewardStartAt
+      ),
+      registrationRewardEndAt: formatDateTimeLocal(
+        defaultValues.registrationRewardEndAt
+      ),
       dailyLimit: defaultValues.dailyLimit,
       monthlyLimit: defaultValues.monthlyLimit,
       dailyOpenLimit: defaultValues.dailyOpenLimit,
@@ -153,12 +178,30 @@ export function BlindBoxSettingsSection({
 
   const { isDirty, isSubmitting } = form.formState
   const enabled = form.watch('enabled')
+  const registrationRewardEnabled = form.watch('registrationRewardEnabled')
 
   async function onSubmit(values: Values) {
     const normalizedCountOptions = normalizeCountOptions(values.countOptions)
     const normalizedTiers = normalizeTiers(values.tiers)
     const defaultCountOptions = JSON.stringify(defaultValues.countOptions)
     const defaultTiers = JSON.stringify(defaultValues.tiers)
+    const registrationRewardStartAt = parseDateTimeLocal(
+      values.registrationRewardStartAt
+    )
+    const registrationRewardEndAt = parseDateTimeLocal(
+      values.registrationRewardEndAt
+    )
+
+    if (
+      registrationRewardStartAt > 0 &&
+      registrationRewardEndAt > 0 &&
+      registrationRewardEndAt <= registrationRewardStartAt
+    ) {
+      form.setError('registrationRewardEndAt', {
+        message: '结束时间必须晚于开始时间',
+      })
+      return
+    }
 
     const updates: Array<{ key: string; value: string }> = []
 
@@ -182,6 +225,21 @@ export function BlindBoxSettingsSection({
       'blind_box_setting.expire_days',
       values.expireDays,
       defaultValues.expireDays
+    )
+    pushIfChanged(
+      'blind_box_setting.registration_reward_enabled',
+      values.registrationRewardEnabled,
+      defaultValues.registrationRewardEnabled
+    )
+    pushIfChanged(
+      'blind_box_setting.registration_reward_start_at',
+      registrationRewardStartAt,
+      defaultValues.registrationRewardStartAt
+    )
+    pushIfChanged(
+      'blind_box_setting.registration_reward_end_at',
+      registrationRewardEndAt,
+      defaultValues.registrationRewardEndAt
     )
     pushIfChanged(
       'blind_box_setting.daily_limit',
@@ -287,6 +345,67 @@ export function BlindBoxSettingsSection({
               </FormItem>
             )}
           />
+
+          <FormField
+            control={form.control}
+            name='registrationRewardEnabled'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                <div className='space-y-0.5'>
+                  <FormLabel className='text-base'>启用邀请码注册赠盒</FormLabel>
+                  <FormDescription>
+                    仅在活动有效期内，填写有效邀请码的新用户才获得 5 个未开启盲盒
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={updateOption.isPending || isSubmitting}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <div className='grid gap-6 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='registrationRewardStartAt'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>邀请赠盒活动开始时间</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='datetime-local'
+                      disabled={!registrationRewardEnabled}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>留空表示保存后立即生效</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='registrationRewardEndAt'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>邀请赠盒活动结束时间</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='datetime-local'
+                      disabled={!registrationRewardEnabled}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>留空表示不设截止时间</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           <div className='grid gap-6 md:grid-cols-2 xl:grid-cols-4'>
             <FormField

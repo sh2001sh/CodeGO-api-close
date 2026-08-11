@@ -23,6 +23,9 @@ type Setting struct {
 	Enabled                      bool          `json:"enabled"`
 	UnitPrice                    float64       `json:"unit_price"`
 	ExpireDays                   int           `json:"expire_days"`
+	RegistrationRewardEnabled    bool          `json:"registration_reward_enabled"`
+	RegistrationRewardStartAt    int64         `json:"registration_reward_start_at"`
+	RegistrationRewardEndAt      int64         `json:"registration_reward_end_at"`
 	DailyLimit                   int           `json:"daily_limit"`
 	MonthlyLimit                 int           `json:"monthly_limit"`
 	DailyOpenLimit               int           `json:"daily_open_limit"`
@@ -74,6 +77,9 @@ var currentSetting = Setting{
 	Enabled:                      false,
 	UnitPrice:                    2.5,
 	ExpireDays:                   7,
+	RegistrationRewardEnabled:    true,
+	RegistrationRewardStartAt:    0,
+	RegistrationRewardEndAt:      0,
 	DailyLimit:                   50,
 	MonthlyLimit:                 500,
 	DailyOpenLimit:               5000,
@@ -85,6 +91,18 @@ var currentSetting = Setting{
 	SubscriptionPlanTitle:        defaultSubscriptionPlanTitle,
 	CountOptions:                 []int{1, 5, 10, 20, 50},
 	Tiers:                        append([]TierSetting(nil), defaultTierSettings...),
+}
+
+// RegistrationRewardActive reports whether invited registrations currently
+// qualify for the configured blind-box campaign.
+func (s *Setting) RegistrationRewardActive(now int64) bool {
+	if s == nil || !s.RegistrationRewardEnabled {
+		return false
+	}
+	if s.RegistrationRewardStartAt > 0 && now < s.RegistrationRewardStartAt {
+		return false
+	}
+	return s.RegistrationRewardEndAt <= 0 || now <= s.RegistrationRewardEndAt
 }
 
 func init() {

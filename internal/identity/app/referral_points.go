@@ -33,7 +33,7 @@ func insertUserAndApplyRegistrationRewards(user *identityschema.User, inviterID 
 		return err
 	}
 	if inviterID > 0 {
-		if err := grantRegistrationBlindBoxes(user.Id); err != nil {
+		if err := grantRegistrationBlindBoxes(user.Id, inviterID); err != nil {
 			return err
 		}
 	}
@@ -50,7 +50,7 @@ func finalizeOAuthUserAndApplyRegistrationRewards(user *identityschema.User, inv
 		platformobservability.SysLog(fmt.Sprintf("failed to finalize created user %d: %v", user.Id, err))
 	}
 	if inviterID > 0 {
-		if err := grantRegistrationBlindBoxes(user.Id); err != nil {
+		if err := grantRegistrationBlindBoxes(user.Id, inviterID); err != nil {
 			platformobservability.SysLog(fmt.Sprintf("failed to grant registration blind boxes to user %d: %v", user.Id, err))
 		}
 	}
@@ -58,13 +58,26 @@ func finalizeOAuthUserAndApplyRegistrationRewards(user *identityschema.User, inv
 	applyReferralRegistrationRewards(inviterID, user.Id)
 }
 
-func grantRegistrationBlindBoxes(userID int) error {
-	if userID <= 0 {
-		return fmt.Errorf("invalid registration blind box user")
+func grantRegistrationBlindBoxes(userID int, inviterID int) error {
+	if userID <= 0 || inviterID <= 0 {
+		return nil
 	}
 
 	now := platformruntime.GetTimestamp()
 	setting := blindboxsettings.Get()
+	if !setting.RegistrationRewardActive(now) {
+		return nil
+	}
+	var inviter identityschema.User
+	err := platformdb.DB.Select("id").
+		Where("id = ? AND role = ?", inviterID, constant.RoleRootUser).
+		First(&inviter).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
 	tradeNo := fmt.Sprintf("registration-blind-box-%d", userID)
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var existing commerceschema.BlindBoxOrder

@@ -250,6 +250,12 @@ const BILLING_SECTIONS = [
           enabled: settings['blind_box_setting.enabled'],
           unitPrice: settings['blind_box_setting.unit_price'],
           expireDays: settings['blind_box_setting.expire_days'],
+          registrationRewardEnabled:
+            settings['blind_box_setting.registration_reward_enabled'],
+          registrationRewardStartAt:
+            settings['blind_box_setting.registration_reward_start_at'],
+          registrationRewardEndAt:
+            settings['blind_box_setting.registration_reward_end_at'],
           dailyLimit: settings['blind_box_setting.daily_limit'],
           monthlyLimit: settings['blind_box_setting.monthly_limit'],
           dailyOpenLimit: settings['blind_box_setting.daily_open_limit'],

@@ -113,11 +113,14 @@ func BackfillActiveMonthlyPassBenefits() error {
 		}
 		for _, sub := range subscriptions {
 			plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)
-			if err != nil || plan == nil || monthlyPassDurationSeconds(plan) == 0 {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					continue
+			if err != nil {
+				if !errors.Is(err, gorm.ErrRecordNotFound) {
+					return err
 				}
-				return err
+				continue
+			}
+			if plan == nil || monthlyPassDurationSeconds(plan) == 0 {
+				continue
 			}
 			reference := fmt.Sprintf("monthly-pass-backfill-20260811:%d", sub.Id)
 			if err := awardMonthlyPassPropTx(tx, sub.UserId, plan, reference); err != nil {

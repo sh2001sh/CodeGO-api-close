@@ -193,3 +193,25 @@ func TestBackfillActiveMonthlyPassBenefitsIsIdempotent(t *testing.T) {
 	assert.Equal(t, int64(45*60), props[0].DurationSeconds)
 	assert.Equal(t, "monthly-pass-backfill-20260811:8816", props[0].BenefitReference)
 }
+
+func TestBackfillActiveMonthlyPassBenefitsSkipsIneligibleSubscriptions(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	now := platformruntime.GetTimestamp()
+	user := &identityschema.User{Id: 8817, Username: "monthly_pass_skip", Status: constant.UserStatusEnabled}
+	dayPlan := &commerceschema.SubscriptionPlan{Id: 8817, Title: "day", PlanType: commerceschema.SubscriptionPlanTypeDaily}
+	monthPlan := &commerceschema.SubscriptionPlan{
+		Id: 8818, Title: "Lite monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierLite,
+	}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, db.Create(dayPlan).Error)
+	require.NoError(t, db.Create(monthPlan).Error)
+	require.NoError(t, db.Create(&commerceschema.UserSubscription{Id: 8817, UserId: user.Id, PlanId: dayPlan.Id, Status: "active", EndTime: now + 86400}).Error)
+	require.NoError(t, db.Create(&commerceschema.UserSubscription{Id: 8818, UserId: user.Id, PlanId: monthPlan.Id, Status: "active", EndTime: now + 86400}).Error)
+
+	require.NoError(t, BackfillActiveMonthlyPassBenefits())
+	var props []commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND prop_type = ?", user.Id, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).Find(&props).Error)
+	require.Len(t, props, 1)
+	assert.Equal(t, int64(15*60), props[0].DurationSeconds)
+}

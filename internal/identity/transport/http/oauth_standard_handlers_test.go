@@ -19,6 +19,7 @@ import (
 
 type stubOAuthProvider struct {
 	name           string
+	prefix         string
 	enabled        bool
 	providerUserID string
 	username       string
@@ -65,6 +66,9 @@ func (p *stubOAuthProvider) SetProviderUserID(user *identityschema.User, provide
 }
 
 func (p *stubOAuthProvider) GetProviderPrefix() string {
+	if p.prefix != "" {
+		return p.prefix
+	}
 	return "stub_"
 }
 
@@ -183,6 +187,7 @@ func TestHandleOAuthGrantsRootInviteRegistrationBlindBoxes(t *testing.T) {
 	}
 	provider := &stubOAuthProvider{
 		name:           "Root Invite OAuth",
+		prefix:         "linuxdo_",
 		enabled:        true,
 		providerUserID: "root-invite-provider-id",
 		username:       "root-invite-oauth-user",

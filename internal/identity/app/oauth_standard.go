@@ -193,6 +193,7 @@ func findOrCreateOAuthUser(provider oauth.Provider, oauthUser *oauth.OAuthUser, 
 		inviterID, _ = identitystore.LoadUserIDByAffiliateCode(affCode)
 	}
 
+	grantBlindBoxes := provider.GetProviderPrefix() == "linuxdo_"
 	if genericProvider, ok := provider.(*oauth.GenericOAuthProvider); ok {
 		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 			if err := identitystore.CreateUserWithTx(tx, user, inviterID); err != nil {
@@ -208,7 +209,7 @@ func findOrCreateOAuthUser(provider oauth.Provider, oauthUser *oauth.OAuthUser, 
 		if err != nil {
 			return nil, err
 		}
-		finalizeOAuthUserAndApplyRegistrationRewards(user, inviterID)
+		finalizeOAuthUserAndApplyRegistrationRewards(user, inviterID, grantBlindBoxes)
 		return user, nil
 	}
 
@@ -229,6 +230,6 @@ func findOrCreateOAuthUser(provider oauth.Provider, oauthUser *oauth.OAuthUser, 
 	if err != nil {
 		return nil, err
 	}
-	finalizeOAuthUserAndApplyRegistrationRewards(user, inviterID)
+	finalizeOAuthUserAndApplyRegistrationRewards(user, inviterID, grantBlindBoxes)
 	return user, nil
 }

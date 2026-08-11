@@ -93,7 +93,7 @@ func TestHandleWeChatOAuthCreatesUserAndSession(t *testing.T) {
 	}
 }
 
-func TestHandleWeChatOAuthGrantsRootInviteRegistrationBlindBoxes(t *testing.T) {
+func TestHandleWeChatOAuthSkipsRootInviteRegistrationBlindBoxes(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
 	originalSetting := blindboxsettings.Get()
 	t.Cleanup(func() { blindboxsettings.Set(originalSetting) })
@@ -142,12 +142,12 @@ func TestHandleWeChatOAuthGrantsRootInviteRegistrationBlindBoxes(t *testing.T) {
 	if !response.Success {
 		t.Fatalf("expected success response, got %#v", response)
 	}
-	var order commerceschema.BlindBoxOrder
-	if err := db.Where("user_id = ?", 2).First(&order).Error; err != nil {
-		t.Fatalf("expected registration blind box order: %v", err)
+	var orderCount int64
+	if err := db.Model(&commerceschema.BlindBoxOrder{}).Where("user_id = ?", 2).Count(&orderCount).Error; err != nil {
+		t.Fatalf("failed to count blind box orders: %v", err)
 	}
-	if order.Quantity != 5 || order.OpenedCount != 0 {
-		t.Fatalf("unexpected blind box order: %#v", order)
+	if orderCount != 0 {
+		t.Fatalf("expected no blind box order for WeChat registration, got %d", orderCount)
 	}
 }
 

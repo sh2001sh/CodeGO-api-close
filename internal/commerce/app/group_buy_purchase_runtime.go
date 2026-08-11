@@ -192,6 +192,10 @@ func settleGroupBuyOrder(groupBuyID int64) error {
 
 // ReconcileGroupBuyBonus applies missing tier differences to real members only.
 func ReconcileGroupBuyBonus(groupBuyID int64) (int, error) {
+	return reconcileGroupBuyBonus(groupBuyID, false)
+}
+
+func reconcileGroupBuyBonus(groupBuyID int64, activeSubscriptionsOnly bool) (int, error) {
 	adjusted := 0
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var order commerceschema.GroupBuyOrder
@@ -215,6 +219,9 @@ func ReconcileGroupBuyBonus(groupBuyID int64) (int, error) {
 			sub, err := getGroupBuyMemberSubscriptionTx(tx, member, order.PlanId)
 			if err != nil {
 				return err
+			}
+			if activeSubscriptionsOnly && sub.Status != "active" {
+				continue
 			}
 			if err := addSubscriptionBonusTx(tx, sub, int64(quotaUnitsFromUSD(delta))); err != nil {
 				return err

@@ -169,7 +169,7 @@ func TestHandleOAuthLogsInNewUser(t *testing.T) {
 	}
 }
 
-func TestHandleOAuthGrantsRootInviteRegistrationBlindBoxes(t *testing.T) {
+func TestHandleLinuxDOOAuthGrantsRegistrationBlindBoxesWithoutInvitation(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
 	originalSetting := blindboxsettings.Get()
 	t.Cleanup(func() { blindboxsettings.Set(originalSetting) })
@@ -179,12 +179,6 @@ func TestHandleOAuthGrantsRootInviteRegistrationBlindBoxes(t *testing.T) {
 	setting.RegistrationRewardEndAt = 0
 	blindboxsettings.Set(setting)
 
-	inviter := &identityschema.User{
-		Id: 1, Username: "root-oauth-inviter", AffCode: "ROOT-OAUTH", Role: constant.RoleRootUser, Status: constant.UserStatusEnabled,
-	}
-	if err := db.Create(inviter).Error; err != nil {
-		t.Fatalf("failed to seed root inviter: %v", err)
-	}
 	provider := &stubOAuthProvider{
 		name:           "Root Invite OAuth",
 		prefix:         "linuxdo_",
@@ -202,7 +196,6 @@ func TestHandleOAuthGrantsRootInviteRegistrationBlindBoxes(t *testing.T) {
 	engine.GET("/prepare", func(c *gin.Context) {
 		session := sessions.Default(c)
 		session.Set("oauth_state", "state-root-invite")
-		session.Set("aff", "ROOT-OAUTH")
 		if err := session.Save(); err != nil {
 			t.Fatalf("failed to seed oauth session: %v", err)
 		}
@@ -222,7 +215,7 @@ func TestHandleOAuthGrantsRootInviteRegistrationBlindBoxes(t *testing.T) {
 		t.Fatalf("expected oauth login success, got %#v", response)
 	}
 	var order commerceschema.BlindBoxOrder
-	if err := db.Where("user_id = ?", 2).First(&order).Error; err != nil {
+	if err := db.Where("user_id = ?", 1).First(&order).Error; err != nil {
 		t.Fatalf("expected registration blind box order: %v", err)
 	}
 	if order.Quantity != 5 || order.OpenedCount != 0 {

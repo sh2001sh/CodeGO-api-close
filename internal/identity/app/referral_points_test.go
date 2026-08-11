@@ -60,13 +60,11 @@ func TestGrantRegistrationBlindBoxesIsIdempotent(t *testing.T) {
 	setting.RegistrationRewardStartAt = 0
 	setting.RegistrationRewardEndAt = 0
 	blindboxsettings.Set(setting)
-	inviter := &identityschema.User{Id: 8102, Username: "root-inviter", AffCode: "ROOT8102", Role: constant.RoleRootUser, Status: constant.UserStatusEnabled}
-	require.NoError(t, db.Create(inviter).Error)
 	user := &identityschema.User{Id: 8103, Username: "registration-blind-box", AffCode: "USER8103", Status: constant.UserStatusEnabled}
 	require.NoError(t, db.Create(user).Error)
 
-	require.NoError(t, grantRegistrationBlindBoxes(user.Id, inviter.Id))
-	require.NoError(t, grantRegistrationBlindBoxes(user.Id, inviter.Id))
+	require.NoError(t, grantRegistrationBlindBoxes(user.Id))
+	require.NoError(t, grantRegistrationBlindBoxes(user.Id))
 
 	var orders []commerceschema.BlindBoxOrder
 	require.NoError(t, db.Where("user_id = ?", user.Id).Find(&orders).Error)
@@ -87,19 +85,25 @@ func TestGrantRegistrationBlindBoxesSkipsInactiveCampaign(t *testing.T) {
 	setting.RegistrationRewardStartAt = 0
 	setting.RegistrationRewardEndAt = 1
 	blindboxsettings.Set(setting)
-	inviter := &identityschema.User{Id: 8105, Username: "expired-root-inviter", AffCode: "ROOT8105", Role: constant.RoleRootUser, Status: constant.UserStatusEnabled}
-	require.NoError(t, db.Create(inviter).Error)
-
 	user := &identityschema.User{Id: 8104, Username: "expired-registration-campaign", AffCode: "USER8104", Status: constant.UserStatusEnabled}
 	require.NoError(t, db.Create(user).Error)
-	require.NoError(t, grantRegistrationBlindBoxes(user.Id, inviter.Id))
+	require.NoError(t, grantRegistrationBlindBoxes(user.Id))
 
 	var count int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxOrder{}).Where("user_id = ?", user.Id).Count(&count).Error)
 	assert.Zero(t, count)
 }
 
-func TestGrantRegistrationBlindBoxesSkipsNonRootInviter(t *testing.T) {
+func TestRegistrationRewardEndsAtConfiguredTimestamp(t *testing.T) {
+	setting := blindboxsettings.Setting{
+		RegistrationRewardEnabled: true,
+		RegistrationRewardEndAt:   100,
+	}
+	assert.True(t, setting.RegistrationRewardActive(99))
+	assert.False(t, setting.RegistrationRewardActive(100))
+}
+
+func TestGrantRegistrationBlindBoxesDoesNotRequireInvitation(t *testing.T) {
 	db := setupReferralPointsAppTestDB(t)
 	originalSetting := blindboxsettings.Get()
 	t.Cleanup(func() { blindboxsettings.Set(originalSetting) })
@@ -108,16 +112,14 @@ func TestGrantRegistrationBlindBoxesSkipsNonRootInviter(t *testing.T) {
 	setting.RegistrationRewardStartAt = 0
 	setting.RegistrationRewardEndAt = 0
 	blindboxsettings.Set(setting)
-	inviter := &identityschema.User{Id: 8106, Username: "normal-inviter", AffCode: "USER8106", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled}
-	require.NoError(t, db.Create(inviter).Error)
 	user := &identityschema.User{Id: 8107, Username: "normal-invitee", AffCode: "USER8107", Status: constant.UserStatusEnabled}
 	require.NoError(t, db.Create(user).Error)
 
-	require.NoError(t, grantRegistrationBlindBoxes(user.Id, inviter.Id))
+	require.NoError(t, grantRegistrationBlindBoxes(user.Id))
 
 	var count int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxOrder{}).Where("user_id = ?", user.Id).Count(&count).Error)
-	assert.Zero(t, count)
+	assert.EqualValues(t, 1, count)
 }
 
 func snapshotPaymentSettingForAppTest() func() {

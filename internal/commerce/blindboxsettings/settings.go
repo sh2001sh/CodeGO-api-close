@@ -102,7 +102,7 @@ func (s *Setting) RegistrationRewardActive(now int64) bool {
 	if s.RegistrationRewardStartAt > 0 && now < s.RegistrationRewardStartAt {
 		return false
 	}
-	return s.RegistrationRewardEndAt <= 0 || now <= s.RegistrationRewardEndAt
+	return s.RegistrationRewardEndAt <= 0 || now < s.RegistrationRewardEndAt
 }
 
 func init() {

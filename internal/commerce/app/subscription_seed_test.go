@@ -111,6 +111,28 @@ func TestDefaultDayPassesDoNotParticipateInCollectiveBenefit(t *testing.T) {
 	}
 }
 
+func TestDefaultMonthlyPlansUseCurrentQuotaAndCollectiveRewards(t *testing.T) {
+	expected := map[string]struct {
+		quotaUSD int
+		bonusAt2 float64
+		bonusAt3 float64
+		bonusAt5 float64
+	}{
+		"Lite月卡":     {350, 25, 45, 65},
+		"Standard月卡": {650, 50, 90, 115},
+		"Pro月卡":      {1260, 95, 170, 240},
+		"Ultra月卡":    {2300, 170, 300, 420},
+	}
+
+	for title, want := range expected {
+		plan := requirePresetPlanByTitle(t, title)
+		assert.Equal(t, quotaUnitsFromUSD(float64(want.quotaUSD)), plan.TotalAmount)
+		assert.Equal(t, want.bonusAt2, plan.GroupBuyBonus2)
+		assert.Equal(t, want.bonusAt3, plan.GroupBuyBonus3)
+		assert.Equal(t, want.bonusAt5, plan.GroupBuyBonus5)
+	}
+}
+
 func TestEnsureDefaultSubscriptionPlans_RepairsCollapsedMonthlyQuotaSnapshot(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	ensureSubscriptionSeedTestSchema(t)

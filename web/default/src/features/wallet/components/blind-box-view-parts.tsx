@@ -94,7 +94,7 @@ function getPropDescription(
 ) {
   if (prop.status === 'active' && prop.expires_at) {
     if (prop.prop_type === 'monthly_pass_multiplier') {
-      return `0.1 倍率已生效，使用 monthly-pass 分组；剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}，非生图模型可用。`
+      return `0.1 倍率已生效，已接入纯PRO分组；剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}，非生图模型可用。`
     }
     return t('Active until {{date}}', {
       date: new Date(prop.expires_at * 1000).toLocaleString(),
@@ -104,14 +104,14 @@ function getPropDescription(
     if (prop.prop_type === 'monthly_pass_multiplier') {
       const remaining = prop.remaining_seconds || prop.duration_seconds
       if (prop.status === 'paused') {
-        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后使用 monthly-pass 分组，按 0.1 倍率计费。`
+        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后接入纯PRO分组，按 0.1 倍率计费。`
       }
-      return `启用后可随时暂停，累计可用 ${formatSeconds(remaining)}；仅限 default 分组非生图模型。`
+      return `启用后可随时暂停，累计可用 ${formatSeconds(remaining)}；仅限纯PRO分组非生图模型。`
     }
     if (prop.prop_type === 'zero_hour_multiplier') {
       return prop.status === 'available'
-        ? '启用后 1 小时内可使用 zero-hour 分组，默认分组非生图模型按 0 倍率计费。'
-        : 'zero-hour 分组已激活，仅限当前用户，单用户并发最多 5 个请求。'
+        ? '启用后 1 小时内可使用 zero-hour 分组，纯PRO分组非生图模型按 0 倍率计费。'
+        : 'zero-hour 分组已激活，已接入纯PRO分组，仅限当前用户，单用户并发最多 5 个请求。'
     }
     return prop.status === 'available'
       ? t('Click Use to activate this card for {{hours}} hours.', {

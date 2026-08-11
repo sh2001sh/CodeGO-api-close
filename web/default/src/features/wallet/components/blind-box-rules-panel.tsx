@@ -117,7 +117,7 @@ export function BlindBoxZeroHourCard(props: { data: BlindBoxSelfData | null }) {
               隐藏道具：1 小时 0 倍率卡
             </h3>
             <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-              抽中并启用后 1 小时内，default 分组的非生图模型按 0 倍率计费
+              抽中并启用后 1 小时内，纯PRO分组的非生图模型按 0 倍率计费
             </p>
           </div>
         </div>
@@ -161,7 +161,7 @@ export function BlindBoxZeroHourCard(props: { data: BlindBoxSelfData | null }) {
           <li>每成功结算 $1 增加 1 点，每个实际支付的盲盒增加 5 点。</li>
           <li>点数越高概率越高，抽中后进度归零重新累积。</li>
           <li>
-            启用后使用 zero-hour 分组，仅限本人，单用户并发最多 5
+            启用后使用 zero-hour 分组并接入纯PRO分组，仅限本人，单用户并发最多 5
             个请求，到期后分组自动隐藏。
           </li>
         </ul>
@@ -178,7 +178,7 @@ export function BlindBoxPropRules() {
     { title: '0.9 倍率卡', detail: '在本页点击使用后生效，持续 24 小时' },
     {
       title: '1 小时 0 倍率卡',
-      detail: '在「我的道具」启用，使用 zero-hour 分组，持续 1 小时',
+      detail: '在「我的道具」启用，接入纯PRO分组，持续 1 小时',
     },
   ]
 

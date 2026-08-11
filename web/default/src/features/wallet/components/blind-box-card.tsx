@@ -404,7 +404,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           }
           toast.success(
             record.prop_type === 'zero_hour_multiplier'
-              ? `${record.reward_title} 已启用，zero-hour 分组将持续 1 小时。`
+              ? `${record.reward_title} 已启用，纯PRO分组将持续 1 小时。`
               : `${record.reward_title} 已启用，24 小时后自动失效。`
           )
           await refreshAll()

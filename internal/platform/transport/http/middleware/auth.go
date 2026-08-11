@@ -446,13 +446,13 @@ func TokenAuth() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "0 倍率卡已结束，请切回 default 分组")
 				return
 			}
-			userGroup = "default"
+			userGroup = commerceapp.MultiplierCardRouteGroup
 		} else if monthlyPassActive {
 			if !commerceapp.IsMonthlyPassGroupActive(token.UserId) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "0.1 倍率卡未开启或已结束，请切回 default 分组")
 				return
 			}
-			userGroup = "default"
+			userGroup = commerceapp.MultiplierCardRouteGroup
 		} else if tokenGroup != "" {
 			// check common.UserUsableGroups[userGroup]
 			if _, ok := gatewayroutingapp.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
@@ -475,13 +475,13 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 		if zeroHourActive {
-			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
-			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, commerceapp.MultiplierCardRouteGroup)
+			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, commerceapp.MultiplierCardRouteGroup)
 			httpctx.SetContextKey(c, constant.ContextKeyZeroHourActive, true)
 		}
 		if monthlyPassActive {
-			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
-			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, commerceapp.MultiplierCardRouteGroup)
+			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, commerceapp.MultiplierCardRouteGroup)
 			httpctx.SetContextKey(c, constant.ContextKeyMonthlyPassActive, true)
 		}
 		c.Next()

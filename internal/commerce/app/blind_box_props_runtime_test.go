@@ -170,6 +170,10 @@ func TestMonthlyPassPropPausesAndResumesWithoutLosingRemainingTime(t *testing.T)
 	assert.Greater(t, resumed.ExpiresAt, platformruntime.GetTimestamp())
 }
 
+func TestMultiplierCardsUseProChannelGroup(t *testing.T) {
+	assert.Equal(t, "纯PRO分组", MultiplierCardRouteGroup)
+}
+
 func TestBackfillActiveMonthlyPassBenefitsIsIdempotent(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	now := platformruntime.GetTimestamp()

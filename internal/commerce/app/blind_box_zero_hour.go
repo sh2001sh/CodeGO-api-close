@@ -19,7 +19,10 @@ func init() {
 }
 
 const (
-	ZeroHourGroup               = "zero-hour"
+	ZeroHourGroup = "zero-hour"
+	// MultiplierCardRouteGroup is the Pro channel pool used by active 0 and 0.1 multiplier cards.
+	// Each card keeps its own billing multiplier override.
+	MultiplierCardRouteGroup    = "纯PRO分组"
 	zeroHourDurationSeconds     = int64(60 * 60)
 	zeroHourProgressPerPaidOpen = int64(5)
 	zeroHourProgressCap         = int64(1000)

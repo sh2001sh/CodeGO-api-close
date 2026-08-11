@@ -47,6 +47,7 @@ services:
       SQL_MAX_IDLE_CONNS: ${SQL_MAX_IDLE_CONNS:-5}
       SQL_MAX_LIFETIME: ${SQL_MAX_LIFETIME:-300}
       REDIS_CONN_STRING: ${REDIS_CONN_STRING:?set REDIS_CONN_STRING in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       TZ: ${TZ:-Asia/Shanghai}
       NODE_TYPE: master
       CONTROL_PORT: "3000"

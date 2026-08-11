@@ -166,6 +166,7 @@ func setupDesktopHTTPTestDB(t *testing.T) *gorm.DB {
 		&identitydomain.UserOAuthBinding{},
 		&commerceschema.SubscriptionPlan{},
 		&commerceschema.UserSubscription{},
+		&commerceschema.BlindBoxOrder{},
 		&identitydomain.DesktopAuthSession{},
 		&identitydomain.DesktopAuthorizedDevice{},
 		&identitydomain.DesktopDiagnosticReport{},

@@ -1,7 +1,6 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -10,7 +9,10 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -88,6 +90,64 @@ func TestHandleWeChatOAuthCreatesUserAndSession(t *testing.T) {
 	}
 	if sessionPayload.ID != 1 || sessionPayload.Username != "wechat_1" {
 		t.Fatalf("unexpected session payload: %#v", sessionPayload)
+	}
+}
+
+func TestHandleWeChatOAuthGrantsRootInviteRegistrationBlindBoxes(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	originalSetting := blindboxsettings.Get()
+	t.Cleanup(func() { blindboxsettings.Set(originalSetting) })
+	setting := blindboxsettings.Get()
+	setting.RegistrationRewardEnabled = true
+	setting.RegistrationRewardStartAt = 0
+	setting.RegistrationRewardEndAt = 0
+	blindboxsettings.Set(setting)
+
+	inviter := &identityschema.User{
+		Id: 1, Username: "root-inviter", AffCode: "ROOTAFF", Role: constant.RoleRootUser, Status: constant.UserStatusEnabled,
+	}
+	if err := db.Create(inviter).Error; err != nil {
+		t.Fatalf("failed to seed root inviter: %v", err)
+	}
+
+	previousEnabled := platformconfig.WeChatAuthEnabled
+	previousRegisterEnabled := platformconfig.RegisterEnabled
+	previousAddress := platformconfig.WeChatServerAddress
+	previousToken := platformconfig.WeChatServerToken
+	platformconfig.WeChatAuthEnabled = true
+	platformconfig.RegisterEnabled = true
+	platformconfig.WeChatServerAddress = "https://wechat.example"
+	platformconfig.WeChatServerToken = "wechat-secret"
+	identityapp.SetWeChatHTTPClientForTest(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		recorder := httptest.NewRecorder()
+		recorder.WriteHeader(http.StatusOK)
+		_, _ = recorder.WriteString(`{"success":true,"message":"","data":"wechat-root-invite-open-id"}`)
+		return recorder.Result(), nil
+	})})
+	t.Cleanup(func() {
+		platformconfig.WeChatAuthEnabled = previousEnabled
+		platformconfig.RegisterEnabled = previousRegisterEnabled
+		platformconfig.WeChatServerAddress = previousAddress
+		platformconfig.WeChatServerToken = previousToken
+		identityapp.SetWeChatHTTPClientForTest(nil)
+	})
+
+	engine := gin.New()
+	engine.Use(sessions.Sessions("session", cookie.NewStore([]byte("wechat-invite-test-secret"))))
+	engine.GET("/oauth/wechat", HandleWeChatOAuth)
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/oauth/wechat?code=wechat-code&aff=ROOTAFF", nil))
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected success response, got %#v", response)
+	}
+	var order commerceschema.BlindBoxOrder
+	if err := db.Where("user_id = ?", 2).First(&order).Error; err != nil {
+		t.Fatalf("expected registration blind box order: %v", err)
+	}
+	if order.Quantity != 5 || order.OpenedCount != 0 {
+		t.Fatalf("unexpected blind box order: %#v", order)
 	}
 }
 

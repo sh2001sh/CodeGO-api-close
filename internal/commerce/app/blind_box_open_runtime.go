@@ -185,7 +185,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			if err != nil {
 				return nil, err
 			}
-			sub, _, err := ApplySubscriptionPurchaseTx(tx, userID, subscriptionPlan, "blind_box")
+			sub, mergeQuota, err := prepareBlindBoxSubscriptionRewardTx(tx, userID, subscriptionPlan)
 			if err != nil {
 				return nil, err
 			}
@@ -195,6 +195,19 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			record.UserSubscriptionId = sub.Id
 			record.RewardUSD = 0
 			pityState.ConsecutiveLowRewards = 0
+			if err := tx.Create(&record).Error; err != nil {
+				return nil, err
+			}
+			if mergeQuota {
+				if err := creditBlindBoxSubscriptionQuotaTx(tx, sub, subscriptionPlan.TotalAmount, record.Id); err != nil {
+					return nil, err
+				}
+			}
+			if err := awardMonthlyPassPropTx(tx, userID, subscriptionPlan, fmt.Sprintf("blind-box-subscription:%d", record.Id)); err != nil {
+				return nil, err
+			}
+			records = append(records, record)
+			continue
 		} else {
 			rewardUSD := 0.0
 			tierName := "pity"

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/sh2001sh/new-api/constant"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -281,6 +282,83 @@ func TestOpenBlindBoxOrderByTradeNo_PropRewardAdvancesPityAndThresholdDrawTrigge
 
 	require.NoError(t, db.Where("user_id = ?", user.Id).First(&pityState).Error)
 	assert.Zero(t, pityState.ConsecutiveLowRewards)
+}
+
+func TestOpenBlindBoxOrderByTradeNo_SubscriptionRewardPreservesExistingCard(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	setting := blindboxsettings.Get()
+	originalSetting := setting
+	setting.Enabled = true
+	setting.SubscriptionPrizeProbability = 1
+	setting.SubscriptionPlanTitle = "盲盒Lite月卡"
+	setting.FirstPurchaseGuaranteeUSD = 0
+	blindboxsettings.Set(setting)
+	t.Cleanup(func() {
+		blindboxsettings.Set(originalSetting)
+	})
+
+	litePlan := &commerceschema.SubscriptionPlan{
+		Id: 9520, Title: setting.SubscriptionPlanTitle, PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierLite, DurationUnit: commerceschema.SubscriptionDurationMonth,
+		DurationValue: 1, Enabled: true, TotalAmount: 1750, PeriodAmount: 1750,
+	}
+	standardPlan := &commerceschema.SubscriptionPlan{
+		Id: 9521, Title: "测试Standard月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierStandard, DurationUnit: commerceschema.SubscriptionDurationMonth,
+		DurationValue: 1, Enabled: true, TotalAmount: 3250, PeriodAmount: 3250,
+	}
+	require.NoError(t, db.Create(litePlan).Error)
+	require.NoError(t, db.Create(standardPlan).Error)
+
+	user := &identityschema.User{Id: 8820, Username: "blind_box_subscription_reward_user", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	now := time.Now().Unix()
+	subscription := &commerceschema.UserSubscription{
+		Id: 9520, UserId: user.Id, PlanId: standardPlan.Id, AmountTotal: 3250, AmountUsed: 100,
+		PeriodAmount: 3250, Status: "active", StartTime: now - 60, EndTime: now + 86400,
+	}
+	require.NoError(t, db.Create(subscription).Error)
+	require.NoError(t, restoreSubscriptionLedgerBalanceAfterResetTx(db, subscription, "test-initial"))
+	require.NoError(t, db.Create(&commerceschema.BlindBoxProp{
+		UserId: user.Id, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		Title: "30 分钟 0.1 倍率卡", Status: commerceschema.BlindBoxPropStatusPaused,
+		Multiplier: 0.1, DurationSeconds: 1800, RemainingSeconds: 1357,
+		BenefitReference: "monthly-pass-backfill-test:9520",
+	}).Error)
+
+	order := &commerceschema.BlindBoxOrder{
+		UserId: user.Id, Quantity: 1, Money: 5, TradeNo: "blind-box-subscription-card-order",
+		PaymentMethod: "test", PaymentProvider: "test", Status: constant.TopUpStatusSuccess,
+		CreateTime: now, CompleteTime: now,
+	}
+	require.NoError(t, db.Create(order).Error)
+
+	records, err := OpenBlindBoxOrderByTradeNo(order.TradeNo)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Equal(t, commerceschema.BlindBoxRewardTypeSubscription, records[0].RewardType)
+	require.Equal(t, subscription.Id, records[0].UserSubscriptionId)
+
+	var savedSubscription commerceschema.UserSubscription
+	require.NoError(t, db.First(&savedSubscription, subscription.Id).Error)
+	assert.Equal(t, int64(5000), savedSubscription.AmountTotal)
+	assert.Equal(t, int64(3250), savedSubscription.PeriodAmount)
+
+	var props []commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND prop_type = ?", user.Id, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).Order("id").Find(&props).Error)
+	require.Len(t, props, 2)
+	assert.Equal(t, int64(1800), props[0].DurationSeconds)
+	assert.Equal(t, int64(1357), props[0].RemainingSeconds)
+	assert.Equal(t, int64(900), props[1].DurationSeconds)
+	assert.Equal(t, int64(900), props[1].RemainingSeconds)
+	assert.Equal(t, fmt.Sprintf("blind-box-subscription:%d", records[0].Id), props[1].BenefitReference)
+
+	var account billingschema.BillingAccount
+	require.NoError(t, db.Where("account_type = ? AND owner_type = ? AND owner_id = ?", "subscription", "user_subscription", subscription.Id).First(&account).Error)
+	var snapshot billingschema.BillingBalanceSnapshot
+	require.NoError(t, db.First(&snapshot, "account_id = ?", account.AccountID).Error)
+	assert.Equal(t, int64(4900), snapshot.AvailableBalance)
 }
 
 func TestApplyFirstPurchaseMinimumGuarantee(t *testing.T) {

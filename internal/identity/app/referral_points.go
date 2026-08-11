@@ -1,13 +1,17 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
@@ -18,12 +22,16 @@ import (
 )
 
 const referralInviteeRegisterRewardPoints int64 = 2
+const registrationBlindBoxQuantity = 10
 
 func insertUserAndApplyRegistrationRewards(user *identityschema.User, inviterID int) error {
 	if user == nil {
 		return fmt.Errorf("user is nil")
 	}
 	if err := identitystore.CreateUser(user, inviterID); err != nil {
+		return err
+	}
+	if err := grantRegistrationBlindBoxes(user.Id); err != nil {
 		return err
 	}
 	recordRegistrationBonusLog(user.Id)
@@ -38,8 +46,43 @@ func finalizeOAuthUserAndApplyRegistrationRewards(user *identityschema.User, inv
 	if err := identitystore.FinalizeCreatedUser(user.Id); err != nil {
 		platformobservability.SysLog(fmt.Sprintf("failed to finalize created user %d: %v", user.Id, err))
 	}
+	if err := grantRegistrationBlindBoxes(user.Id); err != nil {
+		platformobservability.SysLog(fmt.Sprintf("failed to grant registration blind boxes to user %d: %v", user.Id, err))
+	}
 	recordRegistrationBonusLog(user.Id)
 	applyReferralRegistrationRewards(inviterID, user.Id)
+}
+
+func grantRegistrationBlindBoxes(userID int) error {
+	if userID <= 0 {
+		return fmt.Errorf("invalid registration blind box user")
+	}
+
+	now := platformruntime.GetTimestamp()
+	tradeNo := fmt.Sprintf("registration-blind-box-%d", userID)
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var existing commerceschema.BlindBoxOrder
+		err := tx.Where("trade_no = ?", tradeNo).First(&existing).Error
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return tx.Create(&commerceschema.BlindBoxOrder{
+			UserId:          userID,
+			Quantity:        registrationBlindBoxQuantity,
+			Money:           0,
+			TradeNo:         tradeNo,
+			PaymentMethod:   "registration_bonus",
+			PaymentProvider: "system",
+			Source:          commerceschema.BlindBoxOrderSourceRegistrationBenefit,
+			BenefitCycle:    fmt.Sprintf("registration:%d", userID),
+			Status:          constant.TopUpStatusSuccess,
+			CreateTime:      now,
+			CompleteTime:    now,
+		}).Error
+	})
 }
 
 func recordRegistrationBonusLog(userID int) {

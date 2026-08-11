@@ -13,6 +13,7 @@ const (
 
 	BlindBoxOrderSourcePurchase            = "purchase"
 	BlindBoxOrderSourceAdminGrant          = "admin_grant"
+	BlindBoxOrderSourceRegistrationBenefit = "registration_benefit"
 	BlindBoxOrderSourceSubscriptionBenefit = "subscription_benefit"
 
 	BlindBoxCreditStatusActive    = "active"

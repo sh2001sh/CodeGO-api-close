@@ -7,6 +7,7 @@ import (
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -34,6 +35,7 @@ func setupReferralPointsAppTestDB(t *testing.T) *gorm.DB {
 
 	require.NoError(t, db.AutoMigrate(
 		&identityschema.User{},
+		&commerceschema.BlindBoxOrder{},
 		&auditschema.Log{},
 		&billingschema.PointAccount{},
 		&billingschema.PointLedger{},
@@ -46,6 +48,23 @@ func setupReferralPointsAppTestDB(t *testing.T) *gorm.DB {
 		}
 	})
 	return db
+}
+
+func TestGrantRegistrationBlindBoxesIsIdempotent(t *testing.T) {
+	db := setupReferralPointsAppTestDB(t)
+	user := &identityschema.User{Id: 8103, Username: "registration-blind-box", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+
+	require.NoError(t, grantRegistrationBlindBoxes(user.Id))
+	require.NoError(t, grantRegistrationBlindBoxes(user.Id))
+
+	var orders []commerceschema.BlindBoxOrder
+	require.NoError(t, db.Where("user_id = ?", user.Id).Find(&orders).Error)
+	require.Len(t, orders, 1)
+	assert.Equal(t, registrationBlindBoxQuantity, orders[0].Quantity)
+	assert.Equal(t, 0, orders[0].OpenedCount)
+	assert.Equal(t, commerceschema.BlindBoxOrderSourceRegistrationBenefit, orders[0].Source)
+	assert.Equal(t, constant.TopUpStatusSuccess, orders[0].Status)
 }
 
 func snapshotPaymentSettingForAppTest() func() {

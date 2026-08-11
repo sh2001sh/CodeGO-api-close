@@ -161,7 +161,11 @@ func CreateAdminUser(req AdminUserMutateRequest, actorRole int) error {
 		DisplayName: candidate.DisplayName,
 		Role:        candidate.Role,
 	}
-	return insertUserAndApplyRegistrationRewards(&cleanUser, 0)
+	if err := identitystore.CreateUser(&cleanUser, 0); err != nil {
+		return err
+	}
+	recordRegistrationBonusLog(cleanUser.Id)
+	return nil
 }
 
 func UpdateAdminUser(req AdminUserMutateRequest, actorRole int) error {

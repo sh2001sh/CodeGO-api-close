@@ -287,6 +287,7 @@ export type BillingSettings = {
   'checkin_setting.max_quota': number
   'blind_box_setting.enabled': boolean
   'blind_box_setting.unit_price': number
+  'blind_box_setting.expire_days': number
   'blind_box_setting.daily_limit': number
   'blind_box_setting.monthly_limit': number
   'blind_box_setting.daily_open_limit': number

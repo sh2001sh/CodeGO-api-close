@@ -6,6 +6,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -22,7 +23,7 @@ import (
 )
 
 const referralInviteeRegisterRewardPoints int64 = 2
-const registrationBlindBoxQuantity = 10
+const registrationBlindBoxQuantity = 5
 
 func insertUserAndApplyRegistrationRewards(user *identityschema.User, inviterID int) error {
 	if user == nil {
@@ -63,6 +64,7 @@ func grantRegistrationBlindBoxes(userID int) error {
 	}
 
 	now := platformruntime.GetTimestamp()
+	setting := blindboxsettings.Get()
 	tradeNo := fmt.Sprintf("registration-blind-box-%d", userID)
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var existing commerceschema.BlindBoxOrder
@@ -85,6 +87,7 @@ func grantRegistrationBlindBoxes(userID int) error {
 			Status:          constant.TopUpStatusSuccess,
 			CreateTime:      now,
 			CompleteTime:    now,
+			ExpiresAt:       now + int64(setting.ExpireDays)*24*60*60,
 		}).Error
 	})
 }

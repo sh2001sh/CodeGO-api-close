@@ -31,6 +31,7 @@ const tierSchema = z.object({
 const schema = z.object({
   enabled: z.boolean(),
   unitPrice: z.coerce.number().min(0),
+  expireDays: z.coerce.number().int().min(1).max(365),
   dailyLimit: z.coerce.number().int().min(1),
   monthlyLimit: z.coerce.number().int().min(1),
   dailyOpenLimit: z.coerce.number().int().min(1),
@@ -114,6 +115,7 @@ export function BlindBoxSettingsSection({
   defaultValues: {
     enabled: boolean
     unitPrice: number
+    expireDays: number
     dailyLimit: number
     monthlyLimit: number
     dailyOpenLimit: number
@@ -134,6 +136,7 @@ export function BlindBoxSettingsSection({
     defaultValues: {
       enabled: defaultValues.enabled,
       unitPrice: defaultValues.unitPrice,
+      expireDays: defaultValues.expireDays,
       dailyLimit: defaultValues.dailyLimit,
       monthlyLimit: defaultValues.monthlyLimit,
       dailyOpenLimit: defaultValues.dailyOpenLimit,
@@ -174,6 +177,11 @@ export function BlindBoxSettingsSection({
       'blind_box_setting.unit_price',
       values.unitPrice,
       defaultValues.unitPrice
+    )
+    pushIfChanged(
+      'blind_box_setting.expire_days',
+      values.expireDays,
+      defaultValues.expireDays
     )
     pushIfChanged(
       'blind_box_setting.daily_limit',
@@ -303,6 +311,22 @@ export function BlindBoxSettingsSection({
                   <FormControl>
                     <Input type='number' min={1} {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='expireDays'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>盲盒有效期（天）</FormLabel>
+                  <FormControl>
+                    <Input type='number' min={1} max={365} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    邀请码注册赠送和购买获得的未开启盲盒，到期后不可再开启
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

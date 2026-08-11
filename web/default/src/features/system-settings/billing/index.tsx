@@ -122,6 +122,7 @@ const defaultBillingSettings: BillingSettings = {
   'checkin_setting.max_quota': 10000,
   'blind_box_setting.enabled': false,
   'blind_box_setting.unit_price': 2.5,
+  'blind_box_setting.expire_days': 7,
   'blind_box_setting.daily_limit': 50,
   'blind_box_setting.monthly_limit': 500,
   'blind_box_setting.daily_open_limit': 5000,

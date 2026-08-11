@@ -249,6 +249,7 @@ const BILLING_SECTIONS = [
         defaultValues={{
           enabled: settings['blind_box_setting.enabled'],
           unitPrice: settings['blind_box_setting.unit_price'],
+          expireDays: settings['blind_box_setting.expire_days'],
           dailyLimit: settings['blind_box_setting.daily_limit'],
           monthlyLimit: settings['blind_box_setting.monthly_limit'],
           dailyOpenLimit: settings['blind_box_setting.daily_open_limit'],

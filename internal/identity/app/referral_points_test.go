@@ -65,6 +65,7 @@ func TestGrantRegistrationBlindBoxesIsIdempotent(t *testing.T) {
 	assert.Equal(t, 0, orders[0].OpenedCount)
 	assert.Equal(t, commerceschema.BlindBoxOrderSourceRegistrationBenefit, orders[0].Source)
 	assert.Equal(t, constant.TopUpStatusSuccess, orders[0].Status)
+	assert.Greater(t, orders[0].ExpiresAt, orders[0].CreateTime)
 }
 
 func snapshotPaymentSettingForAppTest() func() {

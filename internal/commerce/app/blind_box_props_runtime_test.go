@@ -134,3 +134,62 @@ func TestExpiredZeroHourPropDoesNotBlockAnotherCard(t *testing.T) {
 		return nil
 	}))
 }
+
+func TestMonthlyPassPropPausesAndResumesWithoutLosingRemainingTime(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8815, Username: "monthly_pass_user", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	plan := &commerceschema.SubscriptionPlan{
+		Id: 8815, Title: "Standard monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierStandard,
+	}
+	require.NoError(t, db.Create(plan).Error)
+
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return awardMonthlyPassPropTx(tx, user.Id, plan, "monthly-pass-test:8815")
+	}))
+	var prop commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ?", user.Id).First(&prop).Error)
+	assert.Equal(t, int64(30*60), prop.RemainingSeconds)
+
+	activated, err := ActivateBlindBoxProp(user.Id, prop.Id)
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusActive, activated.Status)
+	assert.True(t, IsMonthlyPassGroupActive(user.Id))
+	assert.Equal(t, int64(1), MonthlyPassConcurrentRequests(user.Id))
+
+	paused, err := PauseBlindBoxProp(user.Id, prop.Id)
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusPaused, paused.Status)
+	assert.Positive(t, paused.RemainingSeconds)
+	assert.False(t, IsMonthlyPassGroupActive(user.Id))
+
+	resumed, err := ActivateBlindBoxProp(user.Id, prop.Id)
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusActive, resumed.Status)
+	assert.Greater(t, resumed.ExpiresAt, platformruntime.GetTimestamp())
+}
+
+func TestBackfillActiveMonthlyPassBenefitsIsIdempotent(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	now := platformruntime.GetTimestamp()
+	user := &identityschema.User{Id: 8816, Username: "monthly_pass_backfill", Status: constant.UserStatusEnabled}
+	plan := &commerceschema.SubscriptionPlan{
+		Id: 8816, Title: "Pro monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierPro,
+	}
+	subscription := &commerceschema.UserSubscription{
+		Id: 8816, UserId: user.Id, PlanId: plan.Id, Status: "active", StartTime: now - 60, EndTime: now + 86400,
+	}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, db.Create(plan).Error)
+	require.NoError(t, db.Create(subscription).Error)
+
+	require.NoError(t, BackfillActiveMonthlyPassBenefits())
+	require.NoError(t, BackfillActiveMonthlyPassBenefits())
+	var props []commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND prop_type = ?", user.Id, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).Find(&props).Error)
+	require.Len(t, props, 1)
+	assert.Equal(t, int64(45*60), props[0].DurationSeconds)
+	assert.Equal(t, "monthly-pass-backfill-20260811:8816", props[0].BenefitReference)
+}

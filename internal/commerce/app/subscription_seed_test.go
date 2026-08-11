@@ -185,6 +185,38 @@ func TestEnsureDefaultSubscriptionPlans_RepairsCollapsedMonthlyQuotaSnapshot(t *
 	assert.Equal(t, monthPlan.TotalAmount-reloadedSub.AmountUsed, snapshot.AvailableBalance)
 }
 
+func TestEnsureDefaultSubscriptionPlans_TopsUpActiveMonthlyQuotaWithoutReducingHistory(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	ensureSubscriptionSeedTestSchema(t)
+	now := time.Now().Unix()
+	preset := requirePresetPlanByTitle(t, "Lite月卡")
+	legacyPlan := preset
+	legacyPlan.Id = 9651
+	legacyPlan.TotalAmount = quotaUnitsFromUSD(300)
+	require.NoError(t, db.Create(&legacyPlan).Error)
+	insertSubscriptionStoreTestUser(t, 9651, []int{9652})
+	subscription := &commerceschema.UserSubscription{
+		Id: 9652, UserId: 9651, PlanId: legacyPlan.Id,
+		AmountTotal: quotaUnitsFromUSD(300), AmountUsed: quotaUnitsFromUSD(100),
+		StartTime: now - 3600, EndTime: now + 30*86400, Status: "active",
+	}
+	require.NoError(t, db.Create(subscription).Error)
+
+	require.NoError(t, EnsureDefaultSubscriptionPlans())
+	var reloaded commerceschema.UserSubscription
+	require.NoError(t, db.First(&reloaded, subscription.Id).Error)
+	assert.Equal(t, preset.TotalAmount, reloaded.AmountTotal)
+	assert.Equal(t, subscription.AmountUsed, reloaded.AmountUsed)
+
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(subscription.Id), QuotaUnit: "quota",
+	})
+	require.NoError(t, err)
+	var snapshot billingschema.BillingBalanceSnapshot
+	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
+	assert.Equal(t, preset.TotalAmount-subscription.AmountUsed, snapshot.AvailableBalance)
+}
+
 func TestEnsureDefaultSubscriptionPlans_UpdatesLegacyGroupBuyColumnsWithoutMissingColumnError(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	ensureSubscriptionSeedTestSchema(t)

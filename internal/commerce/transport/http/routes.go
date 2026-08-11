@@ -102,6 +102,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.POST("/pay", middleware.CriticalRateLimit(), requestBlindBoxPay)
 		blindBoxRoute.POST("/open", middleware.CriticalRateLimit(), openBlindBox)
 		blindBoxRoute.POST("/props/:id/use", middleware.CriticalRateLimit(), useBlindBoxProp)
+		blindBoxRoute.POST("/props/:id/pause", middleware.CriticalRateLimit(), pauseBlindBoxProp)
 	}
 
 	dailyLuckyNumberRoute := apiRouter.Group("/daily-lucky-number")

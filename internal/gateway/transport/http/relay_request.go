@@ -88,9 +88,9 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 	relayInfo.FirstByteTrace = firstByteTrace
 	firstByteTrace.MarkRelayInfoReady()
-	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
-		if relayFormat == types.RelayFormatOpenAIImage || gatewaycontract.IsImageGenerationModel(relayInfo.OriginModelName) {
-			newAPIError = types.NewErrorWithStatusCode(errors.New("0 倍率分组不支持生图模型"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) || httpctx.GetContextKeyBool(c, constant.ContextKeyMonthlyPassActive) {
+		if specialMultiplierUnsupportedRelay(relayFormat, relayInfo.OriginModelName) {
+			newAPIError = types.NewErrorWithStatusCode(errors.New("倍率卡分组仅支持文本和代码模型"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
 			return
 		}
 		releaseSlot, slotErr := acquireZeroHourSlot(c)
@@ -321,6 +321,18 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	if len(useChannel) > 1 {
 		retryLogStr := fmt.Sprintf("retry channels: %s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
+	}
+}
+
+func specialMultiplierUnsupportedRelay(relayFormat types.RelayFormat, modelName string) bool {
+	if gatewaycontract.IsImageGenerationModel(modelName) {
+		return true
+	}
+	switch relayFormat {
+	case types.RelayFormatOpenAIImage, types.RelayFormatOpenAIAudio, types.RelayFormatOpenAIRealtime:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -45,15 +45,67 @@ func ActivateBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp,
 		if !ok || !spec.Activatable {
 			return errors.New("this prop is applied automatically")
 		}
-		if prop.Status != commerceschema.BlindBoxPropStatusAvailable {
+		canResumeMonthlyPass := prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier && prop.Status == commerceschema.BlindBoxPropStatusPaused
+		if prop.Status != commerceschema.BlindBoxPropStatusAvailable && !canResumeMonthlyPass {
 			return errors.New("this prop cannot be activated")
 		}
 		if prop.PropType == commerceschema.BlindBoxPropTypeZeroHourMultiplier && hasActiveZeroHourPropTx(tx, userID) {
 			return errors.New("zero-hour prop is already active")
 		}
+		if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
+			if hasActiveMonthlyPassPropTx(tx, userID) {
+				return errors.New("0.1 倍率卡已经生效")
+			}
+			if prop.RemainingSeconds <= 0 {
+				prop.RemainingSeconds = prop.DurationSeconds
+			}
+			if prop.RemainingSeconds <= 0 {
+				return errors.New("0.1 倍率卡剩余时间不足")
+			}
+		}
 		prop.Status = commerceschema.BlindBoxPropStatusActive
 		prop.ActivatedAt = now
-		prop.ExpiresAt = now + prop.DurationSeconds
+		if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
+			prop.ExpiresAt = now + prop.RemainingSeconds
+		} else {
+			prop.ExpiresAt = now + prop.DurationSeconds
+		}
+		return tx.Save(&prop).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &prop, nil
+}
+
+// PauseBlindBoxProp pauses a monthly pass card and preserves its unused active time.
+func PauseBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp, error) {
+	if userID <= 0 || propID <= 0 {
+		return nil, errors.New("invalid blind box prop request")
+	}
+	var prop commerceschema.BlindBoxProp
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		now := platformruntime.GetTimestamp()
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
+			return err
+		}
+		if prop.PropType != commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
+			return errors.New("this prop cannot be paused")
+		}
+		if err := expireBlindBoxPropIfNeededTx(tx, &prop, now); err != nil {
+			return err
+		}
+		if prop.Status != commerceschema.BlindBoxPropStatusActive {
+			return errors.New("this prop is not active")
+		}
+		prop.RemainingSeconds = max(prop.ExpiresAt-now, 0)
+		if prop.RemainingSeconds == 0 {
+			prop.Status = commerceschema.BlindBoxPropStatusExpired
+			prop.ExpiresAt = 0
+			return tx.Save(&prop).Error
+		}
+		prop.Status = commerceschema.BlindBoxPropStatusPaused
+		prop.ExpiresAt = 0
 		return tx.Save(&prop).Error
 	})
 	if err != nil {
@@ -159,6 +211,9 @@ func expireBlindBoxPropIfNeededTx(tx *gorm.DB, prop *commerceschema.BlindBoxProp
 		return nil
 	}
 	prop.Status = commerceschema.BlindBoxPropStatusExpired
+	if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
+		prop.RemainingSeconds = 0
+	}
 	return tx.Save(prop).Error
 }
 
@@ -169,8 +224,9 @@ func expireUserBlindBoxPropsTx(tx *gorm.DB, userID int, now int64) error {
 	return tx.Model(&commerceschema.BlindBoxProp{}).
 		Where("user_id = ? AND status = ? AND expires_at > 0 AND expires_at <= ?", userID, commerceschema.BlindBoxPropStatusActive, now).
 		Updates(map[string]any{
-			"status":     commerceschema.BlindBoxPropStatusExpired,
-			"updated_at": now,
+			"status":            commerceschema.BlindBoxPropStatusExpired,
+			"remaining_seconds": int64(0),
+			"updated_at":        now,
 		}).Error
 }
 
@@ -298,6 +354,12 @@ func blindBoxPropSpecs() []commerceschema.BlindBoxPropSpec {
 			Multiplier:      0,
 			DurationSeconds: zeroHourDurationSeconds,
 			Activatable:     true,
+		},
+		{
+			PropType:    commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+			Title:       "月卡 0.1 倍率卡",
+			Multiplier:  0.1,
+			Activatable: true,
 		},
 	}
 }

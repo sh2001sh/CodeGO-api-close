@@ -166,7 +166,7 @@ func TestSettleGroupBuyOrderAddsBonusToSubscriptionInsteadOfWallet(t *testing.T)
 	assert.NotZero(t, refreshedOrder.SettledAt)
 }
 
-func TestSettleGroupBuyOrder_OnlyOneRealMember_MarkedExpired(t *testing.T) {
+func TestSettleGroupBuyOrder_OnlyOneRealMemberAndGhost_MarkedCompletedAtTwoMemberTier(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	plan := &commerceschema.SubscriptionPlan{
@@ -246,11 +246,11 @@ func TestSettleGroupBuyOrder_OnlyOneRealMember_MarkedExpired(t *testing.T) {
 
 	var settled commerceschema.GroupBuyOrder
 	require.NoError(t, db.Where("id = ?", order.Id).First(&settled).Error)
-	assert.Equal(t, commerceschema.GroupBuyStatusExpired, settled.Status)
+	assert.Equal(t, commerceschema.GroupBuyStatusCompleted, settled.Status)
 
 	var updatedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", sub.Id).First(&updatedSub).Error)
-	assert.Equal(t, initialTotal, updatedSub.AmountTotal)
+	assert.Equal(t, initialTotal+int64(platformruntime.QuotaPerUnit*20), updatedSub.AmountTotal)
 }
 
 func TestSettleGroupBuyOrder_TwoRealMembers_MarkedCompleted(t *testing.T) {
@@ -340,7 +340,9 @@ func TestSettleGroupBuyOrder_TwoRealMembers_MarkedCompleted(t *testing.T) {
 	require.NoError(t, db.Where("id = ?", order.Id).First(&settled).Error)
 	assert.Equal(t, commerceschema.GroupBuyStatusCompleted, settled.Status)
 
-	expectedBonus := int64(platformruntime.QuotaPerUnit * 20)
+	// The ghost member counts toward the tier, while only real paid members
+	// receive the corresponding tier reward.
+	expectedBonus := int64(platformruntime.QuotaPerUnit * 35)
 	for _, sub := range subs {
 		var updated commerceschema.UserSubscription
 		require.NoError(t, db.Where("id = ?", sub.Id).First(&updated).Error)

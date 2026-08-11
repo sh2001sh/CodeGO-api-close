@@ -147,6 +147,12 @@ func BuildUserGroupsPayload(userID int) map[string]map[string]any {
 			"desc":  "盲盒 0 倍率卡生效中，仅限 default 分组非生图模型",
 		}
 	}
+	if commerceapp.IsMonthlyPassGroupActive(userID) {
+		usableGroups[commerceapp.MonthlyPassGroup] = map[string]any{
+			"ratio": 0.1,
+			"desc":  "月卡 0.1 倍率卡生效中，仅限 default 分组非生图模型",
+		}
+	}
 
 	return usableGroups
 }

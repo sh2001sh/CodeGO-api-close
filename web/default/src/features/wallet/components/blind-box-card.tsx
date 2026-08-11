@@ -16,6 +16,7 @@ import {
   openBlindBoxes,
   requestBlindBoxPayment,
   activateBlindBoxProp,
+  pauseBlindBoxProp,
 } from '../api'
 import { submitPaymentForm } from '../lib'
 import type {
@@ -418,13 +419,25 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
 
   const handleUseProp = useCallback(
     async (prop: BlindBoxProp) => {
-      if (prop.status !== 'available') return
+      if (
+        prop.status !== 'available' &&
+        !(
+          prop.prop_type === 'monthly_pass_multiplier' &&
+          prop.status === 'paused'
+        )
+      ) {
+        return
+      }
       try {
         const response = await activateBlindBoxProp(prop.id)
         if (!isApiSuccess(response)) {
           throw new Error(response.message || t('Failed to use prop'))
         }
-        toast.success(t('{{title}} is now active.', { title: prop.title }))
+        toast.success(
+          prop.prop_type === 'monthly_pass_multiplier'
+            ? `${prop.title} 已开启，可随时暂停。`
+            : t('{{title}} is now active.', { title: prop.title })
+        )
         await refreshAll()
         await queryClient.invalidateQueries({ queryKey: ['user-groups'] })
       } catch (error) {
@@ -434,6 +447,24 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
       }
     },
     [queryClient, refreshAll, t]
+  )
+
+  const handlePauseProp = useCallback(
+    async (prop: BlindBoxProp) => {
+      if (prop.status !== 'active') return
+      try {
+        const response = await pauseBlindBoxProp(prop.id)
+        if (!isApiSuccess(response)) {
+          throw new Error(response.message || '暂停失败')
+        }
+        toast.success(`${prop.title} 已暂停，剩余时间已保留。`)
+        await refreshAll()
+        await queryClient.invalidateQueries({ queryKey: ['user-groups'] })
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '暂停失败')
+      }
+    },
+    [queryClient, refreshAll]
   )
 
   const handleOpenExternal = useCallback(() => {
@@ -540,6 +571,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
             props={data?.props || []}
             disabled={openingCount !== null || paying}
             onUse={(prop) => void handleUseProp(prop)}
+            onPause={(prop) => void handlePauseProp(prop)}
           />
         </DialogContent>
       </Dialog>

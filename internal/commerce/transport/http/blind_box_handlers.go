@@ -83,6 +83,20 @@ func useBlindBoxProp(c *gin.Context) {
 	httpapi.ApiSuccess(c, gin.H{"prop": prop})
 }
 
+func pauseBlindBoxProp(c *gin.Context) {
+	propID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || propID <= 0 {
+		httpapi.ApiErrorMsg(c, "invalid blind box prop id")
+		return
+	}
+	prop, err := commerceapp.PauseBlindBoxProp(c.GetInt("id"), propID)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{"prop": prop})
+}
+
 func getBlindBoxOrderStatus(c *gin.Context) {
 	payload, err := commerceapp.BuildBlindBoxOrderStatusPayload(c.GetInt("id"), c.Param("trade_no"))
 	if err != nil {

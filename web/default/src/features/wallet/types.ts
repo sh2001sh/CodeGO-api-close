@@ -383,16 +383,25 @@ export interface BlindBoxProp {
   open_record_id: number
   prop_type: string
   title: string
-  status: 'available' | 'active' | 'reserved' | 'used' | 'expired' | string
+  status:
+    | 'available'
+    | 'active'
+    | 'paused'
+    | 'reserved'
+    | 'used'
+    | 'expired'
+    | string
   discount_rate: number
   multiplier: number
   duration_seconds: number
+  remaining_seconds?: number
   activated_at?: number
   expires_at?: number
   reserved_at?: number
   used_at?: number
   reserved_order_type?: string
   reserved_order_trade_no?: string
+  benefit_reference?: string
   created_at: number
   updated_at: number
 }

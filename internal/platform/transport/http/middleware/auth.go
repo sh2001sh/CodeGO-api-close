@@ -440,9 +440,16 @@ func TokenAuth() func(c *gin.Context) {
 		userGroup := userCache.Group
 		tokenGroup := token.Group
 		zeroHourActive := tokenGroup == commerceapp.ZeroHourGroup
+		monthlyPassActive := tokenGroup == commerceapp.MonthlyPassGroup
 		if zeroHourActive {
 			if !commerceapp.IsZeroHourGroupActive(token.UserId) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "0 倍率卡已结束，请切回 default 分组")
+				return
+			}
+			userGroup = "default"
+		} else if monthlyPassActive {
+			if !commerceapp.IsMonthlyPassGroupActive(token.UserId) {
+				abortWithOpenAiMessage(c, http.StatusForbidden, "0.1 倍率卡未开启或已结束，请切回 default 分组")
 				return
 			}
 			userGroup = "default"
@@ -471,6 +478,11 @@ func TokenAuth() func(c *gin.Context) {
 			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
 			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
 			httpctx.SetContextKey(c, constant.ContextKeyZeroHourActive, true)
+		}
+		if monthlyPassActive {
+			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
+			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+			httpctx.SetContextKey(c, constant.ContextKeyMonthlyPassActive, true)
 		}
 		c.Next()
 	}

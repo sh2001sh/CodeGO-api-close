@@ -45,6 +45,12 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *RelayInfo) types.GroupRatioIn
 		groupRatioInfo.HasSpecialRatio = true
 		return groupRatioInfo
 	}
+	if httpctx.GetContextKeyBool(ctx, constant.ContextKeyMonthlyPassActive) {
+		groupRatioInfo.GroupRatio = 0.1
+		groupRatioInfo.GroupSpecialRatio = 0.1
+		groupRatioInfo.HasSpecialRatio = true
+		return groupRatioInfo
+	}
 
 	autoGroup, exists := ctx.Get("auto_group")
 	if exists {

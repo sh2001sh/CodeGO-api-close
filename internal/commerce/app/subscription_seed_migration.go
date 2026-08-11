@@ -101,8 +101,11 @@ func migratePresetUserSubscriptions(plan *commerceschema.SubscriptionPlan) error
 
 func buildPresetSubscriptionMigration(sub commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, legacyTotalUSD float64, legacyPeriodUSD float64) map[string]any {
 	updates := map[string]any{}
-	fixTotal := isLegacyPresetPlainUSDValue(sub.AmountTotal, legacyTotalUSD) || isCollapsedPresetPeriodicQuota(plan, sub) || (plan.PeriodAmount == 0 && sub.PeriodAmount > 0 && sub.AmountTotal <= sub.PeriodAmount)
-	if fixTotal && sub.AmountTotal != plan.TotalAmount {
+	activeMonthlyTopUp := sub.Status == "active" && sub.EndTime > platformruntime.GetTimestamp() && plan.TotalAmount > sub.AmountTotal
+	fixTotal := isLegacyPresetPlainUSDValue(sub.AmountTotal, legacyTotalUSD) || isCollapsedPresetPeriodicQuota(plan, sub) || (plan.PeriodAmount == 0 && sub.PeriodAmount > 0 && sub.AmountTotal <= sub.PeriodAmount) || activeMonthlyTopUp
+	// Preset updates only top up active users. Existing subscriptions with a
+	// larger historical allocation must never be reduced by a plan revision.
+	if fixTotal && plan.TotalAmount > sub.AmountTotal {
 		updates["amount_total"] = plan.TotalAmount
 	}
 	if fixTotal && plan.TotalAmount > 0 && sub.AmountUsed > 0 {

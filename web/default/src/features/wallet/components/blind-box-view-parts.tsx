@@ -1,3 +1,4 @@
+import { CirclePause, CirclePlay } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { BlindBoxProp } from '../types'
@@ -6,6 +7,7 @@ export function BlindBoxPropsList(props: {
   props: BlindBoxProp[]
   disabled: boolean
   onUse: (prop: BlindBoxProp) => void
+  onPause: (prop: BlindBoxProp) => void
 }) {
   const { t } = useTranslation()
 
@@ -24,6 +26,9 @@ export function BlindBoxPropsList(props: {
           const manual = isManualUseProp(prop)
           const available = prop.status === 'available'
           const active = prop.status === 'active'
+          const paused = prop.status === 'paused'
+          const monthlyPass = prop.prop_type === 'monthly_pass_multiplier'
+          const canUse = available || (monthlyPass && paused)
 
           return (
             <div
@@ -38,19 +43,29 @@ export function BlindBoxPropsList(props: {
                   {getPropDescription(prop, t)}
                 </div>
               </div>
-              {manual ? (
+              {monthlyPass && active ? (
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  onClick={() => props.onPause(prop)}
+                  disabled={props.disabled}
+                >
+                  <CirclePause className='size-4' data-icon='inline-start' />
+                  暂停
+                </Button>
+              ) : manual ? (
                 <Button
                   type='button'
                   size='sm'
                   variant={active ? 'secondary' : 'default'}
                   onClick={() => props.onUse(prop)}
-                  disabled={props.disabled || !available}
+                  disabled={props.disabled || !canUse}
                 >
-                  {active
-                    ? t('Active')
-                    : available
-                      ? t('Use')
-                      : getPropStatusLabel(prop.status, t)}
+                  {monthlyPass && canUse ? (
+                    <CirclePlay className='size-4' data-icon='inline-start' />
+                  ) : null}
+                  {getPropActionLabel(prop, active, available, paused, t)}
                 </Button>
               ) : (
                 <span className='text-muted-foreground text-xs'>
@@ -69,6 +84,7 @@ function isManualUseProp(prop: BlindBoxProp) {
     'consume_discount_95',
     'consume_discount_90',
     'zero_hour_multiplier',
+    'monthly_pass_multiplier',
   ].includes(prop.prop_type)
 }
 
@@ -77,11 +93,21 @@ function getPropDescription(
   t: (key: string, options?: Record<string, unknown>) => string
 ) {
   if (prop.status === 'active' && prop.expires_at) {
+    if (prop.prop_type === 'monthly_pass_multiplier') {
+      return `0.1 倍率已生效，使用 monthly-pass 分组；剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}，非生图模型可用。`
+    }
     return t('Active until {{date}}', {
       date: new Date(prop.expires_at * 1000).toLocaleString(),
     })
   }
   if (isManualUseProp(prop)) {
+    if (prop.prop_type === 'monthly_pass_multiplier') {
+      const remaining = prop.remaining_seconds || prop.duration_seconds
+      if (prop.status === 'paused') {
+        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后使用 monthly-pass 分组，按 0.1 倍率计费。`
+      }
+      return `启用后可随时暂停，累计可用 ${formatSeconds(remaining)}；仅限 default 分组非生图模型。`
+    }
     if (prop.prop_type === 'zero_hour_multiplier') {
       return prop.status === 'available'
         ? '启用后 1 小时内可使用 zero-hour 分组，默认分组非生图模型按 0 倍率计费。'
@@ -99,6 +125,30 @@ function getPropDescription(
   return t('This prop is no longer available.')
 }
 
+function getPropActionLabel(
+  prop: BlindBoxProp,
+  active: boolean,
+  available: boolean,
+  paused: boolean,
+  t: (key: string) => string
+) {
+  if (prop.prop_type === 'monthly_pass_multiplier') {
+    if (paused) return '继续开启'
+    if (available) return '开启'
+  }
+  if (active) return t('Active')
+  if (available) return t('Use')
+  return getPropStatusLabel(prop.status, t)
+}
+
+function formatSeconds(value: number) {
+  const total = Math.max(0, Math.ceil(value))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  if (minutes === 0) return `${seconds} 秒`
+  return `${minutes} 分${seconds > 0 ? ` ${seconds} 秒` : ''}`
+}
+
 function getPropStatusLabel(
   status: BlindBoxProp['status'],
   t: (key: string) => string
@@ -108,6 +158,8 @@ function getPropStatusLabel(
       return t('Available')
     case 'active':
       return t('Active')
+    case 'paused':
+      return '已暂停'
     case 'reserved':
       return t('Reserved')
     case 'used':

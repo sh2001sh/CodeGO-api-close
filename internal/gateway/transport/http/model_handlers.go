@@ -32,7 +32,7 @@ func ListModels(c *gin.Context, modelType int) {
 		})
 		return
 	}
-	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) || httpctx.GetContextKeyBool(c, constant.ContextKeyMonthlyPassActive) {
 		filtered := userOpenAIModels[:0]
 		for _, model := range userOpenAIModels {
 			if !gatewaycontract.IsImageGenerationModel(model.Id) {

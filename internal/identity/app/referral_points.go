@@ -31,8 +31,10 @@ func insertUserAndApplyRegistrationRewards(user *identityschema.User, inviterID 
 	if err := identitystore.CreateUser(user, inviterID); err != nil {
 		return err
 	}
-	if err := grantRegistrationBlindBoxes(user.Id); err != nil {
-		return err
+	if inviterID > 0 {
+		if err := grantRegistrationBlindBoxes(user.Id); err != nil {
+			return err
+		}
 	}
 	recordRegistrationBonusLog(user.Id)
 	applyReferralRegistrationRewards(inviterID, user.Id)
@@ -46,8 +48,10 @@ func finalizeOAuthUserAndApplyRegistrationRewards(user *identityschema.User, inv
 	if err := identitystore.FinalizeCreatedUser(user.Id); err != nil {
 		platformobservability.SysLog(fmt.Sprintf("failed to finalize created user %d: %v", user.Id, err))
 	}
-	if err := grantRegistrationBlindBoxes(user.Id); err != nil {
-		platformobservability.SysLog(fmt.Sprintf("failed to grant registration blind boxes to user %d: %v", user.Id, err))
+	if inviterID > 0 {
+		if err := grantRegistrationBlindBoxes(user.Id); err != nil {
+			platformobservability.SysLog(fmt.Sprintf("failed to grant registration blind boxes to user %d: %v", user.Id, err))
+		}
 	}
 	recordRegistrationBonusLog(user.Id)
 	applyReferralRegistrationRewards(inviterID, user.Id)

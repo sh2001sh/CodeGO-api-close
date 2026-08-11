@@ -106,7 +106,26 @@ func TestInsertUserAndApplyRegistrationRewardsCreditsInviteePoints(t *testing.T)
 	require.NoError(t, err)
 	assert.EqualValues(t, referralInviteeRegisterRewardPoints, inviteeAccount.Balance)
 
+	var registrationOrder commerceschema.BlindBoxOrder
+	require.NoError(t, db.Where("user_id = ?", invitee.Id).First(&registrationOrder).Error)
+	assert.Equal(t, registrationBlindBoxQuantity, registrationOrder.Quantity)
+
 	inviterAccount, err := billingapp.EnsurePointAccountTx(db, inviter.Id)
 	require.NoError(t, err)
 	assert.Zero(t, inviterAccount.Balance)
+}
+
+func TestInsertUserAndApplyRegistrationRewardsSkipsBlindBoxesWithoutInviter(t *testing.T) {
+	db := setupReferralPointsAppTestDB(t)
+	user := &identityschema.User{
+		Username:    "registration-no-inviter",
+		DisplayName: "registration-no-inviter",
+		Status:      constant.UserStatusEnabled,
+		Role:        constant.RoleCommonUser,
+	}
+	require.NoError(t, insertUserAndApplyRegistrationRewards(user, 0))
+
+	var orderCount int64
+	require.NoError(t, db.Model(&commerceschema.BlindBoxOrder{}).Where("user_id = ?", user.Id).Count(&orderCount).Error)
+	assert.Zero(t, orderCount)
 }

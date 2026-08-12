@@ -1,9 +1,9 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"encoding/json"
 	"errors"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	"net/http"
 
@@ -30,6 +30,7 @@ func Login(c *gin.Context) {
 
 	if result.RequireTwoFA {
 		session := sessions.Default(c)
+		clearAuthenticatedSession(session)
 		session.Set(identityapp.PendingUsernameSessionKey, result.User.Username)
 		session.Set(identityapp.PendingUserIDSessionKey, result.User.ID)
 		if err := session.Save(); err != nil {
@@ -94,6 +95,7 @@ func establishAuthenticatedSession(c *gin.Context, session sessions.Session, use
 	if user == nil {
 		return identityapp.ErrInvalidParams
 	}
+	clearAuthenticatedSession(session)
 	if err := sessionstate.SaveAuthenticatedSession(c, &identityschema.User{
 		Id:          user.ID,
 		Username:    user.Username,
@@ -118,6 +120,16 @@ func establishAuthenticatedSession(c *gin.Context, session sessions.Session, use
 		},
 	})
 	return nil
+}
+
+func clearAuthenticatedSession(session sessions.Session) {
+	session.Delete("id")
+	session.Delete("username")
+	session.Delete("role")
+	session.Delete("status")
+	session.Delete("group")
+	session.Delete(identityapp.PendingUsernameSessionKey)
+	session.Delete(identityapp.PendingUserIDSessionKey)
 }
 
 func handleAuthError(c *gin.Context, err error) {

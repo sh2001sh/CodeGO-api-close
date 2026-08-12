@@ -44,6 +44,8 @@ export const api = axios.create({
 // Deduplicate concurrent GET requests to the same URL
 // Prevents multiple identical requests from being sent simultaneously
 const inFlightGet = new Map<string, Promise<unknown>>()
+const selfRequestControllers = new Set<AbortController>()
+let selfRequestGeneration = 0
 const originalGet = api.get.bind(api)
 
 api.get = ((url: string, config = {}) => {
@@ -137,6 +139,18 @@ function isSessionValidationRequest(url: unknown) {
   return url.split('?')[0] === '/api/user/self'
 }
 
+function isAuthenticationRequest(url: unknown) {
+  if (typeof url !== 'string') return false
+  const path = url.split('?')[0]
+  return (
+    path === '/api/user/login' ||
+    path === '/api/user/login/2fa' ||
+    path === '/api/user/register' ||
+    path === '/api/user/logout' ||
+    path.startsWith('/api/oauth/')
+  )
+}
+
 /**
  * Get common request headers (for both axios and SSE requests)
  */
@@ -159,6 +173,7 @@ export function getCommonHeaders(): Record<string, string> {
 
 // Attach user ID header for all requests
 api.interceptors.request.use((config) => {
+  if (isAuthenticationRequest(config.url)) return config
   const uid = getUserId()
   if (uid) {
     // Custom header for user identification
@@ -177,11 +192,32 @@ api.interceptors.request.use((config) => {
 
 // Get current user info
 export async function getSelf() {
-  const res = await api.get('/api/user/self', {
-    // Avoid global 401 toast during guards/preloads
-    skipErrorHandler: true,
-  } as Record<string, unknown>)
-  return res.data
+  const generation = selfRequestGeneration
+  const controller = new AbortController()
+  selfRequestControllers.add(controller)
+  try {
+    const res = await api.get('/api/user/self', {
+      // Avoid global 401 toast during guards/preloads
+      skipErrorHandler: true,
+      // This endpoint reflects the current browser session. Sharing an
+      // in-flight request across login transitions can restore another user.
+      disableDuplicate: true,
+      signal: controller.signal,
+    } as Record<string, unknown>)
+    if (generation !== selfRequestGeneration) {
+      return { success: false, message: 'Session changed during validation' }
+    }
+    return res.data
+  } finally {
+    selfRequestControllers.delete(controller)
+  }
+}
+
+/** Cancel identity reads started before a login/logout transition. */
+export function cancelSelfRequests() {
+  selfRequestGeneration += 1
+  for (const controller of selfRequestControllers) controller.abort()
+  selfRequestControllers.clear()
 }
 
 // Get user available models

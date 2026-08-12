@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { api, cancelSelfRequests } from '@/lib/api'
 import { resolveAffiliateCode } from './lib/storage'
 import type {
   LoginPayload,
@@ -37,6 +37,7 @@ import type {
 
 // User login with username and password
 export async function login(payload: LoginPayload) {
+  cancelSelfRequests()
   const turnstile = payload.turnstile ?? ''
   const res = await api.post<LoginResponse>(
     `/api/user/login?turnstile=${turnstile}`,
@@ -50,12 +51,14 @@ export async function login(payload: LoginPayload) {
 
 // Two-factor authentication login
 export async function login2fa(payload: TwoFAPayload) {
+  cancelSelfRequests()
   const res = await api.post<Login2FAResponse>('/api/user/login/2fa', payload)
   return res.data
 }
 
 // User logout
 export async function logout(): Promise<ApiResponse> {
+  cancelSelfRequests()
   const res = await api.get('/api/user/logout')
   return res.data
 }

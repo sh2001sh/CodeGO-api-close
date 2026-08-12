@@ -143,18 +143,6 @@ func authHelper(c *gin.Context, minRole int) {
 		currentRole = user.Role
 		currentStatus = user.Status
 		currentGroup = user.Group
-		if session.Get("username") != user.Username ||
-			session.Get("role") != user.Role ||
-			session.Get("status") != user.Status ||
-			session.Get("group") != user.Group {
-			session.Set("username", user.Username)
-			session.Set("role", user.Role)
-			session.Set("status", user.Status)
-			session.Set("group", user.Group)
-			if err := session.Save(); err != nil {
-				platformobservability.SysLog("authHelper failed to sync session user state: " + err.Error())
-			}
-		}
 	}
 	// get header New-Api-User
 	apiUserIdStr := c.Request.Header.Get("New-Api-User")

@@ -21,7 +21,7 @@ import type { AxiosRequestConfig } from 'axios'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { api } from '@/lib/api'
+import { api, cancelSelfRequests } from '@/lib/api'
 import { getOAuthState } from '../api'
 import {
   buildGitHubOAuthUrl,
@@ -57,6 +57,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
   }, [t])
 
   const resetSession = async () => {
+    cancelSelfRequests()
     try {
       auth.reset()
     } catch (_error) {

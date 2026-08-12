@@ -121,8 +121,6 @@ func Verify2FALogin(c *gin.Context) {
 		return
 	}
 
-	session.Delete(identityapp.PendingUsernameSessionKey)
-	session.Delete(identityapp.PendingUserIDSessionKey)
 	if err := establishAuthenticatedSession(c, session, identityapp.BuildAuthenticatedSessionUser(user)); err != nil {
 		httpapi.ApiErrorMsg(c, err.Error())
 		return

@@ -47,7 +47,8 @@ export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
 export AWS_DEFAULT_REGION="$AWS_REGION"
 
 aws --endpoint-url "$R2_ENDPOINT" s3 cp "$ENCRYPTED_DUMP" "s3://${R2_BUCKET}/${BASE_NAME}" --only-show-errors
-sha256sum "$ENCRYPTED_DUMP" | awk '{print $1 "  "}'"${BASE_NAME}" > "$WORK_DIR/checksum.txt"
+CHECKSUM="$(sha256sum "$ENCRYPTED_DUMP" | cut -d' ' -f1)"
+printf '%s  %s\n' "$CHECKSUM" "$BASE_NAME" > "$WORK_DIR/checksum.txt"
 aws --endpoint-url "$R2_ENDPOINT" s3 cp "$WORK_DIR/checksum.txt" "s3://${R2_BUCKET}/${BASE_NAME}.sha256" --only-show-errors
 
 # Keep the latest N daily files. Deletion is restricted to this backup prefix.

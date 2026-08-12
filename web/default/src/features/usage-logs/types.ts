@@ -122,6 +122,11 @@ export interface LogOtherData {
     admin_id?: number | string
   }
   request_path?: string
+  status?: 'failed'
+  status_code?: number
+  error_type?: string
+  error_code?: string
+  retry_count?: number
   request_conversion?: string[]
   ws?: boolean
   audio?: boolean

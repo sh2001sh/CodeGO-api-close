@@ -105,7 +105,10 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 是当前分组唯一可用路由，保留后续探测，不进入冷却", channelError.ChannelName, channelError.ChannelId, modelName))
 	}
 
-	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
+	// Relay requests record one user-visible failure only after all retry
+	// candidates are exhausted. Keep this per-attempt record for channel tests
+	// and other non-relay operations that have no request ID.
+	if constant.ErrorLogEnabled && c.GetString(constant.RequestIdKey) == "" && types.IsRecordErrorLog(err) {
 		userID := c.GetInt("id")
 		tokenName := c.GetString("token_name")
 		modelName := c.GetString("original_model")

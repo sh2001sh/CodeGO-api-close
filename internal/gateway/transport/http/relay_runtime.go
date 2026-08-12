@@ -16,6 +16,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
@@ -259,6 +260,7 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 	if c != nil && c.GetBool(string(constant.ContextKeyClientGone)) {
 		return
 	}
+	recordFinalRelayFailureLog(c, apiErr)
 	logger.LogError(c, fmt.Sprintf("relay error: %s", platformtext.LocalLogPreview(apiErr.Error())))
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
 		if !httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) || c.GetBool(string(constant.ContextKeyClientGone)) {
@@ -304,6 +306,46 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 			"error": apiErr.ToOpenAIError(),
 		})
 	}
+}
+
+// recordFinalRelayFailureLog makes terminal request failures visible in the
+// user's usage log. Retried attempts that later succeed never reach this point,
+// so each client request creates at most one zero-cost failure record.
+func recordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) {
+	if c == nil || apiErr == nil || c.GetInt("id") <= 0 {
+		return
+	}
+
+	startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+	useTimeSeconds := 0
+	if !startTime.IsZero() {
+		useTimeSeconds = int(time.Since(startTime).Seconds())
+	}
+	channelID := c.GetInt("channel_id")
+	other := map[string]interface{}{
+		"status":      "failed",
+		"status_code": apiErr.StatusCode,
+		"error_type":  apiErr.GetErrorType(),
+		"error_code":  apiErr.GetErrorCode(),
+		"retry_count": max(len(c.GetStringSlice("use_channel"))-1, 0),
+	}
+	if c.Request != nil && c.Request.URL != nil {
+		other["request_path"] = c.Request.URL.Path
+	}
+
+	auditapp.RecordErrorLog(
+		c,
+		c.GetInt("id"),
+		channelID,
+		c.GetString("original_model"),
+		c.GetString("token_name"),
+		apiErr.MaskSensitiveErrorWithStatusCode(),
+		c.GetInt("token_id"),
+		useTimeSeconds,
+		httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream),
+		c.GetString("group"),
+		other,
+	)
 }
 
 func refundRelayBillingIfNeeded(c *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.NewAPIError) *types.NewAPIError {

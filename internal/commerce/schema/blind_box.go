@@ -92,10 +92,13 @@ type BlindBoxOpenRecord struct {
 	IsPity             bool    `json:"is_pity"`
 	CreateTime         int64   `json:"create_time" gorm:"bigint;index"`
 
-	PropId        int    `json:"prop_id,omitempty" gorm:"-"`
-	PropType      string `json:"prop_type,omitempty" gorm:"-"`
-	PropStatus    string `json:"prop_status,omitempty" gorm:"-"`
-	PropExpiresAt int64  `json:"prop_expires_at,omitempty" gorm:"-"`
+	PropId         int    `json:"prop_id,omitempty" gorm:"-"`
+	PropType       string `json:"prop_type,omitempty" gorm:"-"`
+	PropStatus     string `json:"prop_status,omitempty" gorm:"-"`
+	PropExpiresAt  int64  `json:"prop_expires_at,omitempty" gorm:"-"`
+	LuckyNumber    string `json:"lucky_number,omitempty" gorm:"-"`
+	LuckyDrawDate  string `json:"lucky_draw_date,omitempty" gorm:"-"`
+	LuckyExpiresAt int64  `json:"lucky_expires_at,omitempty" gorm:"-"`
 }
 
 type BlindBoxPityState struct {

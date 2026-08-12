@@ -115,6 +115,13 @@ func TestOpenBlindBoxOrderByTradeNo_CreditsMatchingWallets(t *testing.T) {
 			records, err := OpenBlindBoxOrderByTradeNo(order.TradeNo)
 			require.NoError(t, err)
 			require.Len(t, records, 1)
+			require.Regexp(t, `^\d{4}$`, records[0].LuckyNumber)
+			require.NotEmpty(t, records[0].LuckyDrawDate)
+			require.Greater(t, records[0].LuckyExpiresAt, time.Now().Unix())
+			var luckyNumbers int64
+			require.NoError(t, db.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).
+				Where("blind_box_open_record_id = ?", records[0].Id).Count(&luckyNumbers).Error)
+			require.Equal(t, int64(1), luckyNumbers)
 			assert.Equal(t, string(tc.expectedWallet), records[0].RewardWalletType)
 
 			expectedCredit := int(math.Round(tc.rewardUSD * platformruntime.QuotaPerUnit))

@@ -13,7 +13,7 @@ export function BlindBoxPage(props: BlindBoxPageProps) {
     <>
       <WalletWorkspaceShell
         title='抽奖盲盒'
-        description='购买并抽取奖励，额度立即到账永久有效'
+        description='每盒附赠一个当日幸运号，奖励即时到账'
         canonicalPath='/blind-box'
         main={
           <BlindBoxCard

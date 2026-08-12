@@ -21,11 +21,41 @@ func prepareDailyLuckyNumberTestDB(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	require.NoError(t, db.AutoMigrate(
 		&commerceschema.SubscriptionLuckyNumber{},
+		&commerceschema.BlindBoxDailyLuckyNumber{},
 		&commerceschema.SubscriptionLuckyDraw{},
 		&commerceschema.SubscriptionLuckyReward{},
 		&commerceschema.SubscriptionLuckyRewardNotification{},
 		&commerceschema.SubscriptionBlindBoxBenefitCycle{},
 	))
+}
+
+func TestBlindBoxLuckyNumberParticipatesOnlyOnItsDrawDate(t *testing.T) {
+	prepareDailyLuckyNumberTestDB(t)
+	db := platformDBForDailyLuckyTest(t)
+	setting := luckysettings.Get()
+	location, err := setting.Location()
+	require.NoError(t, err)
+	now := time.Now().In(location)
+	today := now.Format(luckyDrawDateLayout)
+
+	require.NoError(t, db.Create(&commerceschema.BlindBoxDailyLuckyNumber{
+		BlindBoxOpenRecordId: 9981,
+		UserId:               9982,
+		DrawDate:             today,
+		LuckySuffix:          "3141",
+		ExpiresAt:            time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, location).Unix(),
+	}).Error)
+
+	participants, err := listLuckyDrawParticipantsTx(db, now.Unix())
+	require.NoError(t, err)
+	require.Len(t, participants, 1)
+	require.NotNil(t, participants[0].BlindBoxNumber)
+	require.Equal(t, "3141", participants[0].Number.LuckySuffix)
+
+	tomorrow := now.AddDate(0, 0, 1)
+	participants, err = listLuckyDrawParticipantsTx(db, tomorrow.Unix())
+	require.NoError(t, err)
+	require.Empty(t, participants)
 }
 
 func TestLuckyMatchDigitsReturnsOnlyTheHighestSuffixMatch(t *testing.T) {

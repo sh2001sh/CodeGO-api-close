@@ -8,7 +8,6 @@ import (
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
-	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 
 	"strings"
@@ -46,14 +45,14 @@ func ValidateBlindBoxPurchase(userID int, quantity int) (float64, error) {
 	return setting.UnitPrice * float64(quantity), nil
 }
 
-// CompleteBlindBoxOrder completes a pending blind-box payment and auto-opens remaining boxes.
+// CompleteBlindBoxOrder completes a pending payment. Boxes remain unopened so
+// the user can choose whether to reveal them one at a time or all together.
 func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPaymentProvider string, actualPaymentMethod string) error {
 	if strings.TrimSpace(tradeNo) == "" {
 		return errors.New("tradeNo is empty")
 	}
 
-	shouldAutoOpen := false
-	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var order commerceschema.BlindBoxOrder
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(blindBoxTradeNoColumn()+" = ?", tradeNo).First(&order).Error; err != nil {
 			return commercedomain.ErrBlindBoxOrderNotFound
@@ -62,7 +61,6 @@ func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPayme
 			return commerceschema.ErrPaymentMethodMismatch
 		}
 		if order.Status == constant.TopUpStatusSuccess {
-			shouldAutoOpen = true
 			return nil
 		}
 		if order.Status != constant.TopUpStatusPending {
@@ -80,19 +78,8 @@ func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPayme
 		if err := awardReferralFirstPurchaseBonusTx(tx, order.UserId, commercedomain.ReferralPurchaseTypeBlindBox, "blind_box_order", order.TradeNo); err != nil {
 			return err
 		}
-		shouldAutoOpen = true
 		return tx.Save(&order).Error
 	})
-	if err != nil {
-		return err
-	}
-
-	if shouldAutoOpen {
-		if _, openErr := OpenBlindBoxOrderByTradeNo(tradeNo); openErr != nil {
-			platformobservability.SysError(fmt.Sprintf("failed to auto open blind box order %s: %s", tradeNo, openErr.Error()))
-		}
-	}
-	return nil
 }
 
 // ExpireBlindBoxOrder marks a pending blind-box order as expired.

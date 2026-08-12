@@ -81,6 +81,9 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 	if err := attachBlindBoxPropStateTx(platformdb.DB, overview.RecentRecords); err != nil {
 		return nil, err
 	}
+	if err := attachBlindBoxLuckyNumbersTx(platformdb.DB, overview.RecentRecords); err != nil {
+		return nil, err
+	}
 	for index := range overview.RecentRecords {
 		normalizeBlindBoxOpenRecordDisplay(&overview.RecentRecords[index])
 	}
@@ -185,6 +188,9 @@ func ListBlindBoxHistory(userID int, page int, pageSize int) (*BlindBoxHistoryPa
 		return nil, err
 	}
 	if err := attachBlindBoxPropStateTx(platformdb.DB, result.Records); err != nil {
+		return nil, err
+	}
+	if err := attachBlindBoxLuckyNumbersTx(platformdb.DB, result.Records); err != nil {
 		return nil, err
 	}
 	for index := range result.Records {

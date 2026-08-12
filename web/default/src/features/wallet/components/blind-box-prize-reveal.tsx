@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Sparkles, Star } from 'lucide-react'
+import { CalendarClock, Hash, Sparkles, Star } from 'lucide-react'
 import {
   AnimatePresence,
   motion,
@@ -253,6 +253,32 @@ function PrizeRevealCard(props: {
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
           已进入可用余额，永久有效
         </div>
+      ) : null}
+      {record.lucky_number ? (
+        <motion.div
+          initial={
+            props.reduced ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 6 }
+          }
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{
+            duration: props.reduced ? 0.15 : 0.32,
+            ease: EASE_OUT_QUINT,
+            delay: props.reduced ? 0 : 0.12,
+          }}
+          className='border-primary/25 bg-primary/[0.055] mt-3 flex flex-col gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between'
+        >
+          <div className='flex items-center gap-2'>
+            <Hash className='text-primary size-4' aria-hidden='true' />
+            <span className='text-muted-foreground text-xs'>今日幸运号</span>
+            <span className='text-foreground font-mono text-lg font-semibold tracking-widest tabular-nums'>
+              {record.lucky_number}
+            </span>
+          </div>
+          <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+            <CalendarClock className='size-3.5' aria-hidden='true' />
+            仅参与 {record.lucky_draw_date || '今日'} 开奖，次日失效
+          </div>
+        </motion.div>
       ) : null}
     </motion.div>
   )

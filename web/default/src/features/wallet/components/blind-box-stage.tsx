@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Gift, Loader2, PackageOpen, Sparkles } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Boxes, Gift, Loader2, PackageOpen, Sparkles } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,8 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
   const hasPending = props.availableBoxes > 0
   const opening = props.openingCount !== null
   const disabled = !props.enabled || props.loading
+  const [openMode, setOpenMode] = useState<'single' | 'all'>('single')
+  const openCount = openMode === 'single' ? 1 : props.availableBoxes
 
   return (
     <section className='app-page-shell overflow-hidden'>
@@ -64,7 +67,7 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
             opening={opening}
             onOpen={
               hasPending && !opening
-                ? () => props.onManualOpen(props.availableBoxes)
+                ? () => props.onManualOpen(openCount)
                 : undefined
             }
           />
@@ -77,30 +80,57 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
             </h2>
             <p className='text-muted-foreground mt-1.5 text-xs leading-5'>
               {hasPending
-                ? '来自之前已支付的订单，点击盒子立即抽取，不会重复扣费。'
+                ? '每开一个盲盒都会获得一个仅限当天开奖使用的幸运号。'
                 : '每次抽取都会从普通额度、Claude 额度、道具和隐藏款中随机开出一项，额度立即到账且永久有效。'}
             </p>
           </div>
 
           {hasPending ? (
-            <Button
-              size='lg'
-              onClick={() => props.onManualOpen(props.availableBoxes)}
-              disabled={opening}
-              className='w-full max-w-full whitespace-normal sm:w-auto sm:min-w-44'
-            >
-              {opening ? (
-                <>
-                  <Loader2 data-icon='inline-start' className='animate-spin' />
-                  抽取中
-                </>
-              ) : (
-                <>
-                  <PackageOpen data-icon='inline-start' />
-                  立即抽取 {props.availableBoxes} 次
-                </>
-              )}
-            </Button>
+            <div className='flex w-full max-w-sm flex-col gap-3'>
+              <div
+                className='bg-muted grid grid-cols-2 rounded-lg p-1'
+                role='group'
+                aria-label='盲盒开启方式'
+              >
+                <OpenModeButton
+                  active={openMode === 'single'}
+                  onClick={() => setOpenMode('single')}
+                  icon={PackageOpen}
+                >
+                  逐个开启
+                </OpenModeButton>
+                <OpenModeButton
+                  active={openMode === 'all'}
+                  onClick={() => setOpenMode('all')}
+                  icon={Boxes}
+                >
+                  全部打开
+                </OpenModeButton>
+              </div>
+              <Button
+                size='lg'
+                onClick={() => props.onManualOpen(openCount)}
+                disabled={opening}
+                className='w-full whitespace-normal'
+              >
+                {opening ? (
+                  <>
+                    <Loader2
+                      data-icon='inline-start'
+                      className='animate-spin'
+                    />
+                    抽取中
+                  </>
+                ) : (
+                  <>
+                    <PackageOpen data-icon='inline-start' />
+                    {openMode === 'single'
+                      ? '开启 1 个盲盒'
+                      : `全部打开 ${props.availableBoxes} 个`}
+                  </>
+                )}
+              </Button>
+            </div>
           ) : null}
         </div>
       </div>
@@ -213,6 +243,31 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
         </div>
       </div>
     </section>
+  )
+}
+
+function OpenModeButton(props: {
+  active: boolean
+  onClick: () => void
+  icon: typeof PackageOpen
+  children: ReactNode
+}) {
+  const Icon = props.icon
+  return (
+    <button
+      type='button'
+      aria-pressed={props.active}
+      onClick={props.onClick}
+      className={cn(
+        'focus-visible:ring-ring flex min-h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
+        props.active
+          ? 'bg-background text-foreground shadow-sm'
+          : 'text-muted-foreground hover:text-foreground'
+      )}
+    >
+      <Icon className='size-4' aria-hidden='true' />
+      {props.children}
+    </button>
   )
 }
 

@@ -156,7 +156,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			record.RewardTitle = "1 小时 0 倍率卡"
 			record.RewardTier = "zero_hour_hidden"
 			record.RewardWalletType = ""
-			if err := tx.Create(&record).Error; err != nil {
+			if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 				return nil, err
 			}
 			prop, err := createBlindBoxPropTx(tx, userID, record.Id, record.RewardTitle)
@@ -195,7 +195,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			record.UserSubscriptionId = sub.Id
 			record.RewardUSD = 0
 			pityState.ConsecutiveLowRewards = 0
-			if err := tx.Create(&record).Error; err != nil {
+			if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 				return nil, err
 			}
 			if mergeQuota {
@@ -277,7 +277,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				} else {
 					record.RewardTitle = fmt.Sprintf("%.2f Claude 额度奖励", totalRewardUSD)
 				}
-				if err := tx.Create(&record).Error; err != nil {
+				if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 					return nil, err
 				}
 				if err := applyBlindBoxWalletRewardTx(tx, userID, record.Id, creditAmount, commerceschema.BlindBoxRewardWalletTypeClaude); err != nil {
@@ -311,7 +311,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				} else {
 					record.RewardTitle = fmt.Sprintf("%.2f 美元奖励", totalRewardUSD)
 				}
-				if err := tx.Create(&record).Error; err != nil {
+				if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 					return nil, err
 				}
 				if err := applyBlindBoxWalletRewardTx(tx, userID, record.Id, creditAmount, tierWalletType); err != nil {
@@ -329,7 +329,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				continue
 			}
 
-			if err := tx.Create(&record).Error; err != nil {
+			if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 				return nil, err
 			}
 			if record.RewardType == commerceschema.BlindBoxRewardTypeProp {
@@ -347,7 +347,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			continue
 		}
 
-		if err := tx.Create(&record).Error; err != nil {
+		if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 			return nil, err
 		}
 		records = append(records, record)

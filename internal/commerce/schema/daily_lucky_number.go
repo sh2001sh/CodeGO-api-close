@@ -42,6 +42,23 @@ type SubscriptionLuckyNumber struct {
 	UpdatedAt          int64  `json:"updated_at" gorm:"bigint"`
 }
 
+// BlindBoxDailyLuckyNumber participates in one calendar day's draw only.
+// The open-record uniqueness makes number issuance idempotent with opening.
+type BlindBoxDailyLuckyNumber struct {
+	Id                   int    `json:"id"`
+	BlindBoxOpenRecordId int    `json:"blind_box_open_record_id" gorm:"uniqueIndex"`
+	UserId               int    `json:"user_id" gorm:"index"`
+	DrawDate             string `json:"draw_date" gorm:"type:char(10);index"`
+	LuckySuffix          string `json:"lucky_suffix" gorm:"type:char(4);index"`
+	ExpiresAt            int64  `json:"expires_at" gorm:"bigint;index"`
+	CreatedAt            int64  `json:"created_at" gorm:"bigint"`
+}
+
+func (n *BlindBoxDailyLuckyNumber) BeforeCreate(_ *gorm.DB) error {
+	n.CreatedAt = platformruntime.GetTimestamp()
+	return nil
+}
+
 func (n *SubscriptionLuckyNumber) BeforeCreate(_ *gorm.DB) error {
 	now := platformruntime.GetTimestamp()
 	n.AssignedAt = now
@@ -101,22 +118,24 @@ func (d *SubscriptionLuckyDraw) BeforeUpdate(_ *gorm.DB) error {
 
 // SubscriptionLuckyReward is a per-subscription settlement snapshot for one draw.
 type SubscriptionLuckyReward struct {
-	Id                 int     `json:"id"`
-	DrawId             int     `json:"draw_id" gorm:"index:uq_lucky_reward_draw_subscription,unique"`
-	UserSubscriptionId int     `json:"user_subscription_id" gorm:"index:uq_lucky_reward_draw_subscription,unique;index"`
-	UserId             int     `json:"user_id" gorm:"index"`
-	LuckyNumber        string  `json:"lucky_number" gorm:"type:char(4)"`
-	MembershipTier     string  `json:"membership_tier" gorm:"type:varchar(16)"`
-	MatchedDigits      int     `json:"matched_digits" gorm:"type:int;not null;default:0"`
-	BaseRewardUSD      float64 `json:"base_reward_usd" gorm:"type:decimal(12,2);not null;default:0"`
-	TierMultiplier     float64 `json:"tier_multiplier" gorm:"type:decimal(8,4);not null;default:1"`
-	JackpotRewardUSD   float64 `json:"jackpot_reward_usd" gorm:"type:decimal(12,2);not null;default:0"`
-	FinalRewardQuota   int64   `json:"final_reward_quota" gorm:"type:bigint;not null;default:0"`
-	CreditStatus       string  `json:"credit_status" gorm:"type:varchar(16);index"`
-	CreditError        string  `json:"credit_error,omitempty" gorm:"type:varchar(512)"`
-	CreditedAt         int64   `json:"credited_at" gorm:"bigint"`
-	CreatedAt          int64   `json:"created_at" gorm:"bigint"`
-	UpdatedAt          int64   `json:"updated_at" gorm:"bigint"`
+	Id                   int     `json:"id"`
+	DrawId               int     `json:"draw_id" gorm:"index:uq_lucky_reward_draw_subscription,unique"`
+	UserSubscriptionId   int     `json:"user_subscription_id" gorm:"index:uq_lucky_reward_draw_subscription,unique;index"`
+	BlindBoxOpenRecordId int     `json:"blind_box_open_record_id,omitempty" gorm:"index"`
+	ParticipationType    string  `json:"participation_type,omitempty" gorm:"type:varchar(16);not null;default:'subscription';index"`
+	UserId               int     `json:"user_id" gorm:"index"`
+	LuckyNumber          string  `json:"lucky_number" gorm:"type:char(4)"`
+	MembershipTier       string  `json:"membership_tier" gorm:"type:varchar(16)"`
+	MatchedDigits        int     `json:"matched_digits" gorm:"type:int;not null;default:0"`
+	BaseRewardUSD        float64 `json:"base_reward_usd" gorm:"type:decimal(12,2);not null;default:0"`
+	TierMultiplier       float64 `json:"tier_multiplier" gorm:"type:decimal(8,4);not null;default:1"`
+	JackpotRewardUSD     float64 `json:"jackpot_reward_usd" gorm:"type:decimal(12,2);not null;default:0"`
+	FinalRewardQuota     int64   `json:"final_reward_quota" gorm:"type:bigint;not null;default:0"`
+	CreditStatus         string  `json:"credit_status" gorm:"type:varchar(16);index"`
+	CreditError          string  `json:"credit_error,omitempty" gorm:"type:varchar(512)"`
+	CreditedAt           int64   `json:"credited_at" gorm:"bigint"`
+	CreatedAt            int64   `json:"created_at" gorm:"bigint"`
+	UpdatedAt            int64   `json:"updated_at" gorm:"bigint"`
 }
 
 func (r *SubscriptionLuckyReward) BeforeCreate(_ *gorm.DB) error {

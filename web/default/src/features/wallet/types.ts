@@ -421,6 +421,10 @@ export interface BlindBoxRecord {
   prop_type?: string
   prop_status?: string
   prop_expires_at?: number
+  /** One-day lucky number issued with this opened box. */
+  lucky_number?: string
+  lucky_draw_date?: string
+  lucky_expires_at?: number
 }
 
 export interface BlindBoxHistoryPage {

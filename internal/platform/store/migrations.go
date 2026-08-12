@@ -186,6 +186,20 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260808_commerce_invoice_requests", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&commerceschema.InvoiceRequest{})
 		}},
+		{ID: "20260812_blind_box_daily_lucky_numbers", Run: func(tx *gorm.DB) error {
+			if err := tx.AutoMigrate(&commerceschema.BlindBoxDailyLuckyNumber{}); err != nil {
+				return err
+			}
+			for _, field := range []string{"BlindBoxOpenRecordId", "ParticipationType"} {
+				if tx.Migrator().HasColumn(&commerceschema.SubscriptionLuckyReward{}, field) {
+					continue
+				}
+				if err := tx.Migrator().AddColumn(&commerceschema.SubscriptionLuckyReward{}, field); err != nil {
+					return err
+				}
+			}
+			return nil
+		}},
 	}
 	for _, step := range steps {
 		var applied schemaMigration

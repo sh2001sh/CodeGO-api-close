@@ -193,20 +193,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           const refreshed = await getBlindBoxSelf()
           if (isApiSuccess(refreshed) && refreshed.data) {
             setData(refreshed.data)
-            const openCount = Math.max(
-              1,
-              Number(
-                order.opened_count || order.quantity || paymentState.quantity
-              )
+            toast.success(
+              `${order.quantity || paymentState.quantity} 个盲盒已到账，请选择逐个开启或全部打开。`
             )
-            const resultRecords = (
-              refreshed.data.overview?.recent_records || []
-            ).slice(0, openCount)
-            setPrizeState({
-              open: resultRecords.length > 0,
-              records: resultRecords,
-              openCount,
-            })
           }
           await Promise.all([
             props.onSubscriptionRefresh(),

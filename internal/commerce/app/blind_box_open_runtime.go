@@ -206,6 +206,15 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			if err := awardMonthlyPassPropTx(tx, userID, subscriptionPlan, fmt.Sprintf("blind-box-subscription:%d", record.Id)); err != nil {
 				return nil, err
 			}
+			if prop, propErr := primaryMonthlyPassPropTx(tx, userID); propErr == nil {
+				record.PropId = prop.Id
+				record.PropType = prop.PropType
+				record.PropStatus = prop.Status
+				record.PropExpiresAt = prop.ExpiresAt
+				if err := tx.Save(&record).Error; err != nil {
+					return nil, err
+				}
+			}
 			records = append(records, record)
 			continue
 		} else {

@@ -48,7 +48,29 @@ func creditBlindBoxSubscriptionQuotaTx(tx *gorm.DB, subscription *commerceschema
 	var account billingschema.BillingAccount
 	err := tx.Where("account_type = ? AND owner_type = ? AND owner_id = ? AND quota_unit = ?", "subscription", "user_subscription", subscription.Id, "quota").First(&account).Error
 	if err == gorm.ErrRecordNotFound {
-		return nil
+		accountPtr, ensureErr := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
+			AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(subscription.Id), QuotaUnit: "quota",
+		})
+		if ensureErr != nil {
+			return ensureErr
+		}
+		account = *accountPtr
+		available := subscription.AmountTotal - subscription.AmountUsed - amount
+		if available > 0 {
+			if _, ensureErr = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+				AccountID:      account.AccountID,
+				Amount:         available,
+				IdempotencyKey: fmt.Sprintf("blind-box-subscription-baseline:%d", subscription.Id),
+				ReasonCode:     "blind_box_subscription_baseline",
+				ReasonDetail:   "materialized subscription ledger while merging blind-box monthly subscription reward",
+				ReferenceType:  "user_subscription",
+				ReferenceID:    fmt.Sprintf("%d", subscription.Id),
+				OperatorType:   "commerce",
+				OperatorID:     "blind_box",
+			}); ensureErr != nil {
+				return ensureErr
+			}
+		}
 	}
 	if err != nil {
 		return err

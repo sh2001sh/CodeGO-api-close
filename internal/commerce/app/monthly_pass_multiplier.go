@@ -44,20 +44,182 @@ func awardMonthlyPassPropTx(tx *gorm.DB, userID int, plan *commerceschema.Subscr
 	if duration <= 0 || commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) != commerceschema.SubscriptionPlanTypeMonthly {
 		return nil
 	}
-	var existing commerceschema.BlindBoxProp
-	err := tx.Where("prop_type = ? AND benefit_reference = ?", commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, reference).First(&existing).Error
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
+	now := platformruntime.GetTimestamp()
+	if err := expireUserBlindBoxPropsTx(tx, userID, now); err != nil {
 		return err
 	}
+	// Keep one entitlement per user. A newly awarded card extends the
+	// remaining time of an available, paused, or active card instead of
+	// creating a second card that could be hidden by the active-card check.
+	var cards []commerceschema.BlindBoxProp
+	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+		Where("user_id = ? AND prop_type = ? AND status IN ?", userID, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+			[]string{commerceschema.BlindBoxPropStatusAvailable, commerceschema.BlindBoxPropStatusPaused, commerceschema.BlindBoxPropStatusActive}).
+		Order("status = 'active' desc, id asc").Find(&cards).Error; err != nil {
+		return err
+	}
+	for index := range cards {
+		if hasMonthlyPassBenefitReference(cards[index].BenefitReference, reference) {
+			return nil
+		}
+	}
+	if len(cards) > 0 {
+		primary := &cards[0]
+		remaining := int64(0)
+		active := false
+		for index := range cards {
+			card := &cards[index]
+			cardRemaining := card.RemainingSeconds
+			if card.Status == commerceschema.BlindBoxPropStatusActive {
+				cardRemaining = max(card.ExpiresAt-now, 0)
+				active = true
+			} else if cardRemaining <= 0 {
+				cardRemaining = card.DurationSeconds
+			}
+			remaining += cardRemaining
+		}
+		remaining += duration
+		primary.DurationSeconds = max(primary.DurationSeconds, duration)
+		primary.RemainingSeconds = remaining
+		primary.BenefitReference = appendMonthlyPassBenefitReference(primary.BenefitReference, reference)
+		if active {
+			primary.Status = commerceschema.BlindBoxPropStatusActive
+			primary.ActivatedAt = now
+			primary.ExpiresAt = now + remaining
+		} else {
+			primary.ExpiresAt = 0
+		}
+		if err := tx.Save(primary).Error; err != nil {
+			return err
+		}
+		for index := 1; index < len(cards); index++ {
+			if err := tx.Model(&commerceschema.BlindBoxProp{}).Where("id = ?", cards[index].Id).Updates(map[string]any{
+				"status":     commerceschema.BlindBoxPropStatusUsed,
+				"used_at":    now,
+				"updated_at": now,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	return tx.Create(&commerceschema.BlindBoxProp{
 		UserId: userID, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
 		Title: monthlyPassTitle(duration), Status: commerceschema.BlindBoxPropStatusAvailable,
 		Multiplier: 0.1, DurationSeconds: duration, RemainingSeconds: duration,
 		BenefitReference: reference,
 	}).Error
+}
+
+func hasMonthlyPassBenefitReference(stored, reference string) bool {
+	if strings.TrimSpace(reference) == "" {
+		return false
+	}
+	for _, item := range strings.Split(stored, "|") {
+		if strings.TrimSpace(item) == reference {
+			return true
+		}
+	}
+	return false
+}
+
+func appendMonthlyPassBenefitReference(stored, reference string) string {
+	if hasMonthlyPassBenefitReference(stored, reference) {
+		return stored
+	}
+	if strings.TrimSpace(stored) == "" {
+		return reference
+	}
+	return stored + "|" + reference
+}
+
+func primaryMonthlyPassPropTx(tx *gorm.DB, userID int) (*commerceschema.BlindBoxProp, error) {
+	if tx == nil || userID <= 0 {
+		return nil, errors.New("invalid monthly pass lookup")
+	}
+	var prop commerceschema.BlindBoxProp
+	err := tx.Where("user_id = ? AND prop_type = ? AND status IN ?", userID, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		[]string{commerceschema.BlindBoxPropStatusAvailable, commerceschema.BlindBoxPropStatusPaused, commerceschema.BlindBoxPropStatusActive}).
+		Order("status = 'active' desc, id asc").First(&prop).Error
+	if err != nil {
+		return nil, err
+	}
+	return &prop, nil
+}
+
+// ReconcileMonthlyPassProps folds legacy duplicate cards into one entitlement
+// per user so route checks cannot hide an older active card behind a newer one.
+func ReconcileMonthlyPassProps() (int, error) {
+	now := platformruntime.GetTimestamp()
+	var userIDs []int
+	if err := platformdb.DB.Model(&commerceschema.BlindBoxProp{}).
+		Where("prop_type = ? AND status IN ?", commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+			[]string{commerceschema.BlindBoxPropStatusAvailable, commerceschema.BlindBoxPropStatusPaused, commerceschema.BlindBoxPropStatusActive}).
+		Distinct("user_id").Pluck("user_id", &userIDs).Error; err != nil {
+		return 0, err
+	}
+	merged := 0
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		for _, userID := range userIDs {
+			var cards []commerceschema.BlindBoxProp
+			if err := tx.Set("gorm:query_option", "FOR UPDATE").
+				Where("user_id = ? AND prop_type = ? AND status IN ?", userID, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+					[]string{commerceschema.BlindBoxPropStatusAvailable, commerceschema.BlindBoxPropStatusPaused, commerceschema.BlindBoxPropStatusActive}).
+				Order("id asc").Find(&cards).Error; err != nil {
+				return err
+			}
+			if len(cards) <= 1 {
+				continue
+			}
+			primaryIndex := 0
+			for index := range cards {
+				if cards[index].Status == commerceschema.BlindBoxPropStatusActive && cards[primaryIndex].Status != commerceschema.BlindBoxPropStatusActive {
+					primaryIndex = index
+				}
+			}
+			remaining := int64(0)
+			active := false
+			for index := range cards {
+				cardRemaining := cards[index].RemainingSeconds
+				if cards[index].Status == commerceschema.BlindBoxPropStatusActive {
+					cardRemaining = max(cards[index].ExpiresAt-now, 0)
+					active = true
+				} else if cardRemaining <= 0 {
+					cardRemaining = cards[index].DurationSeconds
+				}
+				remaining += cardRemaining
+			}
+			primary := &cards[primaryIndex]
+			primary.RemainingSeconds = remaining
+			if active {
+				primary.Status = commerceschema.BlindBoxPropStatusActive
+				primary.ActivatedAt = now
+				primary.ExpiresAt = now + remaining
+			} else {
+				if primary.Status != commerceschema.BlindBoxPropStatusPaused {
+					primary.Status = commerceschema.BlindBoxPropStatusAvailable
+				}
+				primary.ExpiresAt = 0
+			}
+			if err := tx.Save(primary).Error; err != nil {
+				return err
+			}
+			for index := range cards {
+				if index == primaryIndex {
+					continue
+				}
+				if err := tx.Model(&commerceschema.BlindBoxProp{}).Where("id = ?", cards[index].Id).Updates(map[string]any{
+					"status": commerceschema.BlindBoxPropStatusUsed, "used_at": now, "updated_at": now,
+				}).Error; err != nil {
+					return err
+				}
+				merged++
+			}
+		}
+		return nil
+	})
+	return merged, err
 }
 
 func hasActiveMonthlyPassPropTx(tx *gorm.DB, userID int) bool {
@@ -119,7 +281,12 @@ func BackfillActiveMonthlyPassBenefits() error {
 				}
 				continue
 			}
-			if plan == nil || monthlyPassDurationSeconds(plan) == 0 {
+			if subscriptionLuckyNumberTableReady() {
+				if err := backfillSubscriptionLuckyNumberTx(tx, &sub, plan); err != nil {
+					return err
+				}
+			}
+			if monthlyPassDurationSeconds(plan) == 0 {
 				continue
 			}
 			reference := fmt.Sprintf("monthly-pass-backfill-20260811:%d", sub.Id)

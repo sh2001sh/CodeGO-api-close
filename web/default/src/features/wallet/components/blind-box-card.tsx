@@ -392,6 +392,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           'consume_discount_95',
           'consume_discount_90',
           'zero_hour_multiplier',
+          'monthly_pass_multiplier',
         ].includes(record.prop_type || '')
       ) {
         return
@@ -405,7 +406,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           toast.success(
             record.prop_type === 'zero_hour_multiplier'
               ? `${record.reward_title} 已启用，纯PRO分组将持续 1 小时。`
-              : `${record.reward_title} 已启用，24 小时后自动失效。`
+              : record.prop_type === 'monthly_pass_multiplier'
+                ? `${record.reward_title} 已启用，纯PRO分组按 0.1 倍率计费，可随时暂停。`
+                : `${record.reward_title} 已启用，24 小时后自动失效。`
           )
           await refreshAll()
           await queryClient.invalidateQueries({ queryKey: ['user-groups'] })
@@ -563,16 +566,18 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
       <BlindBoxHistorySheet open={showHistory} onOpenChange={setShowHistory} />
 
       <Dialog open={showProps} onOpenChange={setShowProps}>
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>我的道具</DialogTitle>
           </DialogHeader>
-          <BlindBoxPropsList
-            props={data?.props || []}
-            disabled={openingCount !== null || paying}
-            onUse={(prop) => void handleUseProp(prop)}
-            onPause={(prop) => void handlePauseProp(prop)}
-          />
+          <div className='max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1'>
+            <BlindBoxPropsList
+              props={data?.props || []}
+              disabled={openingCount !== null || paying}
+              onUse={(prop) => void handleUseProp(prop)}
+              onPause={(prop) => void handlePauseProp(prop)}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </>

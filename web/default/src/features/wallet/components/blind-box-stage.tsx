@@ -87,7 +87,7 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
               size='lg'
               onClick={() => props.onManualOpen(props.availableBoxes)}
               disabled={opening}
-              className='min-w-44'
+              className='w-full max-w-full whitespace-normal sm:w-auto sm:min-w-44'
             >
               {opening ? (
                 <>
@@ -115,7 +115,7 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
               单价 ¥{props.unitPrice.toFixed(1)}
             </span>
           </div>
-          <div className='mt-2.5 flex flex-wrap items-center gap-2'>
+          <div className='mt-2.5 flex min-w-0 flex-wrap items-center gap-2'>
             {(props.countOptions.length > 0
               ? props.countOptions
               : [1, 3, 5, 10]
@@ -138,7 +138,7 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
                   Number.isFinite(value) && value > 0 ? value : 1
                 )
               }}
-              className='h-9 max-w-20'
+              className='h-9 w-20 max-w-full'
               aria-label='自定义抽取次数'
               disabled={disabled}
             />
@@ -149,7 +149,7 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
           <span className='text-foreground text-sm font-semibold'>
             支付方式
           </span>
-          <div className='mt-2.5 flex flex-wrap gap-2'>
+          <div className='mt-2.5 flex min-w-0 flex-wrap gap-2'>
             {props.payMethods.map((method) => (
               <Button
                 key={method.type}
@@ -169,7 +169,7 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
           </div>
         </div>
 
-        <div className='border-primary/25 bg-primary/[0.045] flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3.5'>
+        <div className='border-primary/25 bg-primary/[0.045] flex min-w-0 flex-col items-stretch gap-3 rounded-xl border px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between'>
           <div>
             <div className='text-muted-foreground text-[11px]'>应付金额</div>
             <motion.div
@@ -182,15 +182,20 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
               ¥{props.amountDue.toFixed(2)}
             </motion.div>
           </div>
-          <div className='flex flex-wrap gap-2'>
-            <Button type='button' variant='outline' onClick={props.onOpenProps}>
+          <div className='flex min-w-0 flex-col gap-2 sm:flex-row'>
+            <Button
+              type='button'
+              variant='outline'
+              className='w-full sm:w-auto'
+              onClick={props.onOpenProps}
+            >
               <Gift data-icon='inline-start' />
               我的道具{props.propCount > 0 ? ` (${props.propCount})` : ''}
             </Button>
             <Button
               onClick={props.onPay}
               disabled={!props.enabled || props.paying || !props.paymentMethod}
-              className='min-w-36'
+              className='w-full sm:w-auto sm:min-w-36'
             >
               {props.paying ? (
                 <>

@@ -17,6 +17,7 @@ const (
 	subscriptionMaintenanceBatchSize        = 300
 	subscriptionCleanupInterval             = 30 * time.Minute
 	subscriptionProjectionReconcileInterval = 15 * time.Minute
+	subscriptionLuckyBackfillInterval       = 10 * time.Minute
 )
 
 var (
@@ -24,6 +25,7 @@ var (
 	subscriptionMaintenanceRunning      atomic.Bool
 	subscriptionCleanupLast             atomic.Int64
 	subscriptionProjectionReconcileLast atomic.Int64
+	subscriptionLuckyBackfillLast       atomic.Int64
 )
 
 // StartSubscriptionMaintenanceTask owns non-workflow subscription maintenance.
@@ -83,6 +85,24 @@ func runSubscriptionMaintenanceOnce() {
 			}
 		} else {
 			logger.LogWarn(ctx, fmt.Sprintf("subscription projection reconciliation failed: %v", err))
+		}
+	}
+	lastLuckyBackfill := time.Unix(subscriptionLuckyBackfillLast.Load(), 0)
+	if time.Since(lastLuckyBackfill) >= subscriptionLuckyBackfillInterval {
+		if result, err := BackfillDailyLuckyNumbers(); err == nil {
+			subscriptionLuckyBackfillLast.Store(time.Now().Unix())
+			if platformconfig.DebugEnabled && result.Created > 0 {
+				logger.LogDebug(ctx, fmt.Sprintf("daily lucky number backfill: created=%d scanned=%d", result.Created, result.Scanned))
+			}
+		} else {
+			logger.LogWarn(ctx, fmt.Sprintf("daily lucky number backfill failed: %v", err))
+		}
+		if merged, err := ReconcileMonthlyPassProps(); err == nil {
+			if platformconfig.DebugEnabled && merged > 0 {
+				logger.LogDebug(ctx, fmt.Sprintf("monthly pass prop reconciliation: merged=%d", merged))
+			}
+		} else {
+			logger.LogWarn(ctx, fmt.Sprintf("monthly pass prop reconciliation failed: %v", err))
 		}
 	}
 	if platformconfig.DebugEnabled && totalExpired > 0 {

@@ -11,6 +11,7 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"math"
 	"testing"
 	"time"
@@ -338,6 +339,8 @@ func TestOpenBlindBoxOrderByTradeNo_SubscriptionRewardPreservesExistingCard(t *t
 	require.NoError(t, err)
 	require.Len(t, records, 1)
 	require.Equal(t, commerceschema.BlindBoxRewardTypeSubscription, records[0].RewardType)
+	assert.NotZero(t, records[0].PropId)
+	assert.Equal(t, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, records[0].PropType)
 	require.Equal(t, subscription.Id, records[0].UserSubscriptionId)
 
 	var savedSubscription commerceschema.UserSubscription
@@ -347,18 +350,34 @@ func TestOpenBlindBoxOrderByTradeNo_SubscriptionRewardPreservesExistingCard(t *t
 
 	var props []commerceschema.BlindBoxProp
 	require.NoError(t, db.Where("user_id = ? AND prop_type = ?", user.Id, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).Order("id").Find(&props).Error)
-	require.Len(t, props, 2)
+	// A reward extends the existing paused card instead of creating a second card.
+	require.Len(t, props, 1)
 	assert.Equal(t, int64(1800), props[0].DurationSeconds)
-	assert.Equal(t, int64(1357), props[0].RemainingSeconds)
-	assert.Equal(t, int64(900), props[1].DurationSeconds)
-	assert.Equal(t, int64(900), props[1].RemainingSeconds)
-	assert.Equal(t, fmt.Sprintf("blind-box-subscription:%d", records[0].Id), props[1].BenefitReference)
+	assert.Equal(t, int64(2257), props[0].RemainingSeconds)
+	assert.Contains(t, props[0].BenefitReference, "monthly-pass-backfill-test:9520")
+	assert.Contains(t, props[0].BenefitReference, fmt.Sprintf("blind-box-subscription:%d", records[0].Id))
 
 	var account billingschema.BillingAccount
 	require.NoError(t, db.Where("account_type = ? AND owner_type = ? AND owner_id = ?", "subscription", "user_subscription", subscription.Id).First(&account).Error)
 	var snapshot billingschema.BillingBalanceSnapshot
 	require.NoError(t, db.First(&snapshot, "account_id = ?", account.AccountID).Error)
 	assert.Equal(t, int64(4900), snapshot.AvailableBalance)
+}
+
+func TestAwardMonthlyPassPropMergesActiveCardTime(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8821, Username: "monthly_pass_merge_active", Status: constant.UserStatusEnabled}
+	plan := &commerceschema.SubscriptionPlan{Id: 9522, Title: "Pro monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, db.Create(plan).Error)
+	now := platformruntime.GetTimestamp()
+	card := &commerceschema.BlindBoxProp{UserId: user.Id, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, Title: "45 分钟 0.1 倍率卡", Status: commerceschema.BlindBoxPropStatusActive, Multiplier: 0.1, DurationSeconds: 2700, ExpiresAt: now + 600}
+	require.NoError(t, db.Create(card).Error)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return awardMonthlyPassPropTx(tx, user.Id, plan, "merge-active:1") }))
+	var props []commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND prop_type = ? AND status IN ?", user.Id, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, []string{commerceschema.BlindBoxPropStatusActive, commerceschema.BlindBoxPropStatusAvailable, commerceschema.BlindBoxPropStatusPaused}).Find(&props).Error)
+	require.Len(t, props, 1)
+	assert.InDelta(t, int64(3300), props[0].ExpiresAt-now, 3)
 }
 
 func TestApplyFirstPurchaseMinimumGuarantee(t *testing.T) {

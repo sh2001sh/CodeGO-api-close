@@ -33,13 +33,13 @@ export function BlindBoxPropsList(props: {
           return (
             <div
               key={prop.id}
-              className='border-border/70 bg-background/60 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5'
+              className='border-border/70 bg-background/60 flex min-w-0 flex-col items-stretch gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3'
             >
-              <div className='min-w-0'>
-                <div className='text-foreground truncate text-sm font-medium'>
+              <div className='min-w-0 flex-1'>
+                <div className='text-foreground text-sm font-medium break-words'>
                   {prop.title}
                 </div>
-                <div className='text-muted-foreground mt-0.5 text-xs'>
+                <div className='text-muted-foreground mt-0.5 text-xs leading-5 break-words'>
                   {getPropDescription(prop, t)}
                 </div>
               </div>
@@ -50,6 +50,7 @@ export function BlindBoxPropsList(props: {
                   variant='outline'
                   onClick={() => props.onPause(prop)}
                   disabled={props.disabled}
+                  className='w-full shrink-0 sm:w-auto'
                 >
                   <CirclePause className='size-4' data-icon='inline-start' />
                   暂停
@@ -61,6 +62,7 @@ export function BlindBoxPropsList(props: {
                   variant={active ? 'secondary' : 'default'}
                   onClick={() => props.onUse(prop)}
                   disabled={props.disabled || !canUse}
+                  className='w-full shrink-0 sm:w-auto'
                 >
                   {monthlyPass && canUse ? (
                     <CirclePlay className='size-4' data-icon='inline-start' />

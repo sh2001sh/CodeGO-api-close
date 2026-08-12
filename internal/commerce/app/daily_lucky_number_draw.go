@@ -193,10 +193,17 @@ func listLuckyDrawParticipantsTx(tx *gorm.DB, drawUnix int64) ([]luckyDrawPartic
 		planMap[plan.Id] = plan
 	}
 	subscriptionIDs := make([]int, 0, len(subscriptions))
-	for _, sub := range subscriptions {
+	for index := range subscriptions {
+		sub := &subscriptions[index]
 		plan, ok := planMap[sub.PlanId]
 		if !ok || commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) != commerceschema.SubscriptionPlanTypeMonthly || !plan.LuckyDrawEnabled {
 			continue
+		}
+		// Backfilled/admin-created subscriptions may not have a number yet.
+		// Allocate it lazily before building the participant set so they can
+		// enter the very draw being settled.
+		if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, &plan); err != nil {
+			return nil, err
 		}
 		subscriptionIDs = append(subscriptionIDs, sub.Id)
 	}

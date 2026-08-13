@@ -67,3 +67,23 @@ func TestListDailyLuckyNumberPublicWinsIncludesEverySettledMatch(t *testing.T) {
 	require.Equal(t, 1, page.Records[1].MatchedDigits)
 	require.Equal(t, "**02", page.Records[0].LuckySuffix)
 }
+
+func TestListDailyLuckyNumberPublicWinsDoesNotDependOnSubscriptionNumberTable(t *testing.T) {
+	prepareDailyLuckyNumberTestDB(t)
+	db := platformDBForDailyLuckyTest(t)
+	draw := &commerceschema.SubscriptionLuckyDraw{Id: 9961, DrawDate: "2099-01-04", WinningNumber: "2402", Status: commerceschema.SubscriptionLuckyDrawStatusCompleted}
+	reward := &commerceschema.SubscriptionLuckyReward{
+		Id: 9962, DrawId: draw.Id, UserId: 9963, BlindBoxOpenRecordId: 9964,
+		ParticipationType: "blind_box", LuckyNumber: "1702", MatchedDigits: 2,
+		FinalRewardQuota: int64(platformruntime.QuotaPerUnit), CreditStatus: commerceschema.SubscriptionLuckyRewardCreditCredited,
+	}
+	require.NoError(t, db.Create(draw).Error)
+	require.NoError(t, db.Create(reward).Error)
+	require.NoError(t, db.Migrator().DropTable(&commerceschema.SubscriptionLuckyNumber{}))
+
+	page, err := ListDailyLuckyNumberPublicWins(1, 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), page.Total)
+	require.Len(t, page.Records, 1)
+	require.Equal(t, "**02", page.Records[0].LuckySuffix)
+}

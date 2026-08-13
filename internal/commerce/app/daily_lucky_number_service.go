@@ -274,7 +274,7 @@ func MarkAllDailyLuckyRewardNotificationsRead(userID int) error {
 // ListDailyLuckyNumberPublicWins returns masked, settled public wins.
 func ListDailyLuckyNumberPublicWins(page, pageSize int) (*commercedomain.LuckyPublicWinPage, error) {
 	page, pageSize = normalizeLuckyPage(page, pageSize)
-	if !subscriptionLuckyNumberTableReady() {
+	if !luckyPublicWinsTablesReady() {
 		return &commercedomain.LuckyPublicWinPage{Page: page, PageSize: pageSize, Records: []commercedomain.LuckyPublicWin{}}, nil
 	}
 	query := platformdb.DB.Model(&commerceschema.SubscriptionLuckyReward{}).Where("matched_digits > ? AND credit_status = ?", 0, commerceschema.SubscriptionLuckyRewardCreditCredited)
@@ -421,4 +421,10 @@ func maskLuckySuffix(value string) string {
 
 func luckyRewardNotificationTableReady() bool {
 	return platformdb.DB != nil && platformdb.DB.Migrator().HasTable(&commerceschema.SubscriptionLuckyRewardNotification{})
+}
+
+func luckyPublicWinsTablesReady() bool {
+	return platformdb.DB != nil &&
+		platformdb.DB.Migrator().HasTable(&commerceschema.SubscriptionLuckyDraw{}) &&
+		platformdb.DB.Migrator().HasTable(&commerceschema.SubscriptionLuckyReward{})
 }

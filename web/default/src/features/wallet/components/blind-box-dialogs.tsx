@@ -61,10 +61,12 @@ export function formatBlindBoxTimestamp(timestamp?: number) {
   return new Date(timestamp * 1000).toLocaleString()
 }
 
-export function getBlindBoxMethodLabel(method?: {
-  type?: string
-  name?: string
-} | null) {
+export function getBlindBoxMethodLabel(
+  method?: {
+    type?: string
+    name?: string
+  } | null
+) {
   if (!method) return '未选择'
   if (method.type === 'xunhu') return '微信支付'
   return method.name || method.type || '在线支付'
@@ -74,8 +76,12 @@ export function summarizeOpenResult(records: BlindBoxRecord[]) {
   const subscriptionHits = records.filter(
     (record) => record.reward_type === 'subscription'
   ).length
-  const propHits = records.filter((record) => record.reward_type === 'prop').length
-  const quotaHits = records.filter((record) => record.reward_type === 'quota').length
+  const propHits = records.filter(
+    (record) => record.reward_type === 'prop'
+  ).length
+  const quotaHits = records.filter(
+    (record) => record.reward_type === 'quota'
+  ).length
   const claudeHits = records.filter(
     (record) => record.reward_type === 'claude_quota'
   ).length
@@ -117,28 +123,33 @@ export function BlindBoxPrizeDialog(props: {
 }) {
   return (
     <Dialog open={props.state.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='w-[calc(100vw-1rem)] max-w-2xl overflow-hidden p-0'>
-        <DialogHeader className='border-b px-5 py-4'>
+      <DialogContent className='flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl flex-col overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]'>
+        <DialogHeader className='shrink-0 border-b px-4 py-4 sm:px-5'>
           <DialogTitle className='flex items-center gap-2 text-base'>
-            <Trophy className='size-5 text-primary' />
+            <Trophy className='text-primary size-5' />
             抽奖结果
           </DialogTitle>
         </DialogHeader>
 
-        <div className='space-y-4 px-5 py-5'>
-          <PrizeRevealHeader
-            summary={summarizeOpenResult(props.state.records)}
-            openCount={props.state.openCount}
-            records={props.state.records}
-          />
+        <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5'>
+          <div className='space-y-4'>
+            <PrizeRevealHeader
+              summary={summarizeOpenResult(props.state.records)}
+              openCount={props.state.openCount}
+              records={props.state.records}
+            />
 
-          <PrizeRevealList
-            records={props.state.records}
-            onUseReward={props.onUseReward}
-            formatTimestamp={formatBlindBoxTimestamp}
-          />
-
-          <Button onClick={() => props.onOpenChange(false)}>确定</Button>
+            <PrizeRevealList
+              records={props.state.records}
+              onUseReward={props.onUseReward}
+              formatTimestamp={formatBlindBoxTimestamp}
+            />
+          </div>
+        </div>
+        <div className='bg-background shrink-0 border-t px-4 py-3 sm:px-5'>
+          <Button className='w-full' onClick={() => props.onOpenChange(false)}>
+            确定
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

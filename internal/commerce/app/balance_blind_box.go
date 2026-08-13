@@ -83,8 +83,8 @@ func OpenBalanceBlindBox(userID int, requestID string, requestedCount ...int) (*
 	if len(requestedCount) > 0 && requestedCount[0] > 0 {
 		count = requestedCount[0]
 	}
-	if count > 20 {
-		return nil, errors.New("余额盲盒单次最多开启 20 个")
+	if count > 100 {
+		return nil, errors.New("余额盲盒单次最多开启 100 个")
 	}
 	priceQuota := quotaUnitsFromBlindBoxUSD(setting.BalanceBlindBoxPriceUSD)
 	if priceQuota <= 0 {

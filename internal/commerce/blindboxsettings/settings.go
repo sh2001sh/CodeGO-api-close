@@ -82,30 +82,30 @@ var defaultTierSettings = []TierSetting{
 }
 
 var defaultBalanceBlindBoxTiers = []TierSetting{
-	{Name: "$1.00-$3.00 普通额度", MinUSD: 1, MaxUSD: 3, Probability: 0.08, RewardType: "quota", WalletType: "default"},
-	{Name: "$3.00-$6.00 普通额度", MinUSD: 3, MaxUSD: 6, Probability: 0.12, RewardType: "quota", WalletType: "default"},
-	{Name: "$6.00-$10.00 普通额度", MinUSD: 6, MaxUSD: 10, Probability: 0.16, RewardType: "quota", WalletType: "default"},
+	{Name: "$1.00-$3.00 普通额度", MinUSD: 1, MaxUSD: 3, Probability: 0.17, RewardType: "quota", WalletType: "default"},
+	{Name: "$3.00-$6.00 普通额度", MinUSD: 3, MaxUSD: 6, Probability: 0.145, RewardType: "quota", WalletType: "default"},
+	{Name: "$6.00-$10.00 普通额度", MinUSD: 6, MaxUSD: 10, Probability: 0.1719, RewardType: "quota", WalletType: "default"},
 	{Name: "$10.00-$15.00 普通额度", MinUSD: 10, MaxUSD: 15, Probability: 0.20, RewardType: "quota", WalletType: "default"},
-	{Name: "$15.00-$25.00 普通额度", MinUSD: 15, MaxUSD: 25, Probability: 0.25, RewardType: "quota", WalletType: "default"},
+	{Name: "$15.00-$25.00 普通额度", MinUSD: 15, MaxUSD: 25, Probability: 0.20, RewardType: "quota", WalletType: "default"},
 	{Name: "$35 普通额度", MinUSD: 35, MaxUSD: 35, Probability: 0.03, RewardType: "quota", WalletType: "default"},
 	{Name: "$80 普通额度", MinUSD: 80, MaxUSD: 80, Probability: 0.0043, RewardType: "quota", WalletType: "default"},
 	{Name: "$200 普通额度", MinUSD: 200, MaxUSD: 200, Probability: 0.00058, RewardType: "quota", WalletType: "default"},
 	{Name: "$500 普通额度", MinUSD: 500, MaxUSD: 500, Probability: 0.0001, RewardType: "quota", WalletType: "default"},
 	{Name: "$1000 普通额度", MinUSD: 1000, MaxUSD: 1000, Probability: 0.00002, RewardType: "quota", WalletType: "default"},
-	{Name: "$2.00-$4.00 Claude 额度", MinUSD: 2, MaxUSD: 4, Probability: 0.04, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$5.00-$10.00 Claude 额度", MinUSD: 5, MaxUSD: 10, Probability: 0.035, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$10.00-$25.00 Claude 额度", MinUSD: 10, MaxUSD: 25, Probability: 0.02, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$30.00-$60.00 Claude 额度", MinUSD: 30, MaxUSD: 60, Probability: 0.008, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$200 Claude 额度", MinUSD: 200, MaxUSD: 200, Probability: 0.002, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$2.00-$4.00 Claude 额度", MinUSD: 2, MaxUSD: 4, Probability: 0.015, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$5.00-$10.00 Claude 额度", MinUSD: 5, MaxUSD: 10, Probability: 0.008, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$10.00-$25.00 Claude 额度", MinUSD: 10, MaxUSD: 25, Probability: 0.004, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$30.00-$60.00 Claude 额度", MinUSD: 30, MaxUSD: 60, Probability: 0.001, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$200 Claude 额度", MinUSD: 200, MaxUSD: 200, Probability: 0.0001, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "充值九折卡", Probability: 0.0065, RewardType: "prop"},
 	{Name: "套餐九折卡", Probability: 0.0035, RewardType: "prop"},
 	{Name: "0.95 倍率卡", Probability: 0.0045, RewardType: "prop"},
 	{Name: "0.9 倍率卡", Probability: 0.002, RewardType: "prop"},
 }
 
-var legacyBalanceBlindBoxProbabilities = []float64{
-	0.12, 0.16, 0.18, 0.18, 0.20127, 0.03, 0.006, 0.001, 0.0002,
-	0.00003, 0.04, 0.035, 0.02, 0.008, 0.002, 0.0065, 0.0035, 0.0045, 0.002,
+var legacyBalanceBlindBoxProbabilities = [][]float64{
+	{0.12, 0.16, 0.18, 0.18, 0.20127, 0.03, 0.006, 0.001, 0.0002, 0.00003, 0.04, 0.035, 0.02, 0.008, 0.002, 0.0065, 0.0035, 0.0045, 0.002},
+	{0.08, 0.12, 0.16, 0.20, 0.25, 0.03, 0.0043, 0.00058, 0.0001, 0.00002, 0.04, 0.035, 0.02, 0.008, 0.002, 0.0065, 0.0035, 0.0045, 0.002},
 }
 
 var currentSetting = Setting{
@@ -186,16 +186,23 @@ func isApproxProbability(left, right float64) bool {
 }
 
 func isLegacyBalanceBlindBoxTiers(tiers []TierSetting) bool {
-	if len(tiers) != len(legacyBalanceBlindBoxProbabilities) || len(tiers) != len(defaultBalanceBlindBoxTiers) {
+	if len(tiers) != len(defaultBalanceBlindBoxTiers) {
 		return false
 	}
-	for index, tier := range tiers {
-		if strings.TrimSpace(tier.Name) != defaultBalanceBlindBoxTiers[index].Name ||
-			!isApproxProbability(tier.Probability, legacyBalanceBlindBoxProbabilities[index]) {
-			return false
+	for _, probabilities := range legacyBalanceBlindBoxProbabilities {
+		matched := true
+		for index, tier := range tiers {
+			if strings.TrimSpace(tier.Name) != defaultBalanceBlindBoxTiers[index].Name ||
+				!isApproxProbability(tier.Probability, probabilities[index]) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func isLegacyBrokenTiers(tiers []TierSetting) bool {

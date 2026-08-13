@@ -276,7 +276,7 @@ function BalanceBlindBoxPanel(props: {
                   {tier.name}
                 </div>
                 <div className='text-muted-foreground mt-1 text-[11px]'>
-                  {(tier.probability * 100).toFixed(3)}%
+                  {formatProbability(tier.probability)}
                 </div>
               </div>
             ))}
@@ -296,7 +296,7 @@ function BalanceBlindBoxPanel(props: {
         </button>
         <div className='flex flex-wrap items-center gap-2'>
           <span className='text-muted-foreground text-xs'>抽取数量</span>
-          {[1, 5, 10, 20].map((option) => (
+          {[1, 5, 10, 20, 50, 100].map((option) => (
             <button
               key={option}
               type='button'
@@ -310,12 +310,12 @@ function BalanceBlindBoxPanel(props: {
           <Input
             type='number'
             min={1}
-            max={20}
+            max={100}
             value={count}
             onChange={(event) => {
               const next = Number(event.target.value)
               if (!Number.isFinite(next)) return
-              setCount(Math.min(20, Math.max(1, Math.floor(next))))
+              setCount(Math.min(100, Math.max(1, Math.floor(next))))
             }}
             className='h-8 w-20'
             aria-label='自定义余额盲盒抽取数量'
@@ -325,6 +325,13 @@ function BalanceBlindBoxPanel(props: {
       </div>
     </section>
   )
+}
+
+function formatProbability(probability: number) {
+  if (probability <= 0) return '0%'
+  const percentage = probability * 100
+  if (percentage < 0.001) return '<0.001%'
+  return `${percentage.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}%`
 }
 
 function Metric(props: { label: string; value: string }) {

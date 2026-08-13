@@ -76,6 +76,31 @@ func TestOpenBalanceBlindBoxSupportsBatchOpening(t *testing.T) {
 	}
 }
 
+func TestOpenBalanceBlindBoxSupportsOneHundredDraws(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	original := blindboxsettings.Get()
+	setting := original
+	setting.Enabled = true
+	setting.BalanceBlindBoxEnabled = true
+	setting.BalanceBlindBoxPriceUSD = 15
+	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{Name: "$1 普通额度", MinUSD: 1, MaxUSD: 1, Probability: 1, RewardType: "quota", WalletType: "default"}}
+	blindboxsettings.Set(setting)
+	t.Cleanup(func() { blindboxsettings.Set(original) })
+
+	user := &identityschema.User{Id: 8897, Username: "balance_blind_box_hundred", Quota: int(2000 * platformruntime.QuotaPerUnit), AffCode: "balance-box-hundred"}
+	require.NoError(t, db.Create(user).Error)
+	result, err := OpenBalanceBlindBox(user.Id, "balance-box-request-hundred", 100)
+	require.NoError(t, err)
+	require.Len(t, result.Records, 100)
+
+	replayed, err := OpenBalanceBlindBox(user.Id, "balance-box-request-hundred", 100)
+	require.NoError(t, err)
+	require.Len(t, replayed.Records, 100)
+	var count int64
+	require.NoError(t, db.Model(&commerceschema.BlindBoxOpenRecord{}).Where("user_id = ? AND pool_type = ?", user.Id, commerceschema.BlindBoxPoolTypeBalance15).Count(&count).Error)
+	require.Equal(t, int64(100), count)
+}
+
 func TestOpenBalanceBlindBoxRejectsInsufficientBalanceWithoutRecord(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	original := blindboxsettings.Get()

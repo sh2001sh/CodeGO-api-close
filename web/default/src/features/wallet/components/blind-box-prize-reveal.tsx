@@ -147,11 +147,22 @@ export function PrizeRevealList(props: {
   formatTimestamp: (timestamp?: number) => string
 }) {
   const reduced = useReducedMotion()
+  const variants = reduced
+    ? REDUCED_CONTAINER
+    : {
+        ...REVEAL_CONTAINER,
+        animate: {
+          transition: {
+            staggerChildren: props.records.length > 20 ? 0.015 : 0.12,
+            delayChildren: 0.08,
+          },
+        },
+      }
 
   return (
     <motion.div
       className='grid gap-3'
-      variants={reduced ? REDUCED_CONTAINER : REVEAL_CONTAINER}
+      variants={variants}
       initial='initial'
       animate='animate'
     >

@@ -141,6 +141,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 		record := commerceschema.BlindBoxOpenRecord{
 			UserId:     userID,
 			OrderId:    currentOrder.Id,
+			PoolType:   commerceschema.BlindBoxPoolTypeStandard,
 			CreateTime: platformruntime.GetTimestamp(),
 		}
 		pityTriggered := pityState.ConsecutiveLowRewards+1 >= effectivePityThreshold

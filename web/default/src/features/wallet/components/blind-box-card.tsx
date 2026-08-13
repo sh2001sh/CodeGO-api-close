@@ -3,6 +3,16 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -17,6 +27,8 @@ import {
   requestBlindBoxPayment,
   activateBlindBoxProp,
   pauseBlindBoxProp,
+  convertBlindBoxProp,
+  openBalanceBlindBox,
 } from '../api'
 import { submitPaymentForm } from '../lib'
 import type {
@@ -64,6 +76,12 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   const openingRef = useRef(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showProps, setShowProps] = useState(false)
+  const [convertingPropId, setConvertingPropId] = useState<number | null>(null)
+  const [blindBoxMode, setBlindBoxMode] = useState<'standard' | 'balance'>(
+    'standard'
+  )
+  const [balanceOpening, setBalanceOpening] = useState(false)
+  const [confirmBalanceOpen, setConfirmBalanceOpen] = useState(false)
   const [paymentState, setPaymentState] =
     useState<BlindBoxPaymentState>(EMPTY_PAYMENT_STATE)
   const [prizeState, setPrizeState] =
@@ -472,6 +490,69 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     [queryClient, refreshAll]
   )
 
+  const handleConvertProp = useCallback(
+    async (prop: BlindBoxProp) => {
+      if (
+        prop.status !== 'available' ||
+        !['topup_discount_90', 'subscription_discount_90'].includes(
+          prop.prop_type
+        )
+      ) {
+        return
+      }
+      const targetType =
+        prop.prop_type === 'topup_discount_90'
+          ? 'subscription_discount_90'
+          : 'topup_discount_90'
+      setConvertingPropId(prop.id)
+      try {
+        const response = await convertBlindBoxProp(prop.id, targetType)
+        if (!isApiSuccess(response) || !response.data?.prop) {
+          throw new Error(response.message || '转换失败')
+        }
+        toast.success(`已转换为${response.data.prop.title}`)
+        await refreshAll()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '转换失败')
+      } finally {
+        setConvertingPropId(null)
+      }
+    },
+    [refreshAll]
+  )
+
+  const handleBalanceOpen = useCallback(async () => {
+    if (balanceOpening || !data?.balance_blind_box?.enabled) return
+    if (data.balance_blind_box.balance_usd < data.balance_blind_box.price_usd) {
+      toast.error(
+        `余额不足，还差 ${(data.balance_blind_box.price_usd - data.balance_blind_box.balance_usd).toFixed(2)}`
+      )
+      return
+    }
+    setBalanceOpening(true)
+    try {
+      const requestId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const response = await openBalanceBlindBox(requestId)
+      if (!isApiSuccess(response) || !response.data?.record) {
+        throw new Error(response.message || '余额盲盒抽取失败')
+      }
+      setPrizeState({
+        open: true,
+        records: [response.data.record],
+        openCount: 1,
+      })
+      toast.success('余额盲盒已开启，本次不会产生每日幸运号。')
+      await refreshAll()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '余额盲盒抽取失败')
+    } finally {
+      setBalanceOpening(false)
+    }
+  }, [balanceOpening, data?.balance_blind_box, refreshAll])
+
   const handleOpenExternal = useCallback(() => {
     if (paymentState.formUrl && paymentState.formFields) {
       submitPaymentForm(paymentState.formUrl, paymentState.formFields)
@@ -524,6 +605,10 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
             onPay={() => void handlePay()}
             onManualOpen={(count) => void handleManualOpen(count)}
             onOpenProps={() => setShowProps(true)}
+            mode={blindBoxMode}
+            balanceOpening={balanceOpening}
+            onModeChange={setBlindBoxMode}
+            onBalanceOpen={() => setConfirmBalanceOpen(true)}
           />
         </div>
 
@@ -565,6 +650,37 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
         onUseReward={handleUseReward}
       />
 
+      <AlertDialog
+        open={confirmBalanceOpen}
+        onOpenChange={setConfirmBalanceOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认使用 $15 余额抽取？</AlertDialogTitle>
+            <AlertDialogDescription>
+              确认后将立即扣除 $15
+              站内余额并开奖。本次不会获得每日幸运号，抽奖结果不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={balanceOpening}>
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={balanceOpening}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleBalanceOpen().then(() =>
+                  setConfirmBalanceOpen(false)
+                )
+              }}
+            >
+              {balanceOpening ? '抽取中…' : '确认抽取'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <BlindBoxHistorySheet open={showHistory} onOpenChange={setShowHistory} />
 
       <Dialog open={showProps} onOpenChange={setShowProps}>
@@ -578,6 +694,8 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
               disabled={openingCount !== null || paying}
               onUse={(prop) => void handleUseProp(prop)}
               onPause={(prop) => void handlePauseProp(prop)}
+              onConvert={(prop) => void handleConvertProp(prop)}
+              convertingPropId={convertingPropId}
             />
           </div>
         </DialogContent>

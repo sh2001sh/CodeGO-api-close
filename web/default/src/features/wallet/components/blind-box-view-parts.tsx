@@ -1,4 +1,4 @@
-import { CirclePause, CirclePlay } from 'lucide-react'
+import { CirclePause, CirclePlay, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { BlindBoxProp } from '../types'
@@ -8,6 +8,8 @@ export function BlindBoxPropsList(props: {
   disabled: boolean
   onUse: (prop: BlindBoxProp) => void
   onPause: (prop: BlindBoxProp) => void
+  onConvert: (prop: BlindBoxProp) => void
+  convertingPropId?: number | null
 }) {
   const { t } = useTranslation()
 
@@ -29,6 +31,11 @@ export function BlindBoxPropsList(props: {
           const paused = prop.status === 'paused'
           const monthlyPass = prop.prop_type === 'monthly_pass_multiplier'
           const canUse = available || (monthlyPass && paused)
+          const convertible =
+            available &&
+            ['topup_discount_90', 'subscription_discount_90'].includes(
+              prop.prop_type
+            )
 
           return (
             <div
@@ -43,37 +50,63 @@ export function BlindBoxPropsList(props: {
                   {getPropDescription(prop, t)}
                 </div>
               </div>
-              {monthlyPass && active ? (
-                <Button
-                  type='button'
-                  size='sm'
-                  variant='outline'
-                  onClick={() => props.onPause(prop)}
-                  disabled={props.disabled}
-                  className='w-full shrink-0 sm:w-auto'
-                >
-                  <CirclePause className='size-4' data-icon='inline-start' />
-                  暂停
-                </Button>
-              ) : manual ? (
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={active ? 'secondary' : 'default'}
-                  onClick={() => props.onUse(prop)}
-                  disabled={props.disabled || !canUse}
-                  className='w-full shrink-0 sm:w-auto'
-                >
-                  {monthlyPass && canUse ? (
-                    <CirclePlay className='size-4' data-icon='inline-start' />
-                  ) : null}
-                  {getPropActionLabel(prop, active, available, paused, t)}
-                </Button>
-              ) : (
-                <span className='text-muted-foreground text-xs'>
-                  {getPropStatusLabel(prop.status, t)}
-                </span>
-              )}
+              <div className='flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row'>
+                {convertible ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={() => props.onConvert(prop)}
+                    disabled={
+                      props.disabled || props.convertingPropId === prop.id
+                    }
+                    className='w-full sm:w-auto'
+                  >
+                    <RefreshCw
+                      className={
+                        props.convertingPropId === prop.id
+                          ? 'size-4 animate-spin motion-reduce:animate-none'
+                          : 'size-4'
+                      }
+                      data-icon='inline-start'
+                    />
+                    {prop.prop_type === 'topup_discount_90'
+                      ? '转为套餐九折卡'
+                      : '转为充值九折卡'}
+                  </Button>
+                ) : null}
+                {monthlyPass && active ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={() => props.onPause(prop)}
+                    disabled={props.disabled}
+                    className='w-full shrink-0 sm:w-auto'
+                  >
+                    <CirclePause className='size-4' data-icon='inline-start' />
+                    暂停
+                  </Button>
+                ) : manual ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={active ? 'secondary' : 'default'}
+                    onClick={() => props.onUse(prop)}
+                    disabled={props.disabled || !canUse}
+                    className='w-full shrink-0 sm:w-auto'
+                  >
+                    {monthlyPass && canUse ? (
+                      <CirclePlay className='size-4' data-icon='inline-start' />
+                    ) : null}
+                    {getPropActionLabel(prop, active, available, paused, t)}
+                  </Button>
+                ) : (
+                  <span className='text-muted-foreground text-xs'>
+                    {getPropStatusLabel(prop.status, t)}
+                  </span>
+                )}
+              </div>
             </div>
           )
         })}

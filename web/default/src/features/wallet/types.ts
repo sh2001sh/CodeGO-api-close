@@ -414,6 +414,7 @@ export interface BlindBoxRecord {
   credit_amount: number
   reward_title: string
   reward_tier: string
+  pool_type?: 'standard' | 'balance_15' | string
   user_subscription_id?: number
   is_pity?: boolean
   create_time: number
@@ -505,6 +506,17 @@ export interface BlindBoxSelfData {
   zero_hour?: BlindBoxZeroHourOverview
   statistics?: BlindBoxStatistics
   grants?: BlindBoxGrant[]
+  balance_blind_box?: BalanceBlindBoxOverview
+}
+
+export interface BalanceBlindBoxOverview {
+  enabled: boolean
+  price_usd: number
+  balance_usd: number
+  tiers: BlindBoxTier[]
+  pity_progress: number
+  pity_threshold: number
+  pity_guarantee_usd: number
 }
 
 export interface BlindBoxOrderStatus {

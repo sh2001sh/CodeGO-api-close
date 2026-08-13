@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/sh2001sh/new-api/constant"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
@@ -47,6 +48,75 @@ func TestActivateBlindBoxProp_AppliesConsumptionDiscount(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, props, 1)
 	assert.Equal(t, commerceschema.BlindBoxPropStatusActive, props[0].Status)
+}
+
+func TestConvertBlindBoxDiscountPropBothDirections(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8809, Username: "blind_box_prop_conversion_user", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+
+	var prop *commerceschema.BlindBoxProp
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		prop, err = createBlindBoxPropTx(tx, user.Id, 9001, "充值九折卡")
+		return err
+	}))
+
+	converted, err := ConvertBlindBoxDiscountProp(user.Id, prop.Id, commerceschema.BlindBoxPropTypeSubscriptionDiscount90)
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.BlindBoxPropTypeSubscriptionDiscount90, converted.PropType)
+	require.Equal(t, "套餐九折卡", converted.Title)
+	require.InDelta(t, 0.10, converted.DiscountRate, 0.0001)
+	require.Equal(t, commerceschema.BlindBoxPropStatusAvailable, converted.Status)
+
+	converted, err = ConvertBlindBoxDiscountProp(user.Id, prop.Id, commerceschema.BlindBoxPropTypeTopupDiscount90)
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.BlindBoxPropTypeTopupDiscount90, converted.PropType)
+	require.Equal(t, "充值九折卡", converted.Title)
+	var logs []auditschema.Log
+	require.NoError(t, db.Where("user_id = ? AND type = ?", user.Id, auditschema.LogTypeManage).Order("id asc").Find(&logs).Error)
+	require.Len(t, logs, 2)
+	require.Contains(t, logs[0].Content, "充值九折卡")
+	require.Contains(t, logs[0].Content, "套餐九折卡")
+}
+
+func TestConvertBlindBoxDiscountPropRejectsReservedCard(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8808, Username: "blind_box_prop_reserved_conversion_user", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	prop := &commerceschema.BlindBoxProp{
+		UserId: user.Id, OpenRecordId: 9002, PropType: commerceschema.BlindBoxPropTypeTopupDiscount90,
+		Title: "充值九折卡", Status: commerceschema.BlindBoxPropStatusReserved, DiscountRate: 0.10, Multiplier: 1,
+	}
+	require.NoError(t, db.Create(prop).Error)
+
+	_, err := ConvertBlindBoxDiscountProp(user.Id, prop.Id, commerceschema.BlindBoxPropTypeSubscriptionDiscount90)
+	require.ErrorContains(t, err, "only available")
+}
+
+func TestConvertBlindBoxDiscountPropRejectsAnotherUsersCard(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	owner := &identityschema.User{
+		Id: 8806, Username: "blind_box_prop_conversion_owner", Status: constant.UserStatusEnabled,
+		AffCode: "blind-box-conversion-owner",
+	}
+	other := &identityschema.User{
+		Id: 8807, Username: "blind_box_prop_conversion_other", Status: constant.UserStatusEnabled,
+		AffCode: "blind-box-conversion-other",
+	}
+	require.NoError(t, db.Create(owner).Error)
+	require.NoError(t, db.Create(other).Error)
+	prop := &commerceschema.BlindBoxProp{
+		UserId: owner.Id, OpenRecordId: 9003, PropType: commerceschema.BlindBoxPropTypeTopupDiscount90,
+		Title: "充值九折卡", Status: commerceschema.BlindBoxPropStatusAvailable, DiscountRate: 0.10, Multiplier: 1,
+	}
+	require.NoError(t, db.Create(prop).Error)
+
+	_, err := ConvertBlindBoxDiscountProp(other.Id, prop.Id, commerceschema.BlindBoxPropTypeSubscriptionDiscount90)
+	require.Error(t, err)
+	var saved commerceschema.BlindBoxProp
+	require.NoError(t, db.First(&saved, prop.Id).Error)
+	require.Equal(t, commerceschema.BlindBoxPropTypeTopupDiscount90, saved.PropType)
 }
 
 func TestZeroHourPropActivatesUserScopedGroup(t *testing.T) {

@@ -179,6 +179,9 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
           </div>
           {record.lucky_number ? <LuckyNumberHistory record={record} /> : null}
           <div className='mt-2 flex flex-wrap gap-1.5'>
+            <HistoryTag>
+              {record.pool_type === 'balance_15' ? '余额盲盒' : '普通盲盒'}
+            </HistoryTag>
             <HistoryTag>{detail.type}</HistoryTag>
             {record.is_pity ? <HistoryTag>保底奖励</HistoryTag> : null}
             {record.reward_type === 'prop' && record.prop_status ? (

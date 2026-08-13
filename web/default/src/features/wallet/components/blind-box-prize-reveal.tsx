@@ -197,6 +197,7 @@ function PrizeRevealCard(props: {
               {record.reward_title}
             </div>
             <div className='border-border/70 bg-background/60 text-muted-foreground rounded-full border px-2.5 py-0.5 text-xs font-medium'>
+              {record.pool_type === 'balance_15' ? '余额盲盒' : '普通盲盒'} ·{' '}
               {rewardTypeLabel(record)}
             </div>
             {badge ? (

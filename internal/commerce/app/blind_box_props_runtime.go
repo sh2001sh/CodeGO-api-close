@@ -2,7 +2,10 @@ package app
 
 import (
 	"errors"
+	"fmt"
 
+	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -112,6 +115,57 @@ func PauseBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp, er
 		return nil, err
 	}
 	return &prop, nil
+}
+
+// ConvertBlindBoxDiscountProp converts an unused 10% top-up discount card
+// into a subscription discount card, or vice versa, without consuming it.
+func ConvertBlindBoxDiscountProp(userID int, propID int, targetType string) (*commerceschema.BlindBoxProp, error) {
+	if userID <= 0 || propID <= 0 {
+		return nil, errors.New("invalid blind box prop request")
+	}
+	targetSpec, ok := getBlindBoxPropSpecByType(targetType)
+	if !ok || !isConvertibleBlindBoxDiscountPropType(targetSpec.PropType) {
+		return nil, errors.New("unsupported blind box prop conversion")
+	}
+	var prop commerceschema.BlindBoxProp
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
+			return err
+		}
+		if !isConvertibleBlindBoxDiscountPropType(prop.PropType) {
+			return errors.New("this prop cannot be converted")
+		}
+		if prop.Status != commerceschema.BlindBoxPropStatusAvailable {
+			return errors.New("only available discount cards can be converted")
+		}
+		if prop.PropType == targetSpec.PropType {
+			return errors.New("discount card already has the requested type")
+		}
+		originalTitle := prop.Title
+		prop.PropType = targetSpec.PropType
+		prop.Title = targetSpec.Title
+		prop.DiscountRate = targetSpec.DiscountRate
+		prop.Multiplier = targetSpec.Multiplier
+		prop.DurationSeconds = targetSpec.DurationSeconds
+		if err := tx.Save(&prop).Error; err != nil {
+			return err
+		}
+		return auditapp.RecordLogTx(
+			tx,
+			userID,
+			auditschema.LogTypeManage,
+			fmt.Sprintf("盲盒九折卡转换，道具ID：%d，原类型：%s，目标类型：%s", prop.Id, originalTitle, prop.Title),
+		)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &prop, nil
+}
+
+func isConvertibleBlindBoxDiscountPropType(propType string) bool {
+	return propType == commerceschema.BlindBoxPropTypeTopupDiscount90 ||
+		propType == commerceschema.BlindBoxPropTypeSubscriptionDiscount90
 }
 
 func GetUserBlindBoxConsumptionDiscountRate(userID int) float64 {

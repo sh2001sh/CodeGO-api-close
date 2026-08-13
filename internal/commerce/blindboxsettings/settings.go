@@ -20,23 +20,28 @@ type TierSetting struct {
 
 // Setting stores the runtime blind-box configuration.
 type Setting struct {
-	Enabled                      bool          `json:"enabled"`
-	UnitPrice                    float64       `json:"unit_price"`
-	ExpireDays                   int           `json:"expire_days"`
-	RegistrationRewardEnabled    bool          `json:"registration_reward_enabled"`
-	RegistrationRewardStartAt    int64         `json:"registration_reward_start_at"`
-	RegistrationRewardEndAt      int64         `json:"registration_reward_end_at"`
-	DailyLimit                   int           `json:"daily_limit"`
-	MonthlyLimit                 int           `json:"monthly_limit"`
-	DailyOpenLimit               int           `json:"daily_open_limit"`
-	FirstPurchaseGuaranteeUSD    float64       `json:"first_purchase_guarantee_usd"`
-	PityThreshold                int           `json:"pity_threshold"`
-	PityGuaranteeUSD             float64       `json:"pity_guarantee_usd"`
-	LowRewardThresholdUSD        float64       `json:"low_reward_threshold_usd"`
-	SubscriptionPrizeProbability float64       `json:"subscription_prize_probability"`
-	SubscriptionPlanTitle        string        `json:"subscription_plan_title"`
-	CountOptions                 []int         `json:"count_options"`
-	Tiers                        []TierSetting `json:"tiers"`
+	Enabled                         bool          `json:"enabled"`
+	UnitPrice                       float64       `json:"unit_price"`
+	ExpireDays                      int           `json:"expire_days"`
+	RegistrationRewardEnabled       bool          `json:"registration_reward_enabled"`
+	RegistrationRewardStartAt       int64         `json:"registration_reward_start_at"`
+	RegistrationRewardEndAt         int64         `json:"registration_reward_end_at"`
+	DailyLimit                      int           `json:"daily_limit"`
+	MonthlyLimit                    int           `json:"monthly_limit"`
+	DailyOpenLimit                  int           `json:"daily_open_limit"`
+	FirstPurchaseGuaranteeUSD       float64       `json:"first_purchase_guarantee_usd"`
+	PityThreshold                   int           `json:"pity_threshold"`
+	PityGuaranteeUSD                float64       `json:"pity_guarantee_usd"`
+	LowRewardThresholdUSD           float64       `json:"low_reward_threshold_usd"`
+	SubscriptionPrizeProbability    float64       `json:"subscription_prize_probability"`
+	SubscriptionPlanTitle           string        `json:"subscription_plan_title"`
+	CountOptions                    []int         `json:"count_options"`
+	Tiers                           []TierSetting `json:"tiers"`
+	BalanceBlindBoxEnabled          bool          `json:"balance_blind_box_enabled"`
+	BalanceBlindBoxPriceUSD         float64       `json:"balance_blind_box_price_usd"`
+	BalanceBlindBoxTiers            []TierSetting `json:"balance_blind_box_tiers"`
+	BalanceBlindBoxPityThreshold    int           `json:"balance_blind_box_pity_threshold"`
+	BalanceBlindBoxPityGuaranteeUSD float64       `json:"balance_blind_box_pity_guarantee_usd"`
 }
 
 const (
@@ -73,24 +78,51 @@ var defaultTierSettings = []TierSetting{
 	{Name: "0.9 倍率卡", MinUSD: 0, MaxUSD: 0, Probability: 0.022, RewardType: "prop"},
 }
 
+var defaultBalanceBlindBoxTiers = []TierSetting{
+	{Name: "$1.5 普通额度", MinUSD: 1.5, MaxUSD: 1.5, Probability: 0.28, RewardType: "quota", WalletType: "default"},
+	{Name: "$3 普通额度", MinUSD: 3, MaxUSD: 3, Probability: 0.27, RewardType: "quota", WalletType: "default"},
+	{Name: "$6 普通额度", MinUSD: 6, MaxUSD: 6, Probability: 0.20, RewardType: "quota", WalletType: "default"},
+	{Name: "$10 普通额度", MinUSD: 10, MaxUSD: 10, Probability: 0.10, RewardType: "quota", WalletType: "default"},
+	{Name: "$18 普通额度", MinUSD: 18, MaxUSD: 18, Probability: 0.05, RewardType: "quota", WalletType: "default"},
+	{Name: "$35 普通额度", MinUSD: 35, MaxUSD: 35, Probability: 0.015, RewardType: "quota", WalletType: "default"},
+	{Name: "$80 普通额度", MinUSD: 80, MaxUSD: 80, Probability: 0.004, RewardType: "quota", WalletType: "default"},
+	{Name: "$200 普通额度", MinUSD: 200, MaxUSD: 200, Probability: 0.0008, RewardType: "quota", WalletType: "default"},
+	{Name: "$500 普通额度", MinUSD: 500, MaxUSD: 500, Probability: 0.00018, RewardType: "quota", WalletType: "default"},
+	{Name: "$1000 普通额度", MinUSD: 1000, MaxUSD: 1000, Probability: 0.00002, RewardType: "quota", WalletType: "default"},
+	{Name: "$3 Claude 额度", MinUSD: 3, MaxUSD: 3, Probability: 0.03, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$8 Claude 额度", MinUSD: 8, MaxUSD: 8, Probability: 0.02, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$20 Claude 额度", MinUSD: 20, MaxUSD: 20, Probability: 0.01, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$50 Claude 额度", MinUSD: 50, MaxUSD: 50, Probability: 0.003, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$200 Claude 额度", MinUSD: 200, MaxUSD: 200, Probability: 0.0005, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "充值九折卡", Probability: 0.0065, RewardType: "prop"},
+	{Name: "套餐九折卡", Probability: 0.0035, RewardType: "prop"},
+	{Name: "0.95 倍率卡", Probability: 0.0045, RewardType: "prop"},
+	{Name: "0.9 倍率卡", Probability: 0.002, RewardType: "prop"},
+}
+
 var currentSetting = Setting{
-	Enabled:                      false,
-	UnitPrice:                    2.5,
-	ExpireDays:                   7,
-	RegistrationRewardEnabled:    true,
-	RegistrationRewardStartAt:    0,
-	RegistrationRewardEndAt:      0,
-	DailyLimit:                   50,
-	MonthlyLimit:                 500,
-	DailyOpenLimit:               5000,
-	FirstPurchaseGuaranteeUSD:    20,
-	PityThreshold:                5,
-	PityGuaranteeUSD:             20,
-	LowRewardThresholdUSD:        20,
-	SubscriptionPrizeProbability: defaultSubscriptionPrizeProbability,
-	SubscriptionPlanTitle:        defaultSubscriptionPlanTitle,
-	CountOptions:                 []int{1, 5, 10, 20, 50},
-	Tiers:                        append([]TierSetting(nil), defaultTierSettings...),
+	Enabled:                         false,
+	UnitPrice:                       2.5,
+	ExpireDays:                      7,
+	RegistrationRewardEnabled:       true,
+	RegistrationRewardStartAt:       0,
+	RegistrationRewardEndAt:         0,
+	DailyLimit:                      50,
+	MonthlyLimit:                    500,
+	DailyOpenLimit:                  5000,
+	FirstPurchaseGuaranteeUSD:       20,
+	PityThreshold:                   5,
+	PityGuaranteeUSD:                20,
+	LowRewardThresholdUSD:           20,
+	SubscriptionPrizeProbability:    defaultSubscriptionPrizeProbability,
+	SubscriptionPlanTitle:           defaultSubscriptionPlanTitle,
+	CountOptions:                    []int{1, 5, 10, 20, 50},
+	Tiers:                           append([]TierSetting(nil), defaultTierSettings...),
+	BalanceBlindBoxEnabled:          true,
+	BalanceBlindBoxPriceUSD:         15,
+	BalanceBlindBoxTiers:            append([]TierSetting(nil), defaultBalanceBlindBoxTiers...),
+	BalanceBlindBoxPityThreshold:    50,
+	BalanceBlindBoxPityGuaranteeUSD: 35,
 }
 
 // RegistrationRewardActive reports whether invited registrations currently
@@ -332,6 +364,19 @@ func Get() Setting {
 		settingCopy.Tiers = defaultTiers()
 	}
 	settingCopy.Tiers = normalizeTierSettings(settingCopy.Tiers)
+	if settingCopy.BalanceBlindBoxPriceUSD <= 0 {
+		settingCopy.BalanceBlindBoxPriceUSD = 15
+	}
+	if settingCopy.BalanceBlindBoxPityThreshold <= 0 {
+		settingCopy.BalanceBlindBoxPityThreshold = 50
+	}
+	if settingCopy.BalanceBlindBoxPityGuaranteeUSD <= 0 {
+		settingCopy.BalanceBlindBoxPityGuaranteeUSD = 35
+	}
+	if len(settingCopy.BalanceBlindBoxTiers) == 0 {
+		settingCopy.BalanceBlindBoxTiers = append([]TierSetting(nil), defaultBalanceBlindBoxTiers...)
+	}
+	settingCopy.BalanceBlindBoxTiers = normalizeTierSettings(settingCopy.BalanceBlindBoxTiers)
 	return settingCopy
 }
 

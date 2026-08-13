@@ -45,6 +45,10 @@ func BuildBlindBoxSelfPayload(userID int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	balanceBlindBox, err := GetBalanceBlindBoxOverview(userID)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"enabled":                           enabled,
 		"unit_price":                        setting.UnitPrice,
@@ -65,6 +69,7 @@ func BuildBlindBoxSelfPayload(userID int) (map[string]any, error) {
 		"props":                             props,
 		"zero_hour":                         zeroHour,
 		"statistics":                        statistics,
+		"balance_blind_box":                 balanceBlindBox,
 	}, nil
 }
 
@@ -88,6 +93,10 @@ func BuildBlindBoxAdminOverviewPayload(userID int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	balanceBlindBox, err := GetBalanceBlindBoxOverview(userID)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"enabled":                           enabled,
 		"unit_price":                        setting.UnitPrice,
@@ -106,6 +115,7 @@ func BuildBlindBoxAdminOverviewPayload(userID int) (map[string]any, error) {
 		"overview":                          overview,
 		"props":                             props,
 		"grants":                            grants,
+		"balance_blind_box":                 balanceBlindBox,
 	}, nil
 }
 

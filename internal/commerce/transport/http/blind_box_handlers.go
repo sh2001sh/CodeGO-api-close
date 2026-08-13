@@ -97,6 +97,52 @@ func pauseBlindBoxProp(c *gin.Context) {
 	httpapi.ApiSuccess(c, gin.H{"prop": prop})
 }
 
+func convertBlindBoxProp(c *gin.Context) {
+	propID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || propID <= 0 {
+		httpapi.ApiErrorMsg(c, "invalid blind box prop id")
+		return
+	}
+	var req struct {
+		TargetType string `json:"target_type" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "invalid request")
+		return
+	}
+	prop, err := commerceapp.ConvertBlindBoxDiscountProp(c.GetInt("id"), propID, req.TargetType)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{"prop": prop})
+}
+
+func getBalanceBlindBoxOverview(c *gin.Context) {
+	overview, err := commerceapp.GetBalanceBlindBoxOverview(c.GetInt("id"))
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{"balance_blind_box": overview})
+}
+
+func openBalanceBlindBox(c *gin.Context) {
+	var req struct {
+		RequestID string `json:"request_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "request_id is required")
+		return
+	}
+	result, err := commerceapp.OpenBalanceBlindBox(c.GetInt("id"), req.RequestID)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, result)
+}
+
 func getBlindBoxOrderStatus(c *gin.Context) {
 	payload, err := commerceapp.BuildBlindBoxOrderStatusPayload(c.GetInt("id"), c.Param("trade_no"))
 	if err != nil {

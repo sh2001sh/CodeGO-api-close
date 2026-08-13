@@ -56,9 +56,15 @@ const REDUCED_CELL = {
   animate: { opacity: 1, transition: { duration: 0.18 } },
 }
 
-export function BlindBoxPoolShowcase(props: { data: BlindBoxSelfData | null }) {
+export function BlindBoxPoolShowcase(props: {
+  data: BlindBoxSelfData | null
+  tiers?: BlindBoxTier[]
+  title?: string
+  description?: string
+  hideSubscription?: boolean
+}) {
   const reduced = Boolean(useReducedMotion())
-  const grouped = groupTiersByRewardType(props.data?.tiers || [])
+  const grouped = groupTiersByRewardType(props.tiers || props.data?.tiers || [])
   const hiddenProbability = props.data?.subscription_prize_probability || 0
   const hiddenTitle = props.data?.subscription_plan_title || 'Lite 月卡'
 
@@ -71,10 +77,10 @@ export function BlindBoxPoolShowcase(props: { data: BlindBoxSelfData | null }) {
           </span>
           <div className='min-w-0'>
             <h2 className='text-foreground text-base font-semibold'>
-              奖池一览
+              {props.title || '奖池一览'}
             </h2>
             <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-              每次抽取都从下面所有奖励中按概率开出一项
+              {props.description || '每次抽取都从下面所有奖励中按概率开出一项'}
             </p>
           </div>
         </div>
@@ -82,20 +88,22 @@ export function BlindBoxPoolShowcase(props: { data: BlindBoxSelfData | null }) {
       </div>
 
       <div className='space-y-5 px-4 py-4 sm:px-5 sm:py-5'>
-        <PoolGroup
-          icon={Crown}
-          title='隐藏款'
-          hint='最稀有的一档，抽中直接获得月卡'
-          reduced={reduced}
-        >
-          <PoolCell
-            label={hiddenTitle}
-            probability={hiddenProbability}
-            rarity='legendary'
-            note='直接发放一张月卡，享受对应档位权益'
+        {!props.hideSubscription ? (
+          <PoolGroup
+            icon={Crown}
+            title='隐藏款'
+            hint='最稀有的一档，抽中直接获得月卡'
             reduced={reduced}
-          />
-        </PoolGroup>
+          >
+            <PoolCell
+              label={hiddenTitle}
+              probability={hiddenProbability}
+              rarity='legendary'
+              note='直接发放一张月卡，享受对应档位权益'
+              reduced={reduced}
+            />
+          </PoolGroup>
+        ) : null}
 
         {grouped.claude.length > 0 ? (
           <PoolGroup

@@ -16,6 +16,9 @@ const (
 	BlindBoxOrderSourceRegistrationBenefit = "registration_benefit"
 	BlindBoxOrderSourceSubscriptionBenefit = "subscription_benefit"
 
+	BlindBoxPoolTypeStandard  = "standard"
+	BlindBoxPoolTypeBalance15 = "balance_15"
+
 	BlindBoxCreditStatusActive    = "active"
 	BlindBoxCreditStatusExhausted = "exhausted"
 )
@@ -88,7 +91,9 @@ type BlindBoxOpenRecord struct {
 	CreditAmount       int64   `json:"credit_amount" gorm:"type:bigint;not null;default:0"`
 	RewardTitle        string  `json:"reward_title" gorm:"type:varchar(255)"`
 	RewardTier         string  `json:"reward_tier" gorm:"type:varchar(64)"`
+	PoolType           string  `json:"pool_type" gorm:"type:varchar(32);default:'standard';index"`
 	UserSubscriptionId int     `json:"user_subscription_id" gorm:"index"`
+	RequestId          *string `json:"-" gorm:"type:varchar(64);uniqueIndex"`
 	IsPity             bool    `json:"is_pity"`
 	CreateTime         int64   `json:"create_time" gorm:"bigint;index"`
 
@@ -99,6 +104,14 @@ type BlindBoxOpenRecord struct {
 	LuckyNumber    string `json:"lucky_number,omitempty" gorm:"-"`
 	LuckyDrawDate  string `json:"lucky_draw_date,omitempty" gorm:"-"`
 	LuckyExpiresAt int64  `json:"lucky_expires_at,omitempty" gorm:"-"`
+}
+
+// BalanceBlindBoxPityState tracks the independent $35 guarantee for balance draws.
+type BalanceBlindBoxPityState struct {
+	Id                    int   `json:"id"`
+	UserId                int   `json:"user_id" gorm:"uniqueIndex"`
+	ConsecutiveUnder35USD int   `json:"consecutive_under_35_usd"`
+	UpdatedAt             int64 `json:"updated_at" gorm:"bigint"`
 }
 
 type BlindBoxPityState struct {
@@ -126,6 +139,16 @@ func (p *BlindBoxPityState) BeforeCreate(tx *gorm.DB) error {
 }
 
 func (p *BlindBoxPityState) BeforeUpdate(tx *gorm.DB) error {
+	p.UpdatedAt = platformruntime.GetTimestamp()
+	return nil
+}
+
+func (p *BalanceBlindBoxPityState) BeforeCreate(tx *gorm.DB) error {
+	p.UpdatedAt = platformruntime.GetTimestamp()
+	return nil
+}
+
+func (p *BalanceBlindBoxPityState) BeforeUpdate(tx *gorm.DB) error {
 	p.UpdatedAt = platformruntime.GetTimestamp()
 	return nil
 }

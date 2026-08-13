@@ -44,7 +44,9 @@ import type {
   BlindBoxOpenResponse,
   BlindBoxOrderStatusResponse,
   BlindBoxProp,
+  BlindBoxRecord,
   BlindBoxHistoryResponse,
+  BalanceBlindBoxOverview,
   WalletQuotaConversionOverviewResponse,
   WalletQuotaConversionRequest,
   WalletQuotaConversionResponse,
@@ -314,5 +316,28 @@ export async function pauseBlindBoxProp(
   propId: number
 ): Promise<ApiResponse<{ prop: BlindBoxProp }>> {
   const res = await api.post(`/api/blind-box/props/${propId}/pause`)
+  return res.data
+}
+
+export async function convertBlindBoxProp(
+  propId: number,
+  targetType: 'topup_discount_90' | 'subscription_discount_90'
+): Promise<ApiResponse<{ prop: BlindBoxProp }>> {
+  const res = await api.post(`/api/blind-box/props/${propId}/convert`, {
+    target_type: targetType,
+  })
+  return res.data
+}
+
+export async function openBalanceBlindBox(requestId: string): Promise<
+  ApiResponse<{
+    record: BlindBoxRecord
+    balance_usd: number
+    overview: BalanceBlindBoxOverview
+  }>
+> {
+  const res = await api.post('/api/blind-box/balance/open', {
+    request_id: requestId,
+  })
   return res.data
 }

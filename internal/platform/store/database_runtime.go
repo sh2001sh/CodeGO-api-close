@@ -270,6 +270,7 @@ func migratePrimaryDB() error {
 		&commerceschema.BlindBoxOpenRecord{},
 		&commerceschema.BlindBoxProp{},
 		&commerceschema.BlindBoxPityState{},
+		&commerceschema.BalanceBlindBoxPityState{},
 		&workflowschema.GeneMapShare{},
 		&identitydomain.UserWeChatBinding{},
 		&identitydomain.MiniProgramBindCode{},

@@ -99,13 +99,13 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.GET("/history", getBlindBoxHistory)
 		blindBoxRoute.GET("/orders/:trade_no", getBlindBoxOrderStatus)
 		blindBoxRoute.POST("/amount", requestBlindBoxAmount)
-		blindBoxRoute.POST("/pay", middleware.CriticalRateLimit(), requestBlindBoxPay)
+		blindBoxRoute.POST("/pay", middleware.BlindBoxPaymentRateLimit(), requestBlindBoxPay)
 		blindBoxRoute.POST("/open", middleware.BlindBoxOpenRateLimit(), openBlindBox)
 		blindBoxRoute.POST("/props/:id/use", middleware.CriticalRateLimit(), useBlindBoxProp)
 		blindBoxRoute.POST("/props/:id/pause", middleware.CriticalRateLimit(), pauseBlindBoxProp)
 		blindBoxRoute.POST("/props/:id/convert", middleware.CriticalRateLimit(), convertBlindBoxProp)
 		blindBoxRoute.GET("/balance/overview", getBalanceBlindBoxOverview)
-		blindBoxRoute.POST("/balance/open", middleware.CriticalRateLimit(), openBalanceBlindBox)
+		blindBoxRoute.POST("/balance/open", middleware.BalanceBlindBoxOpenRateLimit(), openBalanceBlindBox)
 	}
 
 	dailyLuckyNumberRoute := apiRouter.Group("/daily-lucky-number")

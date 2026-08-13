@@ -187,6 +187,20 @@ func BlindBoxOpenRateLimit() func(c *gin.Context) {
 	return userRateLimitFactory(120, 60, "BBO")
 }
 
+// BalanceBlindBoxOpenRateLimit limits balance blind-box reveals per
+// authenticated user. It is intentionally separate from regular blind-box
+// reveals and payment creation so a shared network cannot exhaust another
+// user's allowance.
+func BalanceBlindBoxOpenRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(60, 60, "BBOB")
+}
+
+// BlindBoxPaymentRateLimit prevents duplicate payment creation while keeping
+// the limit scoped to the authenticated user rather than a shared client IP.
+func BlindBoxPaymentRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(10, 60, "BBP")
+}
+
 // RegistrationRateLimit protects account creation from automated bursts while
 // keeping a reasonable allowance for shared residential networks.
 func RegistrationRateLimit() gin.HandlerFunc {

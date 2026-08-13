@@ -30,7 +30,7 @@ func getDailyLuckyNumberHistory(c *gin.Context) {
 
 func getDailyLuckyNumberPublicWins(c *gin.Context) {
 	page := platformpagination.GetPageQuery(c)
-	payload, err := commerceapp.ListDailyLuckyNumberPublicWins(page.GetPage(), page.GetPageSize())
+	payload, err := commerceapp.ListDailyLuckyNumberPublicWins(page.GetPage(), page.GetPageSize(), c.Query("draw_date"))
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

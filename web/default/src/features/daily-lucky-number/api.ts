@@ -40,10 +40,11 @@ export async function markAllDailyLuckyRewardNotificationsRead(): Promise<void> 
 
 export async function getDailyLuckyNumberPublicWins(
   page = 1,
-  pageSize = 20
+  pageSize = 20,
+  drawDate?: string
 ): Promise<DailyLuckyPublicWinsResponse> {
   const response = await api.get('/api/daily-lucky-number/public-wins', {
-    params: { page, page_size: pageSize },
+    params: { page, page_size: pageSize, draw_date: drawDate },
   })
   return response.data
 }

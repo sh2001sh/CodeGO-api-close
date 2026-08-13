@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import {
   AlertCircle,
   CalendarDays,
-  ChevronDown,
-  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   ShieldCheck,
   Trophy,
 } from 'lucide-react'
@@ -25,7 +25,7 @@ import {
   WinnerList,
 } from './today-winners-list'
 
-const INITIAL_VISIBLE_COUNT = 8
+const PAGE_SIZE = 8
 export function TodayWinnersPanel(props: {
   records?: LuckyPublicWin[]
   drawDate?: string
@@ -57,7 +57,7 @@ export function TodayWinnersPanel(props: {
             total={view.records.length}
             onChange={(value) => {
               view.setFilter(value)
-              view.setExpanded(false)
+              view.setPage(1)
             }}
           />
           {view.visible.length > 0 ? (
@@ -68,11 +68,14 @@ export function TodayWinnersPanel(props: {
             </div>
           )}
           <PanelFooter
-            expanded={view.expanded}
-            hasMore={view.filtered.length > INITIAL_VISIBLE_COUNT}
-            hiddenCount={view.filtered.length - INITIAL_VISIBLE_COUNT}
+            page={view.page}
+            pageCount={view.pageCount}
+            total={view.filtered.length}
             pageMayBeTruncated={view.pageMayBeTruncated}
-            onToggle={() => view.setExpanded((value) => !value)}
+            onPrevious={() => view.setPage((value) => Math.max(1, value - 1))}
+            onNext={() =>
+              view.setPage((value) => Math.min(view.pageCount, value + 1))
+            }
           />
         </>
       )}
@@ -85,7 +88,7 @@ function useWinnerPanelView(
   drawDate: string | undefined
 ) {
   const [filter, setFilter] = useState<WinnerFilter>('all')
-  const [expanded, setExpanded] = useState(false)
+  const [page, setPage] = useState(1)
   const todayRecords = useMemo(
     () =>
       drawDate
@@ -108,15 +111,23 @@ function useWinnerPanelView(
       ? todayRecords
       : todayRecords.filter((item) => item.matched_digits === filter)
 
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const visible = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  )
+
   return {
     filter,
     setFilter,
-    expanded,
-    setExpanded,
+    page: safePage,
+    setPage,
     records: todayRecords,
     counts,
     filtered,
-    visible: expanded ? filtered : filtered.slice(0, INITIAL_VISIBLE_COUNT),
+    visible,
+    pageCount,
     pageMayBeTruncated:
       todayRecords.length > 0 &&
       todayRecords.length === (records?.length ?? 0) &&
@@ -157,29 +168,45 @@ function PanelHeader(props: {
 }
 
 function PanelFooter(props: {
-  expanded: boolean
-  hasMore: boolean
-  hiddenCount: number
+  page: number
+  pageCount: number
+  total: number
   pageMayBeTruncated: boolean
-  onToggle: () => void
+  onPrevious: () => void
+  onNext: () => void
 }) {
   return (
     <div className='border-border/70 bg-muted/15 flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 sm:px-5'>
       <span className='text-muted-foreground inline-flex items-center gap-2 text-xs'>
         <ShieldCheck className='size-3.5' aria-hidden='true' />
         {props.pageMayBeTruncated
-          ? '名单较长，完整结果可在下方历史名单中分页查看'
+          ? '名单较长，已按页展示'
           : '仅展示中奖尾号和套餐档位'}
       </span>
-      {props.hasMore ? (
-        <Button variant='ghost' size='sm' onClick={props.onToggle}>
-          {props.expanded ? (
-            <ChevronUp data-icon='inline-start' />
-          ) : (
-            <ChevronDown data-icon='inline-start' />
-          )}
-          {props.expanded ? '收起名单' : `再看 ${props.hiddenCount} 条`}
-        </Button>
+      {props.total > 0 && props.pageCount > 1 ? (
+        <div className='flex items-center gap-1.5'>
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            onClick={props.onPrevious}
+            disabled={props.page <= 1}
+            aria-label='上一页'
+          >
+            <ChevronLeft aria-hidden='true' />
+          </Button>
+          <span className='text-muted-foreground min-w-20 text-center text-xs tabular-nums'>
+            第 {props.page} / {props.pageCount} 页
+          </span>
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            onClick={props.onNext}
+            disabled={props.page >= props.pageCount}
+            aria-label='下一页'
+          >
+            <ChevronRight aria-hidden='true' />
+          </Button>
+        </div>
       ) : null}
     </div>
   )

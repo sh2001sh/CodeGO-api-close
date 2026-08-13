@@ -272,12 +272,22 @@ func MarkAllDailyLuckyRewardNotificationsRead(userID int) error {
 }
 
 // ListDailyLuckyNumberPublicWins returns masked, settled public wins.
-func ListDailyLuckyNumberPublicWins(page, pageSize int) (*commercedomain.LuckyPublicWinPage, error) {
+func ListDailyLuckyNumberPublicWins(page, pageSize int, drawDate string) (*commercedomain.LuckyPublicWinPage, error) {
 	page, pageSize = normalizeLuckyPage(page, pageSize)
 	if !luckyPublicWinsTablesReady() {
 		return &commercedomain.LuckyPublicWinPage{Page: page, PageSize: pageSize, Records: []commercedomain.LuckyPublicWin{}}, nil
 	}
 	query := platformdb.DB.Model(&commerceschema.SubscriptionLuckyReward{}).Where("matched_digits > ? AND credit_status = ?", 0, commerceschema.SubscriptionLuckyRewardCreditCredited)
+	if drawDate != "" {
+		var draw commerceschema.SubscriptionLuckyDraw
+		if err := platformdb.DB.Where("draw_date = ?", drawDate).First(&draw).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return &commercedomain.LuckyPublicWinPage{Page: page, PageSize: pageSize, Records: []commercedomain.LuckyPublicWin{}}, nil
+			}
+			return nil, err
+		}
+		query = query.Where("draw_id = ?", draw.Id)
+	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err

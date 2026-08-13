@@ -108,12 +108,36 @@ export function DailyLuckyNumberPage() {
     staleTime: 60 * 1000,
   })
 
+  const payload = selfQuery.data
+  const todayPublicWinsQuery = useQuery({
+    queryKey: [
+      'daily-lucky-number',
+      'public-wins',
+      'today',
+      payload?.today_draw?.draw_date,
+    ],
+    enabled: Boolean(payload?.today_draw?.draw_date),
+    queryFn: async (): Promise<LuckyPublicWinPage> => {
+      const response = await getDailyLuckyNumberPublicWins(
+        1,
+        100,
+        payload?.today_draw?.draw_date
+      )
+      if (!response.success || !response.data) {
+        throw new Error(
+          response.message || 'Unable to load the public winners list.'
+        )
+      }
+      return response.data
+    },
+    staleTime: 60 * 1000,
+  })
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [])
 
-  const payload = selfQuery.data
   const countdownSeconds = useMemo(
     () =>
       Math.max(
@@ -127,12 +151,14 @@ export function DailyLuckyNumberPage() {
     void selfQuery.refetch()
     void historyQuery.refetch()
     void publicWinsQuery.refetch()
+    void todayPublicWinsQuery.refetch()
   }
 
   const refreshing =
     selfQuery.isFetching ||
     historyQuery.isFetching ||
-    publicWinsQuery.isFetching
+    publicWinsQuery.isFetching ||
+    todayPublicWinsQuery.isFetching
 
   const topTier = useMemo(() => resolveTopTier(payload), [payload])
   const bestMatch = useMemo(() => resolveBestMatch(payload), [payload])
@@ -211,12 +237,12 @@ export function DailyLuckyNumberPage() {
                 onOpenRules={openRules}
               />
               <TodayWinnersPanel
-                records={publicWinsQuery.data?.records}
+                records={todayPublicWinsQuery.data?.records}
                 drawDate={payload.today_draw?.draw_date}
                 timezone={payload.timezone}
-                loading={publicWinsQuery.isLoading}
-                error={publicWinsQuery.isError}
-                onRetry={() => void publicWinsQuery.refetch()}
+                loading={todayPublicWinsQuery.isLoading}
+                error={todayPublicWinsQuery.isError}
+                onRetry={() => void todayPublicWinsQuery.refetch()}
               />
               <HistoryPanel
                 tab={historyTab}

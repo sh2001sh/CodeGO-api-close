@@ -1,5 +1,13 @@
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { CalendarDays, Gift, Ticket, TrendingUp } from 'lucide-react'
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Gift,
+  Ticket,
+  TrendingUp,
+} from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -33,6 +41,8 @@ import type {
 } from '../types'
 import { LuckyDigits } from './lucky-digits'
 import { TierBadge } from './tier-badge'
+
+const BLIND_BOX_PAGE_SIZE = 6
 
 function resolvePlan(value?: SubscriptionPlan | PlanRecord | null) {
   if (!value) return null
@@ -78,6 +88,16 @@ export function LuckyMatchBoard(props: {
   const rules = normalizeLuckyNumberRules(props.rules)
   const published = Boolean(props.draw?.winning_number)
   const numberCount = props.subscriptions.length + props.blindBoxNumbers.length
+  const [blindBoxPage, setBlindBoxPage] = useState(1)
+  const blindBoxPageCount = Math.max(
+    1,
+    Math.ceil(props.blindBoxNumbers.length / BLIND_BOX_PAGE_SIZE)
+  )
+  const currentBlindBoxPage = Math.min(blindBoxPage, blindBoxPageCount)
+  const visibleBlindBoxNumbers = props.blindBoxNumbers.slice(
+    (currentBlindBoxPage - 1) * BLIND_BOX_PAGE_SIZE,
+    currentBlindBoxPage * BLIND_BOX_PAGE_SIZE
+  )
 
   return (
     <section className='space-y-3'>
@@ -140,7 +160,7 @@ export function LuckyMatchBoard(props: {
                 </span>
               </div>
               <div className='grid gap-3 lg:grid-cols-2'>
-                {props.blindBoxNumbers.map((entry) => (
+                {visibleBlindBoxNumbers.map((entry) => (
                   <motion.div
                     key={entry.blind_box_open_record_id}
                     variants={item}
@@ -154,6 +174,38 @@ export function LuckyMatchBoard(props: {
                   </motion.div>
                 ))}
               </div>
+              {blindBoxPageCount > 1 ? (
+                <div className='flex items-center justify-center gap-2 pt-1'>
+                  <Button
+                    variant='outline'
+                    size='icon-sm'
+                    onClick={() =>
+                      setBlindBoxPage((value) => Math.max(1, value - 1))
+                    }
+                    disabled={currentBlindBoxPage <= 1}
+                    aria-label='上一页盲盒号码'
+                  >
+                    <ChevronLeft aria-hidden='true' />
+                  </Button>
+                  <span className='text-muted-foreground min-w-24 text-center text-xs tabular-nums'>
+                    第 {currentBlindBoxPage} / {blindBoxPageCount} 页 · 共{' '}
+                    {props.blindBoxNumbers.length} 个
+                  </span>
+                  <Button
+                    variant='outline'
+                    size='icon-sm'
+                    onClick={() =>
+                      setBlindBoxPage((value) =>
+                        Math.min(blindBoxPageCount, value + 1)
+                      )
+                    }
+                    disabled={currentBlindBoxPage >= blindBoxPageCount}
+                    aria-label='下一页盲盒号码'
+                  >
+                    <ChevronRight aria-hidden='true' />
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </motion.div>

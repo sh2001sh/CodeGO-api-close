@@ -118,10 +118,13 @@ func isAdaptiveCapacityFailure(statusCode int) bool {
 	return IsAdaptiveFaultDomainFailureStatus(statusCode)
 }
 
-// IsAdaptiveFaultDomainFailureStatus identifies failures that indicate shared
-// upstream pressure rather than a user, billing, or request validation error.
+// IsAdaptiveFaultDomainFailureStatus identifies failures that reliably signal
+// shared upstream admission pressure. A 502 stream close or a 524 may be a
+// request-local transport interruption after the upstream has accepted work;
+// shrinking the shared admission window for those failures creates a 503 wave
+// for otherwise unrelated requests.
 func IsAdaptiveFaultDomainFailureStatus(statusCode int) bool {
-	return statusCode == 429 || statusCode == 502 || statusCode == 503 || statusCode == 504 || statusCode == 524
+	return statusCode == 429 || statusCode == 503 || statusCode == 504
 }
 
 func normalizeFaultDomain(domain string) string {

@@ -59,6 +59,25 @@ func TestFaultDomainConcurrencyShrinksAfterTransientFailures(t *testing.T) {
 	release(true, 0)
 }
 
+func TestFaultDomainConcurrencyDoesNotShrinkForStreamClosureOrGatewayTimeout(t *testing.T) {
+	resetFaultDomainConcurrencyForTest(t)
+	domain := "test-request-local-stream-failure-domain"
+	model := "gpt-test-request-local-stream-failure"
+
+	for _, statusCode := range []int{502, 524} {
+		for i := 0; i < faultDomainConcurrencyFailureThreshold; i++ {
+			release, acquired, snapshot := TryAcquireFaultDomainSlot(domain, model)
+			require.True(t, acquired)
+			require.Equal(t, faultDomainInitialConcurrency, snapshot.Limit)
+			release(false, statusCode)
+		}
+	}
+
+	_, acquired, snapshot := TryAcquireFaultDomainSlot(domain, model)
+	require.True(t, acquired)
+	require.Equal(t, faultDomainInitialConcurrency, snapshot.Limit)
+}
+
 func TestFaultDomainExclusionIsRequestScoped(t *testing.T) {
 	c := &gin.Context{}
 	domain := "1:shared.example"

@@ -520,6 +520,8 @@ export interface BalanceBlindBoxOverview {
   small_pity_progress: number
   small_pity_threshold: number
   small_pity_guarantee_usd: number
+  first_draw_guarantee_usd: number
+  first_draw_eligible: boolean
 }
 
 export interface BlindBoxOrderStatus {

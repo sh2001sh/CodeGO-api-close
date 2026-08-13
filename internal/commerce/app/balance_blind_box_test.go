@@ -36,14 +36,14 @@ func TestOpenBalanceBlindBoxDebitsOnceAndDoesNotIssueLuckyNumber(t *testing.T) {
 	first, err := OpenBalanceBlindBox(user.Id, "balance-box-request-1")
 	require.NoError(t, err)
 	require.Equal(t, commerceschema.BlindBoxPoolTypeBalance15, first.Record.PoolType)
-	require.Equal(t, 3.0, first.Record.RewardUSD)
+	require.Equal(t, 10.0, first.Record.RewardUSD)
 	require.Empty(t, first.Record.LuckyNumber)
-	require.InDelta(t, 88.0, first.BalanceUSD, 0.000001)
+	require.InDelta(t, 95.0, first.BalanceUSD, 0.000001)
 
 	second, err := OpenBalanceBlindBox(user.Id, "balance-box-request-1")
 	require.NoError(t, err)
 	require.Equal(t, first.Record.Id, second.Record.Id)
-	require.InDelta(t, 88.0, second.BalanceUSD, 0.000001)
+	require.InDelta(t, 95.0, second.BalanceUSD, 0.000001)
 
 	var luckyCount int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).Count(&luckyCount).Error)
@@ -68,8 +68,8 @@ func TestOpenBalanceBlindBoxSupportsBatchOpening(t *testing.T) {
 	result, err := OpenBalanceBlindBox(user.Id, "balance-box-request-batch", 3)
 	require.NoError(t, err)
 	require.Len(t, result.Records, 3)
-	require.GreaterOrEqual(t, result.BalanceUSD, 55.0)
-	require.LessOrEqual(t, result.BalanceUSD, 64.0)
+	require.GreaterOrEqual(t, result.BalanceUSD, 68.0)
+	require.LessOrEqual(t, result.BalanceUSD, 71.0)
 	for _, record := range result.Records {
 		require.Equal(t, commerceschema.BlindBoxPoolTypeBalance15, record.PoolType)
 		require.Empty(t, record.LuckyNumber)
@@ -149,4 +149,26 @@ func TestBalanceBlindBoxTenthDrawUsesSmallGuarantee(t *testing.T) {
 	require.Equal(t, 10.0, result.Record.RewardUSD)
 	require.Equal(t, 0, result.Overview.SmallPityProgress)
 	require.Equal(t, 10, result.Overview.PityProgress)
+}
+
+func TestBalanceBlindBoxFirstDrawUsesGuarantee(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	require.NoError(t, db.AutoMigrate(&commerceschema.BalanceBlindBoxPityState{}))
+	setting := blindboxsettings.Get()
+	setting.Enabled = true
+	setting.BalanceBlindBoxEnabled = true
+	setting.BalanceBlindBoxPriceUSD = 15
+	setting.BalanceBlindBoxFirstDrawGuaranteeUSD = 10
+	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{Name: "$1-$3", MinUSD: 1, MaxUSD: 3, Probability: 1, RewardType: "quota", WalletType: "default"}}
+	blindboxsettings.Set(setting)
+
+	user := &identityschema.User{Id: 8896, Username: "balance-blind-box-first", Quota: int(50 * platformruntime.QuotaPerUnit), AffCode: "balance-box-first"}
+	require.NoError(t, db.Create(user).Error)
+
+	result, err := OpenBalanceBlindBox(user.Id, "balance-box-first-request")
+	require.NoError(t, err)
+	require.Len(t, result.Records, 1)
+	require.Equal(t, 10.0, result.Records[0].RewardUSD)
+	require.True(t, result.Records[0].IsPity)
+	require.False(t, result.Overview.FirstDrawEligible)
 }

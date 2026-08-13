@@ -27,6 +27,8 @@ type BalanceBlindBoxOverview struct {
 	SmallPityProgress     int                            `json:"small_pity_progress"`
 	SmallPityThreshold    int                            `json:"small_pity_threshold"`
 	SmallPityGuaranteeUSD float64                        `json:"small_pity_guarantee_usd"`
+	FirstDrawGuaranteeUSD float64                        `json:"first_draw_guarantee_usd"`
+	FirstDrawEligible     bool                           `json:"first_draw_eligible"`
 }
 
 type BalanceBlindBoxOpenResult struct {
@@ -51,7 +53,13 @@ func GetBalanceBlindBoxOverview(userID int) (*BalanceBlindBoxOverview, error) {
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) && !isBalanceBlindBoxSchemaMissing(err) {
 		return nil, err
 	}
-	return buildBalanceBlindBoxOverview(setting, balance, pity.ConsecutiveUnder6USD, pity.ConsecutiveUnder35USD), nil
+	var openedCount int64
+	if err := platformdb.DB.Model(&commerceschema.BlindBoxOpenRecord{}).
+		Where("user_id = ? AND pool_type = ?", userID, commerceschema.BlindBoxPoolTypeBalance15).
+		Count(&openedCount).Error; err != nil {
+		return nil, err
+	}
+	return buildBalanceBlindBoxOverview(setting, balance, pity.ConsecutiveUnder6USD, pity.ConsecutiveUnder35USD, openedCount == 0), nil
 }
 
 func isBalanceBlindBoxSchemaMissing(err error) bool {
@@ -93,6 +101,12 @@ func OpenBalanceBlindBox(userID int, requestID string, requestedCount ...int) (*
 		} else if err != nil {
 			return err
 		}
+		var openedCount int64
+		if err := tx.Model(&commerceschema.BlindBoxOpenRecord{}).
+			Where("user_id = ? AND pool_type = ?", userID, commerceschema.BlindBoxPoolTypeBalance15).
+			Count(&openedCount).Error; err != nil {
+			return err
+		}
 
 		var pity commerceschema.BalanceBlindBoxPityState
 		err := tx.Set("gorm:query_option", "FOR UPDATE").Where("user_id = ?", userID).First(&pity).Error
@@ -118,7 +132,7 @@ func OpenBalanceBlindBox(userID int, requestID string, requestedCount ...int) (*
 			if index > 0 {
 				drawRequestID = fmt.Sprintf("%s:%d", requestID, index)
 			}
-			record, drawErr := drawBalanceBlindBoxRewardTx(tx, userID, drawRequestID, &pity, setting)
+			record, drawErr := drawBalanceBlindBoxRewardTx(tx, userID, drawRequestID, &pity, setting, openedCount == 0 && index == 0 && pity.ConsecutiveUnder6USD == 0 && pity.ConsecutiveUnder35USD == 0)
 			if drawErr != nil {
 				return drawErr
 			}
@@ -140,20 +154,26 @@ func OpenBalanceBlindBox(userID int, requestID string, requestedCount ...int) (*
 	return result, nil
 }
 
-func drawBalanceBlindBoxRewardTx(tx *gorm.DB, userID int, requestID string, pity *commerceschema.BalanceBlindBoxPityState, setting blindboxsettings.Setting) (*commerceschema.BlindBoxOpenRecord, error) {
+func drawBalanceBlindBoxRewardTx(tx *gorm.DB, userID int, requestID string, pity *commerceschema.BalanceBlindBoxPityState, setting blindboxsettings.Setting, firstDraw bool) (*commerceschema.BlindBoxOpenRecord, error) {
 	tier := pickBlindBoxTier(setting.BalanceBlindBoxTiers)
 	rewardUSD := randomTierRewardUSD(tier)
 	rewardType := blindboxsettings.NormalizeRewardType(tier.RewardType)
 	walletType := normalizeBlindBoxRewardWalletType(tier.WalletType)
-	bigPityTriggered := pity.ConsecutiveUnder35USD+1 >= setting.BalanceBlindBoxPityThreshold
+	firstDrawTriggered := firstDraw
+	bigPityTriggered := !firstDrawTriggered && pity.ConsecutiveUnder35USD+1 >= setting.BalanceBlindBoxPityThreshold
 	smallPityTriggered := !bigPityTriggered && pity.ConsecutiveUnder6USD+1 >= setting.BalanceBlindBoxSmallPityThreshold
-	if bigPityTriggered {
+	if firstDrawTriggered {
+		tier = blindboxsettings.TierSetting{Name: "$10 余额盲盒首抽保底", MinUSD: setting.BalanceBlindBoxFirstDrawGuaranteeUSD, MaxUSD: setting.BalanceBlindBoxFirstDrawGuaranteeUSD, RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: string(commerceschema.BlindBoxRewardWalletTypeDefault)}
+		rewardUSD = setting.BalanceBlindBoxFirstDrawGuaranteeUSD
+		rewardType = commerceschema.BlindBoxRewardTypeQuota
+		walletType = commerceschema.BlindBoxRewardWalletTypeDefault
+	} else if bigPityTriggered {
 		tier = blindboxsettings.TierSetting{Name: "$35 余额盲盒保底", RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: string(commerceschema.BlindBoxRewardWalletTypeDefault)}
 		rewardUSD = setting.BalanceBlindBoxPityGuaranteeUSD
 		rewardType = commerceschema.BlindBoxRewardTypeQuota
 		walletType = commerceschema.BlindBoxRewardWalletTypeDefault
 	} else if smallPityTriggered {
-		tier = blindboxsettings.TierSetting{Name: "$6 余额盲盒小保底", RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: string(commerceschema.BlindBoxRewardWalletTypeDefault)}
+		tier = blindboxsettings.TierSetting{Name: "$10 余额盲盒小保底", MinUSD: setting.BalanceBlindBoxSmallPityGuaranteeUSD, MaxUSD: setting.BalanceBlindBoxSmallPityGuaranteeUSD, RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: string(commerceschema.BlindBoxRewardWalletTypeDefault)}
 		rewardUSD = setting.BalanceBlindBoxSmallPityGuaranteeUSD
 		rewardType = commerceschema.BlindBoxRewardTypeQuota
 		walletType = commerceschema.BlindBoxRewardWalletTypeDefault
@@ -161,7 +181,7 @@ func drawBalanceBlindBoxRewardTx(tx *gorm.DB, userID int, requestID string, pity
 	record := &commerceschema.BlindBoxOpenRecord{
 		UserId: userID, RequestId: &requestID, PoolType: commerceschema.BlindBoxPoolTypeBalance15,
 		RewardType: rewardType, RewardTier: tier.Name, RewardUSD: rewardUSD,
-		RewardWalletType: string(walletType), IsPity: bigPityTriggered || smallPityTriggered, CreateTime: platformruntime.GetTimestamp(),
+		RewardWalletType: string(walletType), IsPity: firstDrawTriggered || bigPityTriggered || smallPityTriggered, CreateTime: platformruntime.GetTimestamp(),
 	}
 	if rewardType == commerceschema.BlindBoxRewardTypeProp {
 		record.RewardTitle = tier.Name
@@ -196,7 +216,7 @@ func drawBalanceBlindBoxRewardTx(tx *gorm.DB, userID int, requestID string, pity
 			return nil, err
 		}
 	}
-	if rewardType != commerceschema.BlindBoxRewardTypeProp && rewardUSD >= setting.BalanceBlindBoxPityGuaranteeUSD {
+	if rewardType != commerceschema.BlindBoxRewardTypeProp && (firstDrawTriggered || rewardUSD >= setting.BalanceBlindBoxPityGuaranteeUSD) {
 		pity.ConsecutiveUnder6USD = 0
 		pity.ConsecutiveUnder35USD = 0
 	} else if rewardType != commerceschema.BlindBoxRewardTypeProp && rewardUSD >= setting.BalanceBlindBoxSmallPityGuaranteeUSD {
@@ -209,7 +229,7 @@ func drawBalanceBlindBoxRewardTx(tx *gorm.DB, userID int, requestID string, pity
 	return record, nil
 }
 
-func buildBalanceBlindBoxOverview(setting blindboxsettings.Setting, balance int, smallPityProgress int, pityProgress int) *BalanceBlindBoxOverview {
+func buildBalanceBlindBoxOverview(setting blindboxsettings.Setting, balance int, smallPityProgress int, pityProgress int, firstDrawEligible bool) *BalanceBlindBoxOverview {
 	return &BalanceBlindBoxOverview{
 		Enabled:               setting.Enabled && setting.BalanceBlindBoxEnabled,
 		PriceUSD:              setting.BalanceBlindBoxPriceUSD,
@@ -221,5 +241,7 @@ func buildBalanceBlindBoxOverview(setting blindboxsettings.Setting, balance int,
 		SmallPityProgress:     smallPityProgress,
 		SmallPityThreshold:    setting.BalanceBlindBoxSmallPityThreshold,
 		SmallPityGuaranteeUSD: setting.BalanceBlindBoxSmallPityGuaranteeUSD,
+		FirstDrawGuaranteeUSD: setting.BalanceBlindBoxFirstDrawGuaranteeUSD,
+		FirstDrawEligible:     firstDrawEligible,
 	}
 }

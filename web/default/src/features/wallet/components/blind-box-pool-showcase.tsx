@@ -239,9 +239,16 @@ function PoolCell(props: {
           />
         </div>
         <span className='text-muted-foreground shrink-0 font-mono text-xs font-medium tabular-nums'>
-          {(props.probability * 100).toFixed(1)}%
+          {formatProbability(props.probability)}
         </span>
       </div>
     </motion.div>
   )
+}
+
+function formatProbability(probability: number) {
+  if (probability <= 0) return '0%'
+  const percentage = probability * 100
+  if (percentage < 0.001) return '<0.001%'
+  return `${percentage.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}%`
 }

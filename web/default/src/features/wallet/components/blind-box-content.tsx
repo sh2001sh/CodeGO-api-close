@@ -234,7 +234,7 @@ function BalanceBlindBoxPanel(props: {
         </div>
       </div>
       <div className='space-y-4 px-4 py-4 sm:px-6 sm:py-5'>
-        <div className='grid gap-3 sm:grid-cols-4'>
+        <div className='grid gap-3 sm:grid-cols-5'>
           <Metric
             label='当前余额'
             value={`$${(balance?.balance_usd || 0).toFixed(2)}`}
@@ -251,10 +251,18 @@ function BalanceBlindBoxPanel(props: {
             label='大奖保底'
             value={`${balance?.pity_progress || 0}/${balance?.pity_threshold || 50}`}
           />
+          <Metric
+            label='首抽保底'
+            value={
+              balance?.first_draw_eligible
+                ? `至少 $${(balance.first_draw_guarantee_usd || 10).toFixed(2)}`
+                : '已使用'
+            }
+          />
         </div>
         <div className='rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-3 text-xs leading-5'>
-          连续 9 次未获得 $10 及以上额度，第 10 次至少获得 $10；连续 49 次未获得
-          $35 及以上额度，第 50 次至少获得
+          首次抽取至少获得 $10 额度；连续 9 次未获得 $10 及以上额度，第 10
+          次至少获得 $10；连续 49 次未获得 $35 及以上额度，第 50 次至少获得
           $35。道具规则与普通盲盒一致，幸运号规则除外。
         </div>
         {headlineTiers.length > 0 ? (

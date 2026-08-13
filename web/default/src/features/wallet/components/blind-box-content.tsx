@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BlindBoxSelfData, PaymentMethod } from '../types'
 import { BlindBoxDisabledNotice } from './blind-box-notices'
@@ -227,8 +228,8 @@ function BalanceBlindBoxPanel(props: {
             使用余额抽取高价值奖励
           </h2>
           <p className='text-muted-foreground mt-2 text-xs leading-5'>
-            奖池沿用盲盒道具与额度奖励，最高可得
-            $1000；本盲盒不会生成每日幸运号。
+            奖池沿用盲盒道具与额度奖励，最高可得 $1000；约四分之一可获得 $15+
+            面值奖励，本盲盒不会生成每日幸运号。
           </p>
         </div>
       </div>
@@ -252,7 +253,7 @@ function BalanceBlindBoxPanel(props: {
           />
         </div>
         <div className='rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-3 text-xs leading-5'>
-          连续 9 次未获得 $6 及以上额度，第 10 次至少获得 $6；连续 49 次未获得
+          连续 9 次未获得 $10 及以上额度，第 10 次至少获得 $10；连续 49 次未获得
           $35 及以上额度，第 50 次至少获得
           $35。道具规则与普通盲盒一致，幸运号规则除外。
         </div>
@@ -298,6 +299,20 @@ function BalanceBlindBoxPanel(props: {
               {option} 个
             </button>
           ))}
+          <Input
+            type='number'
+            min={1}
+            max={20}
+            value={count}
+            onChange={(event) => {
+              const next = Number(event.target.value)
+              if (!Number.isFinite(next)) return
+              setCount(Math.min(20, Math.max(1, Math.floor(next))))
+            }}
+            className='h-8 w-20'
+            aria-label='自定义余额盲盒抽取数量'
+            disabled={props.opening}
+          />
         </div>
       </div>
     </section>

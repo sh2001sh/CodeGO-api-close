@@ -69,7 +69,7 @@ func TestOpenBalanceBlindBoxSupportsBatchOpening(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Records, 3)
 	require.GreaterOrEqual(t, result.BalanceUSD, 55.0)
-	require.LessOrEqual(t, result.BalanceUSD, 61.0)
+	require.LessOrEqual(t, result.BalanceUSD, 64.0)
 	for _, record := range result.Records {
 		require.Equal(t, commerceschema.BlindBoxPoolTypeBalance15, record.PoolType)
 		require.Empty(t, record.LuckyNumber)

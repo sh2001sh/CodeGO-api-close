@@ -661,10 +661,13 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认使用 $15 余额抽取？</AlertDialogTitle>
+            <AlertDialogTitle>
+              确认使用 ${(15 * balanceOpenCount).toFixed(2)} 余额抽取{' '}
+              {balanceOpenCount} 个？
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              确认后将立即扣除 $15
-              站内余额并开奖。本次不会获得每日幸运号，抽奖结果不可撤销。
+              确认后将一次性扣除 ${(15 * balanceOpenCount).toFixed(2)}
+              站内余额并依次开奖。本次不会获得每日幸运号，抽奖结果不可撤销。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

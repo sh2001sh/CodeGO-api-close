@@ -86,23 +86,19 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 		fallbackGroups := OrderAutoFallbackGroups(userGroup, param.ModelName, autoGroups)
 		candidateGroups := append(append([]string{}, autoGroups...), fallbackGroups...)
 		gatewayruntime.UpdateRouteDecisionCandidates(param.Ctx, len(candidateGroups))
-		if param.GetRetry() > 0 {
-			if selectedGroup := httpctx.GetContextKeyString(param.Ctx, constant.ContextKeyAutoGroup); selectedGroup != "" {
-				channel, _ = getHealthySatisfiedChannelWithMode(param.Ctx, selectedGroup, param.ModelName, param.GetRetry(), false)
-				if channel != nil {
-					httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, selectedGroup)
-					gatewayruntime.SelectRouteDecisionCandidate(param.Ctx, selectedGroup, channel.Id, false)
-				}
-				return channel, selectedGroup, nil
-			}
-		}
-
 		startGroupIndex := 0
 		crossGroupRetry := httpctx.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
 
 		if lastGroupIndex, exists := httpctx.GetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex); exists {
 			if idx, ok := lastGroupIndex.(int); ok {
 				startGroupIndex = idx
+				if param.GetRetry() > 0 {
+					// Auto routing is ordered by effective user cost. Once a group
+					// has failed, continue with the next cheapest healthy group
+					// instead of retrying the same group and hiding available
+					// capacity behind its transient failure.
+					startGroupIndex++
+				}
 			}
 		}
 

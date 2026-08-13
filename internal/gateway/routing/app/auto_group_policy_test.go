@@ -155,7 +155,7 @@ func TestAutoSelectionChecksHealthyFallbackBeforeLastResort(t *testing.T) {
 	require.Equal(t, "fallback", group)
 }
 
-func TestAutoRetryStaysWithinInitiallySelectedGroup(t *testing.T) {
+func TestAutoRetryMovesToNextCheapestGroup(t *testing.T) {
 	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
 	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()
 	originalSelector := selectRandomSatisfiedChannel
@@ -168,8 +168,12 @@ func TestAutoRetryStaysWithinInitiallySelectedGroup(t *testing.T) {
 	require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(`["low","fallback"]`))
 	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"low":"低价","fallback":"备用"}`))
 	calledGroups := make([]string, 0, 1)
+	priority := int64(1)
 	selectRandomSatisfiedChannel = func(group string, _ string, _ int) (*gatewayschema.Channel, error) {
 		calledGroups = append(calledGroups, group)
+		if group == "fallback" {
+			return &gatewayschema.Channel{Id: 39, Priority: &priority}, nil
+		}
 		return nil, nil
 	}
 
@@ -184,9 +188,10 @@ func TestAutoRetryStaysWithinInitiallySelectedGroup(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Nil(t, channel)
-	require.Equal(t, "low", group)
-	require.Equal(t, []string{"low"}, calledGroups)
+	require.NotNil(t, channel)
+	require.Equal(t, 39, channel.Id)
+	require.Equal(t, "fallback", group)
+	require.Equal(t, "fallback", calledGroups[len(calledGroups)-1])
 }
 
 func TestCacheSelectionSkipsCoolingChannelEvenWithLegacyProbeContext(t *testing.T) {

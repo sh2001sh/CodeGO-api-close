@@ -7,6 +7,7 @@ import (
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,6 +105,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gateway
 	channel, selectGroup, err := gatewayroutingapp.CacheGetRandomSatisfiedChannel(retryParam)
 	if err == nil && channel == nil {
 		channel, selectGroup = retryFallbackChannel(c, retryParam, selectGroup)
+		if channel == nil {
+			channel, selectGroup = retryLastUsedSoleRoute(c, retryParam, selectGroup)
+		}
 	}
 	if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
 		info.RoutePoolID = selection.PoolID
@@ -158,6 +162,33 @@ func retryFallbackChannel(c *gin.Context, retryParam *gatewayroutingapp.RetryPar
 	// the original channel here so a manual disable or ability change cannot be
 	// bypassed by the one-shot fallback.
 	if channel.Status != constant.ChannelStatusEnabled ||
+		!gatewaystore.IsChannelEnabledForGroupModel(selectGroup, retryParam.ModelName, channelID) {
+		return nil, selectGroup
+	}
+	gatewayruntime.SelectRouteDecisionCandidate(c, selectGroup, channelID, false)
+	return channel, selectGroup
+}
+
+// retryLastUsedSoleRoute is the final guard against retry de-duplication
+// turning a transient failure on a sole route into "no available channel".
+// It is reachable only on the second attempt before any downstream content is
+// delivered, and revalidates the channel's current enabled ability.
+func retryLastUsedSoleRoute(c *gin.Context, retryParam *gatewayroutingapp.RetryParam, selectGroup string) (*gatewayschema.Channel, string) {
+	if c == nil || retryParam == nil || retryParam.GetRetry() <= 0 ||
+		httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||
+		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+		return nil, selectGroup
+	}
+	usedChannels := c.GetStringSlice("use_channel")
+	if len(usedChannels) != 1 {
+		return nil, selectGroup
+	}
+	channelID, err := strconv.Atoi(strings.TrimSpace(usedChannels[0]))
+	if err != nil || channelID <= 0 {
+		return nil, selectGroup
+	}
+	channel, err := gatewaystore.GetCachedChannel(channelID)
+	if err != nil || channel == nil || channel.Status != constant.ChannelStatusEnabled ||
 		!gatewaystore.IsChannelEnabledForGroupModel(selectGroup, retryParam.ModelName, channelID) {
 		return nil, selectGroup
 	}

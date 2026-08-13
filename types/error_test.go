@@ -35,6 +35,21 @@ func TestNewAPIErrorStatusStringsSanitizeChineseUpstreamQuotaLeak(t *testing.T) 
 	require.Equal(t, platformtext.UpstreamQuotaGenericMessage, apiErr.MaskSensitiveErrorWithStatusCode())
 }
 
+func TestNewAPIErrorSanitizesEnglishUpstreamBalanceLeak(t *testing.T) {
+	t.Parallel()
+
+	apiErr := NewOpenAIError(
+		fmt.Errorf("insufficient balance: remaining $0.00, required $3.97"),
+		ErrorCodeBadResponseStatusCode,
+		http.StatusForbidden,
+	)
+
+	apiErr.SanitizeDownstreamResponse()
+	require.Equal(t, http.StatusServiceUnavailable, apiErr.StatusCode)
+	require.Equal(t, ModelUnavailableMessage, apiErr.ToOpenAIError().Message)
+	require.Equal(t, ModelUnavailableMessage, apiErr.MaskSensitiveErrorWithStatusCode())
+}
+
 func TestNewAPIErrorMaskSensitiveErrorHidesUpstreamAvailabilityDetails(t *testing.T) {
 	t.Parallel()
 

@@ -200,6 +200,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			}
 			return nil
 		}},
+		{ID: "20260813_balance_blind_box", Run: migrateBalanceBlindBox},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -417,6 +418,26 @@ func migrateDailyLuckyNumber(tx *gorm.DB) error {
 		&commerceschema.SubscriptionLuckyRewardNotification{},
 		&commerceschema.SubscriptionBlindBoxBenefitCycle{},
 	)
+}
+
+// migrateBalanceBlindBox appends the fields required by the wallet-funded
+// blind-box pool without asking PostgreSQL to rebuild the established records table.
+func migrateBalanceBlindBox(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.BlindBoxOpenRecord{}) {
+		return nil
+	}
+	for _, field := range []string{"PoolType", "RequestId"} {
+		if tx.Migrator().HasColumn(&commerceschema.BlindBoxOpenRecord{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&commerceschema.BlindBoxOpenRecord{}, field); err != nil {
+			return err
+		}
+	}
+	if err := tx.AutoMigrate(&commerceschema.BalanceBlindBoxPityState{}); err != nil {
+		return err
+	}
+	return tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_blind_box_open_records_request_id ON blind_box_open_records (request_id) WHERE request_id IS NOT NULL").Error
 }
 
 // addDailyLuckyNumberColumns only appends the fields introduced by this

@@ -228,8 +228,8 @@ function BalanceBlindBoxPanel(props: {
             使用余额抽取高价值奖励
           </h2>
           <p className='text-muted-foreground mt-2 text-xs leading-5'>
-            奖池沿用盲盒道具与额度奖励，最高可得 $1000；约四分之一可获得 $15+
-            面值奖励，本盲盒不会生成每日幸运号。
+            高波动奖池最高可得
+            $1000，短期可能盈利也可能亏损；长期概率按公开奖池执行，本盲盒不会生成每日幸运号。
           </p>
         </div>
       </div>

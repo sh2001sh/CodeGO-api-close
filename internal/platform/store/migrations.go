@@ -64,6 +64,8 @@ func V2MigrationIDs() []string {
 		"20260804_daily_lucky_reward_notifications",
 		"20260805_billing_outbox_pending_lookup",
 		"20260808_commerce_invoice_requests",
+		"20260812_blind_box_daily_lucky_numbers",
+		"20260813_balance_blind_box",
 	}
 }
 

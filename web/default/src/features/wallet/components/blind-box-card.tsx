@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -61,6 +61,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   const [amountDue, setAmountDue] = useState(0)
   const [paying, setPaying] = useState(false)
   const [openingCount, setOpeningCount] = useState<number | null>(null)
+  const openingRef = useRef(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showProps, setShowProps] = useState(false)
   const [paymentState, setPaymentState] =
@@ -350,6 +351,10 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
 
   const handleManualOpen = useCallback(
     async (count: number) => {
+      // State updates are asynchronous. Keep an immediate guard so a fast
+      // double-click cannot consume two boxes before the button re-renders.
+      if (openingRef.current) return
+      openingRef.current = true
       setOpeningCount(count)
       try {
         const response = await openBlindBoxes({ count })
@@ -374,6 +379,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
         )
       } finally {
         setOpeningCount(null)
+        openingRef.current = false
       }
     },
     [refreshAll]

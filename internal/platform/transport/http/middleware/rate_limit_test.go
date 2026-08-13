@@ -19,7 +19,7 @@ func TestBlindBoxOpenRateLimitIsScopedToUser(t *testing.T) {
 	})
 
 	limiter := BlindBoxOpenRateLimit()
-	for attempt := 0; attempt < 30; attempt++ {
+	for attempt := 0; attempt < 120; attempt++ {
 		context, _ := gin.CreateTestContext(httptest.NewRecorder())
 		context.Request = httptest.NewRequest(http.MethodPost, "/api/blind-box/open", nil)
 		context.Set("id", 901)

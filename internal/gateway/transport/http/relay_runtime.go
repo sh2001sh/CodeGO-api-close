@@ -158,11 +158,12 @@ func retryFallbackChannel(c *gin.Context, retryParam *gatewayroutingapp.RetryPar
 			selectGroup = selected
 		}
 	}
-	// The retry marker is written before routing state is updated. Revalidate
-	// the original channel here so a manual disable or ability change cannot be
-	// bypassed by the one-shot fallback.
-	if channel.Status != constant.ChannelStatusEnabled ||
-		!gatewaystore.IsChannelEnabledForGroupModel(selectGroup, retryParam.ModelName, channelID) {
+	// The first attempt already established group/model ability. Do not query the
+	// ability cache again here: a cache refresh between attempts can otherwise
+	// reject the very sole route that was just selected and turn its real
+	// upstream error into a misleading "no available channel" response. A manual
+	// global channel disable is still honored.
+	if !isRetryChannelReusable(channel) {
 		return nil, selectGroup
 	}
 	gatewayruntime.SelectRouteDecisionCandidate(c, selectGroup, channelID, false)
@@ -188,12 +189,15 @@ func retryLastUsedSoleRoute(c *gin.Context, retryParam *gatewayroutingapp.RetryP
 		return nil, selectGroup
 	}
 	channel, err := gatewaystore.GetCachedChannel(channelID)
-	if err != nil || channel == nil || channel.Status != constant.ChannelStatusEnabled ||
-		!gatewaystore.IsChannelEnabledForGroupModel(selectGroup, retryParam.ModelName, channelID) {
+	if err != nil || !isRetryChannelReusable(channel) {
 		return nil, selectGroup
 	}
 	gatewayruntime.SelectRouteDecisionCandidate(c, selectGroup, channelID, false)
 	return channel, selectGroup
+}
+
+func isRetryChannelReusable(channel *gatewayschema.Channel) bool {
+	return channel != nil && channel.Status == constant.ChannelStatusEnabled
 }
 
 func shouldWaitForRouteSelection(c *gin.Context, attempt int) bool {

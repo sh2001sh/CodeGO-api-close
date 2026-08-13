@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
@@ -32,6 +33,15 @@ func TestRefundRelayBillingSkipsRequestsWithoutRelayInfo(t *testing.T) {
 	apiErr := types.NewErrorWithStatusCode(errors.New("service busy"), types.ErrorCodeServiceBusy, http.StatusServiceUnavailable)
 
 	require.Same(t, apiErr, refundRelayBillingIfNeeded(ctx, nil, apiErr))
+}
+
+func TestRetryChannelReusableHonorsOnlyGlobalChannelStatus(t *testing.T) {
+	enabled := &gatewayschema.Channel{Id: 6, Status: constant.ChannelStatusEnabled}
+	require.True(t, isRetryChannelReusable(enabled))
+
+	disabled := &gatewayschema.Channel{Id: 6, Status: constant.ChannelStatusAutoDisabled}
+	require.False(t, isRetryChannelReusable(disabled))
+	require.False(t, isRetryChannelReusable(nil))
 }
 
 func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {

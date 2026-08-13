@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -80,6 +81,40 @@ func TestNegativeWalletLegacyNormalizationIsAuditableAndIdempotent(t *testing.T)
 	}
 }
 
+func TestBalanceBlindBoxLossCompensationIsPerUserAndIdempotent(t *testing.T) {
+	db := setupLedgerBackfillTestDB(t)
+	users := []identityschema.User{
+		{Id: 701, Username: "balance-loss", AffCode: "balance-loss"},
+		{Id: 702, Username: "balance-profit", AffCode: "balance-profit"},
+	}
+	records := []commerceschema.BlindBoxOpenRecord{
+		{UserId: 701, PoolType: commerceschema.BlindBoxPoolTypeBalance15, RewardUSD: 3, CreateTime: 100},
+		{UserId: 701, PoolType: commerceschema.BlindBoxPoolTypeBalance15, RewardUSD: 20, CreateTime: 101},
+		{UserId: 702, PoolType: commerceschema.BlindBoxPoolTypeBalance15, RewardUSD: 35, CreateTime: 100},
+		{UserId: 701, PoolType: commerceschema.BlindBoxPoolTypeBalance15, RewardUSD: 1, CreateTime: 200},
+	}
+	require.NoError(t, db.Create(&users).Error)
+	require.NoError(t, db.Create(&records).Error)
+
+	plan, err := inspectBalanceBlindBoxLossCompensation(200)
+	require.NoError(t, err)
+	require.Len(t, plan, 1)
+	require.Equal(t, 701, plan[0].UserID)
+	require.Equal(t, 2, plan[0].DrawCount)
+	require.EqualValues(t, 2300, plan[0].RewardCents)
+	require.EqualValues(t, 700, plan[0].CompensationCents)
+
+	require.NoError(t, applyBalanceBlindBoxLossCompensation(200))
+	require.NoError(t, applyBalanceBlindBoxLossCompensation(200))
+	var user identityschema.User
+	require.NoError(t, db.First(&user, 701).Error)
+	require.EqualValues(t, 3_500_000, user.Quota)
+	var credits []billingschema.BonusQuotaCredit
+	require.NoError(t, db.Find(&credits).Error)
+	require.Len(t, credits, 1)
+	require.EqualValues(t, 3_500_000, credits[0].OriginalAmount)
+}
+
 func setupLedgerBackfillTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -95,7 +130,7 @@ func setupLedgerBackfillTestDB(t *testing.T) *gorm.DB {
 	platformdb.DB = db
 	platformdb.UsingSQLite = true
 	platformdb.UsingPostgreSQL = false
-	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &identityschema.Token{}, &commerceschema.UserSubscription{}, &commerceschema.BlindBoxCredit{}, &commerceschema.BlindBoxOpenRecord{}, &billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingLedgerEntry{}, &billingschema.BillingOutboxEvent{}, &billingschema.BillingReservation{}))
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &identityschema.Token{}, &commerceschema.UserSubscription{}, &commerceschema.BlindBoxCredit{}, &commerceschema.BlindBoxOpenRecord{}, &billingschema.BonusQuotaCredit{}, &billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingLedgerEntry{}, &billingschema.BillingOutboxEvent{}, &billingschema.BillingReservation{}, &auditschema.Log{}))
 	return db
 }
 

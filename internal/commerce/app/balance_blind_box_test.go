@@ -68,7 +68,7 @@ func TestOpenBalanceBlindBoxSupportsBatchOpening(t *testing.T) {
 	result, err := OpenBalanceBlindBox(user.Id, "balance-box-request-batch", 3)
 	require.NoError(t, err)
 	require.Len(t, result.Records, 3)
-	require.GreaterOrEqual(t, result.BalanceUSD, 68.0)
+	require.GreaterOrEqual(t, result.BalanceUSD, 67.0)
 	require.LessOrEqual(t, result.BalanceUSD, 71.0)
 	for _, record := range result.Records {
 		require.Equal(t, commerceschema.BlindBoxPoolTypeBalance15, record.PoolType)

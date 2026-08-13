@@ -300,6 +300,7 @@ export type BillingSettings = {
   'blind_box_setting.low_reward_threshold_usd': number
   'blind_box_setting.subscription_prize_probability': number
   'blind_box_setting.subscription_plan_title': string
+  'blind_box_setting.multiplier_card_route_group': string
   'blind_box_setting.count_options': number[]
   'blind_box_setting.tiers': BlindBoxTierSetting[]
 }

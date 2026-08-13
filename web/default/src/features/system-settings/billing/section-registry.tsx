@@ -269,6 +269,9 @@ const BILLING_SECTIONS = [
             settings['blind_box_setting.subscription_prize_probability'],
           subscriptionPlanTitle:
             settings['blind_box_setting.subscription_plan_title'],
+          multiplierCardRouteGroup:
+            settings['blind_box_setting.multiplier_card_route_group'],
+          groupRatio: settings.GroupRatio,
           countOptions: settings['blind_box_setting.count_options'],
           tiers: settings['blind_box_setting.tiers'],
         }}

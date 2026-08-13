@@ -144,13 +144,13 @@ func BuildUserGroupsPayload(userID int) map[string]map[string]any {
 	if zeroHour, err := commerceapp.BuildZeroHourOverview(userID); err == nil && zeroHour.Active {
 		usableGroups[commerceapp.ZeroHourGroup] = map[string]any{
 			"ratio": 0,
-			"desc":  "盲盒 0 倍率卡生效中，仅限纯PRO分组非生图模型",
+			"desc":  "盲盒 0 倍率卡生效中，仅限 " + commerceapp.MultiplierCardRouteGroup() + " 的非生图模型",
 		}
 	}
 	if commerceapp.IsMonthlyPassGroupActive(userID) {
 		usableGroups[commerceapp.MonthlyPassGroup] = map[string]any{
 			"ratio": 0.1,
-			"desc":  "月卡 0.1 倍率卡生效中，仅限纯PRO分组非生图模型",
+			"desc":  "月卡 0.1 倍率卡生效中，仅限 " + commerceapp.MultiplierCardRouteGroup() + " 的非生图模型",
 		}
 	}
 

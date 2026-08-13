@@ -65,6 +65,31 @@ func ListAllChannelSummaries() ([]*gatewayschema.Channel, error) {
 	return channels, err
 }
 
+// HasEnabledChannelForGroup reports whether at least one enabled channel is
+// assigned to the group. It protects administrative routing configuration from
+// pointing user traffic at a group with no candidates.
+func HasEnabledChannelForGroup(group string) (bool, error) {
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return false, nil
+	}
+	channels, err := ListAllChannelSummaries()
+	if err != nil {
+		return false, err
+	}
+	for _, channel := range channels {
+		if channel.Status != constant.ChannelStatusEnabled {
+			continue
+		}
+		for _, channelGroup := range channel.GetGroups() {
+			if strings.TrimSpace(channelGroup) == group {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 // SearchChannels searches channels for admin views.
 func SearchChannels(keyword string, group string, modelName string, idSort bool, sortOptions ...ChannelSortOptions) ([]*gatewayschema.Channel, error) {
 	var channels []*gatewayschema.Channel

@@ -135,6 +135,7 @@ const defaultBillingSettings: BillingSettings = {
   'blind_box_setting.low_reward_threshold_usd': 5,
   'blind_box_setting.subscription_prize_probability': 0.003,
   'blind_box_setting.subscription_plan_title': 'Standard月卡',
+  'blind_box_setting.multiplier_card_route_group': '纯Pro号池',
   'blind_box_setting.count_options': [1, 5, 10, 20, 50],
   'blind_box_setting.tiers': [
     { name: 'starter', min_usd: 1, max_usd: 3, probability: 0.18 },

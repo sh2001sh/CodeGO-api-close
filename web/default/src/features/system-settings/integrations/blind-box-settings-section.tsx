@@ -13,6 +13,14 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
@@ -44,6 +52,7 @@ const schema = z.object({
   lowRewardThresholdUSD: z.coerce.number().min(0),
   subscriptionPrizeProbability: z.coerce.number().min(0).max(1),
   subscriptionPlanTitle: z.string().min(1),
+  multiplierCardRouteGroup: z.string().min(1, '请选择倍率卡路由分组'),
   countOptions: z.string().superRefine((value, ctx) => {
     try {
       const parsed = JSON.parse(value)
@@ -124,6 +133,15 @@ function parseDateTimeLocal(value: string): number {
   return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : 0
 }
 
+function parseGroupNames(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    return Object.keys(parsed).sort((left, right) => left.localeCompare(right))
+  } catch {
+    return []
+  }
+}
+
 export function BlindBoxSettingsSection({
   defaultValues,
 }: {
@@ -143,6 +161,8 @@ export function BlindBoxSettingsSection({
     lowRewardThresholdUSD: number
     subscriptionPrizeProbability: number
     subscriptionPlanTitle: string
+    multiplierCardRouteGroup: string
+    groupRatio: string
     countOptions: number[]
     tiers: BlindBoxTierSetting[]
   }
@@ -171,6 +191,8 @@ export function BlindBoxSettingsSection({
       lowRewardThresholdUSD: defaultValues.lowRewardThresholdUSD,
       subscriptionPrizeProbability: defaultValues.subscriptionPrizeProbability,
       subscriptionPlanTitle: defaultValues.subscriptionPlanTitle,
+      multiplierCardRouteGroup:
+        defaultValues.multiplierCardRouteGroup || '纯Pro号池',
       countOptions: stringifyJson(defaultValues.countOptions),
       tiers: stringifyJson(defaultValues.tiers),
     },
@@ -179,6 +201,7 @@ export function BlindBoxSettingsSection({
   const { isDirty, isSubmitting } = form.formState
   const enabled = form.watch('enabled')
   const registrationRewardEnabled = form.watch('registrationRewardEnabled')
+  const routeGroups = parseGroupNames(defaultValues.groupRatio)
 
   async function onSubmit(values: Values) {
     const normalizedCountOptions = normalizeCountOptions(values.countOptions)
@@ -286,6 +309,11 @@ export function BlindBoxSettingsSection({
       values.subscriptionPlanTitle.trim(),
       defaultValues.subscriptionPlanTitle
     )
+    pushIfChanged(
+      'blind_box_setting.multiplier_card_route_group',
+      values.multiplierCardRouteGroup,
+      defaultValues.multiplierCardRouteGroup || '纯Pro号池'
+    )
 
     if (normalizedCountOptions !== defaultCountOptions) {
       updates.push({
@@ -312,6 +340,7 @@ export function BlindBoxSettingsSection({
     form.reset({
       ...values,
       subscriptionPlanTitle: values.subscriptionPlanTitle.trim(),
+      multiplierCardRouteGroup: values.multiplierCardRouteGroup,
       countOptions: stringifyJson(JSON.parse(normalizedCountOptions)),
       tiers: stringifyJson(JSON.parse(normalizedTiers)),
     })
@@ -401,6 +430,47 @@ export function BlindBoxSettingsSection({
                     />
                   </FormControl>
                   <FormDescription>留空表示不设截止时间</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='multiplierCardRouteGroup'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>倍率卡路由分组</FormLabel>
+                  <Select
+                    items={routeGroups.map((group) => ({
+                      value: group,
+                      label: group,
+                    }))}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={
+                      routeGroups.length === 0 ||
+                      updateOption.isPending ||
+                      isSubmitting
+                    }
+                  >
+                    <FormControl>
+                      <SelectTrigger className='w-full'>
+                        <SelectValue placeholder='选择已有分组' />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        {routeGroups.map((group) => (
+                          <SelectItem key={group} value={group}>
+                            {group}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    0 和 0.1 倍率卡启用后仅路由到此分组；倍率仍由卡本身固定，生图模型不可用。
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

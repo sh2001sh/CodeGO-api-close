@@ -4,6 +4,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -171,7 +172,22 @@ func TestMonthlyPassPropPausesAndResumesWithoutLosingRemainingTime(t *testing.T)
 }
 
 func TestMultiplierCardsUseProChannelGroup(t *testing.T) {
-	assert.Equal(t, "纯PRO分组", MultiplierCardRouteGroup)
+	platformconfig.OptionMapRWMutex.Lock()
+	original := platformconfig.OptionMap
+	platformconfig.OptionMap = map[string]string{}
+	platformconfig.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		platformconfig.OptionMapRWMutex.Lock()
+		platformconfig.OptionMap = original
+		platformconfig.OptionMapRWMutex.Unlock()
+	})
+
+	assert.Equal(t, DefaultMultiplierCardRouteGroup, MultiplierCardRouteGroup())
+
+	platformconfig.OptionMapRWMutex.Lock()
+	platformconfig.OptionMap[MultiplierCardRouteGroupOptionKey] = "倍率卡专属组"
+	platformconfig.OptionMapRWMutex.Unlock()
+	assert.Equal(t, "倍率卡专属组", MultiplierCardRouteGroup())
 }
 
 func TestBackfillActiveMonthlyPassBenefitsIsIdempotent(t *testing.T) {

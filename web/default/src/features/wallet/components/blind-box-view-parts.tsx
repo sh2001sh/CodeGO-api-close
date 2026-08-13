@@ -113,7 +113,7 @@ function getPropDescription(
     if (prop.prop_type === 'zero_hour_multiplier') {
       return prop.status === 'available'
         ? '启用后 1 小时内可使用 zero-hour 分组，倍率卡专属分组非生图模型按 0 倍率计费。'
-        : 'zero-hour 分组已激活，已接入倍率卡专属分组，仅限当前用户，单用户并发最多 5 个请求。'
+        : 'zero-hour 分组已激活，已接入倍率卡专属分组，仅限当前用户，单用户并发最多 10 个请求。'
     }
     return prop.status === 'available'
       ? t('Click Use to activate this card for {{hours}} hours.', {

@@ -12,7 +12,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const MonthlyPassGroup = "monthly-pass"
+const (
+	MonthlyPassGroup                 = "monthly-pass"
+	multiplierCardConcurrentRequests = 10
+)
 
 func monthlyPassDurationSeconds(plan *commerceschema.SubscriptionPlan) int64 {
 	if plan == nil {
@@ -250,19 +253,11 @@ func IsMonthlyPassGroupActive(userID int) bool {
 	return active
 }
 
-// MonthlyPassConcurrentRequests returns the fixed per-user limit for the active
-// card: Lite/Standard use one request, Pro/Ultra use two.
+// MonthlyPassConcurrentRequests returns the fixed per-user limit for an active
+// 0.1 multiplier card. Card duration controls its available time, not request
+// concurrency.
 func MonthlyPassConcurrentRequests(userID int) int64 {
-	if userID <= 0 {
-		return 1
-	}
-	var prop commerceschema.BlindBoxProp
-	err := platformdb.DB.Where("user_id = ? AND prop_type = ? AND status = ? AND expires_at > ?", userID, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, commerceschema.BlindBoxPropStatusActive, platformruntime.GetTimestamp()).
-		Order("expires_at desc, id desc").First(&prop).Error
-	if err != nil || prop.DurationSeconds < 45*60 {
-		return 1
-	}
-	return 2
+	return multiplierCardConcurrentRequests
 }
 
 // BackfillActiveMonthlyPassBenefits grants one card to each currently active preset monthly subscription.

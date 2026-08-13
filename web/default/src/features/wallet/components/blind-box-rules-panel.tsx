@@ -161,7 +161,7 @@ export function BlindBoxZeroHourCard(props: { data: BlindBoxSelfData | null }) {
           <li>每成功结算 $1 增加 1 点，每个实际支付的盲盒增加 5 点。</li>
           <li>点数越高概率越高，抽中后进度归零重新累积。</li>
           <li>
-            启用后使用 zero-hour 分组并接入倍率卡专属分组，仅限本人，单用户并发最多 5
+            启用后使用 zero-hour 分组并接入倍率卡专属分组，仅限本人，单用户并发最多 10
             个请求，到期后分组自动隐藏。
           </li>
         </ul>

@@ -157,7 +157,7 @@ func TestMonthlyPassPropPausesAndResumesWithoutLosingRemainingTime(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(t, commerceschema.BlindBoxPropStatusActive, activated.Status)
 	assert.True(t, IsMonthlyPassGroupActive(user.Id))
-	assert.Equal(t, int64(1), MonthlyPassConcurrentRequests(user.Id))
+	assert.Equal(t, int64(10), MonthlyPassConcurrentRequests(user.Id))
 
 	paused, err := PauseBlindBoxProp(user.Id, prop.Id)
 	require.NoError(t, err)

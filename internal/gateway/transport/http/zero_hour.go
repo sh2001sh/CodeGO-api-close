@@ -12,12 +12,10 @@ import (
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 )
 
-const zeroHourConcurrentRequests = 5
+const zeroHourConcurrentRequests = 10
 
 func specialMultiplierConcurrentRequests(c *gin.Context) int64 {
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyMonthlyPassActive) {
-		// Lite/Standard cards run at one request; Pro/Ultra at two. The duration
-		// encodes the issued monthly tier without exposing subscription details to clients.
 		return commerceapp.MonthlyPassConcurrentRequests(c.GetInt("id"))
 	}
 	return zeroHourConcurrentRequests

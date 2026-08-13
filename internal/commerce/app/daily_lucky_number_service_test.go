@@ -2,11 +2,32 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/require"
 )
+
+func TestListTodayBlindBoxLuckyNumbersFiltersOwnerDateAndExpiry(t *testing.T) {
+	prepareDailyLuckyNumberTestDB(t)
+	db := platformDBForDailyLuckyTest(t)
+	now := time.Now().Unix()
+	drawDate := time.Now().Format(luckyDrawDateLayout)
+	numbers := []commerceschema.BlindBoxDailyLuckyNumber{
+		{BlindBoxOpenRecordId: 9961, UserId: 9960, DrawDate: drawDate, LuckySuffix: "1234", ExpiresAt: now + 3600},
+		{BlindBoxOpenRecordId: 9962, UserId: 9960, DrawDate: drawDate, LuckySuffix: "5678", ExpiresAt: now - 1},
+		{BlindBoxOpenRecordId: 9963, UserId: 9960, DrawDate: "2099-12-31", LuckySuffix: "9012", ExpiresAt: now + 3600},
+		{BlindBoxOpenRecordId: 9964, UserId: 9969, DrawDate: drawDate, LuckySuffix: "3456", ExpiresAt: now + 3600},
+	}
+	require.NoError(t, db.Create(&numbers).Error)
+
+	result, err := listTodayBlindBoxLuckyNumbers(9960, drawDate, now)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, 9961, result[0].BlindBoxOpenRecordId)
+	require.Equal(t, "1234", result[0].LuckySuffix)
+}
 
 func TestListDailyLuckyNumberPublicWinsIncludesEverySettledMatch(t *testing.T) {
 	prepareDailyLuckyNumberTestDB(t)

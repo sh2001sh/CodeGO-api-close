@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
+  Clock3,
   ChevronLeft,
   ChevronRight,
   Gift,
+  Hash,
   Loader2,
   PackageCheck,
   Sparkles,
@@ -175,6 +177,7 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
           <div className='text-muted-foreground mt-1 text-xs leading-5'>
             {detail.description}
           </div>
+          {record.lucky_number ? <LuckyNumberHistory record={record} /> : null}
           <div className='mt-2 flex flex-wrap gap-1.5'>
             <HistoryTag>{detail.type}</HistoryTag>
             {record.is_pity ? <HistoryTag>保底奖励</HistoryTag> : null}
@@ -183,6 +186,26 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
             ) : null}
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function LuckyNumberHistory(props: { record: BlindBoxRecord }) {
+  const { record } = props
+
+  return (
+    <div className='border-primary/20 bg-primary/[0.045] mt-2.5 flex flex-col gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between'>
+      <div className='flex min-w-0 items-center gap-2'>
+        <Hash className='text-primary size-4 shrink-0' aria-hidden='true' />
+        <span className='text-muted-foreground shrink-0 text-xs'>幸运号</span>
+        <span className='text-foreground font-mono text-base font-semibold tracking-widest tabular-nums'>
+          {record.lucky_number}
+        </span>
+      </div>
+      <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+        <Clock3 className='size-3.5 shrink-0' aria-hidden='true' />
+        仅限 {record.lucky_draw_date || '开出当日'} 有效
       </div>
     </div>
   )

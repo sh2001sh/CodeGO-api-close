@@ -81,7 +81,7 @@ export function BlindBoxStage(props: BlindBoxStageProps) {
             <p className='text-muted-foreground mt-1.5 text-xs leading-5'>
               {hasPending
                 ? '每开一个盲盒都会获得一个仅限当天开奖使用的幸运号。'
-                : '每次抽取都会从普通额度、Claude 额度、道具和隐藏款中随机开出一项，额度立即到账且永久有效。'}
+                : '每次抽取都会获得一项奖励，并附赠一个仅限开出当天参与每日幸运号开奖的四位号码。'}
             </p>
           </div>
 

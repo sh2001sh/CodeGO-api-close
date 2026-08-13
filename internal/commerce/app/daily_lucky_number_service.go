@@ -53,6 +53,10 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 	if err != nil {
 		return nil, err
 	}
+	blindBoxNumbers, err := listTodayBlindBoxLuckyNumbers(userID, todayDate, now.Unix())
+	if err != nil {
+		return nil, err
+	}
 	recentRewards, err := listLuckyRewardViews(userID, 20, 0)
 	if err != nil && subscriptionLuckyNumberTableReady() {
 		return nil, err
@@ -90,9 +94,36 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 			JackpotIncrementUSD: setting.JackpotIncrementUSD,
 			JackpotCapUSD:       setting.JackpotCapUSD,
 		},
-		Subscriptions: subscriptions,
-		RecentRewards: recentRewards,
+		Subscriptions:   subscriptions,
+		BlindBoxNumbers: blindBoxNumbers,
+		RecentRewards:   recentRewards,
 	}, nil
+}
+
+func listTodayBlindBoxLuckyNumbers(userID int, drawDate string, nowUnix int64) ([]commercedomain.BlindBoxLuckyNumber, error) {
+	if !platformdb.DB.Migrator().HasTable(&commerceschema.BlindBoxDailyLuckyNumber{}) {
+		return []commercedomain.BlindBoxLuckyNumber{}, nil
+	}
+	var numbers []commerceschema.BlindBoxDailyLuckyNumber
+	if err := platformdb.DB.Where(
+		"user_id = ? AND draw_date = ? AND expires_at > ?",
+		userID,
+		drawDate,
+		nowUnix,
+	).Order("created_at desc, id desc").Find(&numbers).Error; err != nil {
+		return nil, err
+	}
+	result := make([]commercedomain.BlindBoxLuckyNumber, 0, len(numbers))
+	for _, number := range numbers {
+		result = append(result, commercedomain.BlindBoxLuckyNumber{
+			BlindBoxOpenRecordId: number.BlindBoxOpenRecordId,
+			LuckySuffix:          number.LuckySuffix,
+			DrawDate:             number.DrawDate,
+			ExpiresAt:            number.ExpiresAt,
+			CreatedAt:            number.CreatedAt,
+		})
+	}
+	return result, nil
 }
 
 func buildLuckyNumberSubscriptions(userID int) ([]commercedomain.LuckyNumberSubscription, error) {
@@ -357,18 +388,20 @@ func luckyRewardRecord(reward *commerceschema.SubscriptionLuckyReward) commerced
 		return commercedomain.LuckyRewardRecord{}
 	}
 	return commercedomain.LuckyRewardRecord{
-		Id:                 reward.Id,
-		DrawId:             reward.DrawId,
-		UserSubscriptionId: reward.UserSubscriptionId,
-		LuckyNumber:        reward.LuckyNumber,
-		MembershipTier:     reward.MembershipTier,
-		MatchedDigits:      reward.MatchedDigits,
-		BaseRewardUSD:      reward.BaseRewardUSD,
-		TierMultiplier:     reward.TierMultiplier,
-		JackpotRewardUSD:   reward.JackpotRewardUSD,
-		FinalRewardQuota:   reward.FinalRewardQuota,
-		CreditStatus:       reward.CreditStatus,
-		CreditedAt:         reward.CreditedAt,
+		Id:                   reward.Id,
+		DrawId:               reward.DrawId,
+		UserSubscriptionId:   reward.UserSubscriptionId,
+		BlindBoxOpenRecordId: reward.BlindBoxOpenRecordId,
+		ParticipationType:    reward.ParticipationType,
+		LuckyNumber:          reward.LuckyNumber,
+		MembershipTier:       reward.MembershipTier,
+		MatchedDigits:        reward.MatchedDigits,
+		BaseRewardUSD:        reward.BaseRewardUSD,
+		TierMultiplier:       reward.TierMultiplier,
+		JackpotRewardUSD:     reward.JackpotRewardUSD,
+		FinalRewardQuota:     reward.FinalRewardQuota,
+		CreditStatus:         reward.CreditStatus,
+		CreditedAt:           reward.CreditedAt,
 	}
 }
 

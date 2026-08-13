@@ -48,13 +48,25 @@ function resolveTopTier(payload?: LuckyNumberSelfPayload): MembershipTier {
 function resolveBestMatch(payload?: LuckyNumberSelfPayload): number {
   const winning = payload?.today_draw?.winning_number
   if (!payload || !winning) return 0
-  return payload.subscriptions.reduce((best, entry) => {
+  const subscriptionBest = payload.subscriptions.reduce((best, entry) => {
     const suffix = normalizeLuckyNumber(
       entry.subscription.lucky_number?.lucky_suffix ??
         entry.number?.lucky_suffix
     )
     return Math.max(best, getMatchedDigits(suffix, winning))
   }, 0)
+  return (payload.today_blind_box_numbers || []).reduce((best, entry) => {
+    if (
+      payload.today_draw?.drawn_at &&
+      entry.created_at > payload.today_draw.drawn_at
+    ) {
+      return best
+    }
+    return Math.max(
+      best,
+      getMatchedDigits(normalizeLuckyNumber(entry.lucky_suffix), winning)
+    )
+  }, subscriptionBest)
 }
 
 export function DailyLuckyNumberPage() {
@@ -187,6 +199,7 @@ export function DailyLuckyNumberPage() {
               />
               <LuckyMatchBoard
                 subscriptions={payload.subscriptions}
+                blindBoxNumbers={payload.today_blind_box_numbers || []}
                 draw={payload.today_draw}
                 rewards={payload.recent_rewards}
                 rules={payload.rules}

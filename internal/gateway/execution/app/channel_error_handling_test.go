@@ -164,6 +164,36 @@ func TestIncompleteStreamOnOnlyRouteDoesNotCoolModel(t *testing.T) {
 	require.False(t, cooled)
 }
 
+func TestOnlyRoute429RetriesCurrentChannelWithoutCooling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+	context.Set("original_model", "gpt-5.6-sol")
+	context.Set("use_channel", []string{"6"})
+	context.Set(string(constant.ContextKeyRelayAttemptStage), gatewaystream.AttemptStageSelected)
+	httpctx.SetContextKey(context, constant.ContextKeyUsingGroup, "plus-only-route")
+
+	originalHasAlternative := hasAlternativeSelectableRoute
+	hasAlternativeSelectableRoute = func(id int, group, model string) (bool, error) {
+		require.Equal(t, 6, id)
+		require.Equal(t, "plus-only-route", group)
+		require.Equal(t, "gpt-5.6-sol", model)
+		return false, nil
+	}
+	t.Cleanup(func() {
+		hasAlternativeSelectableRoute = originalHasAlternative
+	})
+
+	ProcessChannelError(context, *types.NewChannelError(6, constant.ChannelTypeOpenAI, "sole", false, "", false), types.NewOpenAIError(
+		errors.New("bad response status code 429"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusTooManyRequests,
+	))
+
+	require.Equal(t, 6, httpctx.GetContextKeyInt(context, constant.ContextKeyRetryFallbackChannelID))
+	_, cooled := relaycommon.GetChannelHealth(6, "gpt-5.6-sol")
+	require.False(t, cooled)
+}
+
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)

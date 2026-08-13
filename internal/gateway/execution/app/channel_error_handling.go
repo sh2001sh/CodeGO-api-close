@@ -36,7 +36,8 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
 	credentialRejected := failureClass == upstreamFailureCredentialRejected
 	preserveOnlyRoute := shouldPreserveOnlyRoute(c, channelError.ChannelId, modelName, modelScopedFailure, credentialRejected, err)
-	retryFallbackChannel := shouldRetryCurrentChannelIfNoAlternative(c, err)
+	retryFallbackChannel := shouldRetryCurrentChannelIfNoAlternative(c, err) ||
+		shouldRetryPreservedOnlyRoute(c, preserveOnlyRoute)
 	if retryFallbackChannel {
 		httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, channelError.ChannelId)
 	}
@@ -224,6 +225,21 @@ func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIE
 		}
 	}
 	if len(c.GetStringSlice("use_channel")) != 1 {
+		return false
+	}
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||
+		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+		return false
+	}
+	return gatewaystream.AttemptStageFromContext(c) == gatewaystream.AttemptStageSelected
+}
+
+// shouldRetryPreservedOnlyRoute gives a sole eligible route one controlled
+// second attempt. Normal retry de-duplication excludes an already used channel;
+// without this marker, a transient 429/502 on a sole route is misreported as
+// "no available channel" instead of returning the real upstream result.
+func shouldRetryPreservedOnlyRoute(c *gin.Context, preserveOnlyRoute bool) bool {
+	if c == nil || !preserveOnlyRoute || len(c.GetStringSlice("use_channel")) != 1 {
 		return false
 	}
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||

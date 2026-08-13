@@ -72,6 +72,7 @@ func (p *RetryParam) ResetRetryNextTry() {
 func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, string, error) {
 	if param != nil && param.Ctx != nil {
 		param.Ctx.Set(routePoolContextKey, RoutePoolSelection{})
+		param.Ctx.Set(routePoolFaultDomainContextKey, "")
 	}
 	var channel *gatewayschema.Channel
 	var err error

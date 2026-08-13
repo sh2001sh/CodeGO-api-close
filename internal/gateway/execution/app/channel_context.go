@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +10,7 @@ import (
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -56,9 +56,13 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 
 	httpctx.SetContextKey(c, constant.ContextKeyChannelKey, key)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelBaseUrl, channel.GetBaseURL())
-	if strings.TrimSpace(c.GetString("channel_fault_domain")) == "" {
-		c.Set("channel_fault_domain", gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL()))
+	faultDomain := strings.TrimSpace(c.GetString("automatic_route_pool_fault_domain"))
+	if faultDomain == "" {
+		faultDomain = gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL())
 	}
+	// A retry can choose a different channel in the same Gin context. Always
+	// refresh the effective domain so capacity and cooldowns follow that channel.
+	c.Set("channel_fault_domain", faultDomain)
 	httpctx.SetContextKey(c, constant.ContextKeySystemPromptOverride, false)
 
 	switch channel.Type {

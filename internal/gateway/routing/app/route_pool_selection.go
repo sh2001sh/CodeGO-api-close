@@ -20,6 +20,7 @@ const (
 	routePoolCostRecoveryProbeRate = 0.12
 	routePoolCostRecoveryGap       = 0.33
 	routePoolContextKey            = "automatic_route_pool_selection"
+	routePoolFaultDomainContextKey = "automatic_route_pool_fault_domain"
 
 	routePoolAffinityContextKey = "automatic_route_pool_affinity"
 	routePoolAffinityTTL        = 3 * time.Minute
@@ -237,6 +238,7 @@ func selectRoutePoolCandidate(c *gin.Context, poolID int64, candidate *scoredRou
 		gatewayruntime.MarkAutomaticPool(c)
 		c.Set(routePoolContextKey, RoutePoolSelection{PoolID: poolID, ProcurementCostMultiplier: candidate.cost})
 		if candidate.faultDomain != "" {
+			c.Set(routePoolFaultDomainContextKey, candidate.faultDomain)
 			c.Set("channel_fault_domain", candidate.faultDomain)
 		}
 	}

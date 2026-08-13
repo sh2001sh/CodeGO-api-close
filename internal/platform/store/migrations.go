@@ -439,6 +439,14 @@ func migrateBalanceBlindBox(tx *gorm.DB) error {
 	if err := tx.AutoMigrate(&commerceschema.BalanceBlindBoxPityState{}); err != nil {
 		return err
 	}
+	legacyColumn := "consecutive_under_35_usd"
+	currentColumn := "consecutive_under35_usd"
+	if tx.Migrator().HasColumn(&commerceschema.BalanceBlindBoxPityState{}, legacyColumn) &&
+		!tx.Migrator().HasColumn(&commerceschema.BalanceBlindBoxPityState{}, currentColumn) {
+		if err := tx.Migrator().RenameColumn(&commerceschema.BalanceBlindBoxPityState{}, legacyColumn, currentColumn); err != nil {
+			return err
+		}
+	}
 	return tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_blind_box_open_records_request_id ON blind_box_open_records (request_id) WHERE request_id IS NOT NULL").Error
 }
 

@@ -19,6 +19,8 @@ import (
 	"github.com/sh2001sh/new-api/types"
 )
 
+var hasAlternativeSelectableRoute = gatewaystore.HasAlternativeSelectableRoute
+
 // ProcessChannelError applies shared disable/logging behavior for channel failures.
 func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, platformtext.LocalLogPreview(err.Error())))
@@ -46,7 +48,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	}
 	if modelScopedFailure && modelName != "" && !clientGone {
 		group := selectedChannelGroup(c)
-		alternative, lookupErr := gatewaystore.HasAlternativeSelectableRoute(channelError.ChannelId, group, modelName)
+		alternative, lookupErr := hasAlternativeSelectableRoute(channelError.ChannelId, group, modelName)
 		if lookupErr != nil {
 			platformobservability.SysError(fmt.Sprintf("检查通道「%s」（#%d）的模型 %s 备用路由失败：%v", channelError.ChannelName, channelError.ChannelId, modelName, lookupErr))
 		} else if alternative {
@@ -85,6 +87,11 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), modelName, channelError.ChannelId, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err), gatewayruntime.RequestTypeFromContext(c))
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+	} else if failureClass == upstreamFailureIncompleteStream && preserveOnlyRoute {
+		// A sole route has nowhere else to fail over to. Cooling it after a
+		// stream closes turns a transient upstream error into a misleading
+		// "no available channel" response for every concurrent request.
+		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 	} else if credentialRejected && !localMaxDuration && !clientGone {
 		gatewayruntime.RecordChannelCredentialFailure(channelError.ChannelId)
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
@@ -178,7 +185,7 @@ func shouldPreserveOnlyRoute(c *gin.Context, channelID int, modelName string, mo
 		c.GetBool(string(constant.ContextKeyClientGone)) || !isRetryableChannelFailure(err) {
 		return false
 	}
-	alternative, lookupErr := gatewaystore.HasAlternativeSelectableRoute(channelID, selectedChannelGroup(c), modelName)
+	alternative, lookupErr := hasAlternativeSelectableRoute(channelID, selectedChannelGroup(c), modelName)
 	if lookupErr != nil {
 		platformobservability.SysError(fmt.Sprintf("检查通道 #%d 的模型 %s 唯一路由状态失败：%v", channelID, modelName, lookupErr))
 		return false

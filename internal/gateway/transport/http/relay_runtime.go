@@ -154,6 +154,13 @@ func retryFallbackChannel(c *gin.Context, retryParam *gatewayroutingapp.RetryPar
 			selectGroup = selected
 		}
 	}
+	// The retry marker is written before routing state is updated. Revalidate
+	// the original channel here so a manual disable or ability change cannot be
+	// bypassed by the one-shot fallback.
+	if channel.Status != constant.ChannelStatusEnabled ||
+		!gatewaystore.IsChannelEnabledForGroupModel(selectGroup, retryParam.ModelName, channelID) {
+		return nil, selectGroup
+	}
 	gatewayruntime.SelectRouteDecisionCandidate(c, selectGroup, channelID, false)
 	return channel, selectGroup
 }

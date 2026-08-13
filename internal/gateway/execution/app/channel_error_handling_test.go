@@ -10,6 +10,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
@@ -132,6 +133,35 @@ func TestRetryCurrentChannelForResponsesBeforeSemanticOutput(t *testing.T) {
 
 	context.Set(string(constant.ContextKeyStreamContentDelivered), true)
 	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, streamClosed))
+}
+
+func TestIncompleteStreamOnOnlyRouteDoesNotCoolModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+	context.Set("original_model", "gpt-5.6-sol")
+	httpctx.SetContextKey(context, constant.ContextKeyUsingGroup, "plus-only-route")
+
+	channelID := 9087
+	modelName := "gpt-5.6-sol"
+	originalHasAlternative := hasAlternativeSelectableRoute
+	hasAlternativeSelectableRoute = func(id int, group, model string) (bool, error) {
+		require.Equal(t, channelID, id)
+		require.Equal(t, "plus-only-route", group)
+		require.Equal(t, modelName, model)
+		return false, nil
+	}
+	t.Cleanup(func() {
+		hasAlternativeSelectableRoute = originalHasAlternative
+	})
+
+	ProcessChannelError(context, *types.NewChannelError(channelID, constant.ChannelTypeOpenAI, "sole", false, "", false), types.NewOpenAIError(
+		errors.New("responses stream closed before response.completed"),
+		types.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	))
+
+	_, cooled := relaycommon.GetChannelHealth(channelID, modelName)
+	require.False(t, cooled)
 }
 
 func TestLongContextFailureDoesNotCoolSharedFaultDomain(t *testing.T) {

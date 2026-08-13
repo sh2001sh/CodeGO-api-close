@@ -517,6 +517,9 @@ export interface BalanceBlindBoxOverview {
   pity_progress: number
   pity_threshold: number
   pity_guarantee_usd: number
+  small_pity_progress: number
+  small_pity_threshold: number
+  small_pity_guarantee_usd: number
 }
 
 export interface BlindBoxOrderStatus {

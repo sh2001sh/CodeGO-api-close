@@ -110,6 +110,7 @@ type BlindBoxOpenRecord struct {
 type BalanceBlindBoxPityState struct {
 	Id                    int   `json:"id"`
 	UserId                int   `json:"user_id" gorm:"uniqueIndex"`
+	ConsecutiveUnder6USD  int   `json:"consecutive_under_6_usd"`
 	ConsecutiveUnder35USD int   `json:"consecutive_under_35_usd"`
 	UpdatedAt             int64 `json:"updated_at" gorm:"bigint"`
 }

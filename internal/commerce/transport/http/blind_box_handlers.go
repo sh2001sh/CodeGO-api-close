@@ -130,12 +130,13 @@ func getBalanceBlindBoxOverview(c *gin.Context) {
 func openBalanceBlindBox(c *gin.Context) {
 	var req struct {
 		RequestID string `json:"request_id" binding:"required"`
+		Count     int    `json:"count"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpapi.ApiErrorMsg(c, "request_id is required")
 		return
 	}
-	result, err := commerceapp.OpenBalanceBlindBox(c.GetInt("id"), req.RequestID)
+	result, err := commerceapp.OpenBalanceBlindBox(c.GetInt("id"), req.RequestID, req.Count)
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

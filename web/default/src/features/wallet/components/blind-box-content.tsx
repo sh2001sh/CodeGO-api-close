@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BlindBoxSelfData, PaymentMethod } from '../types'
@@ -70,7 +71,7 @@ export interface BlindBoxContentProps {
   mode: 'standard' | 'balance'
   balanceOpening: boolean
   onModeChange: (mode: 'standard' | 'balance') => void
-  onBalanceOpen: () => void
+  onBalanceOpen: (count: number) => void
 }
 
 export function BlindBoxContent(props: BlindBoxContentProps) {
@@ -200,14 +201,15 @@ function BalanceBlindBoxPanel(props: {
   data: BlindBoxSelfData | null
   loading: boolean
   opening: boolean
-  onOpen: () => void
+  onOpen: (count: number) => void
 }) {
+  const [count, setCount] = useState(1)
   const balance = props.data?.balance_blind_box
   const canOpen = Boolean(
     balance?.enabled &&
     !props.loading &&
     !props.opening &&
-    balance.balance_usd >= balance.price_usd
+    balance.balance_usd >= balance.price_usd * count
   )
   const headlineTiers = (balance?.tiers || [])
     .filter((tier) => tier.max_usd >= 80)
@@ -231,7 +233,7 @@ function BalanceBlindBoxPanel(props: {
         </div>
       </div>
       <div className='space-y-4 px-4 py-4 sm:px-6 sm:py-5'>
-        <div className='grid gap-3 sm:grid-cols-3'>
+        <div className='grid gap-3 sm:grid-cols-4'>
           <Metric
             label='当前余额'
             value={`$${(balance?.balance_usd || 0).toFixed(2)}`}
@@ -241,12 +243,17 @@ function BalanceBlindBoxPanel(props: {
             value={`$${Math.max(0, (balance?.balance_usd || 0) - (balance?.price_usd || 15)).toFixed(2)}`}
           />
           <Metric
-            label='独立保底'
+            label='小保底'
+            value={`${balance?.small_pity_progress || 0}/${balance?.small_pity_threshold || 10}`}
+          />
+          <Metric
+            label='大奖保底'
             value={`${balance?.pity_progress || 0}/${balance?.pity_threshold || 50}`}
           />
         </div>
         <div className='rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-3 text-xs leading-5'>
-          连续 49 次未获得 $35 及以上额度，第 50 次至少获得
+          连续 9 次未获得 $6 及以上额度，第 10 次至少获得 $6；连续 49 次未获得
+          $35 及以上额度，第 50 次至少获得
           $35。道具规则与普通盲盒一致，幸运号规则除外。
         </div>
         {headlineTiers.length > 0 ? (
@@ -268,16 +275,30 @@ function BalanceBlindBoxPanel(props: {
         ) : null}
         <button
           type='button'
-          onClick={props.onOpen}
+          onClick={() => props.onOpen(count)}
           disabled={!canOpen}
           className='disabled:bg-muted disabled:text-muted-foreground flex min-h-11 w-full items-center justify-center rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-teal-700 disabled:cursor-not-allowed'
         >
           {props.opening
             ? '抽取中…'
             : canOpen
-              ? '使用 $15 余额抽取'
-              : `余额不足，还差 $${Math.max(0, (balance?.price_usd || 15) - (balance?.balance_usd || 0)).toFixed(2)}`}
+              ? `使用 $${((balance?.price_usd || 15) * count).toFixed(2)} 余额抽取 ${count} 个`
+              : `余额不足，还差 $${Math.max(0, (balance?.price_usd || 15) * count - (balance?.balance_usd || 0)).toFixed(2)}`}
         </button>
+        <div className='flex flex-wrap items-center gap-2'>
+          <span className='text-muted-foreground text-xs'>抽取数量</span>
+          {[1, 5, 10, 20].map((option) => (
+            <button
+              key={option}
+              type='button'
+              aria-pressed={count === option}
+              onClick={() => setCount(option)}
+              className={`min-h-8 rounded-md border px-3 text-xs font-medium ${count === option ? 'border-teal-600 bg-teal-600 text-white' : 'border-border text-muted-foreground hover:text-foreground'}`}
+            >
+              {option} 个
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   )

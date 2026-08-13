@@ -66,6 +66,7 @@ func V2MigrationIDs() []string {
 		"20260808_commerce_invoice_requests",
 		"20260812_blind_box_daily_lucky_numbers",
 		"20260813_balance_blind_box",
+		"20260813_balance_blind_box_small_pity",
 	}
 }
 
@@ -203,6 +204,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return nil
 		}},
 		{ID: "20260813_balance_blind_box", Run: migrateBalanceBlindBox},
+		{ID: "20260813_balance_blind_box_small_pity", Run: migrateBalanceBlindBoxSmallPity},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -448,6 +450,14 @@ func migrateBalanceBlindBox(tx *gorm.DB) error {
 		}
 	}
 	return tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_blind_box_open_records_request_id ON blind_box_open_records (request_id) WHERE request_id IS NOT NULL").Error
+}
+
+func migrateBalanceBlindBoxSmallPity(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.BalanceBlindBoxPityState{}) ||
+		tx.Migrator().HasColumn(&commerceschema.BalanceBlindBoxPityState{}, "ConsecutiveUnder6USD") {
+		return nil
+	}
+	return tx.Migrator().AddColumn(&commerceschema.BalanceBlindBoxPityState{}, "ConsecutiveUnder6USD")
 }
 
 // addDailyLuckyNumberColumns only appends the fields introduced by this

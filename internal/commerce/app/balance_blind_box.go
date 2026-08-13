@@ -17,19 +17,23 @@ import (
 )
 
 type BalanceBlindBoxOverview struct {
-	Enabled          bool                           `json:"enabled"`
-	PriceUSD         float64                        `json:"price_usd"`
-	BalanceUSD       float64                        `json:"balance_usd"`
-	Tiers            []blindboxsettings.TierSetting `json:"tiers"`
-	PityProgress     int                            `json:"pity_progress"`
-	PityThreshold    int                            `json:"pity_threshold"`
-	PityGuaranteeUSD float64                        `json:"pity_guarantee_usd"`
+	Enabled               bool                           `json:"enabled"`
+	PriceUSD              float64                        `json:"price_usd"`
+	BalanceUSD            float64                        `json:"balance_usd"`
+	Tiers                 []blindboxsettings.TierSetting `json:"tiers"`
+	PityProgress          int                            `json:"pity_progress"`
+	PityThreshold         int                            `json:"pity_threshold"`
+	PityGuaranteeUSD      float64                        `json:"pity_guarantee_usd"`
+	SmallPityProgress     int                            `json:"small_pity_progress"`
+	SmallPityThreshold    int                            `json:"small_pity_threshold"`
+	SmallPityGuaranteeUSD float64                        `json:"small_pity_guarantee_usd"`
 }
 
 type BalanceBlindBoxOpenResult struct {
-	Record     commerceschema.BlindBoxOpenRecord `json:"record"`
-	BalanceUSD float64                           `json:"balance_usd"`
-	Overview   BalanceBlindBoxOverview           `json:"overview"`
+	Record     commerceschema.BlindBoxOpenRecord   `json:"record"`
+	Records    []commerceschema.BlindBoxOpenRecord `json:"records"`
+	BalanceUSD float64                             `json:"balance_usd"`
+	Overview   BalanceBlindBoxOverview             `json:"overview"`
 }
 
 // GetBalanceBlindBoxOverview returns the balance draw price, pool and independent pity state.
@@ -47,7 +51,7 @@ func GetBalanceBlindBoxOverview(userID int) (*BalanceBlindBoxOverview, error) {
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) && !isBalanceBlindBoxSchemaMissing(err) {
 		return nil, err
 	}
-	return buildBalanceBlindBoxOverview(setting, balance, pity.ConsecutiveUnder35USD), nil
+	return buildBalanceBlindBoxOverview(setting, balance, pity.ConsecutiveUnder6USD, pity.ConsecutiveUnder35USD), nil
 }
 
 func isBalanceBlindBoxSchemaMissing(err error) bool {
@@ -59,7 +63,7 @@ func isBalanceBlindBoxSchemaMissing(err error) bool {
 }
 
 // OpenBalanceBlindBox atomically spends $15 wallet balance and grants one reward.
-func OpenBalanceBlindBox(userID int, requestID string) (*BalanceBlindBoxOpenResult, error) {
+func OpenBalanceBlindBox(userID int, requestID string, requestedCount ...int) (*BalanceBlindBoxOpenResult, error) {
 	if userID <= 0 || requestID == "" || len(requestID) > 64 {
 		return nil, errors.New("invalid balance blind box request")
 	}
@@ -67,18 +71,26 @@ func OpenBalanceBlindBox(userID int, requestID string) (*BalanceBlindBoxOpenResu
 	if !setting.Enabled || !setting.BalanceBlindBoxEnabled {
 		return nil, commercedomain.ErrBlindBoxDisabled
 	}
+	count := 1
+	if len(requestedCount) > 0 && requestedCount[0] > 0 {
+		count = requestedCount[0]
+	}
+	if count > 20 {
+		return nil, errors.New("余额盲盒单次最多开启 20 个")
+	}
 	priceQuota := quotaUnitsFromBlindBoxUSD(setting.BalanceBlindBoxPriceUSD)
 	if priceQuota <= 0 {
 		return nil, errors.New("invalid balance blind box price")
 	}
 
-	result := &BalanceBlindBoxOpenResult{}
+	result := &BalanceBlindBoxOpenResult{Records: make([]commerceschema.BlindBoxOpenRecord, 0, count)}
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		var existing commerceschema.BlindBoxOpenRecord
-		if err := tx.Where("request_id = ? AND user_id = ?", requestID, userID).First(&existing).Error; err == nil {
-			result.Record = existing
+		var existingRecords []commerceschema.BlindBoxOpenRecord
+		if err := tx.Where("user_id = ? AND (request_id = ? OR request_id LIKE ?)", userID, requestID, requestID+":%").Order("id asc").Find(&existingRecords).Error; err == nil && len(existingRecords) > 0 {
+			result.Record = existingRecords[0]
+			result.Records = existingRecords
 			return nil
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		} else if err != nil {
 			return err
 		}
 
@@ -94,18 +106,25 @@ func OpenBalanceBlindBox(userID int, requestID string) (*BalanceBlindBoxOpenResu
 		}
 
 		operationID := "balance-blind-box:" + requestID
-		if err := billingapp.DebitWalletQuotaTx(tx, userID, int(priceQuota), operationID+":debit"); err != nil {
+		if err := billingapp.DebitWalletQuotaTx(tx, userID, int(priceQuota)*count, operationID+":debit"); err != nil {
 			if errors.Is(err, billingdomain.ErrInsufficientBalance) {
 				return errors.New("钱包余额不足，无法抽取余额盲盒")
 			}
 			return err
 		}
 
-		record, err := drawBalanceBlindBoxRewardTx(tx, userID, requestID, &pity, setting)
-		if err != nil {
-			return err
+		for index := 0; index < count; index++ {
+			drawRequestID := requestID
+			if index > 0 {
+				drawRequestID = fmt.Sprintf("%s:%d", requestID, index)
+			}
+			record, drawErr := drawBalanceBlindBoxRewardTx(tx, userID, drawRequestID, &pity, setting)
+			if drawErr != nil {
+				return drawErr
+			}
+			result.Records = append(result.Records, *record)
 		}
-		result.Record = *record
+		result.Record = result.Records[0]
 		return tx.Save(&pity).Error
 	})
 	if err != nil {
@@ -126,17 +145,23 @@ func drawBalanceBlindBoxRewardTx(tx *gorm.DB, userID int, requestID string, pity
 	rewardUSD := randomTierRewardUSD(tier)
 	rewardType := blindboxsettings.NormalizeRewardType(tier.RewardType)
 	walletType := normalizeBlindBoxRewardWalletType(tier.WalletType)
-	pityTriggered := pity.ConsecutiveUnder35USD+1 >= setting.BalanceBlindBoxPityThreshold
-	if pityTriggered {
+	bigPityTriggered := pity.ConsecutiveUnder35USD+1 >= setting.BalanceBlindBoxPityThreshold
+	smallPityTriggered := !bigPityTriggered && pity.ConsecutiveUnder6USD+1 >= setting.BalanceBlindBoxSmallPityThreshold
+	if bigPityTriggered {
 		tier = blindboxsettings.TierSetting{Name: "$35 余额盲盒保底", RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: string(commerceschema.BlindBoxRewardWalletTypeDefault)}
 		rewardUSD = setting.BalanceBlindBoxPityGuaranteeUSD
+		rewardType = commerceschema.BlindBoxRewardTypeQuota
+		walletType = commerceschema.BlindBoxRewardWalletTypeDefault
+	} else if smallPityTriggered {
+		tier = blindboxsettings.TierSetting{Name: "$6 余额盲盒小保底", RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: string(commerceschema.BlindBoxRewardWalletTypeDefault)}
+		rewardUSD = setting.BalanceBlindBoxSmallPityGuaranteeUSD
 		rewardType = commerceschema.BlindBoxRewardTypeQuota
 		walletType = commerceschema.BlindBoxRewardWalletTypeDefault
 	}
 	record := &commerceschema.BlindBoxOpenRecord{
 		UserId: userID, RequestId: &requestID, PoolType: commerceschema.BlindBoxPoolTypeBalance15,
 		RewardType: rewardType, RewardTier: tier.Name, RewardUSD: rewardUSD,
-		RewardWalletType: string(walletType), IsPity: pityTriggered, CreateTime: platformruntime.GetTimestamp(),
+		RewardWalletType: string(walletType), IsPity: bigPityTriggered || smallPityTriggered, CreateTime: platformruntime.GetTimestamp(),
 	}
 	if rewardType == commerceschema.BlindBoxRewardTypeProp {
 		record.RewardTitle = tier.Name
@@ -172,21 +197,29 @@ func drawBalanceBlindBoxRewardTx(tx *gorm.DB, userID int, requestID string, pity
 		}
 	}
 	if rewardType != commerceschema.BlindBoxRewardTypeProp && rewardUSD >= setting.BalanceBlindBoxPityGuaranteeUSD {
+		pity.ConsecutiveUnder6USD = 0
 		pity.ConsecutiveUnder35USD = 0
+	} else if rewardType != commerceschema.BlindBoxRewardTypeProp && rewardUSD >= setting.BalanceBlindBoxSmallPityGuaranteeUSD {
+		pity.ConsecutiveUnder6USD = 0
+		pity.ConsecutiveUnder35USD++
 	} else {
+		pity.ConsecutiveUnder6USD++
 		pity.ConsecutiveUnder35USD++
 	}
 	return record, nil
 }
 
-func buildBalanceBlindBoxOverview(setting blindboxsettings.Setting, balance int, pityProgress int) *BalanceBlindBoxOverview {
+func buildBalanceBlindBoxOverview(setting blindboxsettings.Setting, balance int, smallPityProgress int, pityProgress int) *BalanceBlindBoxOverview {
 	return &BalanceBlindBoxOverview{
-		Enabled:          setting.Enabled && setting.BalanceBlindBoxEnabled,
-		PriceUSD:         setting.BalanceBlindBoxPriceUSD,
-		BalanceUSD:       float64(balance) / float64(platformruntime.QuotaPerUnit),
-		Tiers:            setting.BalanceBlindBoxTiers,
-		PityProgress:     pityProgress,
-		PityThreshold:    setting.BalanceBlindBoxPityThreshold,
-		PityGuaranteeUSD: setting.BalanceBlindBoxPityGuaranteeUSD,
+		Enabled:               setting.Enabled && setting.BalanceBlindBoxEnabled,
+		PriceUSD:              setting.BalanceBlindBoxPriceUSD,
+		BalanceUSD:            float64(balance) / float64(platformruntime.QuotaPerUnit),
+		Tiers:                 setting.BalanceBlindBoxTiers,
+		PityProgress:          pityProgress,
+		PityThreshold:         setting.BalanceBlindBoxPityThreshold,
+		PityGuaranteeUSD:      setting.BalanceBlindBoxPityGuaranteeUSD,
+		SmallPityProgress:     smallPityProgress,
+		SmallPityThreshold:    setting.BalanceBlindBoxSmallPityThreshold,
+		SmallPityGuaranteeUSD: setting.BalanceBlindBoxSmallPityGuaranteeUSD,
 	}
 }

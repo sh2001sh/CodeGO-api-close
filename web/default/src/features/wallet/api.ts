@@ -329,15 +329,20 @@ export async function convertBlindBoxProp(
   return res.data
 }
 
-export async function openBalanceBlindBox(requestId: string): Promise<
+export async function openBalanceBlindBox(
+  requestId: string,
+  count = 1
+): Promise<
   ApiResponse<{
     record: BlindBoxRecord
+    records: BlindBoxRecord[]
     balance_usd: number
     overview: BalanceBlindBoxOverview
   }>
 > {
   const res = await api.post('/api/blind-box/balance/open', {
     request_id: requestId,
+    count,
   })
   return res.data
 }

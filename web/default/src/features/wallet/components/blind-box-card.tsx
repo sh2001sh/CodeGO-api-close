@@ -81,6 +81,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     'standard'
   )
   const [balanceOpening, setBalanceOpening] = useState(false)
+  const [balanceOpenCount, setBalanceOpenCount] = useState(1)
   const [confirmBalanceOpen, setConfirmBalanceOpen] = useState(false)
   const [paymentState, setPaymentState] =
     useState<BlindBoxPaymentState>(EMPTY_PAYMENT_STATE)
@@ -523,9 +524,10 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
 
   const handleBalanceOpen = useCallback(async () => {
     if (balanceOpening || !data?.balance_blind_box?.enabled) return
-    if (data.balance_blind_box.balance_usd < data.balance_blind_box.price_usd) {
+    const totalCost = data.balance_blind_box.price_usd * balanceOpenCount
+    if (data.balance_blind_box.balance_usd < totalCost) {
       toast.error(
-        `余额不足，还差 ${(data.balance_blind_box.price_usd - data.balance_blind_box.balance_usd).toFixed(2)}`
+        `余额不足，还差 ${(totalCost - data.balance_blind_box.balance_usd).toFixed(2)}`
       )
       return
     }
@@ -535,14 +537,14 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-      const response = await openBalanceBlindBox(requestId)
-      if (!isApiSuccess(response) || !response.data?.record) {
+      const response = await openBalanceBlindBox(requestId, balanceOpenCount)
+      if (!isApiSuccess(response) || !response.data?.records?.length) {
         throw new Error(response.message || '余额盲盒抽取失败')
       }
       setPrizeState({
         open: true,
-        records: [response.data.record],
-        openCount: 1,
+        records: response.data.records,
+        openCount: response.data.records.length,
       })
       toast.success('余额盲盒已开启，本次不会产生每日幸运号。')
       await refreshAll()
@@ -551,7 +553,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     } finally {
       setBalanceOpening(false)
     }
-  }, [balanceOpening, data?.balance_blind_box, refreshAll])
+  }, [balanceOpening, balanceOpenCount, data?.balance_blind_box, refreshAll])
 
   const handleOpenExternal = useCallback(() => {
     if (paymentState.formUrl && paymentState.formFields) {
@@ -608,7 +610,10 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
             mode={blindBoxMode}
             balanceOpening={balanceOpening}
             onModeChange={setBlindBoxMode}
-            onBalanceOpen={() => setConfirmBalanceOpen(true)}
+            onBalanceOpen={(count) => {
+              setBalanceOpenCount(count)
+              setConfirmBalanceOpen(true)
+            }}
           />
         </div>
 

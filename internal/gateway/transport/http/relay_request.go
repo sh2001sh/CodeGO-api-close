@@ -218,6 +218,12 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		if !admitted {
 			relaycommon.ExcludeFaultDomain(c, faultDomain)
 			relaycommon.ExcludeRouteDecisionCandidate(c, "fault_domain_capacity")
+			// The current route was selected successfully but its shared upstream
+			// concurrency window is temporarily full. Prefer a different fault
+			// domain on the next selection; when this is the only route, retain one
+			// controlled retry of the selected channel instead of converting local
+			// backpressure into a misleading "no available channel" error.
+			httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, channel.Id)
 			newAPIError = types.NewErrorWithStatusCode(
 				errors.New("upstream fault domain is at capacity"),
 				types.ErrorCodeGetChannelFailed,

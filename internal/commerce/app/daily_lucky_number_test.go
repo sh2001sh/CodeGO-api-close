@@ -29,6 +29,49 @@ func prepareDailyLuckyNumberTestDB(t *testing.T) {
 	))
 }
 
+func TestBlindBoxLuckyDrawWindowUsesDrawTimeAsBusinessDayBoundary(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+	setting := luckysettings.Get()
+	setting.Timezone = "Asia/Shanghai"
+	setting.DrawHour = 20
+	setting.DrawMinute = 0
+
+	tests := []struct {
+		name      string
+		now       time.Time
+		drawDate  string
+		expiresAt time.Time
+	}{
+		{
+			name:      "one second before draw belongs to current draw",
+			now:       time.Date(2026, 8, 13, 19, 59, 59, 0, location),
+			drawDate:  "2026-08-13",
+			expiresAt: time.Date(2026, 8, 13, 20, 0, 0, 0, location),
+		},
+		{
+			name:      "draw instant starts next draw window",
+			now:       time.Date(2026, 8, 13, 20, 0, 0, 0, location),
+			drawDate:  "2026-08-14",
+			expiresAt: time.Date(2026, 8, 14, 20, 0, 0, 0, location),
+		},
+		{
+			name:      "after draw belongs to next draw",
+			now:       time.Date(2026, 8, 13, 23, 30, 0, 0, location),
+			drawDate:  "2026-08-14",
+			expiresAt: time.Date(2026, 8, 14, 20, 0, 0, 0, location),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			drawDate, expiresAt := blindBoxLuckyDrawWindow(test.now, setting)
+			require.Equal(t, test.drawDate, drawDate)
+			require.Equal(t, test.expiresAt.Unix(), expiresAt)
+		})
+	}
+}
+
 func TestBlindBoxLuckyNumberParticipatesOnlyOnItsDrawDate(t *testing.T) {
 	prepareDailyLuckyNumberTestDB(t)
 	db := platformDBForDailyLuckyTest(t)
@@ -54,6 +97,32 @@ func TestBlindBoxLuckyNumberParticipatesOnlyOnItsDrawDate(t *testing.T) {
 
 	tomorrow := now.AddDate(0, 0, 1)
 	participants, err = listLuckyDrawParticipantsTx(db, tomorrow.Unix())
+	require.NoError(t, err)
+	require.Empty(t, participants)
+}
+
+func TestBlindBoxLuckyNumberRemainsEligibleAtScheduledDrawInstant(t *testing.T) {
+	prepareDailyLuckyNumberTestDB(t)
+	db := platformDBForDailyLuckyTest(t)
+	setting := luckysettings.Get()
+	location, err := setting.Location()
+	require.NoError(t, err)
+	drawAt := time.Date(2026, 8, 13, setting.DrawHour, setting.DrawMinute, 0, 0, location)
+
+	require.NoError(t, db.Create(&commerceschema.BlindBoxDailyLuckyNumber{
+		BlindBoxOpenRecordId: 9983,
+		UserId:               9984,
+		DrawDate:             drawAt.Format(luckyDrawDateLayout),
+		LuckySuffix:          "2718",
+		ExpiresAt:            drawAt.Unix(),
+	}).Error)
+
+	participants, err := appendBlindBoxLuckyParticipantsTx(db, nil, drawAt.Unix())
+	require.NoError(t, err)
+	require.Len(t, participants, 1)
+	require.Equal(t, "2718", participants[0].Number.LuckySuffix)
+
+	participants, err = appendBlindBoxLuckyParticipantsTx(db, nil, drawAt.Add(time.Second).Unix())
 	require.NoError(t, err)
 	require.Empty(t, participants)
 }

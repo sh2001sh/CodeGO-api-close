@@ -56,10 +56,7 @@ function resolveBestMatch(payload?: LuckyNumberSelfPayload): number {
     return Math.max(best, getMatchedDigits(suffix, winning))
   }, 0)
   return (payload.today_blind_box_numbers || []).reduce((best, entry) => {
-    if (
-      payload.today_draw?.drawn_at &&
-      entry.created_at > payload.today_draw.drawn_at
-    ) {
+    if (entry.draw_date !== payload.today_draw?.draw_date) {
       return best
     }
     return Math.max(

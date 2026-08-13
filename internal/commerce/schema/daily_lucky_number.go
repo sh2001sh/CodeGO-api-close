@@ -42,7 +42,7 @@ type SubscriptionLuckyNumber struct {
 	UpdatedAt          int64  `json:"updated_at" gorm:"bigint"`
 }
 
-// BlindBoxDailyLuckyNumber participates in one calendar day's draw only.
+// BlindBoxDailyLuckyNumber participates in one scheduled draw window only.
 // The open-record uniqueness makes number issuance idempotent with opening.
 type BlindBoxDailyLuckyNumber struct {
 	Id                   int    `json:"id"`

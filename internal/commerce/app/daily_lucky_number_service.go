@@ -26,6 +26,7 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 	}
 	now := time.Now().In(location)
 	todayDate := now.Format(luckyDrawDateLayout)
+	blindBoxDrawDate, _ := blindBoxLuckyDrawWindow(now, setting)
 	todayAt := time.Date(now.Year(), now.Month(), now.Day(), setting.DrawHour, setting.DrawMinute, 0, 0, location)
 	nextDrawAt := todayAt
 	if !now.Before(todayAt) {
@@ -53,7 +54,7 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 	if err != nil {
 		return nil, err
 	}
-	blindBoxNumbers, err := listTodayBlindBoxLuckyNumbers(userID, todayDate, now.Unix())
+	blindBoxNumbers, err := listTodayBlindBoxLuckyNumbers(userID, blindBoxDrawDate, now.Unix())
 	if err != nil {
 		return nil, err
 	}

@@ -21,12 +21,12 @@ func issueBlindBoxDailyLuckyNumberTx(tx *gorm.DB, record *commerceschema.BlindBo
 		return err
 	}
 	now := time.Now().In(location)
-	expiresAt := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, location).Unix()
+	drawDate, expiresAt := blindBoxLuckyDrawWindow(now, setting)
 
 	number := commerceschema.BlindBoxDailyLuckyNumber{
 		BlindBoxOpenRecordId: record.Id,
 		UserId:               record.UserId,
-		DrawDate:             now.Format(luckyDrawDateLayout),
+		DrawDate:             drawDate,
 		ExpiresAt:            expiresAt,
 	}
 	for attempt := 0; attempt < 8; attempt++ {
@@ -48,6 +48,23 @@ func issueBlindBoxDailyLuckyNumberTx(tx *gorm.DB, record *commerceschema.BlindBo
 		}
 	}
 	return errors.New("could not issue blind box daily lucky number")
+}
+
+// blindBoxLuckyDrawWindow assigns an opening to the next scheduled draw.
+// The draw instant itself starts the following draw's eligibility window.
+func blindBoxLuckyDrawWindow(now time.Time, setting luckysettings.Setting) (string, int64) {
+	location, err := setting.Location()
+	if err == nil {
+		now = now.In(location)
+	}
+	drawAt := time.Date(
+		now.Year(), now.Month(), now.Day(),
+		setting.DrawHour, setting.DrawMinute, 0, 0, now.Location(),
+	)
+	if !now.Before(drawAt) {
+		drawAt = drawAt.AddDate(0, 0, 1)
+	}
+	return drawAt.Format(luckyDrawDateLayout), drawAt.Unix()
 }
 
 func createBlindBoxOpenRecordTx(tx *gorm.DB, record *commerceschema.BlindBoxOpenRecord) error {

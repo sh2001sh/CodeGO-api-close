@@ -124,7 +124,7 @@ export function LuckyMatchBoard(props: {
               </EmptyMedia>
               <EmptyTitle>暂时没有可参与的号码</EmptyTitle>
               <EmptyDescription>
-                购买符合条件的月卡，或开启盲盒获得仅限当天使用的号码。
+                购买符合条件的月卡，或开启盲盒获得当前开奖周期有效的号码。
               </EmptyDescription>
             </EmptyHeader>
             <Button render={<Link to='/packages' />}>查看套餐</Button>
@@ -156,7 +156,7 @@ export function LuckyMatchBoard(props: {
                   今日盲盒号码
                 </div>
                 <span className='text-muted-foreground text-xs'>
-                  当日有效 · 基础 1.0x
+                  20:00 至次日 19:59 · 基础 1.0x
                 </span>
               </div>
               <div className='grid gap-3 lg:grid-cols-2'>
@@ -221,21 +221,18 @@ function BlindBoxMatchCard(props: {
   published: boolean
 }) {
   const suffix = normalizeLuckyNumber(props.entry.lucky_suffix)
-  const eligibleForPublishedDraw = Boolean(
-    !props.published ||
-    !props.draw?.drawn_at ||
-    props.entry.created_at <= props.draw.drawn_at
+  const belongsToPublishedDraw = Boolean(
+    props.published && props.entry.draw_date === props.draw?.draw_date
   )
   const reward = findBlindBoxReward(
     props.entry.blind_box_open_record_id,
     props.draw,
     props.rewards
   )
-  const matchedDigits =
-    props.published && eligibleForPublishedDraw
-      ? (reward?.reward.matched_digits ??
-        getMatchedDigits(suffix, props.draw?.winning_number))
-      : 0
+  const matchedDigits = belongsToPublishedDraw
+    ? (reward?.reward.matched_digits ??
+      getMatchedDigits(suffix, props.draw?.winning_number))
+    : 0
   const rewardUsd = reward?.reward_usd ?? 0
   const hit = matchedDigits > 0
 
@@ -261,33 +258,32 @@ function BlindBoxMatchCard(props: {
           </div>
         </div>
         <MatchVerdict
-          published={props.published}
+          published={belongsToPublishedDraw}
           matchedDigits={matchedDigits}
           rewardUsd={rewardUsd}
-          ineligible={!eligibleForPublishedDraw}
         />
       </div>
       <div className='space-y-2.5 px-4 py-4'>
         <DigitRow
-          label='今日开奖'
-          value={props.draw?.winning_number}
-          pending={!props.published}
+          label={belongsToPublishedDraw ? '本期开奖' : '等待开奖'}
+          value={
+            belongsToPublishedDraw ? props.draw?.winning_number : undefined
+          }
+          pending={!belongsToPublishedDraw}
           matchedDigits={matchedDigits}
         />
         <DigitRow
           label='盲盒号码'
           value={suffix}
           matchedDigits={matchedDigits}
-          dim={props.published}
+          dim={belongsToPublishedDraw}
         />
         <p className='text-muted-foreground text-xs leading-5'>
-          {props.published
-            ? !eligibleForPublishedDraw
-              ? '该号码在今日开奖完成后开出，因此未参与本次开奖。'
-              : hit
-                ? `从右往左连续对上 ${matchedDigits} 位，按基础 1.0 倍率结算到钱包余额。`
-                : '最右侧一位未对上，本号码今日未中奖。'
-            : '该号码由盲盒开出，只参与当天开奖，次日自动失效。'}
+          {belongsToPublishedDraw
+            ? hit
+              ? `从右往左连续对上 ${matchedDigits} 位，按基础 1.0 倍率结算到钱包余额。`
+              : '最右侧一位未对上，本期未中奖。'
+            : `该号码参与 ${props.entry.draw_date} 20:00 开奖，有效周期为前一日 20:00 至开奖日 19:59。`}
         </p>
       </div>
     </article>

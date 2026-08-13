@@ -254,7 +254,7 @@ func appendBlindBoxLuckyParticipantsTx(tx *gorm.DB, participants []luckyDrawPart
 	}
 	drawDate := time.Unix(drawUnix, 0).In(location).Format(luckyDrawDateLayout)
 	var numbers []commerceschema.BlindBoxDailyLuckyNumber
-	if err := tx.Where("draw_date = ? AND expires_at > ?", drawDate, drawUnix).Order("id asc").Find(&numbers).Error; err != nil {
+	if err := tx.Where("draw_date = ? AND expires_at >= ?", drawDate, drawUnix).Order("id asc").Find(&numbers).Error; err != nil {
 		return nil, err
 	}
 	for index := range numbers {

@@ -7,6 +7,7 @@ import (
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	bountyschema "github.com/sh2001sh/new-api/internal/bounty/schema"
+	luckysettings "github.com/sh2001sh/new-api/internal/commerce/luckysettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	communityschema "github.com/sh2001sh/new-api/internal/community/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -67,6 +68,7 @@ func V2MigrationIDs() []string {
 		"20260812_blind_box_daily_lucky_numbers",
 		"20260813_balance_blind_box",
 		"20260813_balance_blind_box_small_pity",
+		"20260813_blind_box_lucky_draw_window",
 	}
 }
 
@@ -205,6 +207,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260813_balance_blind_box", Run: migrateBalanceBlindBox},
 		{ID: "20260813_balance_blind_box_small_pity", Run: migrateBalanceBlindBoxSmallPity},
+		{ID: "20260813_blind_box_lucky_draw_window", Run: migrateBlindBoxLuckyDrawWindow},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -458,6 +461,32 @@ func migrateBalanceBlindBoxSmallPity(tx *gorm.DB) error {
 		return nil
 	}
 	return tx.Migrator().AddColumn(&commerceschema.BalanceBlindBoxPityState{}, "ConsecutiveUnder6USD")
+}
+
+func migrateBlindBoxLuckyDrawWindow(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.BlindBoxDailyLuckyNumber{}) {
+		return nil
+	}
+	setting := luckysettings.Get()
+	location, err := setting.Location()
+	if err != nil {
+		return err
+	}
+	now := time.Now().In(location)
+	drawAt := time.Date(
+		now.Year(), now.Month(), now.Day(),
+		setting.DrawHour, setting.DrawMinute, 0, 0, location,
+	)
+	if !now.Before(drawAt) {
+		drawAt = drawAt.AddDate(0, 0, 1)
+	}
+	windowStart := drawAt.AddDate(0, 0, -1)
+	return tx.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).
+		Where("created_at >= ? AND created_at < ?", windowStart.Unix(), drawAt.Unix()).
+		Updates(map[string]interface{}{
+			"draw_date":  drawAt.Format("2006-01-02"),
+			"expires_at": drawAt.Unix(),
+		}).Error
 }
 
 // addDailyLuckyNumberColumns only appends the fields introduced by this

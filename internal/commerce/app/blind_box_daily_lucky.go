@@ -6,6 +6,7 @@ import (
 
 	luckysettings "github.com/sh2001sh/new-api/internal/commerce/luckysettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -66,7 +67,7 @@ func decorateBlindBoxLuckyNumber(record *commerceschema.BlindBoxOpenRecord, numb
 }
 
 func attachBlindBoxLuckyNumbersTx(tx *gorm.DB, records []commerceschema.BlindBoxOpenRecord) error {
-	if len(records) == 0 {
+	if len(records) == 0 || platformdb.DB == nil || !platformdb.DB.Migrator().HasTable(&commerceschema.BlindBoxDailyLuckyNumber{}) {
 		return nil
 	}
 	ids := make([]int, 0, len(records))

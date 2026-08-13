@@ -178,6 +178,13 @@ func CriticalRateLimit() func(c *gin.Context) {
 	return defNext
 }
 
+// BlindBoxOpenRateLimit limits opening by authenticated user rather than the
+// shared client IP. Opening a batch one at a time is an expected workflow, so
+// it needs a narrower but higher allowance than payment and account actions.
+func BlindBoxOpenRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(30, 60, "BBO")
+}
+
 // RegistrationRateLimit protects account creation from automated bursts while
 // keeping a reasonable allowance for shared residential networks.
 func RegistrationRateLimit() gin.HandlerFunc {

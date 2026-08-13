@@ -363,8 +363,15 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           openCount: response.data.open_count || count,
         })
         await refreshAll()
-      } catch {
-        toast.error('处理失败')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        toast.error(
+          message.includes('429') ||
+            message.includes('频繁') ||
+            message.includes('too many')
+            ? '开启过于频繁，请稍后再试'
+            : message || '处理失败'
+        )
       } finally {
         setOpeningCount(null)
       }

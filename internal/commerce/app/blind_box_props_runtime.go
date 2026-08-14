@@ -48,27 +48,27 @@ func ActivateBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp,
 		if !ok || !spec.Activatable {
 			return errors.New("this prop is applied automatically")
 		}
-		canResumeMonthlyPass := prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier && prop.Status == commerceschema.BlindBoxPropStatusPaused
-		if prop.Status != commerceschema.BlindBoxPropStatusAvailable && !canResumeMonthlyPass {
+		canResume := isPausableBlindBoxMultiplierProp(prop.PropType) && prop.Status == commerceschema.BlindBoxPropStatusPaused
+		if prop.Status != commerceschema.BlindBoxPropStatusAvailable && !canResume {
 			return errors.New("this prop cannot be activated")
 		}
 		if prop.PropType == commerceschema.BlindBoxPropTypeZeroHourMultiplier && hasActiveZeroHourPropTx(tx, userID) {
 			return errors.New("zero-hour prop is already active")
 		}
-		if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
-			if hasActiveMonthlyPassPropTx(tx, userID) {
-				return errors.New("0.1 倍率卡已经生效")
-			}
+		if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier && hasActiveMonthlyPassPropTx(tx, userID) {
+			return errors.New("0.1 倍率卡已经生效")
+		}
+		if isPausableBlindBoxMultiplierProp(prop.PropType) {
 			if prop.RemainingSeconds <= 0 {
 				prop.RemainingSeconds = prop.DurationSeconds
 			}
 			if prop.RemainingSeconds <= 0 {
-				return errors.New("0.1 倍率卡剩余时间不足")
+				return errors.New("倍率卡剩余时间不足")
 			}
 		}
 		prop.Status = commerceschema.BlindBoxPropStatusActive
 		prop.ActivatedAt = now
-		if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
+		if isPausableBlindBoxMultiplierProp(prop.PropType) {
 			prop.ExpiresAt = now + prop.RemainingSeconds
 		} else {
 			prop.ExpiresAt = now + prop.DurationSeconds
@@ -81,7 +81,7 @@ func ActivateBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp,
 	return &prop, nil
 }
 
-// PauseBlindBoxProp pauses a monthly pass card and preserves its unused active time.
+// PauseBlindBoxProp pauses a pausable multiplier card and preserves unused time.
 func PauseBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp, error) {
 	if userID <= 0 || propID <= 0 {
 		return nil, errors.New("invalid blind box prop request")
@@ -92,7 +92,7 @@ func PauseBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp, er
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
 			return err
 		}
-		if prop.PropType != commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
+		if !isPausableBlindBoxMultiplierProp(prop.PropType) {
 			return errors.New("this prop cannot be paused")
 		}
 		if err := expireBlindBoxPropIfNeededTx(tx, &prop, now); err != nil {
@@ -115,6 +115,11 @@ func PauseBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp, er
 		return nil, err
 	}
 	return &prop, nil
+}
+
+func isPausableBlindBoxMultiplierProp(propType string) bool {
+	return propType == commerceschema.BlindBoxPropTypeZeroHourMultiplier ||
+		propType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier
 }
 
 // ConvertBlindBoxDiscountProp converts an unused 10% top-up discount card
@@ -265,7 +270,7 @@ func expireBlindBoxPropIfNeededTx(tx *gorm.DB, prop *commerceschema.BlindBoxProp
 		return nil
 	}
 	prop.Status = commerceschema.BlindBoxPropStatusExpired
-	if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
+	if isPausableBlindBoxMultiplierProp(prop.PropType) {
 		prop.RemainingSeconds = 0
 	}
 	return tx.Save(prop).Error

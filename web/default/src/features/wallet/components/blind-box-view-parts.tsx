@@ -30,7 +30,9 @@ export function BlindBoxPropsList(props: {
           const active = prop.status === 'active'
           const paused = prop.status === 'paused'
           const monthlyPass = prop.prop_type === 'monthly_pass_multiplier'
-          const canUse = available || (monthlyPass && paused)
+          const zeroHour = prop.prop_type === 'zero_hour_multiplier'
+          const pausable = monthlyPass || zeroHour
+          const canUse = available || (pausable && paused)
           const convertible =
             available &&
             ['topup_discount_90', 'subscription_discount_90'].includes(
@@ -75,7 +77,7 @@ export function BlindBoxPropsList(props: {
                       : '转为充值九折卡'}
                   </Button>
                 ) : null}
-                {monthlyPass && active ? (
+                {pausable && active ? (
                   <Button
                     type='button'
                     size='sm'
@@ -131,6 +133,9 @@ function getPropDescription(
     if (prop.prop_type === 'monthly_pass_multiplier') {
       return `0.1 倍率已生效，已接入倍率卡专属分组；剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}，非生图模型可用。`
     }
+    if (prop.prop_type === 'zero_hour_multiplier') {
+      return `0 倍率已生效，剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}；可随时暂停并保留剩余时间。`
+    }
     return t('Active until {{date}}', {
       date: new Date(prop.expires_at * 1000).toLocaleString(),
     })
@@ -144,9 +149,13 @@ function getPropDescription(
       return `启用后可随时暂停，累计可用 ${formatSeconds(remaining)}；仅限倍率卡专属分组非生图模型。`
     }
     if (prop.prop_type === 'zero_hour_multiplier') {
+      const remaining = prop.remaining_seconds || prop.duration_seconds
+      if (prop.status === 'paused') {
+        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后重新接入倍率卡专属分组，按 0 倍率计费。`
+      }
       return prop.status === 'available'
-        ? '启用后 1 小时内可使用 zero-hour 分组，倍率卡专属分组非生图模型按 0 倍率计费。'
-        : 'zero-hour 分组已激活，已接入倍率卡专属分组，仅限当前用户，单用户并发最多 10 个请求。'
+        ? '启用后可随时暂停，累计可用 1 小时；倍率卡专属分组非生图模型按 0 倍率计费。'
+        : '0 倍率已生效，可随时暂停；仅限当前用户，单用户并发最多 10 个请求。'
     }
     return prop.status === 'available'
       ? t('Click Use to activate this card for {{hours}} hours.', {
@@ -168,6 +177,10 @@ function getPropActionLabel(
   t: (key: string) => string
 ) {
   if (prop.prop_type === 'monthly_pass_multiplier') {
+    if (paused) return '继续开启'
+    if (available) return '开启'
+  }
+  if (prop.prop_type === 'zero_hour_multiplier') {
     if (paused) return '继续开启'
     if (available) return '开启'
   }

@@ -144,6 +144,40 @@ func TestZeroHourPropActivatesUserScopedGroup(t *testing.T) {
 	assert.Equal(t, zeroHourBaseProbability, overview.CurrentProbability)
 }
 
+func TestZeroHourPropPausesAndResumesWithoutLosingRemainingTime(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8816, Username: "pausable_zero_hour_user", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+
+	var prop *commerceschema.BlindBoxProp
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		prop, err = createBlindBoxPropTx(tx, user.Id, 2, "1 小时 0 倍率卡")
+		return err
+	}))
+
+	activated, err := ActivateBlindBoxProp(user.Id, prop.Id)
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusActive, activated.Status)
+	assert.True(t, IsZeroHourGroupActive(user.Id))
+
+	paused, err := PauseBlindBoxProp(user.Id, prop.Id)
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusPaused, paused.Status)
+	assert.Positive(t, paused.RemainingSeconds)
+	assert.False(t, IsZeroHourGroupActive(user.Id))
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		assert.True(t, hasAvailableOrActiveZeroHourPropTx(tx, user.Id))
+		return nil
+	}))
+
+	resumed, err := ActivateBlindBoxProp(user.Id, prop.Id)
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusActive, resumed.Status)
+	assert.Greater(t, resumed.ExpiresAt, platformruntime.GetTimestamp())
+	assert.True(t, IsZeroHourGroupActive(user.Id))
+}
+
 func TestZeroHourProbabilityCapsAtConfiguredMaximum(t *testing.T) {
 	assert.Equal(t, zeroHourBaseProbability, zeroHourProbability(0))
 	assert.InDelta(t, 0.000541, zeroHourProbability(90), 0.0000000001)

@@ -222,8 +222,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
       if (
         prop.status !== 'available' &&
         !(
-          prop.prop_type === 'monthly_pass_multiplier' &&
-          prop.status === 'paused'
+          ['monthly_pass_multiplier', 'zero_hour_multiplier'].includes(
+            prop.prop_type
+          ) && prop.status === 'paused'
         )
       ) {
         return
@@ -234,7 +235,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           throw new Error(response.message || t('Failed to use prop'))
         }
         toast.success(
-          prop.prop_type === 'monthly_pass_multiplier'
+          ['monthly_pass_multiplier', 'zero_hour_multiplier'].includes(
+            prop.prop_type
+          )
             ? `${prop.title} 已开启，可随时暂停。`
             : t('{{title}} is now active.', { title: prop.title })
         )

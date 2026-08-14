@@ -11,7 +11,7 @@ import (
 
 func TestBalanceBlindBoxPoolEconomics(t *testing.T) {
 	setting := blindboxsettings.Get()
-	require.LessOrEqual(t, setting.BalanceBlindBoxTiers[0].Probability, 0.12)
+	require.LessOrEqual(t, setting.BalanceBlindBoxTiers[0].Probability, 0.06)
 	for _, pair := range [][2]int{{3, 10}, {4, 11}, {5, 12}, {6, 13}, {7, 14}} {
 		require.InDelta(
 			t,
@@ -29,7 +29,7 @@ func TestBalanceBlindBoxPoolEconomics(t *testing.T) {
 		}
 	}
 	require.InDelta(t, 1, probability, 0.000000001)
-	require.Greater(t, atLeastCostProbability, 0.43)
+	require.Greater(t, atLeastCostProbability, 0.54)
 
 	rand.Seed(20260814)
 	const draws = 1_000_000
@@ -48,9 +48,11 @@ func TestBalanceBlindBoxPoolEconomics(t *testing.T) {
 		}
 	}
 	average := totalValue / draws
-	require.Less(t, average, setting.BalanceBlindBoxPriceUSD)
-	require.Greater(t, float64(atLeast10)/draws, 0.58)
-	require.Greater(t, float64(atLeast15)/draws, 0.43)
+	rtp := average / setting.BalanceBlindBoxPriceUSD
+	require.Greater(t, rtp, 1.03)
+	require.Less(t, rtp, 1.08)
+	require.Greater(t, float64(atLeast10)/draws, 0.69)
+	require.Greater(t, float64(atLeast15)/draws, 0.54)
 	t.Logf("draws=%d average=$%.4f rtp=%.2f%% >=$10=%.2f%% >=$15=%.2f%%", draws, average, average/setting.BalanceBlindBoxPriceUSD*100, float64(atLeast10)/draws*100, float64(atLeast15)/draws*100)
 
 	for _, batch := range []int{10, 20, 50, 100, 1000} {

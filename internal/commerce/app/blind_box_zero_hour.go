@@ -179,7 +179,10 @@ func hasAvailableOrActiveZeroHourPropTx(tx *gorm.DB, userID int) bool {
 	var count int64
 	err := tx.Model(&commerceschema.BlindBoxProp{}).
 		Where("user_id = ? AND prop_type = ?", userID, commerceschema.BlindBoxPropTypeZeroHourMultiplier).
-		Where("status = ? OR (status = ? AND expires_at > ?)", commerceschema.BlindBoxPropStatusAvailable, commerceschema.BlindBoxPropStatusActive, now).
+		Where("status IN ? OR (status = ? AND expires_at > ?)", []string{
+			commerceschema.BlindBoxPropStatusAvailable,
+			commerceschema.BlindBoxPropStatusPaused,
+		}, commerceschema.BlindBoxPropStatusActive, now).
 		Count(&count).Error
 	return err == nil && count > 0
 }

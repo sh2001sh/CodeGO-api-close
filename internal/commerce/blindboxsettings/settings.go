@@ -85,19 +85,19 @@ var defaultTierSettings = []TierSetting{
 var defaultBalanceBlindBoxTiers = []TierSetting{
 	// Claude quota is valued at 4x ordinary quota. Equivalent-value bands from
 	// $10 through $200 split their probability evenly by wallet type.
-	{Name: "$1.00-$3.00 普通额度", MinUSD: 1, MaxUSD: 3, Probability: 0.12, RewardType: "quota", WalletType: "default"},
-	{Name: "$3.00-$6.00 普通额度", MinUSD: 3, MaxUSD: 6, Probability: 0.17, RewardType: "quota", WalletType: "default"},
+	{Name: "$1.00-$3.00 普通额度", MinUSD: 1, MaxUSD: 3, Probability: 0.06, RewardType: "quota", WalletType: "default"},
+	{Name: "$3.00-$6.00 普通额度", MinUSD: 3, MaxUSD: 6, Probability: 0.12, RewardType: "quota", WalletType: "default"},
 	{Name: "$6.00-$10.00 普通额度", MinUSD: 6, MaxUSD: 10, Probability: 0.10, RewardType: "quota", WalletType: "default"},
 	{Name: "$10.00-$15.00 普通额度", MinUSD: 10, MaxUSD: 15, Probability: 0.075, RewardType: "quota", WalletType: "default"},
-	{Name: "$15.00-$20.00 普通额度", MinUSD: 15, MaxUSD: 20, Probability: 0.19, RewardType: "quota", WalletType: "default"},
-	{Name: "$25.00-$40.00 普通额度", MinUSD: 25, MaxUSD: 40, Probability: 0.025, RewardType: "quota", WalletType: "default"},
+	{Name: "$15.00-$20.00 普通额度", MinUSD: 15, MaxUSD: 20, Probability: 0.22, RewardType: "quota", WalletType: "default"},
+	{Name: "$25.00-$40.00 普通额度", MinUSD: 25, MaxUSD: 40, Probability: 0.05, RewardType: "quota", WalletType: "default"},
 	{Name: "$80 普通额度", MinUSD: 80, MaxUSD: 80, Probability: 0.004, RewardType: "quota", WalletType: "default"},
 	{Name: "$200 普通额度", MinUSD: 200, MaxUSD: 200, Probability: 0.00075, RewardType: "quota", WalletType: "default"},
 	{Name: "$500 普通额度", MinUSD: 500, MaxUSD: 500, Probability: 0.00036, RewardType: "quota", WalletType: "default"},
 	{Name: "$5000 普通额度", MinUSD: 5000, MaxUSD: 5000, Probability: 0.00004, RewardType: "quota", WalletType: "default"},
 	{Name: "$2.50-$3.75 Claude 额度（等值 $10-$15）", MinUSD: 2.5, MaxUSD: 3.75, Probability: 0.075, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$3.75-$5.00 Claude 额度（等值 $15-$20）", MinUSD: 3.75, MaxUSD: 5, Probability: 0.19, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$6.25-$10.00 Claude 额度（等值 $25-$40）", MinUSD: 6.25, MaxUSD: 10, Probability: 0.025, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$3.75-$5.00 Claude 额度（等值 $15-$20）", MinUSD: 3.75, MaxUSD: 5, Probability: 0.22, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$6.25-$10.00 Claude 额度（等值 $25-$40）", MinUSD: 6.25, MaxUSD: 10, Probability: 0.05, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "$20 Claude 额度（等值 $80）", MinUSD: 20, MaxUSD: 20, Probability: 0.004, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "$50 Claude 额度（等值 $200）", MinUSD: 50, MaxUSD: 50, Probability: 0.00075, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "充值九折卡", Probability: 0.007, RewardType: "prop"},
@@ -107,6 +107,7 @@ var defaultBalanceBlindBoxTiers = []TierSetting{
 }
 
 var legacyBalanceBlindBoxProbabilities = [][]float64{
+	{0.12, 0.17, 0.10, 0.075, 0.19, 0.025, 0.004, 0.00075, 0.00036, 0.00004, 0.075, 0.19, 0.025, 0.004, 0.00075, 0.007, 0.004, 0.006, 0.0031},
 	{0.35, 0.18, 0.10, 0.10, 0.18, 0.04, 0.025, 0.006, 0.0015, 0.001, 0.002, 0.001, 0.0005, 0.0003, 0.0001, 0.0045, 0.0025, 0.0035, 0.0021},
 	{0.12, 0.16, 0.18, 0.18, 0.20127, 0.03, 0.006, 0.001, 0.0002, 0.00003, 0.04, 0.035, 0.02, 0.008, 0.002, 0.0065, 0.0035, 0.0045, 0.002},
 	{0.08, 0.12, 0.16, 0.20, 0.25, 0.03, 0.0043, 0.00058, 0.0001, 0.00002, 0.04, 0.035, 0.02, 0.008, 0.002, 0.0065, 0.0035, 0.0045, 0.002},

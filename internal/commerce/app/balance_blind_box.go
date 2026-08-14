@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	balanceBlindBoxPoolVersion = "balance-resale-v1"
+	balanceBlindBoxPoolVersion = "balance-resale-v2"
 	balanceBlindBoxMaxBatch    = 100
 )
 

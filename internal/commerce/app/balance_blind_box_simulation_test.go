@@ -11,11 +11,25 @@ import (
 
 func TestBalanceBlindBoxPoolEconomics(t *testing.T) {
 	setting := blindboxsettings.Get()
+	require.LessOrEqual(t, setting.BalanceBlindBoxTiers[0].Probability, 0.12)
+	for _, pair := range [][2]int{{3, 10}, {4, 11}, {5, 12}, {6, 13}, {7, 14}} {
+		require.InDelta(
+			t,
+			setting.BalanceBlindBoxTiers[pair[0]].Probability,
+			setting.BalanceBlindBoxTiers[pair[1]].Probability,
+			0.000000001,
+		)
+	}
 	var probability float64
+	var atLeastCostProbability float64
 	for _, tier := range setting.BalanceBlindBoxTiers {
 		probability += tier.Probability
+		if tierMinimumEquivalentValue(tier) >= setting.BalanceBlindBoxPriceUSD {
+			atLeastCostProbability += tier.Probability
+		}
 	}
 	require.InDelta(t, 1, probability, 0.000000001)
+	require.Greater(t, atLeastCostProbability, 0.43)
 
 	rand.Seed(20260814)
 	const draws = 1_000_000
@@ -35,8 +49,8 @@ func TestBalanceBlindBoxPoolEconomics(t *testing.T) {
 	}
 	average := totalValue / draws
 	require.Less(t, average, setting.BalanceBlindBoxPriceUSD)
-	require.Greater(t, float64(atLeast10)/draws, 0.35)
-	require.Greater(t, float64(atLeast15)/draws, 0.25)
+	require.Greater(t, float64(atLeast10)/draws, 0.58)
+	require.Greater(t, float64(atLeast15)/draws, 0.43)
 	t.Logf("draws=%d average=$%.4f rtp=%.2f%% >=$10=%.2f%% >=$15=%.2f%%", draws, average, average/setting.BalanceBlindBoxPriceUSD*100, float64(atLeast10)/draws*100, float64(atLeast15)/draws*100)
 
 	for _, batch := range []int{10, 20, 50, 100, 1000} {
@@ -60,12 +74,13 @@ func TestBalanceBlindBoxPoolEconomics(t *testing.T) {
 	}
 }
 
+func tierMinimumEquivalentValue(tier blindboxsettings.TierSetting) float64 {
+	return balanceBlindBoxEquivalentValue(
+		blindboxsettings.NormalizeRewardType(tier.RewardType),
+		tier.MinUSD,
+	)
+}
+
 func balanceBlindBoxEconomicValue(item commerceschema.BalanceBlindBoxItem) float64 {
-	if item.RewardType == commerceschema.BlindBoxRewardTypeClaudeQuota {
-		return item.RewardUSD * 4
-	}
-	if item.RewardType == commerceschema.BlindBoxRewardTypeProp {
-		return 0
-	}
-	return item.RewardUSD
+	return balanceBlindBoxEquivalentValue(item.RewardType, item.RewardUSD)
 }

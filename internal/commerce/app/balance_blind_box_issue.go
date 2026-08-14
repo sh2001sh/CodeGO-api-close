@@ -63,15 +63,26 @@ func issueSealedBalanceBlindBox(purchaseID, purchaserID int, setting blindboxset
 }
 
 func advanceBalanceBlindBoxPity(pity *commerceschema.BalanceBlindBoxPityState, rewardType string, rewardUSD float64, setting blindboxsettings.Setting) {
-	if rewardType != commerceschema.BlindBoxRewardTypeProp && rewardUSD >= setting.BalanceBlindBoxPityGuaranteeUSD {
+	rewardValue := balanceBlindBoxEquivalentValue(rewardType, rewardUSD)
+	if rewardValue >= setting.BalanceBlindBoxPityGuaranteeUSD {
 		pity.ConsecutiveUnder6USD, pity.ConsecutiveUnder35USD = 0, 0
 		return
 	}
-	if rewardType != commerceschema.BlindBoxRewardTypeProp && rewardUSD >= setting.BalanceBlindBoxSmallPityGuaranteeUSD {
+	if rewardValue >= setting.BalanceBlindBoxSmallPityGuaranteeUSD {
 		pity.ConsecutiveUnder6USD = 0
 		pity.ConsecutiveUnder35USD++
 		return
 	}
 	pity.ConsecutiveUnder6USD++
 	pity.ConsecutiveUnder35USD++
+}
+
+func balanceBlindBoxEquivalentValue(rewardType string, rewardUSD float64) float64 {
+	if rewardType == commerceschema.BlindBoxRewardTypeClaudeQuota {
+		return rewardUSD * 4
+	}
+	if rewardType == commerceschema.BlindBoxRewardTypeProp {
+		return 0
+	}
+	return rewardUSD
 }

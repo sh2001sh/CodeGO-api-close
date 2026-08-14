@@ -99,8 +99,9 @@ function BalanceBoxHeader(props: {
             购买完成后仅存入库存，不会自动开启。奖励在购买时封存，余额盲盒不产生幸运号。
           </p>
           <p className='mt-1 text-[11px] leading-5 text-teal-700/90 dark:text-teal-300/90'>
-            约 {formatRate(rates.atLeast10)} 获得 $10 及以上普通额度，约{' '}
-            {formatRate(rates.atLeast15)} 达到 $15；转赠不会刷新奖励或保底。
+            约 {formatRate(rates.atLeast10)} 获得等值 $10 及以上奖励，约{' '}
+            {formatRate(rates.atLeast15)} 达到等值 $15；Claude 额度按 4
+            倍价值计算，转赠不会刷新奖励或保底。
           </p>
         </div>
         <BalanceBoxHeaderMetrics balance={props.balance} />
@@ -355,7 +356,13 @@ function BalanceBoxGiftConfirm(props: BalanceBoxPanelViewProps) {
 
 function minimumRewardProbability(tiers: BlindBoxTier[], threshold: number) {
   return tiers
-    .filter((tier) => tier.reward_type === 'quota' && tier.min_usd >= threshold)
+    .filter((tier) => {
+      if (tier.reward_type === 'quota') return tier.min_usd >= threshold
+      if (tier.reward_type === 'claude_quota') {
+        return tier.min_usd * 4 >= threshold
+      }
+      return false
+    })
     .reduce((total, tier) => total + tier.probability, 0)
 }
 

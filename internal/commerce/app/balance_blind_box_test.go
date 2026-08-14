@@ -152,6 +152,34 @@ func TestBalanceBlindBoxGiftRejectsSelfAndInsufficientInventory(t *testing.T) {
 	require.ErrorContains(t, err, "库存不足")
 }
 
+func TestBalanceBlindBoxPityUsesClaudeEquivalentValue(t *testing.T) {
+	setting := blindboxsettings.Get()
+	setting.BalanceBlindBoxSmallPityGuaranteeUSD = 10
+	setting.BalanceBlindBoxPityGuaranteeUSD = 35
+	pity := commerceschema.BalanceBlindBoxPityState{
+		ConsecutiveUnder6USD:  9,
+		ConsecutiveUnder35USD: 10,
+	}
+
+	advanceBalanceBlindBoxPity(
+		&pity,
+		commerceschema.BlindBoxRewardTypeClaudeQuota,
+		4,
+		setting,
+	)
+	require.Zero(t, pity.ConsecutiveUnder6USD)
+	require.Equal(t, 11, pity.ConsecutiveUnder35USD)
+
+	advanceBalanceBlindBoxPity(
+		&pity,
+		commerceschema.BlindBoxRewardTypeClaudeQuota,
+		10,
+		setting,
+	)
+	require.Zero(t, pity.ConsecutiveUnder6USD)
+	require.Zero(t, pity.ConsecutiveUnder35USD)
+}
+
 func setBalanceBlindBoxTestSetting(t *testing.T, dailyLimit int) {
 	t.Helper()
 	original := blindboxsettings.Get()

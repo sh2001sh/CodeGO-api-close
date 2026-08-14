@@ -71,6 +71,7 @@ func V2MigrationIDs() []string {
 		"20260813_blind_box_lucky_draw_window",
 		"20260814_wallet_transfers",
 		"20260814_balance_blind_box_inventory",
+		"20260814_balance_blind_box_simulation",
 	}
 }
 
@@ -219,6 +220,12 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 				&commerceschema.BalanceBlindBoxItem{},
 				&commerceschema.BalanceBlindBoxGift{},
 				&commerceschema.BalanceBlindBoxGiftItem{},
+			)
+		}},
+		{ID: "20260814_balance_blind_box_simulation", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(
+				&commerceschema.BalanceBlindBoxSimulationSession{},
+				&commerceschema.BalanceBlindBoxSimulationBatch{},
 			)
 		}},
 	}

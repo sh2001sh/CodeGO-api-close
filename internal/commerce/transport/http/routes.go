@@ -111,6 +111,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.GET("/balance/overview", getBalanceBlindBoxOverview)
 		blindBoxRoute.POST("/balance/purchase", middleware.BalanceBlindBoxOpenRateLimit(), purchaseBalanceBlindBoxes)
 		blindBoxRoute.POST("/balance/open", middleware.BalanceBlindBoxOpenRateLimit(), openBalanceBlindBox)
+		blindBoxRoute.POST("/balance/simulate", middleware.BalanceBlindBoxOpenRateLimit(), simulateBalanceBlindBox)
 		blindBoxRoute.POST("/balance/gift", middleware.CriticalRateLimit(), giftBalanceBlindBoxes)
 	}
 
@@ -140,6 +141,8 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	{
 		blindBoxAdminRoute.GET("/users/:id/overview", adminGetBlindBoxUserOverview)
 		blindBoxAdminRoute.POST("/users/:id/grants", adminGrantBlindBoxes)
+		blindBoxAdminRoute.POST("/users/:id/balance-simulation", adminStartBalanceBlindBoxSimulation)
+		blindBoxAdminRoute.DELETE("/users/:id/balance-simulation", adminStopBalanceBlindBoxSimulation)
 	}
 
 	apiRouter.POST("/blind-box/epay/notify", anonymousRequestBodyLimit, blindBoxEpayNotify)

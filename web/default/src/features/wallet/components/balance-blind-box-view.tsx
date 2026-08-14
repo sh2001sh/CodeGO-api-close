@@ -1,15 +1,12 @@
-import { Gift, Loader2, PackageOpen, Search, ShoppingBag } from 'lucide-react'
-import { useReducedMotion } from 'motion/react'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+  FlaskConical,
+  Gift,
+  Loader2,
+  PackageOpen,
+  Search,
+  ShoppingBag,
+} from 'lucide-react'
+import { useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type {
@@ -22,9 +19,11 @@ import {
   BalanceBoxModeButton,
   BalanceBoxQuantityControl,
 } from './balance-blind-box-controls'
+import { BalanceBoxGiftConfirm } from './balance-blind-box-gift-confirm'
+import { BalanceBoxSimulationSummary } from './balance-blind-box-simulation'
 import { BoxFigure } from './blind-box-stage'
 
-export type ActionMode = 'purchase' | 'open' | 'gift'
+export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulate'
 
 export interface BalanceBoxPanelViewProps {
   balance?: BalanceBlindBoxOverview
@@ -36,12 +35,14 @@ export interface BalanceBoxPanelViewProps {
   recipientId: string
   canPurchase: boolean
   canUseInventory: boolean
+  canSimulate: boolean
   confirmGift: boolean
   onModeChange: (mode: ActionMode) => void
   onCountChange: (count: number) => void
   onRecipientIdChange: (value: string) => void
   onPurchase: () => void
   onOpen: () => void
+  onSimulate: () => void
   onLookup: () => void
   onGift: () => void
   onConfirmGiftChange: (open: boolean) => void
@@ -55,7 +56,12 @@ export function BalanceBoxPanelView(props: BalanceBoxPanelViewProps) {
         opening={props.busy && props.mode === 'open'}
       />
       <div className='space-y-4 px-4 py-4 sm:px-6 sm:py-5'>
-        <BalanceBoxModeSwitch mode={props.mode} onChange={props.onModeChange} />
+        <BalanceBoxModeSwitch
+          mode={props.mode}
+          simulationActive={Boolean(props.balance?.simulation?.active)}
+          onChange={props.onModeChange}
+        />
+        <BalanceBoxSimulationSummary simulation={props.balance?.simulation} />
         <BalanceBoxWorkspace {...props} />
       </div>
       <BalanceBoxGiftConfirm {...props} />
@@ -131,10 +137,14 @@ function BalanceBoxHeaderMetrics(props: { balance?: BalanceBlindBoxOverview }) {
 
 function BalanceBoxModeSwitch(props: {
   mode: ActionMode
+  simulationActive: boolean
   onChange: (mode: ActionMode) => void
 }) {
   return (
-    <div className='bg-muted grid grid-cols-3 rounded-lg p-1' role='tablist'>
+    <div
+      className={`bg-muted grid rounded-lg p-1 ${props.simulationActive ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}
+      role='tablist'
+    >
       <BalanceBoxModeButton
         active={props.mode === 'purchase'}
         icon={ShoppingBag}
@@ -153,6 +163,14 @@ function BalanceBoxModeSwitch(props: {
         label='赠送库存'
         onClick={() => props.onChange('gift')}
       />
+      {props.simulationActive ? (
+        <BalanceBoxModeButton
+          active={props.mode === 'simulate'}
+          icon={FlaskConical}
+          label='模拟抽取'
+          onClick={() => props.onChange('simulate')}
+        />
+      ) : null}
     </div>
   )
 }
@@ -188,6 +206,14 @@ function BalanceBoxModeDescription(props: {
       <p className='text-muted-foreground text-sm leading-6'>
         从最早入库的盲盒开始开启，单次最多 100
         个。奖励直接发放到当前持有者账户，开启后不可转赠。
+      </p>
+    )
+  }
+  if (props.mode === 'simulate') {
+    return (
+      <p className='text-muted-foreground text-sm leading-6'>
+        单次最多 100
+        抽，总次数不限。所有结果仅用于概率测试，到期自动关闭且不会改变真实余额、道具、库存或保底。
       </p>
     )
   }
@@ -246,7 +272,17 @@ function BalanceBoxActionControls(props: BalanceBoxPanelViewProps) {
       {props.mode === 'purchase' ? (
         <BalanceBoxPurchaseAction {...props} />
       ) : null}
-      {props.mode !== 'purchase' ? (
+      {props.mode === 'simulate' ? (
+        <BalanceBoxPrimaryButton
+          busy={props.busy}
+          disabled={!props.canSimulate}
+          icon={FlaskConical}
+          busyLabel='模拟中…'
+          label={`模拟抽取 ${props.count} 次`}
+          onClick={props.onSimulate}
+        />
+      ) : null}
+      {props.mode !== 'purchase' && props.mode !== 'simulate' ? (
         <BalanceBoxInventoryAction {...props} />
       ) : null}
     </div>
@@ -318,39 +354,6 @@ function BalanceBoxPrimaryButton(props: {
       )}
       {props.busy ? props.busyLabel : props.label}
     </Button>
-  )
-}
-
-function BalanceBoxGiftConfirm(props: BalanceBoxPanelViewProps) {
-  return (
-    <AlertDialog
-      open={props.confirmGift}
-      onOpenChange={props.onConfirmGiftChange}
-    >
-      <AlertDialogContent className='max-h-[calc(100dvh-2rem)] overflow-y-auto'>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            确认赠送 {props.count} 个余额盲盒？
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            接收方为 {props.recipient?.display_name_masked}（
-            {props.recipient?.external_id}）。赠送后所有权立即转移，无法撤回。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={props.busy}>取消</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={props.busy}
-            onClick={(event) => {
-              event.preventDefault()
-              props.onGift()
-            }}
-          >
-            {props.busy ? '赠送中…' : '确认赠送'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   )
 }
 

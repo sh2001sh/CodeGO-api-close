@@ -6,6 +6,7 @@ import {
   lookupWalletTransferRecipient,
   openBalanceBlindBox,
   purchaseBalanceBlindBoxes,
+  simulateBalanceBlindBoxes,
 } from '../api'
 import type {
   BalanceBlindBoxOverview,
@@ -19,6 +20,7 @@ export interface BalanceBoxActionContext {
   count: number
   canPurchase: boolean
   canUseInventory: boolean
+  canSimulate: boolean
   recipient: WalletTransferRecipient | null
   recipientId: string
   onRefresh: () => Promise<void>
@@ -26,6 +28,39 @@ export interface BalanceBoxActionContext {
   setRecipient: Dispatch<SetStateAction<WalletTransferRecipient | null>>
   setRecipientId: Dispatch<SetStateAction<string>>
   setConfirmGift: Dispatch<SetStateAction<boolean>>
+}
+
+export async function simulateBalanceBoxDraws(
+  context: BalanceBoxActionContext
+) {
+  if (!context.canSimulate) return
+  context.setBusy(true)
+  try {
+    const response = await simulateBalanceBlindBoxes(
+      newBalanceBoxRequestId(),
+      context.count
+    )
+    if (!isApiSuccess(response) || !response.data?.records?.length) {
+      throw new Error(response.message || '模拟抽取失败')
+    }
+    window.dispatchEvent(
+      new CustomEvent('blind-box:changed', {
+        detail: {
+          records: response.data.records as BlindBoxRecord[],
+          openCount: response.data.records.length,
+          simulation: true,
+        },
+      })
+    )
+    toast.success(
+      `已完成 ${response.data.records.length} 次模拟抽取，真实额度未变更`
+    )
+    await context.onRefresh()
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : '模拟抽取失败')
+  } finally {
+    context.setBusy(false)
+  }
 }
 
 export async function purchaseBalanceBoxInventory(

@@ -1,12 +1,13 @@
 import { Link } from '@tanstack/react-router'
 import { Gift, RefreshCw, Settings2, Wallet } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   getOptionValue,
   useSystemOptions,
 } from '@/features/system-settings/hooks/use-system-options'
 import type { BillingSettings } from '@/features/system-settings/types'
-import { cn } from '@/lib/utils'
+import { BalanceBlindBoxSimulationAdmin } from './balance-blind-box-simulation-admin'
 
 const DEFAULT_BLIND_BOX_SETTINGS: Pick<
   BillingSettings,
@@ -47,7 +48,10 @@ const DEFAULT_BLIND_BOX_SETTINGS: Pick<
 
 export function BlindBoxOperationsPanel() {
   const optionsQuery = useSystemOptions()
-  const settings = getOptionValue(optionsQuery.data?.data, DEFAULT_BLIND_BOX_SETTINGS)
+  const settings = getOptionValue(
+    optionsQuery.data?.data,
+    DEFAULT_BLIND_BOX_SETTINGS
+  )
 
   return (
     <div className='space-y-4'>
@@ -71,7 +75,10 @@ export function BlindBoxOperationsPanel() {
               disabled={optionsQuery.isFetching}
             >
               <RefreshCw
-                className={cn('mr-1 h-4 w-4', optionsQuery.isFetching && 'animate-spin')}
+                className={cn(
+                  'mr-1 h-4 w-4',
+                  optionsQuery.isFetching && 'animate-spin'
+                )}
               />
               刷新
             </Button>
@@ -88,13 +95,18 @@ export function BlindBoxOperationsPanel() {
               <Settings2 className='mr-1 h-4 w-4' />
               打开配置
             </Button>
-            <Button size='sm' onClick={() => window.location.assign('/blind-box')}>
+            <Button
+              size='sm'
+              onClick={() => window.location.assign('/blind-box')}
+            >
               <Wallet className='mr-1 h-4 w-4' />
               打开盲盒页
             </Button>
           </div>
         </div>
       </div>
+
+      <BalanceBlindBoxSimulationAdmin />
 
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         <MetricCard
@@ -167,13 +179,19 @@ export function BlindBoxOperationsPanel() {
           <div className='rounded-2xl border p-4 text-sm'>
             <div className='font-semibold'>其他参数</div>
             <div className='text-muted-foreground mt-2 leading-6'>
-              购买数量选项：{settings['blind_box_setting.count_options'].join(', ')}
+              购买数量选项：
+              {settings['blind_box_setting.count_options'].join(', ')}
             </div>
             <div className='text-muted-foreground mt-3 leading-6'>
-              保底最低奖励：{settings['blind_box_setting.pity_guarantee_usd'].toFixed(2)} USD
+              保底最低奖励：
+              {settings['blind_box_setting.pity_guarantee_usd'].toFixed(2)} USD
             </div>
             <div className='text-muted-foreground leading-6'>
-              低档奖励判定线：{settings['blind_box_setting.low_reward_threshold_usd'].toFixed(2)} USD
+              低档奖励判定线：
+              {settings['blind_box_setting.low_reward_threshold_usd'].toFixed(
+                2
+              )}{' '}
+              USD
             </div>
             <div className='text-muted-foreground leading-6'>
               抽中的普通额度和 Claude 额度会直接进入对应钱包，不再设置到期时间。
@@ -189,7 +207,7 @@ function MetricCard(props: { label: string; value: string }) {
   return (
     <div className='rounded-xl border bg-white p-3'>
       <div className='text-muted-foreground text-xs'>{props.label}</div>
-      <div className='mt-1 break-all text-sm font-semibold'>{props.value}</div>
+      <div className='mt-1 text-sm font-semibold break-all'>{props.value}</div>
     </div>
   )
 }

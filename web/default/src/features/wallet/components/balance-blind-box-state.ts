@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import type {
   BalanceBlindBoxOverview,
   BlindBoxSelfData,
@@ -9,6 +9,7 @@ import {
   lookupBalanceBoxRecipient,
   openBalanceBoxInventory,
   purchaseBalanceBoxInventory,
+  simulateBalanceBoxDraws,
   type BalanceBoxActionContext,
 } from './balance-blind-box-actions'
 import type {
@@ -30,13 +31,21 @@ export function useBalanceBlindBoxPanelState(props: {
     null
   )
   const [confirmGift, setConfirmGift] = useState(false)
-  const { maxCount, safeCount, canPurchase, canUseInventory } =
+  const simulationActive = Boolean(
+    balance?.simulation?.active &&
+    (balance.simulation.expires_at || 0) > Date.now() / 1000
+  )
+  useEffect(() => {
+    if (mode === 'simulate' && !simulationActive) setMode('purchase')
+  }, [mode, simulationActive])
+  const { maxCount, safeCount, canPurchase, canUseInventory, canSimulate } =
     deriveBalanceBoxState(mode, balance, count, props.loading, busy)
   const context = createBalanceBoxActionContext({
     balance,
     safeCount,
     canPurchase,
     canUseInventory,
+    canSimulate,
     recipient,
     recipientId,
     onRefresh: props.onRefresh,
@@ -63,6 +72,7 @@ export function useBalanceBlindBoxPanelState(props: {
     recipientId,
     canPurchase,
     canUseInventory,
+    canSimulate,
     confirmGift,
     ...handlers,
   }
@@ -87,6 +97,12 @@ function deriveBalanceBoxState(
       loading,
       busy
     ),
+    canSimulate: Boolean(
+      balance?.simulation?.active &&
+      (balance.simulation.expires_at || 0) > Date.now() / 1000 &&
+      !loading &&
+      !busy
+    ),
   }
 }
 
@@ -95,6 +111,7 @@ function createBalanceBoxActionContext(args: {
   safeCount: number
   canPurchase: boolean
   canUseInventory: boolean
+  canSimulate: boolean
   recipient: WalletTransferRecipient | null
   recipientId: string
   onRefresh: () => Promise<void>
@@ -126,6 +143,7 @@ function createBalanceBoxHandlers(
     },
     onPurchase: () => void purchaseBalanceBoxInventory(context),
     onOpen: () => void openBalanceBoxInventory(context),
+    onSimulate: () => void simulateBalanceBoxDraws(context),
     onLookup: () => void lookupBalanceBoxRecipient(context),
     onGift: () => void giftBalanceBoxInventory(context),
     onConfirmGiftChange: setConfirmGift,
@@ -138,6 +156,7 @@ function getBalanceBoxMaxCount(
 ) {
   if (mode === 'purchase')
     return Math.max(1, balance?.remaining_purchase_limit || 1)
+  if (mode === 'simulate') return 100
   return Math.max(1, Math.min(100, balance?.inventory_count || 1))
 }
 

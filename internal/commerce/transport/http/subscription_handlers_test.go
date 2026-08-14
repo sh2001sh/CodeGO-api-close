@@ -270,8 +270,9 @@ func TestGetSubscriptionOrderStatusReturnsOrderPayload(t *testing.T) {
 	if err := db.Create(user).Error; err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
+	const planID = 99101
 	if err := db.Create(&commerceschema.SubscriptionPlan{
-		Id:            1,
+		Id:            planID,
 		Title:         "Pro月卡",
 		Enabled:       true,
 		PriceAmount:   60,
@@ -283,7 +284,7 @@ func TestGetSubscriptionOrderStatusReturnsOrderPayload(t *testing.T) {
 	order := &commerceschema.SubscriptionOrder{
 		Id:              1,
 		UserId:          user.Id,
-		PlanId:          1,
+		PlanId:          planID,
 		Money:           60,
 		TradeNo:         "sub-order-1",
 		PaymentMethod:   commerceschema.PaymentMethodStripe,

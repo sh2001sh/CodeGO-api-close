@@ -16,6 +16,7 @@ func main() {
 			Rerank:          gatewayexecution.RerankHelper,
 			Embedding:       gatewayexecution.EmbeddingHelper,
 			Responses:       gatewayexecution.ResponsesHelper,
+			AlphaSearch:     gatewayexecution.AlphaSearchHelper,
 			Gemini:          gatewayexecution.GeminiHelper,
 			GeminiEmbedding: gatewayexecution.GeminiEmbeddingHandler,
 			Claude:          gatewayexecution.ClaudeHelper,

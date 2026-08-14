@@ -22,6 +22,16 @@ func RelayWithFormat(relayFormat types.RelayFormat) gin.HandlerFunc {
 	}
 }
 
+// RelayWithCanonicalPath serves compatibility aliases through one canonical protocol path.
+func RelayWithCanonicalPath(path string, relayFormat types.RelayFormat) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request != nil && c.Request.URL != nil {
+			c.Request.URL.Path = path
+		}
+		relayRequest(c, relayFormat)
+	}
+}
+
 // Playground handles authenticated playground text requests.
 func Playground(c *gin.Context) {
 	if c.GetBool("use_access_token") {

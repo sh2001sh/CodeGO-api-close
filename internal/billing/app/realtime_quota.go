@@ -181,7 +181,8 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredOk {
 		quota = tieredQuota
 	}
-	quota = applyUsageConsumptionDiscount(relayInfo.UserId, quota)
+	discountDetail := calculateUsageConsumptionDiscount(relayInfo.UserId, quota)
+	quota = discountDetail.QuotaAfterDiscount
 
 	var logContent string
 	if !usePrice {
@@ -212,6 +213,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
+	appendUsageConsumptionDiscountInfo(other, discountDetail)
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.InputTokens,
@@ -287,7 +289,8 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredOk {
 		quota = tieredQuota
 	}
-	quota = applyUsageConsumptionDiscount(relayInfo.UserId, quota)
+	discountDetail := calculateUsageConsumptionDiscount(relayInfo.UserId, quota)
+	quota = discountDetail.QuotaAfterDiscount
 
 	var logContent string
 	if !usePrice {
@@ -318,6 +321,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
+	appendUsageConsumptionDiscountInfo(other, discountDetail)
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.PromptTokens,

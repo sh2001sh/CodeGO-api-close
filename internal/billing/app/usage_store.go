@@ -12,3 +12,12 @@ func RecordUsageStats(userID int, channelID int, quota int) {
 	identitystore.UpdateUserUsedQuotaAndRequestCount(userID, quota)
 	gatewaystore.UpdateChannelUsedQuota(channelID, quota)
 }
+
+// AdjustUsageQuotaStats adjusts accumulated quota without changing request count.
+func AdjustUsageQuotaStats(userID int, channelID int, quotaDelta int) {
+	if quotaDelta == 0 {
+		return
+	}
+	identitystore.UpdateUserUsedQuota(userID, quotaDelta)
+	gatewaystore.UpdateChannelUsedQuota(channelID, quotaDelta)
+}

@@ -55,6 +55,18 @@ func runSubscriptionMaintenanceOnce() {
 	defer subscriptionMaintenanceRunning.Store(false)
 
 	ctx := context.Background()
+	totalExpiredTopUps := 0
+	for {
+		n, err := ExpireDueTopUps(subscriptionMaintenanceBatchSize)
+		if err != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("pending topup expiry task failed: %v", err))
+			break
+		}
+		totalExpiredTopUps += n
+		if n < subscriptionMaintenanceBatchSize {
+			break
+		}
+	}
 	totalExpired := 0
 	for {
 		n, err := ExpireDueSubscriptions(subscriptionMaintenanceBatchSize)
@@ -105,7 +117,7 @@ func runSubscriptionMaintenanceOnce() {
 			logger.LogWarn(ctx, fmt.Sprintf("monthly pass prop reconciliation failed: %v", err))
 		}
 	}
-	if platformconfig.DebugEnabled && totalExpired > 0 {
-		logger.LogDebug(ctx, "subscription maintenance: expired_count=%d", totalExpired)
+	if platformconfig.DebugEnabled && (totalExpired > 0 || totalExpiredTopUps > 0) {
+		logger.LogDebug(ctx, "commerce maintenance: expired_subscriptions=%d expired_topups=%d", totalExpired, totalExpiredTopUps)
 	}
 }

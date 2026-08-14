@@ -1,9 +1,9 @@
 package app
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"context"
 	"fmt"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
@@ -94,6 +94,7 @@ func recordTaskRefund(ctx context.Context, task *workflowschema.Task, reason str
 		return
 	}
 	taskBillingAdjustTokenQuota(ctx, task, -quota)
+	billingapp.AdjustUsageQuotaStats(task.UserId, task.ChannelId, -quota)
 
 	other := taskBillingOther(task)
 	other["task_id"] = task.TaskID
@@ -154,6 +155,8 @@ func settleTaskQuotaDelta(ctx context.Context, task *workflowschema.Task, actual
 		logType = auditschema.LogTypeConsume
 		logQuota = quotaDelta
 		billingapp.RecordUsageStats(task.UserId, task.ChannelId, quotaDelta)
+	} else {
+		billingapp.AdjustUsageQuotaStats(task.UserId, task.ChannelId, quotaDelta)
 	}
 
 	other := taskBillingOther(task)

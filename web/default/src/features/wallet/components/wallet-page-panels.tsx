@@ -24,6 +24,7 @@ import {
   getOrderedSubscriptions,
   type WalletPlanMeta,
 } from './wallet-panel-utils'
+import { WalletPeerTransferCard } from './wallet-peer-transfer-card'
 import { WalletQuotaConversionCard } from './wallet-quota-conversion-card'
 import { WalletResetOpportunityPanel } from './wallet-reset-opportunity-panel'
 
@@ -42,8 +43,9 @@ interface WalletPagePanelsProps {
   subscriptionLoading?: boolean
   onSubscriptionRefresh?: () => Promise<void>
   onUserRefresh?: () => Promise<void>
-  section: 'funding' | 'conversion' | 'billing'
+  section: 'funding' | 'conversion' | 'transfer' | 'billing'
   onOpenConversionHistory?: () => void
+  onOpenTransferHistory?: () => void
 }
 
 export function WalletPagePanels(props: WalletPagePanelsProps) {
@@ -66,6 +68,7 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   useEffect(() => {
     if (!props.subscriptionData) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraftFundingSourceOrder(
       normalizeFundingSourceOrder(
         props.subscriptionData.funding_source_order,
@@ -293,6 +296,15 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
           />
         )}
       </div>
+    )
+  }
+
+  if (props.section === 'transfer') {
+    return (
+      <WalletPeerTransferCard
+        onUserRefresh={props.onUserRefresh}
+        onOpenHistory={props.onOpenTransferHistory}
+      />
     )
   }
 

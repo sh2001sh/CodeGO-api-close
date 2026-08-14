@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/dto"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	"github.com/stretchr/testify/require"
 )
@@ -38,4 +39,15 @@ func TestConvertOpenAIResponsesRequestPreservesRemoteCompactionV2Fields(t *testi
 	require.JSONEq(t, `"cache-1"`, string(result.PromptCacheKey))
 	require.Equal(t, &maxOutputTokens, result.MaxOutputTokens)
 	require.Equal(t, &temperature, result.Temperature)
+}
+
+func TestGetRequestURLAlphaSearch(t *testing.T) {
+	url, err := (&Adaptor{}).GetRequestURL(&relaycommon.RelayInfo{
+		RelayMode: gatewaycontract.RelayModeAlphaSearch,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl: "https://chatgpt.com",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://chatgpt.com/backend-api/codex/alpha/search", url)
 }

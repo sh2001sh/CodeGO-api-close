@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { CircleAlert, Sparkles, KeyRound } from 'lucide-react'
+import { BadgeCheck, CircleAlert, Sparkles, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
@@ -62,6 +62,23 @@ interface DetailSegment {
   text: string
   muted?: boolean
   danger?: boolean
+}
+
+function UsageDiscountBadge(props: { other: LogOtherData | null }) {
+  const { t } = useTranslation()
+  const multiplier = props.other?.usage_discount_multiplier
+  const isNinetyPercentCard =
+    props.other?.usage_discount_source === 'blind_box_multiplier_card' &&
+    multiplier != null &&
+    Math.abs(multiplier - 0.9) < 0.000001
+  if (!isNinetyPercentCard) return null
+
+  return (
+    <span className='border-success/30 bg-success/10 text-success inline-flex w-fit items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium'>
+      <BadgeCheck className='size-3' aria-hidden='true' />
+      {t('0.9 multiplier card')}
+    </span>
+  )
 }
 
 function formatRatioCompact(ratio: number | undefined): string {
@@ -335,7 +352,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     {affinity && (
                       <button
                         type='button'
-                        className='absolute -top-1 -right-1 leading-none text-warning'
+                        className='text-warning absolute -top-1 -right-1 leading-none'
                         onClick={(e) => {
                           e.stopPropagation()
                           setAffinityTarget({
@@ -563,10 +580,10 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           streamOutputTime != null && streamOutputTime > 0
             ? streamOutputTime / 1000
             : recordedGenerationTime != null && recordedGenerationTime > 0
-            ? recordedGenerationTime / 1000
-            : log.is_stream && frt != null && frt > 0
-              ? Math.max(useTime - frt / 1000, 0)
-              : useTime
+              ? recordedGenerationTime / 1000
+              : log.is_stream && frt != null && frt > 0
+                ? Math.max(useTime - frt / 1000, 0)
+                : useTime
         const throughputTokens =
           log.is_stream && streamOutputTokens != null && streamOutputTokens > 0
             ? streamOutputTokens
@@ -574,7 +591,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const tokensPerSecond =
           generationTime > 0 &&
           throughputTokens > 0 &&
-          (!log.is_stream || streamOutputTokens != null || !/^gpt/i.test(log.model_name))
+          (!log.is_stream ||
+            streamOutputTokens != null ||
+            !/^gpt/i.test(log.model_name))
             ? throughputTokens / generationTime
             : null
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
@@ -673,7 +692,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger
-                        render={<CircleAlert className='size-3 text-destructive' />}
+                        render={
+                          <CircleAlert className='text-destructive size-3' />
+                        }
                       ></TooltipTrigger>
                       <TooltipContent>
                         <div className='space-y-0.5 text-xs'>
@@ -776,6 +797,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               <span className='text-success font-mono text-xs font-semibold tabular-nums'>
                 {formatLogQuota(quota)}
               </span>
+              <UsageDiscountBadge other={other} />
             </div>
           )
         }
@@ -787,6 +809,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <span className='border-border/80 bg-muted/60 inline-flex w-fit items-center rounded-md border px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums'>
               {quotaStr}
             </span>
+            <UsageDiscountBadge other={other} />
           </div>
         )
       },

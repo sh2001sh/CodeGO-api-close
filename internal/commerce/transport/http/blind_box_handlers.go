@@ -127,6 +127,23 @@ func getBalanceBlindBoxOverview(c *gin.Context) {
 	httpapi.ApiSuccess(c, gin.H{"balance_blind_box": overview})
 }
 
+func purchaseBalanceBlindBoxes(c *gin.Context) {
+	var req struct {
+		RequestID string `json:"request_id" binding:"required"`
+		Count     int    `json:"count" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "request_id and count are required")
+		return
+	}
+	result, err := commerceapp.PurchaseBalanceBlindBoxes(c.GetInt("id"), req.RequestID, req.Count)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, result)
+}
+
 func openBalanceBlindBox(c *gin.Context) {
 	var req struct {
 		RequestID string `json:"request_id" binding:"required"`
@@ -137,6 +154,20 @@ func openBalanceBlindBox(c *gin.Context) {
 		return
 	}
 	result, err := commerceapp.OpenBalanceBlindBox(c.GetInt("id"), req.RequestID, req.Count)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, result)
+}
+
+func giftBalanceBlindBoxes(c *gin.Context) {
+	var req commerceapp.GiftBalanceBlindBoxRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "recipient_external_id, request_id and count are required")
+		return
+	}
+	result, err := commerceapp.GiftBalanceBlindBoxes(c.GetInt("id"), req)
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

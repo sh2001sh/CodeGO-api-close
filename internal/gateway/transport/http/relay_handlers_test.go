@@ -157,6 +157,20 @@ func TestFinalizeRelayErrorSkipsCancelledClient(t *testing.T) {
 	require.Empty(t, recorder.Body.String())
 }
 
+func TestFinalizeRelayErrorDoesNotAppendAfterResponsesTerminalEvent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyIsStream, true)
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	ctx.Set(string(constant.ContextKeyResponsesTerminalSent), true)
+	apiErr := types.NewOpenAIError(errors.New("upstream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	finalizeRelayError(ctx, types.RelayFormatOpenAIResponses, nil, apiErr, "downstream")
+	require.Empty(t, recorder.Body.String())
+}
+
 func TestShouldNotRetryAfterClientDisconnect(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

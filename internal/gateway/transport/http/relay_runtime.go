@@ -314,6 +314,9 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 			rawMessageWithRequestID = platformtext.SanitizeUpstreamProviderErrorMessage(rawMessageWithRequestID)
 		}
 		apiErr.SetMessage(rawMessageWithRequestID)
+		if c.GetBool(string(constant.ContextKeyResponsesTerminalSent)) {
+			return
+		}
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
 			relaycommon.WssError(c, ws, apiErr.ToOpenAIError())

@@ -34,6 +34,17 @@ type ModelRequest struct {
 }
 
 func Distribute() func(c *gin.Context) {
+	return distributeWithHandler(nil)
+}
+
+// DistributeWithHandler runs channel distribution around an explicit handler.
+// It is used by transports that create a request context after the outer HTTP
+// middleware chain has already completed, such as Responses WebSocket turns.
+func DistributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
+	return distributeWithHandler(next)
+}
+
+func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer gatewayruntime.ReleaseAllCoolingFallbacks(c)
 		var channel *gatewayschema.Channel
@@ -180,7 +191,11 @@ func Distribute() func(c *gin.Context) {
 			}
 		}
 		gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-		c.Next()
+		if next != nil {
+			next(c)
+		} else {
+			c.Next()
+		}
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			gatewayruntime.RecordChannelAffinity(c, channel.Id)
 			gatewayroutingapp.RecordAutomaticPoolAffinity(c, channel.Id)

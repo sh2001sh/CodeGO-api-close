@@ -60,6 +60,19 @@ func TestChatCompletionsToResponsesAllowsEmptyToolCallList(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestChatCompletionsToResponsesPreservesPenalties(t *testing.T) {
+	frequencyPenalty := 0.4
+	presencePenalty := -0.2
+	request := chatRequestWithMessages(dto.Message{Role: "user", Content: "hello"})
+	request.FrequencyPenalty = &frequencyPenalty
+	request.PresencePenalty = &presencePenalty
+
+	converted, err := ChatCompletionsRequestToResponsesRequest(request)
+	require.NoError(t, err)
+	require.Equal(t, &frequencyPenalty, converted.FrequencyPenalty)
+	require.Equal(t, &presencePenalty, converted.PresencePenalty)
+}
+
 func TestChatCompletionsToResponsesRejectsIncompleteToolHistory(t *testing.T) {
 	testCases := []struct {
 		name     string

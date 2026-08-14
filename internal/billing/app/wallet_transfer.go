@@ -11,11 +11,16 @@ import (
 
 // DebitWalletQuotaTx atomically debits the standard wallet and its ledger mirror.
 func DebitWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string) error {
+	return DebitWalletQuotaTxWithReason(tx, userID, amount, operationID, "wallet_quota_conversion_debit")
+}
+
+// DebitWalletQuotaTxWithReason debits the standard wallet with an explicit ledger reason.
+func DebitWalletQuotaTxWithReason(tx *gorm.DB, userID int, amount int, operationID, reasonCode string) error {
 	return debitUserWalletQuotaTx(tx, userID, amount, operationID, mirroredWalletTxStore{
 		accountType: billingAccountTypeWallet,
 		readBalance: getUserWalletQuotaTx,
 		applyDelta:  decreaseUserWalletQuotaTx,
-	}, true)
+	}, true, reasonCode)
 }
 
 // DebitClaudeWalletQuotaTx atomically debits the Claude wallet and its ledger mirror.
@@ -24,10 +29,10 @@ func DebitClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID s
 		accountType: billingAccountTypeClaudeWallet,
 		readBalance: getUserClaudeWalletQuotaTx,
 		applyDelta:  decreaseUserClaudeWalletQuotaTx,
-	}, false)
+	}, false, "wallet_quota_conversion_debit")
 }
 
-func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string, mirrored mirroredWalletTxStore, consumeBonus bool) error {
+func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string, mirrored mirroredWalletTxStore, consumeBonus bool, reasonCode string) error {
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
@@ -49,7 +54,7 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID str
 	if err := reconcileAccountBalanceTx(tx, account, userID, legacyBalance); err != nil {
 		return err
 	}
-	if err := applyLedgerDeltaTx(tx, account, userID, amount, operationID, "wallet_quota_conversion_debit"); err != nil {
+	if err := applyLedgerDeltaTx(tx, account, userID, amount, operationID, defaultReasonCode(reasonCode, "wallet_debit")); err != nil {
 		return err
 	}
 	if err := mirrored.applyDelta(tx, userID, amount); err != nil {

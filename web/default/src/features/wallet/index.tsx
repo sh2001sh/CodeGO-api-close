@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowRightLeft, CreditCard, SlidersHorizontal } from 'lucide-react'
+import {
+  ArrowRightLeft,
+  CreditCard,
+  Send,
+  SlidersHorizontal,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
@@ -9,6 +14,7 @@ import { RechargeFormCard } from './components/recharge-form-card'
 import { WalletAccountOverview } from './components/wallet-account-overview'
 import { WalletPagePanels } from './components/wallet-page-panels'
 import { WalletQuotaConversionHistorySheet } from './components/wallet-quota-conversion-history-sheet'
+import { WalletTransferHistorySheet } from './components/wallet-transfer-history-sheet'
 import { WalletWorkspaceShell } from './components/wallet-workspace-shell'
 import { useWalletWorkspace } from './hooks/use-wallet-workspace'
 import type { WalletType } from './types'
@@ -25,9 +31,10 @@ export function Wallet(props: WalletProps) {
   })
   const setBillingDialogOpen = workspace.setBillingDialogOpen
   const [activeSection, setActiveSection] = useState<
-    'funding' | 'conversion' | 'billing'
+    'funding' | 'conversion' | 'transfer' | 'billing'
   >('funding')
   const [conversionHistoryOpen, setConversionHistoryOpen] = useState(false)
+  const [transferHistoryOpen, setTransferHistoryOpen] = useState(false)
 
   useEffect(() => {
     if (!props.initialShowHistory) return
@@ -42,7 +49,7 @@ export function Wallet(props: WalletProps) {
       <WalletWorkspaceShell
         title={t('Wallet')}
         description={t(
-          'Manage top-ups, Claude quota conversion, redemption codes, and billing priority in one place.'
+          'Manage top-ups, quota conversion, secure transfers, redemption codes, and billing priority in one place.'
         )}
         canonicalPath='/wallet'
         framedMain={false}
@@ -55,17 +62,21 @@ export function Wallet(props: WalletProps) {
               }
               onSelectFunding={() => setActiveSection('funding')}
               onSelectConversion={() => setActiveSection('conversion')}
+              onSelectTransfer={() => setActiveSection('transfer')}
               onOpenBillingHistory={() => workspace.setBillingDialogOpen(true)}
               onOpenConversionHistory={() => setConversionHistoryOpen(true)}
+              onOpenTransferHistory={() => setTransferHistoryOpen(true)}
             />
 
             <Tabs
               value={activeSection}
               onValueChange={(value) =>
-                setActiveSection(value as 'funding' | 'conversion' | 'billing')
+                setActiveSection(
+                  value as 'funding' | 'conversion' | 'transfer' | 'billing'
+                )
               }
             >
-              <TabsList className='grid w-full grid-cols-3'>
+              <TabsList className='grid h-auto w-full grid-cols-2 sm:grid-cols-4'>
                 <TabsTrigger value='funding'>
                   <CreditCard className='size-4' />
                   {t('Top up and redeem')}
@@ -73,6 +84,10 @@ export function Wallet(props: WalletProps) {
                 <TabsTrigger value='conversion'>
                   <ArrowRightLeft className='size-4' />
                   {t('Quota conversion')}
+                </TabsTrigger>
+                <TabsTrigger value='transfer'>
+                  <Send className='size-4' />
+                  {t('Quota transfer')}
                 </TabsTrigger>
                 <TabsTrigger value='billing'>
                   <SlidersHorizontal className='size-4' />
@@ -133,6 +148,7 @@ export function Wallet(props: WalletProps) {
               onUserRefresh={workspace.fetchUser}
               section={activeSection}
               onOpenConversionHistory={() => setConversionHistoryOpen(true)}
+              onOpenTransferHistory={() => setTransferHistoryOpen(true)}
             />
           </div>
         }
@@ -159,6 +175,11 @@ export function Wallet(props: WalletProps) {
       <WalletQuotaConversionHistorySheet
         open={conversionHistoryOpen}
         onOpenChange={setConversionHistoryOpen}
+      />
+
+      <WalletTransferHistorySheet
+        open={transferHistoryOpen}
+        onOpenChange={setTransferHistoryOpen}
       />
 
       <CreemConfirmDialog

@@ -60,6 +60,8 @@ func getAndValidateRequest(c *gin.Context, format types.RelayFormat) (dto.Reques
 		return getAndValidateResponsesRequest(c)
 	case types.RelayFormatOpenAIResponsesCompaction:
 		return getAndValidateResponsesCompactionRequest(c)
+	case types.RelayFormatOpenAIAlphaSearch:
+		return getAndValidateAlphaSearchRequest(c)
 	case types.RelayFormatOpenAIImage:
 		return getAndValidOpenAIImageRequest(c, relayMode)
 	case types.RelayFormatEmbedding:
@@ -73,6 +75,26 @@ func getAndValidateRequest(c *gin.Context, format types.RelayFormat) (dto.Reques
 	default:
 		return nil, fmt.Errorf("unsupported relay format: %s", format)
 	}
+}
+
+func getAndValidateAlphaSearchRequest(c *gin.Context) (*dto.AlphaSearchRequest, error) {
+	storage, err := platformhttpx.GetBodyStorage(c)
+	if err != nil {
+		return nil, err
+	}
+	rawBody, err := storage.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	request := &dto.AlphaSearchRequest{}
+	if err := platformencoding.Unmarshal(rawBody, request); err != nil {
+		return nil, err
+	}
+	if request.Model == "" {
+		return nil, errors.New("model is required")
+	}
+	request.RawBody = append(request.RawBody[:0], rawBody...)
+	return request, nil
 }
 
 func getAndValidAudioRequest(c *gin.Context, relayMode int) (*dto.AudioRequest, error) {

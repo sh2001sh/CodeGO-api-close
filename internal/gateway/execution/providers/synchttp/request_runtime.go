@@ -56,6 +56,19 @@ func applyUpstreamContentLength(req *http.Request, info *relaycommon.RelayInfo) 
 	}
 }
 
+func applyReplayableRequestBody(req *http.Request, body io.Reader) {
+	if req == nil || req.GetBody != nil || body == nil {
+		return
+	}
+	replayable, ok := body.(interface {
+		NewReader() (io.ReadCloser, error)
+	})
+	if !ok {
+		return
+	}
+	req.GetBody = replayable.NewReader
+}
+
 func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) context.CancelFunc {
 	pingerCtx, stopPinger := context.WithCancel(context.Background())
 
@@ -234,6 +247,7 @@ func DoAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
 	applyUpstreamContentLength(req, info)
+	applyReplayableRequestBody(req, requestBody)
 
 	headers := req.Header
 	if err := a.SetupRequestHeader(c, &headers, info); err != nil {
@@ -266,6 +280,7 @@ func DoFormAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayI
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
 	applyUpstreamContentLength(req, info)
+	applyReplayableRequestBody(req, requestBody)
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 
 	headers := req.Header

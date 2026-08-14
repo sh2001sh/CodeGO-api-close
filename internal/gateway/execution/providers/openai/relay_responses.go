@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
@@ -101,6 +102,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var sawSemanticOutput atomic.Bool
 	var sawResponseCompleted atomic.Bool
 	var firstOutputTimedOut atomic.Bool
+	var terminalFailure error
 	var preOutputEvents []bufferedResponsesStreamEvent
 	preOutputEventsBuffered := 0
 	preOutputEventsDropped := 0
@@ -137,6 +139,18 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		}
 		semanticOutput := hasResponsesStreamContent(streamResponse)
 		textOutput := isResponsesTextDelta(streamResponse)
+		if isResponsesFailureEvent(streamResponse) {
+			terminalFailure = responsesFailureError(streamResponse)
+			if sawSemanticOutput.Load() {
+				if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+					sr.Stop(err)
+					return
+				}
+				c.Set(string(constant.ContextKeyResponsesTerminalSent), true)
+			}
+			sr.Stop(terminalFailure)
+			return
+		}
 		if semanticOutput {
 			if sawSemanticOutput.CompareAndSwap(false, true) {
 				if info.FirstByteTrace != nil {
@@ -164,6 +178,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				return
 			}
 		} else if streamResponse.Type == "response.completed" {
+			if !sawSemanticOutput.Load() && !hasResponsesCompletedContent(streamResponse) {
+				terminalFailure = errors.New("upstream returned an empty response.completed event")
+				sr.Stop(terminalFailure)
+				return
+			}
 			sawResponseCompleted.Store(true)
 			if firstOutputTimer != nil {
 				firstOutputTimer.Stop()
@@ -252,9 +271,18 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		)
 	}
 
+	if terminalFailure != nil {
+		options := make([]types.NewAPIErrorOptions, 0, 1)
+		if c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+			options = append(options, types.ErrOptionWithSkipRetry())
+		}
+		return nil, types.NewOpenAIError(terminalFailure, types.ErrorCodeBadResponse, http.StatusBadGateway, options...)
+	}
+
 	if !sawResponseCompleted.Load() {
 		options := make([]types.NewAPIErrorOptions, 0, 1)
 		if c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+			_ = sendSyntheticResponsesFailure(c, info, "upstream stream closed before response.completed")
 			options = append(options, types.ErrOptionWithSkipRetry())
 		}
 		return nil, types.NewOpenAIError(
@@ -337,19 +365,6 @@ func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayI
 		}
 	}
 	return nil
-}
-
-func hasResponsesStreamContent(streamResponse dto.ResponsesStreamResponse) bool {
-	if streamResponse.Delta != "" && strings.HasSuffix(streamResponse.Type, ".delta") {
-		return true
-	}
-	if streamResponse.Type != dto.ResponsesOutputTypeItemAdded || streamResponse.Item == nil {
-		return false
-	}
-	// Remote compaction v2 produces a compaction output item rather than text.
-	// It is client-visible semantic output and must leave the lifecycle buffer
-	// immediately, otherwise a later upstream disconnect yields zero items.
-	return streamResponse.Item.Type == "function_call" || streamResponse.Item.Type == "compaction"
 }
 
 func isResponsesTextDelta(streamResponse dto.ResponsesStreamResponse) bool {

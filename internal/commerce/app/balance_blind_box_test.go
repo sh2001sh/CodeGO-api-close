@@ -1,199 +1,185 @@
 package app
 
 import (
-	"errors"
+	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 
-	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
+	"github.com/sh2001sh/new-api/constant"
 	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
-func TestOpenBalanceBlindBoxDebitsOnceAndDoesNotIssueLuckyNumber(t *testing.T) {
+func TestBalanceBlindBoxPurchaseCreatesSealedInventoryAndDebitsOnce(t *testing.T) {
 	db := setupRedemptionTestDB(t)
-	original := blindboxsettings.Get()
-	setting := original
-	setting.Enabled = true
-	setting.BalanceBlindBoxEnabled = true
-	setting.BalanceBlindBoxPriceUSD = 15
-	setting.BalanceBlindBoxPityThreshold = 50
-	setting.BalanceBlindBoxSmallPityThreshold = 10
-	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{
-		Name: "$3 普通额度", MinUSD: 3, MaxUSD: 3, Probability: 1,
-		RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: "default",
-	}}
-	blindboxsettings.Set(setting)
-	t.Cleanup(func() { blindboxsettings.Set(original) })
+	setBalanceBlindBoxTestSetting(t, 10)
+	user := createBalanceBlindBoxTestUser(t, db, 8891, "BBX001", 100)
 
-	startingQuota := int(math.Round(100 * platformruntime.QuotaPerUnit))
-	user := &identityschema.User{Id: 8891, Username: "balance_blind_box_user", Quota: startingQuota, AffCode: "balance-box-user"}
-	require.NoError(t, db.Create(user).Error)
-
-	first, err := OpenBalanceBlindBox(user.Id, "balance-box-request-1")
+	first, err := PurchaseBalanceBlindBoxes(user.Id, "balance-purchase-1", 1)
 	require.NoError(t, err)
-	require.Equal(t, commerceschema.BlindBoxPoolTypeBalance15, first.Record.PoolType)
-	require.Equal(t, 10.0, first.Record.RewardUSD)
-	require.Empty(t, first.Record.LuckyNumber)
-	require.InDelta(t, 95.0, first.BalanceUSD, 0.000001)
+	require.Equal(t, int64(1), first.Overview.InventoryCount)
+	require.InDelta(t, 85, first.Overview.BalanceUSD, 0.000001)
 
-	second, err := OpenBalanceBlindBox(user.Id, "balance-box-request-1")
+	replayed, err := PurchaseBalanceBlindBoxes(user.Id, "balance-purchase-1", 1)
 	require.NoError(t, err)
-	require.Equal(t, first.Record.Id, second.Record.Id)
-	require.InDelta(t, 95.0, second.BalanceUSD, 0.000001)
+	require.Equal(t, first.Purchase.Id, replayed.Purchase.Id)
+	require.Equal(t, int64(1), replayed.Overview.InventoryCount)
+	require.InDelta(t, 85, replayed.Overview.BalanceUSD, 0.000001)
+
+	var item commerceschema.BalanceBlindBoxItem
+	require.NoError(t, db.First(&item).Error)
+	require.Equal(t, 10.0, item.RewardUSD)
+	encoded, err := json.Marshal(item)
+	require.NoError(t, err)
+	jsonText := string(encoded)
+	for _, hidden := range []string{"reward_usd", "reward_type", "reward_tier", "credit_amount", "guarantee_type"} {
+		require.NotContains(t, jsonText, hidden)
+	}
+}
+
+func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitOrLuckyNumber(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	setBalanceBlindBoxTestSetting(t, 10)
+	user := createBalanceBlindBoxTestUser(t, db, 8892, "BBX002", 100)
+	_, err := PurchaseBalanceBlindBoxes(user.Id, "balance-purchase-open", 1)
+	require.NoError(t, err)
+
+	opened, err := OpenBalanceBlindBox(user.Id, "balance-open-1", 1)
+	require.NoError(t, err)
+	require.Equal(t, 10.0, opened.Record.RewardUSD)
+	require.Empty(t, opened.Record.LuckyNumber)
+	require.InDelta(t, 95, opened.BalanceUSD, 0.000001)
+	require.Zero(t, opened.Overview.InventoryCount)
+
+	replayed, err := OpenBalanceBlindBox(user.Id, "balance-open-1", 1)
+	require.NoError(t, err)
+	require.Equal(t, opened.Record.Id, replayed.Record.Id)
+	require.InDelta(t, 95, replayed.BalanceUSD, 0.000001)
 
 	var luckyCount int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).Count(&luckyCount).Error)
 	require.Zero(t, luckyCount)
-	var recordCount int64
-	require.NoError(t, db.Model(&commerceschema.BlindBoxOpenRecord{}).Where("pool_type = ?", commerceschema.BlindBoxPoolTypeBalance15).Count(&recordCount).Error)
-	require.Equal(t, int64(1), recordCount)
 }
 
-func TestOpenBalanceBlindBoxSupportsBatchOpening(t *testing.T) {
+func TestBalanceBlindBoxPurchaseEnforcesDailyLimit(t *testing.T) {
 	db := setupRedemptionTestDB(t)
-	original := blindboxsettings.Get()
-	setting := original
-	setting.Enabled = true
-	setting.BalanceBlindBoxEnabled = true
-	setting.BalanceBlindBoxPriceUSD = 15
-	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{Name: "$1-$3 普通额度", MinUSD: 1, MaxUSD: 3, Probability: 1, RewardType: "quota", WalletType: "default"}}
-	blindboxsettings.Set(setting)
-	t.Cleanup(func() { blindboxsettings.Set(original) })
-	user := &identityschema.User{Id: 8895, Username: "balance_blind_box_batch", Quota: int(100 * platformruntime.QuotaPerUnit), AffCode: "balance-box-batch"}
-	require.NoError(t, db.Create(user).Error)
-	result, err := OpenBalanceBlindBox(user.Id, "balance-box-request-batch", 3)
+	setBalanceBlindBoxTestSetting(t, 2)
+	user := createBalanceBlindBoxTestUser(t, db, 8893, "BBX003", 100)
+
+	_, err := PurchaseBalanceBlindBoxes(user.Id, "balance-limit-1", 2)
 	require.NoError(t, err)
-	require.Len(t, result.Records, 3)
-	require.GreaterOrEqual(t, result.BalanceUSD, 67.0)
-	require.LessOrEqual(t, result.BalanceUSD, 71.0)
-	for _, record := range result.Records {
-		require.Equal(t, commerceschema.BlindBoxPoolTypeBalance15, record.PoolType)
-		require.Empty(t, record.LuckyNumber)
-	}
+	_, err = PurchaseBalanceBlindBoxes(user.Id, "balance-limit-2", 1)
+	require.ErrorContains(t, err, "每日最多购买 2 个")
+
+	overview, err := GetBalanceBlindBoxOverview(user.Id)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), overview.PurchasedToday)
+	require.Zero(t, overview.RemainingPurchaseLimit)
+	require.Equal(t, int64(2), overview.InventoryCount)
 }
 
-func TestOpenBalanceBlindBoxSupportsOneHundredDraws(t *testing.T) {
+func TestBalanceBlindBoxGiftAndRegiftPreserveSealedGuarantee(t *testing.T) {
 	db := setupRedemptionTestDB(t)
-	original := blindboxsettings.Get()
-	setting := original
-	setting.Enabled = true
-	setting.BalanceBlindBoxEnabled = true
-	setting.BalanceBlindBoxPriceUSD = 15
-	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{Name: "$1 普通额度", MinUSD: 1, MaxUSD: 1, Probability: 1, RewardType: "quota", WalletType: "default"}}
-	blindboxsettings.Set(setting)
-	t.Cleanup(func() { blindboxsettings.Set(original) })
+	setBalanceBlindBoxTestSetting(t, 10)
+	purchaser := createBalanceBlindBoxTestUser(t, db, 8894, "BBX004", 100)
+	recipient := createBalanceBlindBoxTestUser(t, db, 8895, "BBX005", 0)
+	finalOwner := createBalanceBlindBoxTestUser(t, db, 8896, "BBX006", 0)
+	_, err := PurchaseBalanceBlindBoxes(purchaser.Id, "balance-gift-purchase", 1)
+	require.NoError(t, err)
 
-	user := &identityschema.User{Id: 8897, Username: "balance_blind_box_hundred", Quota: int(2000 * platformruntime.QuotaPerUnit), AffCode: "balance-box-hundred"}
-	require.NoError(t, db.Create(user).Error)
-	result, err := OpenBalanceBlindBox(user.Id, "balance-box-request-hundred", 100)
+	firstGift, err := GiftBalanceBlindBoxes(purchaser.Id, GiftBalanceBlindBoxRequest{
+		RecipientExternalId: recipient.ExternalId, RequestId: "balance-gift-1", Count: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, recipient.ExternalId, firstGift.Recipient.ExternalId)
+	require.Zero(t, firstGift.Overview.InventoryCount)
+
+	_, err = GiftBalanceBlindBoxes(recipient.Id, GiftBalanceBlindBoxRequest{
+		RecipientExternalId: finalOwner.ExternalId, RequestId: "balance-gift-2", Count: 1,
+	})
+	require.NoError(t, err)
+	opened, err := OpenBalanceBlindBox(finalOwner.Id, "balance-gift-open", 1)
+	require.NoError(t, err)
+	require.True(t, opened.Record.IsPity)
+	require.Equal(t, 10.0, opened.Record.RewardUSD)
+
+	var links []commerceschema.BalanceBlindBoxGiftItem
+	require.NoError(t, db.Order("id asc").Find(&links).Error)
+	require.Len(t, links, 2)
+	require.Equal(t, purchaser.Id, links[0].FromUserId)
+	require.Equal(t, recipient.Id, links[0].ToUserId)
+	require.Equal(t, recipient.Id, links[1].FromUserId)
+	require.Equal(t, finalOwner.Id, links[1].ToUserId)
+	require.Equal(t, links[0].ItemId, links[1].ItemId)
+}
+
+func TestBalanceBlindBoxSupportsOpeningOneHundredOwnedItems(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	setBalanceBlindBoxTestSetting(t, 10)
+	user := createBalanceBlindBoxTestUser(t, db, 8897, "BBX007", 0)
+	items := make([]commerceschema.BalanceBlindBoxItem, 100)
+	for index := range items {
+		items[index] = commerceschema.BalanceBlindBoxItem{
+			PurchaseUserId: user.Id, OwnerUserId: user.Id, PoolVersion: balanceBlindBoxPoolVersion,
+			RewardType: commerceschema.BlindBoxRewardTypeQuota, RewardTier: "$1 普通额度",
+			RewardUSD: 1, CreditAmount: quotaUnitsFromBlindBoxUSD(1), RewardTitle: "1.00 美元奖励",
+			RewardWalletType: string(commerceschema.BlindBoxRewardWalletTypeDefault), GuaranteeType: balanceBlindBoxGuaranteeNone,
+		}
+	}
+	require.NoError(t, db.Create(&items).Error)
+
+	result, err := OpenBalanceBlindBox(user.Id, "balance-open-100", 100)
 	require.NoError(t, err)
 	require.Len(t, result.Records, 100)
-
-	replayed, err := OpenBalanceBlindBox(user.Id, "balance-box-request-hundred", 100)
-	require.NoError(t, err)
-	require.Len(t, replayed.Records, 100)
-	var count int64
-	require.NoError(t, db.Model(&commerceschema.BlindBoxOpenRecord{}).Where("user_id = ? AND pool_type = ?", user.Id, commerceschema.BlindBoxPoolTypeBalance15).Count(&count).Error)
-	require.Equal(t, int64(100), count)
+	require.InDelta(t, 100, result.BalanceUSD, 0.000001)
+	require.Zero(t, result.Overview.InventoryCount)
 }
 
-func TestOpenBalanceBlindBoxRejectsInsufficientBalanceWithoutRecord(t *testing.T) {
+func TestBalanceBlindBoxGiftRejectsSelfAndInsufficientInventory(t *testing.T) {
 	db := setupRedemptionTestDB(t)
-	original := blindboxsettings.Get()
-	setting := original
-	setting.Enabled = true
-	setting.BalanceBlindBoxEnabled = true
-	setting.BalanceBlindBoxPriceUSD = 15
-	blindboxsettings.Set(setting)
-	t.Cleanup(func() { blindboxsettings.Set(original) })
+	setBalanceBlindBoxTestSetting(t, 10)
+	user := createBalanceBlindBoxTestUser(t, db, 8898, "BBX008", 0)
+	other := createBalanceBlindBoxTestUser(t, db, 8899, "BBX009", 0)
 
-	user := &identityschema.User{Id: 8892, Username: "balance_blind_box_low_balance", Quota: int(14 * platformruntime.QuotaPerUnit), AffCode: "balance-box-low"}
-	require.NoError(t, db.Create(user).Error)
-
-	_, err := OpenBalanceBlindBox(user.Id, "balance-box-request-low")
+	_, err := GiftBalanceBlindBoxes(user.Id, GiftBalanceBlindBoxRequest{RecipientExternalId: user.ExternalId, RequestId: "gift-self", Count: 1})
 	require.Error(t, err)
-	require.False(t, errors.Is(err, billingdomain.ErrInsufficientBalance))
-	var recordCount int64
-	require.NoError(t, db.Model(&commerceschema.BlindBoxOpenRecord{}).Count(&recordCount).Error)
-	require.Zero(t, recordCount)
+	_, err = GiftBalanceBlindBoxes(user.Id, GiftBalanceBlindBoxRequest{RecipientExternalId: strings.ToLower(other.ExternalId), RequestId: "gift-empty", Count: 1})
+	require.ErrorContains(t, err, "库存不足")
 }
 
-func TestBalanceBlindBoxFiftiethDrawUsesIndependentGuarantee(t *testing.T) {
-	db := setupRedemptionTestDB(t)
+func setBalanceBlindBoxTestSetting(t *testing.T, dailyLimit int) {
+	t.Helper()
 	original := blindboxsettings.Get()
 	setting := original
 	setting.Enabled = true
 	setting.BalanceBlindBoxEnabled = true
 	setting.BalanceBlindBoxPriceUSD = 15
+	setting.BalanceBlindBoxDailyPurchaseLimit = dailyLimit
 	setting.BalanceBlindBoxPityThreshold = 50
 	setting.BalanceBlindBoxSmallPityThreshold = 10
 	setting.BalanceBlindBoxPityGuaranteeUSD = 35
+	setting.BalanceBlindBoxSmallPityGuaranteeUSD = 10
+	setting.BalanceBlindBoxFirstDrawGuaranteeUSD = 10
 	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{
-		Name: "$1.5 普通额度", MinUSD: 1.5, MaxUSD: 1.5, Probability: 1,
+		Name: "$1 普通额度", MinUSD: 1, MaxUSD: 1, Probability: 1,
 		RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: "default",
 	}}
 	blindboxsettings.Set(setting)
 	t.Cleanup(func() { blindboxsettings.Set(original) })
-
-	user := &identityschema.User{Id: 8893, Username: "balance_blind_box_pity", Quota: int(100 * platformruntime.QuotaPerUnit), AffCode: "balance-box-pity"}
-	require.NoError(t, db.Create(user).Error)
-	require.NoError(t, db.Create(&commerceschema.BalanceBlindBoxPityState{UserId: user.Id, ConsecutiveUnder35USD: 49}).Error)
-
-	result, err := OpenBalanceBlindBox(user.Id, "balance-box-request-pity")
-	require.NoError(t, err)
-	require.True(t, result.Record.IsPity)
-	require.Equal(t, 35.0, result.Record.RewardUSD)
-	require.Zero(t, result.Overview.PityProgress)
 }
 
-func TestBalanceBlindBoxTenthDrawUsesSmallGuarantee(t *testing.T) {
-	db := setupRedemptionTestDB(t)
-	original := blindboxsettings.Get()
-	setting := original
-	setting.Enabled = true
-	setting.BalanceBlindBoxEnabled = true
-	setting.BalanceBlindBoxPriceUSD = 15
-	setting.BalanceBlindBoxPityThreshold = 50
-	setting.BalanceBlindBoxSmallPityThreshold = 10
-	setting.BalanceBlindBoxSmallPityGuaranteeUSD = 10
-	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{Name: "$1.5 普通额度", MinUSD: 1.5, MaxUSD: 1.5, Probability: 1, RewardType: "quota", WalletType: "default"}}
-	blindboxsettings.Set(setting)
-	t.Cleanup(func() { blindboxsettings.Set(original) })
-
-	user := &identityschema.User{Id: 8894, Username: "balance_blind_box_small_pity", Quota: int(200 * platformruntime.QuotaPerUnit), AffCode: "balance-box-small-pity"}
+func createBalanceBlindBoxTestUser(t *testing.T, db *gorm.DB, id int, externalID string, balanceUSD float64) *identityschema.User {
+	t.Helper()
+	user := &identityschema.User{
+		Id: id, Username: "balance_box_" + externalID, ExternalId: externalID,
+		Quota:   int(math.Round(balanceUSD * float64(platformruntime.QuotaPerUnit))),
+		AffCode: "aff-" + externalID, Status: constant.UserStatusEnabled,
+	}
 	require.NoError(t, db.Create(user).Error)
-	require.NoError(t, db.Create(&commerceschema.BalanceBlindBoxPityState{UserId: user.Id, ConsecutiveUnder6USD: 9, ConsecutiveUnder35USD: 9}).Error)
-
-	result, err := OpenBalanceBlindBox(user.Id, "balance-box-request-small-pity")
-	require.NoError(t, err)
-	require.True(t, result.Record.IsPity)
-	require.Equal(t, 10.0, result.Record.RewardUSD)
-	require.Equal(t, 0, result.Overview.SmallPityProgress)
-	require.Equal(t, 10, result.Overview.PityProgress)
-}
-
-func TestBalanceBlindBoxFirstDrawUsesGuarantee(t *testing.T) {
-	db := setupRedemptionTestDB(t)
-	require.NoError(t, db.AutoMigrate(&commerceschema.BalanceBlindBoxPityState{}))
-	setting := blindboxsettings.Get()
-	setting.Enabled = true
-	setting.BalanceBlindBoxEnabled = true
-	setting.BalanceBlindBoxPriceUSD = 15
-	setting.BalanceBlindBoxFirstDrawGuaranteeUSD = 10
-	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{Name: "$1-$3", MinUSD: 1, MaxUSD: 3, Probability: 1, RewardType: "quota", WalletType: "default"}}
-	blindboxsettings.Set(setting)
-
-	user := &identityschema.User{Id: 8896, Username: "balance-blind-box-first", Quota: int(50 * platformruntime.QuotaPerUnit), AffCode: "balance-box-first"}
-	require.NoError(t, db.Create(user).Error)
-
-	result, err := OpenBalanceBlindBox(user.Id, "balance-box-first-request")
-	require.NoError(t, err)
-	require.Len(t, result.Records, 1)
-	require.Equal(t, 10.0, result.Records[0].RewardUSD)
-	require.True(t, result.Records[0].IsPity)
-	require.False(t, result.Overview.FirstDrawEligible)
+	return user
 }

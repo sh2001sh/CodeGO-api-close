@@ -134,6 +134,64 @@ export type WalletQuotaConversionOverviewResponse =
   ApiResponse<WalletQuotaConversionOverview>
 export type WalletQuotaConversionResponse = ApiResponse<WalletQuotaConversion>
 
+export interface WalletTransferSecurityOverview {
+  password_set: boolean
+  locked_until: number
+  remaining_password_attempts: number
+  requires_account_password: boolean
+}
+
+export interface WalletTransferHistoryItem {
+  id: number
+  request_id: string
+  direction: 'incoming' | 'outgoing'
+  counterparty_external_id: string
+  counterparty_display_name_masked: string
+  amount_quota: number
+  balance_after: number
+  status: string
+  created_at: number
+}
+
+export interface WalletTransferHistoryPage {
+  page: number
+  page_size: number
+  total: number
+  items: WalletTransferHistoryItem[]
+}
+
+export interface WalletTransferOverview {
+  quota_per_usd: number
+  min_quota: number
+  balance: number
+  security: WalletTransferSecurityOverview
+  history: WalletTransferHistoryPage
+}
+
+export interface WalletTransferRecipient {
+  external_id: string
+  display_name_masked: string
+}
+
+export interface ConfigureWalletTransferPasswordRequest {
+  current_password?: string
+  old_payment_password?: string
+  new_payment_password: string
+  confirm_password: string
+}
+
+export interface CreateWalletTransferRequest {
+  recipient_external_id: string
+  amount_quota: number
+  payment_password: string
+  request_id: string
+}
+
+export type WalletTransferOverviewResponse = ApiResponse<WalletTransferOverview>
+export type WalletTransferRecipientResponse =
+  ApiResponse<WalletTransferRecipient>
+export type WalletTransferResponse = ApiResponse<WalletTransferHistoryItem>
+
 /**
  * Payment method configuration
  */
@@ -514,6 +572,10 @@ export interface BalanceBlindBoxOverview {
   price_usd: number
   balance_usd: number
   tiers: BlindBoxTier[]
+  inventory_count: number
+  purchased_today: number
+  daily_purchase_limit: number
+  remaining_purchase_limit: number
   pity_progress: number
   pity_threshold: number
   pity_guarantee_usd: number
@@ -522,6 +584,29 @@ export interface BalanceBlindBoxOverview {
   small_pity_guarantee_usd: number
   first_draw_guarantee_usd: number
   first_draw_eligible: boolean
+}
+
+export interface BalanceBlindBoxPurchase {
+  id: number
+  request_id: string
+  quantity: number
+  unit_price_usd: number
+  total_quota: number
+  purchase_date: string
+  status: string
+  created_at: number
+}
+
+export interface BalanceBlindBoxGift {
+  id: number
+  request_id: string
+  sender_external_id: string
+  recipient_external_id: string
+  sender_display_name_masked: string
+  recipient_display_name_masked: string
+  quantity: number
+  status: string
+  created_at: number
 }
 
 export interface BlindBoxOrderStatus {

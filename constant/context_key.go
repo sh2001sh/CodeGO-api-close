@@ -74,6 +74,9 @@ const (
 	// ContextKeyResponsesStreamRetrySafe marks a Responses API stream whose
 	// protocol events may have started before any meaningful model output.
 	ContextKeyResponsesStreamRetrySafe ContextKey = "responses_stream_retry_safe"
+	// ContextKeyResponsesTerminalSent prevents the generic finalizer from
+	// appending a second terminal event after response.failed was emitted.
+	ContextKeyResponsesTerminalSent ContextKey = "responses_terminal_sent"
 	// ContextKeyStreamContentDelivered is set once retrying would duplicate text
 	// or tool arguments already delivered to the client.
 	ContextKeyStreamContentDelivered ContextKey = "stream_content_delivered"

@@ -5,6 +5,7 @@ import {
   CreditCard,
   History,
   ReceiptText,
+  Send,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
@@ -23,8 +24,10 @@ export function WalletAccountOverview(props: {
   activeSubscriptionCount: number
   onSelectFunding: () => void
   onSelectConversion: () => void
+  onSelectTransfer: () => void
   onOpenBillingHistory: () => void
   onOpenConversionHistory: () => void
+  onOpenTransferHistory: () => void
 }) {
   const { t } = useTranslation()
   return (
@@ -62,7 +65,7 @@ export function WalletAccountOverview(props: {
               {t('Active subscriptions')} {props.activeSubscriptionCount}
             </span>
           </div>
-          <div className='grid grid-cols-3 gap-2 sm:flex'>
+          <div className='grid grid-cols-2 gap-2 sm:flex'>
             <Button type='button' onClick={props.onSelectFunding}>
               <CreditCard className='size-4' />
               {t('Top up')}
@@ -74,6 +77,14 @@ export function WalletAccountOverview(props: {
             >
               <ArrowRightLeft className='size-4' />
               {t('Convert')}
+            </Button>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={props.onSelectTransfer}
+            >
+              <Send className='size-4' />
+              {t('Transfer')}
             </Button>
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger
@@ -92,6 +103,10 @@ export function WalletAccountOverview(props: {
                   <DropdownMenuItem onClick={props.onOpenConversionHistory}>
                     <ArrowRightLeft className='size-4' />
                     {t('Conversion records')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={props.onOpenTransferHistory}>
+                    <Send className='size-4' />
+                    {t('Transfer records')}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>

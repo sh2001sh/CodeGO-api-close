@@ -43,9 +43,9 @@ type TopUp struct {
 	WalletType                      string  `json:"wallet_type" gorm:"type:varchar(32);default:'default';index"`
 	FirstPurchaseDiscountApplied    bool    `json:"first_purchase_discount_applied" gorm:"not null;default:false;index"`
 	FirstPurchaseDiscountMultiplier float64 `json:"first_purchase_discount_multiplier" gorm:"type:decimal(8,4);not null;default:0"`
-	CreateTime                      int64   `json:"create_time"`
+	CreateTime                      int64   `json:"create_time" gorm:"index:idx_topups_pending_created,priority:2"`
 	CompleteTime                    int64   `json:"complete_time"`
-	Status                          string  `json:"status"`
+	Status                          string  `json:"status" gorm:"index:idx_topups_pending_created,priority:1"`
 }
 
 func NormalizeWalletType(walletType string) string {

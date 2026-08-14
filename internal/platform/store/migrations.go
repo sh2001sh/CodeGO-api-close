@@ -69,6 +69,8 @@ func V2MigrationIDs() []string {
 		"20260813_balance_blind_box",
 		"20260813_balance_blind_box_small_pity",
 		"20260813_blind_box_lucky_draw_window",
+		"20260814_wallet_transfers",
+		"20260814_balance_blind_box_inventory",
 	}
 }
 
@@ -208,6 +210,17 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260813_balance_blind_box", Run: migrateBalanceBlindBox},
 		{ID: "20260813_balance_blind_box_small_pity", Run: migrateBalanceBlindBoxSmallPity},
 		{ID: "20260813_blind_box_lucky_draw_window", Run: migrateBlindBoxLuckyDrawWindow},
+		{ID: "20260814_wallet_transfers", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&commerceschema.WalletTransferSecurity{}, &commerceschema.WalletTransfer{})
+		}},
+		{ID: "20260814_balance_blind_box_inventory", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(
+				&commerceschema.BalanceBlindBoxPurchase{},
+				&commerceschema.BalanceBlindBoxItem{},
+				&commerceschema.BalanceBlindBoxGift{},
+				&commerceschema.BalanceBlindBoxGiftItem{},
+			)
+		}},
 	}
 	for _, step := range steps {
 		var applied schemaMigration

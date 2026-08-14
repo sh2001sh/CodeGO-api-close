@@ -194,6 +194,13 @@ export interface LogOtherData {
   violation_fee_code?: string
   violation_fee_marker?: string
   fee_quota?: number
+  quota_before_discount?: number
+  quota_after_discount?: number
+  usage_discount_rate?: number
+  usage_discount_multiplier?: number
+  usage_discount_quota?: number
+  usage_discount_source?: string
+  usage_discount_title?: string
   // Reject / intercept reason (admin)
   reject_reason?: string
   // Task-related fields (for refund logs, type=6)

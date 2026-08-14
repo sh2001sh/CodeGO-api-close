@@ -3,6 +3,7 @@ package synchttp
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,8 +14,31 @@ import (
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/stretchr/testify/require"
 )
+
+func TestApplyReplayableRequestBodySetsIndependentGetBody(t *testing.T) {
+	storage, err := platformhttpx.CreateBodyStorage([]byte("request-body"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = storage.Close() })
+	body := platformhttpx.ReaderOnly(storage)
+	req, err := http.NewRequest(http.MethodPost, "https://example.com", body)
+	require.NoError(t, err)
+
+	applyReplayableRequestBody(req, body)
+	require.NotNil(t, req.GetBody)
+
+	prefix := make([]byte, 7)
+	_, err = io.ReadFull(req.Body, prefix)
+	require.NoError(t, err)
+	replay, err := req.GetBody()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = replay.Close() })
+	replayed, err := io.ReadAll(replay)
+	require.NoError(t, err)
+	require.Equal(t, "request-body", string(replayed))
+}
 
 type timeoutError struct{}
 

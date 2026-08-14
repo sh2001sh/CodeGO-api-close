@@ -19,7 +19,34 @@ func RegisterGatewayRuntimeRoutes(router *gin.Engine) {
 	registerRelayModelRoutes(router)
 	registerRelayPlaygroundRoutes(router)
 	registerRelayCoreRoutes(router)
+	registerRelayCompatibilityRoutes(router)
 	registerRelayTaskRoutes(router)
+}
+
+func registerRelayCompatibilityRoutes(router *gin.Engine) {
+	websocketCompatibility := router.Group("")
+	websocketCompatibility.Use(middleware.RouteTag("relay"))
+	websocketCompatibility.Use(middleware.SystemPerformanceCheck())
+	websocketCompatibility.Use(middleware.TokenAuth())
+	{
+		websocketCompatibility.GET("/responses", gatewayhttp.ResponsesWebsocket)
+		websocketCompatibility.GET("/backend-api/codex/responses", gatewayhttp.ResponsesWebsocket)
+	}
+
+	compatibility := router.Group("")
+	compatibility.Use(middleware.RouteTag("relay"))
+	compatibility.Use(middleware.SystemPerformanceCheck())
+	compatibility.Use(middleware.TokenAuth())
+	compatibility.Use(middleware.ModelRequestRateLimit())
+	compatibility.Use(middleware.Distribute())
+	{
+		compatibility.POST("/responses", gatewayhttp.RelayWithCanonicalPath("/v1/responses", types.RelayFormatOpenAIResponses))
+		compatibility.POST("/responses/compact", gatewayhttp.RelayWithCanonicalPath("/v1/responses/compact", types.RelayFormatOpenAIResponsesCompaction))
+		compatibility.POST("/alpha/search", gatewayhttp.RelayWithCanonicalPath("/v1/alpha/search", types.RelayFormatOpenAIAlphaSearch))
+		compatibility.POST("/backend-api/codex/responses", gatewayhttp.RelayWithCanonicalPath("/v1/responses", types.RelayFormatOpenAIResponses))
+		compatibility.POST("/backend-api/codex/responses/compact", gatewayhttp.RelayWithCanonicalPath("/v1/responses/compact", types.RelayFormatOpenAIResponsesCompaction))
+		compatibility.POST("/backend-api/codex/alpha/search", gatewayhttp.RelayWithCanonicalPath("/v1/alpha/search", types.RelayFormatOpenAIAlphaSearch))
+	}
 }
 
 func registerRelayModelRoutes(router *gin.Engine) {
@@ -87,6 +114,13 @@ func registerRelayCoreRoutes(router *gin.Engine) {
 	{
 		balanceRouter.GET("/balance", middleware.DisableCache(), identityhttp.GetTokenAccountBalance)
 	}
+	responsesWebsocketRouter := router.Group("/v1")
+	responsesWebsocketRouter.Use(middleware.RouteTag("relay"))
+	responsesWebsocketRouter.Use(middleware.SystemPerformanceCheck())
+	responsesWebsocketRouter.Use(middleware.TokenAuth())
+	{
+		responsesWebsocketRouter.GET("/responses", gatewayhttp.ResponsesWebsocket)
+	}
 
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(middleware.RouteTag("relay"))
@@ -107,6 +141,7 @@ func registerRelayCoreRoutes(router *gin.Engine) {
 		httpRouter.POST("/chat/completions", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAI))
 		httpRouter.POST("/responses", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIResponses))
 		httpRouter.POST("/responses/compact", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIResponsesCompaction))
+		httpRouter.POST("/alpha/search", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIAlphaSearch))
 		httpRouter.POST("/edits", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIImage))
 		httpRouter.POST("/images/generations", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIImage))
 		httpRouter.POST("/images/edits", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIImage))

@@ -63,6 +63,8 @@ func setupCommerceHTTPTestDB(t *testing.T) *gorm.DB {
 		&commerceschema.UserSubscription{},
 		&commerceschema.SubscriptionClaudeConversion{},
 		&commerceschema.WalletQuotaConversion{},
+		&commerceschema.WalletTransferSecurity{},
+		&commerceschema.WalletTransfer{},
 		&commerceschema.SubscriptionResetOpportunityAccount{},
 		&commerceschema.SubscriptionResetOpportunityLedger{},
 		&commerceschema.GroupBuyOrder{},

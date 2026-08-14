@@ -16,11 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BlindBoxSelfData, PaymentMethod } from '../types'
+import { BalanceBlindBoxPanel } from './balance-blind-box-panel'
 import { BlindBoxDisabledNotice } from './blind-box-notices'
 import { BlindBoxPoolShowcase } from './blind-box-pool-showcase'
 import {
@@ -70,9 +69,8 @@ export interface BlindBoxContentProps {
   onManualOpen: (count: number) => void
   onOpenProps: () => void
   mode: 'standard' | 'balance'
-  balanceOpening: boolean
   onModeChange: (mode: 'standard' | 'balance') => void
-  onBalanceOpen: (count: number) => void
+  onRefresh: () => Promise<void>
 }
 
 export function BlindBoxContent(props: BlindBoxContentProps) {
@@ -102,14 +100,13 @@ export function BlindBoxContent(props: BlindBoxContentProps) {
           <BalanceBlindBoxPanel
             data={props.data}
             loading={props.loading}
-            opening={props.balanceOpening}
-            onOpen={props.onBalanceOpen}
+            onRefresh={props.onRefresh}
           />
           <BlindBoxPoolShowcase
             data={props.data}
             tiers={props.data?.balance_blind_box?.tiers || []}
             title='余额盲盒奖池'
-            description='每次消耗 $15 余额，按下列公开概率获得一项奖励，不产生每日幸运号'
+            description='购买时按下列公开概率封存一项奖励，可持有或转赠；开启不产生每日幸运号'
             hideSubscription
           />
         </>
@@ -194,153 +191,6 @@ function BlindBoxModeSwitch(props: {
           {label}
         </button>
       ))}
-    </div>
-  )
-}
-
-function BalanceBlindBoxPanel(props: {
-  data: BlindBoxSelfData | null
-  loading: boolean
-  opening: boolean
-  onOpen: (count: number) => void
-}) {
-  const [count, setCount] = useState(1)
-  const balance = props.data?.balance_blind_box
-  const canOpen = Boolean(
-    balance?.enabled &&
-    !props.loading &&
-    !props.opening &&
-    balance.balance_usd >= balance.price_usd * count
-  )
-  const headlineTiers = (balance?.tiers || [])
-    .filter((tier) => tier.max_usd >= 80)
-    .sort((left, right) => right.max_usd - left.max_usd)
-    .slice(0, 4)
-
-  return (
-    <section className='app-page-shell overflow-hidden'>
-      <div className='border-b border-teal-500/20 bg-teal-500/[0.06] px-4 py-6 sm:px-6'>
-        <div className='mx-auto max-w-xl text-center'>
-          <div className='text-xs font-semibold text-teal-700 dark:text-teal-300'>
-            余额盲盒 · 固定 $15 / 次
-          </div>
-          <h2 className='text-foreground mt-2 text-xl font-semibold'>
-            使用余额抽取高价值奖励
-          </h2>
-          <p className='text-muted-foreground mt-2 text-xs leading-5'>
-            高波动奖池最高可得
-            $1000，短期可能盈利也可能亏损；长期概率按公开奖池执行，本盲盒不会生成每日幸运号。
-          </p>
-        </div>
-      </div>
-      <div className='space-y-4 px-4 py-4 sm:px-6 sm:py-5'>
-        <div className='grid gap-3 sm:grid-cols-5'>
-          <Metric
-            label='当前余额'
-            value={`$${(balance?.balance_usd || 0).toFixed(2)}`}
-          />
-          <Metric
-            label='抽取后余额'
-            value={`$${Math.max(0, (balance?.balance_usd || 0) - (balance?.price_usd || 15)).toFixed(2)}`}
-          />
-          <Metric
-            label='小保底'
-            value={`${balance?.small_pity_progress || 0}/${balance?.small_pity_threshold || 10}`}
-          />
-          <Metric
-            label='大奖保底'
-            value={`${balance?.pity_progress || 0}/${balance?.pity_threshold || 50}`}
-          />
-          <Metric
-            label='首抽保底'
-            value={
-              balance?.first_draw_eligible
-                ? `至少 $${(balance.first_draw_guarantee_usd || 10).toFixed(2)}`
-                : '已使用'
-            }
-          />
-        </div>
-        <div className='rounded-lg border border-teal-500/20 bg-teal-500/[0.04] p-3 text-xs leading-5'>
-          首次抽取至少获得 $10 额度；连续 9 次未获得 $10 及以上额度，第 10
-          次至少获得 $10；连续 49 次未获得 $35 及以上额度，第 50 次至少获得
-          $35。道具规则与普通盲盒一致，幸运号规则除外。
-        </div>
-        {headlineTiers.length > 0 ? (
-          <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
-            {headlineTiers.map((tier) => (
-              <div
-                key={tier.name}
-                className='rounded-lg border border-amber-500/25 bg-amber-500/[0.06] p-3 text-center'
-              >
-                <div className='text-sm font-semibold text-amber-700 dark:text-amber-300'>
-                  {tier.name}
-                </div>
-                <div className='text-muted-foreground mt-1 text-[11px]'>
-                  {formatProbability(tier.probability)}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        <button
-          type='button'
-          onClick={() => props.onOpen(count)}
-          disabled={!canOpen}
-          className='disabled:bg-muted disabled:text-muted-foreground flex min-h-11 w-full items-center justify-center rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-teal-700 disabled:cursor-not-allowed'
-        >
-          {props.opening
-            ? '抽取中…'
-            : canOpen
-              ? `使用 $${((balance?.price_usd || 15) * count).toFixed(2)} 余额抽取 ${count} 个`
-              : `余额不足，还差 $${Math.max(0, (balance?.price_usd || 15) * count - (balance?.balance_usd || 0)).toFixed(2)}`}
-        </button>
-        <div className='flex flex-wrap items-center gap-2'>
-          <span className='text-muted-foreground text-xs'>抽取数量</span>
-          {[1, 5, 10, 20, 50, 100].map((option) => (
-            <button
-              key={option}
-              type='button'
-              aria-pressed={count === option}
-              onClick={() => setCount(option)}
-              className={`min-h-8 rounded-md border px-3 text-xs font-medium ${count === option ? 'border-teal-600 bg-teal-600 text-white' : 'border-border text-muted-foreground hover:text-foreground'}`}
-            >
-              {option} 个
-            </button>
-          ))}
-          <Input
-            type='number'
-            min={1}
-            max={100}
-            value={count}
-            onChange={(event) => {
-              const next = Number(event.target.value)
-              if (!Number.isFinite(next)) return
-              setCount(Math.min(100, Math.max(1, Math.floor(next))))
-            }}
-            className='h-8 w-20'
-            aria-label='自定义余额盲盒抽取数量'
-            disabled={props.opening}
-          />
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function formatProbability(probability: number) {
-  if (probability <= 0) return '0%'
-  const percentage = probability * 100
-  if (percentage < 0.001) return '<0.001%'
-  return `${percentage.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}%`
-}
-
-function Metric(props: { label: string; value: string }) {
-  return (
-    <div className='border-border/70 bg-muted/30 rounded-lg border p-3'>
-      <div className='text-muted-foreground text-[11px]'>{props.label}</div>
-      <div className='text-foreground mt-1 font-mono text-lg font-semibold tabular-nums'>
-        {props.value}
-      </div>
     </div>
   )
 }

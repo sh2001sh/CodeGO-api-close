@@ -17,6 +17,7 @@ import (
 type BodyStorage interface {
 	io.ReadSeeker
 	io.Closer
+	NewReader() (io.ReadCloser, error)
 	Bytes() ([]byte, error)
 	Size() int64
 	IsDisk() bool
@@ -76,6 +77,15 @@ func (m *memoryStorage) Bytes() ([]byte, error) {
 		return nil, ErrStorageClosed
 	}
 	return m.data, nil
+}
+
+func (m *memoryStorage) NewReader() (io.ReadCloser, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if atomic.LoadInt32(&m.closed) == 1 {
+		return nil, ErrStorageClosed
+	}
+	return io.NopCloser(bytes.NewReader(m.data)), nil
 }
 
 func (m *memoryStorage) Size() int64 {
@@ -211,6 +221,15 @@ func (d *diskStorage) Bytes() ([]byte, error) {
 	return data, nil
 }
 
+func (d *diskStorage) NewReader() (io.ReadCloser, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if atomic.LoadInt32(&d.closed) == 1 {
+		return nil, ErrStorageClosed
+	}
+	return os.Open(d.filePath)
+}
+
 func (d *diskStorage) Size() int64 {
 	return d.size
 }
@@ -273,7 +292,21 @@ func CreateBodyStorageFromReader(reader io.Reader, contentLength int64, maxBytes
 }
 
 // ReaderOnly hides io.Closer so request constructors do not close the shared storage.
+type replayableReaderOnly struct {
+	io.Reader
+	newReader func() (io.ReadCloser, error)
+}
+
+func (r replayableReaderOnly) NewReader() (io.ReadCloser, error) {
+	return r.newReader()
+}
+
 func ReaderOnly(r io.Reader) io.Reader {
+	if replayable, ok := r.(interface {
+		NewReader() (io.ReadCloser, error)
+	}); ok {
+		return replayableReaderOnly{Reader: r, newReader: replayable.NewReader}
+	}
 	return struct{ io.Reader }{r}
 }
 

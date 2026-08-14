@@ -18,6 +18,7 @@ type RelayRuntime struct {
 	Rerank          relayRuntimeFunc
 	Embedding       relayRuntimeFunc
 	Responses       relayRuntimeFunc
+	AlphaSearch     relayRuntimeFunc
 	Gemini          relayRuntimeFunc
 	GeminiEmbedding relayRuntimeFunc
 	Claude          relayRuntimeFunc
@@ -42,6 +43,8 @@ func ExecuteRelay(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIErro
 		return callRelayRuntime(gatewayRelayRuntime.Embedding, "embedding", c, info)
 	case gatewaycontract.RelayModeResponses, gatewaycontract.RelayModeResponsesCompact:
 		return callRelayRuntime(gatewayRelayRuntime.Responses, "responses", c, info)
+	case gatewaycontract.RelayModeAlphaSearch:
+		return callRelayRuntime(gatewayRelayRuntime.AlphaSearch, "alpha_search", c, info)
 	default:
 		return callRelayRuntime(gatewayRelayRuntime.Text, "text", c, info)
 	}

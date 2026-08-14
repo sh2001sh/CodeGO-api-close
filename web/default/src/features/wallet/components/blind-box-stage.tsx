@@ -286,11 +286,12 @@ function AmbientGlow(props: { reduced: boolean }) {
   )
 }
 
-function BoxFigure(props: {
+export function BoxFigure(props: {
   reduced: boolean
   pending: boolean
   opening: boolean
   onOpen?: () => void
+  tone?: 'primary' | 'balance'
 }) {
   const interactive = Boolean(props.onOpen)
   const idle = props.reduced
@@ -320,26 +321,41 @@ function BoxFigure(props: {
       whileHover={interactive && !props.reduced ? { scale: 1.05 } : undefined}
       whileTap={interactive && !props.reduced ? { scale: 0.96 } : undefined}
     >
-      <BoxArt pending={props.pending} reduced={props.reduced} />
+      <BoxArt
+        pending={props.pending}
+        reduced={props.reduced}
+        tone={props.tone || 'primary'}
+      />
     </motion.button>
   )
 }
 
-function BoxArt(props: { pending: boolean; reduced: boolean }) {
+function BoxArt(props: {
+  pending: boolean
+  reduced: boolean
+  tone: 'primary' | 'balance'
+}) {
+  const balanceTone = props.tone === 'balance'
   return (
     <div className='relative size-32 sm:size-36'>
       <div
         className={cn(
           'absolute inset-x-1 bottom-0 h-[62%] rounded-xl border-2 shadow-lg',
           props.pending
-            ? 'border-primary/50 bg-primary/12'
+            ? balanceTone
+              ? 'border-teal-500/55 bg-teal-500/15'
+              : 'border-primary/50 bg-primary/12'
             : 'border-border bg-card'
         )}
       >
         <div
           className={cn(
             'absolute inset-y-0 left-1/2 w-3.5 -translate-x-1/2',
-            props.pending ? 'bg-primary/35' : 'bg-muted-foreground/20'
+            props.pending
+              ? balanceTone
+                ? 'bg-teal-500/40'
+                : 'bg-primary/35'
+              : 'bg-muted-foreground/20'
           )}
         />
       </div>
@@ -348,7 +364,9 @@ function BoxArt(props: { pending: boolean; reduced: boolean }) {
         className={cn(
           'absolute inset-x-0 top-[22%] h-[24%] rounded-lg border-2 shadow-md',
           props.pending
-            ? 'border-primary/55 bg-primary/18'
+            ? balanceTone
+              ? 'border-teal-500/60 bg-teal-500/20'
+              : 'border-primary/55 bg-primary/18'
             : 'border-border bg-muted'
         )}
         animate={
@@ -361,7 +379,11 @@ function BoxArt(props: { pending: boolean; reduced: boolean }) {
         <div
           className={cn(
             'absolute inset-y-0 left-1/2 w-3.5 -translate-x-1/2',
-            props.pending ? 'bg-primary/40' : 'bg-muted-foreground/20'
+            props.pending
+              ? balanceTone
+                ? 'bg-teal-500/45'
+                : 'bg-primary/40'
+              : 'bg-muted-foreground/20'
           )}
         />
       </motion.div>
@@ -375,8 +397,12 @@ function BoxArt(props: { pending: boolean; reduced: boolean }) {
           className={cn(
             'flex size-9 items-center justify-center rounded-full border-2',
             props.pending
-              ? 'border-primary/55 bg-primary text-primary-foreground'
-              : 'border-border bg-card text-primary'
+              ? balanceTone
+                ? 'border-teal-400/70 bg-teal-600 text-white dark:bg-teal-500'
+                : 'border-primary/55 bg-primary text-primary-foreground'
+              : balanceTone
+                ? 'border-border bg-card text-teal-600 dark:text-teal-400'
+                : 'border-border bg-card text-primary'
           )}
         >
           <Sparkles className='size-4' aria-hidden='true' />

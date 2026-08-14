@@ -65,6 +65,7 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { BillingCalculationSection } from './billing-calculation-section'
 
 function timingTextColorClass(
   variant: 'success' | 'warning' | 'danger'
@@ -970,11 +971,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
 
             {/* Billing breakdown (consume type) */}
             {isConsume && other && !isViolation && (
-              <BillingBreakdown
-                log={props.log}
-                other={other}
-                isAdmin={props.isAdmin}
-              />
+              <>
+                <BillingBreakdown
+                  log={props.log}
+                  other={other}
+                  isAdmin={props.isAdmin}
+                />
+                <BillingCalculationSection log={props.log} other={other} />
+              </>
             )}
 
             {/* Tiered pricing breakdown (when billing_mode is tiered_expr) */}

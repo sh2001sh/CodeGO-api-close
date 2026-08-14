@@ -76,6 +76,17 @@ func UpdateUserUsedQuotaAndRequestCount(userID int, quota int) {
 	}
 }
 
+// UpdateUserUsedQuota adjusts accumulated usage without changing request count.
+func UpdateUserUsedQuota(userID int, quota int) {
+	if quota == 0 {
+		return
+	}
+	if err := platformdb.DB.Model(&identityschema.User{}).Where("id = ?", userID).
+		Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error; err != nil {
+		platformobservability.SysLog("failed to update user used quota: " + err.Error())
+	}
+}
+
 func cacheAdjustUserQuota(userID int, delta int64) error {
 	return platformcache.AdjustUserQuotaCache(userID, delta)
 }

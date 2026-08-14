@@ -292,6 +292,65 @@ func TestOaiResponsesStreamHandlerSucceedsAfterResponseCompleted(t *testing.T) {
 	require.Equal(t, "hello", info.ConversationResponseText)
 }
 
+func TestOaiResponsesStreamHandlerRejectsEmptyCompletedEvent(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+	require.Nil(t, usage)
+	require.NotNil(t, err)
+	require.Equal(t, http.StatusBadGateway, err.StatusCode)
+	require.False(t, types.IsSkipRetryError(err))
+	require.Empty(t, recorder.Body.String())
+}
+
+func TestOaiResponsesStreamHandlerForwardsTerminalFailureAfterOutput(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","delta":"partial"}`,
+		``,
+		`data: {"type":"response.failed","response":{"status":"failed","error":{"type":"server_error","message":"upstream failed"}}}`,
+		``,
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+	require.Nil(t, usage)
+	require.NotNil(t, err)
+	require.True(t, types.IsSkipRetryError(err))
+	require.Contains(t, recorder.Body.String(), "event: response.failed")
+	require.Contains(t, recorder.Body.String(), "upstream failed")
+}
+
+func TestOaiResponsesStreamHandlerAddsFailureWhenPartialStreamCloses(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	_, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+	require.NotNil(t, err)
+	require.True(t, types.IsSkipRetryError(err))
+	require.Contains(t, recorder.Body.String(), "event: response.failed")
+	require.Contains(t, recorder.Body.String(), "closed before response.completed")
+}
+
+func setResponsesTestStreamingTimeout(t *testing.T) {
+	t.Helper()
+	previous := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = previous })
+}
+
 func TestIsResponsesTextDelta(t *testing.T) {
 	require.True(t, isResponsesTextDelta(dto.ResponsesStreamResponse{
 		Type:  "response.output_text.delta",

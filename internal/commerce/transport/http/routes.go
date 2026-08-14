@@ -11,6 +11,10 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	{
 		walletRoute.GET("/quota-conversions", getWalletQuotaConversions)
 		walletRoute.POST("/quota-conversions", middleware.CriticalRateLimit(), createWalletQuotaConversion)
+		walletRoute.GET("/transfers", getWalletTransferOverview)
+		walletRoute.GET("/transfers/recipients/:external_id", middleware.CriticalRateLimit(), getWalletTransferRecipient)
+		walletRoute.PUT("/transfers/payment-password", middleware.CriticalRateLimit(), configureWalletTransferPassword)
+		walletRoute.POST("/transfers", middleware.CriticalRateLimit(), createWalletTransfer)
 	}
 
 	subscriptionRoute := apiRouter.Group("/subscription")
@@ -105,7 +109,9 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.POST("/props/:id/pause", middleware.CriticalRateLimit(), pauseBlindBoxProp)
 		blindBoxRoute.POST("/props/:id/convert", middleware.CriticalRateLimit(), convertBlindBoxProp)
 		blindBoxRoute.GET("/balance/overview", getBalanceBlindBoxOverview)
+		blindBoxRoute.POST("/balance/purchase", middleware.BalanceBlindBoxOpenRateLimit(), purchaseBalanceBlindBoxes)
 		blindBoxRoute.POST("/balance/open", middleware.BalanceBlindBoxOpenRateLimit(), openBalanceBlindBox)
+		blindBoxRoute.POST("/balance/gift", middleware.CriticalRateLimit(), giftBalanceBlindBoxes)
 	}
 
 	dailyLuckyNumberRoute := apiRouter.Group("/daily-lucky-number")

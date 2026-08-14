@@ -47,9 +47,16 @@ import type {
   BlindBoxRecord,
   BlindBoxHistoryResponse,
   BalanceBlindBoxOverview,
+  BalanceBlindBoxGift,
+  BalanceBlindBoxPurchase,
   WalletQuotaConversionOverviewResponse,
   WalletQuotaConversionRequest,
   WalletQuotaConversionResponse,
+  ConfigureWalletTransferPasswordRequest,
+  CreateWalletTransferRequest,
+  WalletTransferOverviewResponse,
+  WalletTransferRecipientResponse,
+  WalletTransferResponse,
 } from './types'
 
 // ============================================================================
@@ -80,6 +87,41 @@ export async function createWalletQuotaConversion(
   request: WalletQuotaConversionRequest
 ): Promise<WalletQuotaConversionResponse> {
   const res = await api.post('/api/wallet/quota-conversions', request)
+  return res.data
+}
+
+export async function getWalletTransfers(
+  page = 1,
+  pageSize = 10
+): Promise<WalletTransferOverviewResponse> {
+  const params = new URLSearchParams({
+    p: String(page),
+    page_size: String(pageSize),
+  })
+  const res = await api.get(`/api/wallet/transfers?${params.toString()}`)
+  return res.data
+}
+
+export async function lookupWalletTransferRecipient(
+  externalId: string
+): Promise<WalletTransferRecipientResponse> {
+  const res = await api.get(
+    `/api/wallet/transfers/recipients/${encodeURIComponent(externalId)}`
+  )
+  return res.data
+}
+
+export async function configureWalletTransferPassword(
+  request: ConfigureWalletTransferPasswordRequest
+): Promise<ApiResponse<{ password_set: boolean }>> {
+  const res = await api.put('/api/wallet/transfers/payment-password', request)
+  return res.data
+}
+
+export async function createWalletTransfer(
+  request: CreateWalletTransferRequest
+): Promise<WalletTransferResponse> {
+  const res = await api.post('/api/wallet/transfers', request)
   return res.data
 }
 
@@ -342,6 +384,44 @@ export async function openBalanceBlindBox(
 > {
   const res = await api.post('/api/blind-box/balance/open', {
     request_id: requestId,
+    count,
+  })
+  return res.data
+}
+
+export async function purchaseBalanceBlindBoxes(
+  requestId: string,
+  count: number
+): Promise<
+  ApiResponse<{
+    purchase: BalanceBlindBoxPurchase
+    overview: BalanceBlindBoxOverview
+  }>
+> {
+  const res = await api.post('/api/blind-box/balance/purchase', {
+    request_id: requestId,
+    count,
+  })
+  return res.data
+}
+
+export async function giftBalanceBlindBoxes(
+  requestId: string,
+  recipientExternalId: string,
+  count: number
+): Promise<
+  ApiResponse<{
+    gift: BalanceBlindBoxGift
+    overview: BalanceBlindBoxOverview
+    recipient: {
+      external_id: string
+      display_name_masked: string
+    }
+  }>
+> {
+  const res = await api.post('/api/blind-box/balance/gift', {
+    request_id: requestId,
+    recipient_external_id: recipientExternalId,
     count,
   })
   return res.data

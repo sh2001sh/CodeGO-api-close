@@ -1,18 +1,20 @@
 import { useState } from 'react'
-import { Pencil, ShieldCheck } from 'lucide-react'
+import { Pencil, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminMarketplaceChannels } from '../hooks'
 import type { MarketplaceChannel } from '../types'
+import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
-import { MarketplaceStatusBadge } from './status-badge'
 import { ModelConsistencyBadge } from './model-verification'
+import { MarketplaceStatusBadge } from './status-badge'
 
 export function AdminGovernance() {
   const { t } = useTranslation()
   const query = useAdminMarketplaceChannels(true)
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
+  const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
 
   return (
     <div className='space-y-4'>
@@ -53,6 +55,7 @@ export function AdminGovernance() {
                     />
                   </div>
                   <div className='text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs'>
+                    <span className='tabular-nums'>ID {channel.id}</span>
                     <span>{channel.provider_type}</span>
                     <span className='text-foreground font-medium'>
                       {t('来源')}: {channel.submitted_source_label || '--'}
@@ -70,14 +73,25 @@ export function AdminGovernance() {
                     <span>QPS {channel.qps}</span>
                   </div>
                 </div>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => setEditing(channel)}
-                >
-                  <Pencil />
-                  {t('编辑渠道')}
-                </Button>
+                <div className='flex shrink-0 items-center gap-2'>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => setEditing(channel)}
+                  >
+                    <Pencil />
+                    {t('编辑渠道')}
+                  </Button>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='text-destructive hover:text-destructive'
+                    onClick={() => setDeleting(channel)}
+                  >
+                    <Trash2 />
+                    {t('删除')}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -89,6 +103,14 @@ export function AdminGovernance() {
         open={editing != null}
         onOpenChange={(open) => {
           if (!open) setEditing(null)
+        }}
+      />
+      <ChannelDeleteDialog
+        admin
+        channel={deleting}
+        open={deleting != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null)
         }}
       />
     </div>

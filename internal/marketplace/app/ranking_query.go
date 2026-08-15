@@ -42,12 +42,18 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, query GroupQuery) bool {
 	search := strings.ToLower(strings.TrimSpace(query.Search))
 	if search != "" {
-		haystack := strings.ToLower(group.SystemDisplayName + " " + group.PublicSlug + " " + group.OwnerDisplayName + " " + publicSourceLabel(channel) + " " + strings.Join(models, " "))
+		haystack := strings.ToLower(channel.ID + " " + marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID) + " " + group.PublicSlug + " " + channel.ProviderType + " " + publicSourceLabel(channel) + " " + strings.Join(models, " "))
 		if !strings.Contains(haystack, search) {
 			return false
 		}
 	}
-	if query.Model != "" && !containsFold(models, query.Model) {
+	if query.Model != "" && !containsSubstringFold(models, query.Model) {
+		return false
+	}
+	if query.Source != "" && !strings.EqualFold(publicSourceLabel(channel), query.Source) {
+		return false
+	}
+	if query.Provider != "" && !strings.EqualFold(channel.ProviderType, query.Provider) {
 		return false
 	}
 	return channel.ID != ""
@@ -55,8 +61,10 @@ func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.
 
 func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, snapshot marketplaceschema.RankingSnapshot) GroupListItem {
 	return GroupListItem{
-		ID: group.ID, PublicSlug: group.PublicSlug, SystemDisplayName: group.SystemDisplayName,
-		OwnerDisplayName: group.OwnerDisplayName, SourceType: group.SourceType, SourceLabel: publicSourceLabel(channel),
+		ID: group.ID, ChannelID: channel.ID, PublicSlug: group.PublicSlug,
+		SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID),
+		SourceType:        group.SourceType, SourceLabel: publicSourceLabel(channel),
+		ProviderType:     channel.ProviderType,
 		CreditPoolPolicy: group.CreditPoolPolicy,
 		LifecycleStatus:  group.LifecycleStatus, VerificationStatus: group.VerificationStatus,
 		VerificationDueAt: group.VerificationDueAt, Multiplier: group.Multiplier, Models: models,
@@ -123,6 +131,16 @@ func paginateGroups(items []GroupListItem, page, size int) []GroupListItem {
 func containsFold(values []string, target string) bool {
 	for _, value := range values {
 		if strings.EqualFold(value, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSubstringFold(values []string, target string) bool {
+	target = strings.ToLower(strings.TrimSpace(target))
+	for _, value := range values {
+		if strings.Contains(strings.ToLower(value), target) {
 			return true
 		}
 	}

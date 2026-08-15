@@ -1,8 +1,11 @@
 package app
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"math/big"
+	"strconv"
 	"strings"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
@@ -42,7 +45,10 @@ func CreateMarketplaceChannel(ownerUserID int, req CreateChannelRequest) (*Chann
 }
 
 func buildMarketplaceRecords(ownerUserID int, req CreateChannelRequest) (*marketplaceschema.Channel, *marketplaceschema.Group, error) {
-	channelID := platformruntime.GetUUID()
+	channelID, err := newMarketplaceChannelID()
+	if err != nil {
+		return nil, nil, err
+	}
 	baseURL, err := platformsecurity.EncryptSecret(strings.TrimRight(strings.TrimSpace(req.BaseURL), "/"))
 	if err != nil {
 		return nil, nil, err
@@ -68,13 +74,23 @@ func buildMarketplaceRecords(ownerUserID int, req CreateChannelRequest) (*market
 	return channel, group, nil
 }
 
+func newMarketplaceChannelID() (string, error) {
+	const lowerBound int64 = 100_000_000_000
+	const rangeSize int64 = 900_000_000_000
+	value, err := rand.Int(rand.Reader, big.NewInt(rangeSize))
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt(lowerBound+value.Int64(), 10), nil
+}
+
 func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLabel string, multiplier float64, visibility string) *marketplaceschema.Group {
 	groupID := platformruntime.GetUUID()
 	compact := strings.ReplaceAll(groupID, "-", "")
 	return &marketplaceschema.Group{
 		ID: groupID, ChannelID: channelID, OwnerUserID: ownerUserID,
 		PublicSlug:        "mg_" + compact[:12],
-		SystemDisplayName: marketplaceDisplayName(sourceLabel, multiplier, groupID),
+		SystemDisplayName: marketplaceDisplayName(sourceLabel, multiplier, channelID),
 		InternalGroupName: marketplaceInternalGroupName(sourceLabel, groupID),
 		OwnerDisplayName:  ownerName, SourceType: marketplacedomain.SourceTypeMarketplaceUser,
 		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: multiplier,

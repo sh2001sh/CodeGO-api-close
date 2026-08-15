@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
@@ -59,12 +60,44 @@ func ListOwnerUsageLogs(ownerUserID int, query OwnerUsageLogQuery) (*OwnerUsageL
 	if err != nil {
 		return nil, err
 	}
+	externalUserIDs, err := loadExternalUserIDs(logs)
+	if err != nil {
+		return nil, err
+	}
 	result.Items = make([]OwnerUsageLogItem, 0, len(logs))
 	for i := range logs {
 		log := logs[i]
 		channel := channelByInternalID[log.ChannelId]
-		item := ownerUsageLogItem(log, channel, settlements[log.RequestId])
+		item := ownerUsageLogItem(log, channel, settlements[log.RequestId], externalUserIDs[log.UserId])
 		result.Items = append(result.Items, item)
+	}
+	return result, nil
+}
+
+func loadExternalUserIDs(logs []auditschema.Log) (map[int]string, error) {
+	internalIDs := make([]int, 0, len(logs))
+	seen := make(map[int]struct{}, len(logs))
+	for i := range logs {
+		userID := logs[i].UserId
+		if userID <= 0 {
+			continue
+		}
+		if _, exists := seen[userID]; exists {
+			continue
+		}
+		seen[userID] = struct{}{}
+		internalIDs = append(internalIDs, userID)
+	}
+	result := make(map[int]string, len(internalIDs))
+	if len(internalIDs) == 0 {
+		return result, nil
+	}
+	var users []identityschema.User
+	if err := platformdb.DB.Unscoped().Select("id", "external_id").Where("id IN ?", internalIDs).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	for i := range users {
+		result[users[i].Id] = users[i].ExternalId
 	}
 	return result, nil
 }
@@ -150,7 +183,8 @@ func loadOwnerUsageChannels(ownerUserID int, selectedChannelID string) ([]ownerU
 		}
 		group := groupByChannelID[channel.ID]
 		result = append(result, ownerUsageChannel{
-			ChannelID: channel.ID, GroupID: group.ID, Name: group.SystemDisplayName,
+			ChannelID: channel.ID, GroupID: group.ID,
+			Name:              marketplaceDisplayName(channel.SubmittedSourceLabel, group.Multiplier, channel.ID),
 			InternalChannelID: *channel.InternalChannelID,
 		})
 	}
@@ -179,14 +213,14 @@ func loadOwnerUsageSettlements(ownerUserID int, logs []auditschema.Log) (map[str
 	return result, nil
 }
 
-func ownerUsageLogItem(log auditschema.Log, channel ownerUsageChannel, settlement marketplaceschema.Settlement) OwnerUsageLogItem {
+func ownerUsageLogItem(log auditschema.Log, channel ownerUsageChannel, settlement marketplaceschema.Settlement, externalUserID string) OwnerUsageLogItem {
 	status := "success"
 	if log.Type == auditschema.LogTypeError {
 		status = "failed"
 	}
 	item := OwnerUsageLogItem{
 		ID: log.Id, ChannelID: channel.ChannelID, ChannelName: channel.Name, GroupID: channel.GroupID,
-		UserID: log.UserId, CreatedAt: log.CreatedAt, Status: status, ModelName: log.ModelName,
+		UserID: externalUserID, CreatedAt: log.CreatedAt, Status: status, ModelName: log.ModelName,
 		PromptTokens: log.PromptTokens, CompletionTokens: log.CompletionTokens, UseTime: log.UseTime,
 		IsStream: log.IsStream, RequestID: log.RequestId, ConsumerAmount: int64(log.Quota),
 		IncomeStatus: "none",

@@ -20,11 +20,12 @@ export interface ModelVerificationResult {
 
 export interface MarketplaceGroup {
   id: string
+  channel_id: string
   public_slug: string
   system_display_name: string
-  owner_display_name: string
   source_type: 'marketplace_user' | 'official'
   source_label: string
+  provider_type: string
   credit_pool_policy: string
   lifecycle_status: MarketplaceStatus
   verification_status: string
@@ -128,7 +129,10 @@ export interface ChannelUpdateValues {
 export interface GroupFilters {
   search: string
   model: string
+  source: string
+  provider: string
   status: string
+  verification: string
   sort: string
   direction: string
   window_hours: number
@@ -147,7 +151,7 @@ export interface MarketplaceOwnerUsageLog {
   channel_id: string
   channel_name: string
   group_id: string
-  user_id: number
+  user_id: string
   created_at: number
   status: 'success' | 'failed'
   model_name: string

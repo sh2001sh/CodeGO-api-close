@@ -46,6 +46,8 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 		"POST /api/marketplace/channels/fetch-models":     false,
 		"GET /api/marketplace/channels/mine/logs":         false,
 		"PATCH /api/marketplace/admin/channels/:id":       false,
+		"DELETE /api/marketplace/channels/:id":            false,
+		"DELETE /api/marketplace/admin/channels/:id":      false,
 		"POST /api/marketplace/admin/channels/:id/review": false,
 	}
 	for _, route := range engine.Routes() {

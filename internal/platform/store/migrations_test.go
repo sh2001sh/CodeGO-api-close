@@ -2,11 +2,13 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -81,6 +83,10 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.False(t, db.Migrator().HasTable(&commerceschema.BlindBoxGrant{}))
 	require.NoError(t, ApplyV2Migrations(context.Background(), false))
 	require.True(t, db.Migrator().HasTable(&commerceschema.BlindBoxGrant{}))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+	require.False(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
 	for _, tableName := range []string{
 		"user_companion_pets",
 		"daily_mission_rewards",
@@ -105,6 +111,54 @@ func TestMigrateMarketplaceAutoRoutePoolIsIdempotent(t *testing.T) {
 	require.True(t, db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}))
 	require.True(t, db.Migrator().HasIndex(&marketplaceschema.AutoRoutePoolMember{}, "uq_marketplace_auto_pool_member"))
 	require.True(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+}
+
+func TestMigrateMarketplaceSoftDeleteAndNumericChannelIDs(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	originalPostgreSQL := platformdb.UsingPostgreSQL
+	t.Cleanup(func() { platformdb.UsingPostgreSQL = originalPostgreSQL })
+	platformdb.UsingPostgreSQL = false
+
+	require.NoError(t, db.AutoMigrate(
+		&gatewayschema.Channel{},
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{},
+	))
+	internal := gatewayschema.Channel{Key: "encrypted", OtherInfo: `{"marketplace_channel_id":"legacy-uuid"}`}
+	require.NoError(t, db.Create(&internal).Error)
+	channel := marketplaceschema.Channel{
+		ID: "legacy-uuid", OwnerUserID: 1, ProviderType: "openai_compatible",
+		BaseURLCiphertext: "url", CredentialCiphertext: "key", InternalChannelID: &internal.Id,
+	}
+	group := marketplaceschema.Group{
+		ID: "legacy-group", ChannelID: channel.ID, OwnerUserID: 1, PublicSlug: "legacy",
+		SystemDisplayName: "legacy", InternalGroupName: "legacy", SourceType: "marketplace_user",
+		CreditPoolPolicy: "universal_only", Multiplier: 1, LifecycleStatus: "active",
+		VerificationStatus: "passed", Visibility: "public",
+	}
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.VerificationRun{ID: "legacy-run", ChannelID: channel.ID, Status: "passed"}).Error)
+
+	require.NoError(t, migrateMarketplaceSoftDelete(db))
+	require.NoError(t, migrateMarketplaceNumericChannelIDs(db))
+
+	var migrated marketplaceschema.Channel
+	require.NoError(t, db.First(&migrated).Error)
+	require.True(t, isNumericMarketplaceID(migrated.ID))
+	require.Len(t, migrated.ID, 12)
+	var migratedGroup marketplaceschema.Group
+	require.NoError(t, db.First(&migratedGroup, "id = ?", group.ID).Error)
+	require.Equal(t, migrated.ID, migratedGroup.ChannelID)
+	var migratedRun marketplaceschema.VerificationRun
+	require.NoError(t, db.First(&migratedRun, "id = ?", "legacy-run").Error)
+	require.Equal(t, migrated.ID, migratedRun.ChannelID)
+	require.NoError(t, db.First(&internal, internal.Id).Error)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal([]byte(internal.OtherInfo), &metadata))
+	require.Equal(t, migrated.ID, metadata["marketplace_channel_id"])
 }
 
 func TestMigrateBlindBoxLegacyCreditMarkerUpgradesExistingSQLiteTable(t *testing.T) {

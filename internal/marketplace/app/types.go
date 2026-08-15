@@ -84,6 +84,8 @@ type GroupQuery struct {
 	ViewerUserID  int
 	Search        string
 	Model         string
+	Source        string
+	Provider      string
 	Status        string
 	Verification  string
 	Sort          string
@@ -97,11 +99,12 @@ type GroupQuery struct {
 
 type GroupListItem struct {
 	ID                       string                    `json:"id"`
+	ChannelID                string                    `json:"channel_id"`
 	PublicSlug               string                    `json:"public_slug"`
 	SystemDisplayName        string                    `json:"system_display_name"`
-	OwnerDisplayName         string                    `json:"owner_display_name"`
 	SourceType               string                    `json:"source_type"`
 	SourceLabel              string                    `json:"source_label"`
+	ProviderType             string                    `json:"provider_type"`
 	CreditPoolPolicy         string                    `json:"credit_pool_policy"`
 	LifecycleStatus          string                    `json:"lifecycle_status"`
 	VerificationStatus       string                    `json:"verification_status"`
@@ -193,7 +196,7 @@ type OwnerUsageLogItem struct {
 	ChannelID          string     `json:"channel_id"`
 	ChannelName        string     `json:"channel_name"`
 	GroupID            string     `json:"group_id"`
-	UserID             int        `json:"user_id"`
+	UserID             string     `json:"user_id"`
 	CreatedAt          int64      `json:"created_at"`
 	Status             string     `json:"status"`
 	ModelName          string     `json:"model_name"`

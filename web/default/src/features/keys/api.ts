@@ -62,7 +62,6 @@ interface MarketplaceGroupListResponse {
   items: Array<{
     id: string
     system_display_name: string
-    owner_display_name: string
     source_label: string
     lifecycle_status: string
     verification_status: string

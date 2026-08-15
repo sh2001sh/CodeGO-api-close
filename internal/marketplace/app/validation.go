@@ -13,6 +13,8 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 )
 
+const maxMarketplaceMultiplier = 1_000_000
+
 func validateCreateRequest(req CreateChannelRequest) error {
 	if err := validateProvider(req.ProviderType); err != nil {
 		return err
@@ -93,6 +95,9 @@ func validateModels(models []string) error {
 func validateMultiplier(multiplier float64) error {
 	if math.IsNaN(multiplier) || math.IsInf(multiplier, 0) || multiplier <= 0 {
 		return errors.New("倍率必须是大于 0 的有效数字")
+	}
+	if multiplier > maxMarketplaceMultiplier {
+		return fmt.Errorf("倍率不能超过 %dx", maxMarketplaceMultiplier)
 	}
 	return nil
 }

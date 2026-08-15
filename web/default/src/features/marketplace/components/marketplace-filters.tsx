@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
 import type { GroupFilters } from '../types'
 
 export function MarketplaceFilters(props: {
@@ -38,7 +39,7 @@ export function MarketplaceFilters(props: {
             onChange={(event) =>
               props.onChange({ search: event.target.value, page: 1 })
             }
-            placeholder={t('搜索分组、模型、来源或渠道主')}
+            placeholder={t('搜索渠道 ID、渠道名、模型或来源')}
             className='bg-background pl-9'
           />
         </label>
@@ -53,6 +54,36 @@ export function MarketplaceFilters(props: {
             className='bg-background w-36 sm:w-44'
           />
           <NativeSelect
+            value={props.filters.source}
+            onChange={(event) =>
+              props.onChange({ source: event.target.value, page: 1 })
+            }
+            aria-label={t('模型来源')}
+            className='bg-background'
+          >
+            <option value=''>{t('全部来源')}</option>
+            {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
+              <option key={source} value={source}>
+                {source}
+              </option>
+            ))}
+          </NativeSelect>
+          <NativeSelect
+            value={props.filters.provider}
+            onChange={(event) =>
+              props.onChange({ provider: event.target.value, page: 1 })
+            }
+            aria-label={t('协议类型')}
+            className='bg-background'
+          >
+            <option value=''>{t('全部协议')}</option>
+            <option value='openai_compatible'>OpenAI Compatible</option>
+            <option value='codex'>Codex</option>
+            <option value='azure_openai'>Azure OpenAI</option>
+            <option value='anthropic'>Anthropic / Claude</option>
+            <option value='gemini'>Google Gemini</option>
+          </NativeSelect>
+          <NativeSelect
             value={props.filters.status}
             onChange={(event) =>
               props.onChange({ status: event.target.value, page: 1 })
@@ -64,6 +95,20 @@ export function MarketplaceFilters(props: {
             <option value='active'>{t('可用')}</option>
             <option value='degraded'>{t('质量下降')}</option>
             <option value='suspended'>{t('已暂停')}</option>
+          </NativeSelect>
+          <NativeSelect
+            value={props.filters.verification}
+            onChange={(event) =>
+              props.onChange({ verification: event.target.value, page: 1 })
+            }
+            aria-label={t('检测状态')}
+            className='bg-background'
+          >
+            <option value=''>{t('全部检测状态')}</option>
+            <option value='passed'>{t('检测通过')}</option>
+            <option value='queued'>{t('等待检测')}</option>
+            <option value='running'>{t('检测中')}</option>
+            <option value='failed'>{t('检测未通过')}</option>
           </NativeSelect>
           <NativeSelect
             value={String(props.filters.window_hours)}

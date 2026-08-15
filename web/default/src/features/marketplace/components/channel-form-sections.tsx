@@ -260,6 +260,8 @@ function StrategyMetrics(props: { form: ChannelForm }) {
         <Input
           type='number'
           step='any'
+          max='1000000'
+          inputMode='decimal'
           {...form.register('multiplier', { valueAsNumber: true })}
         />
       </FormField>

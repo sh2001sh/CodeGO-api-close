@@ -9,28 +9,29 @@ import (
 )
 
 type Channel struct {
-	ID                       string    `json:"id" gorm:"column:id;primaryKey;size:64"`
-	OwnerUserID              int       `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
-	ProviderType             string    `json:"provider_type" gorm:"column:provider_type;size:32;not null"`
-	SubmittedSourceLabel     string    `json:"submitted_source_label" gorm:"column:submitted_source_label;size:40"`
-	ApprovedSourceLabel      string    `json:"approved_source_label" gorm:"column:approved_source_label;size:40"`
-	SourceLabelStatus        string    `json:"source_label_status" gorm:"column:source_label_status;size:16;index"`
-	BaseURLCiphertext        string    `json:"-" gorm:"column:base_url_ciphertext;type:text;not null"`
-	CredentialCiphertext     string    `json:"-" gorm:"column:credential_ciphertext;type:text;not null"`
-	CredentialTail           string    `json:"credential_tail" gorm:"column:credential_tail;size:12"`
-	CredentialVersion        int       `json:"credential_version" gorm:"column:credential_version;not null;default:1"`
-	DeclaredModels           string    `json:"-" gorm:"column:declared_models;type:text"`
-	ModelVerificationResults string    `json:"-" gorm:"column:model_verification_results;type:text"`
-	ModelConsistencyStatus   string    `json:"model_consistency_status" gorm:"column:model_consistency_status;size:24;index"`
-	MaxConcurrency           int       `json:"max_concurrency" gorm:"column:max_concurrency;not null;default:1"`
-	QPS                      float64   `json:"qps" gorm:"column:qps;not null;default:1"`
-	MaintenanceWindow        string    `json:"maintenance_window" gorm:"column:maintenance_window;size:255"`
-	Status                   string    `json:"status" gorm:"column:status;size:24;index;not null"`
-	InternalChannelID        *int      `json:"internal_channel_id" gorm:"column:internal_channel_id;index"`
-	LastReviewReason         string    `json:"last_review_reason" gorm:"column:last_review_reason;size:500"`
-	SourceLabelReviewReason  string    `json:"source_label_review_reason" gorm:"column:source_label_review_reason;size:500"`
-	CreatedAt                time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt                time.Time `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+	ID                       string         `json:"id" gorm:"column:id;primaryKey;size:64"`
+	OwnerUserID              int            `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
+	ProviderType             string         `json:"provider_type" gorm:"column:provider_type;size:32;not null"`
+	SubmittedSourceLabel     string         `json:"submitted_source_label" gorm:"column:submitted_source_label;size:40"`
+	ApprovedSourceLabel      string         `json:"approved_source_label" gorm:"column:approved_source_label;size:40"`
+	SourceLabelStatus        string         `json:"source_label_status" gorm:"column:source_label_status;size:16;index"`
+	BaseURLCiphertext        string         `json:"-" gorm:"column:base_url_ciphertext;type:text;not null"`
+	CredentialCiphertext     string         `json:"-" gorm:"column:credential_ciphertext;type:text;not null"`
+	CredentialTail           string         `json:"credential_tail" gorm:"column:credential_tail;size:12"`
+	CredentialVersion        int            `json:"credential_version" gorm:"column:credential_version;not null;default:1"`
+	DeclaredModels           string         `json:"-" gorm:"column:declared_models;type:text"`
+	ModelVerificationResults string         `json:"-" gorm:"column:model_verification_results;type:text"`
+	ModelConsistencyStatus   string         `json:"model_consistency_status" gorm:"column:model_consistency_status;size:24;index"`
+	MaxConcurrency           int            `json:"max_concurrency" gorm:"column:max_concurrency;not null;default:1"`
+	QPS                      float64        `json:"qps" gorm:"column:qps;not null;default:1"`
+	MaintenanceWindow        string         `json:"maintenance_window" gorm:"column:maintenance_window;size:255"`
+	Status                   string         `json:"status" gorm:"column:status;size:24;index;not null"`
+	InternalChannelID        *int           `json:"internal_channel_id" gorm:"column:internal_channel_id;index"`
+	LastReviewReason         string         `json:"last_review_reason" gorm:"column:last_review_reason;size:500"`
+	SourceLabelReviewReason  string         `json:"source_label_review_reason" gorm:"column:source_label_review_reason;size:500"`
+	CreatedAt                time.Time      `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt                time.Time      `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+	DeletedAt                gorm.DeletedAt `json:"-" gorm:"column:deleted_at;index"`
 }
 
 func (Channel) TableName() string { return tableName("channels") }
@@ -43,24 +44,25 @@ func (channel *Channel) BeforeCreate(_ *gorm.DB) error {
 }
 
 type Group struct {
-	ID                 string     `json:"id" gorm:"column:id;primaryKey;size:64"`
-	ChannelID          string     `json:"channel_id" gorm:"column:channel_id;size:64;uniqueIndex;not null"`
-	OwnerUserID        int        `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
-	PublicSlug         string     `json:"public_slug" gorm:"column:public_slug;size:80;uniqueIndex;not null"`
-	SystemDisplayName  string     `json:"system_display_name" gorm:"column:system_display_name;size:128;index;not null"`
-	InternalGroupName  string     `json:"-" gorm:"column:internal_group_name;size:64;uniqueIndex;not null"`
-	OwnerDisplayName   string     `json:"owner_display_name" gorm:"column:owner_display_name;size:128;index"`
-	SourceType         string     `json:"source_type" gorm:"column:source_type;size:32;not null"`
-	CreditPoolPolicy   string     `json:"credit_pool_policy" gorm:"column:credit_pool_policy;size:40;not null"`
-	Multiplier         float64    `json:"multiplier" gorm:"column:multiplier;not null"`
-	RoutingVersion     int        `json:"routing_version" gorm:"column:routing_version;not null;default:1"`
-	LifecycleStatus    string     `json:"lifecycle_status" gorm:"column:lifecycle_status;size:24;index;not null"`
-	VerificationStatus string     `json:"verification_status" gorm:"column:verification_status;size:24;index;not null"`
-	Visibility         string     `json:"visibility" gorm:"column:visibility;size:16;index;not null"`
-	PublishedAt        *time.Time `json:"published_at" gorm:"column:published_at;index"`
-	VerificationDueAt  *time.Time `json:"verification_due_at" gorm:"column:verification_due_at;index"`
-	CreatedAt          time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt          time.Time  `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+	ID                 string         `json:"id" gorm:"column:id;primaryKey;size:64"`
+	ChannelID          string         `json:"channel_id" gorm:"column:channel_id;size:64;uniqueIndex;not null"`
+	OwnerUserID        int            `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
+	PublicSlug         string         `json:"public_slug" gorm:"column:public_slug;size:80;uniqueIndex;not null"`
+	SystemDisplayName  string         `json:"system_display_name" gorm:"column:system_display_name;size:128;index;not null"`
+	InternalGroupName  string         `json:"-" gorm:"column:internal_group_name;size:64;uniqueIndex;not null"`
+	OwnerDisplayName   string         `json:"owner_display_name" gorm:"column:owner_display_name;size:128;index"`
+	SourceType         string         `json:"source_type" gorm:"column:source_type;size:32;not null"`
+	CreditPoolPolicy   string         `json:"credit_pool_policy" gorm:"column:credit_pool_policy;size:40;not null"`
+	Multiplier         float64        `json:"multiplier" gorm:"column:multiplier;not null"`
+	RoutingVersion     int            `json:"routing_version" gorm:"column:routing_version;not null;default:1"`
+	LifecycleStatus    string         `json:"lifecycle_status" gorm:"column:lifecycle_status;size:24;index;not null"`
+	VerificationStatus string         `json:"verification_status" gorm:"column:verification_status;size:24;index;not null"`
+	Visibility         string         `json:"visibility" gorm:"column:visibility;size:16;index;not null"`
+	PublishedAt        *time.Time     `json:"published_at" gorm:"column:published_at;index"`
+	VerificationDueAt  *time.Time     `json:"verification_due_at" gorm:"column:verification_due_at;index"`
+	CreatedAt          time.Time      `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt          time.Time      `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+	DeletedAt          gorm.DeletedAt `json:"-" gorm:"column:deleted_at;index"`
 }
 
 func (Group) TableName() string { return tableName("groups") }

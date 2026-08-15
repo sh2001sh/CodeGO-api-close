@@ -12,7 +12,8 @@ import (
 func ListGroups(c *gin.Context) {
 	query := marketplaceapp.GroupQuery{
 		ViewerUserID: c.GetInt("id"),
-		Search:       c.Query("search"), Model: c.Query("model"), Status: c.Query("status"),
+		Search:       c.Query("search"), Model: c.Query("model"), Source: c.Query("source"),
+		Provider: c.Query("provider"), Status: c.Query("status"),
 		Verification: c.Query("verification"), Sort: c.Query("sort"), Direction: c.Query("direction"),
 		WindowHours: queryInt(c, "window_hours", 24), Page: queryInt(c, "page", 1),
 		PageSize: queryInt(c, "page_size", 20), MinMultiplier: queryFloat(c, "min_multiplier"),
@@ -86,6 +87,10 @@ func UpdateChannel(c *gin.Context) {
 	respond(c, result, err)
 }
 
+func DeleteChannel(c *gin.Context) {
+	respond(c, gin.H{"deleted": true}, marketplaceapp.DeleteOwnerChannel(c.GetInt("id"), c.Param("id")))
+}
+
 func VerifyChannel(c *gin.Context) {
 	channels, err := marketplaceapp.ListOwnerChannels(c.GetInt("id"))
 	if err != nil {
@@ -136,6 +141,10 @@ func UpdateAdminChannel(c *gin.Context) {
 	}
 	result, err := marketplaceapp.UpdateAdminChannel(c.Param("id"), req)
 	respond(c, result, err)
+}
+
+func DeleteAdminChannel(c *gin.Context) {
+	respond(c, gin.H{"deleted": true}, marketplaceapp.DeleteAdminChannel(c.Param("id")))
 }
 
 func ReviewChannel(c *gin.Context) {

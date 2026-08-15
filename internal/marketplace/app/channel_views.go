@@ -13,7 +13,8 @@ import (
 func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Group) *ChannelView {
 	view := &ChannelView{
 		ID: channel.ID, GroupID: group.ID, PublicSlug: group.PublicSlug,
-		SystemDisplayName: group.SystemDisplayName, ProviderType: channel.ProviderType,
+		SystemDisplayName:    marketplaceDisplayName(channel.SubmittedSourceLabel, group.Multiplier, channel.ID),
+		ProviderType:         channel.ProviderType,
 		SubmittedSourceLabel: channel.SubmittedSourceLabel, ApprovedSourceLabel: channel.ApprovedSourceLabel,
 		SourceLabelStatus: channel.SourceLabelStatus, SourceLabelReviewReason: channel.SourceLabelReviewReason,
 		CredentialTail: channel.CredentialTail, CredentialVersion: channel.CredentialVersion,

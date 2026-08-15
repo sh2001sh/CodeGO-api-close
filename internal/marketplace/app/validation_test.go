@@ -22,11 +22,13 @@ func TestValidateMarketplaceURLRejectsPrivateDestinations(t *testing.T) {
 	}
 }
 
-func TestValidateMultiplierAllowsAnyFinitePositiveValue(t *testing.T) {
+func TestValidateMultiplierAllowsPositiveValuesWithinTechnicalLimit(t *testing.T) {
 	require.NoError(t, validateMultiplier(0.0001))
 	require.NoError(t, validateMultiplier(9999))
+	require.NoError(t, validateMultiplier(maxMarketplaceMultiplier))
 	require.Error(t, validateMultiplier(0))
 	require.Error(t, validateMultiplier(-1))
+	require.Error(t, validateMultiplier(maxMarketplaceMultiplier+1))
 }
 
 func TestValidateSourceLabel(t *testing.T) {

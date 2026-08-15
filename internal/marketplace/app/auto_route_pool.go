@@ -41,7 +41,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 		availability, score := autoRouteMetrics(group, snapshots[group.ID])
 		items = append(items, AutoRoutePoolItem{
 			GroupID: group.ID, PublicSlug: group.PublicSlug,
-			SystemDisplayName: group.SystemDisplayName,
+			SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID),
 			SourceLabel:       publicSourceLabel(channel),
 			LifecycleStatus:   group.LifecycleStatus,
 			Multiplier:        group.Multiplier,

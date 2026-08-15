@@ -55,7 +55,10 @@ export function Pricing() {
     () => ({
       search: '',
       model: '',
+      source: '',
+      provider: '',
       status: '',
+      verification: '',
       sort: 'score',
       direction: 'desc',
       window_hours: 24,

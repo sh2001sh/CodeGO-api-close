@@ -121,13 +121,16 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 		imageRatio, _ = gatewaystore.GetImageRatio(info.OriginModelName)
 		audioRatio = gatewaystore.GetAudioRatio(info.OriginModelName)
 		audioCompletionRatio = gatewaystore.GetAudioCompletionRatio(info.OriginModelName)
-		ratio := modelRatio * groupRatioInfo.GroupRatio
-		preConsumedQuota = int(float64(preConsumedTokens) * ratio)
+		preConsumedQuota = platformmath.SaturatingMulToInt(
+			float64(preConsumedTokens), modelRatio, groupRatioInfo.GroupRatio,
+		)
 	} else {
 		if meta.ImagePriceRatio != 0 {
 			modelPrice = modelPrice * meta.ImagePriceRatio
 		}
-		preConsumedQuota = int(modelPrice * platformruntime.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		preConsumedQuota = platformmath.SaturatingMulToInt(
+			modelPrice, platformruntime.QuotaPerUnit, groupRatioInfo.GroupRatio,
+		)
 	}
 
 	if groupRatioInfo.GroupRatio == 0 {
@@ -198,13 +201,17 @@ func ModelPriceHelperPerCall(c *gin.Context, info *RelayInfo) (types.PriceData, 
 	freeModel := false
 
 	if usePrice {
-		quota = int(modelPrice * platformruntime.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		quota = platformmath.SaturatingMulToInt(
+			modelPrice, platformruntime.QuotaPerUnit, groupRatioInfo.GroupRatio,
+		)
 		if groupRatioInfo.GroupRatio == 0 || (!gatewaystore.GetQuotaSetting().EnableFreeModelPreConsume && modelPrice == 0) {
 			quota = 0
 			freeModel = true
 		}
 	} else {
-		quota = int(modelRatio / 2 * platformruntime.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		quota = platformmath.SaturatingMulToInt(
+			modelRatio/2, platformruntime.QuotaPerUnit, groupRatioInfo.GroupRatio,
+		)
 		modelPrice = -1
 		if groupRatioInfo.GroupRatio == 0 || (!gatewaystore.GetQuotaSetting().EnableFreeModelPreConsume && modelRatio == 0) {
 			quota = 0
@@ -262,7 +269,7 @@ func modelPriceHelperTiered(c *gin.Context, info *RelayInfo, promptTokens int, m
 	}
 
 	quotaBeforeGroup := rawCost / 1_000_000 * platformruntime.QuotaPerUnit
-	preConsumedQuota := billingexpr.QuotaRound(quotaBeforeGroup * groupRatioInfo.GroupRatio)
+	preConsumedQuota := platformmath.SaturatingMulToInt(quotaBeforeGroup, groupRatioInfo.GroupRatio)
 
 	freeModel := groupRatioInfo.GroupRatio == 0
 	if freeModel {

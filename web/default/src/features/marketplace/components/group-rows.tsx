@@ -13,8 +13,8 @@ import {
 } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
 import { GroupDetails } from './group-details'
-import { MarketplaceStatusBadge } from './status-badge'
 import { ModelConsistencyBadge } from './model-verification'
+import { MarketplaceStatusBadge } from './status-badge'
 
 export function DesktopGroupRow(props: {
   group: MarketplaceGroup
@@ -95,8 +95,7 @@ export function MobileGroupRow(props: {
                   {group.system_display_name}
                 </div>
                 <div className='text-muted-foreground mt-0.5 truncate text-xs'>
-                  {group.source_label || t('来源待审核')} ·{' '}
-                  {group.owner_display_name}
+                  {group.provider_type}
                 </div>
               </div>
               <div className='shrink-0 text-right'>
@@ -134,7 +133,6 @@ export function MobileGroupRow(props: {
 }
 
 function GroupIdentity(props: { group: MarketplaceGroup }) {
-  const { t } = useTranslation()
   const group = props.group
   return (
     <div>
@@ -144,7 +142,7 @@ function GroupIdentity(props: { group: MarketplaceGroup }) {
         <ModelConsistencyBadge status={group.model_consistency_status} />
       </div>
       <div className='text-muted-foreground mt-1 text-xs'>
-        {group.source_label || t('来源待审核')} · {group.owner_display_name}
+        {group.provider_type}
       </div>
       <div className='mt-2'>
         <ModelPreview models={group.models} />

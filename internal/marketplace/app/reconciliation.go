@@ -29,7 +29,7 @@ func ReconcileMarketplaceChannels() error {
 		channel.ApprovedSourceLabel = label
 		channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
 		channel.SourceLabelReviewReason = ""
-		normalizeInternalGroupName(&group, label)
+		normalizeInternalGroupName(&group, channel.ID, label)
 
 		if group.VerificationStatus == marketplacedomain.VerificationPassed &&
 			group.LifecycleStatus != marketplacedomain.LifecycleSuspended &&

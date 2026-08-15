@@ -54,15 +54,11 @@ func marketplaceInternalGroupName(sourceLabel, groupID string) string {
 	return marketplaceSourcePrefixes[label] + "-" + compact
 }
 
-func marketplaceDisplayName(sourceLabel string, multiplier float64, groupID string) string {
+func marketplaceDisplayName(sourceLabel string, multiplier float64, channelID string) string {
 	label, ok := canonicalSourceLabel(sourceLabel)
 	if !ok {
-		label = "CC其它"
-	}
-	compact := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(groupID), "-", ""))
-	if len(compact) > 6 {
-		compact = compact[:6]
+		label = "来源待审核"
 	}
 	multiplierText := strconv.FormatFloat(multiplier, 'f', -1, 64)
-	return label + " · " + multiplierText + "x · #" + compact
+	return label + "-" + multiplierText + "x-" + strings.TrimSpace(channelID)
 }

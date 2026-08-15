@@ -2,7 +2,11 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
@@ -76,6 +80,8 @@ func V2MigrationIDs() []string {
 		"20260815_marketplace_channel_source_labels",
 		"20260815_marketplace_model_verification",
 		"20260815_marketplace_auto_route_pool",
+		"20260815_marketplace_soft_delete",
+		"20260815_marketplace_numeric_channel_ids",
 	}
 }
 
@@ -225,14 +231,14 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260815_marketplace_channel_source_labels", Run: migrateMarketplaceChannelSourceLabels},
 		{ID: "20260815_marketplace_model_verification", Run: migrateMarketplaceModelVerification},
 		{ID: "20260815_marketplace_auto_route_pool", Run: migrateMarketplaceAutoRoutePool},
+		{ID: "20260815_marketplace_soft_delete", Run: migrateMarketplaceSoftDelete},
+		{ID: "20260815_marketplace_numeric_channel_ids", Run: migrateMarketplaceNumericChannelIDs},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
 		err := db.Where("id = ?", step.ID).First(&applied).Error
 		if err == nil {
-			if step.ID == "20260715_blind_box_admin_grants" &&
-				(!db.Migrator().HasTable(&commerceschema.BlindBoxOrder{}) ||
-					!db.Migrator().HasTable(&commerceschema.BlindBoxGrant{})) {
+			if appliedMigrationNeedsRepair(db, step.ID) {
 				if dryRun {
 					continue
 				}
@@ -269,6 +275,19 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}
 	}
 	return nil
+}
+
+func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
+	switch migrationID {
+	case "20260715_blind_box_admin_grants":
+		return !db.Migrator().HasTable(&commerceschema.BlindBoxOrder{}) ||
+			!db.Migrator().HasTable(&commerceschema.BlindBoxGrant{})
+	case "20260815_marketplace_auto_route_pool":
+		return !db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}) ||
+			!db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority")
+	default:
+		return false
+	}
 }
 
 func migrateBlindBoxLegacyCreditMarker(tx *gorm.DB) error {
@@ -327,6 +346,117 @@ func migrateMarketplaceModelVerification(tx *gorm.DB) error {
 
 func migrateMarketplaceAutoRoutePool(tx *gorm.DB) error {
 	return tx.AutoMigrate(&marketplaceschema.AutoRoutePoolMember{})
+}
+
+func migrateMarketplaceSoftDelete(tx *gorm.DB) error {
+	for _, target := range []struct {
+		model any
+		field string
+	}{
+		{model: &marketplaceschema.Channel{}, field: "DeletedAt"},
+		{model: &marketplaceschema.Group{}, field: "DeletedAt"},
+	} {
+		if !tx.Migrator().HasTable(target.model) || tx.Migrator().HasColumn(target.model, target.field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(target.model, target.field); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateMarketplaceNumericChannelIDs(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return nil
+	}
+	var channels []marketplaceschema.Channel
+	if err := tx.Unscoped().Order("created_at asc").Find(&channels).Error; err != nil {
+		return err
+	}
+	used := make(map[string]struct{}, len(channels))
+	for _, channel := range channels {
+		if isNumericMarketplaceID(channel.ID) {
+			used[channel.ID] = struct{}{}
+		}
+	}
+	nextID := int64(100_000_000_000)
+	for index := range channels {
+		channel := &channels[index]
+		if isNumericMarketplaceID(channel.ID) {
+			continue
+		}
+		newID := nextNumericMarketplaceID(used, &nextID)
+		if err := replaceMarketplaceChannelID(tx, channel, newID); err != nil {
+			return err
+		}
+		used[newID] = struct{}{}
+	}
+	return nil
+}
+
+func isNumericMarketplaceID(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func nextNumericMarketplaceID(used map[string]struct{}, nextID *int64) string {
+	for {
+		(*nextID)++
+		candidate := strconv.FormatInt(*nextID, 10)
+		if _, exists := used[candidate]; !exists {
+			return candidate
+		}
+	}
+}
+
+func replaceMarketplaceChannelID(tx *gorm.DB, channel *marketplaceschema.Channel, newID string) error {
+	oldID := channel.ID
+	if tx.Migrator().HasTable(&marketplaceschema.Group{}) {
+		if err := tx.Unscoped().Model(&marketplaceschema.Group{}).Where("channel_id = ?", oldID).Update("channel_id", newID).Error; err != nil {
+			return err
+		}
+	}
+	if tx.Migrator().HasTable(&marketplaceschema.VerificationRun{}) {
+		if err := tx.Model(&marketplaceschema.VerificationRun{}).Where("channel_id = ?", oldID).Update("channel_id", newID).Error; err != nil {
+			return err
+		}
+	}
+	if err := updateMarketplaceInternalChannelMetadata(tx, channel, newID); err != nil {
+		return err
+	}
+	return tx.Unscoped().Model(&marketplaceschema.Channel{}).Where("id = ?", oldID).Update("id", newID).Error
+}
+
+func updateMarketplaceInternalChannelMetadata(tx *gorm.DB, channel *marketplaceschema.Channel, newID string) error {
+	if channel.InternalChannelID == nil {
+		return nil
+	}
+	var internal gatewayschema.Channel
+	err := tx.First(&internal, "id = ?", *channel.InternalChannelID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	metadata := make(map[string]any)
+	if json.Unmarshal([]byte(strings.TrimSpace(internal.OtherInfo)), &metadata) != nil {
+		metadata = make(map[string]any)
+	}
+	metadata["marketplace_channel_id"] = newID
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	return tx.Model(&internal).Update("other_info", string(encoded)).Error
 }
 
 // migratePendingOutboxLookupIndex keeps the ledger worker's pending-event

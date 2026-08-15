@@ -22,7 +22,11 @@ export const channelFormSchema = z.object({
   base_url: z.string().url().startsWith('https://'),
   api_key: z.string().min(1),
   declared_models: z.array(z.string()).min(1),
-  multiplier: z.number().finite().positive('倍率必须大于 0'),
+  multiplier: z
+    .number()
+    .finite()
+    .positive('倍率必须大于 0')
+    .max(1_000_000, '倍率不能超过 1000000x'),
   visibility: z.enum(['private', 'unlisted', 'public']),
   max_concurrency: z.number().int().min(1).max(10000),
   qps: z.number().positive().max(10000),

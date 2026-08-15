@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   bindMarketplaceToken,
   createMarketplaceChannel,
+  deleteMarketplaceChannel,
   fetchMarketplaceModels,
   getAdminMarketplaceChannels,
   getMarketplaceGroups,
@@ -160,6 +161,29 @@ export function useMarketplaceChannelUpdate(admin: boolean) {
       await queryClient.invalidateQueries({
         queryKey: ['selectable-marketplace-groups'],
       })
+    },
+  })
+}
+
+export function useMarketplaceChannelDelete(admin: boolean) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (channelId: string) =>
+      deleteMarketplaceChannel(channelId, admin),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] }),
+        queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['marketplace-auto-route-pool'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['selectable-marketplace-groups'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['api-key-marketplace-auto-pool'],
+        }),
+      ])
     },
   })
 }

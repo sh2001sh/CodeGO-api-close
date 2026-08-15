@@ -93,6 +93,19 @@ export async function updateMarketplaceChannel(
   return requireData(response.data)
 }
 
+export async function deleteMarketplaceChannel(
+  channelId: string,
+  admin: boolean
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.delete<ApiResponse>(
+    `${prefix}/channels/${channelId}`
+  )
+  if (!response.data.success) {
+    throw new Error(response.data.message || '删除渠道失败')
+  }
+}
+
 export async function fetchMarketplaceModels(
   values: Pick<ChannelFormValues, 'provider_type' | 'base_url' | 'api_key'>
 ) {

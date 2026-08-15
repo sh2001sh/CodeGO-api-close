@@ -162,7 +162,7 @@ export function OwnerChannelUsageLogs(props: {
         <ShieldCheck className='text-info mt-0.5 size-3.5 shrink-0' />
         <span>
           {t(
-            '日志已脱敏，仅展示调用用户 ID，不展示用户名、Token、IP 或请求内容。'
+            '日志已脱敏，仅展示调用用户外部 ID，不展示用户名、Token、IP 或请求内容。'
           )}
         </span>
       </div>
@@ -207,7 +207,7 @@ export function OwnerChannelUsageLogs(props: {
             <TableRow>
               <TableHead>{t('时间')}</TableHead>
               <TableHead>{t('渠道 / 模型')}</TableHead>
-              <TableHead>{t('用户 ID')}</TableHead>
+              <TableHead>{t('用户外部 ID')}</TableHead>
               <TableHead>{t('Tokens')}</TableHead>
               <TableHead>{t('耗时')}</TableHead>
               <TableHead>{t('用户扣费')}</TableHead>
@@ -230,7 +230,7 @@ export function OwnerChannelUsageLogs(props: {
                 <TableCell>
                   <span className='inline-flex items-center gap-1 font-mono text-xs'>
                     <UserRound className='text-muted-foreground size-3' />
-                    {item.user_id}
+                    {item.user_id || '-'}
                   </span>
                 </TableCell>
                 <TableCell className='font-mono text-xs tabular-nums'>

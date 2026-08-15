@@ -3,33 +3,29 @@ import {
   Activity,
   CircleDollarSign,
   Clock3,
-  Loader2,
-  Pause,
-  Pencil,
-  Play,
   Plus,
   RefreshCcw,
   WalletCards,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useMarketplaceMutations, useMyMarketplaceChannels } from '../hooks'
+import { useMyMarketplaceChannels } from '../hooks'
 import { formatMultiplier } from '../lib/format'
 import type { MarketplaceChannel } from '../types'
+import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
 import { ChannelVerificationStatus } from './channel-verification-status'
-import { MarketplaceStatusBadge } from './status-badge'
+import { OwnerChannelActions } from './owner-channel-actions'
 import { IncomeMetric } from './owner-channel-metric'
+import { MarketplaceStatusBadge } from './status-badge'
 
 export function OwnerChannels(props: { onAdd: () => void }) {
   const { t } = useTranslation()
   const query = useMyMarketplaceChannels()
-  const mutations = useMarketplaceMutations()
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
+  const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
   const channels = query.data ?? []
   const metrics = [
     {
@@ -61,26 +57,6 @@ export function OwnerChannels(props: { onAdd: () => void }) {
       ),
     },
   ]
-
-  const act = async (
-    channel: MarketplaceChannel,
-    action: 'verify' | 'pause' | 'resume'
-  ) => {
-    try {
-      if (action === 'verify') {
-        await mutations.verify.mutateAsync(channel.id)
-        toast.info(t('检测已开始，页面会自动更新进度和结果'))
-        return
-      } else
-        await mutations.pause.mutateAsync({
-          id: channel.id,
-          paused: action === 'pause',
-        })
-      toast.success(action === 'pause' ? t('渠道已暂停') : t('渠道已恢复'))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('操作失败'))
-    }
-  }
 
   return (
     <>
@@ -168,6 +144,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                       />
                     </div>
                     <div className='text-muted-foreground mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs'>
+                      <span className='tabular-nums'>ID {channel.id}</span>
                       <span>{channel.provider_type}</span>
                       <span>
                         {channel.submitted_source_label} ·{' '}
@@ -221,65 +198,11 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                       />
                     </div>
                   </div>
-                  <div className='flex shrink-0 flex-wrap items-center gap-2 lg:justify-end'>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => setEditing(channel)}
-                    >
-                      <Pencil />
-                      {t('编辑')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => void act(channel, 'verify')}
-                      disabled={
-                        mutations.verify.isPending ||
-                        channel.lifecycle_status === 'verifying' ||
-                        ['queued', 'running'].includes(
-                          channel.verification_status
-                        )
-                      }
-                    >
-                      <RefreshCcw
-                        className={cn(
-                          channel.lifecycle_status === 'verifying' &&
-                            'animate-spin'
-                        )}
-                      />
-                      {channel.lifecycle_status === 'verifying'
-                        ? t('检测中')
-                        : t('重新检测')}
-                    </Button>
-                    {channel.lifecycle_status === 'suspended' ? (
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => void act(channel, 'resume')}
-                      >
-                        <Play />
-                        {t('恢复')}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => void act(channel, 'pause')}
-                        disabled={
-                          channel.lifecycle_status !== 'active' &&
-                          channel.lifecycle_status !== 'degraded'
-                        }
-                      >
-                        <Pause />
-                        {t('暂停')}
-                      </Button>
-                    )}
-                    {(mutations.pause.isPending ||
-                      mutations.verify.isPending) && (
-                      <Loader2 className='text-muted-foreground size-4 animate-spin' />
-                    )}
-                  </div>
+                  <OwnerChannelActions
+                    channel={channel}
+                    onEdit={() => setEditing(channel)}
+                    onDelete={() => setDeleting(channel)}
+                  />
                 </div>
               ))}
             </div>
@@ -291,6 +214,13 @@ export function OwnerChannels(props: { onAdd: () => void }) {
         open={editing != null}
         onOpenChange={(open) => {
           if (!open) setEditing(null)
+        }}
+      />
+      <ChannelDeleteDialog
+        channel={deleting}
+        open={deleting != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null)
         }}
       />
     </>

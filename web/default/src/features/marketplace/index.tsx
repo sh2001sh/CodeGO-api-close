@@ -15,7 +15,10 @@ import type { GroupFilters } from './types'
 const defaultFilters: GroupFilters = {
   search: '',
   model: '',
+  source: '',
+  provider: '',
   status: '',
+  verification: '',
   sort: 'score',
   direction: 'desc',
   window_hours: 24,

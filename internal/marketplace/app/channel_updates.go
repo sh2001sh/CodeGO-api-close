@@ -30,7 +30,7 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 		reverify = true
 	}
 	if req.Multiplier != nil {
-		if err := applyMultiplierChange(group, channel.SubmittedSourceLabel, *req.Multiplier); err != nil {
+		if err := applyMultiplierChange(group, channel.ID, channel.SubmittedSourceLabel, *req.Multiplier); err != nil {
 			return false, err
 		}
 	}
@@ -50,7 +50,7 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 			channel.ApprovedSourceLabel = label
 			channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
 			channel.SourceLabelReviewReason = ""
-			refreshInternalGroupName(group, label)
+			refreshInternalGroupName(group, channel.ID, label)
 		}
 	}
 	applyCapacityUpdate(channel, req)
@@ -61,7 +61,7 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	if changed {
 		reverify = true
 	}
-	normalizeInternalGroupName(group, channel.SubmittedSourceLabel)
+	normalizeInternalGroupName(group, channel.ID, channel.SubmittedSourceLabel)
 	if reverify {
 		group.LifecycleStatus = marketplacedomain.LifecycleVerifying
 		group.VerificationStatus = marketplacedomain.VerificationQueued
@@ -70,18 +70,18 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	return reverify, nil
 }
 
-func normalizeInternalGroupName(group *marketplaceschema.Group, sourceLabel string) {
+func normalizeInternalGroupName(group *marketplaceschema.Group, channelID, sourceLabel string) {
 	expected := marketplaceInternalGroupName(sourceLabel, group.ID)
 	if group.InternalGroupName == expected {
-		group.SystemDisplayName = marketplaceDisplayName(sourceLabel, group.Multiplier, group.ID)
+		group.SystemDisplayName = marketplaceDisplayName(sourceLabel, group.Multiplier, channelID)
 		return
 	}
 	group.RoutingVersion++
 	group.InternalGroupName = expected
-	group.SystemDisplayName = marketplaceDisplayName(sourceLabel, group.Multiplier, group.ID)
+	group.SystemDisplayName = marketplaceDisplayName(sourceLabel, group.Multiplier, channelID)
 }
 
-func applyMultiplierChange(group *marketplaceschema.Group, sourceLabel string, multiplier float64) error {
+func applyMultiplierChange(group *marketplaceschema.Group, channelID, sourceLabel string, multiplier float64) error {
 	if err := validateMultiplier(multiplier); err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func applyMultiplierChange(group *marketplaceschema.Group, sourceLabel string, m
 	group.Multiplier = multiplier
 	group.RoutingVersion++
 	group.InternalGroupName = marketplaceInternalGroupName(sourceLabel, group.ID)
-	group.SystemDisplayName = marketplaceDisplayName(sourceLabel, multiplier, group.ID)
+	group.SystemDisplayName = marketplaceDisplayName(sourceLabel, multiplier, channelID)
 	return nil
 }
 
@@ -133,8 +133,8 @@ func applyCredentialUpdate(channel *marketplaceschema.Channel, req UpdateChannel
 	return changed, nil
 }
 
-func refreshInternalGroupName(group *marketplaceschema.Group, sourceLabel string) {
+func refreshInternalGroupName(group *marketplaceschema.Group, channelID, sourceLabel string) {
 	group.RoutingVersion++
 	group.InternalGroupName = marketplaceInternalGroupName(sourceLabel, group.ID)
-	group.SystemDisplayName = marketplaceDisplayName(sourceLabel, group.Multiplier, group.ID)
+	group.SystemDisplayName = marketplaceDisplayName(sourceLabel, group.Multiplier, channelID)
 }

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"testing"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
@@ -32,7 +33,35 @@ func TestPendingSourceLabelIsNotSearchableOrReturned(t *testing.T) {
 		SourceLabelStatus: marketplacedomain.SourceLabelPending,
 	}
 	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "Kiro"}))
-	require.Empty(t, groupListItem(group, channel, nil, marketplaceschema.RankingSnapshot{}).SourceLabel)
+	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "渠道主"}))
+	item := groupListItem(group, channel, nil, marketplaceschema.RankingSnapshot{})
+	require.Empty(t, item.SourceLabel)
+	require.Equal(t, "来源待审核-0x-channel-1", item.SystemDisplayName)
+}
+
+func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *testing.T) {
+	group := marketplaceschema.Group{ID: "group-filter", ChannelID: "123456789012", SystemDisplayName: "Codex Plus"}
+	channel := marketplaceschema.Channel{
+		ID: "123456789012", ProviderType: "openai_compatible",
+		ApprovedSourceLabel: "Codex Plus", SourceLabelStatus: marketplacedomain.SourceLabelApproved,
+	}
+	models := []string{"gpt-5.2-codex", "gpt-4.1"}
+
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "123456"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Model: "5.2"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Source: "Codex Plus"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Provider: "openai_compatible"}))
+	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Source: "CC-Kiro"}))
+	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Provider: "anthropic"}))
+
+	item := groupListItem(group, channel, models, marketplaceschema.RankingSnapshot{})
+	require.Equal(t, channel.ID, item.ChannelID)
+	require.Equal(t, channel.ProviderType, item.ProviderType)
+	require.Equal(t, "Codex Plus-0x-123456789012", item.SystemDisplayName)
+
+	payload, err := json.Marshal(item)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "owner_display_name")
 }
 
 func TestPublicPendingReviewGroupIsLoadedForMarketplace(t *testing.T) {

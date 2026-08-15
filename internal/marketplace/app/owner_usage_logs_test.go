@@ -7,6 +7,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,10 @@ func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
 	require.NoError(t, db.Create([]marketplaceschema.Group{
 		{ID: "owner-group", ChannelID: "owner-channel", OwnerUserID: 10, SystemDisplayName: "Codex-Plus-owner", InternalGroupName: "Codex-Plus-owner", PublicSlug: "owner", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1},
 		{ID: "foreign-group", ChannelID: "foreign-channel", OwnerUserID: 11, SystemDisplayName: "Codex-Plus-foreign", InternalGroupName: "Codex-Plus-foreign", PublicSlug: "foreign", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1},
+	}).Error)
+	require.NoError(t, db.Create([]identityschema.User{
+		{Id: 300, ExternalId: "A2B3C4", Username: "consumer-300", Password: "password", AffCode: "AFF300"},
+		{Id: 301, ExternalId: "D5E6F7", Username: "consumer-301", Password: "password", AffCode: "AFF301"},
 	}).Error)
 	now := time.Now().Unix()
 	require.NoError(t, logDB.Create([]auditschema.Log{
@@ -52,16 +57,18 @@ func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
 		itemsByRequestID[item.RequestID] = item
 	}
 	success := itemsByRequestID["owner-success"]
-	require.Equal(t, 300, success.UserID)
+	require.Equal(t, "A2B3C4", success.UserID)
 	require.Equal(t, int64(95), success.OwnerIncome)
 	require.Equal(t, "pending", success.IncomeStatus)
 	failed := itemsByRequestID["owner-error"]
-	require.Equal(t, 301, failed.UserID)
+	require.Equal(t, "D5E6F7", failed.UserID)
 	require.Zero(t, failed.OwnerIncome)
 	require.Equal(t, "failed", failed.Status)
 	payload, err := json.Marshal(result.Items)
 	require.NoError(t, err)
 	for _, sensitiveKey := range []string{
+		`"user_id":300`,
+		`"user_id":301`,
 		`"username":`,
 		`"token_name":`,
 		`"ip":`,
@@ -84,6 +91,10 @@ func TestListOwnerUsageLogsFiltersSingleOwnedChannel(t *testing.T) {
 		{ID: "first-group", ChannelID: "first", OwnerUserID: 10, SystemDisplayName: "First", InternalGroupName: "First", PublicSlug: "first", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1},
 		{ID: "second-group", ChannelID: "second", OwnerUserID: 10, SystemDisplayName: "Second", InternalGroupName: "Second", PublicSlug: "second", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1},
 	}).Error)
+	require.NoError(t, db.Create([]identityschema.User{
+		{Id: 201, ExternalId: "G8H9J2", Username: "consumer-201", Password: "password", AffCode: "AFF201"},
+		{Id: 202, ExternalId: "K3L4M5", Username: "consumer-202", Password: "password", AffCode: "AFF202"},
+	}).Error)
 	require.NoError(t, logDB.Create([]auditschema.Log{
 		{UserId: 201, Type: auditschema.LogTypeConsume, ChannelId: firstInternalID, RequestId: "first-request"},
 		{UserId: 202, Type: auditschema.LogTypeConsume, ChannelId: secondInternalID, RequestId: "second-request"},
@@ -94,7 +105,7 @@ func TestListOwnerUsageLogsFiltersSingleOwnedChannel(t *testing.T) {
 	require.EqualValues(t, 1, result.Total)
 	require.Len(t, result.Items, 1)
 	require.Equal(t, "second", result.Items[0].ChannelID)
-	require.Equal(t, 202, result.Items[0].UserID)
+	require.Equal(t, "K3L4M5", result.Items[0].UserID)
 }
 
 func TestListOwnerUsageLogsRejectsForeignChannelFilter(t *testing.T) {
@@ -117,7 +128,7 @@ func openOwnerUsageLogTestDB(t *testing.T) (*gorm.DB, *gorm.DB) {
 	logDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	platformdb.DB, platformdb.LogDB = db, logDB
-	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.Settlement{}))
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.Settlement{}))
 	require.NoError(t, logDB.AutoMigrate(&auditschema.Log{}))
 	return db, logDB
 }

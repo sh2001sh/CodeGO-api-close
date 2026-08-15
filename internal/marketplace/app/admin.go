@@ -119,9 +119,13 @@ func createInternalChannel(channel *marketplaceschema.Channel, group *marketplac
 	if err := gatewaystore.CreateChannel(internal); err != nil {
 		return err
 	}
-	if err := platformdb.DB.Model(channel).Update("internal_channel_id", internal.Id).Error; err != nil {
+	result := platformdb.DB.Model(channel).Update("internal_channel_id", internal.Id)
+	if result.Error != nil || result.RowsAffected != 1 {
 		_ = gatewaystore.DeleteChannelByID(internal.Id)
-		return err
+		if result.Error != nil {
+			return result.Error
+		}
+		return errors.New("渠道已删除")
 	}
 	channel.InternalChannelID = &internal.Id
 	return nil

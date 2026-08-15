@@ -389,22 +389,6 @@ export async function openBalanceBlindBox(
   return res.data
 }
 
-export async function simulateBalanceBlindBoxes(
-  requestId: string,
-  count: number
-): Promise<
-  ApiResponse<{
-    records: BlindBoxRecord[]
-    simulation: BalanceBlindBoxOverview['simulation']
-  }>
-> {
-  const res = await api.post('/api/blind-box/balance/simulate', {
-    request_id: requestId,
-    count,
-  })
-  return res.data
-}
-
 export async function purchaseBalanceBlindBoxes(
   requestId: string,
   count: number

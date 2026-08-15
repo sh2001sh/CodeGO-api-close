@@ -64,10 +64,13 @@ function summarizeRewards(
 
 export function BlindBoxStatsPanel(props: { statistics?: BlindBoxStatistics }) {
   const rows = [
-    { label: '普通额度', value: summarizeRewards(props.statistics, 'quota') },
     {
-      label: 'Claude 额度',
+      label: '通用额度',
       value: summarizeRewards(props.statistics, 'claude_quota'),
+    },
+    {
+      label: '官方 GPT 专属额度',
+      value: summarizeRewards(props.statistics, 'quota'),
     },
     { label: '道具', value: summarizeRewards(props.statistics, 'prop') },
     {

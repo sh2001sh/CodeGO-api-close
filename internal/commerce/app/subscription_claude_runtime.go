@@ -80,7 +80,7 @@ func GetSubscriptionPlanInfoByUserSubscriptionID(userSubscriptionID int) (*comme
 
 // BuildSubscriptionClaudeConversionLog formats the user-facing conversion log content.
 func BuildSubscriptionClaudeConversionLog(planTitle string, sourceQuota int64, targetQuota int) string {
-	return fmt.Sprintf("套餐额度转 Claude 成功，套餐：%s，扣减套餐额度：%s，到账 Claude 额度：%s", planTitle, logger.LogQuota(int(sourceQuota)), logger.LogQuota(targetQuota))
+	return fmt.Sprintf("套餐额度转通用额度成功，套餐：%s，扣减套餐额度：%s，到账通用额度：%s", planTitle, logger.LogQuota(int(sourceQuota)), logger.LogQuota(targetQuota))
 }
 
 // BuildSubscriptionClaudeConversionPreview returns the current max convertible quota preview.

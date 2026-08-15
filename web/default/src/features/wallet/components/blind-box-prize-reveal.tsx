@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { CalendarClock, FlaskConical, Hash, Sparkles, Star } from 'lucide-react'
+import { CalendarClock, Hash, Sparkles, Star } from 'lucide-react'
 import {
   AnimatePresence,
   motion,
@@ -102,7 +102,6 @@ export function PrizeRevealHeader(props: {
   const reduced = useReducedMotion()
   const rarity = highestRarity(props.records)
   const celebratory = rarity === 'legendary'
-  const simulation = props.records.every((record) => record.simulation)
 
   return (
     <motion.div
@@ -127,23 +126,15 @@ export function PrizeRevealHeader(props: {
       ) : null}
       <div className='relative'>
         <div className='flex items-center gap-2'>
-          {simulation ? (
-            <FlaskConical className='size-5 shrink-0 text-teal-600 dark:text-teal-300' />
-          ) : celebratory ? (
+          {celebratory ? (
             <Star className='fill-primary text-primary size-5 shrink-0' />
           ) : null}
           <div className='text-foreground text-lg font-semibold'>
-            {simulation
-              ? `模拟结果 · ${props.summary}`
-              : celebratory
-                ? `恭喜！${props.summary}`
-                : props.summary}
+            {celebratory ? `恭喜！${props.summary}` : props.summary}
           </div>
         </div>
         <div className='text-muted-foreground mt-1 text-sm'>
-          {simulation
-            ? `共模拟 ${props.openCount} 次，不扣款且不会发放任何真实奖励`
-            : `共抽取 ${props.openCount} 次，奖励已到账`}
+          共抽取 {props.openCount} 次，奖励已到账
         </div>
       </div>
     </motion.div>
@@ -220,11 +211,6 @@ function PrizeRevealCard(props: {
               {record.pool_type === 'balance_15' ? '余额盲盒' : '普通盲盒'} ·{' '}
               {rewardTypeLabel(record)}
             </div>
-            {record.simulation ? (
-              <div className='rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 text-xs font-medium text-teal-700 dark:text-teal-300'>
-                模拟
-              </div>
-            ) : null}
             {badge ? (
               <div
                 className={cn(

@@ -101,7 +101,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		defer releaseSlot()
 	}
 
-	needSensitiveCheck := requestsettings.ShouldCheckPromptSensitive()
+	needSensitiveCheck := shouldCheckPromptSensitiveForRelay(relayFormat)
 	needCountToken := constant.CountToken
 
 	var meta *types.TokenCountMeta
@@ -344,4 +344,11 @@ func specialMultiplierUnsupportedRelay(relayFormat types.RelayFormat, modelName 
 
 func shouldBlockSensitiveWords() bool {
 	return requestsettings.StopOnSensitiveEnabled
+}
+
+func shouldCheckPromptSensitiveForRelay(relayFormat types.RelayFormat) bool {
+	// Claude requests commonly include provider safety/system/tool text. Do
+	// not apply the site's prompt interception to that protocol, otherwise
+	// harmless user prompts can match vocabulary embedded in metadata.
+	return requestsettings.ShouldCheckPromptSensitive() && relayFormat != types.RelayFormatClaude
 }

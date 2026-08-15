@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/sh2001sh/new-api/constant"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
+	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	"strings"
 )
 
@@ -126,7 +127,10 @@ func (channel *Channel) GetBaseURL() string {
 	if channel.BaseURL == nil {
 		return ""
 	}
-	url := *channel.BaseURL
+	url, err := platformsecurity.DecryptSecret(*channel.BaseURL)
+	if err != nil {
+		return ""
+	}
 	if url == "" {
 		url = constant.ChannelBaseURLs[channel.Type]
 	}
@@ -151,7 +155,11 @@ func (channel *Channel) keySource() string {
 	if len(channel.Keys) > 0 {
 		return strings.Join(channel.Keys, "\n")
 	}
-	return channel.Key
+	key, err := platformsecurity.DecryptSecret(channel.Key)
+	if err != nil {
+		return ""
+	}
+	return key
 }
 
 func channelKeysFromRaw(raw string) []string {

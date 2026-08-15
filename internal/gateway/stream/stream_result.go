@@ -10,10 +10,11 @@ type Result struct {
 	status     *gatewaycontract.StreamStatus
 	stopped    bool
 	receivedAt time.Time
+	progress   func()
 }
 
-func newResult(status *gatewaycontract.StreamStatus) *Result {
-	return &Result{status: status}
+func newResult(status *gatewaycontract.StreamStatus, progress func()) *Result {
+	return &Result{status: status, progress: progress}
 }
 
 func (r *Result) Error(err error) {
@@ -38,6 +39,15 @@ func (r *Result) Done() {
 
 func (r *Result) IsStopped() bool {
 	return r.stopped
+}
+
+// MarkProgress records a meaningful upstream increment for adaptive stream
+// deadlines. Callers must use it only for text, reasoning, or tool deltas;
+// lifecycle and heartbeat events do not count as progress.
+func (r *Result) MarkProgress() {
+	if r != nil && r.progress != nil {
+		r.progress()
+	}
 }
 
 // ReceivedAt is the instant when the scanner read this SSE frame from the

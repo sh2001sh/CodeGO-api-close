@@ -1,6 +1,5 @@
 import {
   Activity,
-  ArrowRightLeft,
   ChevronDown,
   CreditCard,
   History,
@@ -35,16 +34,16 @@ export function WalletAccountOverview(props: {
       <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
         <div className='grid min-w-0 gap-3 sm:grid-cols-2 lg:min-w-[28rem]'>
           <BalanceItem
-            label={t('Standard balance')}
-            value={formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
-            description={t('For non-Claude models')}
-          />
-          <BalanceItem
-            label={t('Claude quota')}
+            label={t('通用额度')}
             value={formatUsdAmount(
               quotaUnitsToUsd(props.user?.claude_quota ?? 0)
             )}
-            description={t('For Claude models only')}
+            description={t('用于通用模型及全部第三方市场分组')}
+          />
+          <BalanceItem
+            label={t('官方 GPT 专属额度')}
+            value={formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
+            description={t('仅用于官方 GPT、Codex、Responses 分组')}
           />
         </div>
 
@@ -73,14 +72,6 @@ export function WalletAccountOverview(props: {
             <Button
               type='button'
               variant='outline'
-              onClick={props.onSelectConversion}
-            >
-              <ArrowRightLeft className='size-4' />
-              {t('Convert')}
-            </Button>
-            <Button
-              type='button'
-              variant='outline'
               onClick={props.onSelectTransfer}
             >
               <Send className='size-4' />
@@ -101,7 +92,7 @@ export function WalletAccountOverview(props: {
                     {t('Top-up records')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={props.onOpenConversionHistory}>
-                    <ArrowRightLeft className='size-4' />
+                    <History className='size-4' />
                     {t('Conversion records')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={props.onOpenTransferHistory}>

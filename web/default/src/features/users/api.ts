@@ -204,23 +204,3 @@ export async function grantUserBlindBoxes(
   )
   return res.data
 }
-
-export async function startUserBalanceBlindBoxSimulation(
-  userId: number,
-  payload: { duration_minutes: number; reason?: string }
-): Promise<ApiResponse> {
-  const res = await api.post(
-    `/api/blind-box/admin/users/${userId}/balance-simulation`,
-    payload
-  )
-  return res.data
-}
-
-export async function stopUserBalanceBlindBoxSimulation(
-  userId: number
-): Promise<ApiResponse> {
-  const res = await api.delete(
-    `/api/blind-box/admin/users/${userId}/balance-simulation`
-  )
-  return res.data
-}

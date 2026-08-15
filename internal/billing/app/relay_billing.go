@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"github.com/sh2001sh/new-api/types"
@@ -77,6 +78,15 @@ func SettleRelayBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actu
 		}
 		if err := RecordRequestEconomics(relayInfo, actualQuota); err != nil {
 			platformobservability.SysError("record request economics: " + err.Error())
+		}
+		if relayInfo.MarketplaceGroupID != "" && actualQuota > 0 {
+			if err := marketplacesettlement.Record(marketplacesettlement.RecordParams{
+				RequestID: relayInfo.RequestId, GroupID: relayInfo.MarketplaceGroupID,
+				OwnerUserID: relayInfo.MarketplaceOwnerID, ConsumerUserID: relayInfo.UserId,
+				Amount: int64(actualQuota), Multiplier: relayInfo.MarketplaceMultiplier,
+			}); err != nil {
+				platformobservability.SysError("record marketplace settlement: " + err.Error())
+			}
 		}
 		if session, ok := relayInfo.Billing.(*BillingSession); ok {
 			if funding, ok := session.funding.(settlementProjectionFunding); ok {

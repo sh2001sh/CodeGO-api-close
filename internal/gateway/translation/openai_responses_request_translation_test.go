@@ -19,12 +19,11 @@ func TestChatCompletionsToResponsesPreservesToolCallPair(t *testing.T) {
 	require.NoError(t, err)
 
 	items := responseInputItems(t, converted)
-	require.Len(t, items, 4)
-	require.Equal(t, "assistant", items[1]["role"])
-	require.Equal(t, "function_call", items[2]["type"])
+	require.Len(t, items, 3)
+	require.Equal(t, "function_call", items[1]["type"])
+	require.Equal(t, "call_weather", items[1]["call_id"])
+	require.Equal(t, "function_call_output", items[2]["type"])
 	require.Equal(t, "call_weather", items[2]["call_id"])
-	require.Equal(t, "function_call_output", items[3]["type"])
-	require.Equal(t, "call_weather", items[3]["call_id"])
 }
 
 func TestChatCompletionsToResponsesSupportsParallelToolCalls(t *testing.T) {
@@ -44,9 +43,9 @@ func TestChatCompletionsToResponsesSupportsParallelToolCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	items := responseInputItems(t, converted)
-	require.Len(t, items, 6)
-	require.Equal(t, "call_weather", items[4]["call_id"])
-	require.Equal(t, "call_time", items[5]["call_id"])
+	require.Len(t, items, 5)
+	require.Equal(t, "call_weather", items[3]["call_id"])
+	require.Equal(t, "call_time", items[4]["call_id"])
 }
 
 func TestChatCompletionsToResponsesAllowsEmptyToolCallList(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	platformgeneral "github.com/sh2001sh/new-api/internal/platform/general"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,6 +97,81 @@ func TestScanResponseMarksMaximumDurationSeparatelyFromIdleTimeout(t *testing.T)
 	require.Less(t, time.Since(started), 3*time.Second)
 	require.Equal(t, gatewaycontract.StreamEndReasonMaxDuration, info.StreamStatus.EndReason)
 	require.True(t, relaycommon.IsLocalStreamMaxDurationExceeded(context))
+}
+
+func TestScanResponseEndsAdaptiveLongContextWhenSemanticProgressStops(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldFirstByteTimeout := constant.StreamingFirstByteTimeout
+	oldMaxDuration := constant.StreamingLongContextMaxDuration
+	oldProgress := constant.StreamingAdaptiveProgressTimeout
+	oldInitial := constant.StreamingAdaptiveInitialTimeout
+	constant.StreamingTimeout = 5
+	constant.StreamingFirstByteTimeout = 0
+	constant.StreamingLongContextMaxDuration = 10
+	constant.StreamingAdaptiveProgressTimeout = 1
+	constant.StreamingAdaptiveInitialTimeout = 1
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingFirstByteTimeout = oldFirstByteTimeout
+		constant.StreamingLongContextMaxDuration = oldMaxDuration
+		constant.StreamingAdaptiveProgressTimeout = oldProgress
+		constant.StreamingAdaptiveInitialTimeout = oldInitial
+	})
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request, _ = http.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil)
+	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	body := &blockingReader{closed: make(chan struct{})}
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+
+	started := time.Now()
+	ScanResponse(context, &http.Response{Body: body}, info, func(string, *Result) {})
+
+	require.Less(t, time.Since(started), 3*time.Second)
+	require.Equal(t, gatewaycontract.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+	require.False(t, relaycommon.IsLocalStreamMaxDurationExceeded(context))
+}
+
+func TestScanResponseRenewsAdaptiveDeadlineOnSemanticProgress(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldMaxDuration := constant.StreamingLongContextMaxDuration
+	oldProgress := constant.StreamingAdaptiveProgressTimeout
+	oldInitial := constant.StreamingAdaptiveInitialTimeout
+	constant.StreamingTimeout = 5
+	constant.StreamingLongContextMaxDuration = 2
+	constant.StreamingAdaptiveProgressTimeout = 1
+	constant.StreamingAdaptiveInitialTimeout = 1
+	oldPingEnabled := platformgeneral.GetSetting().PingIntervalEnabled
+	platformgeneral.GetSetting().PingIntervalEnabled = false
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingLongContextMaxDuration = oldMaxDuration
+		constant.StreamingAdaptiveProgressTimeout = oldProgress
+		constant.StreamingAdaptiveInitialTimeout = oldInitial
+		platformgeneral.GetSetting().PingIntervalEnabled = oldPingEnabled
+	})
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request, _ = http.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil)
+	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	go func() {
+		_, _ = io.WriteString(writer, "data: first\n\n")
+		time.Sleep(700 * time.Millisecond)
+		_, _ = io.WriteString(writer, "data: second\n\n")
+		time.Sleep(700 * time.Millisecond)
+		_, _ = io.WriteString(writer, "data: [DONE]\n\n")
+	}()
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+
+	ScanResponse(context, &http.Response{Body: reader}, info, func(_ string, result *Result) {
+		result.MarkProgress()
+	})
+
+	require.Equal(t, gatewaycontract.StreamEndReasonDone, info.StreamStatus.EndReason)
 }
 
 func TestScanResponseStopsBeforeIdleTimeoutWhenFirstByteIsMissing(t *testing.T) {

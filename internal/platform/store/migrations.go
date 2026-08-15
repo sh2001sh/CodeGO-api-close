@@ -6,12 +6,12 @@ import (
 	"time"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
-	bountyschema "github.com/sh2001sh/new-api/internal/bounty/schema"
 	luckysettings "github.com/sh2001sh/new-api/internal/commerce/luckysettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	communityschema "github.com/sh2001sh/new-api/internal/community/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	workflowschema "github.com/sh2001sh/new-api/internal/workflow/schema"
 	"gorm.io/gorm"
@@ -71,7 +71,9 @@ func V2MigrationIDs() []string {
 		"20260813_blind_box_lucky_draw_window",
 		"20260814_wallet_transfers",
 		"20260814_balance_blind_box_inventory",
-		"20260814_balance_blind_box_simulation",
+		"20260815_remove_bounty_market",
+		"20260815_marketplace_channel_source_labels",
+		"20260815_marketplace_model_verification",
 	}
 }
 
@@ -138,22 +140,16 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return nil
 		}},
 		{ID: "20260713_bounty_market", Run: func(tx *gorm.DB) error {
-			return bountyschema.AutoMigrateModels(tx)
+			return nil
 		}},
 		{ID: "20260713_bounty_market_followups", Run: func(tx *gorm.DB) error {
-			return bountyschema.AutoMigrateModels(tx)
+			return nil
 		}},
 		{ID: "20260713_bounty_delivery_summary", Run: func(tx *gorm.DB) error {
-			return tx.AutoMigrate(&bountyschema.BountySubmission{})
+			return nil
 		}},
 		{ID: "20260713_bounty_submission_version_index", Run: func(tx *gorm.DB) error {
-			indexName := "uq_bounty_submissions_task_version"
-			if tx.Migrator().HasIndex(&bountyschema.BountySubmission{}, indexName) {
-				if err := tx.Migrator().DropIndex(&bountyschema.BountySubmission{}, indexName); err != nil {
-					return err
-				}
-			}
-			return tx.Migrator().CreateIndex(&bountyschema.BountySubmission{}, indexName)
+			return nil
 		}},
 		{ID: "20260714_user_external_id", Run: migrateUserExternalIDs},
 		{ID: "20260715_blind_box_admin_grants", Run: func(tx *gorm.DB) error {
@@ -222,12 +218,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 				&commerceschema.BalanceBlindBoxGiftItem{},
 			)
 		}},
-		{ID: "20260814_balance_blind_box_simulation", Run: func(tx *gorm.DB) error {
-			return tx.AutoMigrate(
-				&commerceschema.BalanceBlindBoxSimulationSession{},
-				&commerceschema.BalanceBlindBoxSimulationBatch{},
-			)
-		}},
+		{ID: "20260815_remove_bounty_market", Run: migrateRemoveBountyMarket},
+		{ID: "20260815_marketplace_channel_source_labels", Run: migrateMarketplaceChannelSourceLabels},
+		{ID: "20260815_marketplace_model_verification", Run: migrateMarketplaceModelVerification},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -269,6 +262,52 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.Create(&schemaMigration{ID: step.ID}).Error
 		}); err != nil {
 			return fmt.Errorf("apply migration %s: %w", step.ID, err)
+		}
+	}
+	return nil
+}
+
+func migrateMarketplaceChannelSourceLabels(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return tx.AutoMigrate(
+			&marketplaceschema.Channel{},
+			&marketplaceschema.Group{},
+			&marketplaceschema.VerificationRun{},
+			&marketplaceschema.RankingSnapshot{},
+			&marketplaceschema.Settlement{},
+		)
+	}
+	for _, field := range []string{
+		"SubmittedSourceLabel",
+		"ApprovedSourceLabel",
+		"SourceLabelStatus",
+		"SourceLabelReviewReason",
+	} {
+		if tx.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&marketplaceschema.Channel{}, field); err != nil {
+			return err
+		}
+	}
+	return tx.AutoMigrate(
+		&marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{},
+		&marketplaceschema.RankingSnapshot{},
+		&marketplaceschema.Settlement{},
+	)
+}
+
+func migrateMarketplaceModelVerification(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return tx.AutoMigrate(&marketplaceschema.Channel{})
+	}
+	for _, field := range []string{"ModelVerificationResults", "ModelConsistencyStatus"} {
+		if tx.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&marketplaceschema.Channel{}, field); err != nil {
+			return err
 		}
 	}
 	return nil

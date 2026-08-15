@@ -8,6 +8,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -176,4 +177,49 @@ func TestMigrateUserExternalIDsBackfillsExistingUsers(t *testing.T) {
 	require.NoError(t, migrateUserExternalIDs(db))
 	require.NoError(t, db.First(&users[0], 1).Error)
 	require.Equal(t, firstID, users[0].ExternalId)
+}
+
+func TestMigrateMarketplaceChannelSourceLabelsUpgradesExistingSQLiteTable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE marketplace_channels (
+		id text primary key,
+		owner_user_id integer not null,
+		provider_type text not null,
+		base_url_ciphertext text not null,
+		credential_ciphertext text not null,
+		status text not null
+	)`).Error)
+
+	require.False(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, "SubmittedSourceLabel"))
+	require.NoError(t, migrateMarketplaceChannelSourceLabels(db))
+	for _, field := range []string{
+		"SubmittedSourceLabel",
+		"ApprovedSourceLabel",
+		"SourceLabelStatus",
+		"SourceLabelReviewReason",
+	} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
+	}
+	require.True(t, db.Migrator().HasTable(&marketplaceschema.Settlement{}))
+	require.NoError(t, migrateMarketplaceChannelSourceLabels(db))
+}
+
+func TestMigrateMarketplaceModelVerificationUpgradesExistingSQLiteTable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE marketplace_channels (
+		id text primary key,
+		owner_user_id integer not null,
+		provider_type text not null,
+		base_url_ciphertext text not null,
+		credential_ciphertext text not null,
+		status text not null
+	)`).Error)
+
+	require.NoError(t, migrateMarketplaceModelVerification(db))
+	for _, field := range []string{"ModelVerificationResults", "ModelConsistencyStatus"} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
+	}
+	require.NoError(t, migrateMarketplaceModelVerification(db))
 }

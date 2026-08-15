@@ -198,8 +198,11 @@ function AssetBoard(props: {
         <div className='text-foreground text-sm font-semibold'>开奖状态</div>
       </div>
       <div className='grid grid-cols-2 gap-2.5'>
-        <Tile label='当前钱包额度' value={formatQuota(props.remainingQuota)} />
-        <Tile label='Claude 额度' value={formatQuota(props.claudeQuota)} />
+        <Tile label='通用额度' value={formatQuota(props.claudeQuota)} />
+        <Tile
+          label='官方 GPT 专属额度'
+          value={formatQuota(props.remainingQuota)}
+        />
         <Tile
           label='待开盲盒'
           value={String(props.availableBoxes)}
@@ -240,10 +243,10 @@ function SettlementCard() {
       </div>
       <div className='space-y-2 text-xs leading-5'>
         <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
-          普通额度直接进入钱包，永久有效。
+          通用额度直接进入通用额度钱包，永久有效。
         </div>
         <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
-          Claude 额度直接进入 Claude 钱包，永久有效。
+          官方 GPT 专属额度直接进入对应钱包，永久有效。
         </div>
         <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
           道具会在本页展示并按规则自动生效或手动启用。

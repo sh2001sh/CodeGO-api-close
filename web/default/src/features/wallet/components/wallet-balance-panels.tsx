@@ -26,19 +26,19 @@ export function WalletBalancePanels(props: WalletBalancePanelsProps) {
         </div>
         <div className='text-muted-foreground mt-1 text-xs leading-5'>
           {t(
-            'Core balances are shown in USD; Claude quota and request counts keep their own units.'
+            '官方 GPT 专属额度仅用于官方 GPT 分组；通用额度用于 Claude、DeepSeek、GLM 以及全部第三方市场分组。'
           )}
         </div>
         <div className='mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
           <WalletStatItem
-            label={t('Standard balance')}
-            value={formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
-          />
-          <WalletStatItem
-            label={t('Claude quota')}
+            label={t('通用额度')}
             value={formatUsdAmount(
               quotaUnitsToUsd(props.user?.claude_quota ?? 0)
             )}
+          />
+          <WalletStatItem
+            label={t('官方 GPT 专属额度')}
+            value={formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
           />
           <WalletStatItem
             label={t('Total spent')}

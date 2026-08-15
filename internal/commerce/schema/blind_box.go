@@ -104,7 +104,6 @@ type BlindBoxOpenRecord struct {
 	LuckyNumber    string `json:"lucky_number,omitempty" gorm:"-"`
 	LuckyDrawDate  string `json:"lucky_draw_date,omitempty" gorm:"-"`
 	LuckyExpiresAt int64  `json:"lucky_expires_at,omitempty" gorm:"-"`
-	Simulation     bool   `json:"simulation,omitempty" gorm:"-"`
 }
 
 // BalanceBlindBoxPityState tracks the independent $35 guarantee for balance draws.

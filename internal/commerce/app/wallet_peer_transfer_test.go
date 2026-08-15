@@ -38,11 +38,11 @@ func TestTransferWalletQuotaIsAtomicIdempotentAndPrivate(t *testing.T) {
 	unit := int(platformruntime.QuotaPerUnit)
 	sender := &identityschema.User{
 		Id: 9932, ExternalId: "TRS002", Username: "transfer-sender", DisplayName: "Sender Person",
-		AffCode: "TRS002", Status: constant.UserStatusEnabled, Quota: 10 * unit,
+		AffCode: "TRS002", Status: constant.UserStatusEnabled, ClaudeQuota: 10 * unit,
 	}
 	recipient := &identityschema.User{
 		Id: 9933, ExternalId: "TRS003", Username: "transfer-recipient", DisplayName: "Recipient Person",
-		AffCode: "TRS003", Status: constant.UserStatusEnabled, Quota: unit,
+		AffCode: "TRS003", Status: constant.UserStatusEnabled, ClaudeQuota: unit,
 	}
 	require.NoError(t, db.Create(sender).Error)
 	require.NoError(t, db.Create(recipient).Error)
@@ -58,6 +58,8 @@ func TestTransferWalletQuotaIsAtomicIdempotentAndPrivate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "outgoing", created.Direction)
 	require.Equal(t, recipient.ExternalId, created.CounterpartyExternalId)
+	require.Equal(t, int64(2*unit/100), created.FeeQuota)
+	require.Equal(t, int64(2*unit+2*unit/100), created.TotalDebitQuota)
 	require.NotContains(t, created.CounterpartyDisplayName, "Recipient")
 
 	replayed, err := TransferWalletQuota(sender.Id, request)
@@ -67,8 +69,9 @@ func TestTransferWalletQuotaIsAtomicIdempotentAndPrivate(t *testing.T) {
 	var savedSender, savedRecipient identityschema.User
 	require.NoError(t, db.First(&savedSender, sender.Id).Error)
 	require.NoError(t, db.First(&savedRecipient, recipient.Id).Error)
-	require.Equal(t, 8*unit, savedSender.Quota)
-	require.Equal(t, 3*unit, savedRecipient.Quota)
+	require.Equal(t, 798*unit/100, savedSender.ClaudeQuota)
+	require.Equal(t, 3*unit, savedRecipient.ClaudeQuota)
+	require.Zero(t, savedSender.Quota)
 
 	recipientHistory, err := ListWalletTransfers(recipient.Id, 1, 10)
 	require.NoError(t, err)
@@ -84,7 +87,7 @@ func TestTransferWalletQuotaIsAtomicIdempotentAndPrivate(t *testing.T) {
 func TestTransferWalletQuotaRejectsUnsafeRecipientsAndInsufficientBalance(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	unit := int(platformruntime.QuotaPerUnit)
-	sender := &identityschema.User{Id: 9934, ExternalId: "TRS004", Username: "sender-limits", AffCode: "TRS004", Status: constant.UserStatusEnabled, Quota: unit}
+	sender := &identityschema.User{Id: 9934, ExternalId: "TRS004", Username: "sender-limits", AffCode: "TRS004", Status: constant.UserStatusEnabled, ClaudeQuota: unit}
 	disabled := &identityschema.User{Id: 9935, ExternalId: "TRS005", Username: "disabled-recipient", AffCode: "TRS005", Status: constant.UserStatusDisabled}
 	require.NoError(t, db.Create(sender).Error)
 	require.NoError(t, db.Create(disabled).Error)
@@ -111,6 +114,6 @@ func TestTransferWalletQuotaRejectsUnsafeRecipientsAndInsufficientBalance(t *tes
 	var savedSender, savedRecipient identityschema.User
 	require.NoError(t, db.First(&savedSender, sender.Id).Error)
 	require.NoError(t, db.First(&savedRecipient, disabled.Id).Error)
-	require.Equal(t, unit, savedSender.Quota)
-	require.Zero(t, savedRecipient.Quota)
+	require.Equal(t, unit, savedSender.ClaudeQuota)
+	require.Zero(t, savedRecipient.ClaudeQuota)
 }

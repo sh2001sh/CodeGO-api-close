@@ -17,7 +17,7 @@ const (
 var (
 	ErrWalletQuotaConversionInvalid      = errors.New("额度转换参数无效")
 	ErrWalletQuotaConversionInsufficient = errors.New("可转换额度不足")
-	ErrWalletQuotaConversionInexact      = errors.New("普通额度转 Claude 额度必须满足 4:1 的完整比例")
+	ErrWalletQuotaConversionInexact      = errors.New("官方 GPT 专属额度转通用额度必须满足 4:1 的完整比例")
 )
 
 // WalletQuotaConversion records one completed transfer between wallet pools.

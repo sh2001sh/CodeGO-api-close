@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	requestsettings "github.com/sh2001sh/new-api/internal/platform/requestsettings"
+	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,4 +17,9 @@ func TestShouldBlockSensitiveWordsHonorsStopOnSensitiveEnabled(t *testing.T) {
 
 	requestsettings.StopOnSensitiveEnabled = true
 	require.True(t, shouldBlockSensitiveWords())
+}
+
+func TestClaudeRequestsSkipPromptSensitiveInterception(t *testing.T) {
+	require.False(t, shouldCheckPromptSensitiveForRelay(types.RelayFormatClaude))
+	require.True(t, shouldCheckPromptSensitiveForRelay(types.RelayFormatOpenAI))
 }

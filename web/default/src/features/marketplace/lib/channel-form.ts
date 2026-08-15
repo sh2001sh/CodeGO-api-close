@@ -1,0 +1,80 @@
+import { z } from 'zod'
+import type { MarketplaceChannel } from '../types'
+
+export const MARKETPLACE_SOURCE_OPTIONS = [
+  'Codex Plus',
+  'Codex Pro',
+  'CC-Max',
+  'CC-Kiro',
+  'CC其它',
+  '国产模型',
+] as const
+
+export const channelFormSchema = z.object({
+  provider_type: z.enum([
+    'openai_compatible',
+    'codex',
+    'azure_openai',
+    'anthropic',
+    'gemini',
+  ]),
+  source_label: z.enum(MARKETPLACE_SOURCE_OPTIONS),
+  base_url: z.string().url().startsWith('https://'),
+  api_key: z.string().min(1),
+  declared_models: z.array(z.string()).min(1),
+  multiplier: z.number().finite().positive('倍率必须大于 0'),
+  visibility: z.enum(['private', 'unlisted', 'public']),
+  max_concurrency: z.number().int().min(1).max(10000),
+  qps: z.number().positive().max(10000),
+  maintenance_window: z.string().max(255),
+  model_consistency_status: z.enum([
+    'none',
+    'passed',
+    'failed',
+    'questionable',
+  ]),
+})
+
+export type ChannelFormInput = z.infer<typeof channelFormSchema>
+
+export const channelEditFormSchema = channelFormSchema.extend({
+  base_url: z.union([z.literal(''), z.string().url().startsWith('https://')]),
+  api_key: z.string(),
+})
+
+export const channelFormDefaults: ChannelFormInput = {
+  provider_type: 'openai_compatible',
+  source_label: 'Codex Plus',
+  base_url: '',
+  api_key: '',
+  declared_models: [],
+  multiplier: 1,
+  visibility: 'public',
+  max_concurrency: 10,
+  qps: 5,
+  maintenance_window: '',
+  model_consistency_status: 'none',
+}
+
+export function channelFormDefaultsForEdit(
+  channel: MarketplaceChannel
+): ChannelFormInput {
+  const source = MARKETPLACE_SOURCE_OPTIONS.includes(
+    channel.submitted_source_label as (typeof MARKETPLACE_SOURCE_OPTIONS)[number]
+  )
+    ? (channel.submitted_source_label as ChannelFormInput['source_label'])
+    : 'CC其它'
+  return {
+    provider_type: channel.provider_type as ChannelFormInput['provider_type'],
+    source_label: source,
+    base_url: '',
+    api_key: '',
+    declared_models: channel.declared_models,
+    multiplier: channel.multiplier,
+    visibility: channel.visibility as ChannelFormInput['visibility'],
+    max_concurrency: channel.max_concurrency,
+    qps: channel.qps,
+    maintenance_window: channel.maintenance_window,
+    model_consistency_status: channel.model_consistency_status || 'none',
+  }
+}

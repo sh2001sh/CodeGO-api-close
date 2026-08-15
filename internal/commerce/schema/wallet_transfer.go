@@ -16,7 +16,7 @@ var (
 	ErrWalletTransferPasswordNotSet       = errors.New("请先设置支付密码")
 	ErrWalletTransferPasswordIncorrect    = errors.New("支付密码错误")
 	ErrWalletTransferPasswordLocked       = errors.New("支付密码已临时锁定")
-	ErrWalletTransferInsufficientBalance  = errors.New("普通额度余额不足")
+	ErrWalletTransferInsufficientBalance  = errors.New("通用额度余额不足")
 	ErrWalletTransferAccountPassword      = errors.New("当前登录密码错误")
 	ErrWalletTransferPasswordConfirmation = errors.New("两次输入的支付密码不一致")
 )
@@ -56,6 +56,8 @@ type WalletTransfer struct {
 	SenderDisplayNameMasked    string `json:"sender_display_name_masked" gorm:"type:varchar(64);not null"`
 	RecipientDisplayNameMasked string `json:"recipient_display_name_masked" gorm:"type:varchar(64);not null"`
 	AmountQuota                int64  `json:"amount_quota" gorm:"type:bigint;not null"`
+	FeeQuota                   int64  `json:"fee_quota" gorm:"type:bigint;not null;default:0"`
+	TotalDebitQuota            int64  `json:"total_debit_quota" gorm:"type:bigint;not null;default:0"`
 	SenderBalanceAfter         int64  `json:"sender_balance_after" gorm:"type:bigint;not null"`
 	RecipientBalanceAfter      int64  `json:"recipient_balance_after" gorm:"type:bigint;not null"`
 	Status                     string `json:"status" gorm:"type:varchar(32);not null;default:'completed'"`

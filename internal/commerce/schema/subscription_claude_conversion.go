@@ -22,11 +22,11 @@ var (
 	SubscriptionClaudeConversionRatioDenominator = 10
 	SubscriptionClaudeConversionExcludeDayPass   = true
 
-	ErrSubscriptionClaudeConversionDisabled      = errors.New("套餐转 Claude 额度未开启")
+	ErrSubscriptionClaudeConversionDisabled      = errors.New("GPT 套餐转通用额度未开启")
 	ErrSubscriptionClaudeConversionInvalidAmount = errors.New("转换额度无效")
 	ErrSubscriptionClaudeConversionNoTarget      = errors.New("当前订阅不可转换")
 	ErrSubscriptionClaudeConversionInsufficient  = errors.New("套餐可转换额度不足")
-	ErrSubscriptionClaudeConversionZeroResult    = errors.New("当前转换额度过小，无法得到 Claude 额度")
+	ErrSubscriptionClaudeConversionZeroResult    = errors.New("当前转换额度过小，无法得到通用额度")
 )
 
 type SubscriptionClaudeConversion struct {

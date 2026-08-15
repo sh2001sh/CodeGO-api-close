@@ -344,6 +344,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		//case "response.reasoning_text.done":
 
 		case "response.reasoning_summary_text.delta":
+			sr.MarkProgress()
 			if !sendReasoningSummaryDelta(streamResp.Delta) {
 				sr.Stop(streamErr)
 				return
@@ -373,6 +374,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		//	}
 
 		case "response.output_text.delta":
+			if streamResp.Delta != "" {
+				sr.MarkProgress()
+			}
 			if !sendStartIfNeeded() {
 				sr.Stop(streamErr)
 				return
@@ -441,6 +445,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 
 		case "response.function_call_arguments.delta":
+			sr.MarkProgress()
 			itemID := strings.TrimSpace(streamResp.ItemID)
 			callID := toolCallCanonicalIDByItemID[itemID]
 			if callID == "" {

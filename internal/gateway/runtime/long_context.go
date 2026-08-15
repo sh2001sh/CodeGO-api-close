@@ -40,6 +40,34 @@ func StreamMaxDurationForRequest(c *gin.Context, model string, promptTokens int)
 	return StreamMaxDuration(model, promptTokens)
 }
 
+// StreamAdaptiveProgressTimeoutForRequest returns the allowed quiet period
+// after a long-context GPT stream has started. A semantic progress signal
+// resets this window; image generation remains on its own long-running policy.
+func StreamAdaptiveProgressTimeoutForRequest(c *gin.Context, model string, promptTokens int) time.Duration {
+	if IsImageGenerationRequest(c) || gatewaycontract.IsImageGenerationModel(model) || !isGPTModel(model) {
+		return 0
+	}
+	if (c != nil && IsLongContextRequest(c)) || promptTokens >= LongContextPromptTokenThreshold {
+		if constant.StreamingAdaptiveProgressTimeout > 0 {
+			return time.Duration(constant.StreamingAdaptiveProgressTimeout) * time.Second
+		}
+	}
+	return 0
+}
+
+// StreamAdaptiveInitialTimeoutForRequest bounds the wait for the first
+// semantic event on a long-context GPT stream before progress-based renewal
+// becomes active.
+func StreamAdaptiveInitialTimeoutForRequest(c *gin.Context, model string, promptTokens int) time.Duration {
+	if timeout := StreamAdaptiveProgressTimeoutForRequest(c, model, promptTokens); timeout > 0 {
+		if constant.StreamingAdaptiveInitialTimeout > 0 {
+			return time.Duration(constant.StreamingAdaptiveInitialTimeout) * time.Second
+		}
+		return timeout
+	}
+	return 0
+}
+
 // StreamFirstOutputTimeoutForRequest returns an optional wait for a GPT stream
 // to become useful. It is disabled by default so an upstream that is still
 // restoring conversation state can apply its own timeout and recovery policy.

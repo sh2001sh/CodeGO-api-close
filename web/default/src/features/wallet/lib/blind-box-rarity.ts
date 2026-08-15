@@ -73,8 +73,8 @@ export function formatTierAmount(tier: BlindBoxTier) {
       ? `$${tier.min_usd}`
       : `$${tier.min_usd} - $${tier.max_usd}`
 
-  if (rewardType === 'claude_quota') return `${amount} Claude 额度`
-  return `${amount} 普通额度`
+  if (rewardType === 'claude_quota') return `${amount} 通用额度`
+  return `${amount} 官方 GPT 专属额度`
 }
 
 export function groupTiersByRewardType(tiers: BlindBoxTier[]) {

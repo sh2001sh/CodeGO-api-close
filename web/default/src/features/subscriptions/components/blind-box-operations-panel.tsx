@@ -7,7 +7,7 @@ import {
   useSystemOptions,
 } from '@/features/system-settings/hooks/use-system-options'
 import type { BillingSettings } from '@/features/system-settings/types'
-import { BalanceBlindBoxSimulationAdmin } from './balance-blind-box-simulation-admin'
+import { BalanceBlindBoxSettingsAdmin } from './balance-blind-box-settings-admin'
 
 const DEFAULT_BLIND_BOX_SETTINGS: Pick<
   BillingSettings,
@@ -106,7 +106,7 @@ export function BlindBoxOperationsPanel() {
         </div>
       </div>
 
-      <BalanceBlindBoxSimulationAdmin />
+      <BalanceBlindBoxSettingsAdmin />
 
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         <MetricCard
@@ -194,7 +194,7 @@ export function BlindBoxOperationsPanel() {
               USD
             </div>
             <div className='text-muted-foreground leading-6'>
-              抽中的普通额度和 Claude 额度会直接进入对应钱包，不再设置到期时间。
+              抽中的通用额度和官方 GPT 专属额度会直接进入对应钱包，不再设置到期时间。
             </div>
           </div>
         </div>

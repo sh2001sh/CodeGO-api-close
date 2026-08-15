@@ -240,15 +240,15 @@ function rewardDetail(record: BlindBoxRecord) {
   }
   if (record.reward_type === 'claude_quota') {
     return {
-      title: record.reward_title || `$${record.reward_usd} Claude 额度`,
-      description: `${formatQuota(record.credit_amount || 0)} 已进入 Claude 钱包，永久有效。`,
-      type: 'Claude 额度',
+      title: record.reward_title || `$${record.reward_usd} 通用额度`,
+      description: `${formatQuota(record.credit_amount || 0)} 已进入通用额度钱包，永久有效。`,
+      type: '通用额度',
     }
   }
   return {
-    title: record.reward_title || `$${record.reward_usd} 普通额度`,
-    description: `${formatQuota(record.credit_amount || 0)} 已进入普通钱包，永久有效。`,
-    type: '普通额度',
+    title: record.reward_title || `$${record.reward_usd} 官方 GPT 专属额度`,
+    description: `${formatQuota(record.credit_amount || 0)} 已进入官方 GPT 专属额度钱包，永久有效。`,
+    type: '官方 GPT 专属额度',
   }
 }
 

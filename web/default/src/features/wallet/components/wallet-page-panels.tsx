@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   consumeSubscriptionResetOpportunity,
   updateBillingPreference,
@@ -18,14 +18,12 @@ import type {
   SelfSubscriptionData,
 } from '@/features/subscriptions/types'
 import { RedemptionCodePanel } from './redemption-code-panel'
-import { SubscriptionClaudeConversionCard } from './subscription-claude-conversion-card'
 import { WalletBillingOrderPanel } from './wallet-billing-order-panel'
 import {
   getOrderedSubscriptions,
   type WalletPlanMeta,
 } from './wallet-panel-utils'
 import { WalletPeerTransferCard } from './wallet-peer-transfer-card'
-import { WalletQuotaConversionCard } from './wallet-quota-conversion-card'
 import { WalletResetOpportunityPanel } from './wallet-reset-opportunity-panel'
 
 const ALL_FUNDING_SOURCES: FundingSource[] = ['subscription', 'wallet']
@@ -56,9 +54,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
   const [draftOrderIds, setDraftOrderIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const [usingResetOpportunity, setUsingResetOpportunity] = useState(false)
-  const [conversionMode, setConversionMode] = useState<'wallet' | 'plan'>(
-    'wallet'
-  )
 
   const activeSubscriptions = useMemo(
     () => props.subscriptionData?.subscriptions ?? [],
@@ -248,7 +243,7 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
       <RedemptionCodePanel
         title={t('Redemption code')}
         description={t(
-          'Redeem codes can add standard balance, Claude quota, plans, or promotional benefits.'
+          '兑换码可发放官方 GPT 专属额度、通用额度、GPT 套餐或活动权益。'
         )}
         topupLink={props.topupLink}
         redemptionCode={props.redemptionCode}
@@ -261,41 +256,23 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   if (props.section === 'conversion') {
     return (
-      <div className='space-y-4'>
-        <Tabs
-          value={conversionMode}
-          onValueChange={(value) =>
-            setConversionMode(value as 'wallet' | 'plan')
-          }
-        >
-          <TabsList className='grid w-full max-w-xl grid-cols-2'>
-            <TabsTrigger value='wallet'>{t('Wallet balances')}</TabsTrigger>
-            <TabsTrigger value='plan'>{t('Plan quota')}</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {conversionMode === 'wallet' ? (
-          <WalletQuotaConversionCard
-            onUserRefresh={props.onUserRefresh}
-            onOpenHistory={props.onOpenConversionHistory}
-          />
-        ) : (
-          <SubscriptionClaudeConversionCard
-            subscriptionData={props.subscriptionData}
-            loading={props.subscriptionLoading}
-            planTitles={Object.fromEntries(
-              Array.from(planMetaMap.entries()).map(([id, value]) => [
-                id,
-                {
-                  title: value.title || t('Plan #{{id}}', { id }),
-                  subtitle: value.subtitle || t('Subscription'),
-                },
-              ])
-            )}
-            onRefresh={props.onSubscriptionRefresh}
-          />
-        )}
-      </div>
+      <section className='app-page-shell p-5'>
+        <h3 className='font-semibold'>{t('额度转换已关闭')}</h3>
+        <p className='text-muted-foreground mt-2 max-w-2xl text-sm leading-6'>
+          {t(
+            'GPT 套餐、官方 GPT 专属额度和通用额度用途固定，不能在额度池之间转换。历史转换记录仍可查询。'
+          )}
+        </p>
+        {props.onOpenConversionHistory ? (
+          <Button
+            className='mt-4'
+            variant='outline'
+            onClick={props.onOpenConversionHistory}
+          >
+            {t('查看历史转换记录')}
+          </Button>
+        ) : null}
+      </section>
     )
   }
 

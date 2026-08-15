@@ -20,7 +20,10 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const walletTransferMaxPageSize = 50
+const (
+	walletTransferMaxPageSize = 50
+	walletTransferFeeBPS      = int64(100)
+)
 
 type WalletTransferRecipient struct {
 	ExternalId        string `json:"external_id"`
@@ -41,6 +44,8 @@ type WalletTransferHistoryItem struct {
 	CounterpartyExternalId  string `json:"counterparty_external_id"`
 	CounterpartyDisplayName string `json:"counterparty_display_name_masked"`
 	AmountQuota             int64  `json:"amount_quota"`
+	FeeQuota                int64  `json:"fee_quota"`
+	TotalDebitQuota         int64  `json:"total_debit_quota"`
 	BalanceAfter            int64  `json:"balance_after"`
 	Status                  string `json:"status"`
 	CreatedAt               int64  `json:"created_at"`
@@ -57,6 +62,7 @@ type WalletTransferOverview struct {
 	QuotaPerUSD int64                          `json:"quota_per_usd"`
 	MinQuota    int64                          `json:"min_quota"`
 	Balance     int64                          `json:"balance"`
+	FeeBPS      int64                          `json:"fee_bps"`
 	Security    WalletTransferSecurityOverview `json:"security"`
 	History     WalletTransferHistoryPage      `json:"history"`
 }
@@ -82,7 +88,7 @@ func BuildWalletTransferOverview(user *identityschema.User, page, pageSize int) 
 	if user == nil || user.Id <= 0 {
 		return nil, commerceschema.ErrWalletTransferInvalid
 	}
-	balance, err := billingapp.GetUserWalletQuota(user.Id)
+	balance, err := billingapp.GetUserClaudeWalletQuota(user.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +104,7 @@ func BuildWalletTransferOverview(user *identityschema.User, page, pageSize int) 
 		QuotaPerUSD: int64(platformruntime.QuotaPerUnit),
 		MinQuota:    minimumWalletTransferQuota(),
 		Balance:     int64(balance),
+		FeeBPS:      walletTransferFeeBPS,
 		Security:    *security,
 		History:     *history,
 	}, nil
@@ -229,17 +236,24 @@ func executeWalletTransferTx(tx *gorm.DB, sender, recipient *identityschema.User
 	if err != nil {
 		return err
 	}
-	if senderBalance < int(req.AmountQuota) {
+	feeQuota := walletTransferFee(req.AmountQuota)
+	totalDebit := req.AmountQuota + feeQuota
+	if senderBalance < int(totalDebit) {
 		return commerceschema.ErrWalletTransferInsufficientBalance
 	}
 	operationID := "wallet-transfer:" + req.RequestId
-	if err := billingapp.DebitWalletQuotaTxWithReason(tx, sender.Id, int(req.AmountQuota), operationID+":debit", "wallet_peer_transfer_debit"); err != nil {
+	if err := billingapp.DebitClaudeWalletQuotaTxWithReason(tx, sender.Id, int(req.AmountQuota), operationID+":debit", "wallet_peer_transfer_debit"); err != nil {
 		return err
 	}
-	if err := billingapp.CreditWalletQuotaTx(tx, recipient.Id, int(req.AmountQuota), operationID+":credit", "wallet_peer_transfer_credit"); err != nil {
+	if feeQuota > 0 {
+		if err := billingapp.DebitClaudeWalletQuotaTxWithReason(tx, sender.Id, int(feeQuota), operationID+":fee", "wallet_peer_transfer_fee"); err != nil {
+			return err
+		}
+	}
+	if err := billingapp.CreditClaudeWalletQuotaTx(tx, recipient.Id, int(req.AmountQuota), operationID+":credit", "wallet_peer_transfer_credit"); err != nil {
 		return err
 	}
-	*transfer = newWalletTransfer(sender, recipient, req, int64(senderBalance)-req.AmountQuota, int64(recipientBalance)+req.AmountQuota)
+	*transfer = newWalletTransfer(sender, recipient, req, feeQuota, int64(senderBalance)-totalDebit, int64(recipientBalance)+req.AmountQuota)
 	if err := tx.Create(transfer).Error; err != nil {
 		return err
 	}
@@ -247,34 +261,36 @@ func executeWalletTransferTx(tx *gorm.DB, sender, recipient *identityschema.User
 }
 
 func synchronizeTransferBalancesTx(tx *gorm.DB, sender, recipient *identityschema.User) (int, int, error) {
-	senderBalance, _, err := billingapp.SynchronizeWalletQuotaProjectionsTx(tx, sender.Id, sender.Quota, sender.ClaudeQuota)
+	_, senderBalance, err := billingapp.SynchronizeWalletQuotaProjectionsTx(tx, sender.Id, sender.Quota, sender.ClaudeQuota)
 	if err != nil {
 		return 0, 0, err
 	}
-	recipientBalance, _, err := billingapp.SynchronizeWalletQuotaProjectionsTx(tx, recipient.Id, recipient.Quota, recipient.ClaudeQuota)
+	_, recipientBalance, err := billingapp.SynchronizeWalletQuotaProjectionsTx(tx, recipient.Id, recipient.Quota, recipient.ClaudeQuota)
 	return senderBalance, recipientBalance, err
 }
 
-func newWalletTransfer(sender, recipient *identityschema.User, req CreateWalletTransferRequest, senderAfter, recipientAfter int64) commerceschema.WalletTransfer {
+func newWalletTransfer(sender, recipient *identityschema.User, req CreateWalletTransferRequest, feeQuota, senderAfter, recipientAfter int64) commerceschema.WalletTransfer {
 	return commerceschema.WalletTransfer{
 		RequestId: req.RequestId, SenderUserId: sender.Id, RecipientUserId: recipient.Id,
 		SenderExternalId: sender.ExternalId, RecipientExternalId: recipient.ExternalId,
 		SenderDisplayNameMasked:    maskWalletTransferName(displayNameForTransfer(sender)),
 		RecipientDisplayNameMasked: maskWalletTransferName(displayNameForTransfer(recipient)),
-		AmountQuota:                req.AmountQuota, SenderBalanceAfter: senderAfter, RecipientBalanceAfter: recipientAfter,
+		AmountQuota:                req.AmountQuota, FeeQuota: feeQuota, TotalDebitQuota: req.AmountQuota + feeQuota,
+		SenderBalanceAfter: senderAfter, RecipientBalanceAfter: recipientAfter,
 	}
 }
 
 func recordWalletTransferAuditTx(tx *gorm.DB, transfer *commerceschema.WalletTransfer) error {
 	amount := float64(transfer.AmountQuota) / float64(platformruntime.QuotaPerUnit)
-	if err := auditapp.RecordLogTx(tx, transfer.SenderUserId, auditschema.LogTypeManage, fmt.Sprintf("向用户 %s 转出普通额度 $%.2f，转账记录 %d", transfer.RecipientExternalId, amount, transfer.Id)); err != nil {
+	fee := float64(transfer.FeeQuota) / float64(platformruntime.QuotaPerUnit)
+	if err := auditapp.RecordLogTx(tx, transfer.SenderUserId, auditschema.LogTypeManage, fmt.Sprintf("向用户 %s 转出通用额度 $%.2f，手续费 $%.2f，转账记录 %d", transfer.RecipientExternalId, amount, fee, transfer.Id)); err != nil {
 		return err
 	}
-	return auditapp.RecordLogTx(tx, transfer.RecipientUserId, auditschema.LogTypeManage, fmt.Sprintf("收到用户 %s 转入普通额度 $%.2f，转账记录 %d", transfer.SenderExternalId, amount, transfer.Id))
+	return auditapp.RecordLogTx(tx, transfer.RecipientUserId, auditschema.LogTypeManage, fmt.Sprintf("收到用户 %s 转入通用额度 $%.2f，转账记录 %d", transfer.SenderExternalId, amount, transfer.Id))
 }
 
 func walletTransferHistoryItem(transfer commerceschema.WalletTransfer, userID int) WalletTransferHistoryItem {
-	item := WalletTransferHistoryItem{Id: transfer.Id, RequestId: transfer.RequestId, AmountQuota: transfer.AmountQuota, Status: transfer.Status, CreatedAt: transfer.CreatedAt}
+	item := WalletTransferHistoryItem{Id: transfer.Id, RequestId: transfer.RequestId, AmountQuota: transfer.AmountQuota, FeeQuota: transfer.FeeQuota, TotalDebitQuota: transfer.TotalDebitQuota, Status: transfer.Status, CreatedAt: transfer.CreatedAt}
 	if transfer.SenderUserId == userID {
 		item.Direction = "outgoing"
 		item.CounterpartyExternalId = transfer.RecipientExternalId
@@ -287,6 +303,10 @@ func walletTransferHistoryItem(transfer commerceschema.WalletTransfer, userID in
 		item.BalanceAfter = transfer.RecipientBalanceAfter
 	}
 	return item
+}
+
+func walletTransferFee(amount int64) int64 {
+	return (amount*walletTransferFeeBPS + 9999) / 10000
 }
 
 func recipientFromUser(user *identityschema.User) *WalletTransferRecipient {

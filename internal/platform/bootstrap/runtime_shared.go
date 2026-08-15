@@ -8,10 +8,12 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-contrib/sessions"
+	sessioncookie "github.com/gin-contrib/sessions/cookie"
 	sessionredis "github.com/gin-contrib/sessions/redis"
 	"github.com/gin-gonic/gin"
 	redigo "github.com/gomodule/redigo/redis"
@@ -120,6 +122,14 @@ func buildHTTPServer(registerRoutes httpRouteRegistrar) *gin.Engine {
 }
 
 func buildSessionStore() sessions.Store {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("SESSION_STORE")), "cookie") {
+		store, err := newCookieSessionStore(os.Getenv("SESSION_SECRET"))
+		if err != nil {
+			log.Fatal("failed to initialize cookie session store: " + err.Error())
+		}
+		configureSessionStore(store)
+		return store
+	}
 	redisURL, err := url.Parse(os.Getenv("REDIS_CONN_STRING"))
 	if err != nil || redisURL.Host == "" || !platformcache.RedisReady() {
 		log.Fatal("Redis-backed sessions require a reachable REDIS_CONN_STRING")
@@ -131,6 +141,19 @@ func buildSessionStore() sessions.Store {
 	if err := sessionredis.SetKeyPrefix(store, "codego:session:"); err != nil {
 		log.Fatal("failed to configure Redis session store: " + err.Error())
 	}
+	configureSessionStore(store)
+	return store
+}
+
+func newCookieSessionStore(secret string) (sessions.Store, error) {
+	secret = strings.TrimSpace(secret)
+	if len(secret) < 32 {
+		return nil, fmt.Errorf("SESSION_SECRET must contain at least 32 characters")
+	}
+	return sessioncookie.NewStore([]byte(secret)), nil
+}
+
+func configureSessionStore(store sessions.Store) {
 	store.Options(sessions.Options{
 		Path:     "/",
 		MaxAge:   2592000,
@@ -138,7 +161,6 @@ func buildSessionStore() sessions.Store {
 		Secure:   platformconfig.SessionCookieSecure(),
 		SameSite: http.SameSiteStrictMode,
 	})
-	return store
 }
 
 func newRedisSessionStore(redisURL *url.URL) (sessionredis.Store, error) {

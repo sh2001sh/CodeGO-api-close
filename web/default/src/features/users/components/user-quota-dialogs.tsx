@@ -54,7 +54,7 @@ export function UserQuotaDialogs(props: UserQuotaDialogsProps) {
         currentQuota={parseQuotaFromDollars(props.currentClaudeQuotaRaw || 0)}
         action='add_claude_quota'
         title={props.t('Adjust Claude Quota')}
-        currentLabel={props.t('Current Claude quota')}
+        currentLabel={props.t('当前通用额度')}
         onSuccess={props.onSuccess}
       />
     </>

@@ -10,7 +10,6 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	walletRoute.Use(middleware.UserAuth())
 	{
 		walletRoute.GET("/quota-conversions", getWalletQuotaConversions)
-		walletRoute.POST("/quota-conversions", middleware.CriticalRateLimit(), createWalletQuotaConversion)
 		walletRoute.GET("/transfers", getWalletTransferOverview)
 		walletRoute.GET("/transfers/recipients/:external_id", middleware.CriticalRateLimit(), getWalletTransferRecipient)
 		walletRoute.PUT("/transfers/payment-password", middleware.CriticalRateLimit(), configureWalletTransferPassword)
@@ -26,7 +25,6 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		subscriptionRoute.GET("/orders/:trade_no", getSubscriptionOrderStatus)
 		subscriptionRoute.POST("/orders/:trade_no/cancel", middleware.CriticalRateLimit(), cancelSubscriptionOrder)
 		subscriptionRoute.PUT("/self/preference", updateSubscriptionPreference)
-		subscriptionRoute.POST("/self/claude-conversions", middleware.CriticalRateLimit(), createSubscriptionClaudeConversion)
 		subscriptionRoute.POST("/self/reset-opportunity/use", middleware.CriticalRateLimit(), useSubscriptionResetOpportunity)
 		subscriptionRoute.POST("/fuel/quote", quoteSubscriptionFuel)
 		subscriptionRoute.POST("/fuel/purchase", middleware.CriticalRateLimit(), purchaseSubscriptionFuel)
@@ -111,7 +109,6 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.GET("/balance/overview", getBalanceBlindBoxOverview)
 		blindBoxRoute.POST("/balance/purchase", middleware.BalanceBlindBoxOpenRateLimit(), purchaseBalanceBlindBoxes)
 		blindBoxRoute.POST("/balance/open", middleware.BalanceBlindBoxOpenRateLimit(), openBalanceBlindBox)
-		blindBoxRoute.POST("/balance/simulate", middleware.BalanceBlindBoxOpenRateLimit(), simulateBalanceBlindBox)
 		blindBoxRoute.POST("/balance/gift", middleware.CriticalRateLimit(), giftBalanceBlindBoxes)
 	}
 
@@ -141,8 +138,6 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	{
 		blindBoxAdminRoute.GET("/users/:id/overview", adminGetBlindBoxUserOverview)
 		blindBoxAdminRoute.POST("/users/:id/grants", adminGrantBlindBoxes)
-		blindBoxAdminRoute.POST("/users/:id/balance-simulation", adminStartBalanceBlindBoxSimulation)
-		blindBoxAdminRoute.DELETE("/users/:id/balance-simulation", adminStopBalanceBlindBoxSimulation)
 	}
 
 	apiRouter.POST("/blind-box/epay/notify", anonymousRequestBodyLimit, blindBoxEpayNotify)

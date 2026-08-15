@@ -1,11 +1,4 @@
-import {
-  FlaskConical,
-  Gift,
-  Loader2,
-  PackageOpen,
-  Search,
-  ShoppingBag,
-} from 'lucide-react'
+import { Gift, Loader2, PackageOpen, Search, ShoppingBag } from 'lucide-react'
 import { useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,10 +13,9 @@ import {
   BalanceBoxQuantityControl,
 } from './balance-blind-box-controls'
 import { BalanceBoxGiftConfirm } from './balance-blind-box-gift-confirm'
-import { BalanceBoxSimulationSummary } from './balance-blind-box-simulation'
 import { BoxFigure } from './blind-box-stage'
 
-export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulate'
+export type ActionMode = 'purchase' | 'open' | 'gift'
 
 export interface BalanceBoxPanelViewProps {
   balance?: BalanceBlindBoxOverview
@@ -35,14 +27,12 @@ export interface BalanceBoxPanelViewProps {
   recipientId: string
   canPurchase: boolean
   canUseInventory: boolean
-  canSimulate: boolean
   confirmGift: boolean
   onModeChange: (mode: ActionMode) => void
   onCountChange: (count: number) => void
   onRecipientIdChange: (value: string) => void
   onPurchase: () => void
   onOpen: () => void
-  onSimulate: () => void
   onLookup: () => void
   onGift: () => void
   onConfirmGiftChange: (open: boolean) => void
@@ -56,12 +46,7 @@ export function BalanceBoxPanelView(props: BalanceBoxPanelViewProps) {
         opening={props.busy && props.mode === 'open'}
       />
       <div className='space-y-4 px-4 py-4 sm:px-6 sm:py-5'>
-        <BalanceBoxModeSwitch
-          mode={props.mode}
-          simulationActive={Boolean(props.balance?.simulation?.active)}
-          onChange={props.onModeChange}
-        />
-        <BalanceBoxSimulationSummary simulation={props.balance?.simulation} />
+        <BalanceBoxModeSwitch mode={props.mode} onChange={props.onModeChange} />
         <BalanceBoxWorkspace {...props} />
       </div>
       <BalanceBoxGiftConfirm {...props} />
@@ -106,7 +91,7 @@ function BalanceBoxHeader(props: {
           </p>
           <p className='mt-1 text-[11px] leading-5 text-teal-700/90 dark:text-teal-300/90'>
             约 {formatRate(rates.atLeast10)} 获得等值 $10 及以上奖励，约{' '}
-            {formatRate(rates.atLeast15)} 达到等值 $15；Claude 额度按 4
+            {formatRate(rates.atLeast15)} 达到等值 $15；通用额度按 4
             倍价值计算，转赠不会刷新奖励或保底。
           </p>
         </div>
@@ -137,14 +122,10 @@ function BalanceBoxHeaderMetrics(props: { balance?: BalanceBlindBoxOverview }) {
 
 function BalanceBoxModeSwitch(props: {
   mode: ActionMode
-  simulationActive: boolean
   onChange: (mode: ActionMode) => void
 }) {
   return (
-    <div
-      className={`bg-muted grid rounded-lg p-1 ${props.simulationActive ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}
-      role='tablist'
-    >
+    <div className='bg-muted grid grid-cols-3 rounded-lg p-1' role='tablist'>
       <BalanceBoxModeButton
         active={props.mode === 'purchase'}
         icon={ShoppingBag}
@@ -163,14 +144,6 @@ function BalanceBoxModeSwitch(props: {
         label='赠送库存'
         onClick={() => props.onChange('gift')}
       />
-      {props.simulationActive ? (
-        <BalanceBoxModeButton
-          active={props.mode === 'simulate'}
-          icon={FlaskConical}
-          label='模拟抽取'
-          onClick={() => props.onChange('simulate')}
-        />
-      ) : null}
     </div>
   )
 }
@@ -206,14 +179,6 @@ function BalanceBoxModeDescription(props: {
       <p className='text-muted-foreground text-sm leading-6'>
         从最早入库的盲盒开始开启，单次最多 100
         个。奖励直接发放到当前持有者账户，开启后不可转赠。
-      </p>
-    )
-  }
-  if (props.mode === 'simulate') {
-    return (
-      <p className='text-muted-foreground text-sm leading-6'>
-        单次最多 100
-        抽，总次数不限。所有结果仅用于概率测试，到期自动关闭且不会改变真实余额、道具、库存或保底。
       </p>
     )
   }
@@ -272,17 +237,7 @@ function BalanceBoxActionControls(props: BalanceBoxPanelViewProps) {
       {props.mode === 'purchase' ? (
         <BalanceBoxPurchaseAction {...props} />
       ) : null}
-      {props.mode === 'simulate' ? (
-        <BalanceBoxPrimaryButton
-          busy={props.busy}
-          disabled={!props.canSimulate}
-          icon={FlaskConical}
-          busyLabel='模拟中…'
-          label={`模拟抽取 ${props.count} 次`}
-          onClick={props.onSimulate}
-        />
-      ) : null}
-      {props.mode !== 'purchase' && props.mode !== 'simulate' ? (
+      {props.mode !== 'purchase' ? (
         <BalanceBoxInventoryAction {...props} />
       ) : null}
     </div>
@@ -321,9 +276,7 @@ function BalanceBoxInventoryAction(props: BalanceBoxPanelViewProps) {
   return (
     <BalanceBoxPrimaryButton
       busy={props.busy}
-      disabled={
-        !props.canUseInventory || (gifting && !Boolean(props.recipient))
-      }
+      disabled={!props.canUseInventory || (gifting && !props.recipient)}
       icon={gifting ? Gift : PackageOpen}
       busyLabel={gifting ? '赠送中…' : '开启中…'}
       label={`${gifting ? '赠送' : '开启'} ${props.count} 个`}

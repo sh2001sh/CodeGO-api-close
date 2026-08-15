@@ -139,6 +139,16 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 	if relayInfo.BillingSource != "" {
 		other["billing_source"] = relayInfo.BillingSource
 	}
+	if relayInfo.MarketplaceGroupID != "" {
+		other["marketplace_group_id"] = relayInfo.MarketplaceGroupID
+		other["marketplace_source_type"] = relayInfo.MarketplaceSourceType
+		other["credit_pool_policy"] = relayInfo.MarketplaceCreditPolicy
+		other["marketplace_multiplier"] = relayInfo.MarketplaceMultiplier
+		other["marketplace_platform_commission_rate"] = 0.05
+		other["marketplace_transaction_fee_rate"] = 0.0
+		other["marketplace_owner_net_rate"] = 0.94
+		other["billing_quota_label"] = "通用额度"
+	}
 	switch relayInfo.BillingSource {
 	case BillingSourceClaudeWallet:
 		other["billing_quota_field"] = "claude_quota"

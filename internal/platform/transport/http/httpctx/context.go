@@ -27,6 +27,11 @@ func GetContextKeyInt(c *gin.Context, key constant.ContextKey) int {
 	return c.GetInt(string(key))
 }
 
+// GetContextKeyFloat64 reads a float64 value stored under the typed context key.
+func GetContextKeyFloat64(c *gin.Context, key constant.ContextKey) float64 {
+	return c.GetFloat64(string(key))
+}
+
 // GetContextKeyBool reads a bool value stored under the typed context key.
 func GetContextKeyBool(c *gin.Context, key constant.ContextKey) bool {
 	return c.GetBool(string(key))

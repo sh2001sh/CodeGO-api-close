@@ -16,10 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { AlertTriangle, CheckCircle2, Layers3, RefreshCcw, Rows3 } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Layers3,
+  RefreshCcw,
+  Rows3,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { SectionPageLayout } from '@/components/layout'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -29,7 +36,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
+import { SectionPageLayout } from '@/components/layout'
 import { GroupStatusMonitorCard } from './group-status-monitor-card'
 import {
   formatSampleWindowLabel,
@@ -41,8 +48,15 @@ import { useSidebarGroupStatus } from './use-sidebar-group-status'
 export function SidebarGroupStatusPage() {
   const { t } = useTranslation()
   const query = useSidebarGroupStatus()
-  const items = sortItems(query.data?.data ?? [])
-  const summary = summarizeGroups(items)
+  const [source, setSource] = useState<'all' | 'official' | 'marketplace_user'>(
+    'all'
+  )
+  const allItems = sortItems(query.data?.data ?? [])
+  const items =
+    source === 'all'
+      ? allItems
+      : allItems.filter((item) => (item.source_type ?? 'official') === source)
+  const summary = summarizeGroups(allItems)
 
   return (
     <SectionPageLayout>
@@ -54,7 +68,9 @@ export function SidebarGroupStatusPage() {
         <Button
           variant='outline'
           size='sm'
-          render={<Link to='/dashboard/$section' params={{ section: 'overview' }} />}
+          render={
+            <Link to='/dashboard/$section' params={{ section: 'overview' }} />
+          }
         >
           概览
         </Button>
@@ -74,6 +90,34 @@ export function SidebarGroupStatusPage() {
         <div className='mx-auto flex w-full max-w-[1700px] flex-col gap-5'>
           <OverviewPanel summary={summary} loading={query.isLoading} />
 
+          <div className='border-border flex flex-wrap items-center justify-between gap-3 border-b pb-3'>
+            <div
+              className='bg-muted flex rounded-md p-1'
+              aria-label='分组来源筛选'
+            >
+              {(
+                [
+                  ['all', '全部'],
+                  ['official', '官方渠道'],
+                  ['marketplace_user', '第三方渠道'],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  size='sm'
+                  variant={source === value ? 'secondary' : 'ghost'}
+                  onClick={() => setSource(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <span className='text-muted-foreground text-xs'>
+              官方分组可按模型使用 GPT
+              套餐或对应钱包；第三方分组固定只使用通用额度。
+            </span>
+          </div>
+
           {query.isLoading ? (
             <BoardSkeleton />
           ) : query.isError ? (
@@ -83,17 +127,18 @@ export function SidebarGroupStatusPage() {
           ) : (
             <div className='flex flex-col gap-5'>
               {items.map((group) => (
-                <section
-                  key={group.group}
-                  className='app-page-shell p-4'
-                >
+                <section key={group.group} className='app-page-shell p-4'>
                   <div className='mb-4 flex items-end justify-between gap-3'>
                     <div className='space-y-1'>
-                      <h3 className='text-xl font-semibold tracking-tight text-foreground'>
+                      <h3 className='text-foreground text-xl font-semibold tracking-tight'>
                         {group.group}
                       </h3>
                       <p className='text-muted-foreground text-sm'>
-                        {group.models.length} 个模型
+                        {(group.source_type ?? 'official') ===
+                        'marketplace_user'
+                          ? '第三方渠道 · 仅通用额度'
+                          : '官方渠道'}{' '}
+                        · {group.models.length} 个模型
                       </p>
                     </div>
                   </div>
@@ -171,8 +216,8 @@ function OverviewPanel(props: {
   ]
 
   return (
-    <Card className='border-border/70 bg-gradient-to-br from-background via-background to-primary/5'>
-      <CardHeader className='border-b border-border/70'>
+    <Card className='border-border/70 from-background via-background to-primary/5 bg-gradient-to-br'>
+      <CardHeader className='border-border/70 border-b'>
         <CardTitle className='flex items-center gap-2'>
           <Layers3 className='text-primary size-4' />
           分组模型状态
@@ -188,7 +233,7 @@ function OverviewPanel(props: {
           return (
             <div
               key={metric.label}
-              className='rounded-2xl border border-border/70 bg-background/88 px-4 py-3 dark:bg-background/70'
+              className='border-border/70 bg-background/88 dark:bg-background/70 rounded-2xl border px-4 py-3'
             >
               <div className='flex items-start justify-between gap-3'>
                 <div className='space-y-1'>
@@ -235,10 +280,7 @@ function BoardSkeleton() {
             </div>
             <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
               {Array.from({ length: 5 }).map((__, cardIndex) => (
-                <Skeleton
-                  key={cardIndex}
-                  className='h-48 w-full rounded-2xl'
-                />
+                <Skeleton key={cardIndex} className='h-48 w-full rounded-2xl' />
               ))}
             </div>
           </CardContent>

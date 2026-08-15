@@ -276,7 +276,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				if tierName == "first_purchase" {
 					record.RewardTitle = formatFirstPurchaseBlindBoxRewardTitle(totalRewardUSD)
 				} else {
-					record.RewardTitle = fmt.Sprintf("%.2f Claude 额度奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", totalRewardUSD)
 				}
 				if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 					return nil, err
@@ -308,9 +308,9 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				if tierName == "first_purchase" {
 					record.RewardTitle = formatFirstPurchaseBlindBoxRewardTitle(totalRewardUSD)
 				} else if tierWalletType == commerceschema.BlindBoxRewardWalletTypeClaude {
-					record.RewardTitle = fmt.Sprintf("%.2f Claude 额度奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", totalRewardUSD)
 				} else {
-					record.RewardTitle = fmt.Sprintf("%.2f 美元奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 官方 GPT 专属额度奖励", totalRewardUSD)
 				}
 				if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 					return nil, err

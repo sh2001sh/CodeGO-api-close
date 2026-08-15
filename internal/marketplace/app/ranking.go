@@ -1,0 +1,272 @@
+package app
+
+import (
+	"math"
+	"sort"
+	"strings"
+	"time"
+
+	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+const rankingVersion = "marketplace-v1"
+
+type rankingTotals struct {
+	requestCount  int64
+	successWeight int64
+	successTotal  float64
+	latencyWeight int64
+	latencyTotal  float64
+	ttftWeight    int64
+	ttftTotal     float64
+	tpsWeight     int64
+	tpsTotal      float64
+}
+
+func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
+	query = normalizeGroupQuery(query)
+	groups, channels, err := loadPublicGroups(query)
+	if err != nil {
+		return nil, err
+	}
+	snapshots, err := buildRanking(groups, channels, query.WindowHours)
+	if err != nil {
+		return nil, err
+	}
+	items := filterAndSortGroups(groups, channels, snapshots, query)
+	total := len(items)
+	ranked := 0
+	for _, item := range items {
+		if !item.Observing {
+			ranked++
+		}
+	}
+	items = paginateGroups(items, query.Page, query.PageSize)
+	return &GroupListResult{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}, nil
+}
+
+func GetMarketplaceGroup(slug string, windowHours int) (*GroupListItem, error) {
+	query := normalizeGroupQuery(GroupQuery{Search: slug, WindowHours: windowHours, Page: 1, PageSize: 50})
+	result, err := ListMarketplaceGroups(query)
+	if err != nil {
+		return nil, err
+	}
+	for index := range result.Items {
+		if result.Items[index].PublicSlug == slug {
+			return &result.Items[index], nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func loadPublicGroups(query GroupQuery) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
+	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{})
+	if query.ViewerUserID > 0 {
+		dbQuery = dbQuery.Where("visibility = ? OR owner_user_id = ?", marketplacedomain.VisibilityPublic, query.ViewerUserID)
+	} else {
+		dbQuery = dbQuery.Where("visibility = ?", marketplacedomain.VisibilityPublic)
+	}
+	if query.Status != "" {
+		dbQuery = dbQuery.Where("lifecycle_status = ?", query.Status)
+	}
+	if query.Verification != "" {
+		dbQuery = dbQuery.Where("verification_status = ?", query.Verification)
+	}
+	if query.MinMultiplier > 0 {
+		dbQuery = dbQuery.Where("multiplier >= ?", query.MinMultiplier)
+	}
+	if query.MaxMultiplier > 0 {
+		dbQuery = dbQuery.Where("multiplier <= ?", query.MaxMultiplier)
+	}
+	var groups []marketplaceschema.Group
+	if err := dbQuery.Limit(1000).Find(&groups).Error; err != nil {
+		return nil, nil, err
+	}
+	channels, err := channelMap(groups)
+	return groups, channels, err
+}
+
+func channelMap(groups []marketplaceschema.Group) (map[string]marketplaceschema.Channel, error) {
+	ids := make([]string, 0, len(groups))
+	for _, group := range groups {
+		ids = append(ids, group.ChannelID)
+	}
+	result := make(map[string]marketplaceschema.Channel, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	var channels []marketplaceschema.Channel
+	if err := platformdb.DB.Where("id IN ?", ids).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	for _, channel := range channels {
+		result[channel.ID] = channel
+	}
+	return result, nil
+}
+
+func buildRanking(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) (map[string]marketplaceschema.RankingSnapshot, error) {
+	internalNames := make([]string, 0, len(groups))
+	groupByName := make(map[string]marketplaceschema.Group, len(groups))
+	for _, group := range groups {
+		internalNames = append(internalNames, group.InternalGroupName)
+		groupByName[group.InternalGroupName] = group
+	}
+	rows, err := auditprojection.QuerySummaryByGroupModels(hours, internalNames)
+	if err != nil {
+		return nil, err
+	}
+	totals := aggregateRankingRows(rows)
+	consumers := independentConsumerCounts(internalNames, hours)
+	snapshots := make([]marketplaceschema.RankingSnapshot, 0, len(groups))
+	for _, group := range groups {
+		snapshots = append(snapshots, scoreGroup(group, totals[group.InternalGroupName], consumers[group.InternalGroupName], hours))
+	}
+	assignRanks(snapshots)
+	result := make(map[string]marketplaceschema.RankingSnapshot, len(snapshots))
+	for index := range snapshots {
+		result[snapshots[index].GroupID] = snapshots[index]
+		_ = platformdb.DB.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "group_id"}, {Name: "window_hours"}, {Name: "ranking_version"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"rank", "score", "raw_success_rate", "wilson_success_rate", "avg_ttft_ms",
+				"avg_latency_ms", "avg_tps", "request_count", "independent_consumers", "observing", "calculated_at",
+			}),
+		}).Create(&snapshots[index]).Error
+	}
+	_ = channels
+	return result, nil
+}
+
+func aggregateRankingRows(rows []auditprojection.GroupModelSummary) map[string]rankingTotals {
+	result := make(map[string]rankingTotals)
+	for _, row := range rows {
+		total := result[row.Group]
+		total.requestCount += row.RequestCount
+		total.successTotal += row.SuccessRate * float64(row.RequestCount)
+		total.successWeight += row.RequestCount
+		if row.AvgLatencyMs > 0 {
+			total.latencyTotal += float64(row.AvgLatencyMs) * float64(row.RequestCount)
+			total.latencyWeight += row.RequestCount
+		}
+		if row.AvgTtftMs > 0 {
+			total.ttftTotal += float64(row.AvgTtftMs) * float64(row.RequestCount)
+			total.ttftWeight += row.RequestCount
+		}
+		if row.AvgTps > 0 {
+			total.tpsTotal += row.AvgTps * float64(row.RequestCount)
+			total.tpsWeight += row.RequestCount
+		}
+		result[row.Group] = total
+	}
+	return result
+}
+
+func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers int64, hours int) marketplaceschema.RankingSnapshot {
+	successRate := weighted(total.successTotal, total.successWeight)
+	successCount := int64(math.Round(successRate / 100 * float64(total.requestCount)))
+	wilson := wilsonLowerBound(successCount, total.requestCount, 1.96) * 100
+	requestMin, consumerMin := rankingThresholds(hours)
+	observing := total.requestCount < requestMin || consumers < consumerMin || group.VerificationStatus != marketplacedomain.VerificationPassed
+	score := wilson * 0.4
+	score += inverseMetricScore(weighted(total.ttftTotal, total.ttftWeight), 3000) * 0.25
+	score += inverseMetricScore(weighted(total.latencyTotal, total.latencyWeight), 30000) * 0.15
+	score += cappedMetricScore(weighted(total.tpsTotal, total.tpsWeight), 100) * 0.1
+	score += inverseMetricScore(group.Multiplier, 3) * 0.1
+	return marketplaceschema.RankingSnapshot{
+		GroupID: group.ID, WindowHours: hours, RankingVersion: rankingVersion,
+		Score: round1(score), RawSuccessRate: round2(successRate), WilsonSuccessRate: round2(wilson),
+		AvgTTFTMs:    round2(weighted(total.ttftTotal, total.ttftWeight)),
+		AvgLatencyMs: round2(weighted(total.latencyTotal, total.latencyWeight)), AvgTPS: round2(weighted(total.tpsTotal, total.tpsWeight)),
+		RequestCount: total.requestCount, IndependentConsumers: consumers, Observing: observing, CalculatedAt: time.Now().UTC(),
+	}
+}
+
+func independentConsumerCounts(groups []string, hours int) map[string]int64 {
+	result := make(map[string]int64)
+	if len(groups) == 0 || platformdb.LogDB == nil {
+		return result
+	}
+	type row struct {
+		Group string `gorm:"column:group_name"`
+		Count int64
+	}
+	var rows []row
+	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
+	var quotedGroup strings.Builder
+	platformdb.LogDB.Dialector.QuoteTo(&quotedGroup, "group")
+	groupColumn := quotedGroup.String()
+	_ = platformdb.LogDB.Model(&auditschema.Log{}).
+		Select(groupColumn+" AS group_name, COUNT(DISTINCT user_id) AS count").
+		Where("type = ? AND created_at >= ? AND "+groupColumn+" IN ?", auditschema.LogTypeConsume, cutoff, groups).
+		Group("group").Scan(&rows).Error
+	for _, item := range rows {
+		result[item.Group] = item.Count
+	}
+	return result
+}
+
+func assignRanks(snapshots []marketplaceschema.RankingSnapshot) {
+	sort.SliceStable(snapshots, func(i, j int) bool {
+		if snapshots[i].Observing != snapshots[j].Observing {
+			return !snapshots[i].Observing
+		}
+		if snapshots[i].Score != snapshots[j].Score {
+			return snapshots[i].Score > snapshots[j].Score
+		}
+		return snapshots[i].GroupID < snapshots[j].GroupID
+	})
+	rank := 0
+	for index := range snapshots {
+		if snapshots[index].Observing {
+			snapshots[index].Rank = 0
+			continue
+		}
+		rank++
+		snapshots[index].Rank = rank
+	}
+}
+
+func wilsonLowerBound(successes, total int64, z float64) float64 {
+	if total <= 0 {
+		return 0
+	}
+	n := float64(total)
+	phat := float64(successes) / n
+	z2 := z * z
+	return (phat + z2/(2*n) - z*math.Sqrt((phat*(1-phat)+z2/(4*n))/n)) / (1 + z2/n)
+}
+
+func rankingThresholds(hours int) (int64, int64) {
+	if hours >= 24*30 {
+		return 1000, 30
+	}
+	if hours >= 24*7 {
+		return 300, 20
+	}
+	return 100, 10
+}
+
+func weighted(total float64, weight int64) float64 {
+	if weight <= 0 {
+		return 0
+	}
+	return total / float64(weight)
+}
+func inverseMetricScore(value, ceiling float64) float64 {
+	if value <= 0 {
+		return 0
+	}
+	return math.Max(0, 100-math.Min(value/ceiling*100, 100))
+}
+func cappedMetricScore(value, ceiling float64) float64 {
+	return math.Min(math.Max(value/ceiling*100, 0), 100)
+}
+func round1(value float64) float64 { return math.Round(value*10) / 10 }
+func round2(value float64) float64 { return math.Round(value*100) / 100 }

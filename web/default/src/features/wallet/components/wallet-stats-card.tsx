@@ -1,16 +1,13 @@
-import { useMemo } from 'react'
 import { Activity, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getSubscriptionPlanSubtitle } from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
   SelfSubscriptionData,
 } from '@/features/subscriptions/types'
 import type { UserWalletData } from '../types'
 import { ResetOpportunityEntryCard } from './reset-opportunity-entry-card'
-import { SubscriptionClaudeConversionCard } from './subscription-claude-conversion-card'
 import { WalletStatItem } from './wallet-panel-primitives'
 
 interface WalletStatsCardProps {
@@ -34,18 +31,6 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
     last_used_month: '',
   }
 
-  const planTitles = useMemo(() => {
-    const map: Record<number, { title: string; subtitle: string }> = {}
-    for (const item of props.plans) {
-      if (!item?.plan?.id) continue
-      map[item.plan.id] = {
-        title: item.plan.title || t('Plan #{{id}}', { id: item.plan.id }),
-        subtitle: getSubscriptionPlanSubtitle(item.plan) || t('Subscription'),
-      }
-    }
-    return map
-  }, [props.plans, t])
-
   if (props.loading) {
     return (
       <aside className='space-y-4 lg:sticky lg:top-4'>
@@ -68,14 +53,15 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
           {t('Wallet balance')}
         </div>
         <div className='text-foreground mt-3 font-mono text-3xl font-bold tracking-tight tabular-nums'>
-          {formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
+          {formatUsdAmount(quotaUnitsToUsd(props.user?.claude_quota ?? 0))}
+        </div>
+        <div className='text-muted-foreground mt-1 text-xs'>
+          {t('通用额度')}
         </div>
         <div className='mt-4 grid gap-2'>
           <WalletStatItem
-            label={t('Claude balance')}
-            value={formatUsdAmount(
-              quotaUnitsToUsd(props.user?.claude_quota ?? 0)
-            )}
+            label={t('官方 GPT 专属额度')}
+            value={formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
           />
           <WalletStatItem
             label={t('Total spent')}
@@ -94,13 +80,6 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
           />
         </div>
       </div>
-
-      <SubscriptionClaudeConversionCard
-        subscriptionData={props.subscriptionData}
-        loading={props.subscriptionLoading}
-        planTitles={planTitles}
-        onRefresh={props.onSubscriptionRefresh}
-      />
 
       <ResetOpportunityEntryCard
         resetOpportunity={resetOpportunity}

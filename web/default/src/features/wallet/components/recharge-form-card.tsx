@@ -239,12 +239,12 @@ export function RechargeFormCard({
                       value: 'default' as const,
                       title: t('Standard wallet'),
                       description: t(
-                        'For non-Claude models, existing discounts and group rates apply.'
+                        '充值到官方 GPT 专属额度，仅用于官方 GPT、Codex、Responses 分组。'
                       ),
                     },
                     {
                       value: 'claude' as const,
-                      title: t('Claude quota'),
+                      title: t('通用额度'),
                       description: t(
                         'Only for Claude models; minimum 1 with fixed 1:1 recharge.'
                       ),

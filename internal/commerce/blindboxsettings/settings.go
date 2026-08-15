@@ -55,27 +55,27 @@ const (
 
 var defaultTierSettings = []TierSetting{
 	// Value model:
-	// - 1 Claude 额度 ≈ 1 RMB 成本
-	// - 1 美元普通额度 ≈ 0.1 RMB 成本
+	// - 1 美元通用额度 ≈ 1 RMB 成本
+	// - 1 美元官方 GPT 专属额度 ≈ 0.1 RMB 成本
 	// Target:
 	// - medium rewards carry the highest probability mass
 	// - low / jackpot rewards stay small probability
 	// - Claude rewards have enough presence and larger-span tiers
 	// - total expected payout remains below the 2.5 RMB box price
-	{Name: "2-5 美元普通额度", MinUSD: 2.0, MaxUSD: 5.0, Probability: 0.09, RewardType: "quota", WalletType: "default"},
-	{Name: "5-10 美元普通额度", MinUSD: 5.0, MaxUSD: 10.0, Probability: 0.18, RewardType: "quota", WalletType: "default"},
-	{Name: "10-20 美元普通额度", MinUSD: 10.0, MaxUSD: 20.0, Probability: 0.21, RewardType: "quota", WalletType: "default"},
-	{Name: "20-30 美元普通额度", MinUSD: 20.0, MaxUSD: 30.0, Probability: 0.075, RewardType: "quota", WalletType: "default"},
-	{Name: "30-50 美元普通额度", MinUSD: 30.0, MaxUSD: 50.0, Probability: 0.027, RewardType: "quota", WalletType: "default"},
-	{Name: "50-80 美元普通额度", MinUSD: 50.0, MaxUSD: 80.0, Probability: 0.008, RewardType: "quota", WalletType: "default"},
-	{Name: "80-120 美元普通额度", MinUSD: 80.0, MaxUSD: 120.0, Probability: 0.002, RewardType: "quota", WalletType: "default"},
-	{Name: "0.5-1 Claude 额度", MinUSD: 0.5, MaxUSD: 1.0, Probability: 0.11, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "1-2 Claude 额度", MinUSD: 1.0, MaxUSD: 2.0, Probability: 0.09, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "2-5 Claude 额度", MinUSD: 2.0, MaxUSD: 5.0, Probability: 0.055, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "5-10 Claude 额度", MinUSD: 5.0, MaxUSD: 10.0, Probability: 0.03, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "10-20 Claude 额度", MinUSD: 10.0, MaxUSD: 20.0, Probability: 0.012, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "20-40 Claude 额度", MinUSD: 20.0, MaxUSD: 40.0, Probability: 0.006, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "40-60 Claude 额度", MinUSD: 40.0, MaxUSD: 60.0, Probability: 0.001, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "2-5 美元官方 GPT 专属额度", MinUSD: 2.0, MaxUSD: 5.0, Probability: 0.09, RewardType: "quota", WalletType: "default"},
+	{Name: "5-10 美元官方 GPT 专属额度", MinUSD: 5.0, MaxUSD: 10.0, Probability: 0.18, RewardType: "quota", WalletType: "default"},
+	{Name: "10-20 美元官方 GPT 专属额度", MinUSD: 10.0, MaxUSD: 20.0, Probability: 0.21, RewardType: "quota", WalletType: "default"},
+	{Name: "20-30 美元官方 GPT 专属额度", MinUSD: 20.0, MaxUSD: 30.0, Probability: 0.075, RewardType: "quota", WalletType: "default"},
+	{Name: "30-50 美元官方 GPT 专属额度", MinUSD: 30.0, MaxUSD: 50.0, Probability: 0.027, RewardType: "quota", WalletType: "default"},
+	{Name: "50-80 美元官方 GPT 专属额度", MinUSD: 50.0, MaxUSD: 80.0, Probability: 0.008, RewardType: "quota", WalletType: "default"},
+	{Name: "80-120 美元官方 GPT 专属额度", MinUSD: 80.0, MaxUSD: 120.0, Probability: 0.002, RewardType: "quota", WalletType: "default"},
+	{Name: "0.5-1 通用额度", MinUSD: 0.5, MaxUSD: 1.0, Probability: 0.11, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "1-2 通用额度", MinUSD: 1.0, MaxUSD: 2.0, Probability: 0.09, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "2-5 通用额度", MinUSD: 2.0, MaxUSD: 5.0, Probability: 0.055, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "5-10 通用额度", MinUSD: 5.0, MaxUSD: 10.0, Probability: 0.03, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "10-20 通用额度", MinUSD: 10.0, MaxUSD: 20.0, Probability: 0.012, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "20-40 通用额度", MinUSD: 20.0, MaxUSD: 40.0, Probability: 0.006, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "40-60 通用额度", MinUSD: 40.0, MaxUSD: 60.0, Probability: 0.001, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "充值九折卡", MinUSD: 0, MaxUSD: 0, Probability: 0.028, RewardType: "prop"},
 	{Name: "套餐九折卡", MinUSD: 0, MaxUSD: 0, Probability: 0.012, RewardType: "prop"},
 	{Name: "0.95 倍率卡", MinUSD: 0, MaxUSD: 0, Probability: 0.038, RewardType: "prop"},
@@ -83,23 +83,23 @@ var defaultTierSettings = []TierSetting{
 }
 
 var defaultBalanceBlindBoxTiers = []TierSetting{
-	// Claude quota is valued at 4x ordinary quota. Equivalent-value bands from
+	// Universal quota is valued at 4x official GPT special quota. Equivalent-value bands from
 	// $10 through $200 split their probability evenly by wallet type.
-	{Name: "$1.00-$3.00 普通额度", MinUSD: 1, MaxUSD: 3, Probability: 0.06, RewardType: "quota", WalletType: "default"},
-	{Name: "$3.00-$6.00 普通额度", MinUSD: 3, MaxUSD: 6, Probability: 0.12, RewardType: "quota", WalletType: "default"},
-	{Name: "$6.00-$10.00 普通额度", MinUSD: 6, MaxUSD: 10, Probability: 0.10, RewardType: "quota", WalletType: "default"},
-	{Name: "$10.00-$15.00 普通额度", MinUSD: 10, MaxUSD: 15, Probability: 0.075, RewardType: "quota", WalletType: "default"},
-	{Name: "$15.00-$20.00 普通额度", MinUSD: 15, MaxUSD: 20, Probability: 0.22, RewardType: "quota", WalletType: "default"},
-	{Name: "$25.00-$40.00 普通额度", MinUSD: 25, MaxUSD: 40, Probability: 0.05, RewardType: "quota", WalletType: "default"},
-	{Name: "$80 普通额度", MinUSD: 80, MaxUSD: 80, Probability: 0.004, RewardType: "quota", WalletType: "default"},
-	{Name: "$200 普通额度", MinUSD: 200, MaxUSD: 200, Probability: 0.00075, RewardType: "quota", WalletType: "default"},
-	{Name: "$500 普通额度", MinUSD: 500, MaxUSD: 500, Probability: 0.00036, RewardType: "quota", WalletType: "default"},
-	{Name: "$5000 普通额度", MinUSD: 5000, MaxUSD: 5000, Probability: 0.00004, RewardType: "quota", WalletType: "default"},
-	{Name: "$2.50-$3.75 Claude 额度（等值 $10-$15）", MinUSD: 2.5, MaxUSD: 3.75, Probability: 0.075, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$3.75-$5.00 Claude 额度（等值 $15-$20）", MinUSD: 3.75, MaxUSD: 5, Probability: 0.22, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$6.25-$10.00 Claude 额度（等值 $25-$40）", MinUSD: 6.25, MaxUSD: 10, Probability: 0.05, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$20 Claude 额度（等值 $80）", MinUSD: 20, MaxUSD: 20, Probability: 0.004, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$50 Claude 额度（等值 $200）", MinUSD: 50, MaxUSD: 50, Probability: 0.00075, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$1.00-$3.00 官方 GPT 专属额度", MinUSD: 1, MaxUSD: 3, Probability: 0.06, RewardType: "quota", WalletType: "default"},
+	{Name: "$3.00-$6.00 官方 GPT 专属额度", MinUSD: 3, MaxUSD: 6, Probability: 0.12, RewardType: "quota", WalletType: "default"},
+	{Name: "$6.00-$10.00 官方 GPT 专属额度", MinUSD: 6, MaxUSD: 10, Probability: 0.10, RewardType: "quota", WalletType: "default"},
+	{Name: "$10.00-$15.00 官方 GPT 专属额度", MinUSD: 10, MaxUSD: 15, Probability: 0.075, RewardType: "quota", WalletType: "default"},
+	{Name: "$15.00-$20.00 官方 GPT 专属额度", MinUSD: 15, MaxUSD: 20, Probability: 0.22, RewardType: "quota", WalletType: "default"},
+	{Name: "$25.00-$40.00 官方 GPT 专属额度", MinUSD: 25, MaxUSD: 40, Probability: 0.05, RewardType: "quota", WalletType: "default"},
+	{Name: "$80 官方 GPT 专属额度", MinUSD: 80, MaxUSD: 80, Probability: 0.004, RewardType: "quota", WalletType: "default"},
+	{Name: "$200 官方 GPT 专属额度", MinUSD: 200, MaxUSD: 200, Probability: 0.00075, RewardType: "quota", WalletType: "default"},
+	{Name: "$500 官方 GPT 专属额度", MinUSD: 500, MaxUSD: 500, Probability: 0.00036, RewardType: "quota", WalletType: "default"},
+	{Name: "$5000 官方 GPT 专属额度", MinUSD: 5000, MaxUSD: 5000, Probability: 0.00004, RewardType: "quota", WalletType: "default"},
+	{Name: "$2.50-$3.75 通用额度（等值 $10-$15）", MinUSD: 2.5, MaxUSD: 3.75, Probability: 0.075, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$3.75-$5.00 通用额度（等值 $15-$20）", MinUSD: 3.75, MaxUSD: 5, Probability: 0.22, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$6.25-$10.00 通用额度（等值 $25-$40）", MinUSD: 6.25, MaxUSD: 10, Probability: 0.05, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$20 通用额度（等值 $80）", MinUSD: 20, MaxUSD: 20, Probability: 0.004, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "$50 通用额度（等值 $200）", MinUSD: 50, MaxUSD: 50, Probability: 0.00075, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "充值九折卡", Probability: 0.007, RewardType: "prop"},
 	{Name: "套餐九折卡", Probability: 0.004, RewardType: "prop"},
 	{Name: "0.95 倍率卡", Probability: 0.006, RewardType: "prop"},

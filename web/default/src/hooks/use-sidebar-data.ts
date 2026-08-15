@@ -3,7 +3,6 @@ import {
   BadgeCheck,
   Box,
   Command,
-  Compass,
   Egg,
   FileText,
   Images,
@@ -12,6 +11,7 @@ import {
   Package,
   Radio,
   ShieldCheck,
+  Store,
   RefreshCcw,
   ScrollText,
   Settings,
@@ -19,9 +19,9 @@ import {
   Ticket,
   User,
   Users,
-  HandCoins,
   LibraryBig,
   ReceiptText,
+  ChartNoAxesCombined,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
@@ -71,9 +71,14 @@ export function useSidebarData(): SidebarData {
             icon: Activity,
           },
           {
-            title: t('Group status'),
+            title: t('分组状态'),
             url: '/group-status',
-            icon: Compass,
+            icon: ChartNoAxesCombined,
+          },
+          {
+            title: t('分组市场'),
+            url: '/marketplace',
+            icon: Store,
           },
           {
             title: t('Model analytics'),
@@ -137,11 +142,6 @@ export function useSidebarData(): SidebarData {
             icon: User,
           },
           {
-            title: t('Bounties'),
-            url: '/bounties',
-            icon: HandCoins,
-          },
-          {
             title: t('Community resources'),
             url: '/community-resources',
             icon: LibraryBig,
@@ -201,11 +201,6 @@ export function useSidebarData(): SidebarData {
             title: t('Operations'),
             url: '/operations',
             icon: ShieldCheck,
-          },
-          {
-            title: t('Bounty management'),
-            url: '/bounties/admin',
-            icon: HandCoins,
           },
         ],
       },

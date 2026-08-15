@@ -12,6 +12,7 @@ import (
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformerrx "github.com/sh2001sh/new-api/internal/platform/errx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
@@ -441,6 +442,18 @@ func TokenAuth() func(c *gin.Context) {
 				return
 			}
 			userGroup = commerceapp.MultiplierCardRouteGroup()
+		} else if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) {
+			binding, bindErr := marketplaceapp.ResolveTokenGroupBinding(tokenGroup, token.UserId)
+			if bindErr != nil {
+				abortWithOpenAiMessage(c, http.StatusForbidden, bindErr.Error())
+				return
+			}
+			userGroup = binding.InternalGroup
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceGroupID, binding.GroupID)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceOwnerID, binding.OwnerUserID)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, binding.SourceType)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, binding.CreditPoolPolicy)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, binding.Multiplier)
 		} else if tokenGroup != "" {
 			// check common.UserUsableGroups[userGroup]
 			if _, ok := gatewayroutingapp.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {

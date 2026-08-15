@@ -97,7 +97,7 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
         toast.success(
           t(
             action === 'add_claude_quota'
-              ? 'Claude quota adjusted successfully'
+              ? '通用额度调整成功'
               : 'Quota adjusted successfully'
           )
         )

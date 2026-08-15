@@ -108,8 +108,8 @@ export function BlindBoxPoolShowcase(props: {
         {grouped.claude.length > 0 ? (
           <PoolGroup
             icon={Sparkles}
-            title='Claude 额度'
-            hint='直接进入 Claude 钱包，永久有效'
+            title='通用额度'
+            hint='直接进入通用额度钱包，永久有效'
             reduced={reduced}
           >
             {grouped.claude.map((tier) => (
@@ -121,8 +121,8 @@ export function BlindBoxPoolShowcase(props: {
         {grouped.quota.length > 0 ? (
           <PoolGroup
             icon={Wallet}
-            title='普通额度'
-            hint='直接进入钱包余额，永久有效'
+            title='官方 GPT 专属额度'
+            hint='直接进入官方 GPT 专属额度钱包，永久有效'
             reduced={reduced}
           >
             {grouped.quota.map((tier) => (

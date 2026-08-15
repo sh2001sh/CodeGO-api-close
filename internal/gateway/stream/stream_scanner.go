@@ -62,6 +62,8 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
 	firstByteTimeout := relaycommon.StreamFirstOutputTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
 	streamingMaxDuration := relaycommon.StreamMaxDurationForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
+	adaptiveProgressTimeout := relaycommon.StreamAdaptiveProgressTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
+	adaptiveInitialTimeout := relaycommon.StreamAdaptiveInitialTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
 	streamCtx, cancelStream := context.WithCancel(c.Request.Context())
 	dataCtx, cancelData := context.WithCancel(c.Request.Context())
 	defer cancelStream()
@@ -85,13 +87,23 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	defer ticker.Stop()
 	var firstByteTimer *time.Timer
 	var maxTimer *time.Timer
+	var progressTimer *time.Timer
+	var progressTimerC <-chan time.Time
+	progressNotify := make(chan struct{}, 1)
 	if firstByteTimeout > 0 {
 		firstByteTimer = time.NewTimer(firstByteTimeout)
 		defer firstByteTimer.Stop()
 	}
-	if streamingMaxDuration > 0 {
+	if streamingMaxDuration > 0 && adaptiveProgressTimeout <= 0 {
 		maxTimer = time.NewTimer(streamingMaxDuration)
 		defer maxTimer.Stop()
+	}
+	if adaptiveInitialTimeout > 0 {
+		progressTimer = time.NewTimer(adaptiveInitialTimeout)
+		progressTimerC = progressTimer.C
+		defer progressTimer.Stop()
+	} else {
+		progressNotify = nil
 	}
 
 	generalSettings := platformgeneral.GetSetting()
@@ -153,7 +165,15 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 				stop(true)
 			}
 		}()
-		sr := newResult(info.StreamStatus)
+		sr := newResult(info.StreamStatus, func() {
+			if progressNotify == nil {
+				return
+			}
+			select {
+			case progressNotify <- struct{}{}:
+			default:
+			}
+		})
 		streamDone := streamCtx.Done()
 		for {
 			select {
@@ -274,6 +294,13 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
 		stop(true)
 		closeTimedOutStream(resp)
+	case <-progressNotify:
+		resetStreamTimer(progressTimer, adaptiveProgressTimeout)
+	case <-progressTimerC:
+		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout,
+			fmt.Errorf("semantic progress timeout after %s", adaptiveProgressTimeout))
+		stop(true)
+		closeTimedOutStream(resp)
 	case <-streamingMaxTimer(maxTimer):
 		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonMaxDuration, nil)
 		relaycommon.MarkLocalStreamMaxDurationExceeded(c)
@@ -309,4 +336,17 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	} else {
 		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
 	}
+}
+
+func resetStreamTimer(timer *time.Timer, timeout time.Duration) {
+	if timer == nil || timeout <= 0 {
+		return
+	}
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(timeout)
 }

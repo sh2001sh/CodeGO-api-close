@@ -41,6 +41,7 @@ export type ApiKeyGroupOption = {
   label: string
   desc?: string
   ratio?: number | string
+  category?: 'official' | 'marketplace'
 }
 
 type ApiKeyGroupComboboxProps = {
@@ -127,6 +128,12 @@ export function ApiKeyGroupCombobox({
     setOpen(false)
     setSearchValue('')
   }
+  const officialOptions = filteredOptions.filter(
+    (option) => option.category !== 'marketplace'
+  )
+  const marketplaceOptions = filteredOptions.filter(
+    (option) => option.category === 'marketplace'
+  )
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -173,37 +180,58 @@ export function ApiKeyGroupCombobox({
           />
           <CommandList className='max-h-[360px]'>
             <CommandEmpty>{t('No group found.')}</CommandEmpty>
-            <CommandGroup>
-              {filteredOptions.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.value}
-                  onSelect={() => handleSelect(option.value)}
-                  className='data-[selected=true]:bg-muted items-start gap-3 rounded-lg px-3 py-3 transition-colors'
-                >
-                  <Check
-                    className={cn(
-                      'mt-0.5 h-4 w-4',
-                      value === option.value ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
-                  <span className='min-w-0 flex-1'>
-                    <span className='block truncate font-medium'>
-                      {option.label}
-                    </span>
-                    {option.desc && (
-                      <span className='text-muted-foreground block truncate text-xs'>
-                        {option.desc}
-                      </span>
-                    )}
-                  </span>
-                  <GroupRatioBadge ratio={option.ratio} />
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            <GroupOptions
+              heading={t('Official groups')}
+              options={officialOptions}
+              value={value}
+              onSelect={handleSelect}
+            />
+            <GroupOptions
+              heading={t('第三方分组')}
+              options={marketplaceOptions}
+              value={value}
+              onSelect={handleSelect}
+            />
           </CommandList>
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+function GroupOptions(props: {
+  heading: string
+  options: ApiKeyGroupOption[]
+  value?: string
+  onSelect: (value: string) => void
+}) {
+  if (props.options.length === 0) return null
+  return (
+    <CommandGroup heading={props.heading}>
+      {props.options.map((option) => (
+        <CommandItem
+          key={option.value}
+          value={option.value}
+          onSelect={() => props.onSelect(option.value)}
+          className='data-[selected=true]:bg-muted items-start gap-3 rounded-lg px-3 py-3 transition-colors'
+        >
+          <Check
+            className={cn(
+              'mt-0.5 h-4 w-4',
+              props.value === option.value ? 'opacity-100' : 'opacity-0'
+            )}
+          />
+          <span className='min-w-0 flex-1'>
+            <span className='block truncate font-medium'>{option.label}</span>
+            {option.desc && (
+              <span className='text-muted-foreground block truncate text-xs'>
+                {option.desc}
+              </span>
+            )}
+          </span>
+          <GroupRatioBadge ratio={option.ratio} />
+        </CommandItem>
+      ))}
+    </CommandGroup>
   )
 }

@@ -200,9 +200,8 @@ export function SubscriptionPlansCard({
           contentClassName='space-y-4'
         >
           <div className='border-border bg-muted/40 text-muted-foreground rounded-2xl border px-4 py-3 text-sm leading-6'>
-            套餐额度用于 GPT 模型调用；Claude
-            模型使用独立钱包额度，不直接从套餐中扣除。生效中的套餐额度可按当前规则比例转换为
-            Claude 额度。
+            GPT 套餐额度仅用于官方 GPT 分组；通用额度用于
+            Claude、其他模型和第三方市场分组。两类额度用途固定，不能相互转换。
           </div>
 
           <PlanSection

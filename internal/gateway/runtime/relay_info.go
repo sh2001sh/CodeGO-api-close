@@ -87,19 +87,24 @@ type TokenCountMeta struct {
 }
 
 type RelayInfo struct {
-	TokenId               int
-	TokenKey              string
-	TokenGroup            string
-	UserId                int
-	UsingGroup            string // 使用的分组，当auto跨分组重试时，会变动
-	UserGroup             string // 用户所在分组
-	TokenUnlimited        bool
-	StartTime             time.Time
-	FirstResponseTime     time.Time
-	FirstByteTrace        *FirstByteTrace
-	firstSemanticResponse bool
-	isFirstResponse       bool
-	StreamPacer           *StreamPacer
+	TokenId                 int
+	TokenKey                string
+	TokenGroup              string
+	MarketplaceGroupID      string
+	MarketplaceOwnerID      int
+	MarketplaceSourceType   string
+	MarketplaceCreditPolicy string
+	MarketplaceMultiplier   float64
+	UserId                  int
+	UsingGroup              string // 使用的分组，当auto跨分组重试时，会变动
+	UserGroup               string // 用户所在分组
+	TokenUnlimited          bool
+	StartTime               time.Time
+	FirstResponseTime       time.Time
+	FirstByteTrace          *FirstByteTrace
+	firstSemanticResponse   bool
+	isFirstResponse         bool
+	StreamPacer             *StreamPacer
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool
@@ -497,10 +502,15 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 
 		OriginModelName: httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel),
 
-		TokenId:        httpctx.GetContextKeyInt(c, constant.ContextKeyTokenId),
-		TokenKey:       httpctx.GetContextKeyString(c, constant.ContextKeyTokenKey),
-		TokenUnlimited: httpctx.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
-		TokenGroup:     tokenGroup,
+		TokenId:                 httpctx.GetContextKeyInt(c, constant.ContextKeyTokenId),
+		TokenKey:                httpctx.GetContextKeyString(c, constant.ContextKeyTokenKey),
+		TokenUnlimited:          httpctx.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
+		TokenGroup:              tokenGroup,
+		MarketplaceGroupID:      httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceGroupID),
+		MarketplaceOwnerID:      httpctx.GetContextKeyInt(c, constant.ContextKeyMarketplaceOwnerID),
+		MarketplaceSourceType:   httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceSourceType),
+		MarketplaceCreditPolicy: httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceCreditPolicy),
+		MarketplaceMultiplier:   httpctx.GetContextKeyFloat64(c, constant.ContextKeyMarketplaceMultiplier),
 
 		isFirstResponse: true,
 		RelayMode:       gatewaycontract.Path2RelayMode(c.Request.URL.Path),

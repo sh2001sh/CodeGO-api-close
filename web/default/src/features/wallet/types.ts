@@ -148,6 +148,8 @@ export interface WalletTransferHistoryItem {
   counterparty_external_id: string
   counterparty_display_name_masked: string
   amount_quota: number
+  fee_quota: number
+  total_debit_quota: number
   balance_after: number
   status: string
   created_at: number
@@ -164,6 +166,7 @@ export interface WalletTransferOverview {
   quota_per_usd: number
   min_quota: number
   balance: number
+  fee_bps: number
   security: WalletTransferSecurityOverview
   history: WalletTransferHistoryPage
 }
@@ -480,8 +483,6 @@ export interface BlindBoxRecord {
   prop_type?: string
   prop_status?: string
   prop_expires_at?: number
-  /** True when the result belongs to an isolated admin-enabled simulation. */
-  simulation?: boolean
   /** One-day lucky number issued with this opened box. */
   lucky_number?: string
   lucky_draw_date?: string
@@ -586,19 +587,6 @@ export interface BalanceBlindBoxOverview {
   small_pity_guarantee_usd: number
   first_draw_guarantee_usd: number
   first_draw_eligible: boolean
-  simulation: BalanceBlindBoxSimulationOverview
-}
-
-export interface BalanceBlindBoxSimulationOverview {
-  active: boolean
-  session_id?: number
-  expires_at?: number
-  remaining_seconds?: number
-  draw_count: number
-  simulated_cost_usd: number
-  simulated_reward_value_usd: number
-  simulated_net_usd: number
-  reason?: string
 }
 
 export interface BalanceBlindBoxPurchase {

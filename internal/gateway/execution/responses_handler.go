@@ -68,6 +68,13 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
 	}
 	adaptor.Init(info)
+	passThroughGlobal := gatewaystore.GetGlobalSettings().PassThroughRequestEnabled
+	if info.RelayMode == gatewaycontract.RelayModeResponses &&
+		!passThroughGlobal &&
+		!info.ChannelSetting.PassThroughBodyEnabled &&
+		shouldBridgeBeforeNative(info, bridgeResponsesToChat) {
+		return executeResponsesToChatBridge(c, info, adaptor, request)
+	}
 
 	var requestBody io.Reader
 	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
@@ -77,7 +84,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		}
 		info.UpstreamRequestBodySize = size
 		requestBody = body
-	} else if gatewaystore.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
+	} else if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled {
 		storage, err := platformhttpx.GetBodyStorage(c)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
@@ -90,6 +97,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
+			if info.RelayMode == gatewaycontract.RelayModeResponses &&
+				shouldFallbackAfterConversion(info, bridgeResponsesToChat, err) {
+				bridgeError := executeResponsesToChatBridge(c, info, adaptor, request)
+				if bridgeError == nil {
+					rememberProtocolFallback(info, bridgeResponsesToChat)
+				}
+				return bridgeError
+			}
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
@@ -133,6 +148,15 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		httpResp = resp.(*http.Response)
 		if httpResp.StatusCode != http.StatusOK {
 			newAPIError = platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+			if info.RelayMode == gatewaycontract.RelayModeResponses &&
+				shouldFallbackAfterStatus(info, bridgeResponsesToChat, newAPIError) {
+				bridgeError := executeResponsesToChatBridge(c, info, adaptor, request)
+				if bridgeError == nil {
+					rememberProtocolFallback(info, bridgeResponsesToChat)
+					return nil
+				}
+				return preferBridgeError(newAPIError, bridgeError)
+			}
 			platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
 			return newAPIError
 		}

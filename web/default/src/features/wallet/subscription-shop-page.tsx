@@ -9,7 +9,7 @@ export function SubscriptionShopPage() {
   return (
     <WalletWorkspaceShell
       title='套餐购买'
-      description='先查看当前生效中的订阅与额度，再选购新的月卡或日卡。GPT 模型使用套餐额度，Claude 使用独立钱包额度，生效套餐可按规则比例转换为 Claude 额度。'
+      description='先查看当前生效中的 GPT 套餐额度，再选购新的月卡或日卡。套餐仅用于官方 GPT、Codex、Responses 分组，不能转换为通用额度。'
       framedMain={false}
       main={
         <SubscriptionPlansCard

@@ -152,6 +152,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			return
 		}
 		if semanticOutput {
+			sr.MarkProgress()
 			if sawSemanticOutput.CompareAndSwap(false, true) {
 				if info.FirstByteTrace != nil {
 					info.FirstByteTrace.MarkFirstSemanticReadAt(sr.ReceivedAt(), textOutput)

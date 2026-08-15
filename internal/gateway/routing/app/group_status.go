@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"math"
 	"sort"
 	"strings"
@@ -10,6 +11,9 @@ import (
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
 
 type UserGroupStatusBucket struct {
@@ -31,6 +35,7 @@ type UserGroupModelStatusItem struct {
 
 type UserGroupStatusItem struct {
 	Group        string                     `json:"group"`
+	SourceType   string                     `json:"source_type"`
 	Status       string                     `json:"status"`
 	RequestCount int64                      `json:"request_count"`
 	Models       []UserGroupModelStatusItem `json:"models"`
@@ -47,8 +52,10 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 	if err != nil {
 		return nil, err
 	}
+	groupSources := resolveGroupStatusSources(groupNames)
 
 	groupSummaries := buildPricingGroupModelSummaries(pricing, groupNames)
+	mergeMarketplaceGroupModels(groupSummaries, groupNames)
 	successRates, _, requestCounts, sampleWindowHours, _ := queryGroupModelRecentHealth(groupNames, successSampleMinutes, successSegmentCount)
 	_, seriesByModel, _, seriesWindowHours, bucketSeconds := queryGroupModelRecentHealth(groupNames, timelineSampleMinutes, timelineSegmentCount)
 
@@ -100,6 +107,7 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 
 		result = append(result, UserGroupStatusItem{
 			Group:        groupName,
+			SourceType:   groupSources[groupName],
 			Status:       groupStatus,
 			RequestCount: groupRequestCount,
 			Models:       modelItems,
@@ -114,6 +122,24 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 	})
 
 	return result, nil
+}
+
+func resolveGroupStatusSources(groupNames []string) map[string]string {
+	result := make(map[string]string, len(groupNames))
+	for _, groupName := range groupNames {
+		result[groupName] = marketplacedomain.SourceTypeOfficial
+	}
+	if platformdb.DB == nil || len(groupNames) == 0 {
+		return result
+	}
+	var groups []marketplaceschema.Group
+	if err := platformdb.DB.Select("internal_group_name").Where("internal_group_name IN ?", groupNames).Find(&groups).Error; err != nil {
+		return result
+	}
+	for _, group := range groups {
+		result[group.InternalGroupName] = marketplacedomain.SourceTypeMarketplaceUser
+	}
+	return result
 }
 
 func resolveVisibleGroupStatusGroups(userID int, hasUser bool, pricing []gatewaydomain.Pricing) ([]string, error) {
@@ -141,6 +167,7 @@ func resolveVisibleGroupStatusGroups(userID int, hasUser bool, pricing []gateway
 		addGroupStatusName(groups, groupName)
 	}
 	addGroupStatusName(groups, userGroup)
+	addMarketplaceStatusGroups(groups)
 
 	if len(groups) == 0 {
 		for _, groupName := range collectPricingGroups(pricing) {
@@ -151,6 +178,23 @@ func resolveVisibleGroupStatusGroups(userID int, hasUser bool, pricing []gateway
 		return gatewaystore.ListGroupStatusGroups()
 	}
 	return sortedGroupStatusNames(groups), nil
+}
+
+func addMarketplaceStatusGroups(groups map[string]struct{}) {
+	if platformdb.DB == nil {
+		return
+	}
+	var items []marketplaceschema.Group
+	if err := platformdb.DB.Select("internal_group_name").
+		Where("visibility = ? AND lifecycle_status IN ?", marketplacedomain.VisibilityPublic, []string{
+			marketplacedomain.LifecycleActive,
+			marketplacedomain.LifecycleDegraded,
+		}).Limit(1000).Find(&items).Error; err != nil {
+		return
+	}
+	for _, item := range items {
+		addGroupStatusName(groups, item.InternalGroupName)
+	}
 }
 
 func collectPricingGroups(pricing []gatewaydomain.Pricing) []string {
@@ -204,6 +248,61 @@ func buildPricingGroupModelSummaries(pricing []gatewaydomain.Pricing, groupNames
 	}
 
 	return summaries
+}
+
+func mergeMarketplaceGroupModels(summaries map[string][]*GroupModelStatusSummary, groupNames []string) {
+	if platformdb.DB == nil || len(groupNames) == 0 {
+		return
+	}
+	visible := make(map[string]struct{}, len(groupNames))
+	for _, groupName := range groupNames {
+		visible[groupName] = struct{}{}
+	}
+	var groups []marketplaceschema.Group
+	if err := platformdb.DB.Where("internal_group_name IN ?", groupNames).Find(&groups).Error; err != nil {
+		return
+	}
+	channelIDs := make([]string, 0, len(groups))
+	for _, group := range groups {
+		channelIDs = append(channelIDs, group.ChannelID)
+	}
+	if len(channelIDs) == 0 {
+		return
+	}
+	var channels []marketplaceschema.Channel
+	if err := platformdb.DB.Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
+		return
+	}
+	modelsByChannel := make(map[string][]string, len(channels))
+	for _, channel := range channels {
+		var models []string
+		if json.Unmarshal([]byte(channel.DeclaredModels), &models) == nil {
+			modelsByChannel[channel.ID] = models
+		}
+	}
+	for _, group := range groups {
+		if _, ok := visible[group.InternalGroupName]; !ok {
+			continue
+		}
+		known := make(map[string]struct{}, len(summaries[group.InternalGroupName]))
+		for _, item := range summaries[group.InternalGroupName] {
+			known[item.Model] = struct{}{}
+		}
+		for _, model := range modelsByChannel[group.ChannelID] {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			if _, ok := known[model]; ok {
+				continue
+			}
+			known[model] = struct{}{}
+			summaries[group.InternalGroupName] = append(summaries[group.InternalGroupName], &GroupModelStatusSummary{
+				Group: group.InternalGroupName, Model: model, Status: "healthy",
+				Channels: 1, EnabledChannels: 1,
+			})
+		}
+	}
 }
 
 func pricingTargetGroups(enableGroups []string, groupNames []string, visibleGroups map[string]struct{}) []string {

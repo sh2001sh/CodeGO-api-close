@@ -32,6 +32,7 @@ import {
 import { DataTableColumnHeader } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
+import { getSelectableMarketplaceGroups } from '../api'
 import { API_KEY_STATUSES } from '../constants'
 import { type ApiKey } from '../types'
 import {
@@ -44,8 +45,7 @@ import { DataTableRowActions } from './data-table-row-actions'
 function getQuotaProgressColor(percentage: number): string {
   if (percentage <= 10)
     return '[&_[data-slot=progress-indicator]]:bg-destructive'
-  if (percentage <= 30)
-    return '[&_[data-slot=progress-indicator]]:bg-warning'
+  if (percentage <= 30) return '[&_[data-slot=progress-indicator]]:bg-warning'
   return '[&_[data-slot=progress-indicator]]:bg-success'
 }
 
@@ -69,9 +69,19 @@ function useGroupRatios(): Record<string, number> {
   return data ?? {}
 }
 
+function useMarketplaceGroupInfo() {
+  const { data = [] } = useQuery({
+    queryKey: ['selectable-marketplace-groups'],
+    queryFn: getSelectableMarketplaceGroups,
+    staleTime: 60 * 1000,
+  })
+  return Object.fromEntries(data.map((group) => [group.value, group]))
+}
+
 export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
   const { t } = useTranslation()
   const groupRatios = useGroupRatios()
+  const marketplaceGroupInfo = useMarketplaceGroupInfo()
   return [
     {
       id: 'select',
@@ -202,7 +212,10 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       cell: ({ row }) => {
         const apiKey = row.original
         const group = row.getValue('group') as string
-        const ratio = group && group !== 'auto' ? groupRatios[group] : undefined
+        const marketplaceGroup = marketplaceGroupInfo[group]
+        const ratio =
+          marketplaceGroup?.ratio ??
+          (group && group !== 'auto' ? groupRatios[group] : undefined)
 
         if (group === 'auto') {
           return (
@@ -232,7 +245,13 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
             </Tooltip>
           )
         }
-        return <GroupBadge group={group} ratio={ratio} />
+        return (
+          <GroupBadge
+            group={group}
+            label={marketplaceGroup?.label}
+            ratio={typeof ratio === 'number' ? ratio : undefined}
+          />
+        )
       },
       meta: { label: t('Group'), mobileHidden: true },
     },

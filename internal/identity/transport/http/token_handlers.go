@@ -9,6 +9,7 @@ import (
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -199,6 +200,13 @@ func AddToken(c *gin.Context) {
 		})
 		return
 	}
+	token.Group, token.CrossGroupRetry, err = normalizeTokenGroupSelection(
+		c.GetInt("id"), token.Group, token.CrossGroupRetry,
+	)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
 	key, err := platformruntime.GenerateKey()
 	if err != nil {
 		httpapi.ApiErrorI18n(c, i18n.MsgTokenGenerateFailed)
@@ -287,6 +295,13 @@ func UpdateToken(c *gin.Context) {
 	if statusOnly != "" {
 		cleanToken.Status = token.Status
 	} else {
+		token.Group, token.CrossGroupRetry, err = normalizeTokenGroupSelection(
+			userID, token.Group, token.CrossGroupRetry,
+		)
+		if err != nil {
+			httpapi.ApiError(c, err)
+			return
+		}
 		cleanToken.Name = token.Name
 		cleanToken.ExpiredTime = token.ExpiredTime
 		cleanToken.RemainQuota = token.RemainQuota
@@ -307,6 +322,17 @@ func UpdateToken(c *gin.Context) {
 		"message": "",
 		"data":    identityapp.BuildMaskedTokenResponse(cleanToken),
 	})
+}
+
+func normalizeTokenGroupSelection(userID int, group string, crossGroupRetry bool) (string, bool, error) {
+	group = gatewayroutingapp.NormalizeTokenGroup(group)
+	if !marketplaceapp.IsMarketplaceTokenGroup(group) {
+		return group, crossGroupRetry, nil
+	}
+	if _, err := marketplaceapp.ResolveTokenGroupBinding(group, userID); err != nil {
+		return "", false, err
+	}
+	return group, false, nil
 }
 
 func DeleteTokenBatch(c *gin.Context) {

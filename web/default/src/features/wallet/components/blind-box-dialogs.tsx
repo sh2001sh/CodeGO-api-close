@@ -94,8 +94,8 @@ export function summarizeOpenResult(records: BlindBoxRecord[]) {
 
   const parts: string[] = []
   if (subscriptionHits > 0) parts.push(`${subscriptionHits} 个套餐`)
-  if (quotaHits > 0) parts.push(`$${quotaTotal.toFixed(0)} 额度`)
-  if (claudeHits > 0) parts.push(`$${claudeQuotaTotal.toFixed(0)} Claude 额度`)
+  if (claudeHits > 0) parts.push(`$${claudeQuotaTotal.toFixed(0)} 通用额度`)
+  if (quotaHits > 0) parts.push(`$${quotaTotal.toFixed(0)} 官方 GPT 专属额度`)
   if (propHits > 0) parts.push(`${propHits} 个道具`)
   if (parts.length === 0) {
     return `获得 ${records.length} 项奖励`

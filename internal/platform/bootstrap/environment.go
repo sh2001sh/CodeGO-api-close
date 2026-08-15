@@ -151,6 +151,8 @@ func initConstantEnv() {
 	constant.StreamingLongContextFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_FIRST_BYTE_TIMEOUT", 0)
 	constant.StreamingMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_MAX_DURATION", 240)
 	constant.StreamingLongContextMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_MAX_DURATION", 540)
+	constant.StreamingAdaptiveProgressTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_ADAPTIVE_PROGRESS_TIMEOUT", 45)
+	constant.StreamingAdaptiveInitialTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_ADAPTIVE_INITIAL_TIMEOUT", 120)
 	constant.DifyDebug = platformconfig.GetEnvOrDefaultBool("DIFY_DEBUG", true)
 	constant.MaxFileDownloadMB = platformconfig.GetEnvOrDefaultInt("MAX_FILE_DOWNLOAD_MB", 64)
 	constant.StreamScannerMaxBufferMB = platformconfig.GetEnvOrDefaultInt("STREAM_SCANNER_MAX_BUFFER_MB", 128)

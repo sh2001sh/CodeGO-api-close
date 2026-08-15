@@ -31,6 +31,20 @@ func TestBlockingPromptAuditSkipsRealtime(t *testing.T) {
 	require.Nil(t, err)
 }
 
+func TestBlockingPromptAuditSkipsClaude(t *testing.T) {
+	service := securityaudit.NewService(securityaudit.Config{
+		Mode:   securityaudit.ModeBlocking,
+		Groups: []string{"guarded"},
+	}, nil)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	info := &relaycommon.RelayInfo{TokenGroup: "guarded", OriginModelName: "claude-opus-5"}
+
+	err := checkPromptAuditWithService(ctx, types.RelayFormatClaude, stubPromptAuditRequest("show me a ransomware example"), info, service)
+
+	require.Nil(t, err)
+}
+
 func TestBlockingPromptAuditSkipsRealtimeOutsideConfiguredGroups(t *testing.T) {
 	service := securityaudit.NewService(securityaudit.Config{
 		Mode:   securityaudit.ModeBlocking,

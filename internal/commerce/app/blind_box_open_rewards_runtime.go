@@ -16,14 +16,14 @@ import (
 )
 
 func formatFirstPurchaseBlindBoxRewardTitle(amount float64) string {
-	return fmt.Sprintf("首购专属奖励：%.2f 美元", amount)
+	return fmt.Sprintf("首购专属奖励：$%.2f 官方 GPT 专属额度", amount)
 }
 
 func blindBoxWalletLogLabel(walletType commerceschema.BlindBoxRewardWalletType) string {
 	if walletType == commerceschema.BlindBoxRewardWalletTypeClaude {
-		return "Claude额度"
+		return "通用额度"
 	}
-	return "额度"
+	return "官方 GPT 专属额度"
 }
 
 func recordBlindBoxRewardLogTx(tx *gorm.DB, userID int, amount int64, walletType commerceschema.BlindBoxRewardWalletType, record *commerceschema.BlindBoxOpenRecord) error {

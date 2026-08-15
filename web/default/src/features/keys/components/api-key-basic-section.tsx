@@ -1,0 +1,216 @@
+import type { UseFormReturn } from 'react-hook-form'
+import { KeyRound } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button'
+import {
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { DateTimePicker } from '@/components/datetime-picker'
+import type { ApiKeyFormValues } from '../lib'
+import { ApiKeyFormSection } from './api-key-form-section'
+import {
+  ApiKeyGroupCombobox,
+  type ApiKeyGroupOption,
+} from './api-key-group-combobox'
+
+type ApiKeyForm = UseFormReturn<ApiKeyFormValues>
+
+export function ApiKeyBasicSection(props: {
+  form: ApiKeyForm
+  groups: ApiKeyGroupOption[]
+  isUpdate: boolean
+}) {
+  const { t } = useTranslation()
+  const selectedGroup = props.form.watch('group')
+  return (
+    <ApiKeyFormSection
+      title={t('Basic Information')}
+      description={t('Set API key basic information')}
+      icon={KeyRound}
+    >
+      <NameField form={props.form} />
+      <GroupField form={props.form} groups={props.groups} />
+      {selectedGroup === 'auto' && <CrossGroupRetryField form={props.form} />}
+      <ExpirationField form={props.form} />
+      {!props.isUpdate && <QuantityField form={props.form} />}
+    </ApiKeyFormSection>
+  )
+}
+
+function NameField(props: { form: ApiKeyForm }) {
+  const { t } = useTranslation()
+  return (
+    <FormField
+      control={props.form.control}
+      name='name'
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{t('Name')}</FormLabel>
+          <FormControl>
+            <Input {...field} placeholder={t('Enter a name')} />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  )
+}
+
+function GroupField(props: { form: ApiKeyForm; groups: ApiKeyGroupOption[] }) {
+  const { t } = useTranslation()
+  return (
+    <FormField
+      control={props.form.control}
+      name='group'
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{t('Group')}</FormLabel>
+          <FormControl>
+            <ApiKeyGroupCombobox
+              options={props.groups}
+              value={field.value}
+              onValueChange={field.onChange}
+              placeholder={t('Select a group')}
+            />
+          </FormControl>
+          {field.value?.startsWith('market:') && (
+            <FormDescription>
+              {t('第三方分组只使用通用额度，并按所示倍率计费。')}
+            </FormDescription>
+          )}
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  )
+}
+
+function CrossGroupRetryField(props: { form: ApiKeyForm }) {
+  const { t } = useTranslation()
+  return (
+    <FormField
+      control={props.form.control}
+      name='cross_group_retry'
+      render={({ field }) => (
+        <FormItem className='flex min-h-16 flex-row items-center justify-between gap-3 rounded-lg border px-3 py-2.5 sm:min-h-20 sm:gap-4 sm:px-4 sm:py-3'>
+          <div className='space-y-0.5'>
+            <FormLabel className='text-sm'>{t('Cross-group retry')}</FormLabel>
+            <FormDescription className='line-clamp-2 text-xs sm:line-clamp-none'>
+              {t(
+                'When enabled, if channels in the current group fail, it will try channels in the next group in order.'
+              )}
+            </FormDescription>
+          </div>
+          <FormControl>
+            <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+          </FormControl>
+        </FormItem>
+      )}
+    />
+  )
+}
+
+function ExpirationField(props: { form: ApiKeyForm }) {
+  const { t } = useTranslation()
+  return (
+    <FormField
+      control={props.form.control}
+      name='expired_time'
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{t('Expiration Time')}</FormLabel>
+          <div className='grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'>
+            <FormControl>
+              <DateTimePicker
+                value={field.value}
+                onChange={field.onChange}
+                placeholder={t('Never expires')}
+                className='min-w-0 [&_input[type=time]]:w-24 sm:[&_input[type=time]]:w-32'
+              />
+            </FormControl>
+            <ExpirationPresets onChange={field.onChange} />
+          </div>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  )
+}
+
+function ExpirationPresets(props: {
+  onChange: (value: Date | undefined) => void
+}) {
+  const { t } = useTranslation()
+  const setExpiry = (months: number, days: number, hours: number) => {
+    if (months === 0 && days === 0 && hours === 0) {
+      props.onChange(undefined)
+      return
+    }
+    const next = new Date()
+    next.setMonth(next.getMonth() + months)
+    next.setDate(next.getDate() + days)
+    next.setHours(next.getHours() + hours)
+    props.onChange(next)
+  }
+  const presets = [
+    [t('Never'), 0, 0, 0],
+    [t('1 Month'), 1, 0, 0],
+    [t('1 Day'), 0, 1, 0],
+    [t('1 Hour'), 0, 0, 1],
+  ] as const
+  return (
+    <div className='grid grid-cols-4 gap-2 sm:flex'>
+      {presets.map(([label, months, days, hours]) => (
+        <Button
+          key={label}
+          type='button'
+          variant='outline'
+          size='sm'
+          className='px-2 text-xs sm:px-3 sm:text-sm'
+          onClick={() => setExpiry(months, days, hours)}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
+function QuantityField(props: { form: ApiKeyForm }) {
+  const { t } = useTranslation()
+  return (
+    <FormField
+      control={props.form.control}
+      name='tokenCount'
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{t('Quantity')}</FormLabel>
+          <FormControl>
+            <Input
+              {...field}
+              type='number'
+              min='1'
+              placeholder={t('Number of keys to create')}
+              onChange={(event) =>
+                field.onChange(parseInt(event.target.value, 10) || 1)
+              }
+            />
+          </FormControl>
+          <FormDescription>
+            {t(
+              'Create multiple API keys at once (random suffix will be added to names)'
+            )}
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  )
+}

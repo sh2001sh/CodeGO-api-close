@@ -207,7 +207,7 @@ export function UserBlindBoxDialog(props: Props) {
               value={formatQuota(data?.overview?.remaining_quota || 0)}
             />
             <MetricCard
-              label={t('Claude balance')}
+              label={t('通用额度')}
               value={formatQuota(data?.overview?.claude_quota || 0)}
             />
             <MetricCard

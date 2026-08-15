@@ -22,6 +22,7 @@ export function WalletPeerTransferPanel(props: {
   recipientLoading: boolean
   amount: string
   balanceUSD: number
+  maxTransferUSD: number
   minimumUSD: number
   canContinue: boolean
   onRecipientIdChange: (value: string) => void
@@ -43,7 +44,7 @@ export function WalletPeerTransferPanel(props: {
           </div>
           <p className='text-muted-foreground mt-1 max-w-2xl text-xs leading-5'>
             {t(
-              'Send standard balance to another user by public ID. Claude quota, plans, and props cannot be transferred.'
+              '向其他用户转出通用额度。接收方收到完整金额，发送方另付 1% 手续费；官方 GPT 专属额度和月卡不可转账。'
             )}
           </p>
         </div>
@@ -155,7 +156,7 @@ export function WalletPeerTransferPanel(props: {
               id='wallet-transfer-amount'
               type='number'
               min={props.minimumUSD}
-              max={props.balanceUSD}
+              max={props.maxTransferUSD}
               step='0.01'
               inputMode='decimal'
               value={props.amount}
@@ -173,9 +174,11 @@ export function WalletPeerTransferPanel(props: {
               type='button'
               variant='ghost'
               size='sm'
-              onClick={() => props.onAmountChange(props.balanceUSD.toFixed(2))}
+              onClick={() =>
+                props.onAmountChange(props.maxTransferUSD.toFixed(2))
+              }
             >
-              {t('Max')}
+              {t('最大可转')}
             </Button>
           </div>
         </div>
@@ -184,7 +187,7 @@ export function WalletPeerTransferPanel(props: {
       <div className='mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between'>
         <p className='text-muted-foreground text-xs leading-5'>
           {t(
-            'Recipient IDs and amounts are checked again by the server before the transfer is committed.'
+            '服务器会再次核对接收方、通用额度余额和 1% 手续费；转账完成后不可撤销。'
           )}
         </p>
         <Button

@@ -349,7 +349,7 @@ func TestNewBillingSessionReturnsLocalWalletQuotaMessage(t *testing.T) {
 	require.NotNil(t, apiErr)
 	require.Equal(t, types.ErrorCodeInsufficientUserQuota, apiErr.GetErrorCode())
 	require.Equal(t,
-		"站内余额不足, 当前余额: "+logger.FormatQuota(750)+", 本次所需: "+logger.FormatQuota(2364),
+		"官方 GPT 专属额度不足, 当前余额: "+logger.FormatQuota(750)+", 本次所需: "+logger.FormatQuota(2364),
 		apiErr.Error(),
 	)
 }
@@ -381,7 +381,7 @@ func TestNewBillingSessionReturnsCombinedFundingMessage(t *testing.T) {
 	require.Nil(t, session)
 	require.NotNil(t, apiErr)
 	require.Equal(t, types.ErrorCodeInsufficientUserQuota, apiErr.GetErrorCode())
-	require.Equal(t, "套餐可用额度不足，且钱包余额不足", apiErr.Error())
+	require.Equal(t, "GPT 套餐额度不足，且官方 GPT 专属额度不足", apiErr.Error())
 }
 
 func TestNewBillingSessionReturnsLocalClaudeQuotaMessage(t *testing.T) {
@@ -415,7 +415,7 @@ func TestNewBillingSessionReturnsLocalClaudeQuotaMessage(t *testing.T) {
 	require.NotNil(t, apiErr)
 	require.Equal(t, types.ErrorCodeInsufficientUserQuota, apiErr.GetErrorCode())
 	require.Equal(t,
-		"Claude额度不足, 当前余额: "+logger.FormatQuota(750)+", 本次所需: "+logger.FormatQuota(2364),
+		"通用额度不足, 当前余额: "+logger.FormatQuota(750)+", 本次所需: "+logger.FormatQuota(2364),
 		apiErr.Error(),
 	)
 }

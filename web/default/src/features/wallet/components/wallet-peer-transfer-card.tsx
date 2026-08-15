@@ -83,13 +83,19 @@ export function WalletPeerTransferCard(props: {
   const quotaPerUSD = overview?.quota_per_usd || 500_000
   const amountUSD = Number(amount || 0)
   const amountQuota = Math.round(amountUSD * quotaPerUSD)
+  const feeBPS = overview?.fee_bps ?? 100
+  const feeQuota = Math.ceil((amountQuota * feeBPS) / 10_000)
+  const totalDebitQuota = amountQuota + feeQuota
   const balanceUSD = quotaUnitsToUsd(overview?.balance || 0)
+  const maxTransferUSD = quotaUnitsToUsd(
+    Math.floor(((overview?.balance || 0) * 10_000) / (10_000 + feeBPS))
+  )
   const minimumUSD = quotaUnitsToUsd(overview?.min_quota || quotaPerUSD / 100)
   const locked = (overview?.security.locked_until || 0) > currentTimestamp
   const amountValid =
     Number.isFinite(amountUSD) &&
     amountUSD >= minimumUSD &&
-    amountQuota <= (overview?.balance || 0)
+    totalDebitQuota <= (overview?.balance || 0)
   const canContinue =
     Boolean(recipient) &&
     amountValid &&
@@ -101,6 +107,8 @@ export function WalletPeerTransferCard(props: {
     () => formatUsdAmount(amountUSD || 0),
     [amountUSD]
   )
+  const feeLabel = formatUsdAmount(quotaUnitsToUsd(feeQuota))
+  const totalDebitLabel = formatUsdAmount(quotaUnitsToUsd(totalDebitQuota))
 
   const lookupRecipient = async () => {
     const normalized = recipientId.trim().toUpperCase()
@@ -235,6 +243,7 @@ export function WalletPeerTransferCard(props: {
         recipientLoading={recipientLoading}
         amount={amount}
         balanceUSD={balanceUSD}
+        maxTransferUSD={maxTransferUSD}
         minimumUSD={minimumUSD}
         canContinue={canContinue}
         onRecipientIdChange={(value) => {
@@ -253,6 +262,8 @@ export function WalletPeerTransferCard(props: {
         onOpenChange={setConfirmOpen}
         recipient={recipient}
         amountLabel={amountLabel}
+        feeLabel={feeLabel}
+        totalDebitLabel={totalDebitLabel}
         submitting={submitting}
         onConfirm={submitTransfer}
       />

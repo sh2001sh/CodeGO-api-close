@@ -8,6 +8,7 @@ import (
 
 	"github.com/sh2001sh/new-api/dto"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 )
 
 var compiledResponsesRegexCache sync.Map // map[string]*regexp.Regexp
@@ -46,30 +47,8 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	}
 
 	created := resp.CreatedAt
-	var toolCalls []dto.ToolCallResponse
-	if text == "" && len(resp.Output) > 0 {
-		for _, out := range resp.Output {
-			if out.Type != "function_call" {
-				continue
-			}
-			name := strings.TrimSpace(out.Name)
-			if name == "" {
-				continue
-			}
-			callID := strings.TrimSpace(out.CallId)
-			if callID == "" {
-				callID = strings.TrimSpace(out.ID)
-			}
-			toolCalls = append(toolCalls, dto.ToolCallResponse{
-				ID:   callID,
-				Type: "function",
-				Function: dto.FunctionResponse{
-					Name:      name,
-					Arguments: out.ArgumentsString(),
-				},
-			})
-		}
-	}
+	toolCalls := responsesOutputsToChatToolCalls(resp.Output)
+	reasoning := responsesReasoningSummary(resp.Output)
 
 	finishReason := "stop"
 	if len(toolCalls) > 0 {
@@ -80,9 +59,11 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 		Role:    "assistant",
 		Content: text,
 	}
+	if reasoning != "" {
+		msg.ReasoningContent = &reasoning
+	}
 	if len(toolCalls) > 0 {
 		msg.SetToolCalls(toolCalls)
-		msg.Content = ""
 	}
 
 	out := &dto.OpenAITextResponse{
@@ -101,6 +82,51 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	}
 
 	return out, usage, nil
+}
+
+func responsesOutputsToChatToolCalls(outputs []dto.ResponsesOutput) []dto.ToolCallResponse {
+	var toolCalls []dto.ToolCallResponse
+	for _, output := range outputs {
+		if output.Type != "function_call" && output.Type != "custom_tool_call" && output.Type != "tool_search_call" {
+			continue
+		}
+		name := strings.TrimSpace(output.Name)
+		if output.Namespace != "" {
+			name = qualifyResponsesToolName(output.Namespace, name)
+		}
+		if name == "" {
+			continue
+		}
+		arguments := output.ArgumentsString()
+		if output.Type == "custom_tool_call" {
+			wrapped, _ := platformencoding.Marshal(map[string]string{"input": output.Input})
+			arguments = string(wrapped)
+		}
+		callID := strings.TrimSpace(output.CallId)
+		if callID == "" {
+			callID = strings.TrimSpace(output.ID)
+		}
+		toolCalls = append(toolCalls, dto.ToolCallResponse{
+			ID: callID, Type: "function",
+			Function: dto.FunctionResponse{Name: name, Arguments: arguments},
+		})
+	}
+	return toolCalls
+}
+
+func responsesReasoningSummary(outputs []dto.ResponsesOutput) string {
+	var summary strings.Builder
+	for _, output := range outputs {
+		if output.Type != "reasoning" {
+			continue
+		}
+		for _, part := range output.Summary {
+			if part.Type == "summary_text" {
+				summary.WriteString(part.Text)
+			}
+		}
+	}
+	return summary.String()
 }
 
 func ExtractOutputTextFromResponses(resp *dto.OpenAIResponsesResponse) string {
@@ -136,10 +162,18 @@ func ExtractOutputTextFromResponses(resp *dto.OpenAIResponsesResponse) string {
 }
 
 func ShouldChatCompletionsUseResponsesPolicy(policy gatewaystore.ChatCompletionsToResponsesPolicy, channelID int, channelType int, model string) bool {
-	if !policy.IsChannelEnabled(channelID, channelType) {
-		return false
+	return ResolveProtocolBridgeMode(policy, channelID, channelType, model) == gatewaystore.ProtocolBridgeModeForce
+}
+
+func ResolveProtocolBridgeMode(policy gatewaystore.ProtocolBridgePolicy, channelID int, channelType int, model string) gatewaystore.ProtocolBridgeMode {
+	mode := policy.EffectiveMode()
+	if mode == gatewaystore.ProtocolBridgeModeAuto {
+		return mode
 	}
-	return matchAnyResponsesRegex(policy.ModelPatterns, model)
+	if !policy.MatchesChannel(channelID, channelType) || !matchAnyResponsesRegex(policy.ModelPatterns, model) {
+		return gatewaystore.ProtocolBridgeModeAuto
+	}
+	return mode
 }
 
 func ShouldChatCompletionsUseResponsesGlobal(channelID int, channelType int, model string) bool {
@@ -151,8 +185,20 @@ func ShouldChatCompletionsUseResponsesGlobal(channelID int, channelType int, mod
 	)
 }
 
+func ShouldResponsesUseChatCompletionsGlobal(channelID int, channelType int, model string) bool {
+	return ShouldChatCompletionsUseResponsesPolicy(
+		gatewaystore.GetGlobalSettings().ResponsesToChatCompletionsPolicy,
+		channelID,
+		channelType,
+		model,
+	)
+}
+
 func matchAnyResponsesRegex(patterns []string, s string) bool {
-	if len(patterns) == 0 || s == "" {
+	if len(patterns) == 0 {
+		return true
+	}
+	if s == "" {
 		return false
 	}
 	for _, pattern := range patterns {

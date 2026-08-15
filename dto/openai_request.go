@@ -225,10 +225,16 @@ func (r *GeneralOpenAIRequest) GetSystemRoleName() string {
 const CustomType = "custom"
 
 type ToolCallRequest struct {
-	ID       string          `json:"id,omitempty"`
-	Type     string          `json:"type"`
-	Function FunctionRequest `json:"function,omitempty"`
-	Custom   json.RawMessage `json:"custom,omitempty"`
+	ID          string          `json:"id,omitempty"`
+	Type        string          `json:"type"`
+	Name        string          `json:"name,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Parameters  any             `json:"parameters,omitempty"`
+	Format      json.RawMessage `json:"format,omitempty"`
+	Namespace   string          `json:"namespace,omitempty"`
+	Tools       json.RawMessage `json:"tools,omitempty"`
+	Function    FunctionRequest `json:"function,omitempty"`
+	Custom      json.RawMessage `json:"custom,omitempty"`
 }
 
 type FunctionRequest struct {
@@ -236,6 +242,7 @@ type FunctionRequest struct {
 	Name        string `json:"name"`
 	Parameters  any    `json:"parameters,omitempty"`
 	Arguments   string `json:"arguments,omitempty"`
+	Strict      *bool  `json:"strict,omitempty"`
 }
 
 type StreamOptions struct {

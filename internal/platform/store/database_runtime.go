@@ -7,12 +7,12 @@ import (
 	auditdomain "github.com/sh2001sh/new-api/internal/audit/domain"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
-	bountyschema "github.com/sh2001sh/new-api/internal/bounty/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	communityschema "github.com/sh2001sh/new-api/internal/community/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -61,6 +61,13 @@ func InitPrimaryDB() error {
 		return err
 	}
 	configureSQLPool(sqlDB)
+	// SQLite local deployments need additive marketplace columns even when
+	// full legacy AutoMigrate is intentionally disabled.
+	if platformdb.UsingSQLite {
+		if err := migrateMarketplaceModelVerification(platformdb.DB); err != nil {
+			return err
+		}
+	}
 
 	if !platformconfig.IsMasterNode {
 		return nil
@@ -288,16 +295,12 @@ func migratePrimaryDB() error {
 		&identitydomain.DesktopDiagnosticReport{},
 		&identitydomain.DesktopTelemetryEvent{},
 		&identitydomain.ImageWorkspaceItem{},
-		&bountyschema.BountyTask{},
-		&bountyschema.BountyApplication{},
-		&bountyschema.BountyMaterialRequest{},
-		&bountyschema.BountyMaterialReply{},
-		&bountyschema.BountySubmission{},
-		&bountyschema.BountyDispute{},
-		&bountyschema.BountyEvent{},
-		&bountyschema.BountyNotification{},
-		&bountyschema.BountyReport{},
 		&communityschema.Resource{},
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{},
+		&marketplaceschema.RankingSnapshot{},
+		&marketplaceschema.Settlement{},
 	)
 	if err != nil {
 		return err
@@ -337,7 +340,7 @@ func ensureCodeGoSchemas() error {
 	if !platformdb.UsingPostgreSQL {
 		return nil
 	}
-	schemas := []string{"billing", "gateway", "workflow", "readmodel", "audit", "platform"}
+	schemas := []string{"billing", "gateway", "workflow", "readmodel", "audit", "platform", "marketplace"}
 	for _, schema := range schemas {
 		if err := platformdb.DB.Exec("CREATE SCHEMA IF NOT EXISTS " + schema).Error; err != nil {
 			return err

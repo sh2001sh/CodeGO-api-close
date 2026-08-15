@@ -228,6 +228,15 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+		var streamResponse dto.ChatCompletionsStreamResponse
+		if err := platformencoding.UnmarshalString(data, &streamResponse); err == nil {
+			for _, choice := range streamResponse.Choices {
+				if choice.Delta.GetContentString() != "" || choice.Delta.GetReasoningContent() != "" || len(choice.Delta.ToolCalls) > 0 {
+					sr.MarkProgress()
+					break
+				}
+			}
+		}
 		if lastStreamData != "" {
 			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
 				platformobservability.SysLog("error handling stream format: " + err.Error())

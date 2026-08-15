@@ -920,7 +920,7 @@ func genStripeLink(referenceID string, customerID string, email string, money fl
 	}
 	productName := fmt.Sprintf("账户充值 %d", amount)
 	if IsClaudeTopupWallet(walletType) {
-		productName = fmt.Sprintf("Claude 额度充值 %d", amount)
+		productName = fmt.Sprintf("通用额度充值 %d", amount)
 	}
 	unitAmount := StripeMoneyToMinorUnits(money)
 	if unitAmount <= 0 {

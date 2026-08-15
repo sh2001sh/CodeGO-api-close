@@ -22,7 +22,7 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 	}
 	sender := &identityschema.User{
 		Id: 9941, ExternalId: "HTP001", Username: "http-transfer-sender", DisplayName: "HTTP Sender",
-		Password: accountHash, AffCode: "HTP001", Status: constant.UserStatusEnabled, Quota: 5 * unit,
+		Password: accountHash, AffCode: "HTP001", Status: constant.UserStatusEnabled, ClaudeQuota: 5 * unit,
 	}
 	recipient := &identityschema.User{
 		Id: 9942, ExternalId: "HTP002", Username: "http-transfer-recipient", DisplayName: "HTTP Recipient",
@@ -88,7 +88,7 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 	if err := json.Unmarshal(overviewResponse.Data, &overview); err != nil {
 		t.Fatalf("failed to decode overview: %v", err)
 	}
-	if overview.Balance != int64(3*unit) || overview.History.Total != 1 || !overview.Security.PasswordSet {
+	if overview.Balance != int64(298*unit/100) || overview.FeeBPS != 100 || overview.History.Total != 1 || !overview.Security.PasswordSet {
 		t.Fatalf("unexpected transfer overview: %#v", overview)
 	}
 }

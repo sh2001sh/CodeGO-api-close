@@ -25,11 +25,16 @@ func DebitWalletQuotaTxWithReason(tx *gorm.DB, userID int, amount int, operation
 
 // DebitClaudeWalletQuotaTx atomically debits the Claude wallet and its ledger mirror.
 func DebitClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string) error {
+	return DebitClaudeWalletQuotaTxWithReason(tx, userID, amount, operationID, "wallet_quota_conversion_debit")
+}
+
+// DebitClaudeWalletQuotaTxWithReason debits the universal wallet with an explicit ledger reason.
+func DebitClaudeWalletQuotaTxWithReason(tx *gorm.DB, userID int, amount int, operationID, reasonCode string) error {
 	return debitUserWalletQuotaTx(tx, userID, amount, operationID, mirroredWalletTxStore{
 		accountType: billingAccountTypeClaudeWallet,
 		readBalance: getUserClaudeWalletQuotaTx,
 		applyDelta:  decreaseUserClaudeWalletQuotaTx,
-	}, false, "wallet_quota_conversion_debit")
+	}, false, reasonCode)
 }
 
 func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string, mirrored mirroredWalletTxStore, consumeBonus bool, reasonCode string) error {

@@ -78,9 +78,9 @@ func invalidateTopUpUserCache(userID int) {
 
 func topUpWalletLogLabel(topUp *commerceschema.TopUp) string {
 	if topUp != nil && topUp.NormalizedWalletType() == commerceschema.WalletTypeClaude {
-		return "Claude额度"
+		return "通用额度"
 	}
-	return "额度"
+	return "官方 GPT 专属额度"
 }
 
 // CompleteTopUpByTradeNo completes a pending top-up order and credits quota to the user.

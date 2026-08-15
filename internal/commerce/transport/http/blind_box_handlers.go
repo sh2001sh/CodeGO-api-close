@@ -69,39 +69,6 @@ func adminGrantBlindBoxes(c *gin.Context) {
 	})
 }
 
-func adminStartBalanceBlindBoxSimulation(c *gin.Context) {
-	userID, err := strconv.Atoi(c.Param("id"))
-	if err != nil || userID <= 0 {
-		httpapi.ApiErrorMsg(c, "invalid user id")
-		return
-	}
-	var req commerceapp.AdminBalanceBlindBoxSimulationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpapi.ApiErrorMsg(c, "invalid request")
-		return
-	}
-	simulation, err := commerceapp.StartBalanceBlindBoxSimulation(userID, c.GetInt("id"), req)
-	if err != nil {
-		httpapi.ApiError(c, err)
-		return
-	}
-	httpapi.ApiSuccess(c, gin.H{"simulation": simulation})
-}
-
-func adminStopBalanceBlindBoxSimulation(c *gin.Context) {
-	userID, err := strconv.Atoi(c.Param("id"))
-	if err != nil || userID <= 0 {
-		httpapi.ApiErrorMsg(c, "invalid user id")
-		return
-	}
-	simulation, err := commerceapp.StopBalanceBlindBoxSimulation(userID, c.GetInt("id"))
-	if err != nil {
-		httpapi.ApiError(c, err)
-		return
-	}
-	httpapi.ApiSuccess(c, gin.H{"simulation": simulation})
-}
-
 func useBlindBoxProp(c *gin.Context) {
 	propID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || propID <= 0 {
@@ -187,23 +154,6 @@ func openBalanceBlindBox(c *gin.Context) {
 		return
 	}
 	result, err := commerceapp.OpenBalanceBlindBox(c.GetInt("id"), req.RequestID, req.Count)
-	if err != nil {
-		httpapi.ApiError(c, err)
-		return
-	}
-	httpapi.ApiSuccess(c, result)
-}
-
-func simulateBalanceBlindBox(c *gin.Context) {
-	var req struct {
-		RequestID string `json:"request_id" binding:"required"`
-		Count     int    `json:"count" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpapi.ApiErrorMsg(c, "request_id and count are required")
-		return
-	}
-	result, err := commerceapp.SimulateBalanceBlindBoxes(c.GetInt("id"), req.RequestID, req.Count)
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

@@ -19,6 +19,8 @@ export function WalletTransferConfirmDialog(props: {
   onOpenChange: (open: boolean) => void
   recipient: WalletTransferRecipient | null
   amountLabel: string
+  feeLabel: string
+  totalDebitLabel: string
   submitting: boolean
   onConfirm: (paymentPassword: string) => Promise<void>
 }) {
@@ -55,6 +57,14 @@ export function WalletTransferConfirmDialog(props: {
             </span>
             <strong className='text-right font-semibold tabular-nums'>
               {props.amountLabel}
+            </strong>
+            <span className='text-muted-foreground'>{t('手续费（1%）')}</span>
+            <strong className='text-right font-medium tabular-nums'>
+              {props.feeLabel}
+            </strong>
+            <span className='text-muted-foreground'>{t('通用额度总扣除')}</span>
+            <strong className='text-right font-semibold tabular-nums'>
+              {props.totalDebitLabel}
             </strong>
           </div>
 

@@ -122,16 +122,14 @@ export function createUserQuotaColumns(t: TFunction): ColumnDef<User>[] {
 
         return (
           <Tooltip>
-            <TooltipTrigger
-              render={<div className='w-[130px] cursor-help' />}
-            >
+            <TooltipTrigger render={<div className='w-[130px] cursor-help' />}>
               <span className='font-medium tabular-nums'>
                 {formatQuota(claudeQuota)}
               </span>
             </TooltipTrigger>
             <TooltipContent>
               <p className='text-xs'>
-                {t('Remaining Claude quota')}: {formatQuota(claudeQuota)}
+                {t('剩余通用额度')}: {formatQuota(claudeQuota)}
               </p>
             </TooltipContent>
           </Tooltip>

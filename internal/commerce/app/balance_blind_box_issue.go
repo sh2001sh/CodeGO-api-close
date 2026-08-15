@@ -50,9 +50,9 @@ func issueSealedBalanceBlindBox(purchaseID, purchaserID int, setting blindboxset
 	} else {
 		item.CreditAmount = quotaUnitsFromBlindBoxUSD(rewardUSD)
 		if rewardType == commerceschema.BlindBoxRewardTypeClaudeQuota {
-			item.RewardTitle = fmt.Sprintf("%.2f Claude 额度奖励", rewardUSD)
+			item.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", rewardUSD)
 		} else {
-			item.RewardTitle = fmt.Sprintf("%.2f 美元奖励", rewardUSD)
+			item.RewardTitle = fmt.Sprintf("%.2f 官方 GPT 专属额度奖励", rewardUSD)
 		}
 	}
 	advanceBalanceBlindBoxPity(pity, rewardType, rewardUSD, setting)

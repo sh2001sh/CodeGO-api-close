@@ -48,6 +48,27 @@ export interface DesktopImportLinkResponse {
   provider_name: string
 }
 
+export interface ApiKeyGroupOptionData {
+  value: string
+  label: string
+  desc: string
+  ratio?: number | string
+  category: 'official' | 'marketplace'
+}
+
+interface MarketplaceGroupListResponse {
+  items: Array<{
+    id: string
+    system_display_name: string
+    owner_display_name: string
+    source_label: string
+    lifecycle_status: string
+    verification_status: string
+    multiplier: number
+    models: string[]
+  }>
+}
+
 // ============================================================================
 // API Key Management
 // ============================================================================
@@ -143,4 +164,26 @@ export async function createDesktopImportLink(
 ): Promise<ApiResponse<DesktopImportLinkResponse>> {
   const res = await api.post('/api/desktop/import/deeplink', data)
   return res.data
+}
+
+export async function getSelectableMarketplaceGroups(): Promise<
+  ApiKeyGroupOptionData[]
+> {
+  const res = await api.get<ApiResponse<MarketplaceGroupListResponse>>(
+    '/api/marketplace/groups?page=1&page_size=50&sort=score&direction=desc&window_hours=24'
+  )
+  if (!res.data.success || !res.data.data) return []
+  return res.data.data.items
+    .filter(
+      (group) =>
+        ['active', 'degraded'].includes(group.lifecycle_status) &&
+        group.verification_status === 'passed'
+    )
+    .map((group) => ({
+      value: `market:${group.id}`,
+      label: group.system_display_name,
+      desc: `${group.source_label || '来源待审核'} · ${group.owner_display_name} · ${group.models.slice(0, 2).join(', ')}`,
+      ratio: group.multiplier,
+      category: 'marketplace' as const,
+    }))
 }

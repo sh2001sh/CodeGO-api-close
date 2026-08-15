@@ -14,6 +14,7 @@ import (
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"github.com/sh2001sh/new-api/types"
 )
@@ -308,9 +309,9 @@ func newFundingInsufficientError(source string, err error) *types.NewAPIError {
 		case BillingSourceSubscription:
 			message = "subscription quota insufficient or unavailable"
 		case BillingSourceClaudeWallet:
-			message = "Claude wallet quota insufficient"
+			message = "universal quota insufficient"
 		default:
-			message = "wallet quota insufficient"
+			message = "GPT special quota insufficient"
 		}
 	default:
 		return nil
@@ -467,7 +468,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		}
 		if userQuota <= 0 || userQuota-preConsumedQuota < 0 {
 			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("站内余额不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(userQuota), logger.FormatQuota(preConsumedQuota)),
+				fmt.Errorf("官方 GPT 专属额度不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(userQuota), logger.FormatQuota(preConsumedQuota)),
 				types.ErrorCodeInsufficientUserQuota,
 				http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(),
@@ -496,7 +497,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		}
 		if claudeQuota <= 0 || claudeQuota-preConsumedQuota < 0 {
 			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("Claude额度不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(claudeQuota), logger.FormatQuota(preConsumedQuota)),
+				fmt.Errorf("通用额度不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(claudeQuota), logger.FormatQuota(preConsumedQuota)),
 				types.ErrorCodeInsufficientUserQuota,
 				http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(),
@@ -516,6 +517,20 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 			return nil, apiErr
 		}
 		return session, nil
+	}
+
+	if relayInfo.MarketplaceCreditPolicy == marketplacedomain.CreditPolicyUniversalOnly {
+		session, apiErr := tryClaudeWallet()
+		if apiErr != nil && apiErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota {
+			return nil, types.NewErrorWithStatusCode(
+				fmt.Errorf("通用额度不足，市场渠道不会回退到月卡或官方 GPT 专属额度"),
+				types.ErrorCodeInsufficientUserQuota,
+				http.StatusForbidden,
+				types.ErrOptionWithSkipRetry(),
+				types.ErrOptionWithNoRecordErrorLog(),
+			)
+		}
+		return session, apiErr
 	}
 
 	trySubscription := func() (*BillingSession, *types.NewAPIError) {
@@ -578,7 +593,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		_, walletInsufficient := insufficientSources[BillingSourceWallet]
 		if subscriptionInsufficient && walletInsufficient {
 			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("套餐可用额度不足，且钱包余额不足"),
+				fmt.Errorf("GPT 套餐额度不足，且官方 GPT 专属额度不足"),
 				types.ErrorCodeInsufficientUserQuota,
 				http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(),

@@ -66,8 +66,6 @@ func setupRedemptionTestDB(t *testing.T) *gorm.DB {
 		&commerceschema.BalanceBlindBoxItem{},
 		&commerceschema.BalanceBlindBoxGift{},
 		&commerceschema.BalanceBlindBoxGiftItem{},
-		&commerceschema.BalanceBlindBoxSimulationSession{},
-		&commerceschema.BalanceBlindBoxSimulationBatch{},
 		&commerceschema.BlindBoxZeroHourState{},
 		&commerceschema.BlindBoxProp{},
 		&billingschema.PointAccount{},

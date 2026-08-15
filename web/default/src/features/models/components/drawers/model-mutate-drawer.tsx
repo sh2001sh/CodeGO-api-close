@@ -153,6 +153,7 @@ export function ModelMutateDrawer({
       'global.pass_through_request_enabled': false,
       'global.thinking_model_blacklist': '[]',
       'global.chat_completions_to_responses_policy': '{}',
+      'global.responses_to_chat_completions_policy': '{}',
       'general_setting.ping_interval_enabled': true,
       'general_setting.ping_interval_seconds': 60,
       'gemini.safety_settings': '',

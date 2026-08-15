@@ -21,23 +21,22 @@ const (
 var balanceBlindBoxLocation = time.FixedZone("UTC+8", 8*60*60)
 
 type BalanceBlindBoxOverview struct {
-	Enabled                bool                              `json:"enabled"`
-	PriceUSD               float64                           `json:"price_usd"`
-	BalanceUSD             float64                           `json:"balance_usd"`
-	Tiers                  []blindboxsettings.TierSetting    `json:"tiers"`
-	InventoryCount         int64                             `json:"inventory_count"`
-	PurchasedToday         int64                             `json:"purchased_today"`
-	DailyPurchaseLimit     int                               `json:"daily_purchase_limit"`
-	RemainingPurchaseLimit int64                             `json:"remaining_purchase_limit"`
-	PityProgress           int                               `json:"pity_progress"`
-	PityThreshold          int                               `json:"pity_threshold"`
-	PityGuaranteeUSD       float64                           `json:"pity_guarantee_usd"`
-	SmallPityProgress      int                               `json:"small_pity_progress"`
-	SmallPityThreshold     int                               `json:"small_pity_threshold"`
-	SmallPityGuaranteeUSD  float64                           `json:"small_pity_guarantee_usd"`
-	FirstDrawGuaranteeUSD  float64                           `json:"first_draw_guarantee_usd"`
-	FirstDrawEligible      bool                              `json:"first_draw_eligible"`
-	Simulation             BalanceBlindBoxSimulationOverview `json:"simulation"`
+	Enabled                bool                           `json:"enabled"`
+	PriceUSD               float64                        `json:"price_usd"`
+	BalanceUSD             float64                        `json:"balance_usd"`
+	Tiers                  []blindboxsettings.TierSetting `json:"tiers"`
+	InventoryCount         int64                          `json:"inventory_count"`
+	PurchasedToday         int64                          `json:"purchased_today"`
+	DailyPurchaseLimit     int                            `json:"daily_purchase_limit"`
+	RemainingPurchaseLimit int64                          `json:"remaining_purchase_limit"`
+	PityProgress           int                            `json:"pity_progress"`
+	PityThreshold          int                            `json:"pity_threshold"`
+	PityGuaranteeUSD       float64                        `json:"pity_guarantee_usd"`
+	SmallPityProgress      int                            `json:"small_pity_progress"`
+	SmallPityThreshold     int                            `json:"small_pity_threshold"`
+	SmallPityGuaranteeUSD  float64                        `json:"small_pity_guarantee_usd"`
+	FirstDrawGuaranteeUSD  float64                        `json:"first_draw_guarantee_usd"`
+	FirstDrawEligible      bool                           `json:"first_draw_eligible"`
 }
 
 type BalanceBlindBoxOpenResult struct {
@@ -77,13 +76,7 @@ func GetBalanceBlindBoxOverview(userID int) (*BalanceBlindBoxOverview, error) {
 	if err != nil && !isBalanceBlindBoxSchemaMissing(err) {
 		return nil, err
 	}
-	overview := buildBalanceBlindBoxOverview(setting, balance, inventory, purchasedToday, pity, issuedCount == 0)
-	simulation, err := GetBalanceBlindBoxSimulationOverview(userID)
-	if err != nil {
-		return nil, err
-	}
-	overview.Simulation = simulation
-	return overview, nil
+	return buildBalanceBlindBoxOverview(setting, balance, inventory, purchasedToday, pity, issuedCount == 0), nil
 }
 
 func loadBalanceBlindBoxCounts(db *gorm.DB, userID int) (inventory, purchasedToday, issuedCount int64, err error) {

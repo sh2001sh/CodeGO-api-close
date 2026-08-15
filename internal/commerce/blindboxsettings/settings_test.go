@@ -23,5 +23,5 @@ func TestGetMigratesPreviousBalanceBlindBoxPool(t *testing.T) {
 
 	got := Get().BalanceBlindBoxTiers
 	require.InDelta(t, 0.06, got[0].Probability, 0.000000001)
-	require.Equal(t, "$5000 普通额度", got[9].Name)
+	require.Equal(t, "$5000 官方 GPT 专属额度", got[9].Name)
 }

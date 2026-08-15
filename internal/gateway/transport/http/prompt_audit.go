@@ -30,6 +30,11 @@ func checkPromptAuditWithService(
 	if service == nil || service.Mode() == securityaudit.ModeOff {
 		return nil
 	}
+	// Claude is intentionally outside the site's prompt interception policy;
+	// its system and tool metadata can contain unrelated security vocabulary.
+	if relayFormat == types.RelayFormatClaude {
+		return nil
+	}
 	model, group := "", ""
 	if info != nil {
 		model = info.OriginModelName

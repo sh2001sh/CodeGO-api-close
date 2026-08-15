@@ -146,7 +146,7 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		other["marketplace_multiplier"] = relayInfo.MarketplaceMultiplier
 		other["marketplace_platform_commission_rate"] = 0.05
 		other["marketplace_transaction_fee_rate"] = 0.0
-		other["marketplace_owner_net_rate"] = 0.94
+		other["marketplace_owner_net_rate"] = 0.95
 	}
 	billingQuotaCategory, billingQuotaLabel := billingQuotaSource(relayInfo)
 	if billingQuotaCategory != "" {

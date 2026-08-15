@@ -73,4 +73,5 @@ func TestAppendBillingInfoMarketplaceAlwaysUsesUniversalQuota(t *testing.T) {
 
 	require.Equal(t, "universal", other["billing_quota_category"])
 	require.Equal(t, "通用额度", other["billing_quota_label"])
+	require.Equal(t, 0.95, other["marketplace_owner_net_rate"])
 }

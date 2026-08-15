@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   consumeSubscriptionResetOpportunity,
@@ -18,12 +17,14 @@ import type {
   SelfSubscriptionData,
 } from '@/features/subscriptions/types'
 import { RedemptionCodePanel } from './redemption-code-panel'
+import { SubscriptionClaudeConversionCard } from './subscription-claude-conversion-card'
 import { WalletBillingOrderPanel } from './wallet-billing-order-panel'
 import {
   getOrderedSubscriptions,
   type WalletPlanMeta,
 } from './wallet-panel-utils'
 import { WalletPeerTransferCard } from './wallet-peer-transfer-card'
+import { WalletQuotaConversionCard } from './wallet-quota-conversion-card'
 import { WalletResetOpportunityPanel } from './wallet-reset-opportunity-panel'
 
 const ALL_FUNDING_SOURCES: FundingSource[] = ['subscription', 'wallet']
@@ -100,6 +101,16 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
   const currentSubscriptionPlanMeta = currentSubscription
     ? planMetaMap.get(currentSubscription.plan_id)
     : undefined
+  const conversionPlanTitles = useMemo(() => {
+    const titles: Record<number, { title: string; subtitle: string }> = {}
+    for (const [planID, planMeta] of planMetaMap) {
+      titles[planID] = {
+        title: planMeta.title,
+        subtitle: planMeta.subtitle,
+      }
+    }
+    return titles
+  }, [planMetaMap])
   const resetOpportunity = props.subscriptionData?.reset_opportunity ?? {
     available_count: 0,
     earned_total: 0,
@@ -256,23 +267,21 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   if (props.section === 'conversion') {
     return (
-      <section className='app-page-shell p-5'>
-        <h3 className='font-semibold'>{t('额度转换已关闭')}</h3>
-        <p className='text-muted-foreground mt-2 max-w-2xl text-sm leading-6'>
-          {t(
-            'GPT 套餐、官方 GPT 专属额度和通用额度用途固定，不能在额度池之间转换。历史转换记录仍可查询。'
-          )}
-        </p>
-        {props.onOpenConversionHistory ? (
-          <Button
-            className='mt-4'
-            variant='outline'
-            onClick={props.onOpenConversionHistory}
-          >
-            {t('查看历史转换记录')}
-          </Button>
-        ) : null}
-      </section>
+      <div className='grid gap-4 xl:grid-cols-2'>
+        <WalletQuotaConversionCard
+          onUserRefresh={props.onUserRefresh}
+          onOpenHistory={props.onOpenConversionHistory}
+        />
+        <SubscriptionClaudeConversionCard
+          subscriptionData={props.subscriptionData}
+          loading={props.subscriptionLoading}
+          planTitles={conversionPlanTitles}
+          onRefresh={async () => {
+            await props.onSubscriptionRefresh?.()
+            await props.onUserRefresh?.()
+          }}
+        />
+      </div>
     )
   }
 

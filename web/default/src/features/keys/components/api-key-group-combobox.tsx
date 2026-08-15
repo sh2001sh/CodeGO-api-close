@@ -41,7 +41,8 @@ export type ApiKeyGroupOption = {
   label: string
   desc?: string
   ratio?: number | string
-  category?: 'official' | 'marketplace'
+  category?: 'official' | 'marketplace' | 'marketplace_auto'
+  disabled?: boolean
 }
 
 type ApiKeyGroupComboboxProps = {
@@ -129,7 +130,10 @@ export function ApiKeyGroupCombobox({
     setSearchValue('')
   }
   const officialOptions = filteredOptions.filter(
-    (option) => option.category !== 'marketplace'
+    (option) => option.category === undefined || option.category === 'official'
+  )
+  const marketplaceAutoOptions = filteredOptions.filter(
+    (option) => option.category === 'marketplace_auto'
   )
   const marketplaceOptions = filteredOptions.filter(
     (option) => option.category === 'marketplace'
@@ -181,8 +185,14 @@ export function ApiKeyGroupCombobox({
           <CommandList className='max-h-[360px]'>
             <CommandEmpty>{t('No group found.')}</CommandEmpty>
             <GroupOptions
-              heading={t('Official groups')}
+              heading={t('CodeGo 官方')}
               options={officialOptions}
+              value={value}
+              onSelect={handleSelect}
+            />
+            <GroupOptions
+              heading={t('第三方 Auto')}
+              options={marketplaceAutoOptions}
               value={value}
               onSelect={handleSelect}
             />
@@ -212,8 +222,9 @@ function GroupOptions(props: {
         <CommandItem
           key={option.value}
           value={option.value}
+          disabled={option.disabled}
           onSelect={() => props.onSelect(option.value)}
-          className='data-[selected=true]:bg-muted items-start gap-3 rounded-lg px-3 py-3 transition-colors'
+          className='data-[selected=true]:bg-muted items-start gap-3 rounded-lg px-3 py-3 transition-colors data-disabled:opacity-50'
         >
           <Check
             className={cn(

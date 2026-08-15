@@ -42,6 +42,7 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 	Record(Sample{
 		Model:        info.OriginModelName,
 		Group:        info.UsingGroup,
+		ChannelID:    info.ChannelId,
 		LatencyMs:    latencyMs,
 		TtftMs:       ttftMs,
 		HasTtft:      hasTtft,
@@ -63,13 +64,15 @@ func Record(sample Sample) {
 		sample.LatencyMs = 0
 	}
 
+	bucketTs := bucketStart(time.Now().Unix())
 	key := bucketKey{
 		model:    sample.Model,
 		group:    sample.Group,
-		bucketTs: bucketStart(time.Now().Unix()),
+		bucketTs: bucketTs,
 	}
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
 	actual.(*atomicBucket).add(sample)
+	recordChannelHotBucket(sample, bucketTs)
 	recordRedis(key, sample)
 }
 
@@ -612,6 +615,25 @@ func recordRedis(key bucketKey, sample Sample) {
 		pipe.HIncrBy(ctx, redisKey, "gen_ms", sample.GenerationMs)
 	}
 	pipe.Expire(ctx, redisKey, time.Hour)
+	if sample.ChannelID > 0 {
+		channelKey := channelRedisBucketKey(sample.ChannelID, key.bucketTs)
+		pipe.HIncrBy(ctx, channelKey, "req", 1)
+		if sample.Success {
+			pipe.HIncrBy(ctx, channelKey, "ok", 1)
+		}
+		if sample.LatencyMs > 0 {
+			pipe.HIncrBy(ctx, channelKey, "lat", sample.LatencyMs)
+		}
+		if sample.HasTtft && sample.TtftMs >= 0 {
+			pipe.HIncrBy(ctx, channelKey, "ttft", sample.TtftMs)
+			pipe.HIncrBy(ctx, channelKey, "ttft_n", 1)
+		}
+		if sample.OutputTokens > 0 && sample.GenerationMs > 0 {
+			pipe.HIncrBy(ctx, channelKey, "out", sample.OutputTokens)
+			pipe.HIncrBy(ctx, channelKey, "gen_ms", sample.GenerationMs)
+		}
+		pipe.Expire(ctx, channelKey, 2*time.Hour)
+	}
 	_, _ = pipe.Exec(ctx)
 }
 

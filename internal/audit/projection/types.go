@@ -10,6 +10,7 @@ type Store interface {
 type Sample struct {
 	Model        string
 	Group        string
+	ChannelID    int
 	LatencyMs    int64
 	TtftMs       int64
 	HasTtft      bool
@@ -77,6 +78,16 @@ type GroupModelSummary struct {
 	RequestCount int64   `json:"-"`
 }
 
+// ChannelSummary describes site-wide relay performance for one channel.
+type ChannelSummary struct {
+	ChannelID    int     `json:"channel_id"`
+	AvgLatencyMs int64   `json:"avg_latency_ms"`
+	AvgTtftMs    int64   `json:"avg_ttft_ms"`
+	SuccessRate  float64 `json:"success_rate"`
+	AvgTps       float64 `json:"avg_tps"`
+	RequestCount int64   `json:"request_count"`
+}
+
 type GroupModelSeries struct {
 	Group        string        `json:"group"`
 	ModelName    string        `json:"model_name"`
@@ -89,6 +100,11 @@ type bucketKey struct {
 	model    string
 	group    string
 	bucketTs int64
+}
+
+type channelBucketKey struct {
+	channelID int
+	bucketTs  int64
 }
 
 type counters struct {

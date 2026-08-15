@@ -90,6 +90,22 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestMigrateMarketplaceAutoRoutePoolIsIdempotent(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+
+	originalPostgreSQL := platformdb.UsingPostgreSQL
+	t.Cleanup(func() {
+		platformdb.UsingPostgreSQL = originalPostgreSQL
+	})
+	platformdb.UsingPostgreSQL = false
+
+	require.NoError(t, migrateMarketplaceAutoRoutePool(db))
+	require.NoError(t, migrateMarketplaceAutoRoutePool(db))
+	require.True(t, db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}))
+	require.True(t, db.Migrator().HasIndex(&marketplaceschema.AutoRoutePoolMember{}, "uq_marketplace_auto_pool_member"))
+}
+
 func TestSubscriptionFulfillmentMigrationMarksHistoricalSuccessCompleted(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)

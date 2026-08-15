@@ -44,7 +44,7 @@ func EnsureSchema() error {
 	if !platformconfig.IsMasterNode || platformdb.DB == nil {
 		return nil
 	}
-	return platformdb.DB.AutoMigrate(&perfMetricRecord{})
+	return platformdb.DB.AutoMigrate(&perfMetricRecord{}, &channelPerfMetricRecord{})
 }
 
 func upsertMetric(record *perfMetricRecord) error {

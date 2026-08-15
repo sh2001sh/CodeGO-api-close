@@ -53,7 +53,8 @@ export interface ApiKeyGroupOptionData {
   label: string
   desc: string
   ratio?: number | string
-  category: 'official' | 'marketplace'
+  category: 'official' | 'marketplace' | 'marketplace_auto'
+  disabled?: boolean
 }
 
 interface MarketplaceGroupListResponse {

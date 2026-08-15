@@ -56,6 +56,7 @@ func flushCompletedBuckets() {
 		deleteOldEmptyBucket(k, key)
 		return true
 	})
+	flushCompletedChannelBuckets(currentBucket)
 }
 
 func deleteOldEmptyBucket(k bucketKey, rawKey any) {
@@ -71,6 +72,9 @@ func cleanupExpiredMetrics(retentionDays int) {
 	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour).Unix()
 	if err := deletePerfMetricsBefore(cutoff); err != nil {
 		platformobservability.SysError("failed to cleanup expired perf metrics: " + err.Error())
+	}
+	if err := deleteChannelPerfMetricsBefore(cutoff); err != nil {
+		platformobservability.SysError("failed to cleanup expired channel perf metrics: " + err.Error())
 	}
 }
 

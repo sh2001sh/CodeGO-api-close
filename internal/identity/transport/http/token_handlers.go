@@ -326,6 +326,9 @@ func UpdateToken(c *gin.Context) {
 
 func normalizeTokenGroupSelection(userID int, group string, crossGroupRetry bool) (string, bool, error) {
 	group = gatewayroutingapp.NormalizeTokenGroup(group)
+	if marketplaceapp.IsMarketplaceAutoTokenGroup(group) {
+		return group, false, nil
+	}
 	if !marketplaceapp.IsMarketplaceTokenGroup(group) {
 		return group, crossGroupRetry, nil
 	}

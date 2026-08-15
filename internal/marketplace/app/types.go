@@ -156,6 +156,31 @@ type RoutingBinding struct {
 	Multiplier       float64
 }
 
+type AutoRoutePoolUpdateRequest struct {
+	GroupIDs []string `json:"group_ids"`
+}
+
+type AutoRoutePoolItem struct {
+	GroupID           string   `json:"group_id"`
+	PublicSlug        string   `json:"public_slug"`
+	SystemDisplayName string   `json:"system_display_name"`
+	SourceLabel       string   `json:"source_label"`
+	LifecycleStatus   string   `json:"lifecycle_status"`
+	Multiplier        float64  `json:"multiplier"`
+	Availability      float64  `json:"availability"`
+	RouteScore        float64  `json:"route_score"`
+	Observing         bool     `json:"observing"`
+	RequestCount      int64    `json:"request_count"`
+	Models            []string `json:"models"`
+	Selected          bool     `json:"selected"`
+}
+
+type AutoRoutePoolView struct {
+	TokenGroup    string              `json:"token_group"`
+	SelectedCount int                 `json:"selected_count"`
+	Items         []AutoRoutePoolItem `json:"items"`
+}
+
 type OwnerUsageLogQuery struct {
 	ChannelID string
 	Page      int

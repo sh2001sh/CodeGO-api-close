@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -24,7 +25,7 @@ func TestWilsonLowerBoundPenalizesSmallSamples(t *testing.T) {
 	require.Zero(t, wilsonLowerBound(0, 0, 1.96))
 }
 
-func TestIndependentConsumerCountsQuotesSQLiteGroupColumn(t *testing.T) {
+func TestIndependentConsumerCountsByChannelAcrossGroups(t *testing.T) {
 	originalLogDB := platformdb.LogDB
 	t.Cleanup(func() { platformdb.LogDB = originalLogDB })
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -33,12 +34,29 @@ func TestIndependentConsumerCountsQuotesSQLiteGroupColumn(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&auditschema.Log{}))
 	now := time.Now().Unix()
 	require.NoError(t, db.Create([]auditschema.Log{
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "Codex-Plus-ae381d"},
-		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "Codex-Plus-ae381d"},
+		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ChannelId: 501},
+		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "plus", ChannelId: 501},
+		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "pro", ChannelId: 501},
+		{UserId: 3, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ChannelId: 502},
 	}).Error)
 
-	counts := independentConsumerCounts([]string{"Codex-Plus-ae381d"}, 24)
-	require.EqualValues(t, 2, counts["Codex-Plus-ae381d"])
+	counts := independentConsumerCountsByChannel([]int{501, 502}, 24)
+	require.EqualValues(t, 2, counts[501])
+	require.EqualValues(t, 1, counts[502])
+}
+
+func TestAggregateChannelRankingRowsKeepsChannelsSeparate(t *testing.T) {
+	t.Parallel()
+
+	totals := aggregateChannelRankingRows([]auditprojection.ChannelSummary{
+		{ChannelID: 501, SuccessRate: 75, AvgLatencyMs: 1200, AvgTtftMs: 300, AvgTps: 40, RequestCount: 20},
+		{ChannelID: 502, SuccessRate: 100, AvgLatencyMs: 500, AvgTtftMs: 100, AvgTps: 80, RequestCount: 2},
+	})
+
+	require.EqualValues(t, 20, totals[501].requestCount)
+	require.Equal(t, 1500.0, totals[501].successTotal)
+	require.EqualValues(t, 2, totals[502].requestCount)
+	require.Equal(t, 200.0, totals[502].successTotal)
 }
 
 func TestAssignRanksUsesStableTieBreaker(t *testing.T) {

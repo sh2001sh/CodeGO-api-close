@@ -1,0 +1,53 @@
+package middleware
+
+import (
+	"errors"
+
+	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
+	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
+)
+
+// selectMarketplaceAutoChannel resolves a user-managed group pool only after
+// the request model is known. It returns managed=false for every normal group.
+func selectMarketplaceAutoChannel(c *gin.Context, tokenGroup, modelName string) (*gatewayschema.Channel, string, bool, error) {
+	if !marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
+		return nil, tokenGroup, false, nil
+	}
+	userID := httpctx.GetContextKeyInt(c, constant.ContextKeyUserId)
+	bindings, err := marketplaceapp.ResolveAutoRouteBindings(userID, modelName)
+	if err != nil {
+		return nil, tokenGroup, true, err
+	}
+	gatewayruntime.UpdateRouteDecisionCandidates(c, len(bindings))
+	for _, binding := range bindings {
+		retry := 0
+		channel, _, selectErr := gatewayroutingapp.CacheGetRandomSatisfiedChannel(&gatewayroutingapp.RetryParam{
+			Ctx: c, TokenGroup: binding.InternalGroup, ModelName: modelName, Retry: &retry,
+		})
+		if selectErr != nil {
+			return nil, tokenGroup, true, selectErr
+		}
+		if channel == nil {
+			gatewayruntime.ExcludeRouteDecisionCandidate(c, "marketplace_auto_unavailable")
+			continue
+		}
+		applyMarketplaceAutoBinding(c, binding)
+		return channel, binding.InternalGroup, true, nil
+	}
+	return nil, tokenGroup, true, errors.New("第三方 Auto 路由池当前没有可用渠道")
+}
+
+func applyMarketplaceAutoBinding(c *gin.Context, binding marketplaceapp.RoutingBinding) {
+	httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, binding.InternalGroup)
+	httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, binding.InternalGroup)
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceGroupID, binding.GroupID)
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceOwnerID, binding.OwnerUserID)
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, binding.SourceType)
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, binding.CreditPoolPolicy)
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, binding.Multiplier)
+}

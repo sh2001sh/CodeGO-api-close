@@ -451,6 +451,19 @@ func TestAddTokenSelectsMarketplaceGroupDirectly(t *testing.T) {
 	}
 }
 
+func TestNormalizeTokenGroupSelectionAcceptsMarketplaceAuto(t *testing.T) {
+	group, crossGroupRetry, err := normalizeTokenGroupSelection(7, "market:auto", true)
+	if err != nil {
+		t.Fatalf("expected marketplace auto group to be accepted: %v", err)
+	}
+	if group != "market:auto" {
+		t.Fatalf("expected market:auto, got %q", group)
+	}
+	if crossGroupRetry {
+		t.Fatal("expected marketplace auto to manage fallback internally")
+	}
+}
+
 func TestTokenAutoMigrateUsesVarchar128KeyColumn(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 

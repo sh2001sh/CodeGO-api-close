@@ -5,6 +5,7 @@ import {
   fetchMarketplaceModels,
   getAdminMarketplaceChannels,
   getMarketplaceGroups,
+  getMarketplaceAutoRoutePool,
   getMyMarketplaceChannels,
   getMyMarketplaceUsageLogs,
   getTokenOptions,
@@ -12,6 +13,7 @@ import {
   reviewMarketplaceChannel,
   setMarketplaceChannelPaused,
   updateMarketplaceChannel,
+  updateMarketplaceAutoRoutePool,
 } from './api'
 import type { GroupFilters } from './types'
 
@@ -31,6 +33,29 @@ export function useMarketplaceGroups(filters: GroupFilters) {
   return useQuery({
     queryKey: ['marketplace-groups', filters],
     queryFn: () => getMarketplaceGroups(filters),
+  })
+}
+
+export function useMarketplaceAutoRoutePool(enabled = true) {
+  return useQuery({
+    queryKey: ['marketplace-auto-route-pool'],
+    queryFn: getMarketplaceAutoRoutePool,
+    enabled,
+  })
+}
+
+export function useMarketplaceAutoRoutePoolUpdate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: updateMarketplaceAutoRoutePool,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['marketplace-auto-route-pool'],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['api-key-marketplace-auto-pool'],
+      })
+    },
   })
 }
 

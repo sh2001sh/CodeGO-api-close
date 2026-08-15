@@ -132,33 +132,45 @@ func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 					}
 					httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, usingGroup)
 				}
+				if autoChannel, autoGroup, managed, autoErr := selectMarketplaceAutoChannel(c, usingGroup, modelRequest.Model); managed {
+					if autoErr != nil {
+						logger.LogError(c, "第三方 Auto 路由失败: "+autoErr.Error())
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, platformtext.UpstreamQuotaGenericMessage, types.ErrorCodeModelNotFound)
+						return
+					}
+					channel = autoChannel
+					usingGroup = autoGroup
+					selectGroup = autoGroup
+				}
 
-				if preferredChannelID, found := gatewayruntime.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
-					preferred, err := gatewaystore.GetCachedChannel(preferredChannelID)
-					if err == nil && preferred != nil {
-						if preferred.Status != constant.ChannelStatusEnabled ||
-							gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model, gatewayruntime.RequestTypeFromContext(c)) ||
-							gatewayroutingapp.ShouldMigrateAutomaticPoolAffinity(c, usingGroup, modelRequest.Model, preferred.Id) {
-							gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
-							gatewayruntime.ExcludeRouteDecisionCandidate(c, "stale_affinity")
-						} else if usingGroup == "auto" {
-							userGroup := httpctx.GetContextKeyString(c, constant.ContextKeyUserGroup)
-							autoGroups := gatewayroutingapp.GetUserAutoGroup(userGroup)
-							for _, g := range autoGroups {
-								if gatewaystore.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) && !gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model, gatewayruntime.RequestTypeFromContext(c)) {
-									selectGroup = g
-									httpctx.SetContextKey(c, constant.ContextKeyAutoGroup, g)
-									channel = preferred
-									gatewayruntime.MarkChannelAffinityUsed(c, g, preferred.Id)
-									gatewayruntime.SelectRouteDecisionCandidate(c, g, preferred.Id, true)
-									break
+				if channel == nil {
+					if preferredChannelID, found := gatewayruntime.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
+						preferred, err := gatewaystore.GetCachedChannel(preferredChannelID)
+						if err == nil && preferred != nil {
+							if preferred.Status != constant.ChannelStatusEnabled ||
+								gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model, gatewayruntime.RequestTypeFromContext(c)) ||
+								gatewayroutingapp.ShouldMigrateAutomaticPoolAffinity(c, usingGroup, modelRequest.Model, preferred.Id) {
+								gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+								gatewayruntime.ExcludeRouteDecisionCandidate(c, "stale_affinity")
+							} else if usingGroup == "auto" {
+								userGroup := httpctx.GetContextKeyString(c, constant.ContextKeyUserGroup)
+								autoGroups := gatewayroutingapp.GetUserAutoGroup(userGroup)
+								for _, g := range autoGroups {
+									if gatewaystore.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) && !gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model, gatewayruntime.RequestTypeFromContext(c)) {
+										selectGroup = g
+										httpctx.SetContextKey(c, constant.ContextKeyAutoGroup, g)
+										channel = preferred
+										gatewayruntime.MarkChannelAffinityUsed(c, g, preferred.Id)
+										gatewayruntime.SelectRouteDecisionCandidate(c, g, preferred.Id, true)
+										break
+									}
 								}
+							} else if gatewaystore.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) {
+								channel = preferred
+								selectGroup = usingGroup
+								gatewayruntime.MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
+								gatewayruntime.SelectRouteDecisionCandidate(c, usingGroup, preferred.Id, true)
 							}
-						} else if gatewaystore.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) {
-							channel = preferred
-							selectGroup = usingGroup
-							gatewayruntime.MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
-							gatewayruntime.SelectRouteDecisionCandidate(c, usingGroup, preferred.Id, true)
 						}
 					}
 				}

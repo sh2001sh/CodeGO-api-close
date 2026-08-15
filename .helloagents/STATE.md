@@ -1,34 +1,32 @@
 # Main Goal
-Complete marketplace channel publishing, API key selection, status visibility, and shared editing.
+Refactor the model marketplace to distinguish CodeGo official groups, third-party groups, and a user-configurable third-party Auto group.
 
 # Current Status
-- Marketplace source is selected from: Codex Plus, Codex Pro, CC-Max, CC-Kiro, CC其它, 国产模型.
-- Fixed source selections are approved immediately and do not require administrator review.
-- Internal group names use source plus a six-character group suffix, for example `Codex-Plus-ae381d`; user ID, multiplier, and routing version are excluded.
-- Existing legacy groups are reconciled on startup and verified legacy channels are upgraded to the new naming and publication flow.
-- Detector v2 validates the upstream model list, confirms every declared model exists, and performs one minimal real inference request using the provider protocol.
-- Detection success automatically creates or synchronizes the internal gateway channel and publishes it as active; failure records the exact reason and keeps it unavailable.
-- API key creation can directly select active/passed public marketplace groups and the owner's own private groups.
-- Marketplace owners may use their own groups; settlement remains 5% platform commission and 95% owner income.
-- Marketplace declared models are merged into sidebar group status, independent of official pricing records.
-- Channel creation and editing use the same form. Owners and administrators can edit protocol, source, models, credentials, multiplier, visibility, capacity, and maintenance window.
-- Administrator governance no longer requires a review reason or manual approval.
-- SQLite marketplace ranking's reserved `group` column is quoted correctly.
-- Local service is running at `http://127.0.0.1:3000` with SQLite and no Redis.
+- Complete: backend Auto route pool model, APIs, token group support, candidate routing, billing context, and tests.
+- Complete: model marketplace has CodeGo official, third-party group, and third-party Auto views.
+- Complete: users can build a personal Auto pool from eligible third-party groups.
+- Complete: API key creation exposes third-party Auto and direct third-party groups.
+- Complete: SQLite startup creates the Auto route pool table without PostgreSQL or Redis.
+- Complete: desktop and 390px mobile browser validation passed after fixing Tabs height overflow.
+
+# Key Decisions
+- Auto token group is `market:auto`.
+- Each user maintains a personal pool of eligible marketplace groups.
+- Auto routing only considers pool members supporting the requested model.
+- Candidate score is multiplier divided by conservative availability squared; lower is preferred.
+- Third-party calls always consume general quota and retain the existing 5% marketplace commission flow.
+- Local SQLite remains a supported simple test path; Redis is optional.
 
 # Verification
-- `bun run typecheck` passed.
-- Targeted Marketplace/Keys/sidebar ESLint passed.
-- `bun run build` passed.
-- Marketplace, gateway group-status, and API-key controller tests passed.
-- Detector protocol, declared-model validation, source naming, direct API-key selection, group-status model merge, and SQLite ranking tests passed.
-- `git diff --check` passed except an existing `.env.example` LF/CRLF warning.
-- Local database confirms `Codex-Plus-ae381d`, `active`, `passed`, `public`, source `approved`, detector `2.0.0`.
-- Detector summary: `模型列表与实际推理检测通过，渠道已自动上架`.
-- `GET /marketplace` returned HTTP 200.
+- Focused Go tests passed for marketplace app/HTTP, platform store/middleware, and identity HTTP.
+- Frontend ESLint, typecheck, and production build passed.
+- Local `/api/status`, `/api/marketplace/groups`, and `/pricing` returned HTTP 200.
+- SQLite table `marketplace_auto_route_pool_members` exists after normal local startup.
+- Playwright desktop/mobile screenshots show no overlap; browser console has no errors.
+- `git diff --check` passed.
 
 # Next Actions
-- Refresh the signed-in browser and verify the third-party group appears in API key creation and sidebar group status.
+- None for this feature. Local service remains available at `http://127.0.0.1:3000`.
 
 # Blockers
-- No screenshot automation was available in this session.
+- None.

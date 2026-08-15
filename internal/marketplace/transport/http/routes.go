@@ -11,12 +11,19 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 	if err := marketplaceapp.ReconcileMarketplaceChannels(); err != nil {
 		platformobservability.SysError("reconcile marketplace channels: " + err.Error())
 	}
+	publicMarketplaceRoute := apiRouter.Group("/marketplace")
+	publicMarketplaceRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
+	{
+		publicMarketplaceRoute.GET("/groups", ListGroups)
+		publicMarketplaceRoute.GET("/groups/:slug", GetGroup)
+	}
+
 	marketplaceRoute := apiRouter.Group("/marketplace")
 	marketplaceRoute.Use(middleware.UserAuth())
 	{
-		marketplaceRoute.GET("/groups", ListGroups)
-		marketplaceRoute.GET("/groups/:slug", GetGroup)
 		marketplaceRoute.POST("/groups/:id/bind-token", middleware.CriticalRateLimit(), BindToken)
+		marketplaceRoute.GET("/auto-route-pool", GetAutoRoutePool)
+		marketplaceRoute.PUT("/auto-route-pool", middleware.CriticalRateLimit(), UpdateAutoRoutePool)
 		marketplaceRoute.POST("/channels", middleware.CriticalRateLimit(), CreateChannel)
 		marketplaceRoute.POST("/channels/fetch-models", middleware.CriticalRateLimit(), FetchModels)
 		marketplaceRoute.GET("/channels/mine", ListMyChannels)

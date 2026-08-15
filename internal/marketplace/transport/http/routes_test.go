@@ -18,7 +18,7 @@ func TestMarketplaceRoutesRequireAuthentication(t *testing.T) {
 	RegisterMarketplaceRoutes(engine.Group("/api"))
 
 	for _, target := range []string{
-		"/api/marketplace/groups",
+		"/api/marketplace/auto-route-pool",
 		"/api/marketplace/channels/mine",
 		"/api/marketplace/channels/mine/logs",
 		"/api/marketplace/admin/channels",
@@ -39,6 +39,8 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 
 	want := map[string]bool{
 		"GET /api/marketplace/groups":                     false,
+		"GET /api/marketplace/auto-route-pool":            false,
+		"PUT /api/marketplace/auto-route-pool":            false,
 		"POST /api/marketplace/groups/:id/bind-token":     false,
 		"POST /api/marketplace/channels":                  false,
 		"POST /api/marketplace/channels/fetch-models":     false,

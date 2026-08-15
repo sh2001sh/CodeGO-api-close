@@ -13,6 +13,7 @@ import (
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformerrx "github.com/sh2001sh/new-api/internal/platform/errx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
@@ -442,6 +443,10 @@ func TokenAuth() func(c *gin.Context) {
 				return
 			}
 			userGroup = commerceapp.MultiplierCardRouteGroup()
+		} else if marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
+			// The request model is not known during authentication. The distributor
+			// resolves the user's pool to one real marketplace group afterwards.
+			userGroup = marketplacedomain.TokenAutoGroupValue
 		} else if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) {
 			binding, bindErr := marketplaceapp.ResolveTokenGroupBinding(tokenGroup, token.UserId)
 			if bindErr != nil {

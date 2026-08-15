@@ -67,6 +67,9 @@ func InitPrimaryDB() error {
 		if err := migrateMarketplaceModelVerification(platformdb.DB); err != nil {
 			return err
 		}
+		if err := migrateMarketplaceAutoRoutePool(platformdb.DB); err != nil {
+			return err
+		}
 	}
 
 	if !platformconfig.IsMasterNode {
@@ -301,6 +304,7 @@ func migratePrimaryDB() error {
 		&marketplaceschema.VerificationRun{},
 		&marketplaceschema.RankingSnapshot{},
 		&marketplaceschema.Settlement{},
+		&marketplaceschema.AutoRoutePoolMember{},
 	)
 	if err != nil {
 		return err

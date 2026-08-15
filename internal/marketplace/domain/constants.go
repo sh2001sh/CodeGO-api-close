@@ -37,7 +37,8 @@ const (
 	ModelVerificationPassed = "passed"
 	ModelVerificationFailed = "failed"
 
-	TokenGroupPrefix = "market:"
+	TokenGroupPrefix    = "market:"
+	TokenAutoGroupValue = TokenGroupPrefix + "auto"
 )
 
 func AcceptsTraffic(status string) bool {

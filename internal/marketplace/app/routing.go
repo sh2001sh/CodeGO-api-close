@@ -18,9 +18,16 @@ func IsMarketplaceTokenGroup(value string) bool {
 	return strings.HasPrefix(strings.TrimSpace(value), marketplacedomain.TokenGroupPrefix)
 }
 
+func IsMarketplaceAutoTokenGroup(value string) bool {
+	return strings.EqualFold(strings.TrimSpace(value), marketplacedomain.TokenAutoGroupValue)
+}
+
 func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBinding, error) {
 	if !IsMarketplaceTokenGroup(tokenGroup) {
 		return nil, nil
+	}
+	if IsMarketplaceAutoTokenGroup(tokenGroup) {
+		return nil, errors.New("第三方 Auto 分组需要在请求模型确定后解析")
 	}
 	groupID := strings.TrimPrefix(strings.TrimSpace(tokenGroup), marketplacedomain.TokenGroupPrefix)
 	var group marketplaceschema.Group

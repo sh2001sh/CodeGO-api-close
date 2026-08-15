@@ -4,6 +4,7 @@ import type {
   ChannelUpdateValues,
   GroupFilters,
   MarketplaceChannel,
+  MarketplaceAutoRoutePool,
   MarketplaceGroupList,
   MarketplaceOwnerUsageLogResult,
   TokenOption,
@@ -36,6 +37,21 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
 export async function getMyMarketplaceChannels() {
   const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
     '/api/marketplace/channels/mine'
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceAutoRoutePool() {
+  const response = await api.get<ApiResponse<MarketplaceAutoRoutePool>>(
+    '/api/marketplace/auto-route-pool'
+  )
+  return requireData(response.data)
+}
+
+export async function updateMarketplaceAutoRoutePool(groupIds: string[]) {
+  const response = await api.put<ApiResponse<MarketplaceAutoRoutePool>>(
+    '/api/marketplace/auto-route-pool',
+    { group_ids: groupIds }
   )
   return requireData(response.data)
 }

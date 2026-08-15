@@ -3,7 +3,6 @@ package app
 import (
 	"math"
 	"sort"
-	"strings"
 	"time"
 
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
@@ -112,21 +111,34 @@ func channelMap(groups []marketplaceschema.Group) (map[string]marketplaceschema.
 }
 
 func buildRanking(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) (map[string]marketplaceschema.RankingSnapshot, error) {
-	internalNames := make([]string, 0, len(groups))
-	groupByName := make(map[string]marketplaceschema.Group, len(groups))
+	internalChannelIDs := make([]int, 0, len(groups))
+	seenChannelIDs := make(map[int]struct{}, len(groups))
 	for _, group := range groups {
-		internalNames = append(internalNames, group.InternalGroupName)
-		groupByName[group.InternalGroupName] = group
+		channel := channels[group.ChannelID]
+		if channel.InternalChannelID == nil || *channel.InternalChannelID <= 0 {
+			continue
+		}
+		channelID := *channel.InternalChannelID
+		if _, exists := seenChannelIDs[channelID]; exists {
+			continue
+		}
+		seenChannelIDs[channelID] = struct{}{}
+		internalChannelIDs = append(internalChannelIDs, channelID)
 	}
-	rows, err := auditprojection.QuerySummaryByGroupModels(hours, internalNames)
+	rows, err := auditprojection.QuerySummaryByChannels(hours, internalChannelIDs)
 	if err != nil {
 		return nil, err
 	}
-	totals := aggregateRankingRows(rows)
-	consumers := independentConsumerCounts(internalNames, hours)
+	totals := aggregateChannelRankingRows(rows)
+	consumers := independentConsumerCountsByChannel(internalChannelIDs, hours)
 	snapshots := make([]marketplaceschema.RankingSnapshot, 0, len(groups))
 	for _, group := range groups {
-		snapshots = append(snapshots, scoreGroup(group, totals[group.InternalGroupName], consumers[group.InternalGroupName], hours))
+		channel := channels[group.ChannelID]
+		channelID := 0
+		if channel.InternalChannelID != nil {
+			channelID = *channel.InternalChannelID
+		}
+		snapshots = append(snapshots, scoreGroup(group, totals[channelID], consumers[channelID], hours))
 	}
 	assignRanks(snapshots)
 	result := make(map[string]marketplaceschema.RankingSnapshot, len(snapshots))
@@ -140,32 +152,31 @@ func buildRanking(groups []marketplaceschema.Group, channels map[string]marketpl
 			}),
 		}).Create(&snapshots[index]).Error
 	}
-	_ = channels
 	return result, nil
 }
 
-func aggregateRankingRows(rows []auditprojection.GroupModelSummary) map[string]rankingTotals {
-	result := make(map[string]rankingTotals)
+func aggregateChannelRankingRows(rows []auditprojection.ChannelSummary) map[int]rankingTotals {
+	result := make(map[int]rankingTotals, len(rows))
 	for _, row := range rows {
-		total := result[row.Group]
-		total.requestCount += row.RequestCount
-		total.successTotal += row.SuccessRate * float64(row.RequestCount)
-		total.successWeight += row.RequestCount
-		if row.AvgLatencyMs > 0 {
-			total.latencyTotal += float64(row.AvgLatencyMs) * float64(row.RequestCount)
-			total.latencyWeight += row.RequestCount
+		result[row.ChannelID] = rankingTotals{
+			requestCount: row.RequestCount, successWeight: row.RequestCount,
+			successTotal:  row.SuccessRate * float64(row.RequestCount),
+			latencyWeight: metricWeight(float64(row.AvgLatencyMs), row.RequestCount),
+			latencyTotal:  float64(row.AvgLatencyMs) * float64(row.RequestCount),
+			ttftWeight:    metricWeight(float64(row.AvgTtftMs), row.RequestCount),
+			ttftTotal:     float64(row.AvgTtftMs) * float64(row.RequestCount),
+			tpsWeight:     metricWeight(row.AvgTps, row.RequestCount),
+			tpsTotal:      row.AvgTps * float64(row.RequestCount),
 		}
-		if row.AvgTtftMs > 0 {
-			total.ttftTotal += float64(row.AvgTtftMs) * float64(row.RequestCount)
-			total.ttftWeight += row.RequestCount
-		}
-		if row.AvgTps > 0 {
-			total.tpsTotal += row.AvgTps * float64(row.RequestCount)
-			total.tpsWeight += row.RequestCount
-		}
-		result[row.Group] = total
 	}
 	return result
+}
+
+func metricWeight(value float64, requestCount int64) int64 {
+	if value <= 0 {
+		return 0
+	}
+	return requestCount
 }
 
 func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers int64, hours int) marketplaceschema.RankingSnapshot {
@@ -188,26 +199,23 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 	}
 }
 
-func independentConsumerCounts(groups []string, hours int) map[string]int64 {
-	result := make(map[string]int64)
-	if len(groups) == 0 || platformdb.LogDB == nil {
+func independentConsumerCountsByChannel(channelIDs []int, hours int) map[int]int64 {
+	result := make(map[int]int64)
+	if len(channelIDs) == 0 || platformdb.LogDB == nil {
 		return result
 	}
 	type row struct {
-		Group string `gorm:"column:group_name"`
-		Count int64
+		ChannelID int `gorm:"column:channel_id"`
+		Count     int64
 	}
 	var rows []row
 	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
-	var quotedGroup strings.Builder
-	platformdb.LogDB.Dialector.QuoteTo(&quotedGroup, "group")
-	groupColumn := quotedGroup.String()
 	_ = platformdb.LogDB.Model(&auditschema.Log{}).
-		Select(groupColumn+" AS group_name, COUNT(DISTINCT user_id) AS count").
-		Where("type = ? AND created_at >= ? AND "+groupColumn+" IN ?", auditschema.LogTypeConsume, cutoff, groups).
-		Group("group").Scan(&rows).Error
+		Select("channel_id, COUNT(DISTINCT user_id) AS count").
+		Where("type = ? AND created_at >= ? AND channel_id IN ?", auditschema.LogTypeConsume, cutoff, channelIDs).
+		Group("channel_id").Scan(&rows).Error
 	for _, item := range rows {
-		result[item.Group] = item.Count
+		result[item.ChannelID] = item.Count
 	}
 	return result
 }

@@ -144,6 +144,17 @@ func (settlement *Settlement) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
+// AutoRoutePoolMember stores one user-selected marketplace group in the
+// user's third-party automatic routing pool.
+type AutoRoutePoolMember struct {
+	ID          uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	OwnerUserID int       `json:"owner_user_id" gorm:"column:owner_user_id;not null;uniqueIndex:uq_marketplace_auto_pool_member,priority:1;index"`
+	GroupID     string    `json:"group_id" gorm:"column:group_id;size:64;not null;uniqueIndex:uq_marketplace_auto_pool_member,priority:2;index"`
+	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (AutoRoutePoolMember) TableName() string { return tableName("auto_route_pool_members") }
+
 func tableName(name string) string {
 	if platformdb.UsingPostgreSQL {
 		return "marketplace." + name

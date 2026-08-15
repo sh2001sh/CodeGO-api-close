@@ -18,22 +18,27 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
+import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import { SiteSeo } from '@/components/seo'
 import {
+  useMarketplaceAutoRoutePool,
+  useMarketplaceGroups,
+} from '@/features/marketplace/hooks'
+import {
   LoadingSkeleton,
-  EmptyState,
-  SearchBar,
-  PricingTable,
-  PricingSidebar,
-  PricingToolbar,
-  ModelCardGrid,
+  MarketplaceAutoPool,
   ModelDetailsDrawer,
-  PricingMarketHighlight,
+  OfficialModelDirectory,
+  PricingSourceNavigation,
+  SearchBar,
+  ThirdPartyGroupDirectory,
+  type PricingSourceView,
 } from './components'
-import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
+import { EXCLUDED_GROUPS } from './constants'
 import { useFilters } from './hooks/use-filters'
 import { usePricingData } from './hooks/use-pricing-data'
 import { countFreeModels } from './lib/model-helpers'
@@ -42,135 +47,83 @@ const pricingSeo = getPublicPageSeoEntry('/pricing')
 
 export function Pricing() {
   const { t } = useTranslation()
+  const authenticated = Boolean(useAuthStore((state) => state.auth.user?.id))
+  const [sourceView, setSourceView] = useState<PricingSourceView>('official')
   const [selectedModelName, setSelectedModelName] = useState<string | null>(
     null
   )
+  const pricing = usePricingData()
+  const filters = useFilters(pricing.models || [])
 
-  const {
-    models,
-    vendors,
-    groupRatio,
-    usableGroup,
-    endpointMap,
-    autoGroups,
-    isLoading,
-    priceRate,
-    usdExchangeRate,
-  } = usePricingData()
-
-  const {
-    searchInput,
-    sortBy,
-    vendorFilter,
-    groupFilter,
-    quotaTypeFilter,
-    endpointTypeFilter,
-    tagFilter,
-    tokenUnit,
-    viewMode,
-    showRechargePrice,
-    setSearchInput,
-    setSortBy,
-    setVendorFilter,
-    setGroupFilter,
-    setQuotaTypeFilter,
-    setEndpointTypeFilter,
-    setTagFilter,
-    setTokenUnit,
-    setViewMode,
-    setShowRechargePrice,
-    filteredModels,
-    hasActiveFilters,
-    activeFilterCount,
-    availableTags,
-    clearFilters,
-    clearSearch,
-  } = useFilters(models || [])
-
-  const handleModelClick = useCallback((modelName: string) => {
-    setSelectedModelName(modelName)
-  }, [])
+  const marketplaceFilters = useMemo(
+    () => ({
+      search: sourceView === 'third_party' ? filters.searchInput : '',
+      model: '',
+      status: '',
+      sort: 'score',
+      direction: 'desc',
+      window_hours: 24,
+      page: 1,
+      page_size: 50,
+    }),
+    [filters.searchInput, sourceView]
+  )
+  const marketplaceQuery = useMarketplaceGroups(marketplaceFilters)
+  const autoPoolQuery = useMarketplaceAutoRoutePool(authenticated)
+  const thirdPartyGroups = useMemo(
+    () =>
+      (marketplaceQuery.data?.items ?? []).filter(
+        (group) =>
+          group.source_type === 'marketplace_user' &&
+          ['active', 'degraded'].includes(group.lifecycle_status) &&
+          group.verification_status === 'passed'
+      ),
+    [marketplaceQuery.data?.items]
+  )
 
   const selectedModel = useMemo(
     () =>
       selectedModelName
-        ? (models || []).find(
+        ? (pricing.models || []).find(
             (model) => model.model_name === selectedModelName
           ) || null
         : null,
-    [models, selectedModelName]
+    [pricing.models, selectedModelName]
   )
-
   const availableGroups = useMemo(
     () =>
-      Object.keys(usableGroup || {}).filter(
-        (g) => !EXCLUDED_GROUPS.includes(g)
+      Object.keys(pricing.usableGroup || {}).filter(
+        (group) => !EXCLUDED_GROUPS.includes(group)
       ),
-    [usableGroup]
+    [pricing.usableGroup]
   )
-
   const totalFreeModels = useMemo(
-    () => countFreeModels(models || [], groupRatio || {}),
-    [groupRatio, models]
+    () => countFreeModels(pricing.models || [], pricing.groupRatio || {}),
+    [pricing.groupRatio, pricing.models]
   )
-
   const visibleFreeModels = useMemo(
-    () => countFreeModels(filteredModels, groupRatio || {}),
-    [filteredModels, groupRatio]
+    () => countFreeModels(filters.filteredModels, pricing.groupRatio || {}),
+    [filters.filteredModels, pricing.groupRatio]
   )
+  const activeGroupLabel =
+    !filters.groupFilter || filters.groupFilter === 'all'
+      ? undefined
+      : filters.groupFilter
 
-  const activeGroupLabel = useMemo(() => {
-    if (!groupFilter || groupFilter === 'all') return undefined
-    return groupFilter
-  }, [groupFilter])
+  const handleModelClick = useCallback((modelName: string) => {
+    setSelectedModelName(modelName)
+  }, [])
+  const sourceDescription = {
+    official: t('浏览 CodeGo 官方维护的模型、价格和可用分组。'),
+    third_party: t('比较第三方渠道的模型覆盖、倍率和真实可用率。'),
+    auto: t('建立个人路由池，让请求在选定的第三方分组间自动选择。'),
+  }[sourceView]
 
-  const handleClearAll = useCallback(() => {
-    clearFilters()
-    clearSearch()
-  }, [clearFilters, clearSearch])
-
-  const renderPricingContent = () => {
-    if (filteredModels.length === 0) {
-      return (
-        <EmptyState
-          searchQuery={searchInput}
-          hasActiveFilters={hasActiveFilters}
-          onClearFilters={handleClearAll}
-        />
-      )
-    }
-
-    if (viewMode === VIEW_MODES.CARD) {
-      return (
-        <ModelCardGrid
-          models={filteredModels}
-          onModelClick={handleModelClick}
-          priceRate={priceRate}
-          usdExchangeRate={usdExchangeRate}
-          tokenUnit={tokenUnit}
-          showRechargePrice={showRechargePrice}
-          groupRatios={groupRatio || {}}
-        />
-      )
-    }
-
-    return (
-      <PricingTable
-        models={filteredModels}
-        priceRate={priceRate}
-        usdExchangeRate={usdExchangeRate}
-        tokenUnit={tokenUnit}
-        showRechargePrice={showRechargePrice}
-        onModelClick={handleModelClick}
-      />
-    )
-  }
-
-  if (isLoading) {
+  if (pricing.isLoading) {
     return (
       <PublicLayout showMainContainer={false}>
         <div className='mx-auto w-full max-w-[1800px] px-3 pt-16 pb-8 sm:px-6 sm:pt-20 sm:pb-10 xl:px-8'>
-          <LoadingSkeleton viewMode={viewMode} />
+          <LoadingSkeleton viewMode={filters.viewMode} />
         </div>
       </PublicLayout>
     )
@@ -186,153 +139,114 @@ export function Pricing() {
         ogType='website'
       />
       <PageTransition className='public-topbar-spacer mx-auto w-full max-w-[1800px] px-3 pb-8 sm:px-6 sm:pb-10 xl:px-8'>
-        <div className='mx-auto mb-6 max-w-7xl sm:mb-10'>
-          <header className='border-border bg-card grid gap-5 rounded-2xl border p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end'>
+        <div className='mx-auto max-w-7xl space-y-4 sm:space-y-5'>
+          <header className='border-border bg-card grid gap-5 rounded-lg border p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end'>
             <div>
-              <p className='text-muted-foreground mb-4 text-[13px] font-medium tracking-wide'>
-                {t('Models Directory')}
+              <p className='text-muted-foreground mb-3 text-sm font-medium'>
+                {t('模型目录与路由')}
               </p>
-              <h1 className='text-foreground max-w-3xl text-[2.4rem] leading-[1.12] font-semibold tracking-[0] sm:text-[3.1rem]'>
+              <h1 className='text-foreground max-w-3xl text-4xl leading-tight font-semibold tracking-[0] sm:text-5xl'>
                 {t('Model Square')}
               </h1>
-              <p className='text-muted-foreground mt-5 max-w-2xl text-[15px] leading-relaxed tracking-[0] sm:text-[17px]'>
-                {t('This site currently has {{count}} models enabled', {
-                  count: models?.length || 0,
-                })}
-                {totalFreeModels > 0 && (
-                  <>
-                    {t(', including')}{' '}
-                    <span className='text-foreground font-semibold'>
-                      {totalFreeModels}
-                    </span>{' '}
-                    {t('free models')}
-                  </>
-                )}
+              <p className='text-muted-foreground mt-4 max-w-2xl text-base leading-7'>
+                {sourceDescription}
               </p>
-              <SearchBar
-                value={searchInput}
-                onChange={setSearchInput}
-                onClear={clearSearch}
-                placeholder={t(
-                  'Search model name, provider, endpoint, or tag...'
-                )}
-                className='mt-7 max-w-2xl'
+              {sourceView !== 'auto' && (
+                <SearchBar
+                  value={filters.searchInput}
+                  onChange={filters.setSearchInput}
+                  onClear={filters.clearSearch}
+                  placeholder={
+                    sourceView === 'official'
+                      ? t('搜索模型名称、供应商、端点或标签')
+                      : t('搜索第三方分组、来源或模型')
+                  }
+                  className='mt-6 max-w-2xl'
+                />
+              )}
+            </div>
+            <div className='border-border/70 bg-background grid grid-cols-3 gap-2 rounded-lg border p-3'>
+              <HeaderMetric
+                value={pricing.models.length}
+                label={t('官方模型')}
+              />
+              <HeaderMetric
+                value={thirdPartyGroups.length}
+                label={t('第三方')}
+              />
+              <HeaderMetric
+                value={autoPoolQuery.data?.selected_count ?? 0}
+                label={t('路由池')}
               />
             </div>
-            {models?.length ? (
-              <div className='border-border/60 bg-background/55 grid grid-cols-3 gap-2 rounded-2xl border p-3'>
-                {[
-                  [models.length, t('Models')],
-                  [totalFreeModels, t('Free')],
-                  [visibleFreeModels, t('Visible')],
-                ].map(([value, label]) => (
-                  <div key={String(label)} className='text-center'>
-                    <div className='text-foreground text-xl font-semibold tabular-nums'>
-                      {value}
-                    </div>
-                    <div className='text-muted-foreground mt-1 text-[11px]'>
-                      {label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
           </header>
-        </div>
 
-        <div className='mx-auto max-w-7xl'>
-          {models?.length ? (
-            <PricingMarketHighlight
-              totalCount={models.length}
-              freeCount={totalFreeModels}
-              visibleFreeCount={visibleFreeModels}
-              activeGroupLabel={activeGroupLabel}
-              className='mb-4 sm:mb-5'
+          <Tabs
+            value={sourceView}
+            onValueChange={(value) => setSourceView(value as PricingSourceView)}
+          >
+            <PricingSourceNavigation
+              officialCount={pricing.models.length}
+              thirdPartyCount={thirdPartyGroups.length}
+              autoCount={autoPoolQuery.data?.selected_count ?? 0}
             />
-          ) : null}
-
-          <div className='grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]'>
-            <PricingSidebar
-              quotaTypeFilter={quotaTypeFilter}
-              endpointTypeFilter={endpointTypeFilter}
-              vendorFilter={vendorFilter}
-              groupFilter={groupFilter}
-              tagFilter={tagFilter}
-              onQuotaTypeChange={setQuotaTypeFilter}
-              onEndpointTypeChange={setEndpointTypeFilter}
-              onVendorChange={setVendorFilter}
-              onGroupChange={setGroupFilter}
-              onTagChange={setTagFilter}
-              vendors={vendors || []}
-              groups={availableGroups}
-              groupRatios={groupRatio}
-              tags={availableTags}
-              models={models || []}
-              hasActiveFilters={hasActiveFilters}
-              onClearFilters={clearFilters}
-              className='hover-scrollbar sticky top-4 hidden max-h-[calc(100dvh-2rem)] self-start overflow-y-auto xl:block'
-            />
-
-            <main className='min-w-0 space-y-4'>
-              <PricingToolbar
-                filteredCount={filteredModels.length}
-                totalCount={models?.length}
-                sortBy={sortBy}
-                onSortChange={setSortBy}
-                tokenUnit={tokenUnit}
-                onTokenUnitChange={setTokenUnit}
-                showRechargePrice={showRechargePrice}
-                onRechargePriceChange={setShowRechargePrice}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-                quotaTypeFilter={quotaTypeFilter}
-                endpointTypeFilter={endpointTypeFilter}
-                vendorFilter={vendorFilter}
-                groupFilter={groupFilter}
-                tagFilter={tagFilter}
-                onQuotaTypeChange={setQuotaTypeFilter}
-                onEndpointTypeChange={setEndpointTypeFilter}
-                onVendorChange={setVendorFilter}
-                onGroupChange={setGroupFilter}
-                onTagChange={setTagFilter}
-                vendors={vendors || []}
-                groups={availableGroups}
-                groupRatios={groupRatio}
-                tags={availableTags}
-                models={models || []}
-                hasActiveFilters={hasActiveFilters}
-                activeFilterCount={activeFilterCount}
-                onClearFilters={clearFilters}
+            <TabsContent value='official'>
+              <OfficialModelDirectory
+                models={pricing.models}
+                vendors={pricing.vendors}
+                availableGroups={availableGroups}
+                groupRatio={pricing.groupRatio}
+                totalFreeModels={totalFreeModels}
+                visibleFreeModels={visibleFreeModels}
+                activeGroupLabel={activeGroupLabel}
+                priceRate={pricing.priceRate}
+                usdExchangeRate={pricing.usdExchangeRate}
+                filters={filters}
+                onModelClick={handleModelClick}
               />
-
-              {renderPricingContent()}
-            </main>
-          </div>
+            </TabsContent>
+            <TabsContent value='third_party'>
+              <ThirdPartyGroupDirectory
+                groups={thirdPartyGroups}
+                loading={marketplaceQuery.isLoading}
+                error={marketplaceQuery.isError}
+                onRetry={() => marketplaceQuery.refetch()}
+                onConfigureAuto={() => setSourceView('auto')}
+              />
+            </TabsContent>
+            <TabsContent value='auto'>
+              <MarketplaceAutoPool authenticated={authenticated} />
+            </TabsContent>
+          </Tabs>
         </div>
 
         {selectedModel && (
           <ModelDetailsDrawer
-            open={Boolean(selectedModel)}
-            onOpenChange={(open) => {
-              if (!open) setSelectedModelName(null)
-            }}
+            open
+            onOpenChange={(open) => !open && setSelectedModelName(null)}
             model={selectedModel}
-            groupRatio={groupRatio || {}}
-            usableGroup={usableGroup || {}}
-            endpointMap={
-              (endpointMap as Record<
-                string,
-                { path?: string; method?: string }
-              >) || {}
-            }
-            autoGroups={autoGroups || []}
-            priceRate={priceRate ?? 1}
-            usdExchangeRate={usdExchangeRate ?? 1}
-            tokenUnit={tokenUnit}
-            showRechargePrice={showRechargePrice}
+            groupRatio={pricing.groupRatio}
+            usableGroup={pricing.usableGroup}
+            endpointMap={pricing.endpointMap}
+            autoGroups={pricing.autoGroups}
+            priceRate={pricing.priceRate}
+            usdExchangeRate={pricing.usdExchangeRate}
+            tokenUnit={filters.tokenUnit}
+            showRechargePrice={filters.showRechargePrice}
           />
         )}
       </PageTransition>
     </PublicLayout>
+  )
+}
+
+function HeaderMetric(props: { value: number; label: string }) {
+  return (
+    <div className='text-center'>
+      <div className='text-foreground text-xl font-semibold tabular-nums'>
+        {props.value}
+      </div>
+      <div className='text-muted-foreground mt-1 text-xs'>{props.label}</div>
+    </div>
   )
 }

@@ -27,6 +27,21 @@ func GetGroup(c *gin.Context) {
 	respond(c, result, err)
 }
 
+func GetAutoRoutePool(c *gin.Context) {
+	result, err := marketplaceapp.ListAutoRoutePool(c.GetInt("id"))
+	respond(c, result, err)
+}
+
+func UpdateAutoRoutePool(c *gin.Context) {
+	var req marketplaceapp.AutoRoutePoolUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.ReplaceAutoRoutePool(c.GetInt("id"), req)
+	respond(c, result, err)
+}
+
 func CreateChannel(c *gin.Context) {
 	var req marketplaceapp.CreateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

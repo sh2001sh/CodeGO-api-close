@@ -74,6 +74,7 @@ func V2MigrationIDs() []string {
 		"20260815_remove_bounty_market",
 		"20260815_marketplace_channel_source_labels",
 		"20260815_marketplace_model_verification",
+		"20260815_marketplace_auto_route_pool",
 	}
 }
 
@@ -221,6 +222,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260815_remove_bounty_market", Run: migrateRemoveBountyMarket},
 		{ID: "20260815_marketplace_channel_source_labels", Run: migrateMarketplaceChannelSourceLabels},
 		{ID: "20260815_marketplace_model_verification", Run: migrateMarketplaceModelVerification},
+		{ID: "20260815_marketplace_auto_route_pool", Run: migrateMarketplaceAutoRoutePool},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -311,6 +313,10 @@ func migrateMarketplaceModelVerification(tx *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+func migrateMarketplaceAutoRoutePool(tx *gorm.DB) error {
+	return tx.AutoMigrate(&marketplaceschema.AutoRoutePoolMember{})
 }
 
 // migratePendingOutboxLookupIndex keeps the ledger worker's pending-event

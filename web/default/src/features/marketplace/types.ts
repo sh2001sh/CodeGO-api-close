@@ -178,3 +178,24 @@ export interface MarketplaceOwnerUsageLogResult {
   page: number
   page_size: number
 }
+
+export interface MarketplaceAutoRoutePoolItem {
+  group_id: string
+  public_slug: string
+  system_display_name: string
+  source_label: string
+  lifecycle_status: MarketplaceStatus
+  multiplier: number
+  availability: number
+  route_score: number
+  observing: boolean
+  request_count: number
+  models: string[]
+  selected: boolean
+}
+
+export interface MarketplaceAutoRoutePool {
+  token_group: 'market:auto'
+  selected_count: number
+  items: MarketplaceAutoRoutePoolItem[]
+}

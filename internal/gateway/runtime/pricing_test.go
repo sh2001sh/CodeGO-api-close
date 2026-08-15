@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
@@ -90,4 +92,24 @@ func TestNonZeroGroupRatioStillPreconsumesTieredBilling(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, priceData.FreeModel)
 	require.Positive(t, priceData.QuotaToPreConsume)
+}
+
+func TestMarketplaceMultiplierOverridesMissingGlobalGroupRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalRatios := gatewaystore.GroupRatio2JSONString()
+	require.NoError(t, gatewaystore.UpdateGroupRatioByJSONString(`{"default":1}`))
+	t.Cleanup(func() {
+		require.NoError(t, gatewaystore.UpdateGroupRatioByJSONString(originalRatios))
+	})
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, "market-group-1")
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, 0.37)
+
+	ratio := HandleGroupRatio(ctx, &RelayInfo{UsingGroup: "market_dynamic_group", UserGroup: "default"})
+
+	require.InDelta(t, 0.37, ratio.GroupRatio, 0.000001)
+	require.False(t, ratio.HasSpecialRatio)
+	require.Equal(t, -1.0, ratio.GroupSpecialRatio)
 }

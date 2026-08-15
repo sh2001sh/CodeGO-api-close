@@ -57,6 +57,13 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *RelayInfo) types.GroupRatioIn
 		logger.LogDebug(ctx, fmt.Sprintf("final group: %s", autoGroup))
 		relayInfo.UsingGroup = autoGroup.(string)
 	}
+	if httpctx.GetContextKeyString(ctx, constant.ContextKeyMarketplaceGroupID) != "" {
+		// Marketplace groups are dynamic and intentionally do not populate the
+		// global GroupRatio map. Their persisted multiplier is bound to this
+		// request during token or auto-group resolution.
+		groupRatioInfo.GroupRatio = httpctx.GetContextKeyFloat64(ctx, constant.ContextKeyMarketplaceMultiplier)
+		return groupRatioInfo
+	}
 
 	userGroupRatio, ok := gatewaystore.GetGroupGroupRatio(relayInfo.UserGroup, relayInfo.UsingGroup)
 	if ok {

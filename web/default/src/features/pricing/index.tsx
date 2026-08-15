@@ -18,46 +18,42 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '@/stores/auth-store'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import { SiteSeo } from '@/components/seo'
-import {
-  useMarketplaceAutoRoutePool,
-  useMarketplaceGroups,
-} from '@/features/marketplace/hooks'
+import { useMarketplaceGroups } from '@/features/marketplace/hooks'
 import {
   LoadingSkeleton,
-  MarketplaceAutoPool,
   ModelDetailsDrawer,
   OfficialModelDirectory,
   PricingSourceNavigation,
   SearchBar,
-  ThirdPartyGroupDirectory,
   type PricingSourceView,
 } from './components'
 import { EXCLUDED_GROUPS } from './constants'
 import { useFilters } from './hooks/use-filters'
 import { usePricingData } from './hooks/use-pricing-data'
 import { countFreeModels } from './lib/model-helpers'
+import {
+  buildThirdPartyPricingModels,
+  buildThirdPartyVendors,
+} from './lib/third-party-models'
 
 const pricingSeo = getPublicPageSeoEntry('/pricing')
 
 export function Pricing() {
   const { t } = useTranslation()
-  const authenticated = Boolean(useAuthStore((state) => state.auth.user?.id))
   const [sourceView, setSourceView] = useState<PricingSourceView>('official')
   const [selectedModelName, setSelectedModelName] = useState<string | null>(
     null
   )
   const pricing = usePricingData()
-  const filters = useFilters(pricing.models || [])
 
   const marketplaceFilters = useMemo(
     () => ({
-      search: sourceView === 'third_party' ? filters.searchInput : '',
+      search: '',
       model: '',
       status: '',
       sort: 'score',
@@ -66,10 +62,9 @@ export function Pricing() {
       page: 1,
       page_size: 50,
     }),
-    [filters.searchInput, sourceView]
+    []
   )
   const marketplaceQuery = useMarketplaceGroups(marketplaceFilters)
-  const autoPoolQuery = useMarketplaceAutoRoutePool(authenticated)
   const thirdPartyGroups = useMemo(
     () =>
       (marketplaceQuery.data?.items ?? []).filter(
@@ -80,15 +75,27 @@ export function Pricing() {
       ),
     [marketplaceQuery.data?.items]
   )
+  const thirdPartyModels = useMemo(
+    () => buildThirdPartyPricingModels(thirdPartyGroups, pricing.models || []),
+    [pricing.models, thirdPartyGroups]
+  )
+  const thirdPartyVendors = useMemo(
+    () => buildThirdPartyVendors(thirdPartyModels, pricing.vendors || []),
+    [pricing.vendors, thirdPartyModels]
+  )
+  const officialFilters = useFilters(pricing.models || [])
+  const thirdPartyFilters = useFilters(thirdPartyModels)
+  const filters =
+    sourceView === 'official' ? officialFilters : thirdPartyFilters
 
   const selectedModel = useMemo(
     () =>
       selectedModelName
-        ? (pricing.models || []).find(
+        ? (sourceView === 'official' ? pricing.models : thirdPartyModels).find(
             (model) => model.model_name === selectedModelName
           ) || null
         : null,
-    [pricing.models, selectedModelName]
+    [pricing.models, selectedModelName, sourceView, thirdPartyModels]
   )
   const availableGroups = useMemo(
     () =>
@@ -105,6 +112,14 @@ export function Pricing() {
     () => countFreeModels(filters.filteredModels, pricing.groupRatio || {}),
     [filters.filteredModels, pricing.groupRatio]
   )
+  const thirdPartyFreeModels = useMemo(
+    () => countFreeModels(thirdPartyModels, {}),
+    [thirdPartyModels]
+  )
+  const visibleThirdPartyFreeModels = useMemo(
+    () => countFreeModels(thirdPartyFilters.filteredModels, {}),
+    [thirdPartyFilters.filteredModels]
+  )
   const activeGroupLabel =
     !filters.groupFilter || filters.groupFilter === 'all'
       ? undefined
@@ -116,7 +131,6 @@ export function Pricing() {
   const sourceDescription = {
     official: t('浏览 CodeGo 官方维护的模型、价格和可用分组。'),
     third_party: t('比较第三方渠道的模型覆盖、倍率和真实可用率。'),
-    auto: t('建立个人路由池，让请求在选定的第三方分组间自动选择。'),
   }[sourceView]
 
   if (pricing.isLoading) {
@@ -151,32 +165,26 @@ export function Pricing() {
               <p className='text-muted-foreground mt-4 max-w-2xl text-base leading-7'>
                 {sourceDescription}
               </p>
-              {sourceView !== 'auto' && (
-                <SearchBar
-                  value={filters.searchInput}
-                  onChange={filters.setSearchInput}
-                  onClear={filters.clearSearch}
-                  placeholder={
-                    sourceView === 'official'
-                      ? t('搜索模型名称、供应商、端点或标签')
-                      : t('搜索第三方分组、来源或模型')
-                  }
-                  className='mt-6 max-w-2xl'
-                />
-              )}
+              <SearchBar
+                value={filters.searchInput}
+                onChange={filters.setSearchInput}
+                onClear={filters.clearSearch}
+                placeholder={
+                  sourceView === 'official'
+                    ? t('搜索模型名称、供应商、端点或标签')
+                    : t('搜索第三方模型、来源或分组')
+                }
+                className='mt-6 max-w-2xl'
+              />
             </div>
-            <div className='border-border/70 bg-background grid grid-cols-3 gap-2 rounded-lg border p-3'>
+            <div className='border-border/70 bg-background grid grid-cols-2 gap-2 rounded-lg border p-3'>
               <HeaderMetric
                 value={pricing.models.length}
                 label={t('官方模型')}
               />
               <HeaderMetric
-                value={thirdPartyGroups.length}
-                label={t('第三方')}
-              />
-              <HeaderMetric
-                value={autoPoolQuery.data?.selected_count ?? 0}
-                label={t('路由池')}
+                value={thirdPartyModels.length}
+                label={t('第三方模型')}
               />
             </div>
           </header>
@@ -187,8 +195,7 @@ export function Pricing() {
           >
             <PricingSourceNavigation
               officialCount={pricing.models.length}
-              thirdPartyCount={thirdPartyGroups.length}
-              autoCount={autoPoolQuery.data?.selected_count ?? 0}
+              thirdPartyCount={thirdPartyModels.length}
             />
             <TabsContent value='official'>
               <OfficialModelDirectory
@@ -206,16 +213,25 @@ export function Pricing() {
               />
             </TabsContent>
             <TabsContent value='third_party'>
-              <ThirdPartyGroupDirectory
-                groups={thirdPartyGroups}
-                loading={marketplaceQuery.isLoading}
-                error={marketplaceQuery.isError}
-                onRetry={() => marketplaceQuery.refetch()}
-                onConfigureAuto={() => setSourceView('auto')}
+              <OfficialModelDirectory
+                models={thirdPartyModels}
+                vendors={thirdPartyVendors}
+                availableGroups={Array.from(
+                  new Set(
+                    thirdPartyModels.flatMap((model) => model.enable_groups)
+                  )
+                )}
+                groupRatio={Object.assign(
+                  {},
+                  ...thirdPartyModels.map((model) => model.group_ratio ?? {})
+                )}
+                totalFreeModels={thirdPartyFreeModels}
+                visibleFreeModels={visibleThirdPartyFreeModels}
+                priceRate={pricing.priceRate}
+                usdExchangeRate={pricing.usdExchangeRate}
+                filters={thirdPartyFilters}
+                onModelClick={handleModelClick}
               />
-            </TabsContent>
-            <TabsContent value='auto'>
-              <MarketplaceAutoPool authenticated={authenticated} />
             </TabsContent>
           </Tabs>
         </div>

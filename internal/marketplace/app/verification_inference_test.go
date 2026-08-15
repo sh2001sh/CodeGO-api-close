@@ -74,3 +74,31 @@ func TestProbeDeclaredModelsTestsEveryModel(t *testing.T) {
 	require.NotEmpty(t, results[1].Error)
 	require.Equal(t, 2, progressSnapshots)
 }
+
+func TestSelectVerifiedModelsRejectsUnlistedAndFailedModels(t *testing.T) {
+	results := []ModelVerificationResult{
+		{Model: "good-model", Status: marketplacedomain.ModelVerificationPassed, Listed: true},
+		{Model: "failed-model", Status: marketplacedomain.ModelVerificationFailed, Listed: true},
+		{Model: "unlisted-model", Status: marketplacedomain.ModelVerificationPassed, Listed: false},
+	}
+
+	passed, rejected := selectVerifiedModels(results)
+	require.Equal(t, []string{"good-model"}, passed)
+	require.Equal(t, []string{"failed-model", "unlisted-model"}, rejected)
+	require.Equal(
+		t,
+		"1/3 个模型检测通过并上架；已自动剔除未通过模型: failed-model, unlisted-model",
+		partialVerificationSummary(passed, results, rejected),
+	)
+}
+
+func TestSelectVerifiedModelsRejectsAllFailedModels(t *testing.T) {
+	results := []ModelVerificationResult{
+		{Model: "failed-model", Status: marketplacedomain.ModelVerificationFailed, Listed: true},
+		{Model: "unlisted-model", Status: marketplacedomain.ModelVerificationPassed, Listed: false},
+	}
+
+	passed, rejected := selectVerifiedModels(results)
+	require.Empty(t, passed)
+	require.Equal(t, []string{"failed-model", "unlisted-model"}, rejected)
+}

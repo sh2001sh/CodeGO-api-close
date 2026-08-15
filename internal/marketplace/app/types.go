@@ -173,6 +173,7 @@ type AutoRoutePoolItem struct {
 	RequestCount      int64    `json:"request_count"`
 	Models            []string `json:"models"`
 	Selected          bool     `json:"selected"`
+	Priority          int      `json:"priority"`
 }
 
 type AutoRoutePoolView struct {

@@ -1,13 +1,12 @@
-import { Building2, Network, Route } from 'lucide-react'
+import { Building2, Network } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-export type PricingSourceView = 'official' | 'third_party' | 'auto'
+export type PricingSourceView = 'official' | 'third_party'
 
 export function PricingSourceNavigation(props: {
   officialCount: number
   thirdPartyCount: number
-  autoCount: number
 }) {
   const { t } = useTranslation()
   const items = [
@@ -25,17 +24,10 @@ export function PricingSourceNavigation(props: {
       description: t('由渠道主提供，使用通用额度'),
       count: props.thirdPartyCount,
     },
-    {
-      value: 'auto',
-      icon: Route,
-      label: t('第三方 Auto'),
-      description: t('按倍率和可用率自动路由'),
-      count: props.autoCount,
-    },
   ] as const
 
   return (
-    <TabsList className='bg-muted/60 grid !h-auto w-full grid-cols-1 gap-1 rounded-lg p-1 sm:grid-cols-3'>
+    <TabsList className='bg-muted/60 grid !h-auto w-full grid-cols-1 gap-1 rounded-lg p-1 sm:grid-cols-2'>
       {items.map((item) => {
         const Icon = item.icon
         return (

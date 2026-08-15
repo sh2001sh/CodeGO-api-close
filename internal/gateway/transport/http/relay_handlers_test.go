@@ -35,6 +35,40 @@ func TestRefundRelayBillingSkipsRequestsWithoutRelayInfo(t *testing.T) {
 	require.Same(t, apiErr, refundRelayBillingIfNeeded(ctx, nil, apiErr))
 }
 
+func TestRelayFailureSampleRequiresUpstreamAttempt(t *testing.T) {
+	apiErr := types.NewErrorWithStatusCode(
+		errors.New("用户额度不足"),
+		types.ErrorCodeInsufficientUserQuota,
+		http.StatusForbidden,
+	)
+
+	require.False(t, shouldRecordRelayFailureSample(false, apiErr))
+	require.True(t, shouldRecordRelayFailureSample(true, apiErr))
+	require.False(t, shouldRecordRelayFailureSample(true, nil))
+}
+
+func TestFinalRelayFailureLogRespectsNoRecordFlag(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("id", 1)
+
+	recordable := types.NewErrorWithStatusCode(
+		errors.New("upstream unavailable"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusServiceUnavailable,
+	)
+	localQuota := types.NewErrorWithStatusCode(
+		errors.New("用户额度不足"),
+		types.ErrorCodeInsufficientUserQuota,
+		http.StatusForbidden,
+		types.ErrOptionWithNoRecordErrorLog(),
+	)
+
+	require.True(t, shouldRecordFinalRelayFailureLog(ctx, recordable))
+	require.False(t, shouldRecordFinalRelayFailureLog(ctx, localQuota))
+	require.False(t, shouldRecordFinalRelayFailureLog(nil, recordable))
+}
+
 func TestRetryChannelReusableHonorsOnlyGlobalChannelStatus(t *testing.T) {
 	enabled := &gatewayschema.Channel{Id: 6, Status: constant.ChannelStatusEnabled}
 	require.True(t, isRetryChannelReusable(enabled))

@@ -357,7 +357,7 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 // user's usage log. Retried attempts that later succeed never reach this point,
 // so each client request creates at most one zero-cost failure record.
 func recordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) {
-	if c == nil || apiErr == nil || c.GetInt("id") <= 0 {
+	if !shouldRecordFinalRelayFailureLog(c, apiErr) {
 		return
 	}
 
@@ -393,6 +393,10 @@ func recordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) {
 	)
 }
 
+func shouldRecordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) bool {
+	return c != nil && apiErr != nil && c.GetInt("id") > 0 && types.IsRecordErrorLog(apiErr)
+}
+
 func refundRelayBillingIfNeeded(c *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.NewAPIError) *types.NewAPIError {
 	if apiErr == nil || relayInfo == nil {
 		return apiErr
@@ -412,6 +416,10 @@ func recordRelayFailure(relayInfo *relaycommon.RelayInfo) {
 	gopool.Go(func() {
 		auditprojection.RecordRelaySample(relayInfo, false, 0)
 	})
+}
+
+func shouldRecordRelayFailureSample(upstreamStarted bool, apiErr *types.NewAPIError) bool {
+	return upstreamStarted && apiErr != nil
 }
 
 func restoreRelayRequestBody(c *gin.Context) *types.NewAPIError {

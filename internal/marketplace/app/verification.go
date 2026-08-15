@@ -214,7 +214,16 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	expires := now.Add(7 * 24 * time.Hour)
 	status := marketplacedomain.VerificationPassed
 	lifecycle := marketplacedomain.LifecycleActive
-	summary := verificationSummary(results, probeErr)
+	originalModels := channel.DeclaredModels
+	passedModels, rejectedModels := selectVerifiedModels(results)
+	if len(passedModels) == 0 && probeErr == nil {
+		probeErr = errors.New("没有模型通过连通性检测")
+	}
+	if len(passedModels) > 0 && len(rejectedModels) > 0 {
+		encoded, _ := json.Marshal(passedModels)
+		channel.DeclaredModels = string(encoded)
+		probeErr = nil
+	}
 	if probeErr == nil {
 		if channel.InternalChannelID == nil {
 			probeErr = createInternalChannel(channel, group)
@@ -222,7 +231,12 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 			probeErr = syncInternalChannel(channel, group)
 		}
 	}
+	summary := verificationSummary(results, probeErr)
+	if probeErr == nil && len(rejectedModels) > 0 {
+		summary = partialVerificationSummary(passedModels, results, rejectedModels)
+	}
 	if probeErr != nil {
+		channel.DeclaredModels = originalModels
 		status = marketplacedomain.VerificationFailed
 		lifecycle = marketplacedomain.LifecycleDraft
 		summary = verificationSummary(results, probeErr)
@@ -243,7 +257,11 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 		if err := tx.Model(group).Updates(updates).Error; err != nil {
 			return err
 		}
-		return tx.Model(channel).Update("status", lifecycle).Error
+		channelUpdates := map[string]any{"status": lifecycle}
+		if probeErr == nil && channel.DeclaredModels != originalModels {
+			channelUpdates["declared_models"] = channel.DeclaredModels
+		}
+		return tx.Model(channel).Updates(channelUpdates).Error
 	})
 }
 

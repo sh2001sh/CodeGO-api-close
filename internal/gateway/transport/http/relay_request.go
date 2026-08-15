@@ -32,8 +32,9 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	firstByteTrace := relaycommon.NewFirstByteTrace(httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime))
 
 	var (
-		newAPIError *types.NewAPIError
-		relayInfo   *relaycommon.RelayInfo
+		newAPIError     *types.NewAPIError
+		relayInfo       *relaycommon.RelayInfo
+		upstreamStarted bool
 	)
 
 	ws, err := upgradeRelayWebsocket(c, relayFormat)
@@ -47,7 +48,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	defer func() {
 		relaycommon.ReleaseAllCoolingFallbacks(c)
 		newAPIError = refundRelayBillingIfNeeded(c, relayInfo, newAPIError)
-		if newAPIError != nil {
+		if shouldRecordRelayFailureSample(upstreamStarted, newAPIError) {
 			recordRelayFailure(relayInfo)
 		}
 		finalizeRelayError(c, relayFormat, ws, newAPIError, requestID)
@@ -269,6 +270,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		relaycommon.UpdateRouteDecisionBudget(c, requestBudget)
 		relaycommon.StartRouteDecisionAttempt(c, relayInfo.RetryIndex, channel.Id, faultDomain)
 		relayInfo.FirstByteTrace.MarkUpstreamStart()
+		upstreamStarted = true
 
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:

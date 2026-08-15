@@ -55,6 +55,7 @@ export interface ApiKeyGroupOptionData {
   ratio?: number | string
   category: 'official' | 'marketplace' | 'marketplace_auto'
   disabled?: boolean
+  models?: string[]
 }
 
 interface MarketplaceGroupListResponse {
@@ -183,8 +184,9 @@ export async function getSelectableMarketplaceGroups(): Promise<
     .map((group) => ({
       value: `market:${group.id}`,
       label: group.system_display_name,
-      desc: group.source_label || '来源待审核',
+      desc: `${group.source_label || '来源待审核'} · 仅使用通用额度`,
       ratio: group.multiplier,
       category: 'marketplace' as const,
+      models: group.models,
     }))
 }

@@ -192,6 +192,7 @@ export interface MarketplaceAutoRoutePoolItem {
   request_count: number
   models: string[]
   selected: boolean
+  priority: number
 }
 
 export interface MarketplaceAutoRoutePool {

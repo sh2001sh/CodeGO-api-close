@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAutoRoutePoolOrdersByMultiplierAndAvailability(t *testing.T) {
+func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(
 		&marketplaceschema.Channel{},
@@ -40,8 +40,10 @@ func TestAutoRoutePoolOrdersByMultiplierAndAvailability(t *testing.T) {
 	bindings, err := ResolveAutoRouteBindings(20, "gpt-5")
 	require.NoError(t, err)
 	require.Len(t, bindings, 2)
-	require.Equal(t, "stable", bindings[0].GroupID)
-	require.Equal(t, "cheap", bindings[1].GroupID)
+	require.Equal(t, "cheap", bindings[0].GroupID)
+	require.Equal(t, "stable", bindings[1].GroupID)
+	require.Equal(t, "cheap", view.Items[0].GroupID)
+	require.Equal(t, 1, view.Items[0].Priority)
 }
 
 func TestAutoRoutePoolRejectsForeignPrivateGroup(t *testing.T) {

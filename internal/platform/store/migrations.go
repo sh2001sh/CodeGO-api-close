@@ -71,6 +71,7 @@ func V2MigrationIDs() []string {
 		"20260813_blind_box_lucky_draw_window",
 		"20260814_wallet_transfers",
 		"20260814_balance_blind_box_inventory",
+		"20260815_blind_box_legacy_credit_marker",
 		"20260815_remove_bounty_market",
 		"20260815_marketplace_channel_source_labels",
 		"20260815_marketplace_model_verification",
@@ -219,6 +220,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 				&commerceschema.BalanceBlindBoxGiftItem{},
 			)
 		}},
+		{ID: "20260815_blind_box_legacy_credit_marker", Run: migrateBlindBoxLegacyCreditMarker},
 		{ID: "20260815_remove_bounty_market", Run: migrateRemoveBountyMarket},
 		{ID: "20260815_marketplace_channel_source_labels", Run: migrateMarketplaceChannelSourceLabels},
 		{ID: "20260815_marketplace_model_verification", Run: migrateMarketplaceModelVerification},
@@ -267,6 +269,14 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}
 	}
 	return nil
+}
+
+func migrateBlindBoxLegacyCreditMarker(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.BlindBoxCredit{}) ||
+		tx.Migrator().HasColumn(&commerceschema.BlindBoxCredit{}, "MigratedAt") {
+		return nil
+	}
+	return tx.Migrator().AddColumn(&commerceschema.BlindBoxCredit{}, "MigratedAt")
 }
 
 func migrateMarketplaceChannelSourceLabels(tx *gorm.DB) error {

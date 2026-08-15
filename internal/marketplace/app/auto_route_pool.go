@@ -34,7 +34,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 	selectedCount := 0
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
-		_, isSelected := selected[group.ID]
+		priority, isSelected := selected[group.ID]
 		if isSelected {
 			selectedCount++
 		}
@@ -51,11 +51,15 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 			RequestCount:      snapshots[group.ID].RequestCount,
 			Models:            decodeModels(channel.DeclaredModels),
 			Selected:          isSelected,
+			Priority:          priority,
 		})
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].Selected != items[j].Selected {
 			return items[i].Selected
+		}
+		if items[i].Selected && items[i].Priority != items[j].Priority {
+			return items[i].Priority < items[j].Priority
 		}
 		if items[i].RouteScore != items[j].RouteScore {
 			return items[i].RouteScore < items[j].RouteScore
@@ -91,8 +95,12 @@ func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*Aut
 		if err := tx.Where("owner_user_id = ?", ownerUserID).Delete(&marketplaceschema.AutoRoutePoolMember{}).Error; err != nil {
 			return err
 		}
-		for _, groupID := range groupIDs {
-			member := marketplaceschema.AutoRoutePoolMember{OwnerUserID: ownerUserID, GroupID: groupID}
+		for index, groupID := range groupIDs {
+			member := marketplaceschema.AutoRoutePoolMember{
+				OwnerUserID: ownerUserID,
+				GroupID:     groupID,
+				Priority:    index + 1,
+			}
 			if err := tx.Create(&member).Error; err != nil {
 				return err
 			}
@@ -118,7 +126,7 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string) ([]RoutingBindi
 		return nil, err
 	}
 	if len(selected) == 0 {
-		return nil, errors.New("第三方 Auto 路由池为空，请先在模型广场添加分组")
+		return nil, errors.New("第三方 Auto 路由池为空，请先在创建 API Key 时添加分组")
 	}
 	groups, channels, err := loadAutoRouteGroups(ownerUserID)
 	if err != nil {
@@ -129,12 +137,14 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string) ([]RoutingBindi
 		return nil, err
 	}
 	type scoredBinding struct {
-		binding RoutingBinding
-		score   float64
+		binding  RoutingBinding
+		score    float64
+		priority int
 	}
 	candidates := make([]scoredBinding, 0, len(selected))
 	for _, group := range groups {
-		if _, ok := selected[group.ID]; !ok {
+		priority, ok := selected[group.ID]
+		if !ok {
 			continue
 		}
 		channel := channels[group.ChannelID]
@@ -148,10 +158,13 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string) ([]RoutingBindi
 				OwnerUserID: group.OwnerUserID, SourceType: group.SourceType,
 				CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: group.Multiplier,
 			},
-			score: score,
+			score: score, priority: priority,
 		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].priority != candidates[j].priority {
+			return candidates[i].priority < candidates[j].priority
+		}
 		if candidates[i].score != candidates[j].score {
 			return candidates[i].score < candidates[j].score
 		}
@@ -195,14 +208,18 @@ func loadAutoRouteGroups(ownerUserID int) ([]marketplaceschema.Group, map[string
 	return filtered, channels, nil
 }
 
-func loadAutoRoutePoolSelection(ownerUserID int) (map[string]struct{}, error) {
+func loadAutoRoutePoolSelection(ownerUserID int) (map[string]int, error) {
 	var members []marketplaceschema.AutoRoutePoolMember
-	if err := platformdb.DB.Where("owner_user_id = ?", ownerUserID).Find(&members).Error; err != nil {
+	if err := platformdb.DB.Where("owner_user_id = ?", ownerUserID).Order("priority ASC, id ASC").Find(&members).Error; err != nil {
 		return nil, err
 	}
-	selected := make(map[string]struct{}, len(members))
-	for _, member := range members {
-		selected[member.GroupID] = struct{}{}
+	selected := make(map[string]int, len(members))
+	for index, member := range members {
+		priority := member.Priority
+		if priority <= 0 {
+			priority = index + 1
+		}
+		selected[member.GroupID] = priority
 	}
 	return selected, nil
 }

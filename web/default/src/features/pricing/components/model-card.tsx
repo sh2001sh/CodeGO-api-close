@@ -54,6 +54,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const usdExchangeRate = props.usdExchangeRate ?? 1
   const showRechargePrice = props.showRechargePrice ?? false
   const isTokenBased = isTokenBasedModel(props.model)
+  const pricingAvailable = props.model.pricing_available !== false
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
@@ -127,7 +128,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             </h3>
 
             <div className='mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs sm:mt-1 sm:gap-x-3'>
-              {dynamicSummary ? (
+              {!pricingAvailable ? (
+                <span className='text-warning text-xs font-medium'>
+                  {t('价格待配置')}
+                </span>
+              ) : dynamicSummary ? (
                 dynamicSummary.isSpecialExpression ? (
                   <span className='min-w-0'>
                     <span className='text-warning'>
@@ -279,11 +284,12 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       <div className='border-border/60 relative z-10 mt-3 flex items-center justify-end gap-1.5 border-t pt-3'>
         <button
           type='button'
-          onClick={props.onClick}
-          className='text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition-colors sm:px-2.5 sm:py-1.5'
+          onClick={pricingAvailable ? props.onClick : undefined}
+          disabled={!pricingAvailable}
+          className='text-muted-foreground hover:text-foreground hover:bg-muted disabled:hover:text-muted-foreground inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent sm:px-2.5 sm:py-1.5'
         >
-          {t('Details')}
-          <ChevronRight className='size-3.5' />
+          {pricingAvailable ? t('Details') : t('价格待配置')}
+          {pricingAvailable && <ChevronRight className='size-3.5' />}
         </button>
         <button
           type='button'

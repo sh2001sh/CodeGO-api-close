@@ -104,6 +104,22 @@ func TestMigrateMarketplaceAutoRoutePoolIsIdempotent(t *testing.T) {
 	require.NoError(t, migrateMarketplaceAutoRoutePool(db))
 	require.True(t, db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}))
 	require.True(t, db.Migrator().HasIndex(&marketplaceschema.AutoRoutePoolMember{}, "uq_marketplace_auto_pool_member"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+}
+
+func TestMigrateBlindBoxLegacyCreditMarkerUpgradesExistingSQLiteTable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE blind_box_credits (
+		id integer primary key,
+		user_id integer not null,
+		remaining_amount integer not null
+	)`).Error)
+
+	require.False(t, db.Migrator().HasColumn(&commerceschema.BlindBoxCredit{}, "MigratedAt"))
+	require.NoError(t, migrateBlindBoxLegacyCreditMarker(db))
+	require.True(t, db.Migrator().HasColumn(&commerceschema.BlindBoxCredit{}, "MigratedAt"))
+	require.NoError(t, migrateBlindBoxLegacyCreditMarker(db))
 }
 
 func TestSubscriptionFulfillmentMigrationMarksHistoricalSuccessCompleted(t *testing.T) {

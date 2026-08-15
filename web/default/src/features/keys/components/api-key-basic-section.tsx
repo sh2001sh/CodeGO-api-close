@@ -15,6 +15,8 @@ import { Switch } from '@/components/ui/switch'
 import { DateTimePicker } from '@/components/datetime-picker'
 import type { ApiKeyFormValues } from '../lib'
 import { ApiKeyFormSection } from './api-key-form-section'
+import { ApiKeyAutoRoutePoolDialog } from './api-key-auto-route-pool-dialog'
+import { ApiKeyAvailableModelsDialog } from './api-key-available-models-dialog'
 import {
   ApiKeyGroupCombobox,
   type ApiKeyGroupOption,
@@ -69,8 +71,12 @@ function GroupField(props: { form: ApiKeyForm; groups: ApiKeyGroupOption[] }) {
     <FormField
       control={props.form.control}
       name='group'
-      render={({ field }) => (
-        <FormItem>
+      render={({ field }) => {
+        const selectedOption = props.groups.find(
+          (option) => option.value === field.value
+        )
+        return (
+          <FormItem>
           <FormLabel>{t('Group')}</FormLabel>
           <FormControl>
             <ApiKeyGroupCombobox
@@ -85,9 +91,14 @@ function GroupField(props: { form: ApiKeyForm; groups: ApiKeyGroupOption[] }) {
               {t('第三方分组只使用通用额度，并按所示倍率计费。')}
             </FormDescription>
           )}
+          <div className='mt-2 flex flex-wrap gap-2'>
+            <ApiKeyAvailableModelsDialog option={selectedOption} />
+            <ApiKeyAutoRoutePoolDialog />
+          </div>
           <FormMessage />
-        </FormItem>
-      )}
+          </FormItem>
+        )
+      }}
     />
   )
 }

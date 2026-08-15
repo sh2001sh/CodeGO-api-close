@@ -37,11 +37,18 @@ export function useApiKeyGroupOptions() {
       label: '第三方 Auto',
       desc:
         autoPool && autoPool.selected_count > 0
-          ? `从路由池中的 ${autoPool.selected_count} 个第三方分组自动选择`
-          : '请先在模型广场配置第三方路由池',
+          ? `从路由池中的 ${autoPool.selected_count} 个第三方分组自动选择 · 仅使用通用额度`
+          : '请在创建 API Key 时配置第三方路由池 · 仅使用通用额度',
       ratio: '动态',
       category: 'marketplace_auto',
       disabled: !autoPool || autoPool.selected_count === 0,
+      models: Array.from(
+        new Set(
+          (autoPool?.items ?? [])
+            .filter((item) => item.selected)
+            .flatMap((item) => item.models)
+        )
+      ).sort((left, right) => left.localeCompare(right)),
     }
     return [...officialGroups, autoOption, ...marketplaceGroups]
   }, [autoPool, groupsData?.data, marketplaceGroups])

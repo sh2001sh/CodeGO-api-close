@@ -86,16 +86,41 @@ func publicModelVerificationResults(raw string) []ModelVerificationResult {
 }
 
 func verificationSummary(results []ModelVerificationResult, probeErr error) string {
-	passed := 0
-	for _, result := range results {
-		if result.Status == marketplacedomain.ModelVerificationPassed {
-			passed++
-		}
-	}
+	passedModels, _ := selectVerifiedModels(results)
+	passed := len(passedModels)
 	if probeErr == nil {
 		return fmt.Sprintf("%d/%d 个模型连通性检测通过，渠道已自动上架", passed, len(results))
 	}
 	return fmt.Sprintf("%d/%d 个模型连通性检测通过；%s", passed, len(results), probeErr.Error())
+}
+
+func selectVerifiedModels(results []ModelVerificationResult) ([]string, []string) {
+	passed := make([]string, 0, len(results))
+	rejected := make([]string, 0)
+	for _, result := range results {
+		if result.Listed && result.Status == marketplacedomain.ModelVerificationPassed {
+			passed = append(passed, result.Model)
+			continue
+		}
+		rejected = append(rejected, result.Model)
+	}
+	return normalizeModels(passed), normalizeModels(rejected)
+}
+
+func partialVerificationSummary(passed []string, results []ModelVerificationResult, rejected []string) string {
+	const maxDisplayedRejected = 5
+	displayed := rejected
+	if len(displayed) > maxDisplayedRejected {
+		displayed = displayed[:maxDisplayedRejected]
+	}
+	suffix := ""
+	if len(rejected) > len(displayed) {
+		suffix = fmt.Sprintf(" 等 %d 个", len(rejected))
+	}
+	return fmt.Sprintf(
+		"%d/%d 个模型检测通过并上架；已自动剔除未通过模型: %s%s",
+		len(passed), len(results), strings.Join(displayed, ", "), suffix,
+	)
 }
 
 func truncateVerificationError(message string) string {

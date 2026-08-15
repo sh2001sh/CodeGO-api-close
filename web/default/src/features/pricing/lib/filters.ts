@@ -102,7 +102,20 @@ export function filterByEndpointType(
  * Get model price for sorting
  */
 function getModelPrice(model: PricingModel): number {
+  if (model.pricing_available === false) return Number.POSITIVE_INFINITY
   return model.quota_type === 0 ? model.model_ratio : model.model_price || 0
+}
+
+function compareModelPrice(
+  left: PricingModel,
+  right: PricingModel,
+  direction: 'asc' | 'desc'
+): number {
+  const leftAvailable = left.pricing_available !== false
+  const rightAvailable = right.pricing_available !== false
+  if (leftAvailable !== rightAvailable) return leftAvailable ? -1 : 1
+  const difference = getModelPrice(left) - getModelPrice(right)
+  return direction === 'asc' ? difference : -difference
 }
 
 /**
@@ -121,10 +134,10 @@ export function sortModels(
       )
       break
     case SORT_OPTIONS.PRICE_LOW:
-      sorted.sort((a, b) => getModelPrice(a) - getModelPrice(b))
+      sorted.sort((a, b) => compareModelPrice(a, b, 'asc'))
       break
     case SORT_OPTIONS.PRICE_HIGH:
-      sorted.sort((a, b) => getModelPrice(b) - getModelPrice(a))
+      sorted.sort((a, b) => compareModelPrice(a, b, 'desc'))
       break
   }
 

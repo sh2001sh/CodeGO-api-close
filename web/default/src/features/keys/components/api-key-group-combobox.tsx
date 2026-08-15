@@ -43,6 +43,7 @@ export type ApiKeyGroupOption = {
   ratio?: number | string
   category?: 'official' | 'marketplace' | 'marketplace_auto'
   disabled?: boolean
+  models?: string[]
 }
 
 type ApiKeyGroupComboboxProps = {

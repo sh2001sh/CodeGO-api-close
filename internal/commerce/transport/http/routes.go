@@ -10,6 +10,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	walletRoute.Use(middleware.UserAuth())
 	{
 		walletRoute.GET("/quota-conversions", getWalletQuotaConversions)
+		walletRoute.POST("/quota-conversions", middleware.CriticalRateLimit(), createWalletQuotaConversion)
 		walletRoute.GET("/transfers", getWalletTransferOverview)
 		walletRoute.GET("/transfers/recipients/:external_id", middleware.CriticalRateLimit(), getWalletTransferRecipient)
 		walletRoute.PUT("/transfers/payment-password", middleware.CriticalRateLimit(), configureWalletTransferPassword)

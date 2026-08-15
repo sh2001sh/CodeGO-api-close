@@ -142,7 +142,10 @@ func loadChannelGroup(channelID string) (*marketplaceschema.Channel, *marketplac
 func providerChannelType(provider string) int {
 	switch provider {
 	case "codex":
-		return constant.ChannelTypeCodex
+		// Marketplace Codex entries authenticate to the public Responses API
+		// with a bearer API key. The internal Codex channel type is reserved for
+		// OAuth JSON credentials and would reject the submitted marketplace key.
+		return constant.ChannelTypeOpenAI
 	case "azure_openai":
 		return constant.ChannelTypeAzure
 	case "anthropic":

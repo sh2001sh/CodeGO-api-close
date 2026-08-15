@@ -6,8 +6,23 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetNextEnabledChannelKeyDecryptsSingleKey(t *testing.T) {
+	originalSecret := platformconfig.CryptoSecret
+	platformconfig.CryptoSecret = "single-channel-key-test"
+	t.Cleanup(func() { platformconfig.CryptoSecret = originalSecret })
+
+	encrypted, err := platformsecurity.EncryptSecret("marketplace-upstream-key")
+	require.NoError(t, err)
+
+	key, index, apiErr := GetNextEnabledChannelKey(&gatewayschema.Channel{Key: encrypted})
+	require.Nil(t, apiErr)
+	require.Equal(t, "marketplace-upstream-key", key)
+	require.Zero(t, index)
+}
 
 func TestCacheUpdateChannelStatus_RestoresEnabledChannelToRoutingCache(t *testing.T) {
 	originalCacheEnabled := platformconfig.MemoryCacheEnabled

@@ -4,10 +4,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sh2001sh/new-api/constant"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMarketplaceCodexUsesBearerCompatibleChannel(t *testing.T) {
+	require.Equal(t, constant.ChannelTypeOpenAI, providerChannelType("codex"))
+}
 
 func TestListOwnerChannelsIncludesIncomeSummary(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)

@@ -11,6 +11,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 
 	"github.com/sh2001sh/new-api/types"
@@ -580,7 +581,14 @@ func GetNextEnabledChannelKey(channel *gatewayschema.Channel) (string, int, *typ
 		return "", 0, types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 	if !channel.ChannelInfo.IsMultiKey {
-		return channel.Key, 0, nil
+		key, err := platformsecurity.DecryptSecret(channel.Key)
+		if err != nil {
+			return "", 0, types.NewError(err, types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+		}
+		if strings.TrimSpace(key) == "" {
+			return "", 0, types.NewError(errors.New("no keys available"), types.ErrorCodeChannelNoAvailableKey)
+		}
+		return key, 0, nil
 	}
 
 	runtimeChannel := channel

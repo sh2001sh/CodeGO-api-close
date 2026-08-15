@@ -239,14 +239,14 @@ export function RechargeFormCard({
                       value: 'default' as const,
                       title: t('Standard wallet'),
                       description: t(
-                        '充值到官方 GPT 专属额度，仅用于官方 GPT、Codex、Responses 分组。'
+                        'GPT exclusive quota is for official GPT, Codex, and Responses groups. It remains fixed at 0.25 CNY per USD.'
                       ),
                     },
                     {
                       value: 'claude' as const,
                       title: t('通用额度'),
                       description: t(
-                        'Only for Claude models; minimum 1 with fixed 1:1 recharge.'
+                        'Universal quota is for Claude, DeepSeek, GLM, and other universal models. Minimum 1 USD with fixed 1:1 recharge.'
                       ),
                     },
                   ].map((item) => (

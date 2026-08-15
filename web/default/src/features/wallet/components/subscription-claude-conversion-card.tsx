@@ -153,12 +153,12 @@ export function SubscriptionClaudeConversionCard(
       })
       if (!result.success || !result.data) {
         toast.error(
-          result.message || t('Failed to convert plan quota to Claude quota.')
+          result.message || t('Failed to convert plan quota to universal quota.')
         )
         return
       }
       toast.success(
-        t('{{plan}} converted to Claude quota', {
+        t('{{plan}} converted to universal quota', {
           plan: getPlanLabel(
             selectedSubscription,
             props.planTitles,
@@ -173,7 +173,7 @@ export function SubscriptionClaudeConversionCard(
         window.dispatchEvent(new Event('subscription:changed'))
       }
     } catch {
-      toast.error(t('Failed to convert plan quota to Claude quota.'))
+      toast.error(t('Failed to convert plan quota to universal quota.'))
     } finally {
       setSubmitting(false)
     }
@@ -186,11 +186,11 @@ export function SubscriptionClaudeConversionCard(
           <div>
             <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
               <Sparkles className='text-primary h-4 w-4' />
-              {t('Convert plan quota to Claude')}
+              {t('Convert plan quota to universal quota')}
             </div>
             <div className='text-muted-foreground mt-1 text-xs leading-5'>
               {t(
-                'Only active non-day plans are eligible. Enter USD and convert at {{ratio}} into permanent Claude quota; temporary plan quota may lose value.',
+                'Only active non-day plans are eligible. Enter USD and convert at {{ratio}} into permanent universal quota; temporary plan quota may lose value.',
                 { ratio: ratioText }
               )}
             </div>
@@ -209,7 +209,7 @@ export function SubscriptionClaudeConversionCard(
           />
           <QuickStat label={t('Conversion rule')} value={ratioText} />
           <QuickStat
-            label={t('Estimated maximum Claude quota')}
+            label={t('Estimated maximum universal quota')}
             value={formatQuota(totalPreviewClaudeQuota)}
           />
         </div>
@@ -231,17 +231,17 @@ export function SubscriptionClaudeConversionCard(
         <div>
           <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
             <ArrowRightLeft className='text-primary h-4 w-4' />
-            {t('Convert plan quota to Claude')}
+            {t('Convert plan quota to universal quota')}
           </div>
           <div className='text-muted-foreground mt-1 text-xs leading-5'>
             {t(
-              'Only active non-day plans are eligible. Enter USD at the current {{ratio}} ratio. Converting temporary plan quota into permanent Claude quota cannot be undone.',
+              'Only active non-day plans are eligible. Enter USD at the current {{ratio}} ratio. Converting temporary plan quota into permanent universal quota cannot be undone.',
               { ratio: ratioText }
             )}
           </div>
         </div>
         <div className='border-border bg-background/80 text-foreground rounded-full border px-3 py-1 text-xs font-semibold'>
-          Claude {formatQuota(props.subscriptionData?.claude_quota || 0)}
+          {t('Universal quota')} {formatQuota(props.subscriptionData?.claude_quota || 0)}
         </div>
       </div>
 
@@ -251,7 +251,7 @@ export function SubscriptionClaudeConversionCard(
         </div>
       ) : !config?.enabled ? (
         <div className='border-border/70 bg-background/60 text-muted-foreground mt-3 rounded-2xl border border-dashed px-3 py-3 text-xs'>
-          {t('Plan-to-Claude conversion is currently disabled.')}
+          {t('Plan-to-universal conversion is currently disabled.')}
         </div>
       ) : eligibleSubscriptions.length === 0 ? (
         <div className='border-border/70 bg-background/60 text-muted-foreground mt-3 rounded-2xl border border-dashed px-3 py-3 text-xs'>
@@ -344,7 +344,7 @@ export function SubscriptionClaudeConversionCard(
                 value={formatSubscriptionQuotaAmount(sourceQuota)}
               />
               <QuickStat
-                label={t('Estimated Claude quota')}
+                label={t('Estimated universal quota')}
                 value={formatQuota(previewClaudeQuota || 0)}
               />
             </div>
@@ -358,7 +358,7 @@ export function SubscriptionClaudeConversionCard(
             ) : null}
             <div className='text-muted-foreground mt-2 text-xs leading-5'>
               {t(
-                'USD input is for clarity; the backend still settles against the plan quota. Permanent Claude quota is rounded down.'
+                'USD input is for clarity; the backend still settles against the plan quota. Permanent universal quota is rounded down.'
               )}
             </div>
           </div>
@@ -398,7 +398,7 @@ export function SubscriptionClaudeConversionCard(
             <AlertDialogTitle>{t('Confirm conversion')}</AlertDialogTitle>
             <AlertDialogDescription>
               {t(
-                'This will deduct {{amount}} from {{plan}} and credit approximately {{claude}} permanent Claude quota. This action cannot be undone.',
+                'This will deduct {{amount}} from {{plan}} and credit approximately {{claude}} permanent universal quota. This action cannot be undone.',
                 {
                   amount: formatSubscriptionQuotaAmount(sourceQuota),
                   plan: selectedPlanMeta?.title || t('Current plan'),

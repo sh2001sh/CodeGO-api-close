@@ -297,10 +297,10 @@ func normalizeBlindBoxOpenRecordDisplay(record *commerceschema.BlindBoxOpenRecor
 			record.RewardTitle = spec.Title
 		}
 	}
-	if record.RewardType == commerceschema.BlindBoxRewardTypeQuota && record.RewardTitle == "" {
+	if record.RewardType == commerceschema.BlindBoxRewardTypeQuota {
 		record.RewardTitle = fmt.Sprintf("%.2f 官方 GPT 专属额度奖励", record.RewardUSD)
 	}
-	if record.RewardType == commerceschema.BlindBoxRewardTypeClaudeQuota && record.RewardTitle == "" {
+	if record.RewardType == commerceschema.BlindBoxRewardTypeClaudeQuota {
 		record.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", record.RewardUSD)
 	}
 	if record.RewardType == commerceschema.BlindBoxRewardTypeProp && record.RewardTitle == "" {

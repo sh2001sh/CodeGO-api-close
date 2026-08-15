@@ -50,6 +50,25 @@ func TestListBlindBoxHistoryFiltersThirtyDaysAndNamesProps(t *testing.T) {
 	require.Equal(t, commerceschema.BlindBoxPropStatusAvailable, page.Records[0].PropStatus)
 }
 
+func TestNormalizeBlindBoxOpenRecordDisplayUsesWalletLabels(t *testing.T) {
+	standard := commerceschema.BlindBoxOpenRecord{
+		RewardType:  commerceschema.BlindBoxRewardTypeQuota,
+		RewardTitle: "5 美元普通额度",
+		RewardUSD:   5,
+	}
+	universal := commerceschema.BlindBoxOpenRecord{
+		RewardType:  commerceschema.BlindBoxRewardTypeClaudeQuota,
+		RewardTitle: "20 美元 Claude 额度",
+		RewardUSD:   20,
+	}
+
+	normalizeBlindBoxOpenRecordDisplay(&standard)
+	normalizeBlindBoxOpenRecordDisplay(&universal)
+
+	require.Equal(t, "5.00 官方 GPT 专属额度奖励", standard.RewardTitle)
+	require.Equal(t, "20.00 通用额度奖励", universal.RewardTitle)
+}
+
 func TestListBlindBoxHistoryPaginatesNewestFirst(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	now := platformruntime.GetTimestamp()

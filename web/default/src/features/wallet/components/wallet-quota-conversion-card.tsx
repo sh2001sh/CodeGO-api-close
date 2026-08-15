@@ -115,11 +115,11 @@ export function WalletQuotaConversionCard(props: {
   const directionMeta = useMemo(() => {
     const standardToClaude = direction === STANDARD_TO_CLAUDE
     return {
-      sourceLabel: standardToClaude ? t('Standard balance') : t('Claude quota'),
-      targetLabel: standardToClaude ? t('Claude quota') : t('Standard balance'),
+      sourceLabel: standardToClaude ? t('Standard balance') : t('Universal quota'),
+      targetLabel: standardToClaude ? t('Universal quota') : t('Standard balance'),
       rate: standardToClaude
-        ? `4 ${t('Standard balance')} = 1 ${t('Claude quota')}`
-        : `1 ${t('Claude quota')} = 4 ${t('Standard balance')}`,
+        ? `4 ${t('Standard balance')} = 1 ${t('Universal quota')}`
+        : `1 ${t('Universal quota')} = 4 ${t('Standard balance')}`,
     }
   }, [direction, t])
 
@@ -165,7 +165,7 @@ export function WalletQuotaConversionCard(props: {
           </div>
           <p className='text-muted-foreground mt-1 text-xs leading-5'>
             {t(
-              'Convert standard and Claude balances in either direction at a fixed 4:1 rate.'
+              'Convert GPT exclusive quota and universal quota in either direction at a fixed 4:1 rate.'
             )}
           </p>
         </div>
@@ -213,13 +213,13 @@ export function WalletQuotaConversionCard(props: {
               active={direction === STANDARD_TO_CLAUDE}
               onClick={() => switchDirection(STANDARD_TO_CLAUDE)}
             >
-              {t('Standard to Claude')}
+              {t('GPT exclusive to universal')}
             </DirectionButton>
             <DirectionButton
               active={direction === CLAUDE_TO_STANDARD}
               onClick={() => switchDirection(CLAUDE_TO_STANDARD)}
             >
-              {t('Claude to standard')}
+              {t('Universal to GPT exclusive')}
             </DirectionButton>
           </div>
 

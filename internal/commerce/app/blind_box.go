@@ -153,6 +153,9 @@ func BuildBlindBoxOpenPayload(userID int, count int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	for index := range records {
+		normalizeBlindBoxOpenRecordDisplay(&records[index])
+	}
 	overview, err := GetBlindBoxOverview(userID, 20)
 	if err != nil {
 		return nil, err

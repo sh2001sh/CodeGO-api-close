@@ -118,10 +118,10 @@ export function ConversionHistory(props: {
               {formatUSD(record.source_quota / quotaPerUSD)}{' '}
               {record.direction === STANDARD_TO_CLAUDE
                 ? t('Standard balance')
-                : t('Claude quota')}{' '}
+                : t('Universal quota')}{' '}
               → {formatUSD(record.target_quota / quotaPerUSD)}{' '}
               {record.direction === STANDARD_TO_CLAUDE
-                ? t('Claude quota')
+                ? t('Universal quota')
                 : t('Standard balance')}
             </span>
           </div>

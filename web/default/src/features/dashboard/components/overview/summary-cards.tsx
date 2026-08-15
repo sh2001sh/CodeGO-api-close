@@ -12,7 +12,6 @@ import {
 } from '@/features/subscriptions/lib'
 import type { PlanRecord } from '@/features/subscriptions/types'
 import { UsageChart } from './summary-card-parts'
-import { useOverviewSubscriptionData } from './use-overview-subscription-data'
 import {
   BalanceWorkspace,
   PackageStatusCard,
@@ -20,6 +19,7 @@ import {
   type BalanceSegment,
   type MetricDef,
 } from './summary-sections'
+import { useOverviewSubscriptionData } from './use-overview-subscription-data'
 
 function formatDateTime(timestamp?: number): string {
   if (!timestamp) return '--'
@@ -76,19 +76,26 @@ export function SummaryCards() {
     (total: number, value: number) => total + value,
     0
   )
-  const availableUsd = quotaUnitsToUsd(remainQuota)
-  const walletUsd = quotaUnitsToUsd(remainQuota)
-  const claudeUsd = quotaUnitsToUsd(claudeQuota)
+  const universalQuotaUsd = quotaUnitsToUsd(claudeQuota)
+  const officialGptQuotaUsd = quotaUnitsToUsd(remainQuota)
+  const availableUsd = universalQuotaUsd + officialGptQuotaUsd
   const recentUsageUsd = quotaUnitsToUsd(recentUsage)
   const usedQuotaUsd = quotaUnitsToUsd(usedQuota)
 
   const balanceSegments: BalanceSegment[] = [
     {
-      label: '钱包',
-      display: formatUsdAmount(walletUsd),
-      value: walletUsd,
+      label: '通用额度',
+      display: formatUsdAmount(universalQuotaUsd),
+      value: universalQuotaUsd,
       dot: 'bg-primary',
       bar: 'bg-primary',
+    },
+    {
+      label: '官方 GPT 专属额度',
+      display: formatUsdAmount(officialGptQuotaUsd),
+      value: officialGptQuotaUsd,
+      dot: 'bg-info',
+      bar: 'bg-info',
     },
   ]
 
@@ -148,9 +155,9 @@ export function SummaryCards() {
       hint: '账户累计请求次数',
     },
     {
-      label: 'Claude 余额',
-      value: formatUsdAmount(claudeUsd),
-      hint: 'Claude 模型专用余额池',
+      label: '通用额度',
+      value: formatUsdAmount(universalQuotaUsd),
+      hint: '用于通用模型与全部第三方市场分组',
     },
   ]
 
@@ -160,7 +167,6 @@ export function SummaryCards() {
         <BalanceWorkspace
           available={formatUsdAmount(availableUsd)}
           segments={balanceSegments}
-          claudeQuota={formatUsdAmount(claudeUsd)}
           metrics={heroMetrics}
         />
 

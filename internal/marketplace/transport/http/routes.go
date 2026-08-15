@@ -20,6 +20,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.POST("/channels", middleware.CriticalRateLimit(), CreateChannel)
 		marketplaceRoute.POST("/channels/fetch-models", middleware.CriticalRateLimit(), FetchModels)
 		marketplaceRoute.GET("/channels/mine", ListMyChannels)
+		marketplaceRoute.GET("/channels/mine/logs", ListMyUsageLogs)
 		marketplaceRoute.PATCH("/channels/:id", UpdateChannel)
 		marketplaceRoute.POST("/channels/:id/verify", middleware.CriticalRateLimit(), VerifyChannel)
 		marketplaceRoute.POST("/channels/:id/pause", PauseChannel)

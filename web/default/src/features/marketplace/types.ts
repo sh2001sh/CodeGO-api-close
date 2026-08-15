@@ -7,11 +7,7 @@ export type MarketplaceStatus =
   | 'suspended'
   | 'disabled'
 
-export type ModelConsistencyStatus =
-  | ''
-  | 'passed'
-  | 'failed'
-  | 'questionable'
+export type ModelConsistencyStatus = '' | 'passed' | 'failed' | 'questionable'
 
 export interface ModelVerificationResult {
   model: string
@@ -144,4 +140,41 @@ export interface TokenOption {
   id: number
   name: string
   group?: string | null
+}
+
+export interface MarketplaceOwnerUsageLog {
+  id: number
+  channel_id: string
+  channel_name: string
+  group_id: string
+  user_id: number
+  created_at: number
+  status: 'success' | 'failed'
+  model_name: string
+  prompt_tokens: number
+  completion_tokens: number
+  use_time: number
+  is_stream: boolean
+  request_id: string
+  consumer_amount: number
+  owner_income: number
+  platform_commission: number
+  multiplier: number
+  income_status: 'pending' | 'released' | 'none'
+  available_at?: string | null
+  released_at?: string | null
+}
+
+export interface MarketplaceOwnerUsageLogResult {
+  items: MarketplaceOwnerUsageLog[]
+  summary: {
+    request_count: number
+    success_count: number
+    failed_count: number
+    consumer_amount: number
+    owner_income: number
+  }
+  total: number
+  page: number
+  page_size: number
 }

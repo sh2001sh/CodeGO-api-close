@@ -6,6 +6,7 @@ import {
   getAdminMarketplaceChannels,
   getMarketplaceGroups,
   getMyMarketplaceChannels,
+  getMyMarketplaceUsageLogs,
   getTokenOptions,
   queueMarketplaceVerification,
   reviewMarketplaceChannel,
@@ -14,7 +15,9 @@ import {
 } from './api'
 import type { GroupFilters } from './types'
 
-function verificationRefetchInterval(channels: { lifecycle_status: string; verification_status: string }[]) {
+function verificationRefetchInterval(
+  channels: { lifecycle_status: string; verification_status: string }[]
+) {
   return channels.some(
     (channel) =>
       channel.lifecycle_status === 'verifying' ||
@@ -37,6 +40,18 @@ export function useMyMarketplaceChannels() {
     queryFn: getMyMarketplaceChannels,
     refetchInterval: (query) =>
       verificationRefetchInterval(query.state.data ?? []),
+  })
+}
+
+export function useMyMarketplaceUsageLogs(params: {
+  channelId?: string
+  page: number
+  pageSize: number
+}) {
+  return useQuery({
+    queryKey: ['marketplace-channels', 'mine', 'usage-logs', params],
+    queryFn: () => getMyMarketplaceUsageLogs(params),
+    placeholderData: (previousData) => previousData,
   })
 }
 

@@ -5,6 +5,7 @@ import type {
   GroupFilters,
   MarketplaceChannel,
   MarketplaceGroupList,
+  MarketplaceOwnerUsageLogResult,
   TokenOption,
 } from './types'
 
@@ -35,6 +36,22 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
 export async function getMyMarketplaceChannels() {
   const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
     '/api/marketplace/channels/mine'
+  )
+  return requireData(response.data)
+}
+
+export async function getMyMarketplaceUsageLogs(params: {
+  channelId?: string
+  page: number
+  pageSize: number
+}) {
+  const search = new URLSearchParams({
+    page: String(params.page),
+    page_size: String(params.pageSize),
+  })
+  if (params.channelId) search.set('channel_id', params.channelId)
+  const response = await api.get<ApiResponse<MarketplaceOwnerUsageLogResult>>(
+    `/api/marketplace/channels/mine/logs?${search.toString()}`
   )
   return requireData(response.data)
 }

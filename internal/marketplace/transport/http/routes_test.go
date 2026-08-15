@@ -20,6 +20,7 @@ func TestMarketplaceRoutesRequireAuthentication(t *testing.T) {
 	for _, target := range []string{
 		"/api/marketplace/groups",
 		"/api/marketplace/channels/mine",
+		"/api/marketplace/channels/mine/logs",
 		"/api/marketplace/admin/channels",
 	} {
 		t.Run(target, func(t *testing.T) {
@@ -41,6 +42,7 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 		"POST /api/marketplace/groups/:id/bind-token":     false,
 		"POST /api/marketplace/channels":                  false,
 		"POST /api/marketplace/channels/fetch-models":     false,
+		"GET /api/marketplace/channels/mine/logs":         false,
 		"PATCH /api/marketplace/admin/channels/:id":       false,
 		"POST /api/marketplace/admin/channels/:id/review": false,
 	}

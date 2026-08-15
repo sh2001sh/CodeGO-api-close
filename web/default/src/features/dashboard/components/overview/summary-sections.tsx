@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, WalletCards } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { cn } from '@/lib/utils'
 import { formatSubscriptionQuotaAmount } from '@/features/subscriptions/lib'
 import { DataMetric } from './summary-card-parts'
 
@@ -24,7 +24,6 @@ export type BalanceSegment = {
 export function BalanceWorkspace(props: {
   available: string
   segments: BalanceSegment[]
-  claudeQuota: string
   metrics: MetricDef[]
 }) {
   const total = props.segments.reduce(
@@ -75,13 +74,6 @@ export function BalanceWorkspace(props: {
                 </span>
               </div>
             ))}
-            <div className='flex items-center gap-1.5'>
-              <span className='size-2 rounded-full bg-info' />
-              <span className='text-muted-foreground'>Claude</span>
-              <span className='text-foreground font-medium tabular-nums'>
-                {props.claudeQuota}
-              </span>
-            </div>
           </div>
 
           <div className='mt-5 grid gap-2.5 sm:grid-cols-3'>
@@ -212,9 +204,7 @@ export function PackageStatusCard(props: {
             </div>
           ) : null}
 
-          <div className='grid gap-2 sm:grid-cols-2'>
-            {props.children}
-          </div>
+          <div className='grid gap-2 sm:grid-cols-2'>{props.children}</div>
         </div>
       ) : (
         <div className='border-border text-muted-foreground rounded-xl border border-dashed px-4 py-6 text-sm'>

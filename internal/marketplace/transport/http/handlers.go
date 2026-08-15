@@ -52,6 +52,15 @@ func ListMyChannels(c *gin.Context) {
 	respond(c, result, err)
 }
 
+func ListMyUsageLogs(c *gin.Context) {
+	result, err := marketplaceapp.ListOwnerUsageLogs(c.GetInt("id"), marketplaceapp.OwnerUsageLogQuery{
+		ChannelID: c.Query("channel_id"),
+		Page:      queryInt(c, "page", 1),
+		PageSize:  queryInt(c, "page_size", 20),
+	})
+	respond(c, result, err)
+}
+
 func UpdateChannel(c *gin.Context) {
 	var req marketplaceapp.UpdateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

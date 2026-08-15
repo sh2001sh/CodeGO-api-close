@@ -23,6 +23,16 @@ type legacyUserForExternalIDMigration struct {
 	DeletedAt gorm.DeletedAt
 }
 
+type legacyWalletTransferForFeeFieldsMigration struct {
+	Id              int `gorm:"primaryKey"`
+	AmountQuota     int64
+	SenderBalanceAt int64
+}
+
+func (legacyWalletTransferForFeeFieldsMigration) TableName() string {
+	return "wallet_transfers"
+}
+
 func (legacyUserForExternalIDMigration) TableName() string {
 	return "users"
 }
@@ -111,6 +121,21 @@ func TestMigrateMarketplaceAutoRoutePoolIsIdempotent(t *testing.T) {
 	require.True(t, db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}))
 	require.True(t, db.Migrator().HasIndex(&marketplaceschema.AutoRoutePoolMember{}, "uq_marketplace_auto_pool_member"))
 	require.True(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+}
+
+func TestMigrateWalletTransferFeeFieldsAddsMissingColumns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&legacyWalletTransferForFeeFieldsMigration{}))
+	require.NoError(t, db.Create(&legacyWalletTransferForFeeFieldsMigration{Id: 1, AmountQuota: 256}).Error)
+
+	require.NoError(t, migrateWalletTransferFeeFields(db))
+	require.True(t, db.Migrator().HasColumn(&commerceschema.WalletTransfer{}, "FeeQuota"))
+	require.True(t, db.Migrator().HasColumn(&commerceschema.WalletTransfer{}, "TotalDebitQuota"))
+	var totalDebitQuota int64
+	require.NoError(t, db.Raw("SELECT total_debit_quota FROM wallet_transfers WHERE id = ?", 1).Scan(&totalDebitQuota).Error)
+	require.EqualValues(t, 256, totalDebitQuota)
+	require.NoError(t, migrateWalletTransferFeeFields(db))
 }
 
 func TestMigrateMarketplaceSoftDeleteAndNumericChannelIDs(t *testing.T) {

@@ -82,6 +82,7 @@ func V2MigrationIDs() []string {
 		"20260815_marketplace_auto_route_pool",
 		"20260815_marketplace_soft_delete",
 		"20260815_marketplace_numeric_channel_ids",
+		"20260816_wallet_transfer_fee_fields",
 	}
 }
 
@@ -233,6 +234,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260815_marketplace_auto_route_pool", Run: migrateMarketplaceAutoRoutePool},
 		{ID: "20260815_marketplace_soft_delete", Run: migrateMarketplaceSoftDelete},
 		{ID: "20260815_marketplace_numeric_channel_ids", Run: migrateMarketplaceNumericChannelIDs},
+		{ID: "20260816_wallet_transfer_fee_fields", Run: migrateWalletTransferFeeFields},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -346,6 +348,23 @@ func migrateMarketplaceModelVerification(tx *gorm.DB) error {
 
 func migrateMarketplaceAutoRoutePool(tx *gorm.DB) error {
 	return tx.AutoMigrate(&marketplaceschema.AutoRoutePoolMember{})
+}
+
+func migrateWalletTransferFeeFields(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.WalletTransfer{}) {
+		return tx.AutoMigrate(&commerceschema.WalletTransfer{})
+	}
+	for _, field := range []string{"FeeQuota", "TotalDebitQuota"} {
+		if tx.Migrator().HasColumn(&commerceschema.WalletTransfer{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&commerceschema.WalletTransfer{}, field); err != nil {
+			return err
+		}
+	}
+	return tx.Model(&commerceschema.WalletTransfer{}).
+		Where("total_debit_quota = ?", 0).
+		Update("total_debit_quota", gorm.Expr("amount_quota")).Error
 }
 
 func migrateMarketplaceSoftDelete(tx *gorm.DB) error {

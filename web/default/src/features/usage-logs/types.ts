@@ -181,6 +181,9 @@ export interface LogOtherData {
   is_system_prompt_overwritten?: boolean
   po?: string[]
   billing_source?: string
+  billing_quota_category?: 'universal' | 'gpt' | 'subscription'
+  billing_quota_label?: string
+  marketplace_group_id?: string
   group?: string
   stream_status?: {
     status?: string

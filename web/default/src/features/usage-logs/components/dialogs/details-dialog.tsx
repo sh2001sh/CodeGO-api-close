@@ -65,6 +65,7 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { BillingQuotaSourceBadge } from '../billing-quota-source'
 import { BillingCalculationSection } from './billing-calculation-section'
 
 function timingTextColorClass(
@@ -151,7 +152,7 @@ function BillingBreakdown(props: {
   const isTieredExpr = other.billing_mode === 'tiered_expr'
   const tieredSummary = getTieredBillingSummary(other)
 
-  const rows: Array<{ label: string; value: string }> = []
+  const rows: Array<{ label: string; value: React.ReactNode }> = []
   const priceOpts = { digitsLarge: 4, digitsSmall: 6, abbreviate: false }
   const fmtPrice = (usd: number) => formatBillingCurrencyFromUSD(usd, priceOpts)
   const baseInputUSD = other.model_ratio != null ? other.model_ratio * 2.0 : 0
@@ -310,6 +311,13 @@ function BillingBreakdown(props: {
       value: other.admin_info.local_count_tokens
         ? t('Local Billing')
         : t('Upstream Response'),
+    })
+  }
+
+  if (other.billing_source || other.billing_quota_category) {
+    rows.push({
+      label: t('Quota source'),
+      value: <BillingQuotaSourceBadge other={other} />,
     })
   }
 

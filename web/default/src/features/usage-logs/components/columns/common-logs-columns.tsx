@@ -54,6 +54,7 @@ import {
   isPerCallBilling,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { BillingQuotaSourceBadge } from '../billing-quota-source'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { ModelBadge } from '../model-badge'
 import { useUsageLogsContext } from '../usage-logs-provider'
@@ -787,16 +788,10 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (isSubscription) {
           return (
             <div className='flex flex-col items-start gap-1'>
-              <span className='border-success/30 bg-success/10 text-success inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium'>
-                <span
-                  className='bg-success size-1.5 rounded-full'
-                  aria-hidden='true'
-                />
-                {t('Subscription')}
-              </span>
               <span className='text-success font-mono text-xs font-semibold tabular-nums'>
                 {formatLogQuota(quota)}
               </span>
+              <BillingQuotaSourceBadge other={other} />
               <UsageDiscountBadge other={other} />
             </div>
           )
@@ -809,6 +804,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <span className='border-border/80 bg-muted/60 inline-flex w-fit items-center rounded-md border px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums'>
               {quotaStr}
             </span>
+            <BillingQuotaSourceBadge other={other} />
             <UsageDiscountBadge other={other} />
           </div>
         )

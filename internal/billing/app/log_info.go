@@ -147,7 +147,11 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		other["marketplace_platform_commission_rate"] = 0.05
 		other["marketplace_transaction_fee_rate"] = 0.0
 		other["marketplace_owner_net_rate"] = 0.94
-		other["billing_quota_label"] = "通用额度"
+	}
+	billingQuotaCategory, billingQuotaLabel := billingQuotaSource(relayInfo)
+	if billingQuotaCategory != "" {
+		other["billing_quota_category"] = billingQuotaCategory
+		other["billing_quota_label"] = billingQuotaLabel
 	}
 	switch relayInfo.BillingSource {
 	case BillingSourceClaudeWallet:
@@ -203,6 +207,26 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 			other["subscription_consumed"] = consumed
 		}
 		other["wallet_quota_deducted"] = 0
+	}
+}
+
+func billingQuotaSource(relayInfo *relaycommon.RelayInfo) (category string, label string) {
+	if relayInfo == nil {
+		return "", ""
+	}
+	if relayInfo.MarketplaceGroupID != "" {
+		return "universal", "通用额度"
+	}
+
+	switch relayInfo.BillingSource {
+	case BillingSourceClaudeWallet:
+		return "universal", "通用额度"
+	case BillingSourceWallet:
+		return "gpt", "官方 GPT 专属额度"
+	case BillingSourceSubscription:
+		return "subscription", "GPT 套餐额度"
+	default:
+		return "", ""
 	}
 }
 

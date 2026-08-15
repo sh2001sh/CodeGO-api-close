@@ -182,7 +182,7 @@ export async function getSelectableMarketplaceGroups(): Promise<
     .map((group) => ({
       value: `market:${group.id}`,
       label: group.system_display_name,
-      desc: `${group.source_label || '来源待审核'} · ${group.owner_display_name} · ${group.models.slice(0, 2).join(', ')}`,
+      desc: group.source_label || '来源待审核',
       ratio: group.multiplier,
       category: 'marketplace' as const,
     }))

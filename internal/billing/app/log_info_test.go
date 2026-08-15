@@ -39,3 +39,38 @@ func TestGenerateTextOtherInfoIncludesFirstByteTrace(t *testing.T) {
 	require.True(t, ok)
 	require.Greater(t, trace["total_ms"], int64(0))
 }
+
+func TestAppendBillingInfoIncludesQuotaSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		source   string
+		category string
+		label    string
+	}{
+		{name: "universal quota", source: BillingSourceClaudeWallet, category: "universal", label: "通用额度"},
+		{name: "official GPT quota", source: BillingSourceWallet, category: "gpt", label: "官方 GPT 专属额度"},
+		{name: "GPT plan quota", source: BillingSourceSubscription, category: "subscription", label: "GPT 套餐额度"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			other := make(map[string]interface{})
+			appendBillingInfo(&gatewaysruntime.RelayInfo{BillingSource: tt.source}, other)
+
+			require.Equal(t, tt.source, other["billing_source"])
+			require.Equal(t, tt.category, other["billing_quota_category"])
+			require.Equal(t, tt.label, other["billing_quota_label"])
+		})
+	}
+}
+
+func TestAppendBillingInfoMarketplaceAlwaysUsesUniversalQuota(t *testing.T) {
+	other := make(map[string]interface{})
+	appendBillingInfo(&gatewaysruntime.RelayInfo{
+		BillingSource:      BillingSourceWallet,
+		MarketplaceGroupID: "Codex-Plus-abc123",
+	}, other)
+
+	require.Equal(t, "universal", other["billing_quota_category"])
+	require.Equal(t, "通用额度", other["billing_quota_label"])
+}

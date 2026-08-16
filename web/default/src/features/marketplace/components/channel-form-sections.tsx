@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { Switch } from '@/components/ui/switch'
 import {
   MARKETPLACE_SOURCE_OPTIONS,
   type ChannelFormInput,
@@ -244,7 +245,34 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
           {...form.register('maintenance_window')}
         />
       </FormField>
+      <ChannelInterceptionPolicy form={form} />
     </FormSection>
+  )
+}
+
+function ChannelInterceptionPolicy({ form }: { form: ChannelForm }) {
+  const { t } = useTranslation()
+  const enabled = form.watch('sensitive_word_interception_enabled')
+  return (
+    <div className='flex min-h-16 items-center justify-between gap-4 rounded-md border px-3 py-2.5'>
+      <div className='space-y-0.5'>
+        <p className='text-sm font-medium'>{t('敏感词拦截')}</p>
+        <p className='text-muted-foreground text-xs leading-5'>
+          {enabled
+            ? t('请求会接入平台敏感词检测，命中规则时按平台策略拦截。')
+            : t('请求不接入平台敏感词检测，由渠道主自行承担内容治理责任。')}
+        </p>
+      </div>
+      <Switch
+        checked={enabled}
+        onCheckedChange={(checked) =>
+          form.setValue('sensitive_word_interception_enabled', checked, {
+            shouldDirty: true,
+          })
+        }
+        aria-label={t('敏感词拦截')}
+      />
+    </div>
   )
 }
 

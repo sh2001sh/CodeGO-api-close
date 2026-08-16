@@ -101,12 +101,11 @@ func TestRelayPromptAuditPrecedesCostAndUpstreamSideEffects(t *testing.T) {
 	positions := functionCallPositions(t, filepath.Join(filepath.Dir(currentFile), "relay_request.go"), "relayRequest")
 	auditPosition, found := positions["checkPromptAudit"]
 	require.True(t, found)
-	sensitivePosition, found := positions["CheckSensitiveText"]
+	sensitivePosition, found := positions["checkPromptSensitiveForChannel"]
 	require.True(t, found)
 	require.Less(t, sensitivePosition, auditPosition, "hard sensitive checks must precede the secondary Guard")
 
 	for _, laterCall := range []string{
-		"EstimateRequestToken",
 		"PreConsumeRelayBilling",
 		"ExecuteRealtimeRelay",
 		"ExecuteClaudeRelay",

@@ -16,53 +16,141 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Clock, Gauge, ShieldCheck, Zap } from 'lucide-react'
+import { CheckCircle2, Clock, ShieldCheck, Zap } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
-import type { BlindBoxSelfData } from '../types'
+import type { BalanceBlindBoxOverview } from '../types'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
 
 export function BlindBoxPityTrack(props: {
-  firstPurchaseEligible: boolean
-  firstPurchaseUsd: number
-  pityProgress: number
-  pityThreshold: number
-  remainingPity: number
-  pityGuaranteeUsd: number
+  balance?: BalanceBlindBoxOverview
 }) {
-  const reduced = Boolean(useReducedMotion())
-  const pct =
-    props.pityThreshold > 0
-      ? Math.min(100, (props.pityProgress / props.pityThreshold) * 100)
-      : 0
-  const ready = props.remainingPity <= 0
+  const balance = props.balance
+  const firstEligible = Boolean(
+    balance?.first_draw_eligible && balance.first_draw_guarantee_usd > 0
+  )
 
   return (
-    <section className='app-subtle-panel p-4'>
-      <div className='flex flex-wrap items-center justify-between gap-2'>
-        <div className='flex items-center gap-2'>
-          <ShieldCheck className='text-primary size-4' aria-hidden='true' />
-          <span className='text-foreground text-sm font-semibold'>
-            保底进度
-          </span>
-          {props.firstPurchaseEligible ? (
-            <span className='border-primary/30 bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold'>
-              <Zap className='size-2.5' aria-hidden='true' />
-              首购保底 ${props.firstPurchaseUsd.toFixed(0)}
-            </span>
-          ) : null}
+    <section className='app-subtle-panel overflow-hidden'>
+      <GuaranteeHeader firstEligible={firstEligible} />
+
+      <div className='bg-border/70 grid gap-px sm:grid-cols-[0.88fr_1.12fr]'>
+        <FirstPurchaseGuarantee
+          eligible={firstEligible}
+          rewardMin={balance?.first_draw_reward_min_usd || 0}
+          rewardMax={balance?.first_draw_reward_max_usd || 0}
+        />
+        <div className='bg-background/65 space-y-4 px-4 py-4 sm:px-5'>
+          <GuaranteeProgress
+            label='小保底'
+            progress={balance?.small_pity_progress || 0}
+            threshold={balance?.small_pity_threshold || 0}
+            rewardMin={balance?.small_pity_reward_min_usd || 0}
+            rewardMax={balance?.small_pity_reward_max_usd || 0}
+          />
+          <GuaranteeProgress
+            label='大保底'
+            progress={balance?.pity_progress || 0}
+            threshold={balance?.pity_threshold || 0}
+            rewardMin={balance?.pity_reward_min_usd || 0}
+            rewardMax={balance?.pity_reward_max_usd || 0}
+          />
         </div>
-        <span className='text-foreground text-sm font-semibold tabular-nums'>
-          {props.pityProgress}
-          <span className='text-muted-foreground font-normal'>
-            {' '}
-            / {props.pityThreshold}
-          </span>
-        </span>
       </div>
 
-      <div className='bg-muted mt-3 h-2 overflow-hidden rounded-full'>
+      <p className='text-muted-foreground border-border/70 border-t px-4 py-3 text-[11px] leading-5 sm:px-5'>
+        三类保底使用独立的有界奖池，顶级大奖仅来自普通池。奖励达到对应档位后，保底进度自动重置。
+      </p>
+    </section>
+  )
+}
+
+function GuaranteeHeader(props: { firstEligible: boolean }) {
+  return (
+    <div className='border-border/70 flex items-start justify-between gap-4 border-b px-4 py-3.5 sm:px-5'>
+      <div>
+        <div className='flex items-center gap-2'>
+          <ShieldCheck className='text-primary size-4' aria-hidden='true' />
+          <h3 className='text-foreground text-sm font-semibold'>首购与保底</h3>
+        </div>
+        <p className='text-muted-foreground mt-1 text-xs leading-5'>
+          奖励在购买入库时封存，进度也在此时结算；开启只揭晓结果。
+        </p>
+      </div>
+      <span
+        className={cn(
+          'inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold',
+          props.firstEligible
+            ? 'border-primary/30 bg-primary/10 text-primary'
+            : 'border-border bg-background/70 text-muted-foreground'
+        )}
+      >
+        {props.firstEligible ? (
+          <Zap className='size-3' aria-hidden='true' />
+        ) : (
+          <CheckCircle2 className='size-3' aria-hidden='true' />
+        )}
+        {props.firstEligible ? '首购权益待使用' : '首购权益已使用'}
+      </span>
+    </div>
+  )
+}
+
+function FirstPurchaseGuarantee(props: {
+  eligible: boolean
+  rewardMin: number
+  rewardMax: number
+}) {
+  return (
+    <div className='bg-background/65 px-4 py-4 sm:px-5'>
+      <div className='text-muted-foreground text-[11px]'>首购首抽保底</div>
+      <div className='text-foreground mt-1 text-lg font-semibold tabular-nums'>
+        {formatRewardRange(props.rewardMin, props.rewardMax)} 通用额度
+      </div>
+      <p className='text-muted-foreground mt-2 text-xs leading-5'>
+        {props.eligible
+          ? '首次购买批次的第一个盲盒进入独立首购池，购买多个也只触发一次。'
+          : '首购保底已经使用，后续按常规奖池和连续保底规则结算。'}
+      </p>
+    </div>
+  )
+}
+
+function GuaranteeProgress(props: {
+  label: string
+  progress: number
+  threshold: number
+  rewardMin: number
+  rewardMax: number
+}) {
+  const reduced = Boolean(useReducedMotion())
+  const progress = Math.max(0, props.progress)
+  const threshold = Math.max(0, props.threshold)
+  const missesBeforeGuarantee = Math.max(0, threshold - 1)
+  const remainingMisses = Math.max(0, missesBeforeGuarantee - progress)
+  const ready = threshold > 0 && remainingMisses === 0
+  const pct =
+    missesBeforeGuarantee > 0
+      ? Math.min(100, (progress / missesBeforeGuarantee) * 100)
+      : 100
+
+  return (
+    <div>
+      <div className='flex items-baseline justify-between gap-3'>
+        <div>
+          <span className='text-foreground text-xs font-semibold'>
+            {props.label}
+          </span>
+          <span className='text-muted-foreground ml-1.5 text-[10px]'>
+            第 {threshold} 抽内
+          </span>
+        </div>
+        <span className='text-foreground text-xs font-semibold tabular-nums'>
+          {ready ? '下一抽触发' : `已累计 ${progress} 次`}
+        </span>
+      </div>
+      <div className='bg-muted mt-2 h-1.5 overflow-hidden rounded-full'>
         <motion.div
           className={cn(
             'h-full rounded-full',
@@ -73,102 +161,19 @@ export function BlindBoxPityTrack(props: {
           transition={{ duration: 0.7, ease: EASE_OUT_QUINT }}
         />
       </div>
-
-      <p className='text-muted-foreground mt-2.5 text-xs leading-5'>
-        {props.firstPurchaseEligible
-          ? `首次购买盲盒后，首抽统一额度最低保底 $${props.firstPurchaseUsd.toFixed(0)}。`
-          : ready
-            ? `下次抽取必定触发保底，按 $${props.pityGuaranteeUsd.toFixed(0)} 档位及以上发放。`
-            : `连续 ${props.pityThreshold} 次未开出高价值奖励时触发保底，再抽 ${props.remainingPity} 次达成；保底按 $${props.pityGuaranteeUsd.toFixed(0)} 档位及以上发放。`}
+      <p className='text-muted-foreground mt-1.5 text-[11px] leading-4'>
+        {ready
+          ? `${formatRewardRange(props.rewardMin, props.rewardMax)} 通用额度保底已就绪。`
+          : `再出现 ${remainingMisses} 次低奖，下一抽进入 ${formatRewardRange(props.rewardMin, props.rewardMax)} 通用额度保底池。`}
       </p>
-    </section>
+    </div>
   )
 }
 
-export function BlindBoxZeroHourCard(props: { data: BlindBoxSelfData | null }) {
-  const reduced = Boolean(useReducedMotion())
-  const zeroHour = props.data?.zero_hour
-  if (!zeroHour) return null
-
-  const pointCap = zeroHour.point_cap || 0
-  const pct =
-    pointCap > 0 ? Math.min(100, (zeroHour.points / pointCap) * 100) : 0
-
-  return (
-    <section
-      className={cn(
-        'overflow-hidden rounded-2xl border',
-        zeroHour.active
-          ? 'border-success/35 bg-success/[0.05]'
-          : 'border-amber-500/30 bg-amber-500/[0.05]'
-      )}
-    >
-      <div className='flex flex-wrap items-start justify-between gap-3 px-4 py-3.5'>
-        <div className='flex min-w-0 items-start gap-3'>
-          <motion.span
-            className='flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400'
-            animate={reduced ? undefined : { scale: [1, 1.09, 1] }}
-            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <Gauge className='size-4' aria-hidden='true' />
-          </motion.span>
-          <div className='min-w-0'>
-            <h3 className='text-foreground text-sm font-semibold'>
-              历史 0 倍率道具
-            </h3>
-            <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-              仅用于兼容迁移前已获得的道具，新统一奖池不再产出
-            </p>
-          </div>
-        </div>
-        {zeroHour.active ? (
-          <span className='border-success/30 bg-success/10 text-success shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold'>
-            生效中
-          </span>
-        ) : null}
-      </div>
-
-      <div className='space-y-2.5 px-4 pb-4'>
-        <div>
-          <div className='flex items-baseline justify-between gap-2'>
-            <span className='text-muted-foreground text-xs'>累积进度</span>
-            <span className='text-foreground font-mono text-xs font-medium tabular-nums'>
-              {zeroHour.points} / {pointCap}
-            </span>
-          </div>
-          <div className='bg-muted mt-1.5 h-1.5 overflow-hidden rounded-full'>
-            <motion.div
-              className='h-full rounded-full bg-amber-500'
-              initial={reduced ? false : { width: 0 }}
-              animate={{ width: `${pct}%` }}
-              transition={{ duration: 0.7, ease: EASE_OUT_QUINT }}
-            />
-          </div>
-        </div>
-
-        <div className='grid grid-cols-2 gap-2'>
-          <StatTile
-            label='当前概率'
-            value={`${(zeroHour.current_probability * 100).toFixed(3)}%`}
-          />
-          <StatTile
-            label='概率上限'
-            value={`${(zeroHour.max_probability * 100).toFixed(3)}%`}
-          />
-        </div>
-
-        <ul className='text-muted-foreground space-y-1 text-xs leading-5'>
-          <li>每成功结算 $1 增加 1 点，每个实际支付的盲盒增加 5 点。</li>
-          <li>点数越高概率越高，抽中后进度归零重新累积。</li>
-          <li>
-            启用后使用 zero-hour
-            分组并接入倍率卡专属分组，仅限本人，单用户并发最多 10
-            个请求，到期后分组自动隐藏。
-          </li>
-        </ul>
-      </div>
-    </section>
-  )
+function formatRewardRange(minimum: number, maximum: number) {
+  return minimum === maximum
+    ? minimum.toFixed(2)
+    : `${minimum.toFixed(2)}–${maximum.toFixed(2)}`
 }
 
 export function BlindBoxPropRules() {
@@ -216,16 +221,5 @@ export function BlindBoxPropRules() {
         请求未命中官方渠道时，倍率卡不生效。
       </p>
     </section>
-  )
-}
-
-function StatTile(props: { label: string; value: string }) {
-  return (
-    <div className='border-border/70 bg-background/60 rounded-lg border px-3 py-2'>
-      <div className='text-muted-foreground text-[11px]'>{props.label}</div>
-      <div className='text-foreground mt-0.5 font-mono text-sm font-semibold tabular-nums'>
-        {props.value}
-      </div>
-    </div>
   )
 }

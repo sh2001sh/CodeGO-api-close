@@ -2,17 +2,18 @@ import type { TFunction } from 'i18next'
 import type { LuckyNumberRules, MembershipTier } from './types'
 
 export const DEFAULT_LUCKY_NUMBER_RULES: LuckyNumberRules = {
-  base_reward_1_usd: 1,
-  base_reward_2_usd: 10,
-  base_reward_3_usd: 50,
-  base_reward_4_usd: 100,
+	quota_unit: 'unified_credit',
+  base_reward_1_usd: 0.25,
+  base_reward_2_usd: 2.5,
+  base_reward_3_usd: 12.5,
+  base_reward_4_usd: 25,
   multiplier_lite: 1,
   multiplier_standard: 1.1,
   multiplier_pro: 1.2,
   multiplier_ultra: 1.3,
-  jackpot_initial_usd: 100,
-  jackpot_increment_usd: 20,
-  jackpot_cap_usd: 1000,
+  jackpot_initial_usd: 25,
+  jackpot_increment_usd: 5,
+  jackpot_cap_usd: 250,
 }
 
 export function normalizeLuckyNumberRules(
@@ -123,10 +124,13 @@ export function getMatchedDigits(
   return 0
 }
 
-export function formatLuckyUsd(amount?: number | null): string {
+export function formatLuckyCredit(amount?: number | null): string {
   const value = Number(amount || 0)
-  return `$${value.toFixed(2)}`
+  return `${value.toFixed(2)} 统一额度`
 }
+
+// Compatibility alias for historical component and API field names.
+export const formatLuckyUsd = formatLuckyCredit
 
 export function formatLuckyDate(
   timestampOrDate: number | string | undefined,

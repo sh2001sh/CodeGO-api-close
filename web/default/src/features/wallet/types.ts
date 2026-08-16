@@ -176,6 +176,7 @@ export interface WalletTransferRecipient {
 }
 
 export interface ConfigureWalletTransferPasswordRequest {
+  verification_method?: 'payment_password' | 'email'
   current_password?: string
   old_payment_password?: string
   new_payment_password: string
@@ -460,6 +461,18 @@ export interface BlindBoxProp {
   updated_at: number
 }
 
+export interface BlindBoxPropGift {
+  id: number
+  request_id: string
+  prop_id: number
+  sender_external_id: string
+  recipient_external_id: string
+  prop_type: string
+  prop_title: string
+  status: string
+  created_at: number
+}
+
 export interface BlindBoxRecord {
   id: number
   reward_type: 'quota' | 'claude_quota' | 'subscription' | string
@@ -577,6 +590,12 @@ export interface BalanceBlindBoxOverview {
   small_pity_guarantee_usd: number
   first_draw_guarantee_usd: number
   first_draw_eligible: boolean
+  first_draw_reward_min_usd: number
+  first_draw_reward_max_usd: number
+  small_pity_reward_min_usd: number
+  small_pity_reward_max_usd: number
+  pity_reward_min_usd: number
+  pity_reward_max_usd: number
 }
 
 export interface BalanceBlindBoxPurchase {

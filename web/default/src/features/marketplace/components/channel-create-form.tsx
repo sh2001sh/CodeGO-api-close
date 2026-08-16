@@ -14,12 +14,12 @@ import {
   type ChannelFormInput,
 } from '../lib/channel-form'
 import type { MarketplaceChannel } from '../types'
+import { ChannelConsistencySection } from './channel-consistency-section'
 import {
   ChannelConnectionSection,
   ChannelModelsSection,
   ChannelStrategySection,
 } from './channel-form-sections'
-import { ChannelConsistencySection } from './channel-consistency-section'
 
 export function ChannelCreateForm(props: { onCreated: () => void }) {
   return <ChannelEditorForm onSaved={props.onCreated} />
@@ -101,6 +101,8 @@ export function ChannelEditorForm(props: {
             max_concurrency: values.max_concurrency,
             qps: values.qps,
             maintenance_window: values.maintenance_window,
+            sensitive_word_interception_enabled:
+              values.sensitive_word_interception_enabled,
             ...(values.base_url ? { base_url: values.base_url } : {}),
             ...(values.api_key ? { api_key: values.api_key } : {}),
             ...(props.admin

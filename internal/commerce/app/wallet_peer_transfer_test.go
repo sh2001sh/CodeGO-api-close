@@ -33,6 +33,23 @@ func TestWalletTransferPasswordHashAndLockout(t *testing.T) {
 	require.Greater(t, security.LockedUntil, time.Now().Unix())
 }
 
+func TestResetWalletTransferPasswordClearsFailedAttempts(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 9936, ExternalId: "TRS006", Username: "transfer-email-reset", AffCode: "TRS006", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, ConfigureWalletTransferPassword(user.Id, "", "Paypass123"))
+	require.ErrorIs(t, ConfigureWalletTransferPassword(user.Id, "wrong-pass", "Paypass456"), commerceschema.ErrWalletTransferPasswordIncorrect)
+
+	var security commerceschema.WalletTransferSecurity
+	require.NoError(t, db.First(&security, "user_id = ?", user.Id).Error)
+	require.Equal(t, 1, security.FailedAttempts)
+	require.NoError(t, ResetWalletTransferPassword(user.Id, "Paypass789"))
+	require.NoError(t, db.First(&security, "user_id = ?", user.Id).Error)
+	require.Zero(t, security.FailedAttempts)
+	require.Zero(t, security.LockedUntil)
+	require.True(t, platformsecurity.ValidatePasswordAndHash("Paypass789", security.PasswordHash))
+}
+
 func TestTransferWalletQuotaIsAtomicIdempotentAndPrivate(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	unit := int(platformruntime.QuotaPerUnit)

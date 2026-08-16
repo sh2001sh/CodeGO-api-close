@@ -118,6 +118,25 @@ func convertBlindBoxProp(c *gin.Context) {
 	httpapi.ApiSuccess(c, gin.H{"prop": prop})
 }
 
+func giftBlindBoxProp(c *gin.Context) {
+	propID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || propID <= 0 {
+		httpapi.ApiErrorMsg(c, "invalid blind box prop id")
+		return
+	}
+	var req commerceapp.GiftBlindBoxPropRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "recipient_external_id and request_id are required")
+		return
+	}
+	result, err := commerceapp.GiftBlindBoxProp(c.GetInt("id"), propID, req)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, result)
+}
+
 func getBalanceBlindBoxOverview(c *gin.Context) {
 	overview, err := commerceapp.GetBalanceBlindBoxOverview(c.GetInt("id"))
 	if err != nil {

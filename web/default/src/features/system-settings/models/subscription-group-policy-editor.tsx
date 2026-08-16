@@ -71,7 +71,7 @@ export function SubscriptionGroupPolicyEditor({
   return (
     <Card className='before:border-border/90 relative shadow-sm ring-0 before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:border'>
       <CardHeader className='bg-muted/20 border-b'>
-        <CardTitle>{t('Monthly pass billing')}</CardTitle>
+        <CardTitle>{t('Subscription billing')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className='overflow-hidden rounded-md border'>
@@ -80,10 +80,10 @@ export function SubscriptionGroupPolicyEditor({
               <TableRow>
                 <TableHead className='min-w-40'>{t('Group name')}</TableHead>
                 <TableHead className='w-32 text-center'>
-                  {t('Allow monthly pass')}
+                  {t('Allow subscription quota')}
                 </TableHead>
                 <TableHead className='w-36'>
-                  {t('Monthly pass multiplier')}
+                  {t('Subscription multiplier')}
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -112,7 +112,7 @@ export function SubscriptionGroupPolicyEditor({
                                 enabled: checked === true,
                               })
                             }
-                            aria-label={t('Allow monthly pass for {{group}}', {
+                            aria-label={t('Allow subscription quota for {{group}}', {
                               group,
                             })}
                           />
@@ -133,7 +133,7 @@ export function SubscriptionGroupPolicyEditor({
                             })
                           }
                           aria-label={t(
-                            'Monthly pass multiplier for {{group}}',
+                            'Subscription multiplier for {{group}}',
                             { group }
                           )}
                         />

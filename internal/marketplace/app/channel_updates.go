@@ -54,6 +54,9 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 		}
 	}
 	applyCapacityUpdate(channel, req)
+	if req.SensitiveWordInterceptionEnabled != nil {
+		channel.SensitiveWordInterceptionEnabled = req.SensitiveWordInterceptionEnabled
+	}
 	changed, err := applyCredentialUpdate(channel, req)
 	if err != nil {
 		return false, err

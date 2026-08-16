@@ -216,7 +216,7 @@ function BillingBreakdown(props: {
 	if (effectiveGR != null && Number.isFinite(effectiveGR)) {
 		rows.push({
 			label: isSubscription
-				? t('Monthly pass multiplier')
+				? t('Subscription multiplier')
 				: isUserGR
 					? t('User Exclusive Ratio')
 					: t('Group Ratio'),
@@ -1081,7 +1081,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
               <DetailSection label={t('Subscription Billing')}>
                 {other.subscription_group_multiplier != null && (
                   <DetailRow
-                    label={t('Monthly pass multiplier')}
+                    label={t('Subscription multiplier')}
                     value={`${other.subscription_group_multiplier}x`}
                     mono
                   />

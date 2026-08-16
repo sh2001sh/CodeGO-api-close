@@ -85,17 +85,17 @@ type SubscriptionLuckyDraw struct {
 	Timezone            string  `json:"timezone" gorm:"type:varchar(64);not null;default:'Asia/Shanghai'"`
 	DrawHour            int     `json:"draw_hour" gorm:"type:int;not null;default:20"`
 	DrawMinute          int     `json:"draw_minute" gorm:"type:int;not null;default:0"`
-	BaseReward1USD      float64 `json:"base_reward_1_usd" gorm:"type:decimal(12,2);not null;default:1"`
-	BaseReward2USD      float64 `json:"base_reward_2_usd" gorm:"type:decimal(12,2);not null;default:10"`
-	BaseReward3USD      float64 `json:"base_reward_3_usd" gorm:"type:decimal(12,2);not null;default:50"`
-	BaseReward4USD      float64 `json:"base_reward_4_usd" gorm:"type:decimal(12,2);not null;default:100"`
+	BaseReward1USD      float64 `json:"base_reward_1_usd" gorm:"type:decimal(12,2);not null;default:0.25"`
+	BaseReward2USD      float64 `json:"base_reward_2_usd" gorm:"type:decimal(12,2);not null;default:2.5"`
+	BaseReward3USD      float64 `json:"base_reward_3_usd" gorm:"type:decimal(12,2);not null;default:12.5"`
+	BaseReward4USD      float64 `json:"base_reward_4_usd" gorm:"type:decimal(12,2);not null;default:25"`
 	MultiplierLite      float64 `json:"multiplier_lite" gorm:"type:decimal(8,4);not null;default:1"`
 	MultiplierStandard  float64 `json:"multiplier_standard" gorm:"type:decimal(8,4);not null;default:1.1"`
 	MultiplierPro       float64 `json:"multiplier_pro" gorm:"type:decimal(8,4);not null;default:1.2"`
 	MultiplierUltra     float64 `json:"multiplier_ultra" gorm:"type:decimal(8,4);not null;default:1.3"`
-	JackpotInitialUSD   float64 `json:"jackpot_initial_usd" gorm:"type:decimal(12,2);not null;default:100"`
-	JackpotIncrementUSD float64 `json:"jackpot_increment_usd" gorm:"type:decimal(12,2);not null;default:20"`
-	JackpotCapUSD       float64 `json:"jackpot_cap_usd" gorm:"type:decimal(12,2);not null;default:1000"`
+	JackpotInitialUSD   float64 `json:"jackpot_initial_usd" gorm:"type:decimal(12,2);not null;default:25"`
+	JackpotIncrementUSD float64 `json:"jackpot_increment_usd" gorm:"type:decimal(12,2);not null;default:5"`
+	JackpotCapUSD       float64 `json:"jackpot_cap_usd" gorm:"type:decimal(12,2);not null;default:250"`
 	CostPerUSD          float64 `json:"cost_per_usd" gorm:"type:decimal(12,6);not null;default:0.1"`
 	MonthlyBudgetUSD    float64 `json:"monthly_budget_usd" gorm:"type:decimal(12,2);not null;default:0"`
 	DrawnAt             int64   `json:"drawn_at" gorm:"bigint"`

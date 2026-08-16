@@ -152,7 +152,9 @@ export function PackagePlanCard(props: {
                   {t(monthlyPassBenefit)}
                 </div>
                 <div className='text-muted-foreground mt-0.5 leading-relaxed'>
-                  {t('Start and pause anytime; only active time is counted.')}
+                  {t(
+                    '仅限月卡额度，激活期间按 0.1 倍率扣费，不会回退到通用余额。'
+                  )}
                 </div>
               </div>
             </div>
@@ -169,7 +171,9 @@ export function PackagePlanCard(props: {
                 </span>
               </div>
               <div className='text-primary text-xs leading-relaxed'>
-                {t('Payment automatically joins the current collective benefit queue.')}
+                {t(
+                  'Payment automatically joins the current collective benefit queue.'
+                )}
               </div>
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-muted-foreground'>

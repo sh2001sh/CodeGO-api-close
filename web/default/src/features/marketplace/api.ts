@@ -7,6 +7,7 @@ import type {
   MarketplaceAutoRoutePool,
   MarketplaceGroupList,
   MarketplaceOwnerUsageLogResult,
+  ModelConsistencyFeedbackSummary,
   TokenOption,
 } from './types'
 
@@ -14,6 +15,18 @@ interface ApiResponse<T = unknown> {
   success: boolean
   message?: string
   data?: T
+}
+
+export async function submitMarketplaceModelFeedback(input: {
+  groupId: string
+  model: string
+  status: 'passed' | 'failed' | 'questionable'
+}) {
+  const response = await api.post<ApiResponse<ModelConsistencyFeedbackSummary>>(
+    `/api/marketplace/groups/${input.groupId}/model-consistency-feedback`,
+    { model: input.model, status: input.status }
+  )
+  return requireData(response.data)
 }
 
 function requireData<T>(response: ApiResponse<T>): T {

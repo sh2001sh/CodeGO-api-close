@@ -39,6 +39,7 @@ import { WalletStatsCard } from '@/features/wallet/components/wallet-stats-card'
 import { WalletWorkspaceShell } from '@/features/wallet/components/wallet-workspace-shell'
 import { useWalletWorkspace } from '@/features/wallet/hooks/use-wallet-workspace'
 import { CurrentPackagePanel, PlanZone } from './components'
+import { MonthlyPlanRules } from './monthly-plan-rules'
 
 type ZoneId = 'starter' | 'monthly' | 'shortterm'
 
@@ -230,6 +231,7 @@ export function PackagesPage() {
                 }
                 contentClassName='space-y-5'
               >
+                <MonthlyPlanRules />
                 <PackageModelScopeNotice />
                 {primaryPlanZones.map((zone) => {
                   if (

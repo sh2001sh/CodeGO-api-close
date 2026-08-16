@@ -128,9 +128,12 @@ func BuildUserGroupsPayload(userID int) map[string]map[string]any {
 
 	for groupName := range gatewaystore.GetGroupRatioCopy() {
 		if desc, ok := userUsableGroups[groupName]; ok {
+			subscriptionPolicy := gatewaystore.GetSubscriptionGroupPolicy(groupName)
 			usableGroups[groupName] = map[string]any{
-				"ratio": GetUserGroupRatio(userGroup, groupName),
-				"desc":  desc,
+				"ratio":                GetUserGroupRatio(userGroup, groupName),
+				"desc":                 desc,
+				"subscription_enabled": subscriptionPolicy.Enabled,
+				"subscription_ratio":   subscriptionPolicy.Multiplier,
 			}
 		}
 	}

@@ -25,6 +25,7 @@ export interface BlindBoxLuckyNumber {
 }
 
 export interface LuckyNumberRules {
+	quota_unit: 'unified_credit' | string
   base_reward_1_usd: number
   base_reward_2_usd: number
   base_reward_3_usd: number
@@ -85,6 +86,7 @@ export interface LuckyPublicWin {
 
 export interface LuckyNumberSelfPayload {
   enabled: boolean
+  quota_unit: 'unified_credit' | string
   timezone: string
   draw_hour: number
   draw_minute: number
@@ -127,6 +129,7 @@ export interface LuckyPublicWinPage {
 
 export interface DailyLuckyConfig {
   enabled: boolean
+  quota_unit?: 'unified_credit' | string
   timezone: string
   draw_hour: number
   draw_minute: number

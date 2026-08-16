@@ -95,7 +95,8 @@ func sanitizeChannels(channels []*gatewayschema.Channel) {
 }
 
 func buildChannelListQuery(group string, statusFilter int, typeFilter int) *gorm.DB {
-	query := platformdb.DB.Model(&gatewayschema.Channel{})
+	query := platformdb.DB.Model(&gatewayschema.Channel{}).
+		Where("channel_scope <> ?", gatewayschema.ChannelScopeExternal)
 	query = gatewaystore.ApplyChannelGroupFilter(query, group)
 	if statusFilter == constant.ChannelStatusEnabled {
 		query = query.Where("status = ?", constant.ChannelStatusEnabled)

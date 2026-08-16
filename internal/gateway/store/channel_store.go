@@ -105,7 +105,9 @@ func SearchChannels(keyword string, group string, modelName string, idSort bool,
 	}
 
 	order := resolveChannelSortOptions(idSort, sortOptions)
-	baseQuery := platformdb.DB.Model(&gatewayschema.Channel{}).Omit("key")
+	baseQuery := platformdb.DB.Model(&gatewayschema.Channel{}).
+		Where("channel_scope <> ?", gatewayschema.ChannelScopeExternal).
+		Omit("key")
 
 	whereClause := "(id = ? OR name LIKE ? OR `key` = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 	if platformdb.UsingPostgreSQL {
@@ -292,7 +294,9 @@ func SearchChannelTags(keyword string, group string, modelName string, idSort bo
 		order = "id desc"
 	}
 
-	baseQuery := platformdb.DB.Model(&gatewayschema.Channel{}).Omit("key")
+	baseQuery := platformdb.DB.Model(&gatewayschema.Channel{}).
+		Where("channel_scope <> ?", gatewayschema.ChannelScopeExternal).
+		Omit("key")
 	whereClause := "(id = ? OR name LIKE ? OR " + keyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 	args := []any{platformtext.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + modelName + "%"}
 	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)

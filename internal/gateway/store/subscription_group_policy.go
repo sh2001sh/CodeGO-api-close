@@ -24,7 +24,7 @@ var (
 	}
 )
 
-// GetSubscriptionGroupPolicy returns the monthly-pass policy for a billing group.
+// GetSubscriptionGroupPolicy returns the subscription policy for a billing group.
 func GetSubscriptionGroupPolicy(group string) SubscriptionGroupPolicy {
 	group = strings.TrimSpace(group)
 	if group == "" {

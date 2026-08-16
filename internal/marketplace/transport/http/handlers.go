@@ -24,7 +24,17 @@ func ListGroups(c *gin.Context) {
 }
 
 func GetGroup(c *gin.Context) {
-	result, err := marketplaceapp.GetMarketplaceGroup(c.Param("slug"), queryInt(c, "window_hours", 24))
+	result, err := marketplaceapp.GetMarketplaceGroup(c.Param("slug"), queryInt(c, "window_hours", 24), c.GetInt("id"))
+	respond(c, result, err)
+}
+
+func SubmitModelConsistencyFeedback(c *gin.Context) {
+	var req marketplaceapp.ModelConsistencyFeedbackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.SubmitModelConsistencyFeedback(c.GetInt("id"), c.Param("id"), req)
 	respond(c, result, err)
 }
 

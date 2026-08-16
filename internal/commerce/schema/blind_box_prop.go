@@ -23,6 +23,7 @@ const (
 	BlindBoxPropStatusReserved  = "reserved"
 	BlindBoxPropStatusUsed      = "used"
 	BlindBoxPropStatusExpired   = "expired"
+	BlindBoxPropGiftCompleted   = "completed"
 )
 
 const (
@@ -59,6 +60,21 @@ type BlindBoxProp struct {
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
 }
 
+// BlindBoxPropGift records one atomic prop ownership transfer.
+type BlindBoxPropGift struct {
+	Id                  int    `json:"id"`
+	RequestId           string `json:"request_id" gorm:"type:varchar(64);not null;uniqueIndex"`
+	PropId              int    `json:"prop_id" gorm:"not null;index"`
+	SenderUserId        int    `json:"-" gorm:"not null;index"`
+	RecipientUserId     int    `json:"-" gorm:"not null;index"`
+	SenderExternalId    string `json:"sender_external_id" gorm:"type:varchar(16);not null"`
+	RecipientExternalId string `json:"recipient_external_id" gorm:"type:varchar(16);not null"`
+	PropType            string `json:"prop_type" gorm:"type:varchar(64);not null"`
+	PropTitle           string `json:"prop_title" gorm:"type:varchar(255);not null"`
+	Status              string `json:"status" gorm:"type:varchar(24);not null"`
+	CreatedAt           int64  `json:"created_at" gorm:"type:bigint;not null;index"`
+}
+
 // BlindBoxZeroHourState tracks one user's hidden zero-multiplier draw progress.
 // Points are deliberately integer based to keep probability updates deterministic.
 type BlindBoxZeroHourState struct {
@@ -92,5 +108,13 @@ func (p *BlindBoxProp) BeforeCreate(tx *gorm.DB) error {
 
 func (p *BlindBoxProp) BeforeUpdate(tx *gorm.DB) error {
 	p.UpdatedAt = platformruntime.GetTimestamp()
+	return nil
+}
+
+func (g *BlindBoxPropGift) BeforeCreate(_ *gorm.DB) error {
+	g.CreatedAt = platformruntime.GetTimestamp()
+	if g.Status == "" {
+		g.Status = BlindBoxPropGiftCompleted
+	}
 	return nil
 }

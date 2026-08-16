@@ -39,6 +39,9 @@ export interface MarketplaceGroup {
   models: string[]
   model_verification_results: ModelVerificationResult[]
   model_consistency_status: ModelConsistencyStatus
+  model_consistency_feedback: ModelConsistencyFeedbackSummary[]
+  can_submit_model_feedback: boolean
+  model_feedback_permission: 'allowed' | 'owner' | 'login_required'
   rank: number
   score: number
   success_rate: number
@@ -57,6 +60,15 @@ export interface MarketplaceGroup {
   independent_consumers: number
   observing: boolean
   updated_at: string
+}
+
+export interface ModelConsistencyFeedbackSummary {
+  model: string
+  passed: number
+  failed: number
+  questionable: number
+  total: number
+  viewer_status: ModelConsistencyStatus
 }
 
 export interface MarketplaceGroupList {
@@ -95,6 +107,7 @@ export interface MarketplaceChannel {
   max_concurrency: number
   qps: number
   maintenance_window: string
+  sensitive_word_interception_enabled: boolean
   internal_channel_id?: number | null
   last_review_reason: string
   verification_due_at?: string | null
@@ -117,6 +130,7 @@ export interface ChannelFormValues {
   max_concurrency: number
   qps: number
   maintenance_window: string
+  sensitive_word_interception_enabled: boolean
 }
 
 export interface ChannelUpdateValues {
@@ -128,6 +142,7 @@ export interface ChannelUpdateValues {
   max_concurrency: number
   qps: number
   maintenance_window: string
+  sensitive_word_interception_enabled: boolean
   base_url?: string
   api_key?: string
   model_consistency_status?: ModelConsistencyStatus

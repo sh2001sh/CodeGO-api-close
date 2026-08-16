@@ -137,6 +137,15 @@ func CreditClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyK
 	})
 }
 
+// CreditUnifiedWalletQuotaTx credits the canonical unified-credit wallet.
+//
+// The historical Claude wallet function remains available for migrations and
+// old callers, but new business features should use this name so the unit is
+// explicit and cannot be mistaken for a model-specific balance.
+func CreditUnifiedWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
+	return CreditClaudeWalletQuotaTx(tx, userID, amount, idempotencyKey, reasonCode)
+}
+
 func setUserWalletQuota(userID int, targetBalance int, readBalance func(int) (int, error), applyDelta func(int, int) error) error {
 	if userID <= 0 {
 		return errors.New("invalid user id")

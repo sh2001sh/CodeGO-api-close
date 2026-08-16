@@ -24,20 +24,21 @@ const dailyLuckyAdminQueryKey = ['admin', 'daily-lucky-number'] as const
 
 const EMPTY_CONFIG: DailyLuckyConfig = {
   enabled: true,
+  quota_unit: 'unified_credit',
   timezone: 'Asia/Shanghai',
   draw_hour: 20,
   draw_minute: 0,
-  base_reward_1_usd: 1,
-  base_reward_2_usd: 10,
-  base_reward_3_usd: 50,
-  base_reward_4_usd: 100,
+  base_reward_1_usd: 0.25,
+  base_reward_2_usd: 2.5,
+  base_reward_3_usd: 12.5,
+  base_reward_4_usd: 25,
   multiplier_lite: 1,
   multiplier_standard: 1.1,
   multiplier_pro: 1.2,
   multiplier_ultra: 1.3,
-  jackpot_initial_usd: 100,
-  jackpot_increment_usd: 20,
-  jackpot_cap_usd: 1000,
+  jackpot_initial_usd: 25,
+  jackpot_increment_usd: 5,
+  jackpot_cap_usd: 250,
   cost_per_usd: 0.1,
   monthly_budget_usd: 0,
 }
@@ -163,9 +164,9 @@ export function DailyLuckyAdminPanel() {
       </div>
 
       <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-        <AdminMetric label={t('Monthly nominal reward')} value={`$${payload.monthly_nominal_reward_usd.toFixed(2)}`} />
+        <AdminMetric label={t('Monthly nominal reward')} value={`${payload.monthly_nominal_reward_usd.toFixed(2)} 统一额度`} />
         <AdminMetric label={t('Monthly actual cost')} value={`¥${payload.monthly_actual_cost_cny.toFixed(2)}`} />
-        <AdminMetric label={t('Monthly budget')} value={payload.monthly_budget_usd > 0 ? `$${payload.monthly_budget_usd.toFixed(2)}` : t('No budget limit')} />
+        <AdminMetric label={t('Monthly budget')} value={payload.monthly_budget_usd > 0 ? `${payload.monthly_budget_usd.toFixed(2)} 统一额度` : t('No budget limit')} />
         <AdminMetric label={t('Budget usage')} value={payload.monthly_budget_usd > 0 ? `${payload.monthly_budget_usage_percent.toFixed(1)}%` : t('Not limited')} />
       </div>
 

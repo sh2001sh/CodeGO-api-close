@@ -51,18 +51,25 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 	if response := decodeCommerceResponse(t, setupRecorder); !response.Success {
 		t.Fatalf("expected payment password setup success, got %#v", response)
 	}
-
-	changeWithoutCodeCtx, changeWithoutCodeRecorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
+	missingMethodCtx, missingMethodRecorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
 		"old_payment_password": "Paypass123", "new_payment_password": "Paypass456", "confirm_password": "Paypass456",
 	}, sender.Id)
-	configureWalletTransferPassword(changeWithoutCodeCtx)
-	if response := decodeCommerceResponse(t, changeWithoutCodeRecorder); response.Success {
-		t.Fatal("expected payment password change without email code to be rejected")
+	configureWalletTransferPassword(missingMethodCtx)
+	if response := decodeCommerceResponse(t, missingMethodRecorder); response.Success {
+		t.Fatal("expected payment password change without a verification method to be rejected")
+	}
+
+	changeWithPasswordCtx, changeWithPasswordRecorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
+		"verification_method": "payment_password", "old_payment_password": "Paypass123", "new_payment_password": "Paypass456", "confirm_password": "Paypass456",
+	}, sender.Id)
+	configureWalletTransferPassword(changeWithPasswordCtx)
+	if response := decodeCommerceResponse(t, changeWithPasswordRecorder); !response.Success {
+		t.Fatalf("expected payment-password verification change success, got %#v", response)
 	}
 
 	identityapp.RegisterVerificationCodeWithKey(sender.Email, "654321", identityapp.WalletTransferPasswordPurpose)
 	changeCtx, changeRecorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
-		"old_payment_password": "Paypass123", "email_code": "654321", "new_payment_password": "Paypass456", "confirm_password": "Paypass456",
+		"verification_method": "email", "email_code": "654321", "new_payment_password": "Paypass789", "confirm_password": "Paypass789",
 	}, sender.Id)
 	configureWalletTransferPassword(changeCtx)
 	if response := decodeCommerceResponse(t, changeRecorder); !response.Success {
@@ -90,7 +97,7 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 	transferCtx, transferRecorder := newCommerceContext(t, stdhttp.MethodPost, "/api/wallet/transfers", map[string]any{
 		"recipient_external_id": recipient.ExternalId,
 		"amount_quota":          2 * unit,
-		"payment_password":      "Paypass456",
+		"payment_password":      "Paypass789",
 		"request_id":            "wallet-transfer-http-request",
 	}, sender.Id)
 	createWalletTransfer(transferCtx)

@@ -160,7 +160,7 @@ type RelayInfo struct {
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.
 	SubscriptionAmountTotal               int64
 	SubscriptionAmountUsedAfterPreConsume int64
-	// SubscriptionGroupMultiplier is the configured monthly-pass multiplier
+	// SubscriptionGroupMultiplier is the configured subscription multiplier
 	// for the selected billing group. SubscriptionQuotaScale is the resulting
 	// scale applied to the normal group-priced quota.
 	SubscriptionGroupMultiplier float64

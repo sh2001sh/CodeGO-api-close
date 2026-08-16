@@ -16,6 +16,7 @@ export function BlindBoxPropsDialog(props: {
   onUse: (prop: BlindBoxProp) => void
   onPause: (prop: BlindBoxProp) => void
   onConvert: (prop: BlindBoxProp) => void
+  onGift: (prop: BlindBoxProp) => void
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -30,6 +31,7 @@ export function BlindBoxPropsDialog(props: {
             onUse={props.onUse}
             onPause={props.onPause}
             onConvert={props.onConvert}
+            onGift={props.onGift}
             convertingPropId={props.convertingPropId}
           />
         </div>

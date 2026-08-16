@@ -218,9 +218,9 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 }
 
 // BillingQuotaForLog returns the amount charged to the selected funding source.
-// The normal usage quota is calculated with the wallet/group ratio. Monthly-pass
+// The normal usage quota is calculated with the wallet/group ratio. Subscription
 // billing may apply a different scale, so exposing that raw quota would make a
-// monthly-pass request appear undercharged in usage logs.
+// subscription request appear undercharged in usage logs.
 func BillingQuotaForLog(relayInfo *relaycommon.RelayInfo, usageQuota int) int {
 	if relayInfo == nil || relayInfo.BillingSource != BillingSourceSubscription {
 		return usageQuota

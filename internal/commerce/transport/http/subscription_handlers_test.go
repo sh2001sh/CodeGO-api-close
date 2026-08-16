@@ -406,8 +406,9 @@ func TestCreateSubscriptionClaudeConversionConsumesQuota(t *testing.T) {
 	}
 
 	ctx, recorder := newCommerceContext(t, stdhttp.MethodPost, "/api/subscription/self/claude-conversions", map[string]any{
-		"subscription_id": subscription.Id,
-		"request_id":      "conv-create-1",
+		"subscription_id":    subscription.Id,
+		"conversion_percent": 60,
+		"request_id":         "conv-create-1",
 	}, user.Id)
 	createSubscriptionClaudeConversion(ctx)
 
@@ -420,7 +421,7 @@ func TestCreateSubscriptionClaudeConversionConsumesQuota(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload user: %v", err)
 	}
-	expectedQuota := int(30 * platformruntime.QuotaPerUnit)
+	expectedQuota := int(30 * 0.6 * platformruntime.QuotaPerUnit)
 	if reloaded.ClaudeQuota != expectedQuota {
 		t.Fatalf("expected unified quota %d, got %d", expectedQuota, reloaded.ClaudeQuota)
 	}

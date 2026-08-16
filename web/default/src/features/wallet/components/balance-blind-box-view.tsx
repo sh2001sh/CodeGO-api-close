@@ -1,6 +1,4 @@
 import {
-  Coins,
-  CreditCard,
   Gift,
   Loader2,
   PackageOpen,
@@ -22,8 +20,9 @@ import {
   BalanceBoxQuantityControl,
 } from './balance-blind-box-controls'
 import { BalanceBoxGiftConfirm } from './balance-blind-box-gift-confirm'
-import { BoxFigure } from './blind-box-stage'
+import { BalanceBoxPurchaseWorkspace } from './balance-blind-box-purchase'
 import { BalanceBlindBoxSimulator } from './balance-blind-box-simulator'
+import { BoxFigure } from './blind-box-stage'
 
 export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulation'
 
@@ -132,7 +131,10 @@ function BalanceBoxModeSwitch(props: {
   onChange: (mode: ActionMode) => void
 }) {
   return (
-    <div className='bg-muted grid grid-cols-2 rounded-lg p-1 sm:grid-cols-4' role='tablist'>
+    <div
+      className='bg-muted grid grid-cols-2 rounded-lg p-1 sm:grid-cols-4'
+      role='tablist'
+    >
       <BalanceBoxModeButton
         active={props.mode === 'purchase'}
         icon={ShoppingBag}
@@ -163,12 +165,17 @@ function BalanceBoxModeSwitch(props: {
 
 function BalanceBoxWorkspace(props: BalanceBoxPanelViewProps) {
   if (props.mode === 'simulation') {
-    return <BalanceBlindBoxSimulator priceUSD={props.balance?.price_usd || 2.5} />
+    return (
+      <BalanceBlindBoxSimulator priceUSD={props.balance?.price_usd || 2.5} />
+    )
+  }
+  if (props.mode === 'purchase') {
+    return <BalanceBoxPurchaseWorkspace {...props} />
   }
   return (
     <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
       <div className='space-y-3'>
-        <BalanceBoxModeDescription mode={props.mode} balance={props.balance} />
+        <BalanceBoxModeDescription mode={props.mode} />
         {props.mode === 'gift' ? (
           <BalanceBoxRecipientFields {...props} />
         ) : null}
@@ -178,18 +185,7 @@ function BalanceBoxWorkspace(props: BalanceBoxPanelViewProps) {
   )
 }
 
-function BalanceBoxModeDescription(props: {
-  mode: ActionMode
-  balance?: BalanceBlindBoxOverview
-}) {
-  if (props.mode === 'purchase') {
-    return (
-      <p className='text-muted-foreground text-sm leading-6'>
-        今日还可购买 {props.balance?.remaining_purchase_limit || 0}{' '}
-        个。付款成功后只增加库存，不会直接开奖；每日限制只计算本人购买，不限制收赠和开启。
-      </p>
-    )
-  }
+function BalanceBoxModeDescription(props: { mode: ActionMode }) {
   if (props.mode === 'open') {
     return (
       <p className='text-muted-foreground text-sm leading-6'>
@@ -250,77 +246,7 @@ function BalanceBoxActionControls(props: BalanceBoxPanelViewProps) {
         disabled={props.busy}
         onChange={props.onCountChange}
       />
-      {props.mode === 'purchase' ? (
-        <BalanceBoxPurchaseAction {...props} />
-      ) : null}
-      {props.mode !== 'purchase' ? (
-        <BalanceBoxInventoryAction {...props} />
-      ) : null}
-    </div>
-  )
-}
-
-function BalanceBoxPurchaseAction(props: BalanceBoxPanelViewProps) {
-  const totalPrice = (props.balance?.price_usd || 2.5) * props.count
-  return (
-    <div className='border-primary/15 space-y-3 border-t pt-3'>
-      <div className='flex items-end justify-between gap-3'>
-        <div>
-          <div className='text-muted-foreground text-[11px]'>应付金额</div>
-          <div className='text-foreground text-2xl font-semibold tabular-nums'>
-            {totalPrice.toFixed(2)}
-          </div>
-        </div>
-        <span className='text-muted-foreground max-w-28 text-right text-[11px] leading-4'>
-          两种支付方式，奖池一致
-        </span>
-      </div>
-      {props.cashMethods.length > 0 ? (
-        <div className='flex flex-wrap gap-2' aria-label='人民币支付方式'>
-          {props.cashMethods.map((method) => (
-            <Button
-              key={method.type}
-              type='button'
-              size='sm'
-              variant={
-                props.selectedCashMethod?.type === method.type
-                  ? 'default'
-                  : 'outline'
-              }
-              onClick={() => props.onCashMethodChange(method)}
-              disabled={props.busy}
-            >
-              {method.name}
-            </Button>
-          ))}
-        </div>
-      ) : null}
-      <div className='grid gap-2 sm:grid-cols-2'>
-        <BalanceBoxPrimaryButton
-          busy={props.cashPaying}
-          disabled={!props.selectedCashMethod || props.busy}
-          icon={CreditCard}
-          busyLabel='创建订单…'
-          label={`人民币支付 ${props.cashAmountDue.toFixed(2)}`}
-          onClick={props.onCashPurchase}
-        />
-        <BalanceBoxPrimaryButton
-          busy={props.busy}
-          disabled={!props.canPurchase}
-          icon={Coins}
-          busyLabel='购买中…'
-          label={`统一额度支付 ${totalPrice.toFixed(2)}`}
-          onClick={props.onPurchase}
-        />
-      </div>
-      <Button
-        type='button'
-        variant='ghost'
-        className='w-full'
-        onClick={props.onOpenProps}
-      >
-        查看我的权益卡
-      </Button>
+      <BalanceBoxInventoryAction {...props} />
     </div>
   )
 }

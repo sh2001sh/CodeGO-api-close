@@ -87,7 +87,7 @@ func TestConvertMonthlyPassToUnifiedCreditCreditsUnifiedLedger(t *testing.T) {
 	}
 	require.NoError(t, db.Create(sub).Error)
 
-	result, err := ConvertMonthlyPassToUnifiedCredit("subscription-ledger-req", user.Id, sub.Id)
+	result, err := ConvertMonthlyPassToUnifiedCredit("subscription-ledger-req", user.Id, sub.Id, 75)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 

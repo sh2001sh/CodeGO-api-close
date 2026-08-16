@@ -3,8 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { formatNumber } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
+import { ModelConsistencyFeedback } from './model-consistency-feedback'
+import {
+  ModelConnectivityResults,
+  ModelConsistencyBadge,
+} from './model-verification'
 import { TokenBindPanel } from './token-bind-panel'
-import { ModelConnectivityResults, ModelConsistencyBadge } from './model-verification'
 
 export function GroupDetails(props: { group: MarketplaceGroup }) {
   const { t } = useTranslation()
@@ -55,6 +59,7 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
         ))}
       </div>
       <ModelConnectivityResults results={group.model_verification_results} />
+      <ModelConsistencyFeedback group={group} />
       {group.observing && (
         <p className='text-muted-foreground mt-3 text-xs'>
           {t('样本进度：{{requests}}/100 请求 · {{users}}/10 用户', {

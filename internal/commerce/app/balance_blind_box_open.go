@@ -105,8 +105,7 @@ func openSealedBalanceBlindBoxItemTx(tx *gorm.DB, userID int, requestID string, 
 		CreditAmount: item.CreditAmount, RewardTitle: item.RewardTitle,
 		RewardWalletType: item.RewardWalletType, IsPity: item.IsPity, CreateTime: platformruntime.GetTimestamp(),
 	}
-	// Balance boxes intentionally bypass the ordinary record creator, so they never issue lucky numbers.
-	if err := tx.Create(record).Error; err != nil {
+	if err := createBlindBoxOpenRecordTx(tx, record); err != nil {
 		return nil, err
 	}
 	if item.RewardType == commerceschema.BlindBoxRewardTypeProp {

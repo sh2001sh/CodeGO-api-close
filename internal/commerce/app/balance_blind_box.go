@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	balanceBlindBoxPoolVersion = "unified-box-v1"
+	balanceBlindBoxPoolVersion = "unified-box-v2"
 	balanceBlindBoxMaxBatch    = 100
 )
 
@@ -37,6 +37,12 @@ type BalanceBlindBoxOverview struct {
 	SmallPityGuaranteeUSD  float64                        `json:"small_pity_guarantee_usd"`
 	FirstDrawGuaranteeUSD  float64                        `json:"first_draw_guarantee_usd"`
 	FirstDrawEligible      bool                           `json:"first_draw_eligible"`
+	FirstDrawRewardMinUSD  float64                        `json:"first_draw_reward_min_usd"`
+	FirstDrawRewardMaxUSD  float64                        `json:"first_draw_reward_max_usd"`
+	SmallPityRewardMinUSD  float64                        `json:"small_pity_reward_min_usd"`
+	SmallPityRewardMaxUSD  float64                        `json:"small_pity_reward_max_usd"`
+	PityRewardMinUSD       float64                        `json:"pity_reward_min_usd"`
+	PityRewardMaxUSD       float64                        `json:"pity_reward_max_usd"`
 }
 
 type BalanceBlindBoxOpenResult struct {
@@ -101,6 +107,18 @@ func buildBalanceBlindBoxOverview(setting blindboxsettings.Setting, balance int,
 	if remaining < 0 {
 		remaining = 0
 	}
+	firstMin, firstMax := balanceBlindBoxTierRange(
+		setting.BalanceBlindBoxFirstDrawTiers,
+		setting.BalanceBlindBoxFirstDrawGuaranteeUSD,
+	)
+	smallMin, smallMax := balanceBlindBoxTierRange(
+		setting.BalanceBlindBoxSmallPityTiers,
+		setting.BalanceBlindBoxSmallPityGuaranteeUSD,
+	)
+	bigMin, bigMax := balanceBlindBoxTierRange(
+		setting.BalanceBlindBoxPityTiers,
+		setting.BalanceBlindBoxPityGuaranteeUSD,
+	)
 	return &BalanceBlindBoxOverview{
 		Enabled: setting.Enabled && setting.BalanceBlindBoxEnabled, PriceUSD: setting.BalanceBlindBoxPriceUSD,
 		BalanceUSD: float64(balance) / float64(platformruntime.QuotaPerUnit), Tiers: setting.BalanceBlindBoxTiers,
@@ -110,7 +128,33 @@ func buildBalanceBlindBoxOverview(setting blindboxsettings.Setting, balance int,
 		SmallPityProgress: pity.ConsecutiveUnder6USD, SmallPityThreshold: setting.BalanceBlindBoxSmallPityThreshold,
 		SmallPityGuaranteeUSD: setting.BalanceBlindBoxSmallPityGuaranteeUSD,
 		FirstDrawGuaranteeUSD: setting.BalanceBlindBoxFirstDrawGuaranteeUSD, FirstDrawEligible: firstEligible,
+		FirstDrawRewardMinUSD: firstMin, FirstDrawRewardMaxUSD: firstMax,
+		SmallPityRewardMinUSD: smallMin, SmallPityRewardMaxUSD: smallMax,
+		PityRewardMinUSD: bigMin, PityRewardMaxUSD: bigMax,
 	}
+}
+
+func balanceBlindBoxTierRange(tiers []blindboxsettings.TierSetting, guaranteeUSD float64) (float64, float64) {
+	var minimum, maximum float64
+	for _, tier := range tiers {
+		if blindboxsettings.NormalizeRewardType(tier.RewardType) == commerceschema.BlindBoxRewardTypeProp {
+			continue
+		}
+		if minimum == 0 || tier.MinUSD < minimum {
+			minimum = tier.MinUSD
+		}
+		if tier.MaxUSD > maximum {
+			maximum = tier.MaxUSD
+		}
+	}
+	guaranteeMinimum := guaranteeUSD / balanceBlindBoxEquivalentValue(commerceschema.BlindBoxRewardTypeClaudeQuota, 1)
+	if minimum < guaranteeMinimum {
+		minimum = guaranteeMinimum
+	}
+	if maximum < guaranteeMinimum {
+		maximum = guaranteeMinimum
+	}
+	return minimum, maximum
 }
 
 func currentBalanceBlindBoxDate() string {

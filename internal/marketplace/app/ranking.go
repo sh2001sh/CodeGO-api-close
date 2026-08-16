@@ -52,11 +52,14 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		}
 	}
 	items = paginateGroups(items, query.Page, query.PageSize)
+	if err := attachModelConsistencyFeedback(items, channels, query.ViewerUserID); err != nil {
+		return nil, err
+	}
 	return &GroupListResult{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}, nil
 }
 
-func GetMarketplaceGroup(slug string, windowHours int) (*GroupListItem, error) {
-	query := normalizeGroupQuery(GroupQuery{Search: slug, WindowHours: windowHours, Page: 1, PageSize: 50})
+func GetMarketplaceGroup(slug string, windowHours, viewerUserID int) (*GroupListItem, error) {
+	query := normalizeGroupQuery(GroupQuery{ViewerUserID: viewerUserID, Search: slug, WindowHours: windowHours, Page: 1, PageSize: 50})
 	result, err := ListMarketplaceGroups(query)
 	if err != nil {
 		return nil, err

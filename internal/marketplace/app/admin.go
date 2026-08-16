@@ -112,8 +112,9 @@ func createInternalChannel(channel *marketplaceschema.Channel, group *marketplac
 	internal := &gatewayschema.Channel{
 		Type: providerChannelType(channel.ProviderType), Key: channel.CredentialCiphertext,
 		Status: constant.ChannelStatusEnabled, Name: group.SystemDisplayName,
-		ChannelScope: gatewayschema.ChannelScopeExternal,
-		CreatedTime:  platformruntime.GetTimestamp(), BaseURL: &baseURL,
+		ChannelScope:                     gatewayschema.ChannelScopeExternal,
+		SensitiveWordInterceptionEnabled: channel.SensitiveWordInterceptionEnabled,
+		CreatedTime:                      platformruntime.GetTimestamp(), BaseURL: &baseURL,
 		Models: strings.Join(decodeModels(channel.DeclaredModels), ","), Group: group.InternalGroupName,
 		OtherInfo: string(metadata),
 	}

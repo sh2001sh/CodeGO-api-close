@@ -16,6 +16,7 @@ import (
 )
 
 type configureWalletTransferPasswordRequest struct {
+	VerificationMethod string `json:"verification_method"`
 	CurrentPassword    string `json:"current_password"`
 	OldPaymentPassword string `json:"old_payment_password"`
 	NewPaymentPassword string `json:"new_payment_password"`
@@ -74,15 +75,30 @@ func configureWalletTransferPassword(c *gin.Context) {
 	if !security.PasswordSet && !authorizeFirstWalletTransferPassword(c, user.Password, req.CurrentPassword) {
 		return
 	}
-	if security.PasswordSet && !identityapp.VerifyCodeWithKey(user.Email, req.EmailCode, identityapp.WalletTransferPasswordPurpose) {
-		httpapi.ApiError(c, commerceschema.ErrWalletTransferEmailCodeInvalid)
-		return
+	usedEmailCode := false
+	if security.PasswordSet {
+		switch strings.TrimSpace(req.VerificationMethod) {
+		case "payment_password":
+			err = commerceapp.ConfigureWalletTransferPassword(user.Id, req.OldPaymentPassword, req.NewPaymentPassword)
+		case "email":
+			if !identityapp.VerifyCodeWithKey(user.Email, req.EmailCode, identityapp.WalletTransferPasswordPurpose) {
+				httpapi.ApiError(c, commerceschema.ErrWalletTransferEmailCodeInvalid)
+				return
+			}
+			usedEmailCode = true
+			err = commerceapp.ResetWalletTransferPassword(user.Id, req.NewPaymentPassword)
+		default:
+			httpapi.ApiError(c, commerceschema.ErrWalletTransferInvalid)
+			return
+		}
+	} else {
+		err = commerceapp.ConfigureWalletTransferPassword(user.Id, "", req.NewPaymentPassword)
 	}
-	if err := commerceapp.ConfigureWalletTransferPassword(user.Id, req.OldPaymentPassword, req.NewPaymentPassword); err != nil {
+	if err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
-	if security.PasswordSet {
+	if usedEmailCode {
 		identityapp.DeleteVerificationKey(user.Email, identityapp.WalletTransferPasswordPurpose)
 	}
 	httpapi.ApiSuccess(c, gin.H{"password_set": true})

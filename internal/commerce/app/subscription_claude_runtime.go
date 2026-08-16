@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
+	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
@@ -68,37 +69,40 @@ func GetSubscriptionPlanInfoByUserSubscriptionID(userSubscriptionID int) (*comme
 }
 
 // BuildSubscriptionClaudeConversionLog formats the user-facing settlement log.
-func BuildSubscriptionClaudeConversionLog(planTitle string, unusedRatio float64, targetQuota int) string {
-	return fmt.Sprintf("月卡转通用额度成功，月卡：%s，未使用比例：%.2f%%，到账通用额度：%s", planTitle, unusedRatio*100, logger.LogQuota(targetQuota))
+func BuildSubscriptionClaudeConversionLog(planTitle string, conversionPercent int, targetQuota int) string {
+	return fmt.Sprintf("月卡转通用额度成功，月卡：%s，折现比例：%d%%，到账通用额度：%s", planTitle, conversionPercent, logger.LogQuota(targetQuota))
 }
 
 // BuildSubscriptionClaudeConversionPreview calculates the cash-out value of the whole monthly pass.
 func BuildSubscriptionClaudeConversionPreview(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription) commerceschema.SubscriptionClaudeConversionPreview {
-	quote := calculateMonthlyPassConversionQuote(plan, sub, platformruntime.GetTimestamp())
+	quote := calculateMonthlyPassConversionQuote(plan, sub, platformruntime.GetTimestamp(), 0)
 	return commerceschema.SubscriptionClaudeConversionPreview{
-		Eligible:        quote.targetQuota > 0,
-		RemainingQuota:  quote.remainingQuota,
-		PlanPriceAmount: quote.planPriceAmount,
-		UnusedRatio:     quote.unusedRatio,
-		PreviewQuota:    quote.targetQuota,
+		Eligible:             quote.targetQuota > 0,
+		RemainingQuota:       quote.remainingQuota,
+		PlanPriceAmount:      quote.planPriceAmount,
+		UnusedRatio:          quote.unusedRatio,
+		MaxConversionPercent: quote.maxConversionPercent,
+		PreviewQuota:         quote.targetQuota,
 	}
 }
 
 type monthlyPassConversionQuote struct {
-	remainingQuota  int64
-	planPriceAmount float64
-	unusedRatio     float64
-	targetQuota     int
+	remainingQuota       int64
+	planPriceAmount      float64
+	unusedRatio          float64
+	targetQuota          int
+	conversionPercent    int
+	maxConversionPercent int
 }
 
-// ConvertMonthlyPassToUnifiedCredit settles one whole monthly pass by its unused percentage.
-func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptionID int) (*commerceschema.SubscriptionClaudeConversionResult, error) {
+// ConvertMonthlyPassToUnifiedCredit cashes out a selected whole-pass percentage.
+func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptionID int, conversionPercent int) (*commerceschema.SubscriptionClaudeConversionResult, error) {
 	config := GetSubscriptionClaudeConversionConfig()
 	if !config.Enabled {
 		return nil, commerceschema.ErrSubscriptionClaudeConversionDisabled
 	}
 	requestID = strings.TrimSpace(requestID)
-	if requestID == "" || userID <= 0 || subscriptionID <= 0 {
+	if requestID == "" || userID <= 0 || subscriptionID <= 0 || conversionPercent <= 0 || conversionPercent > 100 {
 		return nil, commerceschema.ErrSubscriptionClaudeConversionInvalid
 	}
 
@@ -110,7 +114,7 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		existing := &commerceschema.SubscriptionClaudeConversion{}
 		if err := tx.Where("request_id = ?", requestID).First(existing).Error; err == nil {
-			if existing.UserId != userID || existing.UserSubscriptionId != subscriptionID {
+			if existing.UserId != userID || existing.UserSubscriptionId != subscriptionID || existing.ConversionPercent != conversionPercent {
 				return commerceschema.ErrSubscriptionClaudeConversionInvalid
 			}
 			return loadExistingMonthlyPassConversionResult(tx, result, existing)
@@ -132,7 +136,14 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		if err := maybeResetUserSubscriptionWithPlanTx(tx, sub, plan, now); err != nil {
 			return err
 		}
-		quote := calculateMonthlyPassConversionQuote(plan, sub, now)
+		resetUsed, err := subscriptionHasResetOpportunityUsageTx(tx, sub.Id)
+		if err != nil {
+			return err
+		}
+		if resetUsed {
+			return commerceschema.ErrSubscriptionClaudeConversionResetUsed
+		}
+		quote := calculateMonthlyPassConversionQuote(plan, sub, now, conversionPercent)
 		if quote.targetQuota <= 0 {
 			return commerceschema.ErrSubscriptionClaudeConversionNoTarget
 		}
@@ -141,19 +152,31 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		} else if pending {
 			return commerceschema.ErrSubscriptionClaudeConversionInProgress
 		}
-
-		sub.AmountUsed = sub.AmountTotal
-		if periodAmount := getSubscriptionPeriodAmount(plan, sub); periodAmount > 0 {
-			sub.PeriodUsed = periodAmount
+		if err := consumeMonthlyPassConversionQuotaTx(tx, sub, quote.remainingQuota, requestID); err != nil {
+			if errors.Is(err, billingdomain.ErrInsufficientBalance) {
+				return commerceschema.ErrSubscriptionClaudeConversionNoTarget
+			}
+			return err
 		}
-		sub.Status = "cancelled"
-		sub.EndTime = now
+
+		sub.AmountUsed += quote.remainingQuota
+		ended := sub.AmountUsed >= sub.AmountTotal
+		if ended {
+			sub.AmountUsed = sub.AmountTotal
+			if periodAmount := getSubscriptionPeriodAmount(plan, sub); periodAmount > 0 {
+				sub.PeriodUsed = periodAmount
+			}
+			sub.Status = "cancelled"
+			sub.EndTime = now
+		}
 		if err := tx.Save(sub).Error; err != nil {
 			return err
 		}
-		downgradeGroup, err = downgradeUserGroupForSubscriptionTx(tx, sub, now)
-		if err != nil {
-			return err
+		if ended {
+			downgradeGroup, err = downgradeUserGroupForSubscriptionTx(tx, sub, now)
+			if err != nil {
+				return err
+			}
 		}
 
 		if err := billingapp.CreditClaudeWalletQuotaTx(
@@ -175,6 +198,7 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 			TargetQuota:        quote.targetQuota,
 			PlanPriceAmount:    quote.planPriceAmount,
 			UnusedRatio:        quote.unusedRatio,
+			ConversionPercent:  conversionPercent,
 			RatioNumerator:     0,
 			RatioDenominator:   0,
 		}
@@ -187,6 +211,9 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		result.TargetQuota = quote.targetQuota
 		result.PlanPriceAmount = quote.planPriceAmount
 		result.UnusedRatio = quote.unusedRatio
+		result.ConversionPercent = conversionPercent
+		result.RemainingRatioAfter = decimal.NewFromInt(sub.AmountTotal - sub.AmountUsed).Div(decimal.NewFromInt(sub.AmountTotal)).InexactFloat64()
+		result.SubscriptionEnded = ended
 		result.AmountUsedAfter = sub.AmountUsed
 		result.PeriodUsedAfter = sub.PeriodUsed
 		result.QuotaAfter, err = getUserClaudeQuotaTx(tx, userID)
@@ -201,6 +228,17 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		_ = identitystore.UpdateUserGroupCache(userID, downgradeGroup)
 	}
 	return result, nil
+}
+
+func subscriptionHasResetOpportunityUsageTx(tx *gorm.DB, subscriptionID int) (bool, error) {
+	if tx == nil || subscriptionID <= 0 {
+		return false, nil
+	}
+	var count int64
+	err := tx.Model(&commerceschema.SubscriptionResetOpportunityLedger{}).
+		Where("related_user_id = ? AND change_type = ?", subscriptionID, commerceschema.SubscriptionResetOpportunityChangeUse).
+		Count(&count).Error
+	return count > 0, err
 }
 
 func loadExistingMonthlyPassConversionResult(tx *gorm.DB, result *commerceschema.SubscriptionClaudeConversionResult, existing *commerceschema.SubscriptionClaudeConversion) error {
@@ -220,10 +258,15 @@ func loadExistingMonthlyPassConversionResult(tx *gorm.DB, result *commerceschema
 	result.PeriodUsedAfter = sub.PeriodUsed
 	result.PlanPriceAmount = existing.PlanPriceAmount
 	result.UnusedRatio = existing.UnusedRatio
+	result.ConversionPercent = existing.ConversionPercent
+	if sub.AmountTotal > 0 {
+		result.RemainingRatioAfter = decimal.NewFromInt(sub.AmountTotal - sub.AmountUsed).Div(decimal.NewFromInt(sub.AmountTotal)).InexactFloat64()
+	}
+	result.SubscriptionEnded = sub.Status != "active"
 	return nil
 }
 
-func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription, now int64) monthlyPassConversionQuote {
+func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription, now int64, conversionPercent int) monthlyPassConversionQuote {
 	if plan == nil || sub == nil || sub.Status != "active" || sub.EndTime <= now || plan.PlanType != commerceschema.SubscriptionPlanTypeMonthly || plan.PriceAmount <= 0 || sub.AmountTotal <= 0 {
 		return monthlyPassConversionQuote{}
 	}
@@ -232,8 +275,23 @@ func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, 
 		return monthlyPassConversionQuote{}
 	}
 	unusedRatio := decimal.NewFromInt(remaining).Div(decimal.NewFromInt(sub.AmountTotal))
+	maxPercent := unusedRatio.Mul(decimal.NewFromInt(100)).Floor().IntPart()
+	if maxPercent <= 0 {
+		return monthlyPassConversionQuote{}
+	}
+	if conversionPercent == 0 {
+		conversionPercent = int(maxPercent)
+	}
+	if conversionPercent <= 0 || int64(conversionPercent) > maxPercent {
+		return monthlyPassConversionQuote{}
+	}
+	conversionRatio := decimal.NewFromInt(int64(conversionPercent)).Div(decimal.NewFromInt(100))
+	convertedQuota := decimal.NewFromInt(sub.AmountTotal).Mul(conversionRatio).Floor().IntPart()
+	if convertedQuota <= 0 || convertedQuota > remaining {
+		return monthlyPassConversionQuote{}
+	}
 	target := decimal.NewFromFloat(plan.PriceAmount).
-		Mul(unusedRatio).
+		Mul(conversionRatio).
 		Mul(decimal.NewFromFloat(platformruntime.QuotaPerUnit)).
 		Floor().
 		IntPart()
@@ -241,11 +299,63 @@ func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, 
 		return monthlyPassConversionQuote{}
 	}
 	return monthlyPassConversionQuote{
-		remainingQuota:  remaining,
-		planPriceAmount: plan.PriceAmount,
-		unusedRatio:     unusedRatio.InexactFloat64(),
-		targetQuota:     int(target),
+		remainingQuota:       convertedQuota,
+		planPriceAmount:      plan.PriceAmount,
+		unusedRatio:          unusedRatio.InexactFloat64(),
+		targetQuota:          int(target),
+		conversionPercent:    conversionPercent,
+		maxConversionPercent: int(maxPercent),
 	}
+}
+
+func consumeMonthlyPassConversionQuotaTx(tx *gorm.DB, sub *commerceschema.UserSubscription, amount int64, requestID string) error {
+	account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
+		AccountType: "subscription",
+		OwnerType:   "user_subscription",
+		OwnerID:     int64(sub.Id),
+		QuotaUnit:   "quota",
+	})
+	if err != nil {
+		return err
+	}
+	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
+	if err != nil {
+		return err
+	}
+	if !ledgerBacked {
+		available := sub.AmountTotal - sub.AmountUsed
+		if available > 0 {
+			_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+				AccountID:      account.AccountID,
+				Amount:         available,
+				IdempotencyKey: fmt.Sprintf("subscription-bootstrap:%d", sub.Id),
+				ReasonCode:     "subscription_balance_bootstrap",
+				ReferenceType:  "user_subscription",
+				ReferenceID:    fmt.Sprintf("%d", sub.Id),
+				OperatorType:   "monthly_pass_conversion",
+				OperatorID:     requestID,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
+		AccountID:      account.AccountID,
+		RequestID:      requestID,
+		ReservedAmount: amount,
+		IdempotencyKey: "monthly-pass-conversion:" + requestID + ":reserve",
+	})
+	if err != nil {
+		return err
+	}
+	_, err = billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{
+		ReservationID:   reservation.ReservationID,
+		UsageEvidenceID: requestID,
+		ActualAmount:    amount,
+		IdempotencyKey:  "monthly-pass-conversion:" + requestID + ":settle",
+	})
+	return err
 }
 
 func monthlyPassHasPendingReservationTx(tx *gorm.DB, subscriptionID int) (bool, error) {

@@ -93,7 +93,7 @@ export function DailyLuckyAdminConfig(props: {
           </div>
         </ConfigSection>
 
-        <ConfigSection title={t('Base rewards (USD)')}>
+        <ConfigSection title={t('Base rewards (unified credits)')}>
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
             <ConfigField
               id='daily-lucky-reward-1'
@@ -179,7 +179,7 @@ export function DailyLuckyAdminConfig(props: {
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
             <ConfigField
               id='daily-lucky-jackpot-initial'
-              label={t('Initial jackpot (USD)')}
+              label={t('Initial jackpot (unified credits)')}
               type='number'
               min={0.01}
               step={0.01}
@@ -188,7 +188,7 @@ export function DailyLuckyAdminConfig(props: {
             />
             <ConfigField
               id='daily-lucky-jackpot-increment'
-              label={t('Daily jackpot increment (USD)')}
+              label={t('Daily jackpot increment (unified credits)')}
               type='number'
               min={0}
               step={0.01}
@@ -197,7 +197,7 @@ export function DailyLuckyAdminConfig(props: {
             />
             <ConfigField
               id='daily-lucky-jackpot-cap'
-              label={t('Jackpot cap (USD)')}
+              label={t('Jackpot cap (unified credits)')}
               type='number'
               min={0.01}
               step={0.01}
@@ -206,7 +206,7 @@ export function DailyLuckyAdminConfig(props: {
             />
             <ConfigField
               id='daily-lucky-cost-per-usd'
-              label={t('Cost per $1 quota (CNY)')}
+              label={t('Cost per unified credit (CNY)')}
               type='number'
               min={0}
               step={0.01}
@@ -215,7 +215,7 @@ export function DailyLuckyAdminConfig(props: {
             />
             <ConfigField
               id='daily-lucky-monthly-budget'
-              label={t('Monthly budget (USD)')}
+              label={t('Monthly budget (unified credits)')}
               type='number'
               min={0}
               step={0.01}

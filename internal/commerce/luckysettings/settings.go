@@ -13,7 +13,10 @@ const DefaultTimezone = "Asia/Shanghai"
 
 // Setting is the configuration snapshot used when the next draw is created.
 type Setting struct {
-	Enabled             bool    `json:"enabled"`
+	Enabled bool `json:"enabled"`
+	// QuotaUnit is deliberately explicit because the persisted reward fields
+	// retain their *_usd names for historical draw compatibility.
+	QuotaUnit           string  `json:"quota_unit"`
 	Timezone            string  `json:"timezone"`
 	DrawHour            int     `json:"draw_hour"`
 	DrawMinute          int     `json:"draw_minute"`
@@ -36,20 +39,21 @@ var (
 	settingMu sync.RWMutex
 	current   = Setting{
 		Enabled:             true,
+		QuotaUnit:           "unified_credit",
 		Timezone:            DefaultTimezone,
 		DrawHour:            20,
 		DrawMinute:          0,
-		BaseReward1USD:      1,
-		BaseReward2USD:      10,
-		BaseReward3USD:      50,
-		BaseReward4USD:      100,
+		BaseReward1USD:      0.25,
+		BaseReward2USD:      2.5,
+		BaseReward3USD:      12.5,
+		BaseReward4USD:      25,
 		MultiplierLite:      1,
 		MultiplierStandard:  1.1,
 		MultiplierPro:       1.2,
 		MultiplierUltra:     1.3,
-		JackpotInitialUSD:   100,
-		JackpotIncrementUSD: 20,
-		JackpotCapUSD:       1000,
+		JackpotInitialUSD:   25,
+		JackpotIncrementUSD: 5,
+		JackpotCapUSD:       250,
 		CostPerUSD:          0.1,
 		MonthlyBudgetUSD:    0,
 	}
@@ -92,6 +96,12 @@ func ApplyField(key, value string) error {
 
 // Normalize fills defaults while keeping valid explicit zero-hour schedules.
 func Normalize(value Setting) Setting {
+	if strings.TrimSpace(value.QuotaUnit) == "" {
+		value.QuotaUnit = "unified_credit"
+	}
+	if value.QuotaUnit != "unified_credit" {
+		value.QuotaUnit = "unified_credit"
+	}
 	if strings.TrimSpace(value.Timezone) == "" {
 		value.Timezone = DefaultTimezone
 	}
@@ -105,16 +115,16 @@ func Normalize(value Setting) Setting {
 		value.DrawMinute = 0
 	}
 	if value.BaseReward1USD <= 0 {
-		value.BaseReward1USD = 1
+		value.BaseReward1USD = 0.25
 	}
 	if value.BaseReward2USD <= 0 {
-		value.BaseReward2USD = 10
+		value.BaseReward2USD = 2.5
 	}
 	if value.BaseReward3USD <= 0 {
-		value.BaseReward3USD = 50
+		value.BaseReward3USD = 12.5
 	}
 	if value.BaseReward4USD <= 0 {
-		value.BaseReward4USD = 100
+		value.BaseReward4USD = 25
 	}
 	if value.MultiplierLite <= 0 {
 		value.MultiplierLite = 1
@@ -129,10 +139,10 @@ func Normalize(value Setting) Setting {
 		value.MultiplierUltra = 1.3
 	}
 	if value.JackpotInitialUSD <= 0 {
-		value.JackpotInitialUSD = 100
+		value.JackpotInitialUSD = 25
 	}
 	if value.JackpotIncrementUSD < 0 {
-		value.JackpotIncrementUSD = 20
+		value.JackpotIncrementUSD = 5
 	}
 	if value.JackpotCapUSD < value.JackpotInitialUSD {
 		value.JackpotCapUSD = value.JackpotInitialUSD

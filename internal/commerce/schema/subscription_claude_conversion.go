@@ -21,6 +21,8 @@ var (
 	ErrSubscriptionClaudeConversionNoTarget   = errors.New("当前月卡不可转换")
 	ErrSubscriptionClaudeConversionInProgress = errors.New("月卡存在待结算请求，请稍后重试")
 	ErrSubscriptionClaudeConversionZeroResult = errors.New("当前月卡剩余价值过低，无法得到通用额度")
+	ErrSubscriptionClaudeConversionResetUsed  = errors.New("该月卡已使用额度刷新，不能再转为通用额度")
+	ErrSubscriptionResetOpportunityConverted  = errors.New("当前生效月卡均已折现，不能使用额度刷新机会")
 )
 
 type SubscriptionClaudeConversion struct {
@@ -33,6 +35,7 @@ type SubscriptionClaudeConversion struct {
 	TargetQuota        int     `json:"target_quota" gorm:"column:target_claude_quota;type:int;not null;default:0"`
 	PlanPriceAmount    float64 `json:"plan_price_amount" gorm:"type:decimal(10,6);not null;default:0"`
 	UnusedRatio        float64 `json:"unused_ratio" gorm:"type:decimal(12,8);not null;default:0"`
+	ConversionPercent  int     `json:"conversion_percent" gorm:"type:int;not null;default:0"`
 	// Deprecated ratio fields are retained only so historical rows remain readable.
 	RatioNumerator   int   `json:"-" gorm:"type:int;not null;default:1"`
 	RatioDenominator int   `json:"-" gorm:"type:int;not null;default:10"`
@@ -57,22 +60,27 @@ type SubscriptionClaudeConversionConfig struct {
 }
 
 type SubscriptionClaudeConversionPreview struct {
-	Eligible        bool    `json:"eligible"`
-	RemainingQuota  int64   `json:"remaining_quota"`
-	PlanPriceAmount float64 `json:"plan_price_amount"`
-	UnusedRatio     float64 `json:"unused_ratio"`
-	PreviewQuota    int     `json:"preview_quota"`
+	Eligible             bool    `json:"eligible"`
+	RemainingQuota       int64   `json:"remaining_quota"`
+	PlanPriceAmount      float64 `json:"plan_price_amount"`
+	UnusedRatio          float64 `json:"unused_ratio"`
+	MaxConversionPercent int     `json:"max_conversion_percent"`
+	PreviewQuota         int     `json:"preview_quota"`
+	IneligibleReason     string  `json:"ineligible_reason,omitempty"`
 }
 
 type SubscriptionClaudeConversionResult struct {
-	Conversion      *SubscriptionClaudeConversion      `json:"conversion"`
-	SubscriptionId  int                                `json:"subscription_id"`
-	SourceQuota     int64                              `json:"source_quota"`
-	TargetQuota     int                                `json:"target_quota"`
-	QuotaAfter      int                                `json:"quota_after"`
-	AmountUsedAfter int64                              `json:"amount_used_after"`
-	PeriodUsedAfter int64                              `json:"period_used_after"`
-	PlanPriceAmount float64                            `json:"plan_price_amount"`
-	UnusedRatio     float64                            `json:"unused_ratio"`
-	Config          SubscriptionClaudeConversionConfig `json:"config"`
+	Conversion          *SubscriptionClaudeConversion      `json:"conversion"`
+	SubscriptionId      int                                `json:"subscription_id"`
+	SourceQuota         int64                              `json:"source_quota"`
+	TargetQuota         int                                `json:"target_quota"`
+	QuotaAfter          int                                `json:"quota_after"`
+	AmountUsedAfter     int64                              `json:"amount_used_after"`
+	PeriodUsedAfter     int64                              `json:"period_used_after"`
+	PlanPriceAmount     float64                            `json:"plan_price_amount"`
+	UnusedRatio         float64                            `json:"unused_ratio"`
+	ConversionPercent   int                                `json:"conversion_percent"`
+	RemainingRatioAfter float64                            `json:"remaining_ratio_after"`
+	SubscriptionEnded   bool                               `json:"subscription_ended"`
+	Config              SubscriptionClaudeConversionConfig `json:"config"`
 }

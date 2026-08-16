@@ -265,7 +265,7 @@ function buildDetailSegments(
 				? userGroupRatio
 				: groupRatio
 		const ratioLabel = isSubscription
-			? t('Monthly pass multiplier')
+			? t('Subscription multiplier')
 			: isUserGroup
 			? t('User Exclusive Ratio')
 			: t('Group Ratio')

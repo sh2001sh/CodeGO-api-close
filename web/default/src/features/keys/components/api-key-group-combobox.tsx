@@ -41,6 +41,8 @@ export type ApiKeyGroupOption = {
   label: string
   desc?: string
   ratio?: number | string
+  subscriptionEnabled?: boolean
+  subscriptionRatio?: number
   category?: 'official' | 'marketplace' | 'marketplace_auto'
   disabled?: boolean
   models?: string[]
@@ -79,9 +81,12 @@ function getRatioBadgeClassName(ratio: ApiKeyGroupOption['ratio']) {
   return 'border-success/30 bg-success/10 text-success'
 }
 
-function GroupRatioBadge({ ratio }: { ratio: ApiKeyGroupOption['ratio'] }) {
+function GroupRatioBadge(props: {
+  ratio: ApiKeyGroupOption['ratio']
+  label: 'Balance' | 'Plan'
+}) {
   const { t } = useTranslation()
-  const label = formatGroupRatio(ratio, t('Ratio'))
+  const label = formatGroupRatio(props.ratio, t(props.label))
 
   if (!label) return null
 
@@ -90,11 +95,23 @@ function GroupRatioBadge({ ratio }: { ratio: ApiKeyGroupOption['ratio'] }) {
       variant='outline'
       className={cn(
         'max-w-24 shrink-0 truncate text-[10px] sm:max-w-none sm:text-xs',
-        getRatioBadgeClassName(ratio)
+        getRatioBadgeClassName(props.ratio)
       )}
     >
       {label}
     </Badge>
+  )
+}
+
+function GroupRatioBadges({ option }: { option?: ApiKeyGroupOption }) {
+  if (!option) return null
+  return (
+    <span className='flex shrink-0 flex-wrap justify-end gap-1'>
+      <GroupRatioBadge ratio={option.ratio} label='Balance' />
+      {option.subscriptionEnabled && (
+        <GroupRatioBadge ratio={option.subscriptionRatio} label='Plan' />
+      )}
+    </span>
   )
 }
 
@@ -116,11 +133,15 @@ export function ApiKeyGroupCombobox({
 
     return options.filter((option) => {
       const ratioText = String(option.ratio ?? '').toLowerCase()
+      const subscriptionRatioText = String(
+        option.subscriptionRatio ?? ''
+      ).toLowerCase()
       return (
         option.value.toLowerCase().includes(search) ||
         option.label.toLowerCase().includes(search) ||
         option.desc?.toLowerCase().includes(search) ||
-        ratioText.includes(search)
+        ratioText.includes(search) ||
+        subscriptionRatioText.includes(search)
       )
     })
   }, [options, searchValue])
@@ -165,9 +186,7 @@ export function ApiKeyGroupCombobox({
               </span>
             )}
           </span>
-          <span className='hidden sm:block'>
-            <GroupRatioBadge ratio={selectedOption?.ratio} />
-          </span>
+          <GroupRatioBadges option={selectedOption} />
         </span>
         <ChevronsUpDown className='h-4 w-4 shrink-0 opacity-50' />
       </PopoverTrigger>
@@ -241,7 +260,7 @@ function GroupOptions(props: {
               </span>
             )}
           </span>
-          <GroupRatioBadge ratio={option.ratio} />
+          <GroupRatioBadges option={option} />
         </CommandItem>
       ))}
     </CommandGroup>

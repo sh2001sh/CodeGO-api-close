@@ -63,3 +63,26 @@ func TestModelConsistencyStatusValidation(t *testing.T) {
 	require.Equal(t, marketplacedomain.ModelConsistencyPassed, channel.ModelConsistencyStatus)
 	require.EqualError(t, applyModelConsistencyStatus(channel, "owner-defined"), "模型一致性标注无效")
 }
+
+func TestOwnerCanDisableSensitiveWordInterception(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
+
+	enabled := true
+	channel := &marketplaceschema.Channel{ID: "sensitive-toggle", ProviderType: "openai_compatible", SensitiveWordInterceptionEnabled: &enabled}
+	group := &marketplaceschema.Group{ID: "sensitive-toggle-group", InternalGroupName: "market_sensitive", Multiplier: 1}
+	disabled := false
+
+	_, err := applyChannelUpdate(channel, group, UpdateChannelRequest{
+		SensitiveWordInterceptionEnabled: &disabled,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, channel.SensitiveWordInterceptionEnabled)
+	require.False(t, *channel.SensitiveWordInterceptionEnabled)
+	require.NoError(t, db.Create(channel).Error)
+
+	var saved marketplaceschema.Channel
+	require.NoError(t, db.First(&saved, "id = ?", channel.ID).Error)
+	require.NotNil(t, saved.SensitiveWordInterceptionEnabled)
+	require.False(t, *saved.SensitiveWordInterceptionEnabled)
+}

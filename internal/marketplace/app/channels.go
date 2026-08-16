@@ -61,6 +61,10 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 	models, _ := json.Marshal(normalizeModels(req.DeclaredModels))
 	ownerName := loadOwnerDisplayName(ownerUserID)
 	sourceLabel, _ := canonicalSourceLabel(req.SourceLabel)
+	sensitiveWordInterceptionEnabled := true
+	if req.SensitiveWordInterceptionEnabled != nil {
+		sensitiveWordInterceptionEnabled = *req.SensitiveWordInterceptionEnabled
+	}
 	channel := &marketplaceschema.Channel{
 		ID: channelID, OwnerUserID: ownerUserID, ProviderType: req.ProviderType,
 		SubmittedSourceLabel: sourceLabel, ApprovedSourceLabel: sourceLabel,
@@ -70,6 +74,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		DeclaredModels: string(models),
 		MaxConcurrency: req.MaxConcurrency, QPS: req.QPS,
 		MaintenanceWindow: strings.TrimSpace(req.MaintenanceWindow), Status: marketplacedomain.LifecycleDraft,
+		SensitiveWordInterceptionEnabled: &sensitiveWordInterceptionEnabled,
 	}
 	group := newMarketplaceGroup(channelID, ownerUserID, ownerName, sourceLabel, req.Multiplier, req.Visibility)
 	return channel, group, nil

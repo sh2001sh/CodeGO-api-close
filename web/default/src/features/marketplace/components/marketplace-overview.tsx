@@ -4,6 +4,7 @@ import {
   Gauge,
   Network,
   ShieldCheck,
+  ShieldAlert,
   Store,
   WalletCards,
 } from 'lucide-react'
@@ -108,6 +109,14 @@ export function MarketplaceOverview(props: {
             </div>
           </div>
         ))}
+      </div>
+      <div className='border-border bg-warning/5 text-muted-foreground flex items-start gap-2 border-t px-5 py-3 text-xs leading-5'>
+        <ShieldAlert className='text-warning mt-0.5 size-4 shrink-0' />
+        <p>
+          {t(
+            '第三方渠道由用户独立提供，CodeGo 不对其真实性、可用性、安全性及上游数据处理行为作担保，请根据检测结果与用户反馈自行判断并控制敏感信息。'
+          )}
+        </p>
       </div>
     </section>
   )

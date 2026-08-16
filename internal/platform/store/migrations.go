@@ -86,6 +86,9 @@ func V2MigrationIDs() []string {
 		"20260816_token_marketplace_multiplier_limit",
 		"20260816_unified_credit_v1_schema",
 		"20260816_unified_credit_v1_channel_scope",
+		"20260816_daily_lucky_unified_credit_rewards",
+		"20260816_blind_box_prop_gifts",
+		"20260816_marketplace_model_consistency_feedback",
 	}
 }
 
@@ -239,6 +242,13 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260816_token_marketplace_multiplier_limit", Run: migrateTokenMarketplaceMultiplierLimit},
 		{ID: "20260816_unified_credit_v1_schema", Run: migrateUnifiedCreditV1Schema},
 		{ID: "20260816_unified_credit_v1_channel_scope", Run: migrateUnifiedCreditV1ChannelScope},
+		{ID: "20260816_daily_lucky_unified_credit_rewards", Run: migrateDailyLuckyUnifiedCreditRewards},
+		{ID: "20260816_blind_box_prop_gifts", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&commerceschema.BlindBoxPropGift{})
+		}},
+		{ID: "20260816_marketplace_model_consistency_feedback", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.ModelConsistencyFeedback{})
+		}},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -355,6 +365,34 @@ func migrateUnifiedCreditV1ChannelScope(tx *gorm.DB) error {
 	return tx.Model(&gatewayschema.Channel{}).
 		Where("id IN ?", marketplaceChannelIDs).
 		Update("channel_scope", gatewayschema.ChannelScopeExternal).Error
+}
+
+// migrateDailyLuckyUnifiedCreditRewards scales only the historical defaults.
+// Custom operator settings are left untouched, while a deployment that still
+// has the old 1/10/50/100 ladder is moved to the smaller unified-credit ladder.
+func migrateDailyLuckyUnifiedCreditRewards(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable("options") {
+		return nil
+	}
+	updates := []struct {
+		key     string
+		legacy  []string
+		revised string
+	}{
+		{key: "daily_lucky_number_setting.base_reward_1_usd", legacy: []string{"1", "1.0", "1.00"}, revised: "0.25"},
+		{key: "daily_lucky_number_setting.base_reward_2_usd", legacy: []string{"10", "10.0", "10.00"}, revised: "2.5"},
+		{key: "daily_lucky_number_setting.base_reward_3_usd", legacy: []string{"50", "50.0", "50.00"}, revised: "12.5"},
+		{key: "daily_lucky_number_setting.base_reward_4_usd", legacy: []string{"100", "100.0", "100.00"}, revised: "25"},
+		{key: "daily_lucky_number_setting.jackpot_initial_usd", legacy: []string{"100", "100.0", "100.00"}, revised: "25"},
+		{key: "daily_lucky_number_setting.jackpot_increment_usd", legacy: []string{"20", "20.0", "20.00"}, revised: "5"},
+		{key: "daily_lucky_number_setting.jackpot_cap_usd", legacy: []string{"1000", "1000.0", "1000.00"}, revised: "250"},
+	}
+	for _, item := range updates {
+		if err := tx.Table("options").Where("key = ? AND value IN ?", item.key, item.legacy).Update("value", item.revised).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {

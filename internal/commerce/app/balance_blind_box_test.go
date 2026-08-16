@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sh2001sh/new-api/constant"
 	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
@@ -47,7 +48,7 @@ func TestBalanceBlindBoxPurchaseCreatesSealedInventoryAndDebitsOnce(t *testing.T
 	}
 }
 
-func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitOrLuckyNumber(t *testing.T) {
+func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitAndIssuesLuckyNumber(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	setBalanceBlindBoxTestSetting(t, 10)
 	user := createBalanceBlindBoxTestUser(t, db, 8892, "BBX002", 100)
@@ -59,7 +60,9 @@ func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitOrLuckyNumber(t *testing.T)
 	if opened.Record.RewardType != commerceschema.BlindBoxRewardTypeProp {
 		require.GreaterOrEqual(t, opened.Record.RewardUSD, 1.0)
 	}
-	require.Empty(t, opened.Record.LuckyNumber)
+	require.Regexp(t, `^\d{4}$`, opened.Record.LuckyNumber)
+	require.NotEmpty(t, opened.Record.LuckyDrawDate)
+	require.Greater(t, opened.Record.LuckyExpiresAt, time.Now().Unix())
 	require.GreaterOrEqual(t, opened.BalanceUSD, 97.5)
 	require.Zero(t, opened.Overview.InventoryCount)
 
@@ -70,7 +73,7 @@ func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitOrLuckyNumber(t *testing.T)
 
 	var luckyCount int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).Count(&luckyCount).Error)
-	require.Zero(t, luckyCount)
+	require.Equal(t, int64(1), luckyCount)
 }
 
 func TestBalanceBlindBoxPurchaseEnforcesDailyLimit(t *testing.T) {
@@ -98,6 +101,8 @@ func TestBalanceBlindBoxGiftAndRegiftPreserveSealedReward(t *testing.T) {
 	finalOwner := createBalanceBlindBoxTestUser(t, db, 8896, "BBX006", 0)
 	_, err := PurchaseBalanceBlindBoxes(purchaser.Id, "balance-gift-purchase", 1)
 	require.NoError(t, err)
+	var sealed commerceschema.BalanceBlindBoxItem
+	require.NoError(t, db.Where("purchase_user_id = ?", purchaser.Id).First(&sealed).Error)
 
 	firstGift, err := GiftBalanceBlindBoxes(purchaser.Id, GiftBalanceBlindBoxRequest{
 		RecipientExternalId: recipient.ExternalId, RequestId: "balance-gift-1", Count: 1,
@@ -112,7 +117,7 @@ func TestBalanceBlindBoxGiftAndRegiftPreserveSealedReward(t *testing.T) {
 	require.NoError(t, err)
 	opened, err := OpenBalanceBlindBox(finalOwner.Id, "balance-gift-open", 1)
 	require.NoError(t, err)
-	require.False(t, opened.Record.IsPity)
+	require.Equal(t, sealed.IsPity, opened.Record.IsPity)
 	if opened.Record.RewardType != commerceschema.BlindBoxRewardTypeProp {
 		require.GreaterOrEqual(t, opened.Record.RewardUSD, 1.0)
 	}

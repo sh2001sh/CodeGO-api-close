@@ -12,6 +12,7 @@ import (
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformschema "github.com/sh2001sh/new-api/internal/platform/schema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -147,6 +148,25 @@ func TestMigrateTokenMarketplaceMultiplierLimitAddsMissingColumn(t *testing.T) {
 	require.NoError(t, migrateTokenMarketplaceMultiplierLimit(db))
 	require.True(t, db.Migrator().HasColumn(&identityschema.Token{}, "MarketplaceMultiplierLimit"))
 	require.NoError(t, migrateTokenMarketplaceMultiplierLimit(db))
+}
+
+func TestMigrateDailyLuckyUnifiedCreditRewardsOnlyScalesLegacyDefaults(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&platformschema.Option{}))
+	require.NoError(t, db.Create(&[]platformschema.Option{
+		{Key: "daily_lucky_number_setting.base_reward_1_usd", Value: "1"},
+		{Key: "daily_lucky_number_setting.base_reward_2_usd", Value: "2.75"},
+		{Key: "daily_lucky_number_setting.jackpot_cap_usd", Value: "1000.00"},
+	}).Error)
+
+	require.NoError(t, migrateDailyLuckyUnifiedCreditRewards(db))
+	var revised platformschema.Option
+	require.NoError(t, db.First(&revised, "key = ?", "daily_lucky_number_setting.base_reward_1_usd").Error)
+	require.Equal(t, "0.25", revised.Value)
+	var custom platformschema.Option
+	require.NoError(t, db.First(&custom, "key = ?", "daily_lucky_number_setting.base_reward_2_usd").Error)
+	require.Equal(t, "2.75", custom.Value)
 }
 
 func TestMigrateMarketplaceSoftDeleteAndNumericChannelIDs(t *testing.T) {

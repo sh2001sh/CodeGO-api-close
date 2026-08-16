@@ -115,7 +115,9 @@ export const userSubscriptionSchema = z.object({
       remaining_quota: z.number(),
       plan_price_amount: z.number(),
       unused_ratio: z.number(),
+      max_conversion_percent: z.number(),
       preview_quota: z.number(),
+      ineligible_reason: z.string().optional(),
     })
     .optional(),
   lucky_number: subscriptionLuckyNumberSchema.optional(),
@@ -163,6 +165,7 @@ export interface SubscriptionClaudeConversionRecord {
   target_quota: number
   plan_price_amount: number
   unused_ratio: number
+  conversion_percent: number
   created_at: number
   updated_at: number
 }
@@ -176,6 +179,9 @@ export interface SubscriptionClaudeConversionResult {
   period_used_after: number
   plan_price_amount: number
   unused_ratio: number
+  conversion_percent: number
+  remaining_ratio_after: number
+  subscription_ended: boolean
   conversion: SubscriptionClaudeConversionRecord
   config: SubscriptionClaudeConversionConfig
 }

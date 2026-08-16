@@ -10,11 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import type { ConfigureWalletTransferPasswordRequest } from '../types'
+import {
+  EmailBindingRequired,
+  PasswordField,
+  PaymentPasswordVerification,
+  type VerificationMethod,
+} from './wallet-transfer-password-verification'
 
-export function WalletTransferPasswordDialog(props: {
+interface WalletTransferPasswordDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   passwordSet: boolean
@@ -28,39 +32,31 @@ export function WalletTransferPasswordDialog(props: {
   onSendEmailCode: () => void
   onBindEmail: () => void
   onSubmit: (request: ConfigureWalletTransferPasswordRequest) => Promise<void>
-}) {
+}
+
+interface PasswordDialogFormState {
+  currentPassword: string
+  setCurrentPassword: (value: string) => void
+  oldPaymentPassword: string
+  setOldPaymentPassword: (value: string) => void
+  newPaymentPassword: string
+  setNewPaymentPassword: (value: string) => void
+  confirmPassword: string
+  setConfirmPassword: (value: string) => void
+  emailCode: string
+  setEmailCode: (value: string) => void
+  visible: boolean
+  setVisible: (value: boolean | ((current: boolean) => boolean)) => void
+  verificationMethod: VerificationMethod
+  setVerificationMethod: (method: VerificationMethod) => void
+  canSubmit: boolean
+}
+
+export function WalletTransferPasswordDialog(
+  props: WalletTransferPasswordDialogProps
+) {
   const { t } = useTranslation()
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [oldPaymentPassword, setOldPaymentPassword] = useState('')
-  const [newPaymentPassword, setNewPaymentPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [emailCode, setEmailCode] = useState('')
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    if (!props.open) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCurrentPassword('')
-    setOldPaymentPassword('')
-    setNewPaymentPassword('')
-    setConfirmPassword('')
-    setEmailCode('')
-    setVisible(false)
-  }, [props.open])
-
-  const passwordsMatch =
-    newPaymentPassword.length > 0 && newPaymentPassword === confirmPassword
-  const hasRequiredVerification = props.passwordSet
-    ? oldPaymentPassword.length > 0 && emailCode.length === 6
-    : !props.requiresAccountPassword || currentPassword.length > 0
-  const canSubmit =
-    !props.submitting &&
-    hasRequiredVerification &&
-    passwordsMatch &&
-    newPaymentPassword.length >= 8 &&
-    /[A-Za-z]/.test(newPaymentPassword) &&
-    /\d/.test(newPaymentPassword)
-
+  const form = usePasswordDialogForm(props)
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className='max-h-[calc(100dvh-1.5rem)] overflow-y-auto max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
@@ -77,180 +73,219 @@ export function WalletTransferPasswordDialog(props: {
             )}
           </DialogDescription>
         </DialogHeader>
-
-        <div className='space-y-4 py-2'>
-          {!props.emailBound ? (
-            <div className='border-border bg-muted/35 flex items-start gap-3 rounded-md border p-3 text-xs leading-5'>
-              <MailCheck className='text-primary mt-0.5 size-4 shrink-0' />
-              <div>
-                <p className='font-medium'>请先绑定邮箱</p>
-                <p className='text-muted-foreground'>
-                  支付密码保护额度转账，账户必须先绑定可接收安全验证码的邮箱。
-                </p>
-              </div>
-            </div>
-          ) : props.passwordSet ? (
-            <PasswordField
-              id='old-payment-password'
-              label={t('Current payment password')}
-              value={oldPaymentPassword}
-              visible={visible}
-              onChange={setOldPaymentPassword}
-            />
-          ) : props.requiresAccountPassword ? (
-            <PasswordField
-              id='account-password'
-              label={t('Current login password')}
-              value={currentPassword}
-              visible={visible}
-              onChange={setCurrentPassword}
-            />
-          ) : (
-            <div className='border-border bg-muted/35 rounded-md border px-3 py-2 text-xs leading-5'>
-              {t(
-                'Your account uses passwordless sign-in. A 2FA or Passkey verification will be requested.'
-              )}
-            </div>
-          )}
-
-          {props.emailBound && props.passwordSet ? (
-            <div className='space-y-2'>
-              <Label htmlFor='payment-password-email-code'>邮箱验证码</Label>
-              <div className='flex gap-2'>
-                <Input
-                  id='payment-password-email-code'
-                  inputMode='numeric'
-                  autoComplete='one-time-code'
-                  maxLength={6}
-                  value={emailCode}
-                  placeholder={`发送至 ${props.emailMasked}`}
-                  onChange={(event) =>
-                    setEmailCode(event.target.value.replace(/\D/g, ''))
-                  }
-                />
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={props.emailSending || props.emailCountdownActive}
-                  onClick={props.onSendEmailCode}
-                >
-                  {props.emailSending ? (
-                    <Loader2 className='size-4 animate-spin' />
-                  ) : props.emailCountdownActive ? (
-                    `${props.emailSecondsLeft}s`
-                  ) : (
-                    '发送验证码'
-                  )}
-                </Button>
-              </div>
-              <p className='text-muted-foreground text-xs leading-5'>
-                修改支付密码必须同时验证当前支付密码和绑定邮箱。
-              </p>
-            </div>
-          ) : null}
-
-          {props.emailBound ? (
-            <PasswordField
-              id='new-payment-password'
-              label={t('New payment password')}
-              value={newPaymentPassword}
-              visible={visible}
-              onChange={setNewPaymentPassword}
-            />
-          ) : null}
-          {props.emailBound ? (
-            <PasswordField
-              id='confirm-payment-password'
-              label={t('Confirm payment password')}
-              value={confirmPassword}
-              visible={visible}
-              onChange={setConfirmPassword}
-            />
-          ) : null}
-
-          <div className='flex items-start justify-between gap-3'>
-            <p className='text-muted-foreground text-xs leading-5'>
-              {t(
-                'Use 8-64 characters with at least one letter and one number.'
-              )}
-            </p>
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon'
-              aria-label={visible ? t('Hide password') : t('Show password')}
-              title={visible ? t('Hide password') : t('Show password')}
-              onClick={() => setVisible((value) => !value)}
-            >
-              {visible ? (
-                <EyeOff className='size-4' />
-              ) : (
-                <Eye className='size-4' />
-              )}
-            </Button>
-          </div>
-        </div>
-
-        <DialogFooter>
-          {!props.emailBound ? (
-            <Button type='button' onClick={props.onBindEmail}>
-              <MailCheck className='size-4' />
-              前往绑定邮箱
-            </Button>
-          ) : (
-            <>
-              <Button
-                type='button'
-                variant='outline'
-                disabled={props.submitting}
-                onClick={() => props.onOpenChange(false)}
-              >
-                {t('Cancel')}
-              </Button>
-              <Button
-                type='button'
-                disabled={!canSubmit}
-                onClick={() =>
-                  void props.onSubmit({
-                    current_password: currentPassword,
-                    old_payment_password: oldPaymentPassword,
-                    new_payment_password: newPaymentPassword,
-                    confirm_password: confirmPassword,
-                    email_code: emailCode,
-                  })
-                }
-              >
-                {props.submitting ? (
-                  <Loader2 className='size-4 animate-spin' />
-                ) : null}
-                {t('Save payment password')}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
+        <PasswordDialogBody {...props} {...form} />
+        <PasswordDialogActions {...props} {...form} />
       </DialogContent>
     </Dialog>
   )
 }
 
-function PasswordField(props: {
-  id: string
-  label: string
-  value: string
-  visible: boolean
-  onChange: (value: string) => void
-}) {
+function usePasswordDialogForm(
+  props: Pick<
+    WalletTransferPasswordDialogProps,
+    'open' | 'passwordSet' | 'requiresAccountPassword' | 'submitting'
+  >
+): PasswordDialogFormState {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [oldPaymentPassword, setOldPaymentPassword] = useState('')
+  const [newPaymentPassword, setNewPaymentPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [emailCode, setEmailCode] = useState('')
+  const [visible, setVisible] = useState(false)
+  const [verificationMethod, setVerificationMethod] =
+    useState<VerificationMethod>('payment_password')
+
+  useEffect(() => {
+    if (!props.open) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentPassword('')
+    setOldPaymentPassword('')
+    setNewPaymentPassword('')
+    setConfirmPassword('')
+    setEmailCode('')
+    setVisible(false)
+    setVerificationMethod('payment_password')
+  }, [props.open])
+
+  const verified = props.passwordSet
+    ? verificationMethod === 'payment_password'
+      ? oldPaymentPassword.length > 0
+      : emailCode.length === 6
+    : !props.requiresAccountPassword || currentPassword.length > 0
+  const validNewPassword =
+    newPaymentPassword.length >= 8 &&
+    /[A-Za-z]/.test(newPaymentPassword) &&
+    /\d/.test(newPaymentPassword) &&
+    newPaymentPassword === confirmPassword
+
+  return {
+    currentPassword,
+    setCurrentPassword,
+    oldPaymentPassword,
+    setOldPaymentPassword,
+    newPaymentPassword,
+    setNewPaymentPassword,
+    confirmPassword,
+    setConfirmPassword,
+    emailCode,
+    setEmailCode,
+    visible,
+    setVisible,
+    verificationMethod,
+    setVerificationMethod,
+    canSubmit: !props.submitting && verified && validNewPassword,
+  }
+}
+
+function PasswordDialogBody(
+  props: WalletTransferPasswordDialogProps & PasswordDialogFormState
+) {
+  const { t } = useTranslation()
   return (
-    <div className='space-y-2'>
-      <Label htmlFor={props.id}>{props.label}</Label>
-      <Input
-        id={props.id}
-        type={props.visible ? 'text' : 'password'}
-        value={props.value}
-        autoComplete='new-password'
-        maxLength={64}
-        onChange={(event) => props.onChange(event.target.value)}
-      />
+    <div className='space-y-4 py-2'>
+      <PasswordIdentityVerification {...props} />
+      {props.emailBound ? (
+        <>
+          <PasswordField
+            id='new-payment-password'
+            label={t('New payment password')}
+            value={props.newPaymentPassword}
+            visible={props.visible}
+            onChange={props.setNewPaymentPassword}
+          />
+          <PasswordField
+            id='confirm-payment-password'
+            label={t('Confirm payment password')}
+            value={props.confirmPassword}
+            visible={props.visible}
+            onChange={props.setConfirmPassword}
+          />
+        </>
+      ) : null}
+      <PasswordVisibilityHint {...props} />
     </div>
   )
+}
+
+function PasswordIdentityVerification(
+  props: WalletTransferPasswordDialogProps & PasswordDialogFormState
+) {
+  const { t } = useTranslation()
+  if (!props.emailBound) return <EmailBindingRequired />
+  if (props.passwordSet) {
+    return (
+      <PaymentPasswordVerification
+        method={props.verificationMethod}
+        oldPaymentPassword={props.oldPaymentPassword}
+        emailCode={props.emailCode}
+        emailMasked={props.emailMasked}
+        emailSending={props.emailSending}
+        emailSecondsLeft={props.emailSecondsLeft}
+        emailCountdownActive={props.emailCountdownActive}
+        visible={props.visible}
+        onMethodChange={props.setVerificationMethod}
+        onOldPaymentPasswordChange={props.setOldPaymentPassword}
+        onEmailCodeChange={props.setEmailCode}
+        onSendEmailCode={props.onSendEmailCode}
+      />
+    )
+  }
+  if (props.requiresAccountPassword) {
+    return (
+      <PasswordField
+        id='account-password'
+        label={t('Current login password')}
+        value={props.currentPassword}
+        visible={props.visible}
+        onChange={props.setCurrentPassword}
+      />
+    )
+  }
+  return (
+    <div className='border-border bg-muted/35 rounded-md border px-3 py-2 text-xs leading-5'>
+      {t(
+        'Your account uses passwordless sign-in. A 2FA or Passkey verification will be requested.'
+      )}
+    </div>
+  )
+}
+
+function PasswordVisibilityHint(props: PasswordDialogFormState) {
+  const { t } = useTranslation()
+  return (
+    <div className='flex items-start justify-between gap-3'>
+      <p className='text-muted-foreground text-xs leading-5'>
+        {t('Use 8-64 characters with at least one letter and one number.')}
+      </p>
+      <Button
+        type='button'
+        variant='ghost'
+        size='icon'
+        aria-label={props.visible ? t('Hide password') : t('Show password')}
+        title={props.visible ? t('Hide password') : t('Show password')}
+        onClick={() => props.setVisible((value) => !value)}
+      >
+        {props.visible ? (
+          <EyeOff className='size-4' />
+        ) : (
+          <Eye className='size-4' />
+        )}
+      </Button>
+    </div>
+  )
+}
+
+function PasswordDialogActions(
+  props: WalletTransferPasswordDialogProps & PasswordDialogFormState
+) {
+  const { t } = useTranslation()
+  if (!props.emailBound) {
+    return (
+      <DialogFooter>
+        <Button type='button' onClick={props.onBindEmail}>
+          <MailCheck className='size-4' />
+          前往绑定邮箱
+        </Button>
+      </DialogFooter>
+    )
+  }
+  return (
+    <DialogFooter>
+      <Button
+        type='button'
+        variant='outline'
+        disabled={props.submitting}
+        onClick={() => props.onOpenChange(false)}
+      >
+        {t('Cancel')}
+      </Button>
+      <Button
+        type='button'
+        disabled={!props.canSubmit}
+        onClick={() => void props.onSubmit(buildPasswordRequest(props))}
+      >
+        {props.submitting ? <Loader2 className='size-4 animate-spin' /> : null}
+        {t('Save payment password')}
+      </Button>
+    </DialogFooter>
+  )
+}
+
+function buildPasswordRequest(
+  props: WalletTransferPasswordDialogProps & PasswordDialogFormState
+): ConfigureWalletTransferPasswordRequest {
+  return {
+    verification_method: props.passwordSet
+      ? props.verificationMethod
+      : undefined,
+    current_password: props.currentPassword,
+    old_payment_password:
+      props.verificationMethod === 'payment_password'
+        ? props.oldPaymentPassword
+        : undefined,
+    new_payment_password: props.newPaymentPassword,
+    confirm_password: props.confirmPassword,
+    email_code:
+      props.verificationMethod === 'email' ? props.emailCode : undefined,
+  }
 }

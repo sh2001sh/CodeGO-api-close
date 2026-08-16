@@ -22,6 +22,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 	marketplaceRoute.Use(middleware.UserAuth())
 	{
 		marketplaceRoute.POST("/groups/:id/bind-token", middleware.CriticalRateLimit(), BindToken)
+		marketplaceRoute.POST("/groups/:id/model-consistency-feedback", middleware.CriticalRateLimit(), SubmitModelConsistencyFeedback)
 		marketplaceRoute.GET("/auto-route-pool", GetAutoRoutePool)
 		marketplaceRoute.PUT("/auto-route-pool", middleware.CriticalRateLimit(), UpdateAutoRoutePool)
 		marketplaceRoute.POST("/channels", middleware.CriticalRateLimit(), CreateChannel)

@@ -23,7 +23,10 @@ import {
 } from '@/features/system-settings/hooks/use-system-options'
 import { useUpdateOption } from '@/features/system-settings/hooks/use-update-option'
 import type { BlindBoxTierSetting } from '@/features/system-settings/types'
-import { BALANCE_BLIND_BOX_DEFAULTS } from './balance-blind-box-settings-data'
+import {
+  BALANCE_BLIND_BOX_DEFAULTS,
+  DEFAULT_BALANCE_BLIND_BOX_TIERS,
+} from './balance-blind-box-settings-data'
 
 const tierSchema = z.object({
   name: z.string().min(1),
@@ -111,7 +114,7 @@ export function BalanceBlindBoxSettingsAdmin() {
         <div>
           <h3 className='text-sm font-semibold'>统一盲盒管理</h3>
           <p className='text-muted-foreground mt-1 text-sm leading-6'>
-            控制统一盲盒售价、单用户每日购买数量与统一奖池。人民币和统一额度入口使用同一库存与概率表。
+            控制统一盲盒售价、单用户每日购买数量与普通高方差奖池。人民币和统一额度入口使用同一库存与概率表，首购和大小保底使用独立有界奖池。
           </p>
         </div>
       </div>
@@ -188,7 +191,7 @@ export function BalanceBlindBoxSettingsAdmin() {
             render={({ field }) => (
               <FormItem>
                 <div className='flex flex-wrap items-center justify-between gap-2'>
-                  <FormLabel>统一盲盒奖池</FormLabel>
+                  <FormLabel>普通高方差奖池</FormLabel>
                   <span
                     className={
                       probability !== null &&
@@ -212,7 +215,8 @@ export function BalanceBlindBoxSettingsAdmin() {
                 </FormControl>
                 <FormDescription>
                   支持 name、min_usd、max_usd、probability、reward_type 和
-                  wallet_type，所有 probability 合计必须等于 1。
+                  wallet_type，所有 probability 合计必须等于
+                  1。这里不包含首购、小保底和大保底池。
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -255,6 +259,9 @@ function NumberField(props: {
 }
 
 function toFormValues(settings: typeof BALANCE_BLIND_BOX_DEFAULTS): Values {
+  const tiers = normalizeDisplayedTiers(
+    settings['blind_box_setting.balance_blind_box_tiers']
+  )
   return {
     enabled: settings['blind_box_setting.balance_blind_box_enabled'],
     priceUSD: settings['blind_box_setting.balance_blind_box_price_usd'],
@@ -270,12 +277,22 @@ function toFormValues(settings: typeof BALANCE_BLIND_BOX_DEFAULTS): Values {
       settings['blind_box_setting.balance_blind_box_pity_threshold'],
     pityGuaranteeUSD:
       settings['blind_box_setting.balance_blind_box_pity_guarantee_usd'],
-    tiers: JSON.stringify(
-      settings['blind_box_setting.balance_blind_box_tiers'],
-      null,
-      2
-    ),
+    tiers: JSON.stringify(tiers, null, 2),
   }
+}
+
+function normalizeDisplayedTiers(tiers: BlindBoxTierSetting[]) {
+  const legacyProbability = [
+    0.1537, 0.27, 0.25, 0.12, 0.05, 0.01115, 0.004, 0.0008, 0.0003, 0.00005,
+    0.06, 0.04, 0.01, 0.03,
+  ]
+  const isLegacy =
+    tiers.length === legacyProbability.length &&
+    tiers.every(
+      (tier, index) =>
+        Math.abs(tier.probability - legacyProbability[index]) < 0.000001
+    )
+  return isLegacy ? DEFAULT_BALANCE_BLIND_BOX_TIERS : tiers
 }
 
 function buildUpdates(

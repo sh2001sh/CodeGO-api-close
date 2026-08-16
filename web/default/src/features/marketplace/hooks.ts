@@ -13,6 +13,7 @@ import {
   queueMarketplaceVerification,
   reviewMarketplaceChannel,
   setMarketplaceChannelPaused,
+  submitMarketplaceModelFeedback,
   updateMarketplaceChannel,
   updateMarketplaceAutoRoutePool,
 } from './api'
@@ -28,6 +29,16 @@ function verificationRefetchInterval(
   )
     ? 1000
     : false
+}
+
+export function useMarketplaceModelFeedback() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: submitMarketplaceModelFeedback,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] })
+    },
+  })
 }
 
 export function useMarketplaceGroups(filters: GroupFilters) {

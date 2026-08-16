@@ -44,6 +44,7 @@ import type {
   BlindBoxOpenResponse,
   BlindBoxOrderStatusResponse,
   BlindBoxProp,
+  BlindBoxPropGift,
   BlindBoxRecord,
   BlindBoxHistoryResponse,
   BalanceBlindBoxOverview,
@@ -52,6 +53,7 @@ import type {
   ConfigureWalletTransferPasswordRequest,
   CreateWalletTransferRequest,
   WalletTransferOverviewResponse,
+  WalletTransferRecipient,
   WalletTransferRecipientResponse,
   WalletTransferResponse,
   WalletTransferEmailCodeResponse,
@@ -367,6 +369,23 @@ export async function convertBlindBoxProp(
 ): Promise<ApiResponse<{ prop: BlindBoxProp }>> {
   const res = await api.post(`/api/blind-box/props/${propId}/convert`, {
     target_type: targetType,
+  })
+  return res.data
+}
+
+export async function giftBlindBoxProp(
+  propId: number,
+  requestId: string,
+  recipientExternalId: string
+): Promise<
+  ApiResponse<{
+    gift: BlindBoxPropGift
+    recipient: WalletTransferRecipient
+  }>
+> {
+  const res = await api.post(`/api/blind-box/props/${propId}/gift`, {
+    request_id: requestId,
+    recipient_external_id: recipientExternalId,
   })
   return res.data
 }

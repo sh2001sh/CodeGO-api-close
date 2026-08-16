@@ -112,21 +112,6 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		meta = fastTokenCountMetaForPricing(request)
 	}
 
-	if needSensitiveCheck && meta != nil {
-		contains, words := identityapp.CheckSensitiveText(meta.CombineText)
-		if contains {
-			logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
-			if shouldBlockSensitiveWords() {
-				newAPIError = types.NewError(errors.New("sensitive words detected"), types.ErrorCodeSensitiveWordsDetected)
-				return
-			}
-		}
-	}
-	if auditErr := checkPromptAudit(c, relayFormat, request, relayInfo); auditErr != nil {
-		newAPIError = auditErr
-		return
-	}
-
 	tokens, err := tokenx.EstimateRequestToken(c, meta, relayInfo)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeCountTokenFailed)
@@ -188,6 +173,14 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		relayInfo.FirstByteTrace.MarkRouteSelected()
 		relayInfo.InitChannelMeta(c)
+		if sensitiveErr := checkPromptSensitiveForChannel(c, relayFormat, channel, meta); sensitiveErr != nil {
+			newAPIError = sensitiveErr
+			break
+		}
+		if auditErr := checkPromptAudit(c, relayFormat, request, relayInfo); auditErr != nil {
+			newAPIError = auditErr
+			break
+		}
 		gatewaystream.BeginRelayAttempt(c)
 		if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) && !streamFailureCircuitChecked {
 			streamFailureCircuitChecked = true
@@ -353,4 +346,22 @@ func shouldCheckPromptSensitiveForRelay(relayFormat types.RelayFormat) bool {
 	// not apply the site's prompt interception to that protocol, otherwise
 	// harmless user prompts can match vocabulary embedded in metadata.
 	return requestsettings.ShouldCheckPromptSensitive() && relayFormat != types.RelayFormatClaude
+}
+
+func checkPromptSensitiveForChannel(c *gin.Context, relayFormat types.RelayFormat, channel *gatewayschema.Channel, meta *types.TokenCountMeta) *types.NewAPIError {
+	if !shouldCheckPromptSensitiveForRelay(relayFormat) || meta == nil {
+		return nil
+	}
+	if !channel.ShouldInterceptSensitiveWords() {
+		return nil
+	}
+	contains, words := identityapp.CheckSensitiveText(meta.CombineText)
+	if !contains {
+		return nil
+	}
+	logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
+	if shouldBlockSensitiveWords() {
+		return types.NewError(errors.New("sensitive words detected"), types.ErrorCodeSensitiveWordsDetected)
+	}
+	return nil
 }

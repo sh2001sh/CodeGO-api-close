@@ -78,6 +78,10 @@ func TestOpenBlindBoxOrderByTradeNo_CreditsMatchingWallets(t *testing.T) {
 			caseSetting.Tiers = []blindboxsettings.TierSetting{
 				{Name: tc.name, MinUSD: tc.rewardUSD, MaxUSD: tc.rewardUSD, Probability: 1, WalletType: tc.walletType},
 			}
+			// The runtime now uses the unified balance blind-box pool as the
+			// canonical source. Keep both fields aligned so this test exercises
+			// wallet normalization instead of inheriting the global pool.
+			caseSetting.BalanceBlindBoxTiers = caseSetting.Tiers
 			blindboxsettings.Set(caseSetting)
 
 			user := &identityschema.User{

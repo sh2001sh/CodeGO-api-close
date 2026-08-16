@@ -25,6 +25,7 @@ import {
 } from './blind-box-dialogs'
 import { BlindBoxHistorySheet } from './blind-box-history-sheet'
 import { BlindBoxPaymentDialog } from './blind-box-payment-dialog'
+import { BlindBoxPropGiftDialog } from './blind-box-prop-gift-dialog'
 import { BlindBoxPropsDialog } from './blind-box-props-dialog'
 import { BlindBoxSidebar } from './blind-box-sidebar'
 import { useBlindBoxChangedEvent } from './use-blind-box-changed-event'
@@ -48,6 +49,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   const [showHistory, setShowHistory] = useState(false)
   const [showProps, setShowProps] = useState(false)
   const [convertingPropId, setConvertingPropId] = useState<number | null>(null)
+  const [giftProp, setGiftProp] = useState<BlindBoxProp | null>(null)
   const [prizeState, setPrizeState] =
     useState<PrizeDialogState>(EMPTY_PRIZE_STATE)
 
@@ -320,6 +322,22 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
         onUse={(prop) => void handleUseProp(prop)}
         onPause={(prop) => void handlePauseProp(prop)}
         onConvert={(prop) => void handleConvertProp(prop)}
+        onGift={(prop) => {
+          setShowProps(false)
+          setGiftProp(prop)
+        }}
+      />
+
+      <BlindBoxPropGiftDialog
+        open={giftProp != null}
+        prop={giftProp}
+        onOpenChange={(open) => {
+          if (!open) setGiftProp(null)
+        }}
+        onGifted={async () => {
+          setGiftProp(null)
+          await refreshAll()
+        }}
       />
     </>
   )

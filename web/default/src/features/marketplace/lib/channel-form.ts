@@ -31,6 +31,7 @@ export const channelFormSchema = z.object({
   max_concurrency: z.number().int().min(1).max(10000),
   qps: z.number().positive().max(10000),
   maintenance_window: z.string().max(255),
+  sensitive_word_interception_enabled: z.boolean(),
   model_consistency_status: z.enum([
     'none',
     'passed',
@@ -57,6 +58,7 @@ export const channelFormDefaults: ChannelFormInput = {
   max_concurrency: 10,
   qps: 5,
   maintenance_window: '',
+  sensitive_word_interception_enabled: true,
   model_consistency_status: 'none',
 }
 
@@ -79,6 +81,8 @@ export function channelFormDefaultsForEdit(
     max_concurrency: channel.max_concurrency,
     qps: channel.qps,
     maintenance_window: channel.maintenance_window,
+    sensitive_word_interception_enabled:
+      channel.sensitive_word_interception_enabled,
     model_consistency_status: channel.model_consistency_status || 'none',
   }
 }

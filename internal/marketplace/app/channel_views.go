@@ -25,7 +25,8 @@ func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Gr
 		VerificationStatus: group.VerificationStatus, Visibility: group.Visibility,
 		MaxConcurrency: channel.MaxConcurrency, QPS: channel.QPS,
 		MaintenanceWindow: channel.MaintenanceWindow, InternalChannelID: channel.InternalChannelID,
-		LastReviewReason: channel.LastReviewReason, VerificationDueAt: group.VerificationDueAt,
+		SensitiveWordInterceptionEnabled: marketplaceSensitiveWordInterceptionEnabled(channel),
+		LastReviewReason:                 channel.LastReviewReason, VerificationDueAt: group.VerificationDueAt,
 		CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt,
 	}
 	if latest, err := LatestVerification(channel.ID); err == nil && latest != nil {
@@ -47,6 +48,10 @@ func loadOwnerDisplayName(userID int) string {
 		return strings.TrimSpace(user.DisplayName)
 	}
 	return strings.TrimSpace(user.Username)
+}
+
+func marketplaceSensitiveWordInterceptionEnabled(channel *marketplaceschema.Channel) bool {
+	return channel == nil || channel.SensitiveWordInterceptionEnabled == nil || *channel.SensitiveWordInterceptionEnabled
 }
 
 func isNotFound(err error) bool { return errors.Is(err, gorm.ErrRecordNotFound) }

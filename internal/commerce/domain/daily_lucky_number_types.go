@@ -19,6 +19,7 @@ type BlindBoxLuckyNumber struct {
 // LuckyNumberRules is the public, non-operational rule snapshot used by the activity page.
 // Cost and budget controls remain admin-only fields.
 type LuckyNumberRules struct {
+	QuotaUnit           string  `json:"quota_unit"`
 	BaseReward1USD      float64 `json:"base_reward_1_usd"`
 	BaseReward2USD      float64 `json:"base_reward_2_usd"`
 	BaseReward3USD      float64 `json:"base_reward_3_usd"`
@@ -48,6 +49,7 @@ type LuckyDrawView struct {
 
 type LuckyNumberSelfPayload struct {
 	Enabled         bool                      `json:"enabled"`
+	QuotaUnit       string                    `json:"quota_unit"`
 	Timezone        string                    `json:"timezone"`
 	DrawHour        int                       `json:"draw_hour"`
 	DrawMinute      int                       `json:"draw_minute"`

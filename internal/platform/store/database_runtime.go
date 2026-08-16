@@ -279,6 +279,7 @@ func migratePrimaryDB() error {
 		&commerceschema.BlindBoxCredit{},
 		&commerceschema.BlindBoxOpenRecord{},
 		&commerceschema.BlindBoxProp{},
+		&commerceschema.BlindBoxPropGift{},
 		&commerceschema.BlindBoxPityState{},
 		&commerceschema.BalanceBlindBoxPityState{},
 		&workflowschema.GeneMapShare{},
@@ -304,6 +305,7 @@ func migratePrimaryDB() error {
 		&marketplaceschema.Group{},
 		&marketplaceschema.VerificationRun{},
 		&marketplaceschema.RankingSnapshot{},
+		&marketplaceschema.ModelConsistencyFeedback{},
 		&marketplaceschema.Settlement{},
 		&marketplaceschema.AutoRoutePoolMember{},
 	)

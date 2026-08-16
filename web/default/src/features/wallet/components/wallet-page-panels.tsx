@@ -17,6 +17,7 @@ import type {
   SelfSubscriptionData,
 } from '@/features/subscriptions/types'
 import { RedemptionCodePanel } from './redemption-code-panel'
+import { SubscriptionClaudeConversionCard } from './subscription-claude-conversion-card'
 import { WalletBillingOrderPanel } from './wallet-billing-order-panel'
 import {
   getOrderedSubscriptions,
@@ -238,17 +239,36 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   if (props.section === 'funding') {
     return (
-      <RedemptionCodePanel
-        title={t('Redemption code')}
-        description={t(
-          '兑换码可发放统一额度、月卡、盲盒或活动权益。'
-        )}
-        topupLink={props.topupLink}
-        redemptionCode={props.redemptionCode}
-        onRedemptionCodeChange={props.onRedemptionCodeChange}
-        onRedeem={props.onRedeem}
-        redeeming={props.redeeming}
-      />
+      <div className='space-y-4'>
+        <RedemptionCodePanel
+          title={t('Redemption code')}
+          description={t('兑换码可发放统一额度、月卡、盲盒或活动权益。')}
+          topupLink={props.topupLink}
+          redemptionCode={props.redemptionCode}
+          onRedemptionCodeChange={props.onRedemptionCodeChange}
+          onRedeem={props.onRedeem}
+          redeeming={props.redeeming}
+        />
+        <div className='app-page-shell p-4'>
+          <SubscriptionClaudeConversionCard
+            subscriptionData={props.subscriptionData}
+            loading={isLoadingPanels}
+            mode='wallet'
+            planTitles={Object.fromEntries(
+              Array.from(planMetaMap.entries()).map(([id, meta]) => [
+                id,
+                { title: meta.title, subtitle: meta.subtitle },
+              ])
+            )}
+            onRefresh={async () => {
+              await Promise.all([
+                props.onSubscriptionRefresh?.(),
+                props.onUserRefresh?.(),
+              ])
+            }}
+          />
+        </div>
+      </div>
     )
   }
 

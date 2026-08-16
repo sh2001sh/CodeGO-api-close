@@ -55,6 +55,16 @@ func GetWalletTransferSecurityOverview(userID int, hasAccountPassword bool, emai
 
 // ConfigureWalletTransferPassword creates or changes the independent payment password.
 func ConfigureWalletTransferPassword(userID int, oldPassword, newPassword string) error {
+	return updateWalletTransferPassword(userID, oldPassword, newPassword, true)
+}
+
+// ResetWalletTransferPassword rotates the payment password after an external
+// identity check, such as a verified bound-email code.
+func ResetWalletTransferPassword(userID int, newPassword string) error {
+	return updateWalletTransferPassword(userID, "", newPassword, false)
+}
+
+func updateWalletTransferPassword(userID int, oldPassword, newPassword string, requireOldPassword bool) error {
 	if userID <= 0 || !validWalletTransferPassword(newPassword) {
 		return commerceschema.ErrWalletTransferInvalid
 	}
@@ -72,9 +82,11 @@ func ConfigureWalletTransferPassword(userID int, oldPassword, newPassword string
 		if queryErr != nil {
 			return queryErr
 		}
-		verificationErr = verifyWalletTransferPasswordLocked(tx, &security, oldPassword)
-		if verificationErr != nil {
-			return nil
+		if requireOldPassword {
+			verificationErr = verifyWalletTransferPasswordLocked(tx, &security, oldPassword)
+			if verificationErr != nil {
+				return nil
+			}
 		}
 		return tx.Model(&security).Updates(map[string]any{
 			"password_hash":   hash,

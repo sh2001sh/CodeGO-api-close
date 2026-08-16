@@ -1,4 +1,4 @@
-import { CirclePause, CirclePlay, RefreshCw } from 'lucide-react'
+import { CirclePause, CirclePlay, Gift, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { BlindBoxProp } from '../types'
@@ -9,6 +9,7 @@ export function BlindBoxPropsList(props: {
   onUse: (prop: BlindBoxProp) => void
   onPause: (prop: BlindBoxProp) => void
   onConvert: (prop: BlindBoxProp) => void
+  onGift: (prop: BlindBoxProp) => void
   convertingPropId?: number | null
 }) {
   const { t } = useTranslation()
@@ -50,6 +51,19 @@ export function BlindBoxPropsList(props: {
                 </div>
               </div>
               <div className='flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row'>
+                {available ? (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={() => props.onGift(prop)}
+                    disabled={props.disabled}
+                    className='w-full sm:w-auto'
+                  >
+                    <Gift className='size-4' data-icon='inline-start' />
+                    赠送
+                  </Button>
+                ) : null}
                 {convertible ? (
                   <Button
                     type='button'

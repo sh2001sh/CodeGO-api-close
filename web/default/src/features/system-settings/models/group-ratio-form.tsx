@@ -295,13 +295,13 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               name='SubscriptionGroupPolicy'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('Monthly pass billing')}</FormLabel>
+                  <FormLabel>{t('Subscription billing')}</FormLabel>
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
                   <FormDescription>
                     {t(
-                      'JSON map of billing group to monthly-pass enablement and multiplier.'
+                      'JSON map of billing group to subscription enablement and multiplier.'
                     )}
                   </FormDescription>
                   <FormMessage />

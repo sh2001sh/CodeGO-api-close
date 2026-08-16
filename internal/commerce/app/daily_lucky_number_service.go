@@ -74,6 +74,7 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 	}
 	return &commercedomain.LuckyNumberSelfPayload{
 		Enabled:       setting.Enabled && subscriptionLuckyNumberTableReady(),
+		QuotaUnit:     setting.QuotaUnit,
 		Timezone:      setting.Timezone,
 		DrawHour:      setting.DrawHour,
 		DrawMinute:    setting.DrawMinute,
@@ -83,6 +84,7 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 		JackpotUSD:    jackpot,
 		JackpotCapUSD: setting.JackpotCapUSD,
 		Rules: commercedomain.LuckyNumberRules{
+			QuotaUnit:           setting.QuotaUnit,
 			BaseReward1USD:      setting.BaseReward1USD,
 			BaseReward2USD:      setting.BaseReward2USD,
 			BaseReward3USD:      setting.BaseReward3USD,

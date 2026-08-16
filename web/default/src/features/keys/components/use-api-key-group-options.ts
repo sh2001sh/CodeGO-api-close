@@ -29,6 +29,8 @@ export function useApiKeyGroupOptions() {
         label: key,
         desc: info.desc || key,
         ratio: info.ratio,
+        subscriptionEnabled: info.subscription_enabled,
+        subscriptionRatio: info.subscription_ratio,
         category: 'official' as const,
       })
     )

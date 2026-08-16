@@ -37,13 +37,44 @@ func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 3, view.SelectedCount)
 
-	bindings, err := ResolveAutoRouteBindings(20, "gpt-5")
+	bindings, err := ResolveAutoRouteBindings(20, "gpt-5", 0)
 	require.NoError(t, err)
 	require.Len(t, bindings, 2)
 	require.Equal(t, "cheap", bindings[0].GroupID)
 	require.Equal(t, "stable", bindings[1].GroupID)
 	require.Equal(t, "cheap", view.Items[0].GroupID)
 	require.Equal(t, 1, view.Items[0].Priority)
+}
+
+func TestAutoRoutePoolFiltersGroupsAboveTokenMultiplierLimit(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.RankingSnapshot{},
+		&marketplaceschema.AutoRoutePoolMember{},
+	))
+	cheapChannelID, expensiveChannelID := 201, 202
+	require.NoError(t, db.Create([]marketplaceschema.Channel{
+		{ID: "cheap-channel", OwnerUserID: 11, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &cheapChannelID, Status: marketplacedomain.LifecycleActive},
+		{ID: "expensive-channel", OwnerUserID: 12, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &expensiveChannelID, Status: marketplacedomain.LifecycleActive},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Group{
+		autoRouteTestGroup("cheap", "cheap-channel", 11, 0.5),
+		autoRouteTestGroup("expensive", "expensive-channel", 12, 1.5),
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.AutoRoutePoolMember{
+		{OwnerUserID: 20, GroupID: "expensive", Priority: 1},
+		{OwnerUserID: 20, GroupID: "cheap", Priority: 2},
+	}).Error)
+
+	bindings, err := ResolveAutoRouteBindings(20, "gpt-5", 1)
+	require.NoError(t, err)
+	require.Len(t, bindings, 1)
+	require.Equal(t, "cheap", bindings[0].GroupID)
+
+	_, err = ResolveAutoRouteBindings(20, "gpt-5", 0.25)
+	require.EqualError(t, err, "第三方 Auto 路由池中支持该模型的渠道倍率均超过 API Key 上限 0.25x")
 }
 
 func TestAutoRoutePoolRejectsForeignPrivateGroup(t *testing.T) {

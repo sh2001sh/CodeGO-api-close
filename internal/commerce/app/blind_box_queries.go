@@ -39,11 +39,7 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 	}
 
 	now := platformruntime.GetTimestamp()
-	userQuota, err := billingapp.GetUserWalletQuota(userID)
-	if err != nil {
-		return nil, err
-	}
-	claudeQuota, err := billingapp.GetUserClaudeWalletQuota(userID)
+	userQuota, err := billingapp.GetUserClaudeWalletQuota(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +84,7 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 		normalizeBlindBoxOpenRecordDisplay(&overview.RecentRecords[index])
 	}
 
-	overview.RemainingQuota = int64(userQuota)
-	overview.ClaudeQuota = int64(claudeQuota)
+	overview.Quota = int64(userQuota)
 
 	var pity commerceschema.BlindBoxPityState
 	if err := platformdb.DB.Where("user_id = ?", userID).First(&pity).Error; err == nil {
@@ -298,7 +293,7 @@ func normalizeBlindBoxOpenRecordDisplay(record *commerceschema.BlindBoxOpenRecor
 		}
 	}
 	if record.RewardType == commerceschema.BlindBoxRewardTypeQuota {
-		record.RewardTitle = fmt.Sprintf("%.2f 官方 GPT 专属额度奖励", record.RewardUSD)
+		record.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", record.RewardUSD)
 	}
 	if record.RewardType == commerceschema.BlindBoxRewardTypeClaudeQuota {
 		record.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", record.RewardUSD)

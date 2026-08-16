@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { ArrowRightLeft, Loader2, Sparkles } from 'lucide-react'
+import { ArrowRightLeft, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
@@ -15,55 +14,23 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { createSubscriptionClaudeConversion } from '@/features/subscriptions/api'
-import {
-  formatSubscriptionQuotaAmount,
-  parseSubscriptionQuotaUSDToUnits,
-  subscriptionQuotaUnitsToUSD,
-} from '@/features/subscriptions/lib'
-import type {
-  SelfSubscriptionData,
-  UserSubscription,
-} from '@/features/subscriptions/types'
+import { formatSubscriptionQuotaAmount } from '@/features/subscriptions/lib'
+import type { SelfSubscriptionData } from '@/features/subscriptions/types'
 
 interface SubscriptionClaudeConversionCardProps {
   subscriptionData?: SelfSubscriptionData | null
   loading?: boolean
-  compact?: boolean
   mode?: 'wallet' | 'dashboard'
   planTitles?: Record<number, { title: string; subtitle: string }>
   onRefresh?: () => Promise<void>
 }
 
 function buildRequestId(): string {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID()
   }
-  return `subscription-claude-${Date.now()}`
-}
-
-function formatDateTime(timestamp?: number): string {
-  if (!timestamp) return '--'
-  return new Date(timestamp * 1000).toLocaleString()
-}
-
-function getEligibleSubscriptions(data?: SelfSubscriptionData | null) {
-  return (data?.subscriptions || []).filter(
-    (item) => item.subscription.conversion_preview?.eligible
-  )
-}
-
-function getPlanLabel(
-  subscription: UserSubscription | undefined,
-  planTitles: Record<number, { title: string; subtitle: string }> | undefined,
-  fallback: string
-) {
-  if (!subscription) return fallback
-  return planTitles?.[subscription.plan_id]?.title || fallback
+  return `monthly-pass-conversion-${Date.now()}`
 }
 
 export function SubscriptionClaudeConversionCard(
@@ -71,372 +38,149 @@ export function SubscriptionClaudeConversionCard(
 ) {
   const { t } = useTranslation()
   const eligibleSubscriptions = useMemo(
-    () => getEligibleSubscriptions(props.subscriptionData),
+    () =>
+      (props.subscriptionData?.subscriptions ?? []).filter(
+        (item) => item.subscription.conversion_preview?.eligible === true
+      ),
     [props.subscriptionData]
   )
-  const recentConversions = props.subscriptionData?.recent_conversions || []
-  const config = props.subscriptionData?.conversion_config
-  const ratioText =
-    config && config.ratio_denominator > 0
-      ? `${config.ratio_numerator}:${config.ratio_denominator}`
-      : '1:10'
-
-  const [selectedSubscriptionId, setSelectedSubscriptionId] =
-    useState<number>(0)
-  const [sourceQuotaInput, setSourceQuotaInput] = useState('')
+  const [selectedId, setSelectedId] = useState(0)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (eligibleSubscriptions.length === 0) {
-      setSelectedSubscriptionId(0)
-      return
+    if (!eligibleSubscriptions.some((item) => item.subscription.id === selectedId)) {
+      setSelectedId(eligibleSubscriptions[0]?.subscription.id ?? 0)
     }
-    const exists = eligibleSubscriptions.some(
-      (item) => item.subscription.id === selectedSubscriptionId
-    )
-    if (!exists) {
-      setSelectedSubscriptionId(eligibleSubscriptions[0].subscription.id)
-    }
-  }, [eligibleSubscriptions, selectedSubscriptionId])
+  }, [eligibleSubscriptions, selectedId])
 
-  const selectedRecord = eligibleSubscriptions.find(
-    (item) => item.subscription.id === selectedSubscriptionId
+  const selected = eligibleSubscriptions.find(
+    (item) => item.subscription.id === selectedId
   )
-  const selectedSubscription = selectedRecord?.subscription
-  const selectedPlanMeta = selectedSubscription
-    ? props.planTitles?.[selectedSubscription.plan_id]
+  const preview = selected?.subscription.conversion_preview
+  const planMeta = selected
+    ? props.planTitles?.[selected.subscription.plan_id]
     : undefined
-  const sourceQuotaUSD = Number(sourceQuotaInput || 0)
-  const sourceQuota = parseSubscriptionQuotaUSDToUnits(sourceQuotaUSD)
-  const maxSourceQuota = Number(
-    selectedSubscription?.conversion_preview?.max_source_quota || 0
-  )
-  const maxSourceQuotaUSD = subscriptionQuotaUnitsToUSD(maxSourceQuota)
-  const previewClaudeQuota =
-    sourceQuota > 0 && Number(config?.ratio_denominator || 0) > 0
-      ? Math.floor(
-          (sourceQuota * Number(config?.ratio_numerator || 0)) /
-            Number(config?.ratio_denominator || 1)
-        )
-      : 0
 
-  const totalConvertibleQuota = eligibleSubscriptions.reduce((sum, item) => {
-    return (
-      sum + Number(item.subscription.conversion_preview?.max_source_quota || 0)
-    )
-  }, 0)
-  const totalPreviewClaudeQuota = eligibleSubscriptions.reduce((sum, item) => {
-    return (
-      sum +
-      Number(item.subscription.conversion_preview?.preview_claude_quota || 0)
-    )
-  }, 0)
-
-  const canSubmit =
-    Boolean(config?.enabled) &&
-    Boolean(selectedSubscriptionId) &&
-    Number.isFinite(sourceQuotaUSD) &&
-    sourceQuota > 0 &&
-    sourceQuota <= maxSourceQuota &&
-    previewClaudeQuota > 0 &&
-    !submitting
-
-  const submitConversion = async () => {
-    if (!canSubmit || !selectedSubscriptionId) return
+  const submit = async () => {
+    if (!selectedId || !preview?.eligible) return
     setSubmitting(true)
     try {
       const result = await createSubscriptionClaudeConversion({
-        subscriptionId: selectedSubscriptionId,
-        sourceQuota,
+        subscriptionId: selectedId,
         requestId: buildRequestId(),
       })
       if (!result.success || !result.data) {
-        toast.error(
-          result.message || t('Failed to convert plan quota to universal quota.')
-        )
+        toast.error(result.message || t('Monthly pass conversion failed.'))
         return
       }
       toast.success(
-        t('{{plan}} converted to universal quota', {
-          plan: getPlanLabel(
-            selectedSubscription,
-            props.planTitles,
-            t('Current plan')
-          ),
+        t('Converted to {{amount}} permanent universal credit.', {
+          amount: formatQuota(result.data.target_quota),
         })
       )
-      setSourceQuotaInput('')
       setConfirmOpen(false)
       await props.onRefresh?.()
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('subscription:changed'))
-      }
-    } catch {
-      toast.error(t('Failed to convert plan quota to universal quota.'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (props.mode === 'dashboard') {
+  if (props.loading) {
     return (
-      <div className='border-border bg-card rounded-2xl border px-4 py-4'>
-        <div className='flex items-start justify-between gap-3'>
-          <div>
-            <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
-              <Sparkles className='text-primary h-4 w-4' />
-              {t('Convert plan quota to universal quota')}
-            </div>
-            <div className='text-muted-foreground mt-1 text-xs leading-5'>
-              {t(
-                'Only active non-day plans are eligible. Enter USD and convert at {{ratio}} into permanent universal quota; temporary plan quota may lose value.',
-                { ratio: ratioText }
-              )}
-            </div>
-          </div>
-          <div className='border-border bg-muted text-muted-foreground rounded-full border px-3 py-1 text-xs'>
-            {t('Maximum {{amount}}', {
-              amount: formatSubscriptionQuotaAmount(totalConvertibleQuota),
-            })}
-          </div>
-        </div>
-
-        <div className='mt-3 grid gap-2 sm:grid-cols-3'>
-          <QuickStat
-            label={t('Convertible plan quota (USD)')}
-            value={formatSubscriptionQuotaAmount(totalConvertibleQuota)}
-          />
-          <QuickStat label={t('Conversion rule')} value={ratioText} />
-          <QuickStat
-            label={t('Estimated maximum universal quota')}
-            value={formatQuota(totalPreviewClaudeQuota)}
-          />
-        </div>
-
-        <Button
-          className='mt-3 w-full justify-between'
-          render={<Link to='/wallet' search={{ wallet_type: 'claude' }} />}
-        >
-          <span>{t('Convert in wallet')}</span>
-          <ArrowRightLeft className='h-4 w-4' />
-        </Button>
+      <div className='flex min-h-36 items-center justify-center'>
+        <Loader2 className='text-muted-foreground size-5 animate-spin' />
       </div>
     )
   }
 
   return (
-    <div className='app-page-shell p-4'>
-      <div className='flex items-start justify-between gap-3'>
-        <div>
-          <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
-            <ArrowRightLeft className='text-primary h-4 w-4' />
-            {t('Convert plan quota to universal quota')}
-          </div>
-          <div className='text-muted-foreground mt-1 text-xs leading-5'>
-            {t(
-              'Only active non-day plans are eligible. Enter USD at the current {{ratio}} ratio. Converting temporary plan quota into permanent universal quota cannot be undone.',
-              { ratio: ratioText }
-            )}
-          </div>
-        </div>
-        <div className='border-border bg-background/80 text-foreground rounded-full border px-3 py-1 text-xs font-semibold'>
-          {t('Universal quota')} {formatQuota(props.subscriptionData?.claude_quota || 0)}
-        </div>
+    <section className='space-y-3'>
+      <div className='flex items-center gap-2'>
+        <ArrowRightLeft className='text-primary size-4' aria-hidden='true' />
+        <h3 className='text-sm font-semibold'>{t('Monthly pass conversion')}</h3>
       </div>
 
-      {props.loading ? (
-        <div className='border-border/70 bg-background/72 text-muted-foreground mt-3 rounded-2xl border px-3 py-6 text-center text-xs'>
-          {t('Loading convertible plans...')}
-        </div>
-      ) : !config?.enabled ? (
-        <div className='border-border/70 bg-background/60 text-muted-foreground mt-3 rounded-2xl border border-dashed px-3 py-3 text-xs'>
-          {t('Plan-to-universal conversion is currently disabled.')}
-        </div>
-      ) : eligibleSubscriptions.length === 0 ? (
-        <div className='border-border/70 bg-background/60 text-muted-foreground mt-3 rounded-2xl border border-dashed px-3 py-3 text-xs'>
-          {t(
-            'No convertible plans are available. Only active non-day subscriptions are eligible.'
-          )}
-        </div>
+      {eligibleSubscriptions.length === 0 ? (
+        <p className='text-muted-foreground text-sm'>
+          {t('No active monthly pass is currently eligible for conversion.')}
+        </p>
       ) : (
-        <>
-          <div className='mt-3 space-y-2'>
-            {eligibleSubscriptions.map((item) => {
-              const checked = item.subscription.id === selectedSubscriptionId
-              return (
-                <button
-                  key={item.subscription.id}
-                  type='button'
-                  onClick={() =>
-                    setSelectedSubscriptionId(item.subscription.id)
-                  }
-                  className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
-                    checked
-                      ? 'border-foreground bg-background/80'
-                      : 'border-border/70 bg-muted/32'
-                  }`}
-                >
-                  <div className='flex items-start justify-between gap-3'>
-                    <div className='min-w-0'>
-                      <div className='text-foreground text-sm font-semibold'>
-                        {props.planTitles?.[item.subscription.plan_id]?.title ||
-                          t('Subscription #{{id}}', {
-                            id: item.subscription.id,
-                          })}
-                      </div>
-                      <div className='text-muted-foreground mt-1 text-xs'>
-                        {props.planTitles?.[item.subscription.plan_id]
-                          ?.subtitle || t('Subscription')}{' '}
-                        · {t('Expires')}:{' '}
-                        {formatDateTime(item.subscription.end_time)}
-                      </div>
-                    </div>
-                    <div className='text-muted-foreground text-right text-xs'>
-                      <div>
-                        {t('Maximum convertible')}{' '}
-                        {formatSubscriptionQuotaAmount(
-                          item.subscription.conversion_preview
-                            ?.max_source_quota || 0
-                        )}
-                      </div>
-                      <div className='text-foreground mt-1'>
-                        {t('Maximum received')}{' '}
-                        {formatQuota(
-                          item.subscription.conversion_preview
-                            ?.preview_claude_quota || 0
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-
-          <div className='app-subtle-panel mt-3 px-3 py-3'>
-            <div className='text-muted-foreground text-[11px] font-medium'>
-              {t('Enter quota to convert (USD)')}
-            </div>
-            <div className='mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2'>
-              <Input
-                type='number'
-                min='0.01'
-                step='0.01'
-                value={sourceQuotaInput}
-                onChange={(event) => setSourceQuotaInput(event.target.value)}
-                placeholder={t('Maximum {{amount}}', {
-                  amount: maxSourceQuotaUSD.toFixed(2),
-                })}
-                className='h-10'
-              />
-              <Button
-                className='h-10 px-4'
-                disabled={!canSubmit}
-                onClick={() => setConfirmOpen(true)}
+        <div className='grid gap-2'>
+          {eligibleSubscriptions.map((item) => {
+            const itemPreview = item.subscription.conversion_preview
+            const meta = props.planTitles?.[item.subscription.plan_id]
+            const selectedItem = item.subscription.id === selectedId
+            return (
+              <button
+                key={item.subscription.id}
+                type='button'
+                onClick={() => setSelectedId(item.subscription.id)}
+                className={`rounded-md border p-3 text-left transition-colors ${
+                  selectedItem
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-muted/50'
+                }`}
               >
-                {t('Convert')}
-              </Button>
-            </div>
-            <div className='mt-2 grid gap-2 text-xs sm:grid-cols-2'>
-              <QuickStat
-                label={t('Plan quota used for this conversion (USD)')}
-                value={formatSubscriptionQuotaAmount(sourceQuota)}
-              />
-              <QuickStat
-                label={t('Estimated universal quota')}
-                value={formatQuota(previewClaudeQuota || 0)}
-              />
-            </div>
-            {selectedSubscription ? (
-              <div className='text-muted-foreground mt-2 text-xs'>
-                {t('Approximate remaining convertible quota after conversion:')}{' '}
-                {formatSubscriptionQuotaAmount(
-                  Math.max(0, maxSourceQuota - sourceQuota)
-                )}
-              </div>
-            ) : null}
-            <div className='text-muted-foreground mt-2 text-xs leading-5'>
-              {t(
-                'USD input is for clarity; the backend still settles against the plan quota. Permanent universal quota is rounded down.'
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {recentConversions.length > 0 ? (
-        <div className='app-subtle-panel mt-3 px-3 py-3'>
-          <div className='text-foreground text-sm font-semibold'>
-            {t('Recent conversions')}
-          </div>
-          <div className='mt-2 space-y-2'>
-            {recentConversions.slice(0, 3).map((item) => (
-              <div
-                key={item.id}
-                className='flex items-center justify-between gap-3 text-xs'
-              >
-                <div className='text-muted-foreground'>
-                  {formatDateTime(item.created_at)} ·{' '}
-                  {t('Subscription #{{id}}', {
-                    id: item.user_subscription_id,
+                <div className='flex items-center justify-between gap-3'>
+                  <span className='text-sm font-medium'>
+                    {meta?.title || `${t('Monthly pass')} #${item.subscription.id}`}
+                  </span>
+                  <span className='text-sm font-semibold'>
+                    {formatQuota(itemPreview?.preview_quota || 0)}
+                  </span>
+                </div>
+                <div className='text-muted-foreground mt-1 text-xs'>
+                  {t('List price {{price}}, unused {{percent}}%', {
+                    price: Number(itemPreview?.plan_price_amount || 0).toFixed(2),
+                    percent: (
+                      Number(itemPreview?.unused_ratio || 0) * 100
+                    ).toFixed(2),
                   })}
                 </div>
-                <div className='text-foreground font-medium'>
-                  {formatSubscriptionQuotaAmount(item.source_quota)} →{' '}
-                  {formatQuota(item.target_claude_quota)}
-                </div>
-              </div>
-            ))}
-          </div>
+              </button>
+            )
+          })}
         </div>
-      ) : null}
+      )}
+
+      <Button
+        type='button'
+        className='w-full'
+        disabled={!selected || submitting}
+        onClick={() => setConfirmOpen(true)}
+      >
+        {submitting ? <Loader2 className='animate-spin' /> : <ArrowRightLeft />}
+        {t('Convert selected monthly pass')}
+      </Button>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('Confirm conversion')}</AlertDialogTitle>
+            <AlertDialogTitle>{t('Confirm monthly pass conversion')}</AlertDialogTitle>
             <AlertDialogDescription>
               {t(
-                'This will deduct {{amount}} from {{plan}} and credit approximately {{claude}} permanent universal quota. This action cannot be undone.',
+                'The entire {{plan}} will end immediately. Its remaining {{remaining}} quota, equal to {{percent}}% of the pass, will convert from the {{price}} list price into approximately {{credit}} permanent universal credit. This cannot be undone.',
                 {
-                  amount: formatSubscriptionQuotaAmount(sourceQuota),
-                  plan: selectedPlanMeta?.title || t('Current plan'),
-                  claude: formatQuota(previewClaudeQuota || 0),
+                  plan: planMeta?.title || t('monthly pass'),
+                  remaining: formatSubscriptionQuotaAmount(
+                    preview?.remaining_quota || 0
+                  ),
+                  percent: (Number(preview?.unused_ratio || 0) * 100).toFixed(2),
+                  price: Number(preview?.plan_price_amount || 0).toFixed(2),
+                  credit: formatQuota(preview?.preview_quota || 0),
                 }
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={!canSubmit}
-              onClick={(event) => {
-                event.preventDefault()
-                void submitConversion()
-              }}
-            >
-              {submitting ? (
-                <Loader2 className='mr-1 h-4 w-4 animate-spin' />
-              ) : null}
+            <AlertDialogCancel disabled={submitting}>{t('Cancel')}</AlertDialogCancel>
+            <AlertDialogAction disabled={submitting} onClick={submit}>
               {t('Confirm conversion')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  )
-}
-
-function QuickStat(props: { label: string; value: string }) {
-  return (
-    <div className='app-subtle-panel px-3 py-3'>
-      <div className='text-muted-foreground text-[11px] font-medium'>
-        {props.label}
-      </div>
-      <div className='text-foreground mt-1 font-mono text-sm font-semibold tabular-nums'>
-        {props.value}
-      </div>
-    </div>
+    </section>
   )
 }

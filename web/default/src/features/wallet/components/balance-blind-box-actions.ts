@@ -39,10 +39,10 @@ export async function purchaseBalanceBoxInventory(
       context.count
     )
     if (!isApiSuccess(response)) throw new Error(response.message || '购买失败')
-    toast.success(`${context.count} 个余额盲盒已购买并存入库存`)
+    toast.success(`${context.count} 个统一盲盒已购买并存入库存`)
     await context.onRefresh()
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '余额盲盒购买失败')
+    toast.error(error instanceof Error ? error.message : '统一盲盒购买失败')
   } finally {
     context.setBusy(false)
   }
@@ -69,9 +69,9 @@ export async function openBalanceBoxInventory(
         },
       })
     )
-    toast.success('库存盲盒已开启，本次不会产生每日幸运号')
+    toast.success('统一盲盒已开启，奖励已发放')
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '余额盲盒开启失败')
+    toast.error(error instanceof Error ? error.message : '统一盲盒开启失败')
   } finally {
     context.setBusy(false)
   }
@@ -114,13 +114,13 @@ export async function giftBalanceBoxInventory(
     )
     if (!isApiSuccess(response)) throw new Error(response.message || '赠送失败')
     toast.success(
-      `已向 ${context.recipient.external_id} 赠送 ${context.count} 个余额盲盒`
+      `已向 ${context.recipient.external_id} 赠送 ${context.count} 个统一盲盒`
     )
     context.setRecipient(null)
     context.setRecipientId('')
     await context.onRefresh()
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '余额盲盒赠送失败')
+    toast.error(error instanceof Error ? error.message : '统一盲盒赠送失败')
   } finally {
     context.setBusy(false)
     context.setConfirmGift(false)

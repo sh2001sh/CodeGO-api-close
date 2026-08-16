@@ -30,8 +30,7 @@ const REDUCED_ITEM: Variants = {
 }
 
 export function BlindBoxSidebar(props: {
-  remainingQuota: number
-  claudeQuota: number
+  quota: number
   availableBoxes: number
   pendingBoxes: number
   records: BlindBoxRecord[]
@@ -51,8 +50,7 @@ export function BlindBoxSidebar(props: {
     >
       <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
         <AssetBoard
-          remainingQuota={props.remainingQuota}
-          claudeQuota={props.claudeQuota}
+          quota={props.quota}
           availableBoxes={props.availableBoxes}
           pendingBoxes={props.pendingBoxes}
         />
@@ -186,8 +184,7 @@ function PropsPreview(props: {
 }
 
 function AssetBoard(props: {
-  remainingQuota: number
-  claudeQuota: number
+  quota: number
   availableBoxes: number
   pendingBoxes: number
 }) {
@@ -198,11 +195,7 @@ function AssetBoard(props: {
         <div className='text-foreground text-sm font-semibold'>开奖状态</div>
       </div>
       <div className='grid grid-cols-2 gap-2.5'>
-        <Tile label='通用额度' value={formatQuota(props.claudeQuota)} />
-        <Tile
-          label='官方 GPT 专属额度'
-          value={formatQuota(props.remainingQuota)}
-        />
+        <Tile label='通用额度' value={formatQuota(props.quota)} />
         <Tile
           label='待开盲盒'
           value={String(props.availableBoxes)}
@@ -244,9 +237,6 @@ function SettlementCard() {
       <div className='space-y-2 text-xs leading-5'>
         <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
           通用额度直接进入通用额度钱包，永久有效。
-        </div>
-        <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
-          官方 GPT 专属额度直接进入对应钱包，永久有效。
         </div>
         <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
           道具会在本页展示并按规则自动生效或手动启用。

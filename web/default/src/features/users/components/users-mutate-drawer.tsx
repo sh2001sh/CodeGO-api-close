@@ -83,7 +83,6 @@ export function UsersMutateDrawer({
   const { triggerRefresh } = useUsers()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
-  const [claudeQuotaDialogOpen, setClaudeQuotaDialogOpen] = useState(false)
 
   // Fetch groups
   const { data: groupsData } = useQuery({
@@ -119,7 +118,6 @@ export function UsersMutateDrawer({
   const tokensOnly = currencyMeta.kind === 'tokens'
 
   const currentQuotaRaw = form.watch('quota_dollars') || 0
-  const currentClaudeQuotaRaw = form.watch('claude_quota_dollars') || 0
 
   const onSubmit = async (data: UserFormValues) => {
     setIsSubmitting(true)
@@ -343,7 +341,6 @@ export function UsersMutateDrawer({
                     currencyLabel={currencyLabel}
                     tokensOnly={tokensOnly}
                     onAdjustQuota={() => setQuotaDialogOpen(true)}
-                    onAdjustClaudeQuota={() => setClaudeQuotaDialogOpen(true)}
                   />
 
                   <FormField
@@ -386,12 +383,9 @@ export function UsersMutateDrawer({
       <UserQuotaDialogs
         currentRow={currentRow}
         quotaDialogOpen={quotaDialogOpen}
-        claudeQuotaDialogOpen={claudeQuotaDialogOpen}
         currentQuotaRaw={currentQuotaRaw}
-        currentClaudeQuotaRaw={currentClaudeQuotaRaw}
         t={t}
         onQuotaOpenChange={setQuotaDialogOpen}
-        onClaudeQuotaOpenChange={setClaudeQuotaDialogOpen}
         onSuccess={refreshUserData}
       />
     </>

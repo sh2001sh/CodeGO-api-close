@@ -78,6 +78,10 @@ func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPayme
 		if err := awardReferralFirstPurchaseBonusTx(tx, order.UserId, commercedomain.ReferralPurchaseTypeBlindBox, "blind_box_order", order.TradeNo); err != nil {
 			return err
 		}
+		if err := issuePaidBlindBoxOrderInventoryTx(tx, &order); err != nil {
+			return err
+		}
+		order.OpenedCount = order.Quantity
 		return tx.Save(&order).Error
 	})
 }

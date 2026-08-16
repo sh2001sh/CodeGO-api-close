@@ -43,6 +43,8 @@ const (
 	SubscriptionPurchaseTypeJoinGroup = "join_group"
 )
 
+const SubscriptionStatusSettledCancelled = "settled_cancelled"
+
 const (
 	SubscriptionOrderFulfillmentPending   = "pending"
 	SubscriptionOrderFulfillmentCompleted = "completed"
@@ -210,7 +212,7 @@ type UserSubscription struct {
 
 	ConversionPreview *SubscriptionClaudeConversionPreview `json:"conversion_preview,omitempty" gorm:"-"`
 	LuckyNumber       *SubscriptionLuckyNumber             `json:"lucky_number,omitempty" gorm:"-"`
-	MembershipTier    string                               `json:"membership_tier,omitempty" gorm:"-"`
+	MembershipTier    string                               `json:"membership_tier,omitempty" gorm:"type:varchar(16);default:'none';index"`
 	CreatedAt         int64                                `json:"created_at" gorm:"bigint"`
 	UpdatedAt         int64                                `json:"updated_at" gorm:"bigint"`
 }

@@ -10,7 +10,6 @@ import (
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
-	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"github.com/sh2001sh/new-api/types"
@@ -18,21 +17,6 @@ import (
 	"net/http/httptest"
 	"testing"
 )
-
-func TestIsClaudeBillingRequestUsesChannelSettingOnly(t *testing.T) {
-	info := &relaycommon.RelayInfo{
-		OriginModelName: "claude-3-7-sonnet",
-		RelayFormat:     types.RelayFormatClaude,
-		ChannelMeta: &relaycommon.ChannelMeta{
-			ChannelSetting: dto.ChannelSettings{},
-		},
-	}
-
-	require.False(t, isClaudeBillingRequest(info))
-
-	info.ChannelSetting.ClaudeWalletEnabled = true
-	require.True(t, isClaudeBillingRequest(info))
-}
 
 func TestBillingSessionRefundSyncRestoresWalletAndTokenPreConsume(t *testing.T) {
 	truncate(t)
@@ -58,17 +42,17 @@ func TestBillingSessionRefundSyncRestoresWalletAndTokenPreConsume(t *testing.T) 
 	require.Nil(t, apiErr)
 	require.Equal(t, 3000, session.GetPreConsumedQuota())
 
-	userQuota, err := identitystore.LoadUserQuota(1001, false)
+	userQuota, err := GetUserClaudeWalletQuota(1001)
 	require.NoError(t, err)
 	require.Equal(t, 7000, userQuota)
-	require.Equal(t, int64(7000), loadBillingSnapshot(t, 1001, "wallet").AvailableBalance)
+	require.Equal(t, int64(7000), loadBillingSnapshot(t, 1001, "claude_wallet").AvailableBalance)
 
 	require.NoError(t, session.RefundSync(ctx))
 
-	userQuota, err = identitystore.LoadUserQuota(1001, false)
+	userQuota, err = GetUserClaudeWalletQuota(1001)
 	require.NoError(t, err)
 	require.Equal(t, 10000, userQuota)
-	require.Equal(t, int64(10000), loadBillingSnapshot(t, 1001, "wallet").AvailableBalance)
+	require.Equal(t, int64(10000), loadBillingSnapshot(t, 1001, "claude_wallet").AvailableBalance)
 }
 
 func TestBillingSessionSettleAdjustsWalletAndTokenToActualUsage(t *testing.T) {
@@ -96,14 +80,14 @@ func TestBillingSessionSettleAdjustsWalletAndTokenToActualUsage(t *testing.T) {
 
 	require.NoError(t, session.Settle(4500))
 
-	userQuota, err := identitystore.LoadUserQuota(1002, false)
+	userQuota, err := GetUserClaudeWalletQuota(1002)
 	require.NoError(t, err)
 	require.Equal(t, 5500, userQuota)
-	snapshot := loadBillingSnapshot(t, 1002, "wallet")
+	snapshot := loadBillingSnapshot(t, 1002, "claude_wallet")
 	require.Equal(t, int64(5500), snapshot.AvailableBalance)
 	require.Equal(t, int64(4500), snapshot.ConsumedTotal)
 	require.NoError(t, session.RefundSync(ctx))
-	userQuota, err = identitystore.LoadUserQuota(1002, false)
+	userQuota, err = GetUserClaudeWalletQuota(1002)
 	require.NoError(t, err)
 	require.Equal(t, 5500, userQuota)
 }
@@ -171,7 +155,7 @@ func TestBillingSessionSettlesExactPreConsumeIntoLedger(t *testing.T) {
 	require.EqualValues(t, 3_000, settlement.ActualAmount)
 }
 
-func TestTrustedBillingSessionCreatesReservationAtSettlement(t *testing.T) {
+func TestUnlimitedTokenWalletSessionStillPreConsumes(t *testing.T) {
 	truncate(t)
 	const trustedQuota = 6_000_000
 	seedUser(t, 1015, trustedQuota)
@@ -188,7 +172,7 @@ func TestTrustedBillingSessionCreatesReservationAtSettlement(t *testing.T) {
 	}
 	session, apiErr := NewBillingSession(ctx, info, 1_000)
 	require.Nil(t, apiErr)
-	require.Equal(t, 0, session.GetPreConsumedQuota())
+	require.Equal(t, 1_000, session.GetPreConsumedQuota())
 	require.NoError(t, session.Settle(1_000))
 
 	funding := session.funding.(*LedgerRelayFunding)
@@ -225,7 +209,7 @@ func TestBillingSessionRequestReplayDoesNotProjectWalletTwice(t *testing.T) {
 	firstFunding := first.funding.(*LedgerRelayFunding)
 	secondFunding := second.funding.(*LedgerRelayFunding)
 	require.Equal(t, firstFunding.ReservationID(), secondFunding.ReservationID())
-	userQuota, err := identitystore.LoadUserQuota(1013, false)
+	userQuota, err := GetUserClaudeWalletQuota(1013)
 	require.NoError(t, err)
 	require.Equal(t, 7000, userQuota)
 }
@@ -253,49 +237,43 @@ func TestPreConsumeRelayBillingReusesSessionAcrossChannelRetry(t *testing.T) {
 	require.Nil(t, PreConsumeRelayBilling(ctx, 2_000, info))
 	require.Same(t, firstSession, info.Billing)
 
-	quota, err := identitystore.LoadUserQuota(1016, false)
+	quota, err := GetUserClaudeWalletQuota(1016)
 	require.NoError(t, err)
 	require.Equal(t, 7_000, quota)
 	require.NoError(t, RefundRelayBillingSync(ctx, info))
 
-	quota, err = identitystore.LoadUserQuota(1016, false)
+	quota, err = GetUserClaudeWalletQuota(1016)
 	require.NoError(t, err)
 	require.Equal(t, 10_000, quota)
 }
 
-func TestBridgeSeparatesWalletAndClaudeLedgerAccounts(t *testing.T) {
+func TestBridgeUsesSingleUnifiedCreditLedgerAccount(t *testing.T) {
 	truncate(t)
 	require.NoError(t, platformdb.DB.Create(&identityschema.User{
 		Id:          1005,
-		Username:    "dual_wallet_user",
-		Quota:       5000,
+		Username:    "unified_credit_user",
 		ClaudeQuota: 2000,
 		Status:      constant.UserStatusEnabled,
 	}).Error)
 
-	require.NoError(t, AdjustWalletQuota(1005, 1000))
 	require.NoError(t, AdjustClaudeWalletQuota(1005, 500))
-
-	walletSnapshot := loadBillingSnapshot(t, 1005, "wallet")
-	require.Equal(t, int64(4000), walletSnapshot.AvailableBalance)
 
 	claudeSnapshot := loadBillingSnapshot(t, 1005, "claude_wallet")
 	require.Equal(t, int64(1500), claudeSnapshot.AvailableBalance)
 
 	var accounts []billingschema.BillingAccount
 	require.NoError(t, platformdb.DB.Where("owner_type = ? AND owner_id = ?", "user", 1005).Order("account_type asc").Find(&accounts).Error)
-	require.Len(t, accounts, 2)
+	require.Len(t, accounts, 1)
 	require.Equal(t, "claude_wallet", accounts[0].AccountType)
-	require.Equal(t, "wallet", accounts[1].AccountType)
 }
 
-func TestAdjustWalletQuotaConsumesBonusQuotaCredits(t *testing.T) {
+func TestAdjustUnifiedCreditConsumesBonusQuotaCredits(t *testing.T) {
 	truncate(t)
 	require.NoError(t, platformdb.DB.Create(&identityschema.User{
-		Id:       1006,
-		Username: "bonus_wallet_user",
-		Quota:    1000,
-		Status:   constant.UserStatusEnabled,
+		Id:          1006,
+		Username:    "bonus_wallet_user",
+		ClaudeQuota: 1000,
+		Status:      constant.UserStatusEnabled,
 	}).Error)
 	require.NoError(t, platformdb.DB.Create(&billingschema.BonusQuotaCredit{
 		UserId:          1006,
@@ -307,9 +285,9 @@ func TestAdjustWalletQuotaConsumesBonusQuotaCredits(t *testing.T) {
 		Status:          billingschema.BonusQuotaStatusActive,
 	}).Error)
 
-	require.NoError(t, AdjustWalletQuota(1006, 400))
+	require.NoError(t, AdjustClaudeWalletQuota(1006, 400))
 
-	userQuota, err := identitystore.LoadUserQuota(1006, false)
+	userQuota, err := GetUserClaudeWalletQuota(1006)
 	require.NoError(t, err)
 	require.Equal(t, 600, userQuota)
 
@@ -318,14 +296,14 @@ func TestAdjustWalletQuotaConsumesBonusQuotaCredits(t *testing.T) {
 	require.EqualValues(t, 600, credit.RemainingAmount)
 	require.Equal(t, billingschema.BonusQuotaStatusActive, credit.Status)
 
-	require.NoError(t, AdjustWalletQuota(1006, 600))
+	require.NoError(t, AdjustClaudeWalletQuota(1006, 600))
 
 	require.NoError(t, platformdb.DB.Where("user_id = ?", 1006).First(&credit).Error)
 	require.Zero(t, credit.RemainingAmount)
 	require.Equal(t, billingschema.BonusQuotaStatusExhausted, credit.Status)
 }
 
-func TestNewBillingSessionReturnsLocalWalletQuotaMessage(t *testing.T) {
+func TestNewBillingSessionReturnsUnifiedCreditMessage(t *testing.T) {
 	truncate(t)
 	seedUser(t, 1003, 750)
 	seedToken(t, 2003, 1003, "sk-wallet-insufficient", 10000)
@@ -349,7 +327,7 @@ func TestNewBillingSessionReturnsLocalWalletQuotaMessage(t *testing.T) {
 	require.NotNil(t, apiErr)
 	require.Equal(t, types.ErrorCodeInsufficientUserQuota, apiErr.GetErrorCode())
 	require.Equal(t,
-		"官方 GPT 专属额度不足, 当前余额: "+logger.FormatQuota(750)+", 本次所需: "+logger.FormatQuota(2364),
+		"通用额度不足, 当前余额: "+logger.FormatQuota(750)+", 本次所需: "+logger.FormatQuota(2364),
 		apiErr.Error(),
 	)
 }
@@ -375,13 +353,17 @@ func TestNewBillingSessionReturnsCombinedFundingMessage(t *testing.T) {
 		RequestId:       "req-combined-insufficient",
 		IsPlayground:    true,
 		ForcePreConsume: true,
+		UserSetting:     dto.UserSetting{BillingPreference: "wallet_only"},
 	}
 
 	session, apiErr := NewBillingSession(ctx, info, 2364)
 	require.Nil(t, session)
 	require.NotNil(t, apiErr)
 	require.Equal(t, types.ErrorCodeInsufficientUserQuota, apiErr.GetErrorCode())
-	require.Equal(t, "GPT 套餐额度不足，且官方 GPT 专属额度不足", apiErr.Error())
+	require.Equal(t,
+		"通用额度不足, 当前余额: "+logger.FormatQuota(750)+", 本次所需: "+logger.FormatQuota(2364),
+		apiErr.Error(),
+	)
 }
 
 func TestNewBillingSessionReturnsLocalClaudeQuotaMessage(t *testing.T) {
@@ -403,6 +385,7 @@ func TestNewBillingSessionReturnsLocalClaudeQuotaMessage(t *testing.T) {
 		RequestId:       "req-claude-insufficient",
 		IsPlayground:    true,
 		ForcePreConsume: true,
+		UserSetting:     dto.UserSetting{BillingPreference: "wallet_only"},
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelSetting: dto.ChannelSettings{
 				ClaudeWalletEnabled: true,

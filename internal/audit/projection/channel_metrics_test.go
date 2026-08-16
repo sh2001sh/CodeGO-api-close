@@ -68,6 +68,37 @@ func TestChannelMetricPersistenceUsesChannelAndBucketIdentity(t *testing.T) {
 	require.EqualValues(t, 1, summaries[1].RequestCount)
 }
 
+func TestChannelMetricsCalculateCacheHitRateAcrossTokenClasses(t *testing.T) {
+	originalDB := platformdb.DB
+	originalRedisEnabled := platformcache.RedisEnabled
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformcache.RedisEnabled = originalRedisEnabled
+		clearMetricBucketsForChannels(930501)
+	})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	platformdb.DB = db
+	platformcache.RedisEnabled = false
+	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}))
+
+	Record(Sample{
+		Model: "cache-model", Group: "cache-group", ChannelID: 930501,
+		Success: true, InputTokens: 600, CacheReadTokens: 300, CacheWriteTokens: 100,
+	})
+
+	summaries, err := QuerySummaryByChannels(24, []int{930501})
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	require.Equal(t, 30.0, summaries[0].CacheHitRate)
+
+	series, err := QuerySeriesByChannels(6, []int{930501})
+	require.NoError(t, err)
+	require.Len(t, series, 1)
+	require.Len(t, series[0].Series, 1)
+	require.Equal(t, 30.0, series[0].Series[0].CacheHitRate)
+}
+
 func clearMetricBucketsForChannels(channelIDs ...int) {
 	allowed := make(map[int]struct{}, len(channelIDs))
 	for _, channelID := range channelIDs {

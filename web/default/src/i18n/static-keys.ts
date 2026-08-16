@@ -104,13 +104,6 @@ export const STATIC_I18N_KEYS = [
   'Failed to update user',
   'Failed to delete user',
   'No user selected',
-  'Claude quota adjusted successfully',
-  'Adjust Claude Quota',
-  'Current Claude quota',
-  'Claude Quota',
-  'No Claude Quota',
-  'Remaining Claude quota',
-  'Claude Quota ({{currency}})',
 
   // Redemption codes
   'Unused',

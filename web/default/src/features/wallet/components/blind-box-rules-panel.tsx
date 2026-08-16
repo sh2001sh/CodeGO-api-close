@@ -76,7 +76,7 @@ export function BlindBoxPityTrack(props: {
 
       <p className='text-muted-foreground mt-2.5 text-xs leading-5'>
         {props.firstPurchaseEligible
-          ? `首次购买盲盒后，首抽官方 GPT 专属额度最低保底 $${props.firstPurchaseUsd.toFixed(0)}。`
+          ? `首次购买盲盒后，首抽统一额度最低保底 $${props.firstPurchaseUsd.toFixed(0)}。`
           : ready
             ? `下次抽取必定触发保底，按 $${props.pityGuaranteeUsd.toFixed(0)} 档位及以上发放。`
             : `连续 ${props.pityThreshold} 次未开出高价值奖励时触发保底，再抽 ${props.remainingPity} 次达成；保底按 $${props.pityGuaranteeUsd.toFixed(0)} 档位及以上发放。`}
@@ -114,10 +114,10 @@ export function BlindBoxZeroHourCard(props: { data: BlindBoxSelfData | null }) {
           </motion.span>
           <div className='min-w-0'>
             <h3 className='text-foreground text-sm font-semibold'>
-              隐藏道具：1 小时 0 倍率卡
+              历史 0 倍率道具
             </h3>
             <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-              抽中并启用后 1 小时内，倍率卡专属分组的非生图模型按 0 倍率计费
+              仅用于兼容迁移前已获得的道具，新统一奖池不再产出
             </p>
           </div>
         </div>
@@ -173,13 +173,21 @@ export function BlindBoxZeroHourCard(props: { data: BlindBoxSelfData | null }) {
 
 export function BlindBoxPropRules() {
   const rules = [
-    { title: '充值九折卡', detail: '下次充值自动抵扣一次，仅生效 1 次' },
-    { title: '套餐九折卡', detail: '下次购买套餐自动抵扣一次，仅生效 1 次' },
-    { title: '0.95 倍率卡', detail: '在本页点击使用后生效，持续 24 小时' },
-    { title: '0.9 倍率卡', detail: '在本页点击使用后生效，持续 24 小时' },
     {
-      title: '1 小时 0 倍率卡',
-      detail: '在「我的道具」启用，接入倍率卡专属分组，持续 1 小时',
+      title: '充值九折卡',
+      detail: '下次统一额度充值自动按九折结算，仅使用一次',
+    },
+    {
+      title: '0.95 倍率卡',
+      detail: '仅官方渠道，启用后连续 24 小时按 0.95 倍率扣减',
+    },
+    {
+      title: '0.90 倍率卡',
+      detail: '仅官方渠道，启用后连续 24 小时按 0.90 倍率扣减',
+    },
+    {
+      title: '0.10 倍率体验卡',
+      detail: '仅官方指定 GPT 分组，累计 15 分钟，可暂停',
     },
   ]
 
@@ -204,6 +212,9 @@ export function BlindBoxPropRules() {
           </div>
         ))}
       </div>
+      <p className='text-muted-foreground mt-3 text-xs leading-5'>
+        请求未命中官方渠道时，倍率卡不生效。
+      </p>
     </section>
   )
 }

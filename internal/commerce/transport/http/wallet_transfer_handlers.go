@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	stdhttp "net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
@@ -19,6 +20,7 @@ type configureWalletTransferPasswordRequest struct {
 	OldPaymentPassword string `json:"old_payment_password"`
 	NewPaymentPassword string `json:"new_payment_password"`
 	ConfirmPassword    string `json:"confirm_password"`
+	EmailCode          string `json:"email_code"`
 }
 
 func getWalletTransferOverview(c *gin.Context) {
@@ -60,19 +62,51 @@ func configureWalletTransferPassword(c *gin.Context) {
 		httpapi.ApiError(c, err)
 		return
 	}
-	security, err := commerceapp.GetWalletTransferSecurityOverview(user.Id, user.Password != "")
+	security, err := commerceapp.GetWalletTransferSecurityOverview(user.Id, user.Password != "", user.Email)
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
+	if !security.EmailBound {
+		httpapi.ApiError(c, commerceschema.ErrWalletTransferEmailRequired)
+		return
+	}
 	if !security.PasswordSet && !authorizeFirstWalletTransferPassword(c, user.Password, req.CurrentPassword) {
+		return
+	}
+	if security.PasswordSet && !identityapp.VerifyCodeWithKey(user.Email, req.EmailCode, identityapp.WalletTransferPasswordPurpose) {
+		httpapi.ApiError(c, commerceschema.ErrWalletTransferEmailCodeInvalid)
 		return
 	}
 	if err := commerceapp.ConfigureWalletTransferPassword(user.Id, req.OldPaymentPassword, req.NewPaymentPassword); err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
+	if security.PasswordSet {
+		identityapp.DeleteVerificationKey(user.Email, identityapp.WalletTransferPasswordPurpose)
+	}
 	httpapi.ApiSuccess(c, gin.H{"password_set": true})
+}
+
+func sendWalletTransferPasswordEmailCode(c *gin.Context) {
+	email, err := identityapp.SendWalletTransferPasswordVerification(c.GetInt("id"))
+	if err != nil {
+		if errors.Is(err, identityapp.ErrBoundEmailRequired) {
+			httpapi.ApiError(c, commerceschema.ErrWalletTransferEmailRequired)
+			return
+		}
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{"email_masked": maskEmailForResponse(email)})
+}
+
+func maskEmailForResponse(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 || parts[0] == "" {
+		return ""
+	}
+	return string([]rune(parts[0])[0]) + "***@" + parts[1]
 }
 
 func createWalletTransfer(c *gin.Context) {

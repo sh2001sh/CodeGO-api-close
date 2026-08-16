@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	balanceBlindBoxPoolVersion = "balance-resale-v3"
+	balanceBlindBoxPoolVersion = "unified-box-v1"
 	balanceBlindBoxMaxBatch    = 100
 )
 
@@ -63,7 +63,7 @@ func GetBalanceBlindBoxOverview(userID int) (*BalanceBlindBoxOverview, error) {
 		return nil, errors.New("invalid user id")
 	}
 	setting := blindboxsettings.Get()
-	balance, err := billingapp.GetUserWalletQuota(userID)
+	balance, err := billingapp.GetUserClaudeWalletQuota(userID)
 	if err != nil {
 		return nil, err
 	}

@@ -1,10 +1,19 @@
-import { Gift, Loader2, PackageOpen, Search, ShoppingBag } from 'lucide-react'
+import {
+  Coins,
+  CreditCard,
+  Gift,
+  Loader2,
+  PackageOpen,
+  Search,
+  ShoppingBag,
+  FlaskConical,
+} from 'lucide-react'
 import { useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type {
   BalanceBlindBoxOverview,
-  BlindBoxTier,
+  PaymentMethod,
   WalletTransferRecipient,
 } from '../types'
 import {
@@ -14,8 +23,9 @@ import {
 } from './balance-blind-box-controls'
 import { BalanceBoxGiftConfirm } from './balance-blind-box-gift-confirm'
 import { BoxFigure } from './blind-box-stage'
+import { BalanceBlindBoxSimulator } from './balance-blind-box-simulator'
 
-export type ActionMode = 'purchase' | 'open' | 'gift'
+export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulation'
 
 export interface BalanceBoxPanelViewProps {
   balance?: BalanceBlindBoxOverview
@@ -28,6 +38,10 @@ export interface BalanceBoxPanelViewProps {
   canPurchase: boolean
   canUseInventory: boolean
   confirmGift: boolean
+  cashMethods: PaymentMethod[]
+  selectedCashMethod: PaymentMethod | null
+  cashAmountDue: number
+  cashPaying: boolean
   onModeChange: (mode: ActionMode) => void
   onCountChange: (count: number) => void
   onRecipientIdChange: (value: string) => void
@@ -36,6 +50,9 @@ export interface BalanceBoxPanelViewProps {
   onLookup: () => void
   onGift: () => void
   onConfirmGiftChange: (open: boolean) => void
+  onCashMethodChange: (method: PaymentMethod) => void
+  onCashPurchase: () => void
+  onOpenProps: () => void
 }
 
 export function BalanceBoxPanelView(props: BalanceBoxPanelViewProps) {
@@ -60,39 +77,29 @@ function BalanceBoxHeader(props: {
 }) {
   const reduced = Boolean(useReducedMotion())
   const inventoryCount = props.balance?.inventory_count || 0
-  const rates = {
-    atLeast10: minimumRewardProbability(props.balance?.tiers || [], 10),
-    atLeast15: minimumRewardProbability(props.balance?.tiers || [], 15),
-  }
   return (
-    <div className='relative overflow-hidden border-b border-teal-500/20 bg-gradient-to-b from-teal-500/[0.10] via-teal-500/[0.035] to-transparent px-4 pt-7 pb-5 sm:px-6'>
-      <div
-        aria-hidden='true'
-        className='pointer-events-none absolute top-4 left-1/2 size-52 -translate-x-1/2 rounded-full bg-teal-500/15 blur-3xl'
-      />
+    <div className='border-primary/20 bg-primary/[0.045] border-b px-4 pt-7 pb-5 sm:px-6'>
       <div className='relative flex flex-col items-center gap-4'>
         <BoxFigure
           reduced={reduced}
           pending={inventoryCount > 0}
           opening={props.opening}
-          tone='balance'
+          tone='primary'
         />
         <div className='max-w-xl text-center'>
-          <div className='text-xs font-semibold text-teal-700 dark:text-teal-300'>
-            余额盲盒 · ${(props.balance?.price_usd || 15).toFixed(0)} / 个
+          <div className='text-primary text-xs font-semibold'>
+            统一盲盒 · {(props.balance?.price_usd || 2.5).toFixed(2)} / 个
           </div>
           <h2 className='text-foreground mt-1 text-lg font-semibold tracking-tight sm:text-xl'>
             {inventoryCount > 0
-              ? `你有 ${inventoryCount} 个余额盲盒待开启`
-              : '购买可持有、可转赠的余额盲盒'}
+              ? `你有 ${inventoryCount} 个统一盲盒待开启`
+              : '购买可持有、可转赠的统一盲盒'}
           </h2>
           <p className='text-muted-foreground mt-1.5 text-xs leading-5'>
-            购买完成后仅存入库存，不会自动开启。奖励在购买时封存，余额盲盒不产生幸运号。
+            人民币与统一额度购买进入同一库存、同一奖池。奖励在入库时封存，转赠不会改变结果。
           </p>
-          <p className='mt-1 text-[11px] leading-5 text-teal-700/90 dark:text-teal-300/90'>
-            约 {formatRate(rates.atLeast10)} 获得等值 $10 及以上奖励，约{' '}
-            {formatRate(rates.atLeast15)} 达到等值 $15；通用额度按 4
-            倍价值计算，转赠不会刷新奖励或保底。
+          <p className='text-primary/90 mt-1 text-[11px] leading-5'>
+            奖励为公开概率的随机额度区间或权益卡；统一额度奖励永久有效。
           </p>
         </div>
         <BalanceBoxHeaderMetrics balance={props.balance} />
@@ -113,8 +120,8 @@ function BalanceBoxHeaderMetrics(props: { balance?: BalanceBlindBoxOverview }) {
         value={`${props.balance?.purchased_today || 0}/${props.balance?.daily_purchase_limit || 10}`}
       />
       <BalanceBoxMetric
-        label='钱包余额'
-        value={`$${(props.balance?.balance_usd || 0).toFixed(2)}`}
+        label='统一额度'
+        value={`${(props.balance?.balance_usd || 0).toFixed(2)}`}
       />
     </div>
   )
@@ -125,12 +132,18 @@ function BalanceBoxModeSwitch(props: {
   onChange: (mode: ActionMode) => void
 }) {
   return (
-    <div className='bg-muted grid grid-cols-3 rounded-lg p-1' role='tablist'>
+    <div className='bg-muted grid grid-cols-2 rounded-lg p-1 sm:grid-cols-4' role='tablist'>
       <BalanceBoxModeButton
         active={props.mode === 'purchase'}
         icon={ShoppingBag}
         label='购买盲盒'
         onClick={() => props.onChange('purchase')}
+      />
+      <BalanceBoxModeButton
+        active={props.mode === 'simulation'}
+        icon={FlaskConical}
+        label='模拟抽盒'
+        onClick={() => props.onChange('simulation')}
       />
       <BalanceBoxModeButton
         active={props.mode === 'open'}
@@ -149,6 +162,9 @@ function BalanceBoxModeSwitch(props: {
 }
 
 function BalanceBoxWorkspace(props: BalanceBoxPanelViewProps) {
+  if (props.mode === 'simulation') {
+    return <BalanceBlindBoxSimulator priceUSD={props.balance?.price_usd || 2.5} />
+  }
   return (
     <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
       <div className='space-y-3'>
@@ -227,7 +243,7 @@ function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {
 
 function BalanceBoxActionControls(props: BalanceBoxPanelViewProps) {
   return (
-    <div className='space-y-4 rounded-xl border border-teal-500/25 bg-teal-500/[0.045] p-4'>
+    <div className='border-primary/20 bg-primary/[0.035] space-y-4 rounded-lg border p-4'>
       <BalanceBoxQuantityControl
         count={props.count}
         max={props.maxCount}
@@ -245,28 +261,66 @@ function BalanceBoxActionControls(props: BalanceBoxPanelViewProps) {
 }
 
 function BalanceBoxPurchaseAction(props: BalanceBoxPanelViewProps) {
-  const totalPrice = (props.balance?.price_usd || 15) * props.count
+  const totalPrice = (props.balance?.price_usd || 2.5) * props.count
   return (
-    <div className='space-y-3 border-t border-teal-500/20 pt-3'>
+    <div className='border-primary/15 space-y-3 border-t pt-3'>
       <div className='flex items-end justify-between gap-3'>
         <div>
           <div className='text-muted-foreground text-[11px]'>应付金额</div>
-          <div className='text-foreground font-mono text-2xl font-semibold tabular-nums'>
-            ${totalPrice.toFixed(2)}
+          <div className='text-foreground text-2xl font-semibold tabular-nums'>
+            {totalPrice.toFixed(2)}
           </div>
         </div>
         <span className='text-muted-foreground max-w-28 text-right text-[11px] leading-4'>
-          付款后存入库存
+          两种支付方式，奖池一致
         </span>
       </div>
-      <BalanceBoxPrimaryButton
-        busy={props.busy}
-        disabled={!props.canPurchase}
-        icon={ShoppingBag}
-        busyLabel='购买中…'
-        label='购买并存入库存'
-        onClick={props.onPurchase}
-      />
+      {props.cashMethods.length > 0 ? (
+        <div className='flex flex-wrap gap-2' aria-label='人民币支付方式'>
+          {props.cashMethods.map((method) => (
+            <Button
+              key={method.type}
+              type='button'
+              size='sm'
+              variant={
+                props.selectedCashMethod?.type === method.type
+                  ? 'default'
+                  : 'outline'
+              }
+              onClick={() => props.onCashMethodChange(method)}
+              disabled={props.busy}
+            >
+              {method.name}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      <div className='grid gap-2 sm:grid-cols-2'>
+        <BalanceBoxPrimaryButton
+          busy={props.cashPaying}
+          disabled={!props.selectedCashMethod || props.busy}
+          icon={CreditCard}
+          busyLabel='创建订单…'
+          label={`人民币支付 ${props.cashAmountDue.toFixed(2)}`}
+          onClick={props.onCashPurchase}
+        />
+        <BalanceBoxPrimaryButton
+          busy={props.busy}
+          disabled={!props.canPurchase}
+          icon={Coins}
+          busyLabel='购买中…'
+          label={`统一额度支付 ${totalPrice.toFixed(2)}`}
+          onClick={props.onPurchase}
+        />
+      </div>
+      <Button
+        type='button'
+        variant='ghost'
+        className='w-full'
+        onClick={props.onOpenProps}
+      >
+        查看我的权益卡
+      </Button>
     </div>
   )
 }
@@ -296,7 +350,7 @@ function BalanceBoxPrimaryButton(props: {
   const Icon = props.icon
   return (
     <Button
-      className='w-full bg-teal-600 text-white hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600'
+      className='w-full'
       disabled={props.disabled}
       onClick={props.onClick}
     >
@@ -308,20 +362,4 @@ function BalanceBoxPrimaryButton(props: {
       {props.busy ? props.busyLabel : props.label}
     </Button>
   )
-}
-
-function minimumRewardProbability(tiers: BlindBoxTier[], threshold: number) {
-  return tiers
-    .filter((tier) => {
-      if (tier.reward_type === 'quota') return tier.min_usd >= threshold
-      if (tier.reward_type === 'claude_quota') {
-        return tier.min_usd * 4 >= threshold
-      }
-      return false
-    })
-    .reduce((total, tier) => total + tier.probability, 0)
-}
-
-function formatRate(probability: number) {
-  return `${(probability * 100).toFixed(1).replace(/\.0$/, '')}%`
 }

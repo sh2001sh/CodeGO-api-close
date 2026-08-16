@@ -94,7 +94,7 @@ export function BalanceBlindBoxSettingsAdmin() {
     const normalizedTiers = JSON.stringify(parseTiers(values.tiers))
     const updates = buildUpdates(values, settings, normalizedTiers)
     if (updates.length === 0) {
-      toast.info('没有需要保存的余额盲盒变更')
+      toast.info('没有需要保存的统一盲盒变更')
       return
     }
     for (const update of updates) await updateOption.mutateAsync(update)
@@ -109,9 +109,9 @@ export function BalanceBlindBoxSettingsAdmin() {
           <Settings2 className='size-4' />
         </div>
         <div>
-          <h3 className='text-sm font-semibold'>余额盲盒管理</h3>
+          <h3 className='text-sm font-semibold'>统一盲盒管理</h3>
           <p className='text-muted-foreground mt-1 text-sm leading-6'>
-            控制余额盲盒售价、单用户每日购买数量、首抽与保底规则。每日上限只限制购买，不限制已购库存的开启和赠送。
+            控制统一盲盒售价、单用户每日购买数量与统一奖池。人民币和统一额度入口使用同一库存与概率表。
           </p>
         </div>
       </div>
@@ -124,7 +124,7 @@ export function BalanceBlindBoxSettingsAdmin() {
             render={({ field }) => (
               <FormItem className='bg-muted/40 flex items-center justify-between rounded-xl p-3'>
                 <div>
-                  <FormLabel>启用余额盲盒</FormLabel>
+                  <FormLabel>启用统一盲盒</FormLabel>
                   <FormDescription>
                     关闭后用户端不再允许购买或开启
                   </FormDescription>
@@ -188,7 +188,7 @@ export function BalanceBlindBoxSettingsAdmin() {
             render={({ field }) => (
               <FormItem>
                 <div className='flex flex-wrap items-center justify-between gap-2'>
-                  <FormLabel>余额盲盒奖池</FormLabel>
+                  <FormLabel>统一盲盒奖池</FormLabel>
                   <span
                     className={
                       probability !== null &&
@@ -223,7 +223,7 @@ export function BalanceBlindBoxSettingsAdmin() {
             type='submit'
             disabled={!form.formState.isDirty || updateOption.isPending}
           >
-            {updateOption.isPending ? '保存中...' : '保存余额盲盒配置'}
+            {updateOption.isPending ? '保存中...' : '保存统一盲盒配置'}
           </Button>
         </form>
       </Form>

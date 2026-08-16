@@ -35,44 +35,22 @@ type mirroredWalletTxStore struct {
 	applyDelta  func(tx *gorm.DB, userID int, amount int) error
 }
 
-func GetUserWalletQuota(userID int) (int, error) {
-	return getLedgerBackedWalletBalance(userID, billingAccountTypeWallet, func() (int, error) {
-		return identitystore.LoadUserQuota(userID, false)
-	})
-}
-
 func GetUserClaudeWalletQuota(userID int) (int, error) {
 	return getLedgerBackedWalletBalance(userID, billingAccountTypeClaudeWallet, func() (int, error) {
 		return identitystore.LoadUserClaudeQuota(userID, false)
 	})
 }
 
-// SynchronizeWalletQuotaProjectionsTx aligns the legacy wallet columns with
-// their existing ledger snapshots before an operation that must update both.
-// The snapshot is already the user-facing balance after an account exists.
-func SynchronizeWalletQuotaProjectionsTx(tx *gorm.DB, userID, walletQuota, claudeQuota int) (int, int, error) {
+// GetUnifiedCreditBalanceTx returns the canonical unified balance inside a transaction.
+func GetUnifiedCreditBalanceTx(tx *gorm.DB, userID int) (int, error) {
 	if tx == nil || userID <= 0 {
-		return 0, 0, errors.New("invalid wallet projection synchronization")
+		return 0, errors.New("invalid unified credit lookup")
 	}
-	canonicalWallet, err := canonicalWalletBalanceTx(tx, userID, billingAccountTypeWallet, walletQuota)
+	legacyBalance, err := getUserClaudeWalletQuotaTx(tx, userID)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	canonicalClaude, err := canonicalWalletBalanceTx(tx, userID, billingAccountTypeClaudeWallet, claudeQuota)
-	if err != nil {
-		return 0, 0, err
-	}
-	if canonicalWallet != walletQuota {
-		if err := tx.Model(&identityschema.User{}).Where("id = ?", userID).UpdateColumn("quota", canonicalWallet).Error; err != nil {
-			return 0, 0, err
-		}
-	}
-	if canonicalClaude != claudeQuota {
-		if err := tx.Model(&identityschema.User{}).Where("id = ?", userID).UpdateColumn("claude_quota", canonicalClaude).Error; err != nil {
-			return 0, 0, err
-		}
-	}
-	return canonicalWallet, canonicalClaude, nil
+	return canonicalWalletBalanceTx(tx, userID, billingAccountTypeClaudeWallet, legacyBalance)
 }
 
 func canonicalWalletBalanceTx(tx *gorm.DB, userID int, accountType string, legacyBalance int) (int, error) {
@@ -134,19 +112,6 @@ func isMissingBillingSchema(err error) bool {
 	return strings.Contains(message, "no such table") || strings.Contains(message, "does not exist")
 }
 
-func AdjustWalletQuota(userID int, delta int) error {
-	return adjustUserWalletQuota(userID, delta, mirroredWalletStore{
-		accountType: billingAccountTypeWallet,
-		readBalance: GetUserWalletQuota,
-		applyDelta: func(targetUserID int, targetDelta int) error {
-			if targetDelta > 0 {
-				return identitystore.DecreaseUserQuota(targetUserID, targetDelta)
-			}
-			return identitystore.IncreaseUserQuota(targetUserID, -targetDelta)
-		},
-	})
-}
-
 func AdjustClaudeWalletQuota(userID int, delta int) error {
 	return adjustUserWalletQuota(userID, delta, mirroredWalletStore{
 		accountType: billingAccountTypeClaudeWallet,
@@ -160,20 +125,8 @@ func AdjustClaudeWalletQuota(userID int, delta int) error {
 	})
 }
 
-func SetWalletQuota(userID int, targetBalance int) error {
-	return setUserWalletQuota(userID, targetBalance, GetUserWalletQuota, AdjustWalletQuota)
-}
-
 func SetClaudeWalletQuota(userID int, targetBalance int) error {
 	return setUserWalletQuota(userID, targetBalance, GetUserClaudeWalletQuota, AdjustClaudeWalletQuota)
-}
-
-func CreditWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
-	return creditUserWalletQuotaTx(tx, userID, amount, idempotencyKey, reasonCode, mirroredWalletTxStore{
-		accountType: billingAccountTypeWallet,
-		readBalance: getUserWalletQuotaTx,
-		applyDelta:  increaseUserWalletQuotaTx,
-	})
 }
 
 func CreditClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
@@ -229,7 +182,7 @@ func adjustUserWalletQuota(userID int, delta int, mirrored mirroredWalletStore) 
 		}
 		return err
 	}
-	if mirrored.accountType == billingAccountTypeWallet && delta > 0 {
+	if mirrored.accountType == billingAccountTypeClaudeWallet && delta > 0 {
 		ConsumeBonusWalletQuotaCredits(userID, int64(delta))
 	}
 	return nil

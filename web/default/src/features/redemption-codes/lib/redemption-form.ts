@@ -19,38 +19,27 @@ For commercial licensing, please contact support@quantumnous.com
 import { z } from 'zod'
 import type { TFunction } from 'i18next'
 import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
-import {
-  REDEMPTION_TYPES,
-  REDEMPTION_VALIDATION,
-  REDEMPTION_WALLET_TYPES,
-} from '../constants'
+import { REDEMPTION_TYPES, REDEMPTION_VALIDATION } from '../constants'
 import {
   type Redemption,
   type RedemptionFormData,
   type RedemptionType,
-  type RedemptionWalletType,
 } from '../types'
 
 export function getRedemptionFormSchema(t: TFunction) {
   return z
     .object({
-      name: z
-        .string()
-        .max(
-          REDEMPTION_VALIDATION.NAME_MAX_LENGTH,
-          t('Name must be between {{min}} and {{max}} characters', {
-            min: REDEMPTION_VALIDATION.NAME_MIN_LENGTH,
-            max: REDEMPTION_VALIDATION.NAME_MAX_LENGTH,
-          })
-        ),
+      name: z.string().max(
+        REDEMPTION_VALIDATION.NAME_MAX_LENGTH,
+        t('Name must be between {{min}} and {{max}} characters', {
+          min: REDEMPTION_VALIDATION.NAME_MIN_LENGTH,
+          max: REDEMPTION_VALIDATION.NAME_MAX_LENGTH,
+        })
+      ),
       redeem_type: z.enum([
         REDEMPTION_TYPES.QUOTA,
         REDEMPTION_TYPES.SUBSCRIPTION,
         REDEMPTION_TYPES.BLIND_BOX,
-      ]),
-      wallet_type: z.enum([
-        REDEMPTION_WALLET_TYPES.DEFAULT,
-        REDEMPTION_WALLET_TYPES.CLAUDE,
       ]),
       quota_dollars: z.number().min(0),
       plan_id: z.number().int().min(0).optional(),
@@ -111,7 +100,6 @@ export function getRedemptionFormSchema(t: TFunction) {
 export type RedemptionFormValues = {
   name: string
   redeem_type: RedemptionType
-  wallet_type: RedemptionWalletType
   quota_dollars: number
   plan_id?: number
   blind_box_quantity?: number
@@ -122,7 +110,6 @@ export type RedemptionFormValues = {
 export const REDEMPTION_FORM_DEFAULT_VALUES: RedemptionFormValues = {
   name: '',
   redeem_type: REDEMPTION_TYPES.QUOTA,
-  wallet_type: REDEMPTION_WALLET_TYPES.DEFAULT,
   quota_dollars: 10,
   plan_id: undefined,
   blind_box_quantity: 1,
@@ -138,7 +125,6 @@ export function transformFormDataToPayload(
   return {
     name: data.name,
     redeem_type: data.redeem_type,
-    wallet_type: isSubscription || isBlindBox ? REDEMPTION_WALLET_TYPES.DEFAULT : data.wallet_type,
     quota:
       isSubscription || isBlindBox
         ? 0
@@ -162,11 +148,7 @@ export function transformRedemptionToFormDefaults(
         ? REDEMPTION_TYPES.SUBSCRIPTION
         : redemption.redeem_type === REDEMPTION_TYPES.BLIND_BOX
           ? REDEMPTION_TYPES.BLIND_BOX
-        : REDEMPTION_TYPES.QUOTA,
-    wallet_type:
-      redemption.wallet_type === REDEMPTION_WALLET_TYPES.CLAUDE
-        ? REDEMPTION_WALLET_TYPES.CLAUDE
-        : REDEMPTION_WALLET_TYPES.DEFAULT,
+          : REDEMPTION_TYPES.QUOTA,
     quota_dollars:
       redemption.redeem_type === REDEMPTION_TYPES.SUBSCRIPTION ||
       redemption.redeem_type === REDEMPTION_TYPES.BLIND_BOX

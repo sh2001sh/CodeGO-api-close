@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompleteBlindBoxOrderKeepsBoxesForUserSelectedReveal(t *testing.T) {
+func TestCompleteBlindBoxOrderCreatesSealedUnifiedInventory(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	user := &identityschema.User{Id: 8891, Username: "blind-box-manual-reveal", Status: constant.UserStatusEnabled}
 	require.NoError(t, db.Create(user).Error)
@@ -26,8 +26,13 @@ func TestCompleteBlindBoxOrderKeepsBoxesForUserSelectedReveal(t *testing.T) {
 	var saved commerceschema.BlindBoxOrder
 	require.NoError(t, db.First(&saved, order.Id).Error)
 	require.Equal(t, constant.TopUpStatusSuccess, saved.Status)
-	require.Zero(t, saved.OpenedCount)
+	require.Equal(t, saved.Quantity, saved.OpenedCount)
 	var opens int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxOpenRecord{}).Where("order_id = ?", order.Id).Count(&opens).Error)
 	require.Zero(t, opens)
+	var inventory int64
+	require.NoError(t, db.Model(&commerceschema.BalanceBlindBoxItem{}).
+		Where("owner_user_id = ? AND status = ?", user.Id, commerceschema.BalanceBlindBoxItemStatusAvailable).
+		Count(&inventory).Error)
+	require.Equal(t, int64(3), inventory)
 }

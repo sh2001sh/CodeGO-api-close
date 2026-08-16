@@ -1,9 +1,9 @@
 package app
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestMigrateBlindBoxLegacyCredits_TerminatesToMatchingWalletsAndCleansRows(t *testing.T) {
+func TestMigrateBlindBoxLegacyCreditsCreditsUnifiedBalanceAndCleansRows(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	users := []*identityschema.User{
@@ -44,13 +44,13 @@ func TestMigrateBlindBoxLegacyCredits_TerminatesToMatchingWalletsAndCleansRows(t
 	var afterUsers []*identityschema.User
 	require.NoError(t, db.Order("id asc").Find(&afterUsers).Error)
 	require.Len(t, afterUsers, 2)
-	assert.Equal(t, 220, afterUsers[0].Quota)
-	assert.Equal(t, 200, afterUsers[0].ClaudeQuota)
+	assert.Equal(t, 100, afterUsers[0].Quota)
+	assert.Equal(t, 320, afterUsers[0].ClaudeQuota)
 	assert.Equal(t, 300, afterUsers[1].Quota)
 	assert.Equal(t, 480, afterUsers[1].ClaudeQuota)
 
-	walletSnapshot := loadCommerceBillingSnapshot(t, users[0].Id, "wallet")
-	assert.Equal(t, int64(afterUsers[0].Quota), walletSnapshot.AvailableBalance)
+	unifiedSnapshot := loadCommerceBillingSnapshot(t, users[0].Id, "claude_wallet")
+	assert.Equal(t, int64(afterUsers[0].ClaudeQuota), unifiedSnapshot.AvailableBalance)
 	claudeSnapshot := loadCommerceBillingSnapshot(t, users[1].Id, "claude_wallet")
 	assert.Equal(t, int64(afterUsers[1].ClaudeQuota), claudeSnapshot.AvailableBalance)
 
@@ -63,8 +63,8 @@ func TestMigrateBlindBoxLegacyCredits_TerminatesToMatchingWalletsAndCleansRows(t
 	var finalUsers []*identityschema.User
 	require.NoError(t, db.Order("id asc").Find(&finalUsers).Error)
 	require.Len(t, finalUsers, 2)
-	assert.Equal(t, 220, finalUsers[0].Quota)
-	assert.Equal(t, 200, finalUsers[0].ClaudeQuota)
+	assert.Equal(t, 100, finalUsers[0].Quota)
+	assert.Equal(t, 320, finalUsers[0].ClaudeQuota)
 	assert.Equal(t, 300, finalUsers[1].Quota)
 	assert.Equal(t, 480, finalUsers[1].ClaudeQuota)
 }
@@ -109,8 +109,8 @@ func TestMigrateBlindBoxLegacyCredits_SkipsCacheInvalidationWhenRedisClientNotRe
 
 	var savedUser identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-	assert.Equal(t, 175, savedUser.Quota)
-	assert.Equal(t, 50, savedUser.ClaudeQuota)
+	assert.Equal(t, 100, savedUser.Quota)
+	assert.Equal(t, 125, savedUser.ClaudeQuota)
 
 	var savedCredit commerceschema.BlindBoxCredit
 	assert.ErrorIs(t, gorm.ErrRecordNotFound, db.Where("id = ?", credit.Id).First(&savedCredit).Error)

@@ -87,16 +87,18 @@ func TestGetSubscriptionPlansReturnsPublicPlans(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 	confirmTopupComplianceForTest(t)
 
-	if err := db.Create(&commerceschema.SubscriptionPlan{
-		Id:            1,
+	plan := &commerceschema.SubscriptionPlan{
+		Id:            99801,
 		Title:         "Standard月卡",
 		Enabled:       true,
+		PlanType:      commerceschema.SubscriptionPlanTypeMonthly,
 		InternalOnly:  false,
 		PriceAmount:   30,
 		SortOrder:     10,
 		DurationUnit:  commerceschema.SubscriptionDurationMonth,
 		DurationValue: 1,
-	}).Error; err != nil {
+	}
+	if err := db.Create(plan).Error; err != nil {
 		t.Fatalf("failed to seed subscription plan: %v", err)
 	}
 
@@ -201,16 +203,12 @@ func TestGetSubscriptionSelfReturnsOverview(t *testing.T) {
 
 	var payload struct {
 		BillingPreference string `json:"billing_preference"`
-		ClaudeQuota       int    `json:"claude_quota"`
 	}
 	if err := platformencoding.Unmarshal(response.Data, &payload); err != nil {
 		t.Fatalf("failed to decode self payload: %v", err)
 	}
 	if payload.BillingPreference != "subscription_first" {
 		t.Fatalf("expected subscription_first preference, got %q", payload.BillingPreference)
-	}
-	if payload.ClaudeQuota != 0 {
-		t.Fatalf("expected claude quota 0, got %d", payload.ClaudeQuota)
 	}
 }
 
@@ -340,7 +338,7 @@ func TestListSubscriptionClaudeConversionsReturnsItems(t *testing.T) {
 		RequestId:          "conv-list-1",
 		Status:             commerceschema.SubscriptionClaudeConversionStatusCompleted,
 		SourceQuota:        100,
-		TargetClaudeQuota:  10,
+		TargetQuota:        10,
 		RatioNumerator:     1,
 		RatioDenominator:   10,
 	}).Error; err != nil {
@@ -381,32 +379,34 @@ func TestCreateSubscriptionClaudeConversionConsumesQuota(t *testing.T) {
 	if err := db.Create(user).Error; err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
-	if err := db.Create(&commerceschema.SubscriptionPlan{
-		Id:            1,
+	plan := &commerceschema.SubscriptionPlan{
+		Id:            99801,
 		Title:         "Standard月卡",
 		Enabled:       true,
+		PlanType:      commerceschema.SubscriptionPlanTypeMonthly,
 		PriceAmount:   30,
 		DurationUnit:  commerceschema.SubscriptionDurationMonth,
 		DurationValue: 1,
 		TotalAmount:   100,
-	}).Error; err != nil {
+	}
+	if err := db.Create(plan).Error; err != nil {
 		t.Fatalf("failed to seed subscription plan: %v", err)
 	}
-	if err := db.Create(&commerceschema.UserSubscription{
-		Id:          1,
+	subscription := &commerceschema.UserSubscription{
+		Id:          99802,
 		UserId:      user.Id,
-		PlanId:      1,
+		PlanId:      plan.Id,
 		AmountTotal: 100,
 		StartTime:   platformruntime.GetTimestamp() - 60,
 		EndTime:     platformruntime.GetTimestamp() + 3600,
 		Status:      "active",
-	}).Error; err != nil {
+	}
+	if err := db.Create(subscription).Error; err != nil {
 		t.Fatalf("failed to seed user subscription: %v", err)
 	}
 
 	ctx, recorder := newCommerceContext(t, stdhttp.MethodPost, "/api/subscription/self/claude-conversions", map[string]any{
-		"subscription_id": 1,
-		"source_quota":    10,
+		"subscription_id": subscription.Id,
 		"request_id":      "conv-create-1",
 	}, user.Id)
 	createSubscriptionClaudeConversion(ctx)
@@ -420,8 +420,9 @@ func TestCreateSubscriptionClaudeConversionConsumesQuota(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload user: %v", err)
 	}
-	if reloaded.ClaudeQuota != 1 {
-		t.Fatalf("expected claude quota 1, got %d", reloaded.ClaudeQuota)
+	expectedQuota := int(30 * platformruntime.QuotaPerUnit)
+	if reloaded.ClaudeQuota != expectedQuota {
+		t.Fatalf("expected unified quota %d, got %d", expectedQuota, reloaded.ClaudeQuota)
 	}
 }
 

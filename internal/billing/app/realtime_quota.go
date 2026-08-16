@@ -88,7 +88,7 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	if relayInfo.UsePrice {
 		return nil
 	}
-	userQuota, err := GetUserWalletQuota(relayInfo.UserId)
+	userQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 		ModelRatio: modelRatio,
 		GroupRatio: actualGroupRatio,
 	})
-	quota = applyUsageConsumptionDiscount(relayInfo.UserId, quota)
+	quota = applyUsageConsumptionDiscount(relayInfo, quota)
 
 	if userQuota < quota {
 		return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
@@ -181,7 +181,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredOk {
 		quota = tieredQuota
 	}
-	discountDetail := calculateUsageConsumptionDiscount(relayInfo.UserId, quota)
+	discountDetail := calculateUsageConsumptionDiscount(relayInfo, quota)
 	quota = discountDetail.QuotaAfterDiscount
 
 	var logContent string
@@ -289,7 +289,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredOk {
 		quota = tieredQuota
 	}
-	discountDetail := calculateUsageConsumptionDiscount(relayInfo.UserId, quota)
+	discountDetail := calculateUsageConsumptionDiscount(relayInfo, quota)
 	quota = discountDetail.QuotaAfterDiscount
 
 	var logContent string
@@ -337,6 +337,15 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		Other:            other,
 	})
 	gopool.Go(func() {
-		auditprojection.RecordRelaySample(relayInfo, true, int64(usage.CompletionTokens))
+		cacheReadTokens := usage.PromptTokensDetails.CachedTokens
+		cacheWriteTokens := usage.PromptTokensDetails.GetCachedCreationTokens()
+		auditprojection.RecordRelayUsageSample(
+			relayInfo,
+			true,
+			performanceInputTokens(usage.PromptTokens, cacheReadTokens, cacheWriteTokens, false),
+			int64(cacheReadTokens),
+			int64(cacheWriteTokens),
+			int64(usage.CompletionTokens),
+		)
 	})
 }

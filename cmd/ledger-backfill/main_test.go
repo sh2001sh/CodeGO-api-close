@@ -108,7 +108,8 @@ func TestBalanceBlindBoxLossCompensationIsPerUserAndIdempotent(t *testing.T) {
 	require.NoError(t, applyBalanceBlindBoxLossCompensation(200))
 	var user identityschema.User
 	require.NoError(t, db.First(&user, 701).Error)
-	require.EqualValues(t, 3_500_000, user.Quota)
+	require.Zero(t, user.Quota)
+	require.EqualValues(t, 3_500_000, user.ClaudeQuota)
 	var credits []billingschema.BonusQuotaCredit
 	require.NoError(t, db.Find(&credits).Error)
 	require.Len(t, credits, 1)

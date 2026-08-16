@@ -6,22 +6,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetMigratesPreviousBalanceBlindBoxPool(t *testing.T) {
-	original := currentSetting
-	t.Cleanup(func() { currentSetting = original })
+func TestGetUsesUnifiedBlindBoxPoolForBothPaymentEntries(t *testing.T) {
+	setting := Get()
+	require.Equal(t, 2.5, setting.UnitPrice)
+	require.Equal(t, 2.5, setting.BalanceBlindBoxPriceUSD)
+	require.Equal(t, setting.Tiers, setting.BalanceBlindBoxTiers)
+	require.InDelta(t, 0.1537, setting.Tiers[0].Probability, 0.000000001)
+	require.Equal(t, "200.00-1000.00 统一额度", setting.Tiers[9].Name)
+	require.InDelta(t, defaultSubscriptionPrizeProbability, setting.SubscriptionPrizeProbability, 0.000000001)
+	require.Equal(t, defaultSubscriptionPlanTitle, setting.SubscriptionPlanTitle)
+}
 
-	legacy := append([]TierSetting(nil), defaultBalanceBlindBoxTiers...)
-	oldProbabilities := []float64{
-		0.12, 0.17, 0.10, 0.075, 0.19, 0.025, 0.004, 0.00075, 0.00036,
-		0.00004, 0.075, 0.19, 0.025, 0.004, 0.00075, 0.007, 0.004, 0.006,
-		0.0031,
-	}
-	for index := range legacy {
-		legacy[index].Probability = oldProbabilities[index]
-	}
-	currentSetting.BalanceBlindBoxTiers = legacy
+func TestGetNormalizesLegacyQuotaRewardsToUnifiedCredit(t *testing.T) {
+	original := Get()
+	t.Cleanup(func() { Set(original) })
 
-	got := Get().BalanceBlindBoxTiers
-	require.InDelta(t, 0.06, got[0].Probability, 0.000000001)
-	require.Equal(t, "$5000 官方 GPT 专属额度", got[9].Name)
+	setting := original
+	setting.Tiers = []TierSetting{
+		{Name: "legacy quota", MinUSD: 1, MaxUSD: 1, Probability: 0.5, RewardType: "quota", WalletType: "default"},
+		{Name: "legacy claude quota", MinUSD: 2, MaxUSD: 2, Probability: 0.5, RewardType: "claude_quota", WalletType: "claude"},
+	}
+	Set(setting)
+
+	normalized := Get()
+	require.Len(t, normalized.Tiers, 2)
+	for _, tier := range normalized.Tiers {
+		require.Equal(t, "claude_quota", tier.RewardType)
+		require.Equal(t, "claude", tier.WalletType)
+	}
 }

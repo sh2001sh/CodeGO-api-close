@@ -123,6 +123,13 @@ func createBlindBoxGrantTx(tx *gorm.DB, userID int, adminUserID int, quantity in
 	if err := tx.Create(order).Error; err != nil {
 		return err
 	}
+	if err := issuePaidBlindBoxOrderInventoryTx(tx, order); err != nil {
+		return err
+	}
+	order.OpenedCount = order.Quantity
+	if err := tx.Save(order).Error; err != nil {
+		return err
+	}
 	grant.BlindBoxOrderId = order.Id
 	grant.TradeNo = order.TradeNo
 	if err := tx.Save(grant).Error; err != nil {

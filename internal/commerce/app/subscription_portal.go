@@ -41,10 +41,9 @@ type UpdateSubscriptionPreferenceRequest struct {
 	SubscriptionOrderIds []int    `json:"subscription_order_ids"`
 }
 
-// CreateSubscriptionClaudeConversionRequest requests a quota-to-Claude conversion.
+// CreateSubscriptionClaudeConversionRequest requests monthly-pass settlement to unified credit.
 type CreateSubscriptionClaudeConversionRequest struct {
 	SubscriptionId int    `json:"subscription_id"`
-	SourceQuota    int64  `json:"source_quota"`
 	RequestId      string `json:"request_id"`
 }
 
@@ -196,10 +195,6 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	claudeQuota, err := GetUserClaudeQuota(userID)
-	if err != nil {
-		return nil, err
-	}
 	recentConversions, err := ListRecentSubscriptionClaudeConversions(userID, 10)
 	if err != nil {
 		return nil, err
@@ -242,7 +237,6 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 		"subscriptions":          activeSubscriptions,
 		"all_subscriptions":      allSubscriptions,
 		"reset_opportunity":      resetOpportunity,
-		"claude_quota":           claudeQuota,
 		"conversion_config":      GetSubscriptionClaudeConversionConfig(),
 		"recent_conversions":     recentConversions,
 	}, nil
@@ -279,22 +273,24 @@ func BuildSubscriptionClaudeConversionsPayload(userID int) (map[string]any, erro
 
 // CreateSubscriptionClaudeConversion converts subscription quota into Claude quota for the current user.
 func CreateSubscriptionClaudeConversion(userID int, req CreateSubscriptionClaudeConversionRequest) (map[string]any, error) {
-	result, err := ConvertSubscriptionQuotaToClaudeQuota(req.RequestId, userID, req.SubscriptionId, req.SourceQuota)
+	result, err := ConvertMonthlyPassToUnifiedCredit(req.RequestId, userID, req.SubscriptionId)
 	if err != nil {
 		return nil, err
 	}
 	if planInfo, planErr := GetSubscriptionPlanInfoByUserSubscriptionID(req.SubscriptionId); planErr == nil && planInfo != nil {
-		auditapp.RecordLog(userID, auditschema.LogTypeTopup, BuildSubscriptionClaudeConversionLog(planInfo.PlanTitle, result.SourceQuota, result.TargetClaudeQuota))
+		auditapp.RecordLog(userID, auditschema.LogTypeTopup, BuildSubscriptionClaudeConversionLog(planInfo.PlanTitle, result.UnusedRatio, result.TargetQuota))
 	}
 	return map[string]any{
-		"subscription_id":     result.SubscriptionId,
-		"source_quota":        result.SourceQuota,
-		"target_claude_quota": result.TargetClaudeQuota,
-		"claude_quota_after":  result.ClaudeQuotaAfter,
-		"amount_used_after":   result.AmountUsedAfter,
-		"period_used_after":   result.PeriodUsedAfter,
-		"conversion":          result.Conversion,
-		"config":              result.Config,
+		"subscription_id":   result.SubscriptionId,
+		"source_quota":      result.SourceQuota,
+		"target_quota":      result.TargetQuota,
+		"quota_after":       result.QuotaAfter,
+		"amount_used_after": result.AmountUsedAfter,
+		"period_used_after": result.PeriodUsedAfter,
+		"plan_price_amount": result.PlanPriceAmount,
+		"unused_ratio":      result.UnusedRatio,
+		"conversion":        result.Conversion,
+		"config":            result.Config,
 	}, nil
 }
 

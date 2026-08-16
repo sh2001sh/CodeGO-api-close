@@ -88,7 +88,7 @@ func truncate(t *testing.T) {
 
 func seedUser(t *testing.T, id int, quota int) {
 	t.Helper()
-	user := &identityschema.User{Id: id, Username: "test_user", Quota: quota, Status: constant.UserStatusEnabled}
+	user := &identityschema.User{Id: id, Username: "test_user", ClaudeQuota: quota, Status: constant.UserStatusEnabled}
 	require.NoError(t, platformdb.DB.Create(user).Error)
 }
 

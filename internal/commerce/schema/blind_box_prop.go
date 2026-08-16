@@ -42,12 +42,14 @@ type BlindBoxProp struct {
 	DiscountRate float64 `json:"discount_rate" gorm:"type:decimal(8,4);not null;default:0"`
 	Multiplier   float64 `json:"multiplier" gorm:"type:decimal(8,4);not null;default:1"`
 
-	DurationSeconds  int64 `json:"duration_seconds" gorm:"bigint;not null;default:0"`
-	RemainingSeconds int64 `json:"remaining_seconds" gorm:"bigint;not null;default:0"`
-	ActivatedAt      int64 `json:"activated_at" gorm:"bigint;index;default:0"`
-	ExpiresAt        int64 `json:"expires_at" gorm:"bigint;index;default:0"`
-	ReservedAt       int64 `json:"reserved_at" gorm:"bigint;default:0"`
-	UsedAt           int64 `json:"used_at" gorm:"bigint;default:0"`
+	DurationSeconds   int64 `json:"duration_seconds" gorm:"bigint;not null;default:0"`
+	RemainingSeconds  int64 `json:"remaining_seconds" gorm:"bigint;not null;default:0"`
+	MaxDiscountQuota  int64 `json:"max_discount_quota" gorm:"bigint;not null;default:0"`
+	UsedDiscountQuota int64 `json:"used_discount_quota" gorm:"bigint;not null;default:0"`
+	ActivatedAt       int64 `json:"activated_at" gorm:"bigint;index;default:0"`
+	ExpiresAt         int64 `json:"expires_at" gorm:"bigint;index;default:0"`
+	ReservedAt        int64 `json:"reserved_at" gorm:"bigint;default:0"`
+	UsedAt            int64 `json:"used_at" gorm:"bigint;default:0"`
 
 	ReservedOrderType    string `json:"reserved_order_type" gorm:"type:varchar(32);index;default:''"`
 	ReservedOrderTradeNo string `json:"reserved_order_trade_no" gorm:"type:varchar(255);index;default:''"`
@@ -69,12 +71,13 @@ type BlindBoxZeroHourState struct {
 }
 
 type BlindBoxPropSpec struct {
-	PropType        string
-	Title           string
-	DiscountRate    float64
-	Multiplier      float64
-	DurationSeconds int64
-	Activatable     bool
+	PropType         string
+	Title            string
+	DiscountRate     float64
+	Multiplier       float64
+	DurationSeconds  int64
+	MaxDiscountQuota int64
+	Activatable      bool
 }
 
 func (p *BlindBoxProp) BeforeCreate(tx *gorm.DB) error {

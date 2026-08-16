@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+const (
+	ChannelScopeOfficial = "official"
+	ChannelScopeExternal = "external"
+)
+
 type Channel struct {
 	Id                 int     `json:"id"`
 	Type               int     `json:"type" gorm:"default:0"`
@@ -17,6 +22,7 @@ type Channel struct {
 	TestModel          *string `json:"test_model"`
 	Status             int     `json:"status" gorm:"default:1"`
 	Name               string  `json:"name" gorm:"index"`
+	ChannelScope       string  `json:"channel_scope" gorm:"column:channel_scope;type:varchar(16);not null;default:'official';index"`
 	Weight             *uint   `json:"weight" gorm:"default:0"`
 	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
 	TestTime           int64   `json:"test_time" gorm:"bigint"`
@@ -46,6 +52,10 @@ type Channel struct {
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
+}
+
+func (channel *Channel) IsOfficial() bool {
+	return strings.ToLower(strings.TrimSpace(channel.ChannelScope)) != ChannelScopeExternal
 }
 
 type ChannelInfo struct {

@@ -47,8 +47,6 @@ func NewLedgerRelayFundingWithInitialBalance(userID int, requestID string, sourc
 	funding := &LedgerRelayFunding{userID: userID, requestID: requestID, source: source, initialBalance: initialBalance}
 	switch source {
 	case BillingSourceWallet:
-		funding.accountType = billingAccountTypeWallet
-	case BillingSourceClaudeWallet:
 		funding.accountType = billingAccountTypeClaudeWallet
 	default:
 		return nil, fmt.Errorf("unsupported ledger funding source: %s", source)
@@ -212,10 +210,7 @@ func (f *LedgerRelayFunding) ensureAccount() (*billingschema.BillingAccount, err
 }
 
 func (f *LedgerRelayFunding) legacyBalance() (int, error) {
-	if f.accountType == billingAccountTypeClaudeWallet {
-		return GetUserClaudeWalletQuota(f.userID)
-	}
-	return GetUserWalletQuota(f.userID)
+	return GetUserClaudeWalletQuota(f.userID)
 }
 
 func (f *LedgerRelayFunding) idempotencyKey(operation string) string {
@@ -250,14 +245,8 @@ func (f *LedgerRelayFunding) projectLegacyDelta(delta int) error {
 	if delta == 0 {
 		return nil
 	}
-	if f.accountType == billingAccountTypeClaudeWallet {
-		if delta > 0 {
-			return identitystore.DecreaseUserClaudeQuota(f.userID, delta)
-		}
-		return identitystore.IncreaseUserClaudeQuota(f.userID, -delta)
-	}
 	if delta > 0 {
-		return identitystore.DecreaseUserQuota(f.userID, delta)
+		return identitystore.DecreaseUserClaudeQuota(f.userID, delta)
 	}
-	return identitystore.IncreaseUserQuota(f.userID, -delta)
+	return identitystore.IncreaseUserClaudeQuota(f.userID, -delta)
 }

@@ -129,7 +129,7 @@ export function UserBlindBoxDialog(props: Props) {
               <div className='font-medium'>{t('Quota metric note')}</div>
               <div className='text-muted-foreground'>
                 {t(
-                  'Dashboard used quota is the user-wide cumulative consumption. Subscription used quota is package-local usage. Blind box rewards are credited directly to the matching wallet.'
+                  'Dashboard used quota is the user-wide cumulative consumption. Subscription used quota is package-local usage. Blind box credit rewards are added to the unified credit balance.'
                 )}
               </div>
             </div>
@@ -203,12 +203,8 @@ export function UserBlindBoxDialog(props: Props) {
               value={String(data?.overview?.available_boxes || 0)}
             />
             <MetricCard
-              label={t('Wallet balance')}
-              value={formatQuota(data?.overview?.remaining_quota || 0)}
-            />
-            <MetricCard
-              label={t('通用额度')}
-              value={formatQuota(data?.overview?.claude_quota || 0)}
+              label={t('Universal Credit')}
+              value={formatQuota(data?.overview?.quota || 0)}
             />
             <MetricCard
               label={t('User used quota')}

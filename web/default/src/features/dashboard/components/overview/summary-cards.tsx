@@ -43,7 +43,6 @@ export function SummaryCards() {
   const { subscriptionData, plans } = useOverviewSubscriptionData()
   const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
   const remainQuota = Number(user?.quota ?? 0)
-  const claudeQuota = Number(user?.claude_quota ?? 0)
   const usedQuota = Number(user?.used_quota ?? 0)
   const requestCount = Number(user?.request_count ?? 0)
 
@@ -76,9 +75,8 @@ export function SummaryCards() {
     (total: number, value: number) => total + value,
     0
   )
-  const universalQuotaUsd = quotaUnitsToUsd(claudeQuota)
-  const officialGptQuotaUsd = quotaUnitsToUsd(remainQuota)
-  const availableUsd = universalQuotaUsd + officialGptQuotaUsd
+  const universalQuotaUsd = quotaUnitsToUsd(remainQuota)
+  const availableUsd = universalQuotaUsd
   const recentUsageUsd = quotaUnitsToUsd(recentUsage)
   const usedQuotaUsd = quotaUnitsToUsd(usedQuota)
 
@@ -89,13 +87,6 @@ export function SummaryCards() {
       value: universalQuotaUsd,
       dot: 'bg-primary',
       bar: 'bg-primary',
-    },
-    {
-      label: '官方 GPT 专属额度',
-      display: formatUsdAmount(officialGptQuotaUsd),
-      value: officialGptQuotaUsd,
-      dot: 'bg-info',
-      bar: 'bg-info',
     },
   ]
 

@@ -26,7 +26,7 @@ export function BalanceBoxGiftConfirm(props: {
       <AlertDialogContent className='max-h-[calc(100dvh-2rem)] overflow-y-auto'>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            确认赠送 {props.count} 个余额盲盒？
+            确认赠送 {props.count} 个统一盲盒？
           </AlertDialogTitle>
           <AlertDialogDescription>
             接收方为 {props.recipient?.display_name_masked}（

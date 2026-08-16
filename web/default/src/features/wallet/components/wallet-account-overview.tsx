@@ -22,28 +22,19 @@ export function WalletAccountOverview(props: {
   user: UserWalletData | null
   activeSubscriptionCount: number
   onSelectFunding: () => void
-  onSelectConversion: () => void
   onSelectTransfer: () => void
   onOpenBillingHistory: () => void
-  onOpenConversionHistory: () => void
   onOpenTransferHistory: () => void
 }) {
   const { t } = useTranslation()
   return (
     <section className='app-page-shell p-4 sm:p-5'>
       <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
-        <div className='grid min-w-0 gap-3 sm:grid-cols-2 lg:min-w-[28rem]'>
+        <div className='min-w-0 lg:min-w-[28rem]'>
           <BalanceItem
-            label={t('通用额度')}
-            value={formatUsdAmount(
-              quotaUnitsToUsd(props.user?.claude_quota ?? 0)
-            )}
-            description={t('用于通用模型及全部第三方市场分组')}
-          />
-          <BalanceItem
-            label={t('官方 GPT 专属额度')}
+            label={t('统一额度')}
             value={formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
-            description={t('仅用于官方 GPT、Codex、Responses 分组')}
+            description={t('永久有效，可用于官方渠道与第三方市场分组')}
           />
         </div>
 
@@ -90,10 +81,6 @@ export function WalletAccountOverview(props: {
                   <DropdownMenuItem onClick={props.onOpenBillingHistory}>
                     <ReceiptText className='size-4' />
                     {t('Top-up records')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={props.onOpenConversionHistory}>
-                    <History className='size-4' />
-                    {t('Conversion records')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={props.onOpenTransferHistory}>
                     <Send className='size-4' />

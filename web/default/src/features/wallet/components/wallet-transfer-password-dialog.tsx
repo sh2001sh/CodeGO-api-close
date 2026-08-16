@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Loader2, MailCheck, ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,7 +19,14 @@ export function WalletTransferPasswordDialog(props: {
   onOpenChange: (open: boolean) => void
   passwordSet: boolean
   requiresAccountPassword: boolean
+  emailBound: boolean
+  emailMasked: string
+  emailSending: boolean
+  emailSecondsLeft: number
+  emailCountdownActive: boolean
   submitting: boolean
+  onSendEmailCode: () => void
+  onBindEmail: () => void
   onSubmit: (request: ConfigureWalletTransferPasswordRequest) => Promise<void>
 }) {
   const { t } = useTranslation()
@@ -27,6 +34,7 @@ export function WalletTransferPasswordDialog(props: {
   const [oldPaymentPassword, setOldPaymentPassword] = useState('')
   const [newPaymentPassword, setNewPaymentPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [emailCode, setEmailCode] = useState('')
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -36,13 +44,14 @@ export function WalletTransferPasswordDialog(props: {
     setOldPaymentPassword('')
     setNewPaymentPassword('')
     setConfirmPassword('')
+    setEmailCode('')
     setVisible(false)
   }, [props.open])
 
   const passwordsMatch =
     newPaymentPassword.length > 0 && newPaymentPassword === confirmPassword
   const hasRequiredVerification = props.passwordSet
-    ? oldPaymentPassword.length > 0
+    ? oldPaymentPassword.length > 0 && emailCode.length === 6
     : !props.requiresAccountPassword || currentPassword.length > 0
   const canSubmit =
     !props.submitting &&
@@ -70,7 +79,17 @@ export function WalletTransferPasswordDialog(props: {
         </DialogHeader>
 
         <div className='space-y-4 py-2'>
-          {props.passwordSet ? (
+          {!props.emailBound ? (
+            <div className='border-border bg-muted/35 flex items-start gap-3 rounded-md border p-3 text-xs leading-5'>
+              <MailCheck className='text-primary mt-0.5 size-4 shrink-0' />
+              <div>
+                <p className='font-medium'>请先绑定邮箱</p>
+                <p className='text-muted-foreground'>
+                  支付密码保护额度转账，账户必须先绑定可接收安全验证码的邮箱。
+                </p>
+              </div>
+            </div>
+          ) : props.passwordSet ? (
             <PasswordField
               id='old-payment-password'
               label={t('Current payment password')}
@@ -94,20 +113,60 @@ export function WalletTransferPasswordDialog(props: {
             </div>
           )}
 
-          <PasswordField
-            id='new-payment-password'
-            label={t('New payment password')}
-            value={newPaymentPassword}
-            visible={visible}
-            onChange={setNewPaymentPassword}
-          />
-          <PasswordField
-            id='confirm-payment-password'
-            label={t('Confirm payment password')}
-            value={confirmPassword}
-            visible={visible}
-            onChange={setConfirmPassword}
-          />
+          {props.emailBound && props.passwordSet ? (
+            <div className='space-y-2'>
+              <Label htmlFor='payment-password-email-code'>邮箱验证码</Label>
+              <div className='flex gap-2'>
+                <Input
+                  id='payment-password-email-code'
+                  inputMode='numeric'
+                  autoComplete='one-time-code'
+                  maxLength={6}
+                  value={emailCode}
+                  placeholder={`发送至 ${props.emailMasked}`}
+                  onChange={(event) =>
+                    setEmailCode(event.target.value.replace(/\D/g, ''))
+                  }
+                />
+                <Button
+                  type='button'
+                  variant='outline'
+                  disabled={props.emailSending || props.emailCountdownActive}
+                  onClick={props.onSendEmailCode}
+                >
+                  {props.emailSending ? (
+                    <Loader2 className='size-4 animate-spin' />
+                  ) : props.emailCountdownActive ? (
+                    `${props.emailSecondsLeft}s`
+                  ) : (
+                    '发送验证码'
+                  )}
+                </Button>
+              </div>
+              <p className='text-muted-foreground text-xs leading-5'>
+                修改支付密码必须同时验证当前支付密码和绑定邮箱。
+              </p>
+            </div>
+          ) : null}
+
+          {props.emailBound ? (
+            <PasswordField
+              id='new-payment-password'
+              label={t('New payment password')}
+              value={newPaymentPassword}
+              visible={visible}
+              onChange={setNewPaymentPassword}
+            />
+          ) : null}
+          {props.emailBound ? (
+            <PasswordField
+              id='confirm-payment-password'
+              label={t('Confirm payment password')}
+              value={confirmPassword}
+              visible={visible}
+              onChange={setConfirmPassword}
+            />
+          ) : null}
 
           <div className='flex items-start justify-between gap-3'>
             <p className='text-muted-foreground text-xs leading-5'>
@@ -133,31 +192,41 @@ export function WalletTransferPasswordDialog(props: {
         </div>
 
         <DialogFooter>
-          <Button
-            type='button'
-            variant='outline'
-            disabled={props.submitting}
-            onClick={() => props.onOpenChange(false)}
-          >
-            {t('Cancel')}
-          </Button>
-          <Button
-            type='button'
-            disabled={!canSubmit}
-            onClick={() =>
-              void props.onSubmit({
-                current_password: currentPassword,
-                old_payment_password: oldPaymentPassword,
-                new_payment_password: newPaymentPassword,
-                confirm_password: confirmPassword,
-              })
-            }
-          >
-            {props.submitting ? (
-              <Loader2 className='size-4 animate-spin' />
-            ) : null}
-            {t('Save payment password')}
-          </Button>
+          {!props.emailBound ? (
+            <Button type='button' onClick={props.onBindEmail}>
+              <MailCheck className='size-4' />
+              前往绑定邮箱
+            </Button>
+          ) : (
+            <>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={props.submitting}
+                onClick={() => props.onOpenChange(false)}
+              >
+                {t('Cancel')}
+              </Button>
+              <Button
+                type='button'
+                disabled={!canSubmit}
+                onClick={() =>
+                  void props.onSubmit({
+                    current_password: currentPassword,
+                    old_payment_password: oldPaymentPassword,
+                    new_payment_password: newPaymentPassword,
+                    confirm_password: confirmPassword,
+                    email_code: emailCode,
+                  })
+                }
+              >
+                {props.submitting ? (
+                  <Loader2 className='size-4 animate-spin' />
+                ) : null}
+                {t('Save payment password')}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

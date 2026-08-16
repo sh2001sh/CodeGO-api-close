@@ -29,9 +29,11 @@ const PAGE_SIZE = 20
 
 const PROP_TITLES: Record<string, string> = {
   topup_discount_90: '充值九折卡',
-  subscription_discount_90: '套餐九折卡',
+  subscription_discount_90: '历史套餐折扣卡',
   consume_discount_95: '0.95 倍率卡',
   consume_discount_90: '0.9 倍率卡',
+  monthly_pass_multiplier: '0.10 倍率体验卡',
+  zero_hour_multiplier: '历史 0 倍率道具',
 }
 
 export function BlindBoxHistorySheet(props: {
@@ -180,7 +182,7 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
           {record.lucky_number ? <LuckyNumberHistory record={record} /> : null}
           <div className='mt-2 flex flex-wrap gap-1.5'>
             <HistoryTag>
-              {record.pool_type === 'balance_15' ? '余额盲盒' : '普通盲盒'}
+              统一盲盒
             </HistoryTag>
             <HistoryTag>{detail.type}</HistoryTag>
             {record.is_pity ? <HistoryTag>保底奖励</HistoryTag> : null}
@@ -238,18 +240,14 @@ function rewardDetail(record: BlindBoxRecord) {
       type: '套餐',
     }
   }
-  if (record.reward_type === 'claude_quota') {
+  if (record.reward_type === 'claude_quota' || record.reward_type === 'quota') {
     return {
       title: record.reward_title || `$${record.reward_usd} 通用额度`,
       description: `${formatQuota(record.credit_amount || 0)} 已进入通用额度钱包，永久有效。`,
       type: '通用额度',
     }
   }
-  return {
-    title: record.reward_title || `$${record.reward_usd} 官方 GPT 专属额度`,
-    description: `${formatQuota(record.credit_amount || 0)} 已进入官方 GPT 专属额度钱包，永久有效。`,
-    type: '官方 GPT 专属额度',
-  }
+  return { title: record.reward_title, description: '', type: '奖励' }
 }
 
 function rewardIcon(record: BlindBoxRecord) {
@@ -263,11 +261,13 @@ function propDescription(propType: string) {
   if (propType === 'topup_discount_90')
     return '下次钱包充值自动享受九折，仅使用一次。'
   if (propType === 'subscription_discount_90')
-    return '下次购买套餐自动享受九折，仅使用一次。'
+    return '迁移前获得的历史折扣卡，可转换为充值九折卡后使用。'
   if (propType === 'consume_discount_95')
-    return '手动启用后，额度消耗倍率按 0.95 计算，持续 24 小时。'
+    return '仅官方渠道可用，启用后按 0.95 倍率计算，持续 24 小时。'
   if (propType === 'consume_discount_90')
-    return '手动启用后，额度消耗倍率按 0.9 计算，持续 24 小时。'
+    return '仅官方渠道可用，启用后按 0.90 倍率计算，持续 24 小时。'
+  if (propType === 'monthly_pass_multiplier')
+    return '仅官方指定 GPT 分组可用，累计 15 分钟，可暂停。'
   return '道具已进入“我的道具”，可按页面规则使用。'
 }
 

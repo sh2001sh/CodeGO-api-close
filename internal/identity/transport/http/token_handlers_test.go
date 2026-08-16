@@ -426,11 +426,12 @@ func TestAddTokenSelectsMarketplaceGroupDirectly(t *testing.T) {
 		t.Fatalf("failed to seed marketplace group: %v", err)
 	}
 	ctx, recorder := newAuthenticatedContext(t, stdhttp.MethodPost, "/api/token/", map[string]any{
-		"name":              "market-token",
-		"expired_time":      -1,
-		"unlimited_quota":   true,
-		"group":             "market:" + group.ID,
-		"cross_group_retry": true,
+		"name":                         "market-token",
+		"expired_time":                 -1,
+		"unlimited_quota":              true,
+		"group":                        "market:" + group.ID,
+		"cross_group_retry":            true,
+		"marketplace_multiplier_limit": 0.75,
 	}, 7)
 
 	AddToken(ctx)
@@ -448,6 +449,9 @@ func TestAddTokenSelectsMarketplaceGroupDirectly(t *testing.T) {
 	}
 	if token.CrossGroupRetry {
 		t.Fatal("expected marketplace token to disable cross-group retry")
+	}
+	if token.MarketplaceMultiplierLimit != 0.75 {
+		t.Fatalf("expected marketplace multiplier limit 0.75, got %v", token.MarketplaceMultiplierLimit)
 	}
 }
 

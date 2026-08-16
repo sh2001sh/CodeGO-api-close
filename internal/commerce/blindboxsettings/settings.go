@@ -54,57 +54,23 @@ const (
 )
 
 var defaultTierSettings = []TierSetting{
-	// Value model:
-	// - 1 美元通用额度 ≈ 1 RMB 成本
-	// - 1 美元官方 GPT 专属额度 ≈ 0.1 RMB 成本
-	// Target:
-	// - medium rewards carry the highest probability mass
-	// - low / jackpot rewards stay small probability
-	// - Claude rewards have enough presence and larger-span tiers
-	// - total expected payout remains below the 2.5 RMB box price
-	{Name: "2-5 美元官方 GPT 专属额度", MinUSD: 2.0, MaxUSD: 5.0, Probability: 0.09, RewardType: "quota", WalletType: "default"},
-	{Name: "5-10 美元官方 GPT 专属额度", MinUSD: 5.0, MaxUSD: 10.0, Probability: 0.18, RewardType: "quota", WalletType: "default"},
-	{Name: "10-20 美元官方 GPT 专属额度", MinUSD: 10.0, MaxUSD: 20.0, Probability: 0.21, RewardType: "quota", WalletType: "default"},
-	{Name: "20-30 美元官方 GPT 专属额度", MinUSD: 20.0, MaxUSD: 30.0, Probability: 0.075, RewardType: "quota", WalletType: "default"},
-	{Name: "30-50 美元官方 GPT 专属额度", MinUSD: 30.0, MaxUSD: 50.0, Probability: 0.027, RewardType: "quota", WalletType: "default"},
-	{Name: "50-80 美元官方 GPT 专属额度", MinUSD: 50.0, MaxUSD: 80.0, Probability: 0.008, RewardType: "quota", WalletType: "default"},
-	{Name: "80-120 美元官方 GPT 专属额度", MinUSD: 80.0, MaxUSD: 120.0, Probability: 0.002, RewardType: "quota", WalletType: "default"},
-	{Name: "0.5-1 通用额度", MinUSD: 0.5, MaxUSD: 1.0, Probability: 0.11, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "1-2 通用额度", MinUSD: 1.0, MaxUSD: 2.0, Probability: 0.09, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "2-5 通用额度", MinUSD: 2.0, MaxUSD: 5.0, Probability: 0.055, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "5-10 通用额度", MinUSD: 5.0, MaxUSD: 10.0, Probability: 0.03, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "10-20 通用额度", MinUSD: 10.0, MaxUSD: 20.0, Probability: 0.012, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "20-40 通用额度", MinUSD: 20.0, MaxUSD: 40.0, Probability: 0.006, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "40-60 通用额度", MinUSD: 40.0, MaxUSD: 60.0, Probability: 0.001, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "充值九折卡", MinUSD: 0, MaxUSD: 0, Probability: 0.028, RewardType: "prop"},
-	{Name: "套餐九折卡", MinUSD: 0, MaxUSD: 0, Probability: 0.012, RewardType: "prop"},
-	{Name: "0.95 倍率卡", MinUSD: 0, MaxUSD: 0, Probability: 0.038, RewardType: "prop"},
-	{Name: "0.9 倍率卡", MinUSD: 0, MaxUSD: 0, Probability: 0.022, RewardType: "prop"},
+	{Name: "1.00-1.50 统一额度", MinUSD: 1, MaxUSD: 1.5, Probability: 0.1537, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "1.50-2.00 统一额度", MinUSD: 1.5, MaxUSD: 2, Probability: 0.27, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "2.00-2.80 统一额度", MinUSD: 2, MaxUSD: 2.8, Probability: 0.25, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "2.80-4.00 统一额度", MinUSD: 2.8, MaxUSD: 4, Probability: 0.12, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "4.00-6.00 统一额度", MinUSD: 4, MaxUSD: 6, Probability: 0.05, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "6.00-10.00 统一额度", MinUSD: 6, MaxUSD: 10, Probability: 0.01115, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "10.00-20.00 统一额度", MinUSD: 10, MaxUSD: 20, Probability: 0.004, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "20.00-50.00 统一额度", MinUSD: 20, MaxUSD: 50, Probability: 0.0008, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "50.00-200.00 统一额度", MinUSD: 50, MaxUSD: 200, Probability: 0.0003, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "200.00-1000.00 统一额度", MinUSD: 200, MaxUSD: 1000, Probability: 0.00005, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "0.95 倍率卡", Probability: 0.06, RewardType: "prop"},
+	{Name: "0.9 倍率卡", Probability: 0.04, RewardType: "prop"},
+	{Name: "0.10 倍率体验卡", Probability: 0.01, RewardType: "prop"},
+	{Name: "充值九折卡", Probability: 0.03, RewardType: "prop"},
 }
 
-var defaultBalanceBlindBoxTiers = []TierSetting{
-	// Universal quota is valued at 4x official GPT special quota. Equivalent-value bands from
-	// $10 through $200 split their probability evenly by wallet type.
-	{Name: "$1.00-$3.00 官方 GPT 专属额度", MinUSD: 1, MaxUSD: 3, Probability: 0.06, RewardType: "quota", WalletType: "default"},
-	{Name: "$3.00-$6.00 官方 GPT 专属额度", MinUSD: 3, MaxUSD: 6, Probability: 0.12, RewardType: "quota", WalletType: "default"},
-	{Name: "$6.00-$10.00 官方 GPT 专属额度", MinUSD: 6, MaxUSD: 10, Probability: 0.10, RewardType: "quota", WalletType: "default"},
-	{Name: "$10.00-$15.00 官方 GPT 专属额度", MinUSD: 10, MaxUSD: 15, Probability: 0.075, RewardType: "quota", WalletType: "default"},
-	{Name: "$15.00-$20.00 官方 GPT 专属额度", MinUSD: 15, MaxUSD: 20, Probability: 0.22, RewardType: "quota", WalletType: "default"},
-	{Name: "$25.00-$40.00 官方 GPT 专属额度", MinUSD: 25, MaxUSD: 40, Probability: 0.05, RewardType: "quota", WalletType: "default"},
-	{Name: "$80 官方 GPT 专属额度", MinUSD: 80, MaxUSD: 80, Probability: 0.004, RewardType: "quota", WalletType: "default"},
-	{Name: "$200 官方 GPT 专属额度", MinUSD: 200, MaxUSD: 200, Probability: 0.00075, RewardType: "quota", WalletType: "default"},
-	{Name: "$500 官方 GPT 专属额度", MinUSD: 500, MaxUSD: 500, Probability: 0.00036, RewardType: "quota", WalletType: "default"},
-	{Name: "$5000 官方 GPT 专属额度", MinUSD: 5000, MaxUSD: 5000, Probability: 0.00004, RewardType: "quota", WalletType: "default"},
-	{Name: "$2.50-$3.75 通用额度（等值 $10-$15）", MinUSD: 2.5, MaxUSD: 3.75, Probability: 0.075, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$3.75-$5.00 通用额度（等值 $15-$20）", MinUSD: 3.75, MaxUSD: 5, Probability: 0.22, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$6.25-$10.00 通用额度（等值 $25-$40）", MinUSD: 6.25, MaxUSD: 10, Probability: 0.05, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$20 通用额度（等值 $80）", MinUSD: 20, MaxUSD: 20, Probability: 0.004, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "$50 通用额度（等值 $200）", MinUSD: 50, MaxUSD: 50, Probability: 0.00075, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "充值九折卡", Probability: 0.007, RewardType: "prop"},
-	{Name: "套餐九折卡", Probability: 0.004, RewardType: "prop"},
-	{Name: "0.95 倍率卡", Probability: 0.006, RewardType: "prop"},
-	{Name: "0.9 倍率卡", Probability: 0.0031, RewardType: "prop"},
-}
+var defaultBalanceBlindBoxTiers = append([]TierSetting(nil), defaultTierSettings...)
 
 var legacyBalanceBlindBoxProbabilities = [][]float64{
 	{0.12, 0.17, 0.10, 0.075, 0.19, 0.025, 0.004, 0.00075, 0.00036, 0.00004, 0.075, 0.19, 0.025, 0.004, 0.00075, 0.007, 0.004, 0.006, 0.0031},
@@ -126,23 +92,23 @@ var currentSetting = Setting{
 	DailyLimit:                           50,
 	MonthlyLimit:                         500,
 	DailyOpenLimit:                       5000,
-	FirstPurchaseGuaranteeUSD:            20,
-	PityThreshold:                        5,
-	PityGuaranteeUSD:                     20,
-	LowRewardThresholdUSD:                20,
+	FirstPurchaseGuaranteeUSD:            0,
+	PityThreshold:                        1_000_000,
+	PityGuaranteeUSD:                     0,
+	LowRewardThresholdUSD:                1,
 	SubscriptionPrizeProbability:         defaultSubscriptionPrizeProbability,
 	SubscriptionPlanTitle:                defaultSubscriptionPlanTitle,
 	CountOptions:                         []int{1, 5, 10, 20, 50},
 	Tiers:                                append([]TierSetting(nil), defaultTierSettings...),
 	BalanceBlindBoxEnabled:               true,
-	BalanceBlindBoxPriceUSD:              15,
-	BalanceBlindBoxDailyPurchaseLimit:    10,
+	BalanceBlindBoxPriceUSD:              2.5,
+	BalanceBlindBoxDailyPurchaseLimit:    500,
 	BalanceBlindBoxTiers:                 append([]TierSetting(nil), defaultBalanceBlindBoxTiers...),
-	BalanceBlindBoxPityThreshold:         50,
-	BalanceBlindBoxPityGuaranteeUSD:      35,
-	BalanceBlindBoxSmallPityThreshold:    10,
-	BalanceBlindBoxSmallPityGuaranteeUSD: 10,
-	BalanceBlindBoxFirstDrawGuaranteeUSD: 10,
+	BalanceBlindBoxPityThreshold:         1_000_000,
+	BalanceBlindBoxPityGuaranteeUSD:      0,
+	BalanceBlindBoxSmallPityThreshold:    1_000_000,
+	BalanceBlindBoxSmallPityGuaranteeUSD: 0,
+	BalanceBlindBoxFirstDrawGuaranteeUSD: 0,
 }
 
 // RegistrationRewardActive reports whether invited registrations currently
@@ -316,7 +282,13 @@ func normalizeTierSettings(tiers []TierSetting) []TierSetting {
 	result := make([]TierSetting, len(tiers))
 	for i, tier := range tiers {
 		result[i] = tier
-		result[i].RewardType = NormalizeRewardType(inferRewardType(tier))
+		rewardType := NormalizeRewardType(inferRewardType(tier))
+		if rewardType == "quota" || rewardType == "claude_quota" {
+			result[i].RewardType = "claude_quota"
+			result[i].WalletType = "claude"
+			continue
+		}
+		result[i].RewardType = rewardType
 		result[i].WalletType = inferWalletType(tier)
 	}
 	return result
@@ -403,9 +375,11 @@ func Get() Setting {
 		settingCopy.Tiers = defaultTiers()
 	}
 	settingCopy.Tiers = normalizeTierSettings(settingCopy.Tiers)
-	if settingCopy.BalanceBlindBoxPriceUSD <= 0 {
-		settingCopy.BalanceBlindBoxPriceUSD = 15
-	}
+	settingCopy.FirstPurchaseGuaranteeUSD = 0
+	settingCopy.PityThreshold = 1_000_000
+	settingCopy.PityGuaranteeUSD = 0
+	settingCopy.LowRewardThresholdUSD = 0
+	settingCopy.BalanceBlindBoxPriceUSD = 2.5
 	if settingCopy.BalanceBlindBoxDailyPurchaseLimit <= 0 {
 		settingCopy.BalanceBlindBoxDailyPurchaseLimit = 10
 	}
@@ -424,12 +398,12 @@ func Get() Setting {
 	if settingCopy.BalanceBlindBoxFirstDrawGuaranteeUSD <= 0 {
 		settingCopy.BalanceBlindBoxFirstDrawGuaranteeUSD = 10
 	}
-	if len(settingCopy.BalanceBlindBoxTiers) == 0 {
-		settingCopy.BalanceBlindBoxTiers = append([]TierSetting(nil), defaultBalanceBlindBoxTiers...)
-	} else if isLegacyBalanceBlindBoxTiers(settingCopy.BalanceBlindBoxTiers) {
-		settingCopy.BalanceBlindBoxTiers = append([]TierSetting(nil), defaultBalanceBlindBoxTiers...)
-	}
-	settingCopy.BalanceBlindBoxTiers = normalizeTierSettings(settingCopy.BalanceBlindBoxTiers)
+	settingCopy.BalanceBlindBoxTiers = append([]TierSetting(nil), settingCopy.Tiers...)
+	settingCopy.BalanceBlindBoxPityThreshold = 1_000_000
+	settingCopy.BalanceBlindBoxPityGuaranteeUSD = 0
+	settingCopy.BalanceBlindBoxSmallPityThreshold = 1_000_000
+	settingCopy.BalanceBlindBoxSmallPityGuaranteeUSD = 0
+	settingCopy.BalanceBlindBoxFirstDrawGuaranteeUSD = 0
 	return settingCopy
 }
 

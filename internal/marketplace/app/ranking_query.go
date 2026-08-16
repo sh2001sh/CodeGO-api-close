@@ -24,7 +24,7 @@ func normalizeGroupQuery(query GroupQuery) GroupQuery {
 	return query
 }
 
-func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, query GroupQuery) []GroupListItem {
+func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, recentSeries map[int][]RecentRequestBucket, query GroupQuery) []GroupListItem {
 	items := make([]GroupListItem, 0, len(groups))
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
@@ -33,7 +33,11 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 			continue
 		}
 		snapshot := snapshots[group.ID]
-		items = append(items, groupListItem(group, channel, models, snapshot))
+		channelID := 0
+		if channel.InternalChannelID != nil {
+			channelID = *channel.InternalChannelID
+		}
+		items = append(items, groupListItem(group, channel, models, snapshot, recentSeries[channelID]))
 	}
 	sortGroupItems(items, query.Sort, query.Direction)
 	return items
@@ -59,7 +63,7 @@ func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.
 	return channel.ID != ""
 }
 
-func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, snapshot marketplaceschema.RankingSnapshot) GroupListItem {
+func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, snapshot marketplaceschema.RankingSnapshot, recentSeries []RecentRequestBucket) GroupListItem {
 	return GroupListItem{
 		ID: group.ID, ChannelID: channel.ID, PublicSlug: group.PublicSlug,
 		SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID),
@@ -73,9 +77,28 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		Rank:                     snapshot.Rank, Score: snapshot.Score, SuccessRate: snapshot.RawSuccessRate,
 		WilsonSuccessRate: snapshot.WilsonSuccessRate, AvgTTFTMs: snapshot.AvgTTFTMs,
 		AvgLatencyMs: snapshot.AvgLatencyMs, AvgTPS: snapshot.AvgTPS,
-		RequestCount: snapshot.RequestCount, IndependentConsumers: snapshot.IndependentConsumers,
+		CacheHitRate: snapshot.CacheHitRate, LatestRequestStatus: latestRequestStatus(recentSeries),
+		RecentRequestSeries: recentSeries,
+		RequestCount:        snapshot.RequestCount, IndependentConsumers: snapshot.IndependentConsumers,
 		Observing: snapshot.Observing, UpdatedAt: group.UpdatedAt,
 	}
+}
+
+func latestRequestStatus(series []RecentRequestBucket) string {
+	for index := len(series) - 1; index >= 0; index-- {
+		point := series[index]
+		if point.RequestCount <= 0 {
+			continue
+		}
+		if point.SuccessRate >= 99 {
+			return "healthy"
+		}
+		if point.SuccessRate >= 85 {
+			return "unstable"
+		}
+		return "failed"
+	}
+	return "unknown"
 }
 
 func publicSourceLabel(channel marketplaceschema.Channel) string {

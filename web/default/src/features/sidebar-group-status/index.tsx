@@ -141,6 +141,16 @@ export function SidebarGroupStatusPage() {
                         · {group.models.length} 个模型
                       </p>
                     </div>
+                    <div className='shrink-0 text-right'>
+                      <div className='text-muted-foreground text-xs'>
+                        缓存命中率
+                      </div>
+                      <div className='mt-0.5 text-lg font-semibold tabular-nums'>
+                        {group.cache_hit_rate == null
+                          ? '--'
+                          : `${group.cache_hit_rate.toFixed(1)}%`}
+                      </div>
+                    </div>
                   </div>
 
                   <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>

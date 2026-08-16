@@ -18,25 +18,10 @@ func issueSealedBalanceBlindBox(purchaseID, purchaserID int, setting blindboxset
 	tier := pickBlindBoxTier(setting.BalanceBlindBoxTiers)
 	rewardUSD := randomTierRewardUSD(tier)
 	rewardType := blindboxsettings.NormalizeRewardType(tier.RewardType)
-	walletType := normalizeBlindBoxRewardWalletType(tier.WalletType)
+	walletType := commerceschema.BlindBoxRewardWalletTypeClaude
 	guaranteeType := balanceBlindBoxGuaranteeNone
-
-	bigPity := !first && pity.ConsecutiveUnder35USD+1 >= setting.BalanceBlindBoxPityThreshold
-	smallPity := !first && !bigPity && pity.ConsecutiveUnder6USD+1 >= setting.BalanceBlindBoxSmallPityThreshold
-	switch {
-	case first:
-		tier = blindboxsettings.TierSetting{Name: "$10 余额盲盒首抽保底"}
-		rewardUSD, rewardType, walletType = setting.BalanceBlindBoxFirstDrawGuaranteeUSD, commerceschema.BlindBoxRewardTypeQuota, commerceschema.BlindBoxRewardWalletTypeDefault
-		guaranteeType = balanceBlindBoxGuaranteeFirst
-	case bigPity:
-		tier = blindboxsettings.TierSetting{Name: "$35 余额盲盒保底"}
-		rewardUSD, rewardType, walletType = setting.BalanceBlindBoxPityGuaranteeUSD, commerceschema.BlindBoxRewardTypeQuota, commerceschema.BlindBoxRewardWalletTypeDefault
-		guaranteeType = balanceBlindBoxGuaranteeBig
-	case smallPity:
-		tier = blindboxsettings.TierSetting{Name: "$10 余额盲盒小保底"}
-		rewardUSD, rewardType, walletType = setting.BalanceBlindBoxSmallPityGuaranteeUSD, commerceschema.BlindBoxRewardTypeQuota, commerceschema.BlindBoxRewardWalletTypeDefault
-		guaranteeType = balanceBlindBoxGuaranteeSmall
-	}
+	_ = pity
+	_ = first
 
 	item := commerceschema.BalanceBlindBoxItem{
 		PurchaseId: purchaseID, PurchaseUserId: purchaserID, OwnerUserId: purchaserID, PoolVersion: balanceBlindBoxPoolVersion,
@@ -48,16 +33,10 @@ func issueSealedBalanceBlindBox(purchaseID, purchaserID int, setting blindboxset
 		item.RewardWalletType = ""
 		item.RewardUSD = 0
 	} else {
+		rewardType = commerceschema.BlindBoxRewardTypeClaudeQuota
 		item.CreditAmount = quotaUnitsFromBlindBoxUSD(rewardUSD)
-		if rewardType == commerceschema.BlindBoxRewardTypeClaudeQuota {
-			item.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", rewardUSD)
-		} else {
-			item.RewardTitle = fmt.Sprintf("%.2f 官方 GPT 专属额度奖励", rewardUSD)
-		}
-	}
-	advanceBalanceBlindBoxPity(pity, rewardType, rewardUSD, setting)
-	if guaranteeType == balanceBlindBoxGuaranteeFirst {
-		pity.ConsecutiveUnder6USD, pity.ConsecutiveUnder35USD = 0, 0
+		item.RewardType = rewardType
+		item.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", rewardUSD)
 	}
 	return item
 }

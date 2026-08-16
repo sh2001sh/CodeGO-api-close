@@ -21,7 +21,6 @@ import {
   Crown,
   PackageOpen,
   Sparkles,
-  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
@@ -105,27 +104,14 @@ export function BlindBoxPoolShowcase(props: {
           </PoolGroup>
         ) : null}
 
-        {grouped.claude.length > 0 ? (
+        {grouped.credit.length > 0 ? (
           <PoolGroup
             icon={Sparkles}
             title='通用额度'
             hint='直接进入通用额度钱包，永久有效'
             reduced={reduced}
           >
-            {grouped.claude.map((tier) => (
-              <TierCell key={tier.name} tier={tier} reduced={reduced} />
-            ))}
-          </PoolGroup>
-        ) : null}
-
-        {grouped.quota.length > 0 ? (
-          <PoolGroup
-            icon={Wallet}
-            title='官方 GPT 专属额度'
-            hint='直接进入官方 GPT 专属额度钱包，永久有效'
-            reduced={reduced}
-          >
-            {grouped.quota.map((tier) => (
+            {grouped.credit.map((tier) => (
               <TierCell key={tier.name} tier={tier} reduced={reduced} />
             ))}
           </PoolGroup>

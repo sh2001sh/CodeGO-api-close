@@ -6,23 +6,18 @@ import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   SecureVerificationDialog,
-  useSecureVerification,
 } from '@/features/auth/secure-verification'
 import {
-  configureWalletTransferPassword,
   createWalletTransfer,
   getWalletTransfers,
   isApiSuccess,
   lookupWalletTransferRecipient,
 } from '../api'
-import type {
-  ConfigureWalletTransferPasswordRequest,
-  WalletTransferOverview,
-  WalletTransferRecipient,
-} from '../types'
+import type { WalletTransferOverview, WalletTransferRecipient } from '../types'
 import { WalletPeerTransferPanel } from './wallet-peer-transfer-panel'
 import { WalletTransferConfirmDialog } from './wallet-transfer-confirm-dialog'
 import { WalletTransferPasswordDialog } from './wallet-transfer-password-dialog'
+import { useWalletTransferPassword } from './use-wallet-transfer-password'
 
 export function WalletPeerTransferCard(props: {
   onUserRefresh?: () => Promise<void>
@@ -39,9 +34,7 @@ export function WalletPeerTransferCard(props: {
   const [recipientLoading, setRecipientLoading] = useState(false)
   const [amount, setAmount] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [passwordSubmitting, setPasswordSubmitting] = useState(false)
   const [currentTimestamp, setCurrentTimestamp] = useState(0)
 
   const loadOverview = useCallback(async () => {
@@ -65,14 +58,9 @@ export function WalletPeerTransferCard(props: {
     }
   }, [t])
 
-  const finishPasswordSetup = useCallback(async () => {
-    toast.success(t('Payment password saved.'))
-    setPasswordDialogOpen(false)
-    await loadOverview()
-  }, [loadOverview, t])
-
-  const verification = useSecureVerification({
-    onSuccess: () => void finishPasswordSetup(),
+  const password = useWalletTransferPassword({
+    security: overview?.security,
+    reload: loadOverview,
   })
 
   useEffect(() => {
@@ -131,47 +119,6 @@ export function WalletPeerTransferCard(props: {
       )
     } finally {
       setRecipientLoading(false)
-    }
-  }
-
-  const configurePassword = async (
-    request: ConfigureWalletTransferPasswordRequest
-  ) => {
-    const perform = async () => {
-      const response = await configureWalletTransferPassword(request)
-      if (!isApiSuccess(response)) {
-        throw new Error(
-          response.message || t('Failed to save payment password.')
-        )
-      }
-      return response
-    }
-
-    setPasswordSubmitting(true)
-    try {
-      const passwordSet = overview?.security.password_set ?? false
-      const needsAccountPassword =
-        overview?.security.requires_account_password ?? true
-      if (!passwordSet && !needsAccountPassword) {
-        const result = await verification.withVerification(perform, {
-          title: t('Verify before setting a payment password'),
-          description: t(
-            'Confirm your identity with 2FA or Passkey before enabling quota transfers.'
-          ),
-        })
-        if (result) await finishPasswordSetup()
-        return
-      }
-      await perform()
-      await finishPasswordSetup()
-    } catch (reason) {
-      toast.error(
-        reason instanceof Error
-          ? reason.message
-          : t('Failed to save payment password.')
-      )
-    } finally {
-      setPasswordSubmitting(false)
     }
   }
 
@@ -253,7 +200,7 @@ export function WalletPeerTransferCard(props: {
         onLookupRecipient={() => void lookupRecipient()}
         onAmountChange={setAmount}
         onOpenHistory={props.onOpenHistory}
-        onOpenPassword={() => setPasswordDialogOpen(true)}
+        onOpenPassword={() => password.setOpen(true)}
         onReview={() => setConfirmOpen(true)}
       />
 
@@ -268,24 +215,31 @@ export function WalletPeerTransferCard(props: {
         onConfirm={submitTransfer}
       />
       <WalletTransferPasswordDialog
-        open={passwordDialogOpen}
-        onOpenChange={setPasswordDialogOpen}
+        open={password.open}
+        onOpenChange={password.setOpen}
         passwordSet={overview.security.password_set}
         requiresAccountPassword={overview.security.requires_account_password}
-        submitting={passwordSubmitting}
-        onSubmit={configurePassword}
+        emailBound={overview.security.email_bound}
+        emailMasked={overview.security.email_masked}
+        emailSending={password.emailSending}
+        emailSecondsLeft={password.emailSecondsLeft}
+        emailCountdownActive={password.emailCountdownActive}
+        submitting={password.submitting}
+        onSendEmailCode={() => void password.sendEmailCode()}
+        onBindEmail={() => window.location.assign('/profile')}
+        onSubmit={password.configure}
       />
       <SecureVerificationDialog
-        open={verification.open}
-        onOpenChange={verification.setOpen}
-        methods={verification.methods}
-        state={verification.state}
+        open={password.verification.open}
+        onOpenChange={password.verification.setOpen}
+        methods={password.verification.methods}
+        state={password.verification.state}
         onVerify={(method, code) => {
-          void verification.executeVerification(method, code)
+          void password.verification.executeVerification(method, code)
         }}
-        onCancel={verification.cancel}
-        onCodeChange={verification.setCode}
-        onMethodChange={verification.switchMethod}
+        onCancel={password.verification.cancel}
+        onCodeChange={password.verification.setCode}
+        onMethodChange={password.verification.switchMethod}
       />
     </>
   )

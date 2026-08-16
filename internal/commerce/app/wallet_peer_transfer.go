@@ -92,7 +92,7 @@ func BuildWalletTransferOverview(user *identityschema.User, page, pageSize int) 
 	if err != nil {
 		return nil, err
 	}
-	security, err := GetWalletTransferSecurityOverview(user.Id, user.Password != "")
+	security, err := GetWalletTransferSecurityOverview(user.Id, user.Password != "", user.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -261,11 +261,11 @@ func executeWalletTransferTx(tx *gorm.DB, sender, recipient *identityschema.User
 }
 
 func synchronizeTransferBalancesTx(tx *gorm.DB, sender, recipient *identityschema.User) (int, int, error) {
-	_, senderBalance, err := billingapp.SynchronizeWalletQuotaProjectionsTx(tx, sender.Id, sender.Quota, sender.ClaudeQuota)
+	senderBalance, err := billingapp.GetUnifiedCreditBalanceTx(tx, sender.Id)
 	if err != nil {
 		return 0, 0, err
 	}
-	_, recipientBalance, err := billingapp.SynchronizeWalletQuotaProjectionsTx(tx, recipient.Id, recipient.Quota, recipient.ClaudeQuota)
+	recipientBalance, err := billingapp.GetUnifiedCreditBalanceTx(tx, recipient.Id)
 	return senderBalance, recipientBalance, err
 }
 

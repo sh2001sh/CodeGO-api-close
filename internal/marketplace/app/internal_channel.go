@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 )
@@ -22,5 +23,6 @@ func syncInternalChannel(channel *marketplaceschema.Channel, group *marketplaces
 	internal.BaseURL = &baseURL
 	internal.Models = strings.Join(decodeModels(channel.DeclaredModels), ",")
 	internal.Group = group.InternalGroupName
+	internal.ChannelScope = gatewayschema.ChannelScopeExternal
 	return gatewaystore.UpdateChannel(internal)
 }

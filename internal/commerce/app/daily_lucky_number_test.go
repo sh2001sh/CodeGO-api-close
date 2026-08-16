@@ -277,8 +277,8 @@ func TestDailyLuckyRewardSettlementWritesLedgerOnce(t *testing.T) {
 	require.Equal(t, subscription.AmountTotal, savedSubscription.AmountTotal)
 	var savedUser identityschema.User
 	require.NoError(t, db.First(&savedUser, user.Id).Error)
-	require.Equal(t, int(reward.FinalRewardQuota), savedUser.Quota)
-	snapshot := loadCommerceBillingSnapshot(t, user.Id, "wallet")
+	require.Equal(t, int(reward.FinalRewardQuota), savedUser.ClaudeQuota)
+	snapshot := loadCommerceBillingSnapshot(t, user.Id, "claude_wallet")
 	require.Equal(t, reward.FinalRewardQuota, snapshot.AvailableBalance)
 	var savedReward commerceschema.SubscriptionLuckyReward
 	require.NoError(t, db.First(&savedReward, reward.Id).Error)

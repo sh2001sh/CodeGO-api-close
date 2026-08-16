@@ -21,14 +21,35 @@ type SubscriptionFundingPlanInfo struct {
 	PlanTitle string
 }
 
+type BlindBoxConsumptionDiscountRequest struct {
+	RequestID    string
+	UserID       int
+	ChannelID    int
+	ChannelScope string
+	ModelName    string
+	UsingGroup   string
+	Quota        int
+}
+
+type BlindBoxConsumptionDiscountResult struct {
+	PropID                 int
+	Title                  string
+	QuotaBeforeDiscount    int
+	QuotaAfterDiscount     int
+	DiscountQuota          int
+	DiscountRate           float64
+	Multiplier             float64
+	RemainingDiscountQuota int64
+}
+
 type SubscriptionFundingHooks struct {
-	PreConsume              func(requestID string, userID int, modelName string, amount int64) (*SubscriptionFundingPreConsumeResult, error)
-	ReserveAdditional       func(requestID string, subscriptionID int, modelName string, amount int64) error
-	GetPlanInfo             func(userSubscriptionID int) (*SubscriptionFundingPlanInfo, error)
-	PostConsumeDelta        func(subscriptionID int, modelName string, delta int64) error
-	RefundPreConsume        func(requestID string) error
-	SettleReservation       func(requestID string, subscriptionID int, modelName string, actualAmount int64) error
-	GetBlindBoxDiscountRate func(userID int) float64
+	PreConsume                       func(requestID string, userID int, modelName string, amount int64) (*SubscriptionFundingPreConsumeResult, error)
+	ReserveAdditional                func(requestID string, subscriptionID int, modelName string, amount int64) error
+	GetPlanInfo                      func(userSubscriptionID int) (*SubscriptionFundingPlanInfo, error)
+	PostConsumeDelta                 func(subscriptionID int, modelName string, delta int64) error
+	RefundPreConsume                 func(requestID string) error
+	SettleReservation                func(requestID string, subscriptionID int, modelName string, actualAmount int64) error
+	ApplyBlindBoxConsumptionDiscount func(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error)
 }
 
 var subscriptionFundingHooks SubscriptionFundingHooks
@@ -47,11 +68,11 @@ func postSubscriptionUsageDelta(subscriptionID int, modelName string, delta int6
 	return subscriptionFundingHooks.PostConsumeDelta(subscriptionID, modelName, delta)
 }
 
-func getBlindBoxConsumptionDiscountRate(userID int) float64 {
-	if userID <= 0 || subscriptionFundingHooks.GetBlindBoxDiscountRate == nil {
-		return 0
+func applyBlindBoxConsumptionDiscount(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error) {
+	if request.UserID <= 0 || request.Quota <= 0 || subscriptionFundingHooks.ApplyBlindBoxConsumptionDiscount == nil {
+		return BlindBoxConsumptionDiscountResult{QuotaBeforeDiscount: request.Quota, QuotaAfterDiscount: request.Quota, Multiplier: 1}, nil
 	}
-	return subscriptionFundingHooks.GetBlindBoxDiscountRate(userID)
+	return subscriptionFundingHooks.ApplyBlindBoxConsumptionDiscount(request)
 }
 
 type FundingSource interface {
@@ -63,64 +84,6 @@ type FundingSource interface {
 
 type ReservableFundingSource interface {
 	ReserveAdditional(amount int64) error
-}
-
-type WalletFunding struct {
-	userID   int
-	consumed int
-}
-
-func (w *WalletFunding) Source() string { return BillingSourceWallet }
-
-func (w *WalletFunding) PreConsume(amount int) error {
-	if amount <= 0 {
-		return nil
-	}
-	if err := AdjustWalletQuota(w.userID, amount); err != nil {
-		return err
-	}
-	w.consumed = amount
-	return nil
-}
-
-func (w *WalletFunding) Settle(delta int) error {
-	return AdjustWalletQuota(w.userID, delta)
-}
-
-func (w *WalletFunding) Refund() error {
-	if w.consumed <= 0 {
-		return nil
-	}
-	return AdjustWalletQuota(w.userID, -w.consumed)
-}
-
-type ClaudeWalletFunding struct {
-	userID   int
-	consumed int
-}
-
-func (w *ClaudeWalletFunding) Source() string { return BillingSourceClaudeWallet }
-
-func (w *ClaudeWalletFunding) PreConsume(amount int) error {
-	if amount <= 0 {
-		return nil
-	}
-	if err := AdjustClaudeWalletQuota(w.userID, amount); err != nil {
-		return err
-	}
-	w.consumed = amount
-	return nil
-}
-
-func (w *ClaudeWalletFunding) Settle(delta int) error {
-	return AdjustClaudeWalletQuota(w.userID, delta)
-}
-
-func (w *ClaudeWalletFunding) Refund() error {
-	if w.consumed <= 0 {
-		return nil
-	}
-	return AdjustClaudeWalletQuota(w.userID, -w.consumed)
 }
 
 type SubscriptionFunding struct {
@@ -141,10 +104,11 @@ type SubscriptionFunding struct {
 
 func (s *SubscriptionFunding) Source() string { return BillingSourceSubscription }
 
-func (s *SubscriptionFunding) PreConsume(_ int) error {
+func (s *SubscriptionFunding) PreConsume(amount int) error {
 	if subscriptionFundingHooks.PreConsume == nil {
 		return errors.New("subscription funding pre-consume hook is not registered")
 	}
+	s.amount = int64(amount)
 	res, err := subscriptionFundingHooks.PreConsume(s.requestID, s.userID, s.modelName, s.amount)
 	if err != nil {
 		return err

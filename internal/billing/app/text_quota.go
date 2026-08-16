@@ -76,6 +76,17 @@ func cacheWriteTokensTotal(summary textQuotaSummary) int {
 	return summary.CacheCreationTokens
 }
 
+func performanceInputTokens(promptTokens, cacheReadTokens, cacheWriteTokens int, cacheSeparated bool) int64 {
+	inputTokens := promptTokens
+	if !cacheSeparated {
+		inputTokens -= cacheReadTokens + cacheWriteTokens
+	}
+	if inputTokens < 0 {
+		inputTokens = 0
+	}
+	return int64(inputTokens)
+}
+
 func isLegacyClaudeDerivedOpenAIUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
 	if relayInfo == nil || usage == nil {
 		return false
@@ -378,7 +389,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 			summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredRes)
 		}
 	}
-	discountDetail := calculateUsageConsumptionDiscount(relayInfo.UserId, summary.Quota)
+	discountDetail := calculateUsageConsumptionDiscount(relayInfo, summary.Quota)
 	summary.Quota = discountDetail.QuotaAfterDiscount
 
 	if summary.WebSearchCallCount > 0 {
@@ -513,6 +524,14 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Other:            other,
 	})
 	gopool.Go(func() {
-		auditprojection.RecordRelaySample(relayInfo, true, int64(summary.CompletionTokens))
+		cacheWriteTokens := cacheWriteTokensTotal(summary)
+		auditprojection.RecordRelayUsageSample(
+			relayInfo,
+			true,
+			performanceInputTokens(summary.PromptTokens, summary.CacheTokens, cacheWriteTokens, summary.IsClaudeUsageSemantic),
+			int64(summary.CacheTokens),
+			int64(cacheWriteTokens),
+			int64(summary.CompletionTokens),
+		)
 	})
 }

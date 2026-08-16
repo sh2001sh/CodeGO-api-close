@@ -44,8 +44,6 @@ func init() {
 		SettleReservation: func(requestID string, subscriptionID int, modelName string, actualAmount int64) error {
 			return SettleSubscriptionReservation(requestID, subscriptionID, modelName, actualAmount)
 		},
-		GetBlindBoxDiscountRate: func(userID int) float64 {
-			return GetUserBlindBoxConsumptionDiscountRate(userID)
-		},
+		ApplyBlindBoxConsumptionDiscount: ApplyBlindBoxConsumptionDiscount,
 	})
 }

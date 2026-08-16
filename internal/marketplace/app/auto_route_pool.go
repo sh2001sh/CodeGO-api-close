@@ -116,7 +116,10 @@ func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*Aut
 // ResolveAutoRouteBindings returns model-compatible pool members in routing
 // order. The distributor tries them in order and falls through when a group
 // has no currently healthy channel.
-func ResolveAutoRouteBindings(ownerUserID int, modelName string) ([]RoutingBinding, error) {
+func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit float64) ([]RoutingBinding, error) {
+	if err := ValidateMultiplierLimitValue(multiplierLimit); err != nil {
+		return nil, err
+	}
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
 		return nil, errors.New("第三方 Auto 路由需要模型名称")
@@ -142,6 +145,7 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string) ([]RoutingBindi
 		priority int
 	}
 	candidates := make([]scoredBinding, 0, len(selected))
+	overLimitCount := 0
 	for _, group := range groups {
 		priority, ok := selected[group.ID]
 		if !ok {
@@ -149,6 +153,10 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string) ([]RoutingBindi
 		}
 		channel := channels[group.ChannelID]
 		if !containsFold(decodeModels(channel.DeclaredModels), modelName) {
+			continue
+		}
+		if !MultiplierWithinLimit(group.Multiplier, multiplierLimit) {
+			overLimitCount++
 			continue
 		}
 		_, score := autoRouteMetrics(group, snapshots[group.ID])
@@ -175,6 +183,9 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string) ([]RoutingBindi
 		bindings = append(bindings, candidate.binding)
 	}
 	if len(bindings) == 0 {
+		if overLimitCount > 0 {
+			return nil, multiplierLimitExceededError(multiplierLimit)
+		}
 		return nil, errors.New("第三方 Auto 路由池没有支持该模型的可用分组")
 	}
 	return bindings, nil

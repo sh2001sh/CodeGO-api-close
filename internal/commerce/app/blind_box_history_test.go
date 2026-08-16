@@ -65,7 +65,7 @@ func TestNormalizeBlindBoxOpenRecordDisplayUsesWalletLabels(t *testing.T) {
 	normalizeBlindBoxOpenRecordDisplay(&standard)
 	normalizeBlindBoxOpenRecordDisplay(&universal)
 
-	require.Equal(t, "5.00 官方 GPT 专属额度奖励", standard.RewardTitle)
+	require.Equal(t, "5.00 统一额度奖励", standard.RewardTitle)
 	require.Equal(t, "20.00 通用额度奖励", universal.RewardTitle)
 }
 

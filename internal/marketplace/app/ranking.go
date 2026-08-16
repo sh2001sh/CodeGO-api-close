@@ -26,6 +26,7 @@ type rankingTotals struct {
 	ttftTotal     float64
 	tpsWeight     int64
 	tpsTotal      float64
+	cacheHitRate  float64
 }
 
 func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
@@ -38,7 +39,11 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	items := filterAndSortGroups(groups, channels, snapshots, query)
+	recentSeries, err := marketplaceRecentRequestSeries(groups, channels, 6)
+	if err != nil {
+		return nil, err
+	}
+	items := filterAndSortGroups(groups, channels, snapshots, recentSeries, query)
 	total := len(items)
 	ranked := 0
 	for _, item := range items {
@@ -148,7 +153,7 @@ func buildRanking(groups []marketplaceschema.Group, channels map[string]marketpl
 			Columns: []clause.Column{{Name: "group_id"}, {Name: "window_hours"}, {Name: "ranking_version"}},
 			DoUpdates: clause.AssignmentColumns([]string{
 				"rank", "score", "raw_success_rate", "wilson_success_rate", "avg_ttft_ms",
-				"avg_latency_ms", "avg_tps", "request_count", "independent_consumers", "observing", "calculated_at",
+				"avg_latency_ms", "avg_tps", "cache_hit_rate", "request_count", "independent_consumers", "observing", "calculated_at",
 			}),
 		}).Create(&snapshots[index]).Error
 	}
@@ -167,6 +172,7 @@ func aggregateChannelRankingRows(rows []auditprojection.ChannelSummary) map[int]
 			ttftTotal:     float64(row.AvgTtftMs) * float64(row.RequestCount),
 			tpsWeight:     metricWeight(row.AvgTps, row.RequestCount),
 			tpsTotal:      row.AvgTps * float64(row.RequestCount),
+			cacheHitRate:  row.CacheHitRate,
 		}
 	}
 	return result
@@ -195,8 +201,43 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 		Score: round1(score), RawSuccessRate: round2(successRate), WilsonSuccessRate: round2(wilson),
 		AvgTTFTMs:    round2(weighted(total.ttftTotal, total.ttftWeight)),
 		AvgLatencyMs: round2(weighted(total.latencyTotal, total.latencyWeight)), AvgTPS: round2(weighted(total.tpsTotal, total.tpsWeight)),
+		CacheHitRate: round2(total.cacheHitRate),
 		RequestCount: total.requestCount, IndependentConsumers: consumers, Observing: observing, CalculatedAt: time.Now().UTC(),
 	}
+}
+
+func marketplaceRecentRequestSeries(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) (map[int][]RecentRequestBucket, error) {
+	channelIDs := make([]int, 0, len(groups))
+	seen := make(map[int]struct{}, len(groups))
+	for _, group := range groups {
+		channel := channels[group.ChannelID]
+		if channel.InternalChannelID == nil || *channel.InternalChannelID <= 0 {
+			continue
+		}
+		channelID := *channel.InternalChannelID
+		if _, ok := seen[channelID]; ok {
+			continue
+		}
+		seen[channelID] = struct{}{}
+		channelIDs = append(channelIDs, channelID)
+	}
+	rows, err := auditprojection.QuerySeriesByChannels(hours, channelIDs)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[int][]RecentRequestBucket, len(rows))
+	for _, row := range rows {
+		points := row.Series
+		if len(points) > 12 {
+			points = points[len(points)-12:]
+		}
+		series := make([]RecentRequestBucket, 0, len(points))
+		for _, point := range points {
+			series = append(series, RecentRequestBucket{Ts: point.Ts, SuccessRate: round2(point.SuccessRate), RequestCount: point.RequestCount})
+		}
+		result[row.ChannelID] = series
+	}
+	return result, nil
 }
 
 func independentConsumerCountsByChannel(channelIDs []int, hours int) map[int]int64 {

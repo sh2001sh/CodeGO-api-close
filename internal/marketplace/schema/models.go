@@ -36,6 +36,14 @@ type Channel struct {
 
 func (Channel) TableName() string { return tableName("channels") }
 
+// ChannelIDSequence allocates short, monotonic public marketplace channel IDs.
+type ChannelIDSequence struct {
+	ID        uint64    `json:"-" gorm:"primaryKey;autoIncrement"`
+	CreatedAt time.Time `json:"-" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (ChannelIDSequence) TableName() string { return tableName("channel_id_sequences") }
+
 func (channel *Channel) BeforeCreate(_ *gorm.DB) error {
 	if channel.ID == "" {
 		channel.ID = platformruntime.GetUUID()
@@ -104,6 +112,7 @@ type RankingSnapshot struct {
 	AvgTTFTMs            float64   `json:"avg_ttft_ms" gorm:"column:avg_ttft_ms"`
 	AvgLatencyMs         float64   `json:"avg_latency_ms" gorm:"column:avg_latency_ms"`
 	AvgTPS               float64   `json:"avg_tps" gorm:"column:avg_tps"`
+	CacheHitRate         float64   `json:"cache_hit_rate" gorm:"column:cache_hit_rate"`
 	RequestCount         int64     `json:"request_count" gorm:"column:request_count"`
 	IndependentConsumers int64     `json:"independent_consumers" gorm:"column:independent_consumers"`
 	Observing            bool      `json:"observing" gorm:"column:observing;index"`

@@ -18,6 +18,7 @@ const (
 
 	BlindBoxPoolTypeStandard  = "standard"
 	BlindBoxPoolTypeBalance15 = "balance_15"
+	BlindBoxPoolTypeUnified   = "unified"
 
 	BlindBoxCreditStatusActive    = "active"
 	BlindBoxCreditStatusExhausted = "exhausted"
@@ -86,7 +87,7 @@ type BlindBoxOpenRecord struct {
 	UserId             int     `json:"user_id" gorm:"index"`
 	OrderId            int     `json:"order_id" gorm:"index"`
 	RewardType         string  `json:"reward_type" gorm:"type:varchar(32);index"`
-	RewardWalletType   string  `json:"reward_wallet_type" gorm:"type:varchar(32);default:'default';index"`
+	RewardWalletType   string  `json:"reward_wallet_type" gorm:"type:varchar(32);default:'claude';index"`
 	RewardUSD          float64 `json:"reward_usd"`
 	CreditAmount       int64   `json:"credit_amount" gorm:"type:bigint;not null;default:0"`
 	RewardTitle        string  `json:"reward_title" gorm:"type:varchar(255)"`

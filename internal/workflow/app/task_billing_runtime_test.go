@@ -96,7 +96,7 @@ func truncateTables(t *testing.T) {
 
 func seedUser(t *testing.T, id int, quota int) {
 	t.Helper()
-	user := &identityschema.User{Id: id, Username: "test_user", Quota: quota, Status: constant.UserStatusEnabled}
+	user := &identityschema.User{Id: id, Username: "test_user", ClaudeQuota: quota, Status: constant.UserStatusEnabled}
 	require.NoError(t, platformdb.DB.Create(user).Error)
 }
 
@@ -183,8 +183,8 @@ func makeTask(userID, channelID, quota, tokenID int, billingSource string, subsc
 func getUserQuota(t *testing.T, id int) int {
 	t.Helper()
 	var user identityschema.User
-	require.NoError(t, platformdb.DB.Select("quota").Where("id = ?", id).First(&user).Error)
-	return user.Quota
+	require.NoError(t, platformdb.DB.Select("claude_quota").Where("id = ?", id).First(&user).Error)
+	return user.ClaudeQuota
 }
 
 func getTokenRemainQuota(t *testing.T, id int) int {

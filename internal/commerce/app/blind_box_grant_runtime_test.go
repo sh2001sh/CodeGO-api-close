@@ -39,6 +39,7 @@ func TestGrantBlindBoxesIsIdempotentAndOpenable(t *testing.T) {
 	require.NotNil(t, first.Order)
 	require.Equal(t, commerceschema.BlindBoxOrderSourceAdminGrant, first.Order.Source)
 	require.Equal(t, 2, first.Order.Quantity)
+	require.Equal(t, 2, first.Order.OpenedCount)
 
 	second, err := GrantBlindBoxes(user.Id, admin.Id, request)
 	require.NoError(t, err)
@@ -48,9 +49,9 @@ func TestGrantBlindBoxesIsIdempotentAndOpenable(t *testing.T) {
 	require.NoError(t, db.Model(&commerceschema.BlindBoxGrant{}).Count(&grantCount).Error)
 	require.Equal(t, int64(1), grantCount)
 
-	records, err := OpenBlindBoxes(user.Id, 2)
+	opened, err := OpenBalanceBlindBox(user.Id, "admin-grant-open-1", 2)
 	require.NoError(t, err)
-	require.Len(t, records, 2)
+	require.Len(t, opened.Records, 2)
 
 	var order commerceschema.BlindBoxOrder
 	require.NoError(t, db.First(&order, first.Order.Id).Error)

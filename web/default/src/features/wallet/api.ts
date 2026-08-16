@@ -49,14 +49,14 @@ import type {
   BalanceBlindBoxOverview,
   BalanceBlindBoxGift,
   BalanceBlindBoxPurchase,
-  WalletQuotaConversionOverviewResponse,
-  WalletQuotaConversionRequest,
-  WalletQuotaConversionResponse,
   ConfigureWalletTransferPasswordRequest,
   CreateWalletTransferRequest,
   WalletTransferOverviewResponse,
   WalletTransferRecipientResponse,
   WalletTransferResponse,
+  WalletTransferEmailCodeResponse,
+  UnifiedCreditMigrationDetailResponse,
+  BalanceBlindBoxSimulationResult,
 } from './types'
 
 // ============================================================================
@@ -70,23 +70,16 @@ export function isApiSuccess(response: ApiResponse): boolean {
   return response.success === true || response.message === 'success'
 }
 
+export async function getUnifiedCreditMigrationDetail(): Promise<UnifiedCreditMigrationDetailResponse> {
+  const res = await api.get('/api/wallet/unified-credit-migration')
+  return res.data
+}
+
 /**
  * Get topup configuration info
  */
 export async function getTopupInfo(): Promise<TopupInfoResponse> {
   const res = await api.get('/api/user/topup/info')
-  return res.data
-}
-
-export async function getWalletQuotaConversions(): Promise<WalletQuotaConversionOverviewResponse> {
-  const res = await api.get('/api/wallet/quota-conversions')
-  return res.data
-}
-
-export async function createWalletQuotaConversion(
-  request: WalletQuotaConversionRequest
-): Promise<WalletQuotaConversionResponse> {
-  const res = await api.post('/api/wallet/quota-conversions', request)
   return res.data
 }
 
@@ -115,6 +108,13 @@ export async function configureWalletTransferPassword(
   request: ConfigureWalletTransferPasswordRequest
 ): Promise<ApiResponse<{ password_set: boolean }>> {
   const res = await api.put('/api/wallet/transfers/payment-password', request)
+  return res.data
+}
+
+export async function sendWalletTransferPasswordEmailCode(): Promise<WalletTransferEmailCodeResponse> {
+  const res = await api.post(
+    '/api/wallet/transfers/payment-password/email-code'
+  )
   return res.data
 }
 
@@ -382,7 +382,7 @@ export async function openBalanceBlindBox(
     overview: BalanceBlindBoxOverview
   }>
 > {
-  const res = await api.post('/api/blind-box/balance/open', {
+  const res = await api.post('/api/blind-box/inventory/open', {
     request_id: requestId,
     count,
   })
@@ -398,7 +398,7 @@ export async function purchaseBalanceBlindBoxes(
     overview: BalanceBlindBoxOverview
   }>
 > {
-  const res = await api.post('/api/blind-box/balance/purchase', {
+  const res = await api.post('/api/blind-box/inventory/purchase', {
     request_id: requestId,
     count,
   })
@@ -419,9 +419,20 @@ export async function giftBalanceBlindBoxes(
     }
   }>
 > {
-  const res = await api.post('/api/blind-box/balance/gift', {
+  const res = await api.post('/api/blind-box/inventory/gift', {
     request_id: requestId,
     recipient_external_id: recipientExternalId,
+    count,
+  })
+  return res.data
+}
+
+export async function simulateBalanceBlindBoxes(
+  balanceQuota: number,
+  count: number
+): Promise<ApiResponse<BalanceBlindBoxSimulationResult>> {
+  const res = await api.post('/api/blind-box/simulation/draw', {
+    balance_quota: balanceQuota,
     count,
   })
   return res.data

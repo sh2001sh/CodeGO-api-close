@@ -34,7 +34,7 @@ func TestPendingSourceLabelIsNotSearchableOrReturned(t *testing.T) {
 	}
 	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "Kiro"}))
 	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "渠道主"}))
-	item := groupListItem(group, channel, nil, marketplaceschema.RankingSnapshot{})
+	item := groupListItem(group, channel, nil, marketplaceschema.RankingSnapshot{}, nil)
 	require.Empty(t, item.SourceLabel)
 	require.Equal(t, "来源待审核-0x-channel-1", item.SystemDisplayName)
 }
@@ -54,7 +54,7 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Source: "CC-Kiro"}))
 	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Provider: "anthropic"}))
 
-	item := groupListItem(group, channel, models, marketplaceschema.RankingSnapshot{})
+	item := groupListItem(group, channel, models, marketplaceschema.RankingSnapshot{}, nil)
 	require.Equal(t, channel.ID, item.ChannelID)
 	require.Equal(t, channel.ProviderType, item.ProviderType)
 	require.Equal(t, "Codex Plus-0x-123456789012", item.SystemDisplayName)
@@ -91,4 +91,17 @@ func TestPublicPendingReviewGroupIsLoadedForMarketplace(t *testing.T) {
 	require.Len(t, groups, 1)
 	require.Equal(t, group.ID, groups[0].ID)
 	require.Empty(t, publicSourceLabel(channels[channel.ID]))
+}
+
+func TestLatestRequestStatusUsesMostRecentNonEmptyBucket(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "unknown", latestRequestStatus(nil))
+	require.Equal(t, "healthy", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 100, RequestCount: 3}}))
+	require.Equal(t, "unstable", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 92, RequestCount: 8}}))
+	require.Equal(t, "failed", latestRequestStatus([]RecentRequestBucket{
+		{SuccessRate: 100, RequestCount: 4},
+		{SuccessRate: 70, RequestCount: 2},
+		{SuccessRate: 0, RequestCount: 0},
+	}))
 }

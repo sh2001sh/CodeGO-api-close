@@ -21,19 +21,23 @@ function getPropPresentation(prop: BlindBoxProp): PropPresentation {
       }
     case 'subscription_discount_90':
       return {
-        description: '下次购买套餐时自动按 9 折结算，仅使用一次。',
-        actionLabel: '去购买套餐',
-        actionTo: '/packages',
+        description: '迁移前获得的历史折扣卡，可在盲盒道具页转换为充值九折卡。',
       }
     case 'consume_discount_95':
       return {
-        description: '启用后 24 小时内，模型调用按 95% 额度扣减。',
+        description: '仅官方渠道可用；启用后连续 24 小时按 0.95 倍率扣减。',
         actionLabel: '立即启用',
         manualActivation: true,
       }
     case 'consume_discount_90':
       return {
-        description: '启用后 24 小时内，模型调用按 90% 额度扣减。',
+        description: '仅官方渠道可用；启用后连续 24 小时按 0.90 倍率扣减。',
+        actionLabel: '立即启用',
+        manualActivation: true,
+      }
+    case 'monthly_pass_multiplier':
+      return {
+        description: '仅官方指定 GPT 分组可用；累计 15 分钟，可暂停。',
         actionLabel: '立即启用',
         manualActivation: true,
       }
@@ -125,7 +129,7 @@ export function BlindBoxPropInventory(props: {
             >
               <div className='flex items-start justify-between gap-2'>
                 <div className='text-foreground min-w-0 text-sm font-medium'>
-                  {prop.title}
+                  {getPropTitle(prop)}
                 </div>
                 <span
                   className={cn(
@@ -180,4 +184,11 @@ export function BlindBoxPropInventory(props: {
       </div>
     </section>
   )
+}
+
+function getPropTitle(prop: BlindBoxProp) {
+  if (prop.prop_type === 'monthly_pass_multiplier') return '0.10 倍率体验卡'
+  if (prop.prop_type === 'subscription_discount_90') return '历史套餐折扣卡'
+  if (prop.prop_type === 'zero_hour_multiplier') return '历史 0 倍率道具'
+  return prop.title
 }

@@ -59,7 +59,6 @@ func V2MigrationIDs() []string {
 		"20260718_first_purchase_discount",
 		"20260718_community_resources",
 		"20260719_subscription_first_purchase_discount",
-		"20260720_wallet_quota_conversion",
 		"20260721_blind_box_zero_hour",
 		"20260724_gateway_route_pools",
 		"20260724_gateway_route_pool_auto_discovery",
@@ -83,6 +82,10 @@ func V2MigrationIDs() []string {
 		"20260815_marketplace_soft_delete",
 		"20260815_marketplace_numeric_channel_ids",
 		"20260816_wallet_transfer_fee_fields",
+		"20260816_marketplace_incremental_channel_ids",
+		"20260816_token_marketplace_multiplier_limit",
+		"20260816_unified_credit_v1_schema",
+		"20260816_unified_credit_v1_channel_scope",
 	}
 }
 
@@ -173,9 +176,6 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260719_subscription_first_purchase_discount", Run: func(tx *gorm.DB) error {
 			return migrateSubscriptionFirstPurchaseDiscount(tx)
 		}},
-		{ID: "20260720_wallet_quota_conversion", Run: func(tx *gorm.DB) error {
-			return tx.AutoMigrate(&commerceschema.WalletQuotaConversion{})
-		}},
 		{ID: "20260721_blind_box_zero_hour", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&commerceschema.BlindBoxZeroHourState{})
 		}},
@@ -235,6 +235,10 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260815_marketplace_soft_delete", Run: migrateMarketplaceSoftDelete},
 		{ID: "20260815_marketplace_numeric_channel_ids", Run: migrateMarketplaceNumericChannelIDs},
 		{ID: "20260816_wallet_transfer_fee_fields", Run: migrateWalletTransferFeeFields},
+		{ID: "20260816_marketplace_incremental_channel_ids", Run: migrateMarketplaceIncrementalChannelIDs},
+		{ID: "20260816_token_marketplace_multiplier_limit", Run: migrateTokenMarketplaceMultiplierLimit},
+		{ID: "20260816_unified_credit_v1_schema", Run: migrateUnifiedCreditV1Schema},
+		{ID: "20260816_unified_credit_v1_channel_scope", Run: migrateUnifiedCreditV1ChannelScope},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -279,6 +283,80 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 	return nil
 }
 
+func migrateUnifiedCreditV1Schema(tx *gorm.DB) error {
+	if err := tx.AutoMigrate(
+		&commerceschema.UnifiedCreditUserMigration{},
+		&commerceschema.SubscriptionTierSettlement{},
+		&commerceschema.UnifiedCreditGroupRatioMigration{},
+	); err != nil {
+		return err
+	}
+	for _, target := range []struct {
+		model any
+		field string
+	}{
+		{model: &commerceschema.UserSubscription{}, field: "MembershipTier"},
+		{model: &commerceschema.BlindBoxProp{}, field: "MaxDiscountQuota"},
+		{model: &commerceschema.BlindBoxProp{}, field: "UsedDiscountQuota"},
+	} {
+		if !tx.Migrator().HasTable(target.model) || tx.Migrator().HasColumn(target.model, target.field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(target.model, target.field); err != nil {
+			return err
+		}
+	}
+	if tx.Migrator().HasTable(&commerceschema.BlindBoxProp{}) {
+		if err := tx.Model(&commerceschema.BlindBoxProp{}).
+			Where("prop_type = ? AND duration_seconds = ?", commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, 0).
+			Update("duration_seconds", int64(15*60)).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&commerceschema.BlindBoxProp{}).
+			Where("prop_type = ?", commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).
+			Update("title", "0.10 倍率体验卡").Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateUnifiedCreditV1ChannelScope(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) {
+		if err := tx.AutoMigrate(&commerceschema.BlindBoxPropDiscountUsage{}); err != nil {
+			return err
+		}
+	}
+	if !tx.Migrator().HasTable(&gatewayschema.Channel{}) {
+		return nil
+	}
+	if !tx.Migrator().HasColumn(&gatewayschema.Channel{}, "ChannelScope") {
+		if err := tx.Migrator().AddColumn(&gatewayschema.Channel{}, "ChannelScope"); err != nil {
+			return err
+		}
+	}
+	if err := tx.Model(&gatewayschema.Channel{}).
+		Where("channel_scope = '' OR channel_scope IS NULL").
+		Update("channel_scope", gatewayschema.ChannelScopeOfficial).Error; err != nil {
+		return err
+	}
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return nil
+	}
+	var marketplaceChannelIDs []int
+	if err := tx.Model(&marketplaceschema.Channel{}).
+		Where("internal_channel_id IS NOT NULL").
+		Pluck("internal_channel_id", &marketplaceChannelIDs).Error; err != nil {
+		return err
+	}
+	if len(marketplaceChannelIDs) == 0 {
+		return nil
+	}
+	return tx.Model(&gatewayschema.Channel{}).
+		Where("id IN ?", marketplaceChannelIDs).
+		Update("channel_scope", gatewayschema.ChannelScopeExternal).Error
+}
+
 func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	switch migrationID {
 	case "20260715_blind_box_admin_grants":
@@ -287,6 +365,10 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	case "20260815_marketplace_auto_route_pool":
 		return !db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}) ||
 			!db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority")
+	case "20260816_unified_credit_v1_channel_scope":
+		return !db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) ||
+			db.Migrator().HasTable(&gatewayschema.Channel{}) &&
+				!db.Migrator().HasColumn(&gatewayschema.Channel{}, "ChannelScope")
 	default:
 		return false
 	}
@@ -412,6 +494,70 @@ func migrateMarketplaceNumericChannelIDs(tx *gorm.DB) error {
 		used[newID] = struct{}{}
 	}
 	return nil
+}
+
+func migrateMarketplaceIncrementalChannelIDs(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return nil
+	}
+	if err := tx.AutoMigrate(&marketplaceschema.ChannelIDSequence{}); err != nil {
+		return err
+	}
+	var sequenceCount int64
+	if err := tx.Model(&marketplaceschema.ChannelIDSequence{}).Count(&sequenceCount).Error; err != nil {
+		return err
+	}
+	if sequenceCount > 0 {
+		return nil
+	}
+
+	var channels []marketplaceschema.Channel
+	if err := tx.Unscoped().Order("created_at asc, id asc").Find(&channels).Error; err != nil {
+		return err
+	}
+	used := make(map[string]struct{}, len(channels))
+	for _, channel := range channels {
+		used[channel.ID] = struct{}{}
+	}
+	for index := range channels {
+		channel := &channels[index]
+		temporaryID := nextMarketplaceTemporaryID(used, index+1)
+		if err := replaceMarketplaceChannelID(tx, channel, temporaryID); err != nil {
+			return err
+		}
+		delete(used, channel.ID)
+		used[temporaryID] = struct{}{}
+		channel.ID = temporaryID
+	}
+	for index := range channels {
+		channel := &channels[index]
+		incrementalID := strconv.Itoa(index + 1)
+		if err := replaceMarketplaceChannelID(tx, channel, incrementalID); err != nil {
+			return err
+		}
+		channel.ID = incrementalID
+		if err := tx.Create(&marketplaceschema.ChannelIDSequence{}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateTokenMarketplaceMultiplierLimit(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&identityschema.Token{}) || tx.Migrator().HasColumn(&identityschema.Token{}, "MarketplaceMultiplierLimit") {
+		return nil
+	}
+	return tx.Migrator().AddColumn(&identityschema.Token{}, "MarketplaceMultiplierLimit")
+}
+
+func nextMarketplaceTemporaryID(used map[string]struct{}, ordinal int) string {
+	candidate := "__marketplace_id_tmp_" + strconv.Itoa(ordinal)
+	for {
+		if _, exists := used[candidate]; !exists {
+			return candidate
+		}
+		candidate += "_"
+	}
 }
 
 func isNumericMarketplaceID(value string) bool {

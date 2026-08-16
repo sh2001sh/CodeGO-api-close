@@ -19,7 +19,8 @@ func selectMarketplaceAutoChannel(c *gin.Context, tokenGroup, modelName string) 
 		return nil, tokenGroup, false, nil
 	}
 	userID := httpctx.GetContextKeyInt(c, constant.ContextKeyUserId)
-	bindings, err := marketplaceapp.ResolveAutoRouteBindings(userID, modelName)
+	multiplierLimit := httpctx.GetContextKeyFloat64(c, constant.ContextKeyTokenMarketplaceMultiplierLimit)
+	bindings, err := marketplaceapp.ResolveAutoRouteBindings(userID, modelName, multiplierLimit)
 	if err != nil {
 		return nil, tokenGroup, true, err
 	}

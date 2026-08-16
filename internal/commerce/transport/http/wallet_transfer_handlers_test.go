@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
+	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
@@ -22,7 +23,7 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 	}
 	sender := &identityschema.User{
 		Id: 9941, ExternalId: "HTP001", Username: "http-transfer-sender", DisplayName: "HTTP Sender",
-		Password: accountHash, AffCode: "HTP001", Status: constant.UserStatusEnabled, ClaudeQuota: 5 * unit,
+		Password: accountHash, Email: "sender@example.com", AffCode: "HTP001", Status: constant.UserStatusEnabled, ClaudeQuota: 5 * unit,
 	}
 	recipient := &identityschema.User{
 		Id: 9942, ExternalId: "HTP002", Username: "http-transfer-recipient", DisplayName: "HTTP Recipient",
@@ -51,6 +52,26 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 		t.Fatalf("expected payment password setup success, got %#v", response)
 	}
 
+	changeWithoutCodeCtx, changeWithoutCodeRecorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
+		"old_payment_password": "Paypass123", "new_payment_password": "Paypass456", "confirm_password": "Paypass456",
+	}, sender.Id)
+	configureWalletTransferPassword(changeWithoutCodeCtx)
+	if response := decodeCommerceResponse(t, changeWithoutCodeRecorder); response.Success {
+		t.Fatal("expected payment password change without email code to be rejected")
+	}
+
+	identityapp.RegisterVerificationCodeWithKey(sender.Email, "654321", identityapp.WalletTransferPasswordPurpose)
+	changeCtx, changeRecorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
+		"old_payment_password": "Paypass123", "email_code": "654321", "new_payment_password": "Paypass456", "confirm_password": "Paypass456",
+	}, sender.Id)
+	configureWalletTransferPassword(changeCtx)
+	if response := decodeCommerceResponse(t, changeRecorder); !response.Success {
+		t.Fatalf("expected payment password change success, got %#v", response)
+	}
+	if identityapp.VerifyCodeWithKey(sender.Email, "654321", identityapp.WalletTransferPasswordPurpose) {
+		t.Fatal("expected used email verification code to be consumed")
+	}
+
 	lookupCtx, lookupRecorder := newCommerceContext(t, stdhttp.MethodGet, "/api/wallet/transfers/recipients/HTP002", nil, sender.Id)
 	lookupCtx.Params = gin.Params{{Key: "external_id", Value: recipient.ExternalId}}
 	getWalletTransferRecipient(lookupCtx)
@@ -69,7 +90,7 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 	transferCtx, transferRecorder := newCommerceContext(t, stdhttp.MethodPost, "/api/wallet/transfers", map[string]any{
 		"recipient_external_id": recipient.ExternalId,
 		"amount_quota":          2 * unit,
-		"payment_password":      "Paypass123",
+		"payment_password":      "Paypass456",
 		"request_id":            "wallet-transfer-http-request",
 	}, sender.Id)
 	createWalletTransfer(transferCtx)
@@ -90,5 +111,27 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 	}
 	if overview.Balance != int64(298*unit/100) || overview.FeeBPS != 100 || overview.History.Total != 1 || !overview.Security.PasswordSet {
 		t.Fatalf("unexpected transfer overview: %#v", overview)
+	}
+}
+
+func TestWalletTransferPasswordSetupRequiresBoundEmail(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	hash, err := platformsecurity.Password2Hash("Loginpass123")
+	if err != nil {
+		t.Fatalf("failed to hash password: %v", err)
+	}
+	user := &identityschema.User{
+		Id: 9943, ExternalId: "HTP003", Username: "transfer-no-email", Password: hash,
+		AffCode: "HTP003", Status: constant.UserStatusEnabled,
+	}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	ctx, recorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
+		"current_password": "Loginpass123", "new_payment_password": "Paypass123", "confirm_password": "Paypass123",
+	}, user.Id)
+	configureWalletTransferPassword(ctx)
+	if response := decodeCommerceResponse(t, recorder); response.Success {
+		t.Fatal("expected setup without a bound email to be rejected")
 	}
 }

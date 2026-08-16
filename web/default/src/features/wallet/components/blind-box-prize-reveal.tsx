@@ -83,7 +83,9 @@ const REDUCED_ITEM: Variants = {
 
 function rewardTypeLabel(record: BlindBoxRecord) {
   if (record.reward_type === 'subscription') return '套餐'
-  if (record.reward_type === 'claude_quota') return 'Claude'
+  if (record.reward_type === 'claude_quota' || record.reward_type === 'quota') {
+    return '统一额度'
+  }
   if (record.reward_type === 'prop') return '道具'
   return '额度'
 }
@@ -208,8 +210,7 @@ function PrizeRevealCard(props: {
               {record.reward_title}
             </div>
             <div className='border-border/70 bg-background/60 text-muted-foreground rounded-full border px-2.5 py-0.5 text-xs font-medium'>
-              {record.pool_type === 'balance_15' ? '余额盲盒' : '普通盲盒'} ·{' '}
-              {rewardTypeLabel(record)}
+              统一盲盒 · {rewardTypeLabel(record)}
             </div>
             {badge ? (
               <div
@@ -247,9 +248,13 @@ function PrizeRevealCard(props: {
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
           {manualUseProp
             ? propActive
-              ? '已启用，持续 24 小时自动生效'
+              ? record.prop_type === 'monthly_pass_multiplier'
+                ? '已启用，仅官方指定 GPT 分组可用，累计 15 分钟并可暂停'
+                : '已启用，仅官方渠道可用，持续 24 小时'
               : propAvailable
-                ? '点击立即使用后生效，持续 24 小时'
+                ? record.prop_type === 'monthly_pass_multiplier'
+                  ? '点击启用后累计可用 15 分钟，可暂停，仅官方指定 GPT 分组生效'
+                  : '点击启用后持续 24 小时，仅官方渠道生效'
                 : '该道具已失效'
             : record.prop_status === 'used'
               ? '已用于最近一次符合条件的订单'
@@ -257,13 +262,10 @@ function PrizeRevealCard(props: {
                 ? '已锁定到待支付订单，支付完成后自动使用'
                 : '下次满足条件时自动抵扣一次'}
         </div>
-      ) : record.reward_type === 'claude_quota' ? (
+      ) : record.reward_type === 'claude_quota' ||
+        record.reward_type === 'quota' ? (
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
-          已进入 Claude 钱包，永久有效
-        </div>
-      ) : record.reward_type === 'quota' ? (
-        <div className='text-muted-foreground mt-3 text-xs leading-5'>
-          已进入可用余额，永久有效
+          已进入统一额度账户，永久有效
         </div>
       ) : null}
       {record.lucky_number ? (

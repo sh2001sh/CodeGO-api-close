@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -6,7 +6,6 @@ import {
   calculateBlindBoxAmount,
   getBlindBoxSelf,
   isApiSuccess,
-  openBlindBoxes,
   activateBlindBoxProp,
   pauseBlindBoxProp,
   convertBlindBoxProp,
@@ -46,14 +45,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod | null>(null)
   const [amountDue, setAmountDue] = useState(0)
-  const [openingCount, setOpeningCount] = useState<number | null>(null)
-  const openingRef = useRef(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showProps, setShowProps] = useState(false)
   const [convertingPropId, setConvertingPropId] = useState<number | null>(null)
-  const [blindBoxMode, setBlindBoxMode] = useState<'standard' | 'balance'>(
-    'standard'
-  )
   const [prizeState, setPrizeState] =
     useState<PrizeDialogState>(EMPTY_PRIZE_STATE)
 
@@ -135,51 +129,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
 
   useBlindBoxChangedEvent(setPrizeState, refreshAll)
 
-  const availableBoxes = data?.overview?.available_boxes || 0
-  const pendingBoxes = data?.overview?.pending_boxes || 0
-  const remainingQuota = data?.overview?.remaining_quota || 0
-  const claudeQuota = data?.overview?.claude_quota || 0
-  const effectivePityThreshold =
-    data?.overview?.effective_pity_threshold || data?.pity_threshold || 1
-  const pityProgress = data?.overview?.pity_progress || 0
-  const remainingPity = Math.max(0, effectivePityThreshold - pityProgress)
-
-  const handleManualOpen = useCallback(
-    async (count: number) => {
-      // State updates are asynchronous. Keep an immediate guard so a fast
-      // double-click cannot consume two boxes before the button re-renders.
-      if (openingRef.current) return
-      openingRef.current = true
-      setOpeningCount(count)
-      try {
-        const response = await openBlindBoxes({ count })
-        if (!response.success || !response.data) {
-          throw new Error(response.message || '处理失败')
-        }
-
-        setPrizeState({
-          open: true,
-          records: response.data.records || [],
-          openCount: response.data.open_count || count,
-        })
-        await refreshAll()
-      } catch (error) {
-        const message = error instanceof Error ? error.message : ''
-        toast.error(
-          message.includes('429') ||
-            message.includes('频繁') ||
-            message.includes('too many')
-            ? '开启过于频繁，请稍后再试'
-            : message || '处理失败'
-        )
-      } finally {
-        setOpeningCount(null)
-        openingRef.current = false
-      }
-    },
-    [refreshAll]
-  )
-
+  const availableBoxes = data?.inventory?.inventory_count || 0
+  const pendingBoxes = 0
+  const quota = data?.overview?.quota || 0
   const handleUseReward = useCallback(
     (record: BlindBoxRecord) => {
       if (
@@ -202,10 +154,10 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           }
           toast.success(
             record.prop_type === 'zero_hour_multiplier'
-              ? `${record.reward_title} 已启用，倍率卡专属分组将持续 1 小时。`
+              ? '历史 0 倍率道具已启用。'
               : record.prop_type === 'monthly_pass_multiplier'
-                ? `${record.reward_title} 已启用，倍率卡专属分组按 0.1 倍率计费，可随时暂停。`
-                : `${record.reward_title} 已启用，24 小时后自动失效。`
+                ? '0.10 倍率体验卡已启用，仅官方指定 GPT 分组可用，累计 15 分钟并可随时暂停。'
+                : `${record.reward_title} 已启用，仅官方渠道可用，24 小时后自动失效。`
           )
           await refreshAll()
           await queryClient.invalidateQueries({ queryKey: ['user-groups'] })
@@ -312,25 +264,16 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
             selectedPaymentMethod={selectedPaymentMethod}
             amountDue={amountDue}
             paying={paying}
-            openingCount={openingCount}
-            availableBoxes={availableBoxes}
-            effectivePityThreshold={effectivePityThreshold}
-            pityProgress={pityProgress}
-            remainingPity={remainingPity}
             onQuantityChange={setSelectedQuantity}
             onPaymentMethodChange={setSelectedPaymentMethod}
             onPay={() => void handlePay()}
-            onManualOpen={(count) => void handleManualOpen(count)}
             onOpenProps={() => setShowProps(true)}
-            mode={blindBoxMode}
-            onModeChange={setBlindBoxMode}
             onRefresh={refreshAll}
           />
         </div>
 
         <BlindBoxSidebar
-          remainingQuota={remainingQuota}
-          claudeQuota={claudeQuota}
+          quota={quota}
           availableBoxes={availableBoxes}
           pendingBoxes={pendingBoxes}
           records={data?.overview?.recent_records || []}
@@ -371,7 +314,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
       <BlindBoxPropsDialog
         open={showProps}
         props={data?.props || []}
-        disabled={openingCount !== null || paying}
+        disabled={paying}
         convertingPropId={convertingPropId}
         onOpenChange={setShowProps}
         onUse={(prop) => void handleUseProp(prop)}

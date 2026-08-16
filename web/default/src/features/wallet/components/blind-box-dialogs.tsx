@@ -79,23 +79,17 @@ export function summarizeOpenResult(records: BlindBoxRecord[]) {
   const propHits = records.filter(
     (record) => record.reward_type === 'prop'
   ).length
-  const quotaHits = records.filter(
-    (record) => record.reward_type === 'quota'
-  ).length
-  const claudeHits = records.filter(
-    (record) => record.reward_type === 'claude_quota'
-  ).length
-  const quotaTotal = records
-    .filter((record) => record.reward_type === 'quota')
-    .reduce((sum, record) => sum + (record.reward_usd || 0), 0)
-  const claudeQuotaTotal = records
-    .filter((record) => record.reward_type === 'claude_quota')
+  const creditRecords = records.filter((record) =>
+    ['quota', 'claude_quota'].includes(record.reward_type)
+  )
+  const creditTotal = creditRecords
     .reduce((sum, record) => sum + (record.reward_usd || 0), 0)
 
   const parts: string[] = []
   if (subscriptionHits > 0) parts.push(`${subscriptionHits} 个套餐`)
-  if (claudeHits > 0) parts.push(`$${claudeQuotaTotal.toFixed(0)} 通用额度`)
-  if (quotaHits > 0) parts.push(`$${quotaTotal.toFixed(0)} 官方 GPT 专属额度`)
+  if (creditRecords.length > 0) {
+    parts.push(`$${creditTotal.toFixed(0)} 通用额度`)
+  }
   if (propHits > 0) parts.push(`${propHits} 个道具`)
   if (parts.length === 0) {
     return `获得 ${records.length} 项奖励`

@@ -48,6 +48,10 @@ func classifyRoutePoolCandidate(
 	requestType gatewayruntime.RequestType,
 	now time.Time,
 ) (scoredRoutePoolCandidate, routePoolCandidateClass) {
+	if channelExcludedByScope(c, candidate.Channel) {
+		gatewayruntime.ExcludeRouteDecisionCandidate(c, "non_official_channel")
+		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
+	}
 	if channelAlreadyUsed(c, candidate.Channel.Id) {
 		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
 	}

@@ -194,7 +194,7 @@ export function BlindBoxOperationsPanel() {
               USD
             </div>
             <div className='text-muted-foreground leading-6'>
-              抽中的通用额度和官方 GPT 专属额度会直接进入对应钱包，不再设置到期时间。
+              抽中的统一额度会直接进入账户，永久有效。
             </div>
           </div>
         </div>

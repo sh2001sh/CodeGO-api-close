@@ -120,10 +120,19 @@ type GroupListItem struct {
 	AvgTTFTMs                float64                   `json:"avg_ttft_ms"`
 	AvgLatencyMs             float64                   `json:"avg_latency_ms"`
 	AvgTPS                   float64                   `json:"avg_tps"`
+	CacheHitRate             float64                   `json:"cache_hit_rate"`
+	LatestRequestStatus      string                    `json:"latest_request_status"`
+	RecentRequestSeries      []RecentRequestBucket     `json:"recent_request_series"`
 	RequestCount             int64                     `json:"request_count"`
 	IndependentConsumers     int64                     `json:"independent_consumers"`
 	Observing                bool                      `json:"observing"`
 	UpdatedAt                time.Time                 `json:"updated_at"`
+}
+
+type RecentRequestBucket struct {
+	Ts           int64   `json:"ts"`
+	SuccessRate  float64 `json:"success_rate"`
+	RequestCount int64   `json:"request_count"`
 }
 
 type GroupListResult struct {

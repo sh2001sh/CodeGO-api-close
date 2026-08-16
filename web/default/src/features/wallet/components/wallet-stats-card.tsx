@@ -53,16 +53,12 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
           {t('Wallet balance')}
         </div>
         <div className='text-foreground mt-3 font-mono text-3xl font-bold tracking-tight tabular-nums'>
-          {formatUsdAmount(quotaUnitsToUsd(props.user?.claude_quota ?? 0))}
+          {formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
         </div>
         <div className='text-muted-foreground mt-1 text-xs'>
           {t('通用额度')}
         </div>
         <div className='mt-4 grid gap-2'>
-          <WalletStatItem
-            label={t('官方 GPT 专属额度')}
-            value={formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
-          />
           <WalletStatItem
             label={t('Total spent')}
             value={formatUsdAmount(

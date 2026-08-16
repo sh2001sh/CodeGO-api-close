@@ -30,6 +30,7 @@ export type SidebarGroupModelStatusItem = {
   series_window?: number
   bucket_seconds?: number
   request_count?: number
+  cache_hit_rate?: number | null
   series?: SidebarGroupStatusBucket[]
 }
 
@@ -44,6 +45,7 @@ export type SidebarGroupStatusItem = {
   source_type?: 'official' | 'marketplace_user'
   status: SidebarGroupAvailabilityStatus
   request_count?: number
+  cache_hit_rate?: number | null
   models: SidebarGroupModelStatusItem[]
 }
 

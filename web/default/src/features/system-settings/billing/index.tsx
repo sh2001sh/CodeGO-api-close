@@ -57,6 +57,8 @@ const defaultBillingSettings: BillingSettings = {
   AutoGroups: '',
   DefaultUseAutoGroup: false,
   'group_ratio_setting.group_special_usable_group': '{}',
+  SubscriptionGroupPolicy:
+    '{"default":{"enabled":true,"multiplier":1},"vip":{"enabled":true,"multiplier":1},"svip":{"enabled":true,"multiplier":1}}',
   PayAddress: '',
   EpayId: '',
   EpayKey: '',

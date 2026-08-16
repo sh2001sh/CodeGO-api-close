@@ -19,6 +19,8 @@ var (
 	ErrWalletTransferInsufficientBalance  = errors.New("通用额度余额不足")
 	ErrWalletTransferAccountPassword      = errors.New("当前登录密码错误")
 	ErrWalletTransferPasswordConfirmation = errors.New("两次输入的支付密码不一致")
+	ErrWalletTransferEmailRequired        = errors.New("请先绑定邮箱后再设置支付密码")
+	ErrWalletTransferEmailCodeInvalid     = errors.New("邮箱验证码错误或已过期")
 )
 
 // WalletTransferSecurity stores the independent payment-password credential.

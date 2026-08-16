@@ -20,9 +20,11 @@ func BuildPerfMetricsSummary(hours int, group string) (any, error) {
 	for _, row := range rows {
 		models = append(models, auditprojection.ModelSummary{
 			ModelName:    row.ModelName,
+			AvgTtftMs:    row.AvgTtftMs,
 			AvgLatencyMs: row.AvgLatencyMs,
 			SuccessRate:  row.SuccessRate,
 			AvgTps:       row.AvgTps,
+			CacheHitRate: row.CacheHitRate,
 			RequestCount: row.RequestCount,
 		})
 	}

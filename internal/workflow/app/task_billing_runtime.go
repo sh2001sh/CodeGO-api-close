@@ -43,7 +43,7 @@ func taskBillingAdjustFunding(task *workflowschema.Task, delta int) error {
 	if taskBillingIsSubscription(task) {
 		return commerceapp.PostConsumeUserSubscriptionUsageDelta(task.PrivateData.SubscriptionId, taskBillingModelName(task), int64(delta))
 	}
-	return billingapp.AdjustWalletQuota(task.UserId, delta)
+	return billingapp.AdjustClaudeWalletQuota(task.UserId, delta)
 }
 
 func taskBillingAdjustTokenQuota(ctx context.Context, task *workflowschema.Task, delta int) {

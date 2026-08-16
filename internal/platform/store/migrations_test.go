@@ -138,6 +138,17 @@ func TestMigrateWalletTransferFeeFieldsAddsMissingColumns(t *testing.T) {
 	require.NoError(t, migrateWalletTransferFeeFields(db))
 }
 
+func TestMigrateTokenMarketplaceMultiplierLimitAddsMissingColumn(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE tokens (id integer primary key)`).Error)
+	require.False(t, db.Migrator().HasColumn(&identityschema.Token{}, "MarketplaceMultiplierLimit"))
+
+	require.NoError(t, migrateTokenMarketplaceMultiplierLimit(db))
+	require.True(t, db.Migrator().HasColumn(&identityschema.Token{}, "MarketplaceMultiplierLimit"))
+	require.NoError(t, migrateTokenMarketplaceMultiplierLimit(db))
+}
+
 func TestMigrateMarketplaceSoftDeleteAndNumericChannelIDs(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
@@ -169,11 +180,11 @@ func TestMigrateMarketplaceSoftDeleteAndNumericChannelIDs(t *testing.T) {
 
 	require.NoError(t, migrateMarketplaceSoftDelete(db))
 	require.NoError(t, migrateMarketplaceNumericChannelIDs(db))
+	require.NoError(t, migrateMarketplaceIncrementalChannelIDs(db))
 
 	var migrated marketplaceschema.Channel
 	require.NoError(t, db.First(&migrated).Error)
-	require.True(t, isNumericMarketplaceID(migrated.ID))
-	require.Len(t, migrated.ID, 12)
+	require.Equal(t, "1", migrated.ID)
 	var migratedGroup marketplaceschema.Group
 	require.NoError(t, db.First(&migratedGroup, "id = ?", group.ID).Error)
 	require.Equal(t, migrated.ID, migratedGroup.ChannelID)
@@ -184,6 +195,9 @@ func TestMigrateMarketplaceSoftDeleteAndNumericChannelIDs(t *testing.T) {
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal([]byte(internal.OtherInfo), &metadata))
 	require.Equal(t, migrated.ID, metadata["marketplace_channel_id"])
+	var sequence marketplaceschema.ChannelIDSequence
+	require.NoError(t, db.First(&sequence).Error)
+	require.Equal(t, uint64(1), sequence.ID)
 }
 
 func TestMigrateBlindBoxLegacyCreditMarkerUpgradesExistingSQLiteTable(t *testing.T) {
@@ -333,4 +347,29 @@ func TestMigrateMarketplaceModelVerificationUpgradesExistingSQLiteTable(t *testi
 		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
 	}
 	require.NoError(t, migrateMarketplaceModelVerification(db))
+}
+
+func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.Channel{}, &marketplaceschema.Channel{}))
+
+	official := gatewayschema.Channel{Id: 61, Key: "official", ChannelScope: gatewayschema.ChannelScopeOfficial}
+	marketplaceInternal := gatewayschema.Channel{Id: 62, Key: "marketplace", ChannelScope: gatewayschema.ChannelScopeOfficial}
+	require.NoError(t, db.Create(&[]gatewayschema.Channel{official, marketplaceInternal}).Error)
+	internalID := marketplaceInternal.Id
+	require.NoError(t, db.Create(&marketplaceschema.Channel{
+		ID: "marketplace-62", OwnerUserID: 9, ProviderType: "openai",
+		BaseURLCiphertext: "base", CredentialCiphertext: "credential",
+		Status: "active", InternalChannelID: &internalID,
+	}).Error)
+
+	require.NoError(t, migrateUnifiedCreditV1ChannelScope(db))
+	require.NoError(t, migrateUnifiedCreditV1ChannelScope(db))
+
+	require.NoError(t, db.First(&official, official.Id).Error)
+	require.Equal(t, gatewayschema.ChannelScopeOfficial, official.ChannelScope)
+	require.NoError(t, db.First(&marketplaceInternal, marketplaceInternal.Id).Error)
+	require.Equal(t, gatewayschema.ChannelScopeExternal, marketplaceInternal.ChannelScope)
+	require.True(t, db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}))
 }

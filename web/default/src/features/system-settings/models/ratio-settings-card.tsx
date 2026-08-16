@@ -193,6 +193,38 @@ const groupSchema = z.object({
       })
     }
   }),
+  SubscriptionGroupPolicy: z.string().superRefine((value, ctx) => {
+    const result = validateJsonString(value, {
+      predicate: (parsed) =>
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        !Array.isArray(parsed) &&
+        Object.values(parsed).every((item) => {
+          if (
+            typeof item !== 'object' ||
+            item === null ||
+            Array.isArray(item)
+          ) {
+            return false
+          }
+          const policy = item as Record<string, unknown>
+          return (
+            typeof policy.enabled === 'boolean' &&
+            typeof policy.multiplier === 'number' &&
+            Number.isFinite(policy.multiplier) &&
+            policy.multiplier > 0
+          )
+        }),
+      predicateMessage:
+        'Expected group policies with enabled and positive multiplier values',
+    })
+    if (!result.valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.message || 'Invalid monthly pass group policy',
+      })
+    }
+  }),
 })
 
 type ModelFormValues = z.infer<typeof modelSchema>
@@ -263,6 +295,9 @@ export function RatioSettingsCard({
     GroupSpecialUsableGroup: normalizeJsonString(
       groupDefaults.GroupSpecialUsableGroup
     ),
+    SubscriptionGroupPolicy: normalizeJsonString(
+      groupDefaults.SubscriptionGroupPolicy
+    ),
   })
 
   const modelForm = useForm<ModelFormValues>({
@@ -297,6 +332,9 @@ export function RatioSettingsCard({
       AutoGroups: formatJsonForTextarea(groupDefaults.AutoGroups),
       GroupSpecialUsableGroup: formatJsonForTextarea(
         groupDefaults.GroupSpecialUsableGroup
+      ),
+      SubscriptionGroupPolicy: formatJsonForTextarea(
+        groupDefaults.SubscriptionGroupPolicy
       ),
     },
   })
@@ -346,6 +384,9 @@ export function RatioSettingsCard({
       GroupSpecialUsableGroup: normalizeJsonString(
         groupDefaults.GroupSpecialUsableGroup
       ),
+      SubscriptionGroupPolicy: normalizeJsonString(
+        groupDefaults.SubscriptionGroupPolicy
+      ),
     }
 
     groupForm.reset({
@@ -357,6 +398,9 @@ export function RatioSettingsCard({
       AutoGroups: formatJsonForTextarea(groupDefaults.AutoGroups),
       GroupSpecialUsableGroup: formatJsonForTextarea(
         groupDefaults.GroupSpecialUsableGroup
+      ),
+      SubscriptionGroupPolicy: formatJsonForTextarea(
+        groupDefaults.SubscriptionGroupPolicy
       ),
     })
   }, [groupDefaults, groupForm])
@@ -407,6 +451,9 @@ export function RatioSettingsCard({
         DefaultUseAutoGroup: values.DefaultUseAutoGroup,
         GroupSpecialUsableGroup: normalizeJsonString(
           values.GroupSpecialUsableGroup
+        ),
+        SubscriptionGroupPolicy: normalizeJsonString(
+          values.SubscriptionGroupPolicy
         ),
       }
 

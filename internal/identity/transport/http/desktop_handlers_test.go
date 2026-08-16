@@ -35,7 +35,6 @@ type desktopSummaryResponse struct {
 		Username           string   `json:"username"`
 		DisplayName        string   `json:"display_name"`
 		QuotaUSD           float64  `json:"quota_usd"`
-		ClaudeQuotaUSD     float64  `json:"claude_quota_usd"`
 		UsedQuotaUSD       float64  `json:"used_quota_usd"`
 		FundingSourceOrder []string `json:"funding_source_order"`
 	} `json:"account"`
@@ -274,11 +273,8 @@ func TestGetDesktopAccountSummaryReturnsAggregatedDesktopData(t *testing.T) {
 	if payload.Account.Username != user.Username {
 		t.Fatalf("expected username %q, got %q", user.Username, payload.Account.Username)
 	}
-	if payload.Account.QuotaUSD != 3 {
-		t.Fatalf("expected quota usd 3, got %v", payload.Account.QuotaUSD)
-	}
-	if payload.Account.ClaudeQuotaUSD != 1 {
-		t.Fatalf("expected claude quota usd 1, got %v", payload.Account.ClaudeQuotaUSD)
+	if payload.Account.QuotaUSD != 1 {
+		t.Fatalf("expected quota usd 1, got %v", payload.Account.QuotaUSD)
 	}
 	if payload.Account.UsedQuotaUSD != 0.5 {
 		t.Fatalf("expected used quota usd 0.5, got %v", payload.Account.UsedQuotaUSD)
@@ -760,13 +756,13 @@ func TestCreateCCSwitchImportUsesOfficialDirectParameterContract(t *testing.T) {
 func TestGetTokenAccountBalanceAppliesTokenLimit(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
 	user := &identityschema.User{
-		Id:       1,
-		Username: "balance-user",
-		Password: "password123",
-		Role:     constant.RoleCommonUser,
-		Status:   constant.UserStatusEnabled,
-		Group:    "default",
-		Quota:    int(platformruntime.QuotaPerUnit * 3),
+		Id:          1,
+		Username:    "balance-user",
+		Password:    "password123",
+		Role:        constant.RoleCommonUser,
+		Status:      constant.UserStatusEnabled,
+		Group:       "default",
+		ClaudeQuota: int(platformruntime.QuotaPerUnit * 3),
 	}
 	if err := db.Create(user).Error; err != nil {
 		t.Fatalf("failed to seed user: %v", err)

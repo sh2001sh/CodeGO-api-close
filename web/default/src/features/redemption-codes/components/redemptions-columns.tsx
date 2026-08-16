@@ -32,7 +32,6 @@ import {
   REDEMPTION_FILTER_EXPIRED,
   REDEMPTION_STATUSES,
   REDEMPTION_TYPES,
-  REDEMPTION_WALLET_TYPES,
 } from '../constants'
 import { isRedemptionExpired, isTimestampExpired } from '../lib'
 import { type Redemption } from '../types'
@@ -49,10 +48,7 @@ function getRedemptionTypeLabel(
   if (redeemType === REDEMPTION_TYPES.BLIND_BOX) {
     return t('Blind Box')
   }
-  if (redemption.wallet_type === REDEMPTION_WALLET_TYPES.CLAUDE) {
-    return t('Claude Quota')
-  }
-  return t('Quota')
+  return t('Universal Credit')
 }
 
 function getQuotaBenefitLabel(
@@ -60,10 +56,7 @@ function getQuotaBenefitLabel(
   t: (key: string, options?: Record<string, unknown>) => string
 ) {
   const quotaLabel = formatQuota(redemption.quota)
-  if (redemption.wallet_type === REDEMPTION_WALLET_TYPES.CLAUDE) {
-    return `${t('Claude Quota')} · ${quotaLabel}`
-  }
-  return quotaLabel
+  return `${t('Universal Credit')} · ${quotaLabel}`
 }
 
 export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
@@ -129,9 +122,7 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
                 ? 'info'
                 : redeemType === REDEMPTION_TYPES.BLIND_BOX
                   ? 'warning'
-                  : redemption.wallet_type === REDEMPTION_WALLET_TYPES.CLAUDE
-                    ? 'info'
-                  : 'neutral'
+                : 'info'
             }
             copyable={false}
           />
@@ -257,16 +248,12 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
         }
 
         return (
-            <StatusBadge
-              label={getQuotaBenefitLabel(redemption, t)}
-              variant={
-                redemption.wallet_type === REDEMPTION_WALLET_TYPES.CLAUDE
-                  ? 'info'
-                  : 'neutral'
-              }
-              copyable={false}
-            />
-          )
+          <StatusBadge
+            label={getQuotaBenefitLabel(redemption, t)}
+            variant='info'
+            copyable={false}
+          />
+        )
       },
     },
     {

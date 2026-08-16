@@ -95,7 +95,7 @@ func settleDailyLuckyReward(rewardID int) error {
 			participantKey = fmt.Sprintf("blind-box:%d", reward.BlindBoxOpenRecordId)
 		}
 		idempotencyKey := fmt.Sprintf("lucky-draw:%s:%s", drawDateForRewardTx(tx, reward.DrawId), participantKey)
-		if err := billingapp.CreditWalletQuotaTx(tx, userID, int(reward.FinalRewardQuota), idempotencyKey, "subscription_lucky_draw"); err != nil {
+		if err := billingapp.CreditClaudeWalletQuotaTx(tx, userID, int(reward.FinalRewardQuota), idempotencyKey, "subscription_lucky_draw"); err != nil {
 			return err
 		}
 		if err := recordLuckyRewardLogTx(tx, userID, &reward); err != nil {

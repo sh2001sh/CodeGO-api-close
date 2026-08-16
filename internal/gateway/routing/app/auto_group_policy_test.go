@@ -284,3 +284,49 @@ func TestAutoSelectionFallsBackToPermittedModelSpecificGroup(t *testing.T) {
 	assert.Equal(t, 99, channel.Id)
 	assert.Equal(t, "claude", group)
 }
+
+func TestOfficialChannelSelectionSkipsExternalCandidate(t *testing.T) {
+	originalSelector := selectRandomSatisfiedChannel
+	t.Cleanup(func() { selectRandomSatisfiedChannel = originalSelector })
+	priority := int64(1)
+	calls := 0
+	selectRandomSatisfiedChannel = func(_ string, _ string, _ int) (*gatewayschema.Channel, error) {
+		calls++
+		if calls == 1 {
+			return &gatewayschema.Channel{Id: 71, Priority: &priority, ChannelScope: gatewayschema.ChannelScopeExternal}, nil
+		}
+		return &gatewayschema.Channel{Id: 72, Priority: &priority, ChannelScope: gatewayschema.ChannelScopeOfficial}, nil
+	}
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(string(constant.ContextKeyOfficialChannelOnly), true)
+	channel, group, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx: context, TokenGroup: "default", ModelName: "gpt-official-only",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 72, channel.Id)
+	require.Equal(t, "default", group)
+}
+
+func TestOfficialChannelSelectionFallsBackWhenNoOfficialCandidateExists(t *testing.T) {
+	originalSelector := selectRandomSatisfiedChannel
+	t.Cleanup(func() { selectRandomSatisfiedChannel = originalSelector })
+	priority := int64(1)
+	selectRandomSatisfiedChannel = func(_ string, _ string, _ int) (*gatewayschema.Channel, error) {
+		return &gatewayschema.Channel{Id: 73, Priority: &priority, ChannelScope: gatewayschema.ChannelScopeExternal}, nil
+	}
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(string(constant.ContextKeyOfficialChannelOnly), true)
+	channel, _, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx: context, TokenGroup: "default", ModelName: "gpt-official-fallback",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 73, channel.Id)
+	require.False(t, context.GetBool(string(constant.ContextKeyOfficialChannelOnly)))
+	require.True(t, context.GetBool(string(constant.ContextKeyOfficialChannelFallback)))
+}

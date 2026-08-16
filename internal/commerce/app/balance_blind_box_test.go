@@ -23,17 +23,22 @@ func TestBalanceBlindBoxPurchaseCreatesSealedInventoryAndDebitsOnce(t *testing.T
 	first, err := PurchaseBalanceBlindBoxes(user.Id, "balance-purchase-1", 1)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), first.Overview.InventoryCount)
-	require.InDelta(t, 85, first.Overview.BalanceUSD, 0.000001)
+	require.InDelta(t, 97.5, first.Overview.BalanceUSD, 0.000001)
 
 	replayed, err := PurchaseBalanceBlindBoxes(user.Id, "balance-purchase-1", 1)
 	require.NoError(t, err)
 	require.Equal(t, first.Purchase.Id, replayed.Purchase.Id)
 	require.Equal(t, int64(1), replayed.Overview.InventoryCount)
-	require.InDelta(t, 85, replayed.Overview.BalanceUSD, 0.000001)
+	require.InDelta(t, 97.5, replayed.Overview.BalanceUSD, 0.000001)
 
 	var item commerceschema.BalanceBlindBoxItem
 	require.NoError(t, db.First(&item).Error)
-	require.Equal(t, 10.0, item.RewardUSD)
+	require.Equal(t, balanceBlindBoxPoolVersion, item.PoolVersion)
+	if item.RewardType == commerceschema.BlindBoxRewardTypeProp {
+		require.Empty(t, item.RewardWalletType)
+	} else {
+		require.Equal(t, string(commerceschema.BlindBoxRewardWalletTypeClaude), item.RewardWalletType)
+	}
 	encoded, err := json.Marshal(item)
 	require.NoError(t, err)
 	jsonText := string(encoded)
@@ -51,15 +56,17 @@ func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitOrLuckyNumber(t *testing.T)
 
 	opened, err := OpenBalanceBlindBox(user.Id, "balance-open-1", 1)
 	require.NoError(t, err)
-	require.Equal(t, 10.0, opened.Record.RewardUSD)
+	if opened.Record.RewardType != commerceschema.BlindBoxRewardTypeProp {
+		require.GreaterOrEqual(t, opened.Record.RewardUSD, 1.0)
+	}
 	require.Empty(t, opened.Record.LuckyNumber)
-	require.InDelta(t, 95, opened.BalanceUSD, 0.000001)
+	require.GreaterOrEqual(t, opened.BalanceUSD, 97.5)
 	require.Zero(t, opened.Overview.InventoryCount)
 
 	replayed, err := OpenBalanceBlindBox(user.Id, "balance-open-1", 1)
 	require.NoError(t, err)
 	require.Equal(t, opened.Record.Id, replayed.Record.Id)
-	require.InDelta(t, 95, replayed.BalanceUSD, 0.000001)
+	require.InDelta(t, opened.BalanceUSD, replayed.BalanceUSD, 0.000001)
 
 	var luckyCount int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).Count(&luckyCount).Error)
@@ -83,7 +90,7 @@ func TestBalanceBlindBoxPurchaseEnforcesDailyLimit(t *testing.T) {
 	require.Equal(t, int64(2), overview.InventoryCount)
 }
 
-func TestBalanceBlindBoxGiftAndRegiftPreserveSealedGuarantee(t *testing.T) {
+func TestBalanceBlindBoxGiftAndRegiftPreserveSealedReward(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	setBalanceBlindBoxTestSetting(t, 10)
 	purchaser := createBalanceBlindBoxTestUser(t, db, 8894, "BBX004", 100)
@@ -105,8 +112,10 @@ func TestBalanceBlindBoxGiftAndRegiftPreserveSealedGuarantee(t *testing.T) {
 	require.NoError(t, err)
 	opened, err := OpenBalanceBlindBox(finalOwner.Id, "balance-gift-open", 1)
 	require.NoError(t, err)
-	require.True(t, opened.Record.IsPity)
-	require.Equal(t, 10.0, opened.Record.RewardUSD)
+	require.False(t, opened.Record.IsPity)
+	if opened.Record.RewardType != commerceschema.BlindBoxRewardTypeProp {
+		require.GreaterOrEqual(t, opened.Record.RewardUSD, 1.0)
+	}
 
 	var links []commerceschema.BalanceBlindBoxGiftItem
 	require.NoError(t, db.Order("id asc").Find(&links).Error)
@@ -126,9 +135,9 @@ func TestBalanceBlindBoxSupportsOpeningOneHundredOwnedItems(t *testing.T) {
 	for index := range items {
 		items[index] = commerceschema.BalanceBlindBoxItem{
 			PurchaseUserId: user.Id, OwnerUserId: user.Id, PoolVersion: balanceBlindBoxPoolVersion,
-			RewardType: commerceschema.BlindBoxRewardTypeQuota, RewardTier: "$1 普通额度",
+			RewardType: commerceschema.BlindBoxRewardTypeClaudeQuota, RewardTier: "1 统一额度",
 			RewardUSD: 1, CreditAmount: quotaUnitsFromBlindBoxUSD(1), RewardTitle: "1.00 美元奖励",
-			RewardWalletType: string(commerceschema.BlindBoxRewardWalletTypeDefault), GuaranteeType: balanceBlindBoxGuaranteeNone,
+			RewardWalletType: string(commerceschema.BlindBoxRewardWalletTypeClaude), GuaranteeType: balanceBlindBoxGuaranteeNone,
 		}
 	}
 	require.NoError(t, db.Create(&items).Error)
@@ -186,17 +195,13 @@ func setBalanceBlindBoxTestSetting(t *testing.T, dailyLimit int) {
 	setting := original
 	setting.Enabled = true
 	setting.BalanceBlindBoxEnabled = true
-	setting.BalanceBlindBoxPriceUSD = 15
+	setting.BalanceBlindBoxPriceUSD = 2.5
 	setting.BalanceBlindBoxDailyPurchaseLimit = dailyLimit
 	setting.BalanceBlindBoxPityThreshold = 50
 	setting.BalanceBlindBoxSmallPityThreshold = 10
 	setting.BalanceBlindBoxPityGuaranteeUSD = 35
 	setting.BalanceBlindBoxSmallPityGuaranteeUSD = 10
 	setting.BalanceBlindBoxFirstDrawGuaranteeUSD = 10
-	setting.BalanceBlindBoxTiers = []blindboxsettings.TierSetting{{
-		Name: "$1 普通额度", MinUSD: 1, MaxUSD: 1, Probability: 1,
-		RewardType: commerceschema.BlindBoxRewardTypeQuota, WalletType: "default",
-	}}
 	blindboxsettings.Set(setting)
 	t.Cleanup(func() { blindboxsettings.Set(original) })
 }
@@ -205,8 +210,8 @@ func createBalanceBlindBoxTestUser(t *testing.T, db *gorm.DB, id int, externalID
 	t.Helper()
 	user := &identityschema.User{
 		Id: id, Username: "balance_box_" + externalID, ExternalId: externalID,
-		Quota:   int(math.Round(balanceUSD * float64(platformruntime.QuotaPerUnit))),
-		AffCode: "aff-" + externalID, Status: constant.UserStatusEnabled,
+		ClaudeQuota: int(math.Round(balanceUSD * float64(platformruntime.QuotaPerUnit))),
+		AffCode:     "aff-" + externalID, Status: constant.UserStatusEnabled,
 	}
 	require.NoError(t, db.Create(user).Error)
 	return user

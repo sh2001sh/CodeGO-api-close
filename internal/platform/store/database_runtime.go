@@ -300,6 +300,7 @@ func migratePrimaryDB() error {
 		&identitydomain.ImageWorkspaceItem{},
 		&communityschema.Resource{},
 		&marketplaceschema.Channel{},
+		&marketplaceschema.ChannelIDSequence{},
 		&marketplaceschema.Group{},
 		&marketplaceschema.VerificationRun{},
 		&marketplaceschema.RankingSnapshot{},

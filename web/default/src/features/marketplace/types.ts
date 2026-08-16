@@ -46,6 +46,13 @@ export interface MarketplaceGroup {
   avg_ttft_ms: number
   avg_latency_ms: number
   avg_tps: number
+  cache_hit_rate: number
+  latest_request_status: 'healthy' | 'unstable' | 'failed' | 'unknown'
+  recent_request_series: Array<{
+    ts: number
+    success_rate: number
+    request_count: number
+  }>
   request_count: number
   independent_consumers: number
   observing: boolean

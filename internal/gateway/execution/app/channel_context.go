@@ -22,6 +22,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 	}
 
 	httpctx.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
+	httpctx.SetContextKey(c, constant.ContextKeyChannelScope, normalizedChannelScope(channel))
 	httpctx.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelType, channel.Type)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)
@@ -84,4 +85,11 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 		c.Set("bot_id", channel.Other)
 	}
 	return nil
+}
+
+func normalizedChannelScope(channel *gatewayschema.Channel) string {
+	if channel != nil && !channel.IsOfficial() {
+		return gatewayschema.ChannelScopeExternal
+	}
+	return gatewayschema.ChannelScopeOfficial
 }

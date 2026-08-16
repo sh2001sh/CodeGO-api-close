@@ -112,8 +112,10 @@ export const userSubscriptionSchema = z.object({
   conversion_preview: z
     .object({
       eligible: z.boolean(),
-      max_source_quota: z.number(),
-      preview_claude_quota: z.number(),
+      remaining_quota: z.number(),
+      plan_price_amount: z.number(),
+      unused_ratio: z.number(),
+      preview_quota: z.number(),
     })
     .optional(),
   lucky_number: subscriptionLuckyNumberSchema.optional(),
@@ -149,9 +151,6 @@ export interface SubscriptionResetOpportunityUseResult {
 
 export interface SubscriptionClaudeConversionConfig {
   enabled: boolean
-  ratio_numerator: number
-  ratio_denominator: number
-  exclude_day_pass: boolean
 }
 
 export interface SubscriptionClaudeConversionRecord {
@@ -161,9 +160,9 @@ export interface SubscriptionClaudeConversionRecord {
   request_id: string
   status: string
   source_quota: number
-  target_claude_quota: number
-  ratio_numerator: number
-  ratio_denominator: number
+  target_quota: number
+  plan_price_amount: number
+  unused_ratio: number
   created_at: number
   updated_at: number
 }
@@ -171,10 +170,12 @@ export interface SubscriptionClaudeConversionRecord {
 export interface SubscriptionClaudeConversionResult {
   subscription_id: number
   source_quota: number
-  target_claude_quota: number
-  claude_quota_after: number
+  target_quota: number
+  quota_after: number
   amount_used_after: number
   period_used_after: number
+  plan_price_amount: number
+  unused_ratio: number
   conversion: SubscriptionClaudeConversionRecord
   config: SubscriptionClaudeConversionConfig
 }
@@ -289,7 +290,6 @@ export interface SelfSubscriptionData {
   subscriptions: UserSubscriptionRecord[]
   all_subscriptions: UserSubscriptionRecord[]
   reset_opportunity: SubscriptionResetOpportunitySummary
-  claude_quota: number
   conversion_config: SubscriptionClaudeConversionConfig
   recent_conversions: SubscriptionClaudeConversionRecord[]
 }

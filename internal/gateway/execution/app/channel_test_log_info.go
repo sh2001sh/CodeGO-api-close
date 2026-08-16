@@ -123,13 +123,11 @@ func appendGatewayBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string
 		other["billing_source"] = relayInfo.BillingSource
 	}
 	switch relayInfo.BillingSource {
-	case billingapp.BillingSourceClaudeWallet:
+	case billingapp.BillingSourceWallet:
 		other["billing_quota_field"] = "claude_quota"
 		if relayInfo.FinalPreConsumedQuota > 0 {
 			other["claude_quota_pre_consumed"] = relayInfo.FinalPreConsumedQuota
 		}
-	case billingapp.BillingSourceWallet:
-		other["billing_quota_field"] = "quota"
 	}
 }
 

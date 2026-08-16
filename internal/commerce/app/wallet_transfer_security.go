@@ -23,30 +23,34 @@ const (
 )
 
 type WalletTransferSecurityOverview struct {
-	PasswordSet               bool  `json:"password_set"`
-	LockedUntil               int64 `json:"locked_until"`
-	RemainingPasswordAttempts int   `json:"remaining_password_attempts"`
-	RequiresAccountPassword   bool  `json:"requires_account_password"`
+	PasswordSet               bool   `json:"password_set"`
+	LockedUntil               int64  `json:"locked_until"`
+	RemainingPasswordAttempts int    `json:"remaining_password_attempts"`
+	RequiresAccountPassword   bool   `json:"requires_account_password"`
+	EmailBound                bool   `json:"email_bound"`
+	EmailMasked               string `json:"email_masked"`
 }
 
-func GetWalletTransferSecurityOverview(userID int, hasAccountPassword bool) (*WalletTransferSecurityOverview, error) {
+func GetWalletTransferSecurityOverview(userID int, hasAccountPassword bool, email string) (*WalletTransferSecurityOverview, error) {
+	email = strings.TrimSpace(email)
+	base := WalletTransferSecurityOverview{
+		RemainingPasswordAttempts: walletTransferMaxFailedAttempts,
+		RequiresAccountPassword:   hasAccountPassword,
+		EmailBound:                email != "",
+		EmailMasked:               maskWalletTransferEmail(email),
+	}
 	var security commerceschema.WalletTransferSecurity
 	err := platformdb.DB.Where("user_id = ?", userID).First(&security).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return &WalletTransferSecurityOverview{
-			RemainingPasswordAttempts: walletTransferMaxFailedAttempts,
-			RequiresAccountPassword:   hasAccountPassword,
-		}, nil
+		return &base, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &WalletTransferSecurityOverview{
-		PasswordSet:               true,
-		LockedUntil:               security.LockedUntil,
-		RemainingPasswordAttempts: remainingWalletTransferAttempts(security.FailedAttempts),
-		RequiresAccountPassword:   hasAccountPassword,
-	}, nil
+	base.PasswordSet = true
+	base.LockedUntil = security.LockedUntil
+	base.RemainingPasswordAttempts = remainingWalletTransferAttempts(security.FailedAttempts)
+	return &base, nil
 }
 
 // ConfigureWalletTransferPassword creates or changes the independent payment password.
@@ -165,4 +169,17 @@ func remainingWalletTransferAttempts(failedAttempts int) int {
 		return 0
 	}
 	return remaining
+}
+
+func maskWalletTransferEmail(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 || parts[0] == "" {
+		return ""
+	}
+	local := []rune(parts[0])
+	visible := string(local[0])
+	if len(local) > 2 {
+		visible += string(local[len(local)-1])
+	}
+	return visible + "***@" + parts[1]
 }

@@ -42,6 +42,8 @@ func flushCompletedChannelBuckets(currentBucket int64) {
 			TotalLatencyMs: drained.totalLatencyMs, TtftSumMs: drained.ttftSumMs,
 			TtftCount: drained.ttftCount, OutputTokens: drained.outputTokens,
 			GenerationMs: drained.generationMs,
+			InputTokens:  drained.inputTokens, CacheReadTokens: drained.cacheReadTokens,
+			CacheWriteTokens: drained.cacheWriteTokens,
 		})
 		if err != nil {
 			bucket.addCounters(drained)
@@ -84,6 +86,8 @@ func QuerySummaryByChannels(hours int, channelIDs []int) ([]ChannelSummary, erro
 			totalLatencyMs: row.TotalLatencyMs, ttftSumMs: row.TtftSumMs,
 			ttftCount: row.TtftCount, outputTokens: row.OutputTokens,
 			generationMs: row.GenerationMs,
+			inputTokens:  row.InputTokens, cacheReadTokens: row.CacheReadTokens,
+			cacheWriteTokens: row.CacheWriteTokens,
 		}
 	}
 	if platformcache.RedisEnabled && platformcache.RDB != nil {
@@ -92,6 +96,77 @@ func QuerySummaryByChannels(hours int, channelIDs []int) ([]ChannelSummary, erro
 		mergeChannelHotBuckets(totals, channelIDs, startTs, endTs)
 	}
 	return buildChannelSummaries(totals), nil
+}
+
+func QuerySeriesByChannels(hours int, channelIDs []int) ([]ChannelSeries, error) {
+	if len(channelIDs) == 0 {
+		return []ChannelSeries{}, nil
+	}
+	if hours <= 0 {
+		hours = 6
+	}
+	endTs := time.Now().Unix()
+	startTs := endTs - int64(hours)*3600
+	rows, err := getChannelPerfMetricBuckets(startTs, endTs, channelIDs)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[int]struct{}, len(channelIDs))
+	buckets := make(map[int]map[int64]counters, len(channelIDs))
+	for _, channelID := range channelIDs {
+		allowed[channelID] = struct{}{}
+	}
+	for _, row := range rows {
+		appendChannelSeriesBucket(buckets, row.ChannelID, row.BucketTs, counters{
+			requestCount: row.RequestCount, successCount: row.SuccessCount,
+			totalLatencyMs: row.TotalLatencyMs, ttftSumMs: row.TtftSumMs,
+			ttftCount: row.TtftCount, outputTokens: row.OutputTokens,
+			generationMs: row.GenerationMs, inputTokens: row.InputTokens,
+			cacheReadTokens: row.CacheReadTokens, cacheWriteTokens: row.CacheWriteTokens,
+		})
+	}
+	channelHotBuckets.Range(func(key, value any) bool {
+		bucketKey := key.(channelBucketKey)
+		if bucketKey.bucketTs < startTs || bucketKey.bucketTs > endTs {
+			return true
+		}
+		if _, ok := allowed[bucketKey.channelID]; !ok {
+			return true
+		}
+		appendChannelSeriesBucket(buckets, bucketKey.channelID, bucketKey.bucketTs, value.(*atomicBucket).snapshot())
+		return true
+	})
+	return buildChannelSeries(buckets), nil
+}
+
+func appendChannelSeriesBucket(buckets map[int]map[int64]counters, channelID int, bucketTs int64, value counters) {
+	if value.requestCount == 0 {
+		return
+	}
+	if buckets[channelID] == nil {
+		buckets[channelID] = make(map[int64]counters)
+	}
+	current := buckets[channelID][bucketTs]
+	mergeCounterValue(&current, value)
+	buckets[channelID][bucketTs] = current
+}
+
+func buildChannelSeries(buckets map[int]map[int64]counters) []ChannelSeries {
+	result := make([]ChannelSeries, 0, len(buckets))
+	for channelID, values := range buckets {
+		timestamps := make([]int64, 0, len(values))
+		for ts := range values {
+			timestamps = append(timestamps, ts)
+		}
+		sort.Slice(timestamps, func(i, j int) bool { return timestamps[i] < timestamps[j] })
+		points := make([]BucketPoint, 0, len(timestamps))
+		for _, ts := range timestamps {
+			points = append(points, bucketPoint(ts, values[ts]))
+		}
+		result = append(result, ChannelSeries{ChannelID: channelID, Series: points})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ChannelID < result[j].ChannelID })
+	return result
 }
 
 func mergeChannelHotBuckets(totals map[int]counters, channelIDs []int, startTs, endTs int64) {
@@ -153,6 +228,9 @@ func mergeCounterValue(target *counters, value counters) {
 	target.ttftCount += value.ttftCount
 	target.outputTokens += value.outputTokens
 	target.generationMs += value.generationMs
+	target.inputTokens += value.inputTokens
+	target.cacheReadTokens += value.cacheReadTokens
+	target.cacheWriteTokens += value.cacheWriteTokens
 }
 
 func buildChannelSummaries(totals map[int]counters) []ChannelSummary {
@@ -166,6 +244,7 @@ func buildChannelSummaries(totals map[int]counters) []ChannelSummary {
 			AvgTtftMs:   avg(total.ttftSumMs, total.ttftCount),
 			SuccessRate: math.Round(successRate(total)*100) / 100,
 			AvgTps:      math.Round(avgTps(total)*100) / 100, RequestCount: total.requestCount,
+			CacheHitRate: roundMetric(cacheHitRate(total)),
 		})
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].ChannelID < results[j].ChannelID })

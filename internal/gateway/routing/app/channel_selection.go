@@ -160,6 +160,14 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 			return nil, param.TokenGroup, err
 		}
 	}
+	if channel == nil && requiresOfficialChannel(param.Ctx) {
+		httpctx.SetContextKey(param.Ctx, constant.ContextKeyOfficialChannelOnly, false)
+		httpctx.SetContextKey(param.Ctx, constant.ContextKeyOfficialChannelFallback, true)
+		httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, 0)
+		httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupRetryIndex, 0)
+		param.SetRetry(0)
+		return CacheGetRandomSatisfiedChannel(param)
+	}
 	return channel, selectGroup, nil
 }
 func getHealthySatisfiedChannel(group string, modelName string, retry int) (*gatewayschema.Channel, error) {
@@ -208,7 +216,7 @@ func selectLegacyLastResortChannel(c *gin.Context, group, modelName string, retr
 	requestType := gatewayruntime.RequestTypeFromContext(c)
 	for priorityRetry := retry; priorityRetry < retry+16; priorityRetry++ {
 		channel, err := selectRandomSatisfiedChannel(group, modelName, priorityRetry)
-		if err != nil || channel == nil || channelAlreadyUsed(c, channel.Id) {
+		if err != nil || channel == nil || channelAlreadyUsed(c, channel.Id) || channelExcludedByScope(c, channel) {
 			continue
 		}
 		health, found := gatewayruntime.GetChannelHealth(channel.Id, modelName, requestType)
@@ -240,6 +248,9 @@ func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelNam
 		if retryFallbackChannelID(c) == channel.Id {
 			continue
 		}
+		if channelExcludedByScope(c, channel) {
+			continue
+		}
 		faultDomain := gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL())
 		if gatewayruntime.IsFaultDomainExcluded(c, faultDomain) {
 			continue
@@ -267,6 +278,14 @@ func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelNam
 		return channel, degraded, priority, true, nil
 	}
 	return nil, degraded, priority, found, nil
+}
+
+func requiresOfficialChannel(c *gin.Context) bool {
+	return c != nil && httpctx.GetContextKeyBool(c, constant.ContextKeyOfficialChannelOnly)
+}
+
+func channelExcludedByScope(c *gin.Context, channel *gatewayschema.Channel) bool {
+	return requiresOfficialChannel(c) && channel != nil && !channel.IsOfficial()
 }
 
 func retryFallbackChannelID(c *gin.Context) int {

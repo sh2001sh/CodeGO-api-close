@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"math"
 	"testing"
 	"time"
 )
@@ -48,37 +47,28 @@ func TestOpenBlindBoxOrderByTradeNo_CreditsMatchingWallets(t *testing.T) {
 	require.NoError(t, db.Create(plan).Error)
 
 	testCases := []struct {
-		name             string
-		userID           int
-		username         string
-		tradeNo          string
-		rewardUSD        float64
-		walletType       string
-		expectedLabel    string
-		expectedWallet   commerceschema.BlindBoxRewardWalletType
-		expectedSnapshot string
+		name       string
+		userID     int
+		username   string
+		tradeNo    string
+		rewardUSD  float64
+		walletType string
 	}{
 		{
-			name:             "default wallet reward",
-			userID:           8803,
-			username:         "blind_box_default_wallet_user",
-			tradeNo:          "blind-box-default-wallet-order",
-			rewardUSD:        1,
-			walletType:       "default",
-			expectedLabel:    "钱包：官方 GPT 专属额度",
-			expectedWallet:   commerceschema.BlindBoxRewardWalletTypeDefault,
-			expectedSnapshot: "wallet",
+			name:       "legacy default wallet configuration",
+			userID:     8803,
+			username:   "blind_box_default_wallet_user",
+			tradeNo:    "blind-box-default-wallet-order",
+			rewardUSD:  1,
+			walletType: "default",
 		},
 		{
-			name:             "claude wallet reward",
-			userID:           8804,
-			username:         "blind_box_claude_wallet_user",
-			tradeNo:          "blind-box-claude-wallet-order",
-			rewardUSD:        2,
-			walletType:       "claude",
-			expectedLabel:    "钱包：通用额度",
-			expectedWallet:   commerceschema.BlindBoxRewardWalletTypeClaude,
-			expectedSnapshot: "claude_wallet",
+			name:       "legacy claude wallet configuration",
+			userID:     8804,
+			username:   "blind_box_claude_wallet_user",
+			tradeNo:    "blind-box-claude-wallet-order",
+			rewardUSD:  2,
+			walletType: "claude",
 		},
 	}
 
@@ -122,29 +112,34 @@ func TestOpenBlindBoxOrderByTradeNo_CreditsMatchingWallets(t *testing.T) {
 			require.NoError(t, db.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).
 				Where("blind_box_open_record_id = ?", records[0].Id).Count(&luckyNumbers).Error)
 			require.Equal(t, int64(1), luckyNumbers)
-			assert.Equal(t, string(tc.expectedWallet), records[0].RewardWalletType)
-
-			expectedCredit := int(math.Round(tc.rewardUSD * platformruntime.QuotaPerUnit))
 			var savedUser identityschema.User
 			require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-			if tc.expectedWallet == commerceschema.BlindBoxRewardWalletTypeClaude {
-				assert.Equal(t, 100, savedUser.Quota)
-				assert.Equal(t, 200+expectedCredit, savedUser.ClaudeQuota)
-				snapshot := loadCommerceBillingSnapshot(t, user.Id, tc.expectedSnapshot)
-				assert.Equal(t, int64(savedUser.ClaudeQuota), snapshot.AvailableBalance)
-			} else {
-				assert.Equal(t, 100+expectedCredit, savedUser.Quota)
+			assert.Equal(t, 100, savedUser.Quota)
+			if records[0].RewardType == commerceschema.BlindBoxRewardTypeProp {
+				assert.Empty(t, records[0].RewardWalletType)
 				assert.Equal(t, 200, savedUser.ClaudeQuota)
-				snapshot := loadCommerceBillingSnapshot(t, user.Id, tc.expectedSnapshot)
-				assert.Equal(t, int64(savedUser.Quota), snapshot.AvailableBalance)
+			} else {
+				assert.Equal(t, string(commerceschema.BlindBoxRewardWalletTypeClaude), records[0].RewardWalletType)
+				assert.Equal(t, 200+int(records[0].CreditAmount), savedUser.ClaudeQuota)
+				snapshot := loadCommerceBillingSnapshot(t, user.Id, "claude_wallet")
+				assert.Equal(t, int64(savedUser.ClaudeQuota), snapshot.AvailableBalance)
 			}
+			var legacyAccounts int64
+			require.NoError(t, db.Model(&billingschema.BillingAccount{}).
+				Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user", user.Id, "wallet").
+				Count(&legacyAccounts).Error)
+			assert.Zero(t, legacyAccounts)
 
 			var logs []auditschema.Log
 			require.NoError(t, db.Where("user_id = ? AND type = ?", user.Id, auditschema.LogTypeTopup).Order("id asc").Find(&logs).Error)
-			require.Len(t, logs, 1)
-			assert.Contains(t, logs[0].Content, "盲盒开奖到账")
-			assert.Contains(t, logs[0].Content, tc.expectedLabel)
-			assert.Contains(t, logs[0].Content, fmt.Sprintf("开奖记录ID：%d", records[0].Id))
+			if records[0].RewardType == commerceschema.BlindBoxRewardTypeProp {
+				assert.Empty(t, logs)
+			} else {
+				require.Len(t, logs, 1)
+				assert.Contains(t, logs[0].Content, "盲盒开奖到账")
+				assert.Contains(t, logs[0].Content, "钱包：统一额度")
+				assert.Contains(t, logs[0].Content, fmt.Sprintf("开奖记录ID：%d", records[0].Id))
+			}
 		})
 	}
 }
@@ -212,7 +207,7 @@ func TestOpenBlindBoxOrderByTradeNo_DoesNotDoubleCreditQuota(t *testing.T) {
 
 	var afterFirst identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&afterFirst).Error)
-	assert.Greater(t, afterFirst.Quota, beforeQuota)
+	assert.Equal(t, beforeQuota, afterFirst.Quota)
 
 	records2, err := OpenBlindBoxOrderByTradeNo(order.TradeNo)
 	require.NoError(t, err)
@@ -221,21 +216,22 @@ func TestOpenBlindBoxOrderByTradeNo_DoesNotDoubleCreditQuota(t *testing.T) {
 	var afterSecond identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&afterSecond).Error)
 	assert.Equal(t, afterFirst.Quota, afterSecond.Quota)
-
-	snapshot := loadCommerceBillingSnapshot(t, user.Id, "wallet")
-	assert.Equal(t, int64(afterFirst.Quota), snapshot.AvailableBalance)
+	assert.Equal(t, afterFirst.ClaudeQuota, afterSecond.ClaudeQuota)
+	if afterFirst.ClaudeQuota > 0 {
+		snapshot := loadCommerceBillingSnapshot(t, user.Id, "claude_wallet")
+		assert.Equal(t, int64(afterFirst.ClaudeQuota), snapshot.AvailableBalance)
+	}
 
 	var savedOrder commerceschema.BlindBoxOrder
 	require.NoError(t, db.Where("id = ?", order.Id).First(&savedOrder).Error)
 	assert.Equal(t, 1, savedOrder.OpenedCount)
 
-	var logs []auditschema.Log
-	require.NoError(t, db.Where("user_id = ? AND type = ?", user.Id, auditschema.LogTypeTopup).Find(&logs).Error)
-	require.Len(t, logs, 1)
-	assert.Contains(t, logs[0].Content, "盲盒开奖到账")
+	var records int64
+	require.NoError(t, db.Model(&commerceschema.BlindBoxOpenRecord{}).Where("order_id = ?", order.Id).Count(&records).Error)
+	assert.Equal(t, int64(1), records)
 }
 
-func TestOpenBlindBoxOrderByTradeNo_PropRewardAdvancesPityAndThresholdDrawTriggersGuarantee(t *testing.T) {
+func TestOpenBlindBoxOrderByTradeNo_UnifiedPoolIgnoresLegacyPityOverrides(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	setting := blindboxsettings.Get()
@@ -275,24 +271,21 @@ func TestOpenBlindBoxOrderByTradeNo_PropRewardAdvancesPityAndThresholdDrawTrigge
 	firstDraw, err := OpenBlindBoxes(user.Id, 1)
 	require.NoError(t, err)
 	require.Len(t, firstDraw, 1)
-	assert.Equal(t, commerceschema.BlindBoxRewardTypeProp, firstDraw[0].RewardType)
 	assert.False(t, firstDraw[0].IsPity)
 
 	var pityState commerceschema.BlindBoxPityState
 	require.NoError(t, db.Where("user_id = ?", user.Id).First(&pityState).Error)
-	assert.Equal(t, 1, pityState.ConsecutiveLowRewards)
 
 	secondDraw, err := OpenBlindBoxes(user.Id, 1)
 	require.NoError(t, err)
 	require.Len(t, secondDraw, 1)
-	assert.True(t, secondDraw[0].IsPity)
-	assert.Equal(t, 2.0, secondDraw[0].RewardUSD)
+	assert.False(t, secondDraw[0].IsPity)
 
 	require.NoError(t, db.Where("user_id = ?", user.Id).First(&pityState).Error)
-	assert.Zero(t, pityState.ConsecutiveLowRewards)
+	assert.Less(t, pityState.ConsecutiveLowRewards, blindboxsettings.Get().PityThreshold)
 }
 
-func TestOpenBlindBoxOrderByTradeNo_SubscriptionRewardPreservesExistingCard(t *testing.T) {
+func TestOpenBlindBoxOrderByTradeNo_UnifiedPoolMergesMonthlyPassReward(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	setting := blindboxsettings.Get()
@@ -346,23 +339,12 @@ func TestOpenBlindBoxOrderByTradeNo_SubscriptionRewardPreservesExistingCard(t *t
 	require.NoError(t, err)
 	require.Len(t, records, 1)
 	require.Equal(t, commerceschema.BlindBoxRewardTypeSubscription, records[0].RewardType)
-	assert.NotZero(t, records[0].PropId)
-	assert.Equal(t, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, records[0].PropType)
 	require.Equal(t, subscription.Id, records[0].UserSubscriptionId)
 
 	var savedSubscription commerceschema.UserSubscription
 	require.NoError(t, db.First(&savedSubscription, subscription.Id).Error)
 	assert.Equal(t, int64(5000), savedSubscription.AmountTotal)
 	assert.Equal(t, int64(3250), savedSubscription.PeriodAmount)
-
-	var props []commerceschema.BlindBoxProp
-	require.NoError(t, db.Where("user_id = ? AND prop_type = ?", user.Id, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).Order("id").Find(&props).Error)
-	// A reward extends the existing paused card instead of creating a second card.
-	require.Len(t, props, 1)
-	assert.Equal(t, int64(1800), props[0].DurationSeconds)
-	assert.Equal(t, int64(2257), props[0].RemainingSeconds)
-	assert.Contains(t, props[0].BenefitReference, "monthly-pass-backfill-test:9520")
-	assert.Contains(t, props[0].BenefitReference, fmt.Sprintf("blind-box-subscription:%d", records[0].Id))
 
 	var account billingschema.BillingAccount
 	require.NoError(t, db.Where("account_type = ? AND owner_type = ? AND owner_id = ?", "subscription", "user_subscription", subscription.Id).First(&account).Error)

@@ -100,11 +100,11 @@ func TestPerformCheckinCreatesRecordUpdatesQuotaAndWritesAuditLog(t *testing.T) 
 	setting.MaxQuota = 120
 
 	user := &identityschema.User{
-		Id:       2,
-		Username: "checkin-perform-user",
-		Status:   constant.UserStatusEnabled,
-		Group:    "default",
-		Quota:    500,
+		Id:          2,
+		Username:    "checkin-perform-user",
+		Status:      constant.UserStatusEnabled,
+		Group:       "default",
+		ClaudeQuota: 500,
 	}
 	require.NoError(t, db.Create(user).Error)
 
@@ -116,7 +116,7 @@ func TestPerformCheckinCreatesRecordUpdatesQuotaAndWritesAuditLog(t *testing.T) 
 
 	var savedUser identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-	assert.Equal(t, 620, savedUser.Quota)
+	assert.Equal(t, 620, savedUser.ClaudeQuota)
 
 	var records []identitydomain.Checkin
 	require.NoError(t, db.Where("user_id = ?", user.Id).Find(&records).Error)
@@ -124,7 +124,7 @@ func TestPerformCheckinCreatesRecordUpdatesQuotaAndWritesAuditLog(t *testing.T) 
 	assert.Equal(t, 120, records[0].QuotaAwarded)
 
 	var account billingschema.BillingAccount
-	require.NoError(t, db.Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user", user.Id, "wallet").First(&account).Error)
+	require.NoError(t, db.Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user", user.Id, "claude_wallet").First(&account).Error)
 	var snapshot billingschema.BillingBalanceSnapshot
 	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
 	assert.EqualValues(t, 620, snapshot.AvailableBalance)

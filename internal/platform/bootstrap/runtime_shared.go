@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	redigo "github.com/gomodule/redigo/redis"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
+	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
@@ -33,6 +34,10 @@ type httpRouteRegistrar func(*gin.Engine)
 func prepareRuntime(component string) error {
 	if err := initResources(); err != nil {
 		platformobservability.FatalLog("failed to initialize resources: " + err.Error())
+		return err
+	}
+	if err := commerceapp.ValidateUnifiedCreditSchemaVersion(); err != nil {
+		platformobservability.FatalLog("unified credit schema is not ready: " + err.Error())
 		return err
 	}
 	logStartupMode(component)

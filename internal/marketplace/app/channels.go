@@ -1,10 +1,8 @@
 package app
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
-	"math/big"
 	"strconv"
 	"strings"
 
@@ -26,11 +24,14 @@ func CreateMarketplaceChannel(ownerUserID int, req CreateChannelRequest) (*Chann
 	if err := validateCreateRequest(req); err != nil {
 		return nil, err
 	}
-	channel, group, err := buildMarketplaceRecords(ownerUserID, req)
-	if err != nil {
-		return nil, err
-	}
+	var channel *marketplaceschema.Channel
+	var group *marketplaceschema.Group
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		channel, group, err = buildMarketplaceRecords(tx, ownerUserID, req)
+		if err != nil {
+			return err
+		}
 		if err := tx.Create(channel).Error; err != nil {
 			return err
 		}
@@ -44,8 +45,8 @@ func CreateMarketplaceChannel(ownerUserID int, req CreateChannelRequest) (*Chann
 	return channelView(channel, group), nil
 }
 
-func buildMarketplaceRecords(ownerUserID int, req CreateChannelRequest) (*marketplaceschema.Channel, *marketplaceschema.Group, error) {
-	channelID, err := newMarketplaceChannelID()
+func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequest) (*marketplaceschema.Channel, *marketplaceschema.Group, error) {
+	channelID, err := newMarketplaceChannelID(tx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -74,14 +75,12 @@ func buildMarketplaceRecords(ownerUserID int, req CreateChannelRequest) (*market
 	return channel, group, nil
 }
 
-func newMarketplaceChannelID() (string, error) {
-	const lowerBound int64 = 100_000_000_000
-	const rangeSize int64 = 900_000_000_000
-	value, err := rand.Int(rand.Reader, big.NewInt(rangeSize))
-	if err != nil {
+func newMarketplaceChannelID(tx *gorm.DB) (string, error) {
+	sequence := marketplaceschema.ChannelIDSequence{}
+	if err := tx.Create(&sequence).Error; err != nil {
 		return "", err
 	}
-	return strconv.FormatInt(lowerBound+value.Int64(), 10), nil
+	return strconv.FormatUint(sequence.ID, 10), nil
 }
 
 func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLabel string, multiplier float64, visibility string) *marketplaceschema.Group {

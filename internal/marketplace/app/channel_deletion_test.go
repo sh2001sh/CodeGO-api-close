@@ -83,12 +83,13 @@ func TestAdminCanDeleteAnotherOwnersMarketplaceChannel(t *testing.T) {
 	require.ErrorIs(t, db.First(&marketplaceschema.Channel{}, "id = ?", channel.ID).Error, gorm.ErrRecordNotFound)
 }
 
-func TestMarketplaceChannelIDContainsOnlyDigits(t *testing.T) {
-	id, err := newMarketplaceChannelID()
+func TestMarketplaceChannelIDIncrements(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.ChannelIDSequence{}))
+	id, err := newMarketplaceChannelID(db)
 	require.NoError(t, err)
-	require.Len(t, id, 12)
-	for _, char := range id {
-		require.GreaterOrEqual(t, char, '0')
-		require.LessOrEqual(t, char, '9')
-	}
+	require.Equal(t, "1", id)
+	nextID, err := newMarketplaceChannelID(db)
+	require.NoError(t, err)
+	require.Equal(t, "2", nextID)
 }

@@ -57,7 +57,6 @@ import type { PlanRecord } from '@/features/subscriptions/types'
 import { createRedemption, getRedemption, updateRedemption } from '../api'
 import {
   REDEMPTION_TYPES,
-  REDEMPTION_WALLET_TYPES,
   SUCCESS_MESSAGES,
 } from '../constants'
 import {
@@ -121,7 +120,6 @@ export function RedemptionsMutateDrawer({
   })
 
   const redeemType = form.watch('redeem_type')
-  const walletType = form.watch('wallet_type')
   const selectedPlanId = form.watch('plan_id')
 
   useEffect(() => {
@@ -259,16 +257,9 @@ export function RedemptionsMutateDrawer({
       )
     }
 
-    if (data.wallet_type === REDEMPTION_WALLET_TYPES.CLAUDE) {
-      const quotaText = tokensOnly
-        ? `${t('Claude Quota')} ${Math.round(Number(data.quota_dollars || 0))}`
-        : `${t('Claude Quota')} ${currencyLabel}${formatCompactAmount(Number(data.quota_dollars || 0))}`
-      return trimToMaxRunes(quotaText)
-    }
-
     const quotaText = tokensOnly
-      ? `${t('Quota')} ${Math.round(Number(data.quota_dollars || 0))}`
-      : `${t('Quota')} ${currencyLabel}${formatCompactAmount(Number(data.quota_dollars || 0))}`
+      ? `${t('Universal Credit')} ${Math.round(Number(data.quota_dollars || 0))}`
+      : `${t('Universal Credit')} ${currencyLabel}${formatCompactAmount(Number(data.quota_dollars || 0))}`
     return trimToMaxRunes(quotaText)
   }
 
@@ -357,17 +348,9 @@ export function RedemptionsMutateDrawer({
                       } else if (value === REDEMPTION_TYPES.SUBSCRIPTION) {
                         form.setValue('blind_box_quantity', 1)
                         form.setValue('quota_dollars', 0)
-                        form.setValue(
-                          'wallet_type',
-                          REDEMPTION_WALLET_TYPES.DEFAULT
-                        )
                       } else {
                         form.setValue('plan_id', undefined)
                         form.setValue('quota_dollars', 0)
-                        form.setValue(
-                          'wallet_type',
-                          REDEMPTION_WALLET_TYPES.DEFAULT
-                        )
                       }
                     }}
                   >
@@ -401,90 +384,35 @@ export function RedemptionsMutateDrawer({
             />
 
             {redeemType === REDEMPTION_TYPES.QUOTA ? (
-              <>
-                <FormField
-                  control={form.control}
-                  name='wallet_type'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Balance Pool')}</FormLabel>
-                      <Select
-                        items={[
-                          {
-                            value: REDEMPTION_WALLET_TYPES.DEFAULT,
-                            label: t('Default Balance'),
-                          },
-                          {
-                            value: REDEMPTION_WALLET_TYPES.CLAUDE,
-                            label: t('Claude Quota'),
-                          },
-                        ]}
-                        value={field.value}
-                        onValueChange={(value) => {
-                          if (value === null) return
-                          field.onChange(value)
-                        }}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent alignItemWithTrigger={false}>
-                          <SelectGroup>
-                            <SelectItem value={REDEMPTION_WALLET_TYPES.DEFAULT}>
-                              {t('Default Balance')}
-                            </SelectItem>
-                            <SelectItem value={REDEMPTION_WALLET_TYPES.CLAUDE}>
-                              {t('Claude Quota')}
-                            </SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        {walletType === REDEMPTION_WALLET_TYPES.CLAUDE
-                          ? t('Redeeming this code will add quota only to the Claude balance pool')
-                          : t('Redeeming this code will add quota to the default balance pool')}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name='quota_dollars'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        {walletType === REDEMPTION_WALLET_TYPES.CLAUDE
-                          ? t('Claude Quota Amount')
-                          : quotaLabel}
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type='number'
-                          step={tokensOnly ? 1 : 0.01}
-                          placeholder={quotaPlaceholder}
-                          onChange={(e) =>
-                            field.onChange(parseFloat(e.target.value) || 0)
-                          }
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {walletType === REDEMPTION_WALLET_TYPES.CLAUDE
-                          ? t('Claude quota codes only add balance for Claude models')
-                          : tokensOnly
-                            ? t('Enter the quota amount in tokens')
-                            : t('Enter the quota amount in {{currency}}', {
-                                currency: currencyLabel,
-                              })}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </>
+              <FormField
+                control={form.control}
+                name='quota_dollars'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{quotaLabel}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type='number'
+                        step={tokensOnly ? 1 : 0.01}
+                        placeholder={quotaPlaceholder}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value) || 0)
+                        }
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {tokensOnly
+                        ? t('Redeeming this code adds the entered tokens to universal credit')
+                        : t(
+                            'Redeeming this code adds the entered {{currency}} amount to universal credit',
+                            { currency: currencyLabel }
+                          )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             ) : redeemType === REDEMPTION_TYPES.SUBSCRIPTION ? (
               <FormField
                 control={form.control}

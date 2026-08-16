@@ -154,14 +154,12 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		other["billing_quota_label"] = billingQuotaLabel
 	}
 	switch relayInfo.BillingSource {
-	case BillingSourceClaudeWallet:
-		other["billing_quota_field"] = "claude_quota"
-		if relayInfo.FinalPreConsumedQuota > 0 {
-			other["claude_quota_pre_consumed"] = relayInfo.FinalPreConsumedQuota
-		}
-	case BillingSourceSubscription:
 	case BillingSourceWallet:
 		other["billing_quota_field"] = "quota"
+		if relayInfo.FinalPreConsumedQuota > 0 {
+			other["quota_pre_consumed"] = relayInfo.FinalPreConsumedQuota
+		}
+	case BillingSourceSubscription:
 	default:
 		if relayInfo.BillingSource != "" {
 			other["billing_quota_field"] = "quota"
@@ -219,10 +217,8 @@ func billingQuotaSource(relayInfo *relaycommon.RelayInfo) (category string, labe
 	}
 
 	switch relayInfo.BillingSource {
-	case BillingSourceClaudeWallet:
-		return "universal", "通用额度"
 	case BillingSourceWallet:
-		return "gpt", "官方 GPT 专属额度"
+		return "universal", "通用额度"
 	case BillingSourceSubscription:
 		return "subscription", "GPT 套餐额度"
 	default:
@@ -231,10 +227,10 @@ func billingQuotaSource(relayInfo *relaycommon.RelayInfo) (category string, labe
 }
 
 func appendBillingContent(content string, relayInfo *relaycommon.RelayInfo) string {
-	if relayInfo == nil || relayInfo.BillingSource != BillingSourceClaudeWallet {
+	if relayInfo == nil || relayInfo.BillingSource != BillingSourceWallet {
 		return content
 	}
-	note := "Billed from Claude quota"
+	note := "Billed from unified credit"
 	if content == "" {
 		return note
 	}

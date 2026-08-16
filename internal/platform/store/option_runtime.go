@@ -22,6 +22,9 @@ import (
 func applyOptionValue(key string, value string) (err error) {
 	platformconfig.OptionMapRWMutex.Lock()
 	defer platformconfig.OptionMapRWMutex.Unlock()
+	if platformconfig.OptionMap == nil {
+		platformconfig.OptionMap = make(map[string]string)
+	}
 	platformconfig.OptionMap[key] = value
 
 	if handled, configErr := handleConfigUpdate(key, value); handled {
@@ -299,14 +302,10 @@ func applyOptionValue(key string, value string) (err error) {
 		err = gatewaystore.UpdateGroupRatioByJSONString(value)
 	case "GroupGroupRatio":
 		err = gatewaystore.UpdateGroupGroupRatioByJSONString(value)
+	case gatewaystore.SubscriptionGroupPolicyOptionKey:
+		err = gatewaystore.UpdateSubscriptionGroupPolicyByJSONString(value)
 	case commerceschema.SubscriptionClaudeConversionEnabledOptionKey:
 		commerceschema.SubscriptionClaudeConversionEnabled = value == "true"
-	case commerceschema.SubscriptionClaudeConversionRatioNumeratorOptionKey:
-		commerceschema.SubscriptionClaudeConversionRatioNumerator, _ = strconv.Atoi(value)
-	case commerceschema.SubscriptionClaudeConversionRatioDenominatorOptionKey:
-		commerceschema.SubscriptionClaudeConversionRatioDenominator, _ = strconv.Atoi(value)
-	case commerceschema.SubscriptionClaudeConversionExcludeDayPassOptionKey:
-		commerceschema.SubscriptionClaudeConversionExcludeDayPass = value == "true"
 	case "UserUsableGroups":
 		err = gatewaygroups.UpdateUserUsableGroupsByJSONString(value)
 	case "CompletionRatio":

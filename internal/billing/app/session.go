@@ -5,6 +5,7 @@ import (
 	"fmt"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,16 +15,16 @@ import (
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"github.com/sh2001sh/new-api/types"
 )
 
-func isClaudeBillingRequest(relayInfo *relaycommon.RelayInfo) bool {
-	if relayInfo == nil || relayInfo.ChannelMeta == nil {
-		return false
-	}
-	return relayInfo.ChannelSetting.ClaudeWalletEnabled
+func isExternalBillingChannel(relayInfo *relaycommon.RelayInfo) bool {
+	return relayInfo != nil && relayInfo.ChannelMeta != nil &&
+		strings.EqualFold(strings.TrimSpace(relayInfo.ChannelMeta.ChannelScope), gatewayschema.ChannelScopeExternal)
 }
 
 type BillingSession struct {
@@ -33,6 +34,7 @@ type BillingSession struct {
 	tokenConsumed    int
 	extraReserved    int
 	trusted          bool
+	quotaScale       float64
 	fundingSettled   bool
 	settled          bool
 	refunded         bool
@@ -46,6 +48,7 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	if actualQuota < 0 {
 		actualQuota = 0
 	}
+	actualQuota = s.scaleQuota(actualQuota)
 	if s.settled {
 		return nil
 	}
@@ -204,6 +207,7 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	if targetQuota < 0 {
 		targetQuota = 0
 	}
+	targetQuota = s.scaleQuota(targetQuota)
 	if s.settled || s.refunded || s.trusted || targetQuota <= s.preConsumedQuota {
 		return nil
 	}
@@ -229,7 +233,7 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 }
 
 func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIError {
-	effectiveQuota := quota
+	effectiveQuota := s.scaleQuota(quota)
 
 	if s.shouldTrust(c) {
 		s.trusted = true
@@ -299,6 +303,17 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	return nil
 }
 
+func (s *BillingSession) scaleQuota(quota int) int {
+	if quota <= 0 || s.quotaScale <= 0 || s.quotaScale == 1 {
+		return quota
+	}
+	scaled := int(math.Round(float64(quota) * s.quotaScale))
+	if scaled < 1 {
+		return 1
+	}
+	return scaled
+}
+
 func newFundingInsufficientError(source string, err error) *types.NewAPIError {
 	var message string
 	switch {
@@ -308,10 +323,8 @@ func newFundingInsufficientError(source string, err error) *types.NewAPIError {
 		switch source {
 		case BillingSourceSubscription:
 			message = "subscription quota insufficient or unavailable"
-		case BillingSourceClaudeWallet:
-			message = "universal quota insufficient"
 		default:
-			message = "GPT special quota insufficient"
+			message = "universal quota insufficient"
 		}
 	default:
 		return nil
@@ -330,19 +343,7 @@ func (s *BillingSession) reserveFunding(delta int) error {
 	if funding, ok := s.funding.(ReservableFundingSource); ok {
 		return funding.ReserveAdditional(int64(delta))
 	}
-	switch funding := s.funding.(type) {
-	case *WalletFunding:
-		if err := AdjustWalletQuota(funding.userID, delta); err != nil {
-			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-		}
-		funding.consumed += delta
-		return nil
-	case *ClaudeWalletFunding:
-		if err := AdjustClaudeWalletQuota(funding.userID, delta); err != nil {
-			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-		}
-		funding.consumed += delta
-		return nil
+	switch s.funding.(type) {
 	case *SubscriptionFunding:
 		return nil
 	default:
@@ -358,20 +359,7 @@ func (s *BillingSession) rollbackFundingReserve(delta int) {
 	if _, ok := s.funding.(ReservableFundingSource); ok {
 		return
 	}
-	switch funding := s.funding.(type) {
-	case *WalletFunding:
-		if err := AdjustWalletQuota(funding.userID, -delta); err != nil {
-			platformobservability.SysLog("error rolling back wallet funding reserve: " + err.Error())
-		} else {
-			funding.consumed -= delta
-		}
-	case *ClaudeWalletFunding:
-		if err := AdjustClaudeWalletQuota(funding.userID, -delta); err != nil {
-			platformobservability.SysLog("error rolling back claude wallet funding reserve: " + err.Error())
-		} else {
-			funding.consumed -= delta
-		}
-	}
+	_ = delta
 }
 
 func (s *BillingSession) reserveToken(delta int) error {
@@ -411,8 +399,6 @@ func (s *BillingSession) shouldTrust(c *gin.Context) bool {
 
 	switch s.funding.Source() {
 	case BillingSourceWallet:
-		return s.relayInfo.UserQuota > trustQuota
-	case BillingSourceClaudeWallet:
 		return false
 	case BillingSourceSubscription:
 		return false
@@ -462,13 +448,13 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	)
 
 	tryWallet := func() (*BillingSession, *types.NewAPIError) {
-		userQuota, err := GetUserWalletQuota(relayInfo.UserId)
+		userQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
 		}
 		if userQuota <= 0 || userQuota-preConsumedQuota < 0 {
 			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("官方 GPT 专属额度不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(userQuota), logger.FormatQuota(preConsumedQuota)),
+				fmt.Errorf("通用额度不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(userQuota), logger.FormatQuota(preConsumedQuota)),
 				types.ErrorCodeInsufficientUserQuota,
 				http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(),
@@ -490,40 +476,11 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		return session, nil
 	}
 
-	tryClaudeWallet := func() (*BillingSession, *types.NewAPIError) {
-		claudeQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
-		if err != nil {
-			return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
-		}
-		if claudeQuota <= 0 || claudeQuota-preConsumedQuota < 0 {
-			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("通用额度不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(claudeQuota), logger.FormatQuota(preConsumedQuota)),
-				types.ErrorCodeInsufficientUserQuota,
-				http.StatusForbidden,
-				types.ErrOptionWithSkipRetry(),
-				types.ErrOptionWithNoRecordErrorLog(),
-			)
-		}
-		relayInfo.UserQuota = claudeQuota
-		funding, err := NewLedgerRelayFundingWithInitialBalance(relayInfo.UserId, relayInfo.RequestId, BillingSourceClaudeWallet, &claudeQuota)
-		if err != nil {
-			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-		}
-		session := &BillingSession{
-			relayInfo: relayInfo,
-			funding:   funding,
-		}
-		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
-			return nil, apiErr
-		}
-		return session, nil
-	}
-
 	if relayInfo.MarketplaceCreditPolicy == marketplacedomain.CreditPolicyUniversalOnly {
-		session, apiErr := tryClaudeWallet()
+		session, apiErr := tryWallet()
 		if apiErr != nil && apiErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota {
 			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("通用额度不足，市场渠道不会回退到月卡或官方 GPT 专属额度"),
+				fmt.Errorf("通用额度不足，市场渠道不会回退到月卡"),
 				types.ErrorCodeInsufficientUserQuota,
 				http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(),
@@ -534,28 +491,41 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	}
 
 	trySubscription := func() (*BillingSession, *types.NewAPIError) {
-		subConsume := int64(preConsumedQuota)
-		if subConsume <= 0 {
-			subConsume = 1
+		if isExternalBillingChannel(relayInfo) {
+			return nil, nil
+		}
+		policy := gatewaystore.GetSubscriptionGroupPolicy(relayInfo.UsingGroup)
+		if !policy.Enabled {
+			return nil, nil
+		}
+
+		groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
+		if groupRatio <= 0 {
+			if specialRatio, ok := gatewaystore.GetGroupGroupRatio(relayInfo.UserGroup, relayInfo.UsingGroup); ok {
+				groupRatio = specialRatio
+			} else {
+				groupRatio = gatewaystore.GetGroupRatio(relayInfo.UsingGroup)
+			}
+		}
+		quotaScale := policy.Multiplier
+		if groupRatio > 0 {
+			quotaScale /= groupRatio
 		}
 
 		session := &BillingSession{
-			relayInfo: relayInfo,
+			relayInfo:  relayInfo,
+			quotaScale: quotaScale,
 			funding: &SubscriptionFunding{
 				requestID: relayInfo.RequestId,
 				userID:    relayInfo.UserId,
 				modelName: relayInfo.OriginModelName,
-				amount:    subConsume,
+				amount:    int64(preConsumedQuota),
 			},
 		}
-		if apiErr := session.preConsume(c, int(subConsume)); apiErr != nil {
+		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
 			return nil, apiErr
 		}
 		return session, nil
-	}
-
-	if isClaudeBillingRequest(relayInfo) {
-		return tryClaudeWallet()
 	}
 
 	var lastInsufficientErr *types.NewAPIError
@@ -593,7 +563,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		_, walletInsufficient := insufficientSources[BillingSourceWallet]
 		if subscriptionInsufficient && walletInsufficient {
 			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("GPT 套餐额度不足，且官方 GPT 专属额度不足"),
+				fmt.Errorf("月卡额度不足，且通用额度不足"),
 				types.ErrorCodeInsufficientUserQuota,
 				http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(),

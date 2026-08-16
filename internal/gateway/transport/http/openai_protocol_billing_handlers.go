@@ -28,7 +28,7 @@ func GetOpenAIProtocolSubscription(c *gin.Context) {
 		}
 	} else {
 		userID := c.GetInt("id")
-		remainQuota, err = billingapp.GetUserWalletQuota(userID)
+		remainQuota, err = billingapp.GetUserClaudeWalletQuota(userID)
 		if err == nil {
 			usedQuota, err = billingapp.GetUserUsedQuota(userID)
 		}

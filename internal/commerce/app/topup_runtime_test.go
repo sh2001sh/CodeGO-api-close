@@ -64,7 +64,7 @@ func TestCompleteTopUpByTradeNo_ConsumesReservedBlindBoxProp(t *testing.T) {
 
 	var savedUser identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-	assert.Greater(t, savedUser.Quota, 0)
+	assert.Greater(t, savedUser.ClaudeQuota, 0)
 }
 
 func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {

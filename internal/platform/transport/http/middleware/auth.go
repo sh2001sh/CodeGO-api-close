@@ -429,6 +429,8 @@ func TokenAuth() func(c *gin.Context) {
 
 		userGroup := userCache.Group
 		tokenGroup := token.Group
+		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, commerceapp.RequiresOfficialBlindBoxChannel(token.UserId))
+		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelFallback, false)
 		zeroHourActive := tokenGroup == commerceapp.ZeroHourGroup
 		monthlyPassActive := tokenGroup == commerceapp.MonthlyPassGroup
 		if zeroHourActive {
@@ -444,13 +446,19 @@ func TokenAuth() func(c *gin.Context) {
 			}
 			userGroup = commerceapp.MultiplierCardRouteGroup()
 		} else if marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
+			httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, false)
 			// The request model is not known during authentication. The distributor
 			// resolves the user's pool to one real marketplace group afterwards.
 			userGroup = marketplacedomain.TokenAutoGroupValue
 		} else if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) {
+			httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, false)
 			binding, bindErr := marketplaceapp.ResolveTokenGroupBinding(tokenGroup, token.UserId)
 			if bindErr != nil {
 				abortWithOpenAiMessage(c, http.StatusForbidden, bindErr.Error())
+				return
+			}
+			if limitErr := marketplaceapp.EnforceMultiplierLimit(binding.Multiplier, token.MarketplaceMultiplierLimit); limitErr != nil {
+				abortWithOpenAiMessage(c, http.StatusForbidden, limitErr.Error())
 				return
 			}
 			userGroup = binding.InternalGroup
@@ -514,6 +522,7 @@ func SetupContextForToken(c *gin.Context, token *identityschema.Token, parts ...
 	}
 	httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, gatewayroutingapp.NormalizeTokenGroup(token.Group))
 	httpctx.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
+	httpctx.SetContextKey(c, constant.ContextKeyTokenMarketplaceMultiplierLimit, token.MarketplaceMultiplierLimit)
 	if len(parts) > 1 {
 		if identityapp.IsUserAdmin(token.UserId) {
 			c.Set("specific_channel_id", parts[1])

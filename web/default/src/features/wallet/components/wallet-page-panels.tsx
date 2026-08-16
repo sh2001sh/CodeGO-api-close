@@ -17,14 +17,12 @@ import type {
   SelfSubscriptionData,
 } from '@/features/subscriptions/types'
 import { RedemptionCodePanel } from './redemption-code-panel'
-import { SubscriptionClaudeConversionCard } from './subscription-claude-conversion-card'
 import { WalletBillingOrderPanel } from './wallet-billing-order-panel'
 import {
   getOrderedSubscriptions,
   type WalletPlanMeta,
 } from './wallet-panel-utils'
 import { WalletPeerTransferCard } from './wallet-peer-transfer-card'
-import { WalletQuotaConversionCard } from './wallet-quota-conversion-card'
 import { WalletResetOpportunityPanel } from './wallet-reset-opportunity-panel'
 
 const ALL_FUNDING_SOURCES: FundingSource[] = ['subscription', 'wallet']
@@ -42,8 +40,7 @@ interface WalletPagePanelsProps {
   subscriptionLoading?: boolean
   onSubscriptionRefresh?: () => Promise<void>
   onUserRefresh?: () => Promise<void>
-  section: 'funding' | 'conversion' | 'transfer' | 'billing'
-  onOpenConversionHistory?: () => void
+  section: 'funding' | 'transfer' | 'billing'
   onOpenTransferHistory?: () => void
 }
 
@@ -101,16 +98,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
   const currentSubscriptionPlanMeta = currentSubscription
     ? planMetaMap.get(currentSubscription.plan_id)
     : undefined
-  const conversionPlanTitles = useMemo(() => {
-    const titles: Record<number, { title: string; subtitle: string }> = {}
-    for (const [planID, planMeta] of planMetaMap) {
-      titles[planID] = {
-        title: planMeta.title,
-        subtitle: planMeta.subtitle,
-      }
-    }
-    return titles
-  }, [planMetaMap])
   const resetOpportunity = props.subscriptionData?.reset_opportunity ?? {
     available_count: 0,
     earned_total: 0,
@@ -254,7 +241,7 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
       <RedemptionCodePanel
         title={t('Redemption code')}
         description={t(
-          '兑换码可发放官方 GPT 专属额度、通用额度、GPT 套餐或活动权益。'
+          '兑换码可发放统一额度、月卡、盲盒或活动权益。'
         )}
         topupLink={props.topupLink}
         redemptionCode={props.redemptionCode}
@@ -262,26 +249,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
         onRedeem={props.onRedeem}
         redeeming={props.redeeming}
       />
-    )
-  }
-
-  if (props.section === 'conversion') {
-    return (
-      <div className='grid gap-4 xl:grid-cols-2'>
-        <WalletQuotaConversionCard
-          onUserRefresh={props.onUserRefresh}
-          onOpenHistory={props.onOpenConversionHistory}
-        />
-        <SubscriptionClaudeConversionCard
-          subscriptionData={props.subscriptionData}
-          loading={props.subscriptionLoading}
-          planTitles={conversionPlanTitles}
-          onRefresh={async () => {
-            await props.onSubscriptionRefresh?.()
-            await props.onUserRefresh?.()
-          }}
-        />
-      </div>
     )
   }
 

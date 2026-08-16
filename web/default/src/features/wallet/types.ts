@@ -32,7 +32,6 @@ export interface ApiResponse<T = unknown> {
 export interface RedemptionResult {
   redeem_type: 'quota' | 'subscription' | 'blind_box' | string
   quota?: number
-  wallet_type?: WalletType
   plan_id?: number
   plan_title?: string
   blind_box_quantity?: number
@@ -95,50 +94,50 @@ export interface CreemPaymentRequest {
   payment_method: 'creem'
 }
 
-export type WalletType = 'default' | 'claude'
-
-export type WalletQuotaConversionDirection =
-  | 'standard_to_claude'
-  | 'claude_to_standard'
-
-export interface WalletQuotaConversion {
+export interface UnifiedCreditUserMigration {
   id: number
   user_id: number
-  request_id: string
-  direction: WalletQuotaConversionDirection
-  status: string
-  source_quota: number
-  target_quota: number
-  standard_quota_before: number
-  standard_quota_after: number
-  claude_quota_before: number
-  claude_quota_after: number
+  version: string
+  legacy_gpt_quota: number
+  converted_unified_quota: number
+  subscription_unified_quota: number
+  status: 'applied' | 'review_required' | string
+  review_reason?: string
   created_at: number
+  completed_at: number
 }
 
-export interface WalletQuotaConversionOverview {
-  standard_per_claude: number
-  quota_per_usd: number
-  standard_quota: number
-  claude_quota: number
-  recent_conversions: WalletQuotaConversion[]
+export interface SubscriptionTierSettlement {
+  id: number
+  user_subscription_id: number
+  plan_id: number
+  membership_tier: 'lite' | 'standard' | 'pro' | 'ultra' | string
+  base_price_cents: number
+  amount_total: number
+  amount_used: number
+  unused_amount: number
+  settlement_quota: number
+  rule_version: string
+  status: 'applied' | 'review_required' | string
+  review_reason?: string
+  settled_at: number
 }
 
-export interface WalletQuotaConversionRequest {
-  direction: WalletQuotaConversionDirection
-  source_quota: number
-  request_id: string
+export interface UnifiedCreditMigrationDetail {
+  migration?: UnifiedCreditUserMigration
+  settlements: SubscriptionTierSettlement[]
 }
 
-export type WalletQuotaConversionOverviewResponse =
-  ApiResponse<WalletQuotaConversionOverview>
-export type WalletQuotaConversionResponse = ApiResponse<WalletQuotaConversion>
+export type UnifiedCreditMigrationDetailResponse =
+  ApiResponse<UnifiedCreditMigrationDetail>
 
 export interface WalletTransferSecurityOverview {
   password_set: boolean
   locked_until: number
   remaining_password_attempts: number
   requires_account_password: boolean
+  email_bound: boolean
+  email_masked: string
 }
 
 export interface WalletTransferHistoryItem {
@@ -181,6 +180,7 @@ export interface ConfigureWalletTransferPasswordRequest {
   old_payment_password?: string
   new_payment_password: string
   confirm_password: string
+  email_code?: string
 }
 
 export interface CreateWalletTransferRequest {
@@ -194,6 +194,9 @@ export type WalletTransferOverviewResponse = ApiResponse<WalletTransferOverview>
 export type WalletTransferRecipientResponse =
   ApiResponse<WalletTransferRecipient>
 export type WalletTransferResponse = ApiResponse<WalletTransferHistoryItem>
+export type WalletTransferEmailCodeResponse = ApiResponse<{
+  email_masked: string
+}>
 
 /**
  * Payment method configuration
@@ -293,8 +296,6 @@ export interface PaymentRequest {
   amount: number
   /** Payment method identifier */
   payment_method: string
-  /** Target wallet balance pool */
-  wallet_type?: WalletType
 }
 
 /**
@@ -303,8 +304,6 @@ export interface PaymentRequest {
 export interface WaffoPaymentRequest {
   /** Topup amount */
   amount: number
-  /** Target wallet balance pool */
-  wallet_type?: WalletType
   /** Optional server-side Waffo payment method index */
   pay_method_index?: number
 }
@@ -315,8 +314,6 @@ export interface WaffoPaymentRequest {
 export interface WaffoPancakePaymentRequest {
   /** Topup amount */
   amount: number
-  /** Target wallet balance pool */
-  wallet_type?: WalletType
 }
 
 /**
@@ -325,8 +322,6 @@ export interface WaffoPancakePaymentRequest {
 export interface AmountRequest {
   /** Topup amount to calculate */
   amount: number
-  /** Target wallet balance pool */
-  wallet_type?: WalletType
 }
 
 export interface SubscriptionResetOpportunitySummary {
@@ -367,8 +362,6 @@ export interface UserWalletData {
   username: string
   /** Current quota balance */
   quota: number
-  /** Claude-only quota balance */
-  claude_quota?: number
   /** Total used quota */
   used_quota: number
   /** Total request count */
@@ -404,8 +397,6 @@ export interface TopupRecord {
   trade_no: string
   /** Payment method type */
   payment_method: string
-  /** Target wallet balance pool */
-  wallet_type?: WalletType
   /** Creation timestamp */
   create_time: number
   /** Completion timestamp */
@@ -456,6 +447,8 @@ export interface BlindBoxProp {
   multiplier: number
   duration_seconds: number
   remaining_seconds?: number
+  max_discount_quota: number
+  used_discount_quota: number
   activated_at?: number
   expires_at?: number
   reserved_at?: number
@@ -512,10 +505,7 @@ export interface BlindBoxGrant {
 export interface BlindBoxOverview {
   available_boxes: number
   pending_boxes: number
-  // Mirrors the user's main wallet quota. Blind-box rewards are credited
-  // into the normal wallet immediately, so this is not a separate pool.
-  remaining_quota: number
-  claude_quota: number
+  quota: number
   pity_progress: number
   pity_threshold: number
   effective_pity_threshold: number
@@ -567,7 +557,7 @@ export interface BlindBoxSelfData {
   zero_hour?: BlindBoxZeroHourOverview
   statistics?: BlindBoxStatistics
   grants?: BlindBoxGrant[]
-  balance_blind_box?: BalanceBlindBoxOverview
+  inventory?: BalanceBlindBoxOverview
 }
 
 export interface BalanceBlindBoxOverview {
@@ -610,6 +600,23 @@ export interface BalanceBlindBoxGift {
   quantity: number
   status: string
   created_at: number
+}
+
+export interface BalanceBlindBoxSimulationDraw {
+  reward_type: string
+  reward_tier: string
+  reward_usd: number
+  credit_amount: number
+  reward_title: string
+}
+
+export interface BalanceBlindBoxSimulationResult {
+  price_quota: number
+  balance_before: number
+  cost_quota: number
+  reward_quota: number
+  balance_after: number
+  draws: BalanceBlindBoxSimulationDraw[]
 }
 
 export interface BlindBoxOrderStatus {

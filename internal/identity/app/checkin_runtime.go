@@ -50,7 +50,7 @@ func performUserCheckin(userID int) (*identitydomain.Checkin, error) {
 			return errors.New("签到失败，请稍后重试")
 		}
 		idempotencyKey := "checkin:" + checkin.CheckinDate + ":" + fmt.Sprint(userID)
-		if err := billingapp.CreditWalletQuotaTx(tx, userID, checkin.QuotaAwarded, idempotencyKey, "daily_checkin_credit"); err != nil {
+		if err := billingapp.CreditClaudeWalletQuotaTx(tx, userID, checkin.QuotaAwarded, idempotencyKey, "daily_checkin_credit"); err != nil {
 			return errors.New("签到失败：更新额度出错")
 		}
 		return nil

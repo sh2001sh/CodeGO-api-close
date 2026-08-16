@@ -49,7 +49,7 @@ func main() {
 
 	for _, candidate := range candidates {
 		if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-			return billingapp.CreditWalletQuotaTx(
+			return billingapp.CreditClaudeWalletQuotaTx(
 				tx,
 				candidate.UserID,
 				int(candidate.RefundAmount),

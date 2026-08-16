@@ -114,13 +114,20 @@ export function MobileGroupRow(props: {
             </div>
           </div>
         </div>
-        <div className='bg-muted/25 mt-3 grid grid-cols-3 rounded-lg px-3 py-2.5 text-xs'>
+        <div className='bg-muted/25 mt-3 grid grid-cols-2 gap-y-2 rounded-lg px-3 py-2.5 text-xs sm:grid-cols-4'>
           <Metric
             label={t('成功率')}
             value={formatPercent(group.success_rate)}
           />
           <Metric label='TTFT' value={formatDuration(group.avg_ttft_ms)} />
+          <Metric
+            label={t('缓存命中率')}
+            value={formatPercent(group.cache_hit_rate)}
+          />
           <Metric label={t('请求')} value={formatNumber(group.request_count)} />
+        </div>
+        <div className='mt-3'>
+          <RecentRequestStatus group={group} />
         </div>
       </button>
       {props.open && (
@@ -171,7 +178,7 @@ function QualityCell(props: { group: MarketplaceGroup }) {
   const group = props.group
   const rate = Math.max(0, Math.min(100, group.success_rate))
   return (
-    <div>
+    <div className='space-y-2.5'>
       <div className='flex items-center justify-between gap-3 text-xs'>
         <span className='text-muted-foreground'>{t('成功率')}</span>
         <span className='font-medium tabular-nums'>{formatPercent(rate)}</span>
@@ -182,11 +189,57 @@ function QualityCell(props: { group: MarketplaceGroup }) {
           style={{ width: `${rate}%` }}
         />
       </div>
-      <div className='text-muted-foreground mt-2 flex justify-between text-[11px]'>
-        <span>{group.observing ? t('观测中') : t('综合评分')}</span>
-        <span className='text-foreground font-medium tabular-nums'>
-          {group.observing ? '--' : group.score.toFixed(1)}
+      <RecentRequestStatus group={group} />
+      <div className='flex items-center justify-between gap-3 text-[11px]'>
+        <span className='text-muted-foreground'>{t('缓存命中率')}</span>
+        <span className='font-medium tabular-nums'>
+          {formatPercent(group.cache_hit_rate)}
         </span>
+      </div>
+    </div>
+  )
+}
+
+function RecentRequestStatus(props: { group: MarketplaceGroup }) {
+  const { t } = useTranslation()
+  const points = props.group.recent_request_series?.slice(-10) ?? []
+  const statusLabels = {
+    healthy: t('近期稳定'),
+    unstable: t('近期波动'),
+    failed: t('近期异常'),
+    unknown: t('暂无近期请求'),
+  }
+
+  return (
+    <div className='flex items-center justify-between gap-3'>
+      <span className='text-muted-foreground shrink-0 text-[11px]'>
+        {statusLabels[props.group.latest_request_status]}
+      </span>
+      <div
+        className='flex min-w-16 flex-1 justify-end gap-0.5'
+        aria-label={t('近期请求状态')}
+      >
+        {points.length === 0
+          ? Array.from({ length: 6 }).map((_, index) => (
+              <span
+                key={index}
+                className='bg-muted h-2.5 min-w-1 flex-1 rounded-sm'
+              />
+            ))
+          : points.map((point) => (
+              <span
+                key={`${point.ts}-${point.request_count}`}
+                title={`${formatPercent(point.success_rate)} · ${formatNumber(point.request_count)} ${t('次请求')}`}
+                className={cn(
+                  'h-2.5 min-w-1 flex-1 rounded-sm',
+                  point.success_rate >= 99 && 'bg-emerald-500',
+                  point.success_rate >= 85 &&
+                    point.success_rate < 99 &&
+                    'bg-amber-500',
+                  point.success_rate < 85 && 'bg-rose-500'
+                )}
+              />
+            ))}
       </div>
     </div>
   )

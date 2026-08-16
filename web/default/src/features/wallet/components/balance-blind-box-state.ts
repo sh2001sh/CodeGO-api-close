@@ -2,6 +2,7 @@ import { useState, type Dispatch, type SetStateAction } from 'react'
 import type {
   BalanceBlindBoxOverview,
   BlindBoxSelfData,
+  PaymentMethod,
   WalletTransferRecipient,
 } from '../types'
 import {
@@ -20,8 +21,16 @@ export function useBalanceBlindBoxPanelState(props: {
   data: BlindBoxSelfData | null
   loading: boolean
   onRefresh: () => Promise<void>
+  cashMethods: PaymentMethod[]
+  selectedCashMethod: PaymentMethod | null
+  cashAmountDue: number
+  cashPaying: boolean
+  onCashMethodChange: (method: PaymentMethod) => void
+  onCashQuantityChange: (count: number) => void
+  onCashPurchase: (count: number) => void
+  onOpenProps: () => void
 }): BalanceBoxPanelViewProps {
-  const balance = props.data?.balance_blind_box
+  const balance = props.data?.inventory
   const [mode, setMode] = useState<ActionMode>('purchase')
   const [count, setCount] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -31,7 +40,13 @@ export function useBalanceBlindBoxPanelState(props: {
   )
   const [confirmGift, setConfirmGift] = useState(false)
   const { maxCount, safeCount, canPurchase, canUseInventory } =
-    deriveBalanceBoxState(mode, balance, count, props.loading, busy)
+    deriveBalanceBoxState(
+      mode,
+      balance,
+      count,
+      props.loading,
+      busy || props.cashPaying
+    )
   const context = createBalanceBoxActionContext({
     balance,
     safeCount,
@@ -51,19 +66,27 @@ export function useBalanceBlindBoxPanelState(props: {
     setCount,
     setRecipientId,
     setRecipient,
-    setConfirmGift
+    setConfirmGift,
+    props.onCashQuantityChange
   )
   return {
     balance,
     mode,
     count: safeCount,
     maxCount,
-    busy,
+    busy: busy || props.cashPaying,
     recipient,
     recipientId,
     canPurchase,
     canUseInventory,
     confirmGift,
+    cashMethods: props.cashMethods,
+    selectedCashMethod: props.selectedCashMethod,
+    cashAmountDue: props.cashAmountDue,
+    cashPaying: props.cashPaying,
+    onCashMethodChange: props.onCashMethodChange,
+    onCashPurchase: () => props.onCashPurchase(safeCount),
+    onOpenProps: props.onOpenProps,
     ...handlers,
   }
 }
@@ -112,14 +135,19 @@ function createBalanceBoxHandlers(
   setCount: Dispatch<SetStateAction<number>>,
   setRecipientId: Dispatch<SetStateAction<string>>,
   setRecipient: Dispatch<SetStateAction<WalletTransferRecipient | null>>,
-  setConfirmGift: Dispatch<SetStateAction<boolean>>
+  setConfirmGift: Dispatch<SetStateAction<boolean>>,
+  onCashQuantityChange: (count: number) => void
 ) {
   return {
     onModeChange: (next: ActionMode) => {
       setMode(next)
       setCount(1)
+      onCashQuantityChange(1)
     },
-    onCountChange: setCount,
+    onCountChange: (value: number) => {
+      setCount(value)
+      onCashQuantityChange(value)
+    },
     onRecipientIdChange: (value: string) => {
       setRecipientId(value)
       setRecipient(null)

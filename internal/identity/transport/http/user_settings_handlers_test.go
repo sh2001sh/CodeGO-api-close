@@ -1,11 +1,11 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"net/http"
 	"testing"
@@ -29,7 +29,7 @@ func TestTransferAffQuotaMovesAffiliateQuotaToBalance(t *testing.T) {
 		Role:        constant.RoleCommonUser,
 		Status:      constant.UserStatusEnabled,
 		Group:       "default",
-		Quota:       10,
+		ClaudeQuota: 10,
 		AffQuota:    int(platformruntime.QuotaPerUnit * 2),
 	}
 	if err := db.Create(user).Error; err != nil {
@@ -50,8 +50,8 @@ func TestTransferAffQuotaMovesAffiliateQuotaToBalance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload user: %v", err)
 	}
-	if reloaded.Quota != user.Quota+int(platformruntime.QuotaPerUnit) {
-		t.Fatalf("expected quota increase, got %d", reloaded.Quota)
+	if reloaded.ClaudeQuota != user.ClaudeQuota+int(platformruntime.QuotaPerUnit) {
+		t.Fatalf("expected quota increase, got %d", reloaded.ClaudeQuota)
 	}
 	if reloaded.AffQuota != user.AffQuota-int(platformruntime.QuotaPerUnit) {
 		t.Fatalf("expected aff quota decrease, got %d", reloaded.AffQuota)

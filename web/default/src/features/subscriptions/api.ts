@@ -261,12 +261,10 @@ export async function consumeSubscriptionResetOpportunity(): Promise<
 
 export async function createSubscriptionClaudeConversion(payload: {
   subscriptionId: number
-  sourceQuota: number
   requestId: string
 }): Promise<ApiResponse<SubscriptionClaudeConversionResult>> {
   const res = await api.post('/api/subscription/self/claude-conversions', {
     subscription_id: payload.subscriptionId,
-    source_quota: payload.sourceQuota,
     request_id: payload.requestId,
   })
   return res.data

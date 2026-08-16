@@ -13,6 +13,8 @@ const (
 	EmailVerificationPurpose = "v"
 	// PasswordResetPurpose identifies codes used for password-reset links.
 	PasswordResetPurpose = "r"
+	// WalletTransferPasswordPurpose identifies codes used to rotate transfer payment passwords.
+	WalletTransferPasswordPurpose = "wallet-transfer-password:"
 )
 
 type verificationValue struct {

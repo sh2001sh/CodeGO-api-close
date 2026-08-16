@@ -187,6 +187,10 @@ func AddToken(c *gin.Context) {
 			return
 		}
 	}
+	if err := marketplaceapp.ValidateMultiplierLimitValue(token.MarketplaceMultiplierLimit); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
 	maxTokens := identitystore.GetMaxUserTokens()
 	count, err := identityapp.CountTokensForUser(c.GetInt("id"))
 	if err != nil {
@@ -214,19 +218,20 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	cleanToken := identityschema.Token{
-		UserId:             c.GetInt("id"),
-		Name:               token.Name,
-		Key:                key,
-		CreatedTime:        platformruntime.GetTimestamp(),
-		AccessedTime:       0,
-		ExpiredTime:        token.ExpiredTime,
-		RemainQuota:        token.RemainQuota,
-		UnlimitedQuota:     token.UnlimitedQuota,
-		ModelLimitsEnabled: token.ModelLimitsEnabled,
-		ModelLimits:        token.ModelLimits,
-		AllowIps:           token.AllowIps,
-		Group:              gatewayroutingapp.NormalizeTokenGroup(token.Group),
-		CrossGroupRetry:    token.CrossGroupRetry,
+		UserId:                     c.GetInt("id"),
+		Name:                       token.Name,
+		Key:                        key,
+		CreatedTime:                platformruntime.GetTimestamp(),
+		AccessedTime:               0,
+		ExpiredTime:                token.ExpiredTime,
+		RemainQuota:                token.RemainQuota,
+		UnlimitedQuota:             token.UnlimitedQuota,
+		ModelLimitsEnabled:         token.ModelLimitsEnabled,
+		ModelLimits:                token.ModelLimits,
+		AllowIps:                   token.AllowIps,
+		Group:                      gatewayroutingapp.NormalizeTokenGroup(token.Group),
+		CrossGroupRetry:            token.CrossGroupRetry,
+		MarketplaceMultiplierLimit: token.MarketplaceMultiplierLimit,
 	}
 	err = identityapp.InsertUserToken(&cleanToken)
 	if err != nil {
@@ -277,6 +282,10 @@ func UpdateToken(c *gin.Context) {
 			return
 		}
 	}
+	if err := marketplaceapp.ValidateMultiplierLimitValue(token.MarketplaceMultiplierLimit); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
 	cleanToken, err := identityapp.GetUserToken(userID, token.Id)
 	if err != nil {
 		httpapi.ApiError(c, err)
@@ -311,6 +320,7 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.AllowIps = token.AllowIps
 		cleanToken.Group = gatewayroutingapp.NormalizeTokenGroup(token.Group)
 		cleanToken.CrossGroupRetry = token.CrossGroupRetry
+		cleanToken.MarketplaceMultiplierLimit = token.MarketplaceMultiplierLimit
 	}
 	err = identityapp.UpdateUserToken(cleanToken)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -34,4 +35,27 @@ func TestCreateUserWithTxAssignsImmutableExternalUserID(t *testing.T) {
 	var reloaded identityschema.User
 	require.NoError(t, db.First(&reloaded, user.Id).Error)
 	require.Equal(t, originalExternalID, reloaded.ExternalId)
+}
+
+func TestCreateUserCreditsRegistrationBonusToUnifiedBalanceOnly(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}))
+
+	originalDB := platformdb.DB
+	originalQuota := platformconfig.QuotaForNewUser
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformconfig.QuotaForNewUser = originalQuota
+	})
+	platformdb.DB = db
+	platformconfig.QuotaForNewUser = 12345
+
+	user := &identityschema.User{Username: "unified-registration-user", Password: "password123", DisplayName: "Unified Registration User"}
+	require.NoError(t, CreateUser(user, 0))
+
+	var reloaded identityschema.User
+	require.NoError(t, db.First(&reloaded, user.Id).Error)
+	require.Zero(t, reloaded.Quota)
+	require.Equal(t, platformconfig.QuotaForNewUser, reloaded.ClaudeQuota)
 }

@@ -50,7 +50,6 @@ export interface UserProfile {
   /** Current quota balance */
   quota: number
   /** Claude-only quota balance */
-  claude_quota?: number
   /** Total used quota */
   used_quota: number
   /** Total request count */

@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react'
-import {
-  ArrowRightLeft,
-  CreditCard,
-  Send,
-  SlidersHorizontal,
-} from 'lucide-react'
+import { CreditCard, Send, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
@@ -13,27 +8,21 @@ import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialo
 import { RechargeFormCard } from './components/recharge-form-card'
 import { WalletAccountOverview } from './components/wallet-account-overview'
 import { WalletPagePanels } from './components/wallet-page-panels'
-import { WalletQuotaConversionHistorySheet } from './components/wallet-quota-conversion-history-sheet'
 import { WalletTransferHistorySheet } from './components/wallet-transfer-history-sheet'
 import { WalletWorkspaceShell } from './components/wallet-workspace-shell'
 import { useWalletWorkspace } from './hooks/use-wallet-workspace'
-import type { WalletType } from './types'
 
 interface WalletProps {
   initialShowHistory?: boolean
-  initialWalletType?: WalletType
 }
 
 export function Wallet(props: WalletProps) {
   const { t } = useTranslation()
-  const workspace = useWalletWorkspace({
-    initialWalletType: props.initialWalletType,
-  })
+  const workspace = useWalletWorkspace()
   const setBillingDialogOpen = workspace.setBillingDialogOpen
   const [activeSection, setActiveSection] = useState<
-    'funding' | 'conversion' | 'transfer' | 'billing'
+    'funding' | 'transfer' | 'billing'
   >('funding')
-  const [conversionHistoryOpen, setConversionHistoryOpen] = useState(false)
   const [transferHistoryOpen, setTransferHistoryOpen] = useState(false)
 
   useEffect(() => {
@@ -48,9 +37,7 @@ export function Wallet(props: WalletProps) {
     <>
       <WalletWorkspaceShell
         title={t('Wallet')}
-        description={t(
-          'Manage top-ups, quota conversion, secure transfers, redemption codes, and billing priority in one place.'
-        )}
+        description={t('在一个页面管理统一额度充值、安全转账和扣费优先级。')}
         canonicalPath='/wallet'
         framedMain={false}
         main={
@@ -61,29 +48,21 @@ export function Wallet(props: WalletProps) {
                 workspace.subscriptionData?.subscriptions?.length ?? 0
               }
               onSelectFunding={() => setActiveSection('funding')}
-              onSelectConversion={() => setActiveSection('conversion')}
               onSelectTransfer={() => setActiveSection('transfer')}
               onOpenBillingHistory={() => workspace.setBillingDialogOpen(true)}
-              onOpenConversionHistory={() => setConversionHistoryOpen(true)}
               onOpenTransferHistory={() => setTransferHistoryOpen(true)}
             />
 
             <Tabs
               value={activeSection}
               onValueChange={(value) =>
-                setActiveSection(
-                  value as 'funding' | 'conversion' | 'transfer' | 'billing'
-                )
+                setActiveSection(value as 'funding' | 'transfer' | 'billing')
               }
             >
-              <TabsList className='grid h-auto w-full grid-cols-2 sm:grid-cols-4'>
+              <TabsList className='grid h-auto w-full grid-cols-3'>
                 <TabsTrigger value='funding'>
                   <CreditCard className='size-4' />
                   {t('Top up and redeem')}
-                </TabsTrigger>
-                <TabsTrigger value='conversion'>
-                  <ArrowRightLeft className='size-4' />
-                  {t('Quota conversion')}
                 </TabsTrigger>
                 <TabsTrigger value='transfer'>
                   <Send className='size-4' />
@@ -102,8 +81,6 @@ export function Wallet(props: WalletProps) {
                 presetAmounts={workspace.presetAmounts}
                 selectedPreset={workspace.selectedPreset}
                 onSelectPreset={workspace.handleSelectPreset}
-                selectedWalletType={workspace.selectedWalletType}
-                onWalletTypeChange={workspace.handleWalletTypeChange}
                 topupAmount={workspace.topupAmount}
                 onTopupAmountChange={workspace.handleTopupAmountChange}
                 paymentAmount={workspace.paymentAmount}
@@ -117,14 +94,12 @@ export function Wallet(props: WalletProps) {
                 topupLink={workspace.topupInfo?.topup_link}
                 loading={workspace.topupLoading}
                 showRedemptionSection={false}
-                priceRatio={(workspace.status?.price as number) || 1}
                 usdExchangeRate={workspace.effectiveUsdExchangeRate}
                 creemProducts={workspace.topupInfo?.creem_products}
                 enableCreemTopup={workspace.topupInfo?.enable_creem_topup}
                 onCreemProductSelect={workspace.handleCreemProductSelect}
                 enableWaffoTopup={workspace.topupInfo?.enable_waffo_topup}
                 waffoPayMethods={workspace.topupInfo?.waffo_pay_methods}
-                waffoMinTopup={workspace.topupInfo?.waffo_min_topup}
                 onWaffoMethodSelect={workspace.handleWaffoMethodSelect}
                 enableWaffoPancakeTopup={
                   workspace.topupInfo?.enable_waffo_pancake_topup
@@ -147,7 +122,6 @@ export function Wallet(props: WalletProps) {
               onSubscriptionRefresh={workspace.fetchSubscriptionData}
               onUserRefresh={workspace.fetchUser}
               section={activeSection}
-              onOpenConversionHistory={() => setConversionHistoryOpen(true)}
               onOpenTransferHistory={() => setTransferHistoryOpen(true)}
             />
           </div>
@@ -170,11 +144,6 @@ export function Wallet(props: WalletProps) {
       <BillingHistoryDialog
         open={workspace.billingDialogOpen}
         onOpenChange={workspace.setBillingDialogOpen}
-      />
-
-      <WalletQuotaConversionHistorySheet
-        open={conversionHistoryOpen}
-        onOpenChange={setConversionHistoryOpen}
       />
 
       <WalletTransferHistorySheet

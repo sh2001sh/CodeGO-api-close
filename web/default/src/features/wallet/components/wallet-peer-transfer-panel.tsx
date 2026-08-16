@@ -44,7 +44,7 @@ export function WalletPeerTransferPanel(props: {
           </div>
           <p className='text-muted-foreground mt-1 max-w-2xl text-xs leading-5'>
             {t(
-              '向其他用户转出通用额度。接收方收到完整金额，发送方另付 1% 手续费；官方 GPT 专属额度和月卡不可转账。'
+              '向其他用户转出通用额度。接收方收到完整金额，发送方另付 1% 手续费；月卡不可转账。'
             )}
           </p>
         </div>
@@ -74,17 +74,23 @@ export function WalletPeerTransferPanel(props: {
         </div>
       </div>
 
-      {!props.overview.security.password_set || props.locked ? (
+      {!props.overview.security.email_bound ||
+      !props.overview.security.password_set ||
+      props.locked ? (
         <div className='border-border bg-muted/35 mt-4 flex items-start gap-3 rounded-md border p-3'>
           <LockKeyhole className='text-primary mt-0.5 size-4 shrink-0' />
           <div className='min-w-0 text-xs leading-5'>
             <p className='font-medium'>
-              {props.locked
+              {!props.overview.security.email_bound
+                ? '绑定邮箱后才能设置支付密码'
+                : props.locked
                 ? t('Transfers are temporarily locked')
                 : t('Set a payment password before your first transfer')}
             </p>
             <p className='text-muted-foreground'>
-              {props.locked
+              {!props.overview.security.email_bound
+                ? '请先前往个人设置绑定邮箱，后续修改支付密码时验证码会发送到该邮箱。'
+                : props.locked
                 ? t('Try again after {{time}}.', {
                     time: new Date(
                       props.overview.security.locked_until * 1000

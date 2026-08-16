@@ -23,7 +23,7 @@ export function PackageModelScopeNotice(props: { className?: string }) {
         <ul className='text-muted-foreground mt-1 list-disc space-y-1 pl-4 text-xs leading-5'>
           <li>
             {t(
-              'Plan quota cannot be used with Claude models. Use Claude quota for Claude requests.'
+              'Monthly passes can only be used in groups that administrators explicitly enable for monthly-pass billing; each enabled group has its own monthly-pass billing multiplier.'
             )}
           </li>
           <li>

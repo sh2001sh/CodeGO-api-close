@@ -124,7 +124,7 @@ func getBalanceBlindBoxOverview(c *gin.Context) {
 		httpapi.ApiError(c, err)
 		return
 	}
-	httpapi.ApiSuccess(c, gin.H{"balance_blind_box": overview})
+	httpapi.ApiSuccess(c, gin.H{"inventory": overview})
 }
 
 func purchaseBalanceBlindBoxes(c *gin.Context) {
@@ -154,6 +154,23 @@ func openBalanceBlindBox(c *gin.Context) {
 		return
 	}
 	result, err := commerceapp.OpenBalanceBlindBox(c.GetInt("id"), req.RequestID, req.Count)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, result)
+}
+
+func simulateBalanceBlindBoxes(c *gin.Context) {
+	var req struct {
+		BalanceQuota int64 `json:"balance_quota" binding:"required"`
+		Count        int   `json:"count" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "balance_quota and count are required")
+		return
+	}
+	result, err := commerceapp.SimulateBalanceBlindBoxes(req.BalanceQuota, req.Count)
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

@@ -20,7 +20,7 @@ export function BlindBoxPropsList(props: {
       </div>
       <div className='text-muted-foreground mt-1 text-xs leading-5'>
         {t(
-          'Use available multiplier cards here. Recharge and plan discount cards apply automatically to the next eligible order.'
+          '倍率卡需手动启用，充值九折卡会自动应用于下一笔符合条件的统一额度充值。'
         )}
       </div>
       <div className='mt-3 space-y-2'>
@@ -34,10 +34,7 @@ export function BlindBoxPropsList(props: {
           const pausable = monthlyPass || zeroHour
           const canUse = available || (pausable && paused)
           const convertible =
-            available &&
-            ['topup_discount_90', 'subscription_discount_90'].includes(
-              prop.prop_type
-            )
+            available && prop.prop_type === 'subscription_discount_90'
 
           return (
             <div
@@ -46,7 +43,7 @@ export function BlindBoxPropsList(props: {
             >
               <div className='min-w-0 flex-1'>
                 <div className='text-foreground text-sm font-medium break-words'>
-                  {prop.title}
+                  {getPropTitle(prop)}
                 </div>
                 <div className='text-muted-foreground mt-0.5 text-xs leading-5 break-words'>
                   {getPropDescription(prop, t)}
@@ -72,9 +69,7 @@ export function BlindBoxPropsList(props: {
                       }
                       data-icon='inline-start'
                     />
-                    {prop.prop_type === 'topup_discount_90'
-                      ? '转为套餐九折卡'
-                      : '转为充值九折卡'}
+                    转为充值九折卡
                   </Button>
                 ) : null}
                 {pausable && active ? (
@@ -131,22 +126,22 @@ function getPropDescription(
 ) {
   if (prop.status === 'active' && prop.expires_at) {
     if (prop.prop_type === 'monthly_pass_multiplier') {
-      return `0.1 倍率已生效，已接入倍率卡专属分组；剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}，非生图模型可用。`
+      return `0.10 倍率体验卡已生效；剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}，仅官方指定 GPT 分组可用。`
     }
     if (prop.prop_type === 'zero_hour_multiplier') {
-      return `0 倍率已生效，剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}；可随时暂停并保留剩余时间。`
+      return `历史 0 倍率道具已生效，剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}；可随时暂停并保留剩余时间。`
     }
-    return t('Active until {{date}}', {
+    return `${t('Active until {{date}}', {
       date: new Date(prop.expires_at * 1000).toLocaleString(),
-    })
+    })} 仅官方渠道可用。`
   }
   if (isManualUseProp(prop)) {
     if (prop.prop_type === 'monthly_pass_multiplier') {
       const remaining = prop.remaining_seconds || prop.duration_seconds
       if (prop.status === 'paused') {
-        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后接入倍率卡专属分组，按 0.1 倍率计费。`
+        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后仅在官方指定 GPT 分组按 0.10 倍率计费。`
       }
-      return `启用后可随时暂停，累计可用 ${formatSeconds(remaining)}；仅限倍率卡专属分组非生图模型。`
+      return `启用后可随时暂停，累计可用 ${formatSeconds(remaining)}；仅限官方指定 GPT 分组。`
     }
     if (prop.prop_type === 'zero_hour_multiplier') {
       const remaining = prop.remaining_seconds || prop.duration_seconds
@@ -154,19 +149,26 @@ function getPropDescription(
         return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后重新接入倍率卡专属分组，按 0 倍率计费。`
       }
       return prop.status === 'available'
-        ? '启用后可随时暂停，累计可用 1 小时；倍率卡专属分组非生图模型按 0 倍率计费。'
+        ? '迁移前获得的历史道具，启用后可随时暂停并保留剩余时间。'
         : '0 倍率已生效，可随时暂停；仅限当前用户，单用户并发最多 10 个请求。'
     }
     return prop.status === 'available'
-      ? t('Click Use to activate this card for {{hours}} hours.', {
+      ? `${t('Click Use to activate this card for {{hours}} hours.', {
           hours: Math.max(1, Math.round(prop.duration_seconds / 3600)),
-        })
+        })} 仅官方渠道可用。`
       : t('Multiplier card')
   }
   if (prop.status === 'available') {
     return t('Automatically applied to the next eligible order.')
   }
   return t('This prop is no longer available.')
+}
+
+function getPropTitle(prop: BlindBoxProp) {
+  if (prop.prop_type === 'monthly_pass_multiplier') return '0.10 倍率体验卡'
+  if (prop.prop_type === 'subscription_discount_90') return '历史套餐折扣卡'
+  if (prop.prop_type === 'zero_hour_multiplier') return '历史 0 倍率道具'
+  return prop.title
 }
 
 function getPropActionLabel(

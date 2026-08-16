@@ -28,7 +28,7 @@ func TestGetOpenAIProtocolSubscriptionReturnsUserBillingSnapshot(t *testing.T) {
 		Role:        constant.RoleCommonUser,
 		Status:      constant.UserStatusEnabled,
 		Group:       "default",
-		Quota:       int(platformruntime.QuotaPerUnit * 3),
+		ClaudeQuota: int(platformruntime.QuotaPerUnit * 3),
 		UsedQuota:   int(platformruntime.QuotaPerUnit * 2),
 		AffCode:     "GB01",
 	}

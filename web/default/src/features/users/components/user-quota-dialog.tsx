@@ -95,11 +95,7 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
       })
       if (result.success) {
         toast.success(
-          t(
-            action === 'add_claude_quota'
-              ? '通用额度调整成功'
-              : 'Quota adjusted successfully'
-          )
+          t('通用额度调整成功')
         )
         setAmount('')
         setMode('add')

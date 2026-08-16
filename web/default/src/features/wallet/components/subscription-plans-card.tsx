@@ -200,13 +200,12 @@ export function SubscriptionPlansCard({
           contentClassName='space-y-4'
         >
           <div className='border-border bg-muted/40 text-muted-foreground rounded-2xl border px-4 py-3 text-sm leading-6'>
-            GPT 套餐额度仅用于官方 GPT 分组；通用额度用于
-            Claude、其他模型和第三方市场分组。两类额度用途固定，不能相互转换。
+            月卡仅可用于管理员已启用月卡扣费的非第三方分组，并按该分组配置的月卡倍率扣费。未使用月卡可按档位价格与剩余比例整卡转换为通用额度。
           </div>
 
           <PlanSection
             title='月卡套餐'
-            description='适合长期使用 GPT 系列模型。月卡有效期 1 个月，购买的总额度就是本月可用额度，一个月内可自由使用。'
+            description='适合长期使用。月卡有效期 1 个月，仅在允许月卡扣费的分组中按配置倍率使用。'
             loading={plansLoading}
             emptyText='当前没有可购买的月卡套餐。'
           >

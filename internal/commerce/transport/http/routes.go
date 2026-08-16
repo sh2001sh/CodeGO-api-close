@@ -9,11 +9,11 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	walletRoute := apiRouter.Group("/wallet")
 	walletRoute.Use(middleware.UserAuth())
 	{
-		walletRoute.GET("/quota-conversions", getWalletQuotaConversions)
-		walletRoute.POST("/quota-conversions", middleware.CriticalRateLimit(), createWalletQuotaConversion)
+		walletRoute.GET("/unified-credit-migration", getUnifiedCreditMigrationDetail)
 		walletRoute.GET("/transfers", getWalletTransferOverview)
 		walletRoute.GET("/transfers/recipients/:external_id", middleware.CriticalRateLimit(), getWalletTransferRecipient)
 		walletRoute.PUT("/transfers/payment-password", middleware.CriticalRateLimit(), configureWalletTransferPassword)
+		walletRoute.POST("/transfers/payment-password/email-code", middleware.EmailVerificationRateLimit(), sendWalletTransferPasswordEmailCode)
 		walletRoute.POST("/transfers", middleware.CriticalRateLimit(), createWalletTransfer)
 	}
 
@@ -23,6 +23,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		subscriptionRoute.GET("/plans", getSubscriptionPlans)
 		subscriptionRoute.GET("/self", getSubscriptionSelf)
 		subscriptionRoute.GET("/self/claude-conversions", listSubscriptionClaudeConversions)
+		subscriptionRoute.POST("/self/claude-conversions", middleware.CriticalRateLimit(), createSubscriptionClaudeConversion)
 		subscriptionRoute.GET("/orders/:trade_no", getSubscriptionOrderStatus)
 		subscriptionRoute.POST("/orders/:trade_no/cancel", middleware.CriticalRateLimit(), cancelSubscriptionOrder)
 		subscriptionRoute.PUT("/self/preference", updateSubscriptionPreference)
@@ -103,14 +104,14 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.GET("/orders/:trade_no", getBlindBoxOrderStatus)
 		blindBoxRoute.POST("/amount", requestBlindBoxAmount)
 		blindBoxRoute.POST("/pay", middleware.BlindBoxPaymentRateLimit(), requestBlindBoxPay)
-		blindBoxRoute.POST("/open", middleware.BlindBoxOpenRateLimit(), openBlindBox)
 		blindBoxRoute.POST("/props/:id/use", middleware.CriticalRateLimit(), useBlindBoxProp)
 		blindBoxRoute.POST("/props/:id/pause", middleware.CriticalRateLimit(), pauseBlindBoxProp)
 		blindBoxRoute.POST("/props/:id/convert", middleware.CriticalRateLimit(), convertBlindBoxProp)
-		blindBoxRoute.GET("/balance/overview", getBalanceBlindBoxOverview)
-		blindBoxRoute.POST("/balance/purchase", middleware.BalanceBlindBoxOpenRateLimit(), purchaseBalanceBlindBoxes)
-		blindBoxRoute.POST("/balance/open", middleware.BalanceBlindBoxOpenRateLimit(), openBalanceBlindBox)
-		blindBoxRoute.POST("/balance/gift", middleware.CriticalRateLimit(), giftBalanceBlindBoxes)
+		blindBoxRoute.GET("/inventory/overview", getBalanceBlindBoxOverview)
+		blindBoxRoute.POST("/inventory/purchase", middleware.BalanceBlindBoxOpenRateLimit(), purchaseBalanceBlindBoxes)
+		blindBoxRoute.POST("/inventory/open", middleware.BalanceBlindBoxOpenRateLimit(), openBalanceBlindBox)
+		blindBoxRoute.POST("/inventory/gift", middleware.CriticalRateLimit(), giftBalanceBlindBoxes)
+		blindBoxRoute.POST("/simulation/draw", middleware.BalanceBlindBoxOpenRateLimit(), simulateBalanceBlindBoxes)
 	}
 
 	dailyLuckyNumberRoute := apiRouter.Group("/daily-lucky-number")

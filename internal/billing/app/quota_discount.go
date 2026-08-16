@@ -1,6 +1,11 @@
 package app
 
-import "math"
+import (
+	"math"
+
+	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+)
 
 type usageConsumptionDiscount struct {
 	QuotaBeforeDiscount int
@@ -9,21 +14,40 @@ type usageConsumptionDiscount struct {
 	DiscountQuota       int
 	QuotaAfterDiscount  int
 	DiscountTitle       string
+	PropID              int
+	RemainingQuota      int64
+	ChannelScope        string
 }
 
-func getEffectiveConsumptionDiscountRate(userID int) float64 {
-	return getBlindBoxConsumptionDiscountRate(userID)
+func applyUsageConsumptionDiscount(relayInfo *relaycommon.RelayInfo, quota int) int {
+	return calculateUsageConsumptionDiscount(relayInfo, quota).QuotaAfterDiscount
 }
 
-func applyUsageConsumptionDiscount(userID int, quota int) int {
-	return calculateUsageConsumptionDiscount(userID, quota).QuotaAfterDiscount
-}
-
-func calculateUsageConsumptionDiscount(userID int, quota int) usageConsumptionDiscount {
-	return calculateUsageConsumptionDiscountWithRate(
-		quota,
-		getEffectiveConsumptionDiscountRate(userID),
-	)
+func calculateUsageConsumptionDiscount(relayInfo *relaycommon.RelayInfo, quota int) usageConsumptionDiscount {
+	detail := calculateUsageConsumptionDiscountWithRate(quota, 0)
+	if relayInfo == nil || relayInfo.ChannelMeta == nil || quota <= 0 {
+		return detail
+	}
+	result, err := applyBlindBoxConsumptionDiscount(BlindBoxConsumptionDiscountRequest{
+		RequestID: relayInfo.RequestId, UserID: relayInfo.UserId,
+		ChannelID: relayInfo.ChannelId, ChannelScope: relayInfo.ChannelScope,
+		ModelName: relayInfo.OriginModelName, UsingGroup: relayInfo.UsingGroup,
+		Quota: quota,
+	})
+	if err != nil {
+		platformobservability.SysError("apply blind box consumption discount: " + err.Error())
+		return detail
+	}
+	detail.QuotaBeforeDiscount = result.QuotaBeforeDiscount
+	detail.QuotaAfterDiscount = result.QuotaAfterDiscount
+	detail.DiscountQuota = result.DiscountQuota
+	detail.DiscountRate = result.DiscountRate
+	detail.DiscountMultiplier = result.Multiplier
+	detail.DiscountTitle = result.Title
+	detail.PropID = result.PropID
+	detail.RemainingQuota = result.RemainingDiscountQuota
+	detail.ChannelScope = relayInfo.ChannelScope
+	return detail
 }
 
 func calculateUsageConsumptionDiscountWithRate(quota int, rate float64) usageConsumptionDiscount {
@@ -70,5 +94,8 @@ func appendUsageConsumptionDiscountInfo(
 	if detail.DiscountRate > 0 {
 		other["usage_discount_source"] = "blind_box_multiplier_card"
 		other["usage_discount_title"] = detail.DiscountTitle
+		other["usage_discount_prop_id"] = detail.PropID
+		other["usage_discount_channel_scope"] = detail.ChannelScope
+		other["usage_discount_remaining_quota"] = detail.RemainingQuota
 	}
 }

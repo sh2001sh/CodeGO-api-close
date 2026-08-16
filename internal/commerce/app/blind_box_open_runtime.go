@@ -10,7 +10,6 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
-	"math/rand"
 	"strings"
 	// OpenBlindBoxes opens the requested number of blind boxes for the user.
 )
@@ -180,7 +179,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			}
 		}
 
-		subscriptionHit := rand.Float64() < setting.SubscriptionPrizeProbability
+		subscriptionHit := secureBlindBoxRandomFloat64() < setting.SubscriptionPrizeProbability
 		if subscriptionHit {
 			subscriptionPlan, err := getBlindBoxSubscriptionPlanTx(tx)
 			if err != nil {
@@ -276,7 +275,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				if tierName == "first_purchase" {
 					record.RewardTitle = formatFirstPurchaseBlindBoxRewardTitle(totalRewardUSD)
 				} else {
-					record.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", totalRewardUSD)
 				}
 				if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 					return nil, err
@@ -308,9 +307,9 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				if tierName == "first_purchase" {
 					record.RewardTitle = formatFirstPurchaseBlindBoxRewardTitle(totalRewardUSD)
 				} else if tierWalletType == commerceschema.BlindBoxRewardWalletTypeClaude {
-					record.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", totalRewardUSD)
 				} else {
-					record.RewardTitle = fmt.Sprintf("%.2f 官方 GPT 专属额度奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", totalRewardUSD)
 				}
 				if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 					return nil, err

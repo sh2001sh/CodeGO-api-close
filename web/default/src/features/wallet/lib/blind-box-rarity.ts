@@ -58,9 +58,9 @@ export function resolveTierRewardType(tier: BlindBoxTier) {
 export function classifyTier(tier: BlindBoxTier): RewardRarity {
   const rewardType = resolveTierRewardType(tier)
   if (rewardType === 'subscription') return 'legendary'
-  if (rewardType === 'claude_quota')
+  if (rewardType === 'claude_quota' || rewardType === 'quota') {
     return tier.max_usd >= 2 ? 'epic' : 'common'
-  if (rewardType === 'quota') return tier.max_usd >= 30 ? 'epic' : 'common'
+  }
   return 'common'
 }
 
@@ -73,15 +73,13 @@ export function formatTierAmount(tier: BlindBoxTier) {
       ? `$${tier.min_usd}`
       : `$${tier.min_usd} - $${tier.max_usd}`
 
-  if (rewardType === 'claude_quota') return `${amount} 通用额度`
-  return `${amount} 官方 GPT 专属额度`
+  return `${amount} 通用额度`
 }
 
 export function groupTiersByRewardType(tiers: BlindBoxTier[]) {
   return {
-    quota: tiers.filter((tier) => resolveTierRewardType(tier) === 'quota'),
-    claude: tiers.filter(
-      (tier) => resolveTierRewardType(tier) === 'claude_quota'
+    credit: tiers.filter((tier) =>
+      ['quota', 'claude_quota'].includes(resolveTierRewardType(tier))
     ),
     props: tiers.filter((tier) => resolveTierRewardType(tier) === 'prop'),
   }

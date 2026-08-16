@@ -64,6 +64,7 @@ type ResponsesUsageInfo struct {
 type ChannelMeta struct {
 	ChannelType          int
 	ChannelId            int
+	ChannelScope         string
 	ChannelIsMultiKey    bool
 	ChannelMultiKeyIndex int
 	ChannelBaseUrl       string
@@ -211,6 +212,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	channelMeta := &ChannelMeta{
 		ChannelType:          channelType,
 		ChannelId:            httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId),
+		ChannelScope:         httpctx.GetContextKeyString(c, constant.ContextKeyChannelScope),
 		ChannelIsMultiKey:    httpctx.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey),
 		ChannelMultiKeyIndex: httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex),
 		ChannelBaseUrl:       httpctx.GetContextKeyString(c, constant.ContextKeyChannelBaseUrl),

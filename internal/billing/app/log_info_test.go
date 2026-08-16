@@ -47,8 +47,7 @@ func TestAppendBillingInfoIncludesQuotaSource(t *testing.T) {
 		category string
 		label    string
 	}{
-		{name: "universal quota", source: BillingSourceClaudeWallet, category: "universal", label: "通用额度"},
-		{name: "official GPT quota", source: BillingSourceWallet, category: "gpt", label: "官方 GPT 专属额度"},
+		{name: "universal quota", source: BillingSourceWallet, category: "universal", label: "通用额度"},
 		{name: "GPT plan quota", source: BillingSourceSubscription, category: "subscription", label: "GPT 套餐额度"},
 	}
 

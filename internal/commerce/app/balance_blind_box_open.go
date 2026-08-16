@@ -25,7 +25,7 @@ func OpenBalanceBlindBox(userID int, requestID string, requestedCount ...int) (*
 		count = requestedCount[0]
 	}
 	if userID <= 0 || requestID == "" || len(requestID) > 61 || count <= 0 || count > balanceBlindBoxMaxBatch {
-		return nil, errors.New("余额盲盒开启参数无效，单次最多开启 100 个")
+		return nil, errors.New("统一盲盒开启参数无效，单次最多开启 100 个")
 	}
 	setting := blindboxsettings.Get()
 	if !setting.Enabled || !setting.BalanceBlindBoxEnabled {
@@ -49,7 +49,7 @@ func OpenBalanceBlindBox(userID int, requestID string, requestedCount ...int) (*
 			return err
 		}
 		if len(items) != count {
-			return fmt.Errorf("余额盲盒库存不足，当前可开启 %d 个", len(items))
+			return fmt.Errorf("统一盲盒库存不足，当前可开启 %d 个", len(items))
 		}
 		for index := range items {
 			drawRequestID := requestID
@@ -63,7 +63,7 @@ func OpenBalanceBlindBox(userID int, requestID string, requestedCount ...int) (*
 			result.Records = append(result.Records, *record)
 		}
 		result.Record = result.Records[0]
-		return auditapp.RecordLogTx(tx, userID, auditschema.LogTypeManage, fmt.Sprintf("开启余额盲盒库存 %d 个", count))
+		return auditapp.RecordLogTx(tx, userID, auditschema.LogTypeManage, fmt.Sprintf("开启统一盲盒库存 %d 个", count))
 	})
 	if err != nil {
 		return nil, err
@@ -86,13 +86,13 @@ func loadBalanceBlindBoxOpenReplay(tx *gorm.DB, userID int, requestID string, co
 		}
 	}
 	var records []commerceschema.BlindBoxOpenRecord
-	err := tx.Where("user_id = ? AND pool_type = ? AND request_id IN ?", userID, commerceschema.BlindBoxPoolTypeBalance15, requestIDs).
+	err := tx.Where("user_id = ? AND pool_type IN ? AND request_id IN ?", userID, []string{commerceschema.BlindBoxPoolTypeUnified, commerceschema.BlindBoxPoolTypeBalance15}, requestIDs).
 		Order("id asc").Find(&records).Error
 	if err != nil || len(records) == 0 {
 		return records, err
 	}
 	if len(records) != count {
-		return nil, errors.New("余额盲盒开启请求冲突")
+		return nil, errors.New("统一盲盒开启请求冲突")
 	}
 	return records, nil
 }
@@ -100,7 +100,7 @@ func loadBalanceBlindBoxOpenReplay(tx *gorm.DB, userID int, requestID string, co
 func openSealedBalanceBlindBoxItemTx(tx *gorm.DB, userID int, requestID string, item *commerceschema.BalanceBlindBoxItem) (*commerceschema.BlindBoxOpenRecord, error) {
 	walletType := normalizeBlindBoxRewardWalletType(item.RewardWalletType)
 	record := &commerceschema.BlindBoxOpenRecord{
-		UserId: userID, RequestId: &requestID, PoolType: commerceschema.BlindBoxPoolTypeBalance15,
+		UserId: userID, RequestId: &requestID, PoolType: commerceschema.BlindBoxPoolTypeUnified,
 		RewardType: item.RewardType, RewardTier: item.RewardTier, RewardUSD: item.RewardUSD,
 		CreditAmount: item.CreditAmount, RewardTitle: item.RewardTitle,
 		RewardWalletType: item.RewardWalletType, IsPity: item.IsPity, CreateTime: platformruntime.GetTimestamp(),

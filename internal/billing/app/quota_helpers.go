@@ -43,7 +43,7 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 			relayInfo.SubscriptionPostDelta += delta
 		}
 	} else {
-		err = AdjustWalletQuota(relayInfo.UserId, quota)
+		err = AdjustClaudeWalletQuota(relayInfo.UserId, quota)
 		if err != nil {
 			return err
 		}

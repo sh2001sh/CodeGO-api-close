@@ -2,8 +2,9 @@ import { useEffect, useMemo } from 'react'
 import { z } from 'zod'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Settings2 } from 'lucide-react'
+import { Gauge, Settings2, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
+import { calculateBlindBoxEconomics } from '@/lib/blind-box-economics'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -22,32 +23,25 @@ import {
   useSystemOptions,
 } from '@/features/system-settings/hooks/use-system-options'
 import { useUpdateOption } from '@/features/system-settings/hooks/use-update-option'
-import type { BlindBoxTierSetting } from '@/features/system-settings/types'
+import { BALANCE_BLIND_BOX_DEFAULTS } from './balance-blind-box-settings-data'
 import {
-  BALANCE_BLIND_BOX_DEFAULTS,
-  DEFAULT_BALANCE_BLIND_BOX_TIERS,
-} from './balance-blind-box-settings-data'
-
-const tierSchema = z.object({
-  name: z.string().min(1),
-  min_usd: z.number().min(0),
-  max_usd: z.number().min(0),
-  probability: z.number().min(0).max(1),
-  reward_type: z.string().optional(),
-  wallet_type: z.string().optional(),
-})
+  calculateTierProbability,
+  formatBlindBoxTiers,
+  normalizeDisplayedTiers,
+  parseBlindBoxTiers,
+} from './balance-blind-box-settings-utils'
 
 const schema = z.object({
   enabled: z.boolean(),
   priceUSD: z.coerce.number().positive().max(10000),
-  dailyPurchaseLimit: z.coerce.number().int().min(1).max(10000),
+  dailyPurchaseLimit: z.coerce.number().int().min(1).max(10),
   firstDrawGuaranteeUSD: z.coerce.number().min(0).max(100000),
   smallPityThreshold: z.coerce.number().int().min(1).max(10000),
   smallPityGuaranteeUSD: z.coerce.number().min(0).max(100000),
   pityThreshold: z.coerce.number().int().min(1).max(10000),
   pityGuaranteeUSD: z.coerce.number().min(0).max(100000),
   tiers: z.string().superRefine((value, context) => {
-    const parsed = parseTiers(value)
+    const parsed = parseBlindBoxTiers(value)
     if (!parsed) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -87,21 +81,25 @@ export function BalanceBlindBoxSettingsAdmin() {
     defaultValues: defaults,
   })
   const tiersValue = form.watch('tiers')
-  const probability = calculateProbability(tiersValue)
+  const parsedTiers = parseBlindBoxTiers(tiersValue)
+  const probability = calculateTierProbability(tiersValue)
+  const economics = parsedTiers
+    ? calculateBlindBoxEconomics(parsedTiers, form.watch('priceUSD'))
+    : null
 
   useEffect(() => {
     if (!form.formState.isDirty) form.reset(defaults)
   }, [defaults, form])
 
   const onSubmit = async (values: Values) => {
-    const normalizedTiers = JSON.stringify(parseTiers(values.tiers))
+    const normalizedTiers = JSON.stringify(parseBlindBoxTiers(values.tiers))
     const updates = buildUpdates(values, settings, normalizedTiers)
     if (updates.length === 0) {
       toast.info('没有需要保存的统一盲盒变更')
       return
     }
     for (const update of updates) await updateOption.mutateAsync(update)
-    form.reset({ ...values, tiers: formatTiers(normalizedTiers) })
+    form.reset({ ...values, tiers: formatBlindBoxTiers(normalizedTiers) })
     await optionsQuery.refetch()
   }
 
@@ -185,6 +183,42 @@ export function BalanceBlindBoxSettingsAdmin() {
             />
           </div>
 
+          <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+            <EconomicsMetric
+              icon={TrendingUp}
+              label='普通池理论期望'
+              value={
+                economics
+                  ? `${economics.expectedRewardUSD.toFixed(3)} USD`
+                  : '--'
+              }
+            />
+            <EconomicsMetric
+              icon={Gauge}
+              label='普通池理论回报率'
+              value={economics ? `${economics.returnRate.toFixed(2)}%` : '--'}
+            />
+            <EconomicsMetric
+              icon={TrendingUp}
+              label='单抽额度不低于售价概率'
+              value={
+                economics
+                  ? `${(economics.immediateProfitProbability * 100).toFixed(2)}%`
+                  : '--'
+              }
+            />
+            <EconomicsMetric
+              icon={Gauge}
+              label='普通池单奖上限'
+              value={
+                economics ? `${economics.maxRewardUSD.toFixed(2)} USD` : '--'
+              }
+            />
+          </div>
+          <p className='text-muted-foreground text-xs leading-5'>
+            理论指标包含“再来一抽”的连锁期望，不包含首抽、小保底和大保底；用户短期实际回报会围绕理论值波动。
+          </p>
+
           <FormField
             control={form.control}
             name='tiers'
@@ -235,6 +269,25 @@ export function BalanceBlindBoxSettingsAdmin() {
   )
 }
 
+function EconomicsMetric(props: {
+  icon: typeof Gauge
+  label: string
+  value: string
+}) {
+  const Icon = props.icon
+  return (
+    <div className='bg-muted/35 rounded-lg border px-3 py-2.5'>
+      <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+        <Icon className='size-3.5' aria-hidden='true' />
+        {props.label}
+      </div>
+      <div className='mt-1 text-sm font-semibold tabular-nums'>
+        {props.value}
+      </div>
+    </div>
+  )
+}
+
 function NumberField(props: {
   form: ReturnType<typeof useForm<Values>>
   name: Exclude<keyof Values, 'enabled' | 'tiers'>
@@ -279,20 +332,6 @@ function toFormValues(settings: typeof BALANCE_BLIND_BOX_DEFAULTS): Values {
       settings['blind_box_setting.balance_blind_box_pity_guarantee_usd'],
     tiers: JSON.stringify(tiers, null, 2),
   }
-}
-
-function normalizeDisplayedTiers(tiers: BlindBoxTierSetting[]) {
-  const legacyProbability = [
-    0.1537, 0.27, 0.25, 0.12, 0.05, 0.01115, 0.004, 0.0008, 0.0003, 0.00005,
-    0.06, 0.04, 0.01, 0.03,
-  ]
-  const isLegacy =
-    tiers.length === legacyProbability.length &&
-    tiers.every(
-      (tier, index) =>
-        Math.abs(tier.probability - legacyProbability[index]) < 0.000001
-    )
-  return isLegacy ? DEFAULT_BALANCE_BLIND_BOX_TIERS : tiers
 }
 
 function buildUpdates(
@@ -352,22 +391,4 @@ function buildUpdates(
   return pairs
     .filter(([, next, previous]) => next !== previous)
     .map(([key, value]) => ({ key, value: String(value) }))
-}
-
-function parseTiers(value: string): BlindBoxTierSetting[] | null {
-  try {
-    const parsed = z.array(tierSchema).safeParse(JSON.parse(value))
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
-}
-
-function calculateProbability(value: string) {
-  const tiers = parseTiers(value)
-  return tiers?.reduce((sum, tier) => sum + tier.probability, 0) ?? null
-}
-
-function formatTiers(value: string) {
-  return JSON.stringify(JSON.parse(value), null, 2)
 }

@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
+import { calculateBlindBoxEconomics } from '@/lib/blind-box-economics'
 import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -122,7 +123,11 @@ function SimulationWorkspace(props: {
             重设额度
           </Button>
         </div>
-        <SimulationMetrics stats={stats} />
+        <SimulationMetrics
+          stats={stats}
+          priceUSD={props.priceUSD}
+          tiers={props.balance?.tiers || []}
+        />
         <div className='grid gap-4 border-t p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_280px]'>
           <SimulationHistory history={stats.history} />
           <div className='border-primary/15 bg-background/55 space-y-4 rounded-lg border p-4'>
@@ -236,7 +241,10 @@ function SimulationPityProgress(props: {
 
 function SimulationMetrics(props: {
   stats: NonNullable<ReturnType<typeof useBalanceBlindBoxSimulator>['stats']>
+  priceUSD: number
+  tiers: BalanceBlindBoxOverview['tiers']
 }) {
+  const economics = calculateBlindBoxEconomics(props.tiers, props.priceUSD)
   const metrics = [
     [
       '当前模拟余额',
@@ -244,19 +252,25 @@ function SimulationMetrics(props: {
     ],
     ['累计投入', formatUsdAmount(quotaUnitsToUsd(props.stats.spentQuota))],
     ['累计额度奖励', formatUsdAmount(quotaUnitsToUsd(props.stats.rewardQuota))],
-    ['模拟回报率', `${props.stats.returnRate.toFixed(1)}%`],
+    ['本次实际回报率', `${props.stats.returnRate.toFixed(1)}%`],
   ]
   return (
-    <div className='grid grid-cols-2 border-t sm:grid-cols-4'>
-      {metrics.map(([label, value]) => (
-        <div
-          key={label}
-          className='border-border/70 px-4 py-3 not-last:border-r max-sm:nth-[2n]:border-r-0'
-        >
-          <p className='text-muted-foreground text-[11px]'>{label}</p>
-          <p className='mt-1 text-sm font-semibold tabular-nums'>{value}</p>
-        </div>
-      ))}
+    <div className='border-t'>
+      <div className='grid grid-cols-2 sm:grid-cols-4'>
+        {metrics.map(([label, value]) => (
+          <div
+            key={label}
+            className='border-border/70 px-4 py-3 not-last:border-r max-sm:nth-[2n]:border-r-0'
+          >
+            <p className='text-muted-foreground text-[11px]'>{label}</p>
+            <p className='mt-1 text-sm font-semibold tabular-nums'>{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className='bg-muted/30 text-muted-foreground border-t px-4 py-2 text-[11px] leading-5 sm:px-5'>
+        普通奖池理论回报率约 {economics.returnRate.toFixed(2)}
+        %，包含“再来一抽”、不含首抽与大小保底；上方为本次随机结果，短期可能高于或低于理论值。
+      </div>
     </div>
   )
 }

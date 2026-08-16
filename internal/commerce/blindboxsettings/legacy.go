@@ -10,6 +10,10 @@ func isApproxProbability(left, right float64) bool {
 }
 
 func isLegacyBalanceBlindBoxTiers(tiers []TierSetting) bool {
+	if len(tiers) == len(defaultBalanceBlindBoxTiers) &&
+		(strings.TrimSpace(tiers[3].Name) == "2.50-3.9124 统一额度" || tiers[9].MaxUSD > 500) {
+		return true
+	}
 	for _, probabilities := range legacyBalanceBlindBoxProbabilities {
 		if len(tiers) != len(probabilities) {
 			continue

@@ -17,10 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { parseCurrencyDisplayType } from '@/lib/currency'
+import { BalanceBlindBoxSettingsAdmin } from '@/features/subscriptions/components/balance-blind-box-settings-admin'
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
-import { BlindBoxSettingsSection } from '../integrations/blind-box-settings-section'
 import { FirstPurchaseDiscountSection } from '../integrations/first-purchase-discount-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
 import { RatioSettingsCard } from '../models/ratio-settings-card'
@@ -245,39 +245,7 @@ const BILLING_SECTIONS = [
     titleKey: 'Blind Box Event',
     descriptionKey:
       'Configure blind box pricing, probability tiers, and pity rules',
-    build: (settings: BillingSettings) => (
-      <BlindBoxSettingsSection
-        defaultValues={{
-          enabled: settings['blind_box_setting.enabled'],
-          unitPrice: settings['blind_box_setting.unit_price'],
-          expireDays: settings['blind_box_setting.expire_days'],
-          registrationRewardEnabled:
-            settings['blind_box_setting.registration_reward_enabled'],
-          registrationRewardStartAt:
-            settings['blind_box_setting.registration_reward_start_at'],
-          registrationRewardEndAt:
-            settings['blind_box_setting.registration_reward_end_at'],
-          dailyLimit: settings['blind_box_setting.daily_limit'],
-          monthlyLimit: settings['blind_box_setting.monthly_limit'],
-          dailyOpenLimit: settings['blind_box_setting.daily_open_limit'],
-          firstPurchaseGuaranteeUSD:
-            settings['blind_box_setting.first_purchase_guarantee_usd'],
-          pityThreshold: settings['blind_box_setting.pity_threshold'],
-          pityGuaranteeUSD: settings['blind_box_setting.pity_guarantee_usd'],
-          lowRewardThresholdUSD:
-            settings['blind_box_setting.low_reward_threshold_usd'],
-          subscriptionPrizeProbability:
-            settings['blind_box_setting.subscription_prize_probability'],
-          subscriptionPlanTitle:
-            settings['blind_box_setting.subscription_plan_title'],
-          multiplierCardRouteGroup:
-            settings['blind_box_setting.multiplier_card_route_group'],
-          groupRatio: settings.GroupRatio,
-          countOptions: settings['blind_box_setting.count_options'],
-          tiers: settings['blind_box_setting.tiers'],
-        }}
-      />
-    ),
+    build: () => <BalanceBlindBoxSettingsAdmin />,
   },
 ] as const
 

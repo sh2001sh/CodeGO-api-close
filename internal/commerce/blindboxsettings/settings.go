@@ -281,7 +281,9 @@ func Get() Setting {
 	settingCopy.PityThreshold = 1_000_000
 	settingCopy.PityGuaranteeUSD = 0
 	settingCopy.LowRewardThresholdUSD = 0
-	settingCopy.BalanceBlindBoxPriceUSD = 2.5
+	if settingCopy.BalanceBlindBoxPriceUSD <= 0 {
+		settingCopy.BalanceBlindBoxPriceUSD = 2.5
+	}
 	if settingCopy.BalanceBlindBoxDailyPurchaseLimit <= 0 || settingCopy.BalanceBlindBoxDailyPurchaseLimit > 10 {
 		settingCopy.BalanceBlindBoxDailyPurchaseLimit = 10
 	}

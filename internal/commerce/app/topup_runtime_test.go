@@ -33,7 +33,7 @@ func TestCompleteTopUpByTradeNo_ConsumesReservedBlindBoxProp(t *testing.T) {
 	topUp := &commerceschema.TopUp{
 		UserId:     user.Id,
 		Amount:     2,
-		Money:      100,
+		Money:      1,
 		TradeNo:    "blind-box-topup-discount-order",
 		Status:     constant.TopUpStatusPending,
 		CreateTime: time.Now().Unix(),
@@ -41,7 +41,7 @@ func TestCompleteTopUpByTradeNo_ConsumesReservedBlindBoxProp(t *testing.T) {
 	appliedRate, err := CreatePendingTopUpOrderWithBlindBoxDiscount(topUp)
 	require.NoError(t, err)
 	assert.InDelta(t, 0.10, appliedRate, 0.0001)
-	assert.Equal(t, 90.0, topUp.Money)
+	assert.Equal(t, 0.9, topUp.Money)
 
 	var reserved commerceschema.BlindBoxProp
 	require.NoError(t, db.Where("id = ?", prop.Id).First(&reserved).Error)

@@ -26,7 +26,9 @@ const (
 	maximumPendingTopUpExpiryMinutes = 24 * 60
 )
 
-// CreatePendingTopUpOrderWithBlindBoxDiscount creates a pending top-up order and binds any reserved blind-box discount.
+// CreatePendingTopUpOrderWithBlindBoxDiscount creates a pending top-up order
+// from its pre-discount price and applies at most one reserved card in the same
+// transaction. Checkout creators must not apply the card before calling it.
 func CreatePendingTopUpOrderWithBlindBoxDiscount(topUp *commerceschema.TopUp) (float64, error) {
 	if topUp == nil {
 		return 0, errors.New("topup is nil")

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/constant"
+	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -73,6 +74,32 @@ func TestConvertMonthlyPassToUnifiedCreditAllRemainingEndsPass(t *testing.T) {
 	assert.Equal(t, savedSub.PeriodAmount, savedSub.PeriodUsed)
 	assert.Equal(t, "cancelled", savedSub.Status)
 	assert.LessOrEqual(t, savedSub.EndTime, time.Now().Unix())
+}
+
+func TestConvertMonthlyPassToUnifiedCreditRecoversInterruptedReservation(t *testing.T) {
+	db, user, _, sub := setupMonthlyPassConversionTest(t, 9207, 9307, 9407, 49, 20)
+	account, err := billingdomain.EnsureBillingAccountTx(db, billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(sub.Id), QuotaUnit: "quota",
+	})
+	require.NoError(t, err)
+	seedAmount := int64(platformruntime.QuotaPerUnit) * 80
+	_, err = billingdomain.CreditAccountTx(db, billingdomain.CreditAccountParams{
+		AccountID: account.AccountID, Amount: seedAmount, IdempotencyKey: "seed-stale-conversion-balance",
+		ReasonCode: "test_seed",
+	})
+	require.NoError(t, err)
+	stale, err := billingdomain.CreateReservationTx(db, billingdomain.CreateReservationParams{
+		AccountID: account.AccountID, RequestID: "stale-conversion", ReservedAmount: 10,
+		IdempotencyKey: "monthly-pass-conversion:stale-conversion:reserve",
+	})
+	require.NoError(t, err)
+
+	_, err = ConvertMonthlyPassToUnifiedCredit("req-after-interruption", user.Id, sub.Id, 60)
+	require.NoError(t, err)
+
+	var recovered billingschema.BillingReservation
+	require.NoError(t, db.Where("reservation_id = ?", stale.ReservationID).First(&recovered).Error)
+	assert.Equal(t, billingschema.BillingReservationStatusReleased, recovered.Status)
 }
 
 func TestConvertMonthlyPassToUnifiedCreditRejectsInvalidPercentages(t *testing.T) {

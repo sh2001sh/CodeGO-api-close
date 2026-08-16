@@ -370,10 +370,26 @@ func monthlyPassHasPendingReservationTx(tx *gorm.DB, subscriptionID int) (bool, 
 	if err != nil {
 		return false, err
 	}
-	var snapshot billingschema.BillingBalanceSnapshot
-	err = tx.Where("account_id = ?", account.AccountID).First(&snapshot).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return false, nil
+
+	// A conversion reserves and settles within one transaction. An open
+	// conversion reservation therefore means a previous request was interrupted
+	// after the hold was committed. Recover it before retrying instead of
+	// permanently blocking the subscription on a stale snapshot balance.
+	var stale []billingschema.BillingReservation
+	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("account_id = ? AND status = ? AND idempotency_key LIKE ?", account.AccountID, billingschema.BillingReservationStatusOpen, "monthly-pass-conversion:%:reserve").
+		Find(&stale).Error
+	if err != nil {
+		return false, err
 	}
-	return snapshot.ReservedBalance > 0, err
+	for _, reservation := range stale {
+		if _, err := billingdomain.ReleaseReservationTx(tx, billingdomain.ReleaseReservationParams{
+			ReservationID:  reservation.ReservationID,
+			IdempotencyKey: "monthly-pass-conversion-recovery:" + reservation.ReservationID,
+			ReasonCode:     "monthly_pass_conversion_recovery",
+		}); err != nil {
+			return false, err
+		}
+	}
+	return false, nil
 }

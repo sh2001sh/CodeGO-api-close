@@ -79,6 +79,7 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 		"subscription_orders",
 		"user_subscriptions",
 		"subscription_pre_consume_records",
+		"subscription_claude_conversions",
 		"gateway_request_executions",
 		"gateway_route_plans",
 		"gateway_execution_attempts",
@@ -89,6 +90,9 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 		"blind_box_grants",
 	} {
 		require.True(t, db.Migrator().HasTable(table), table)
+	}
+	for _, column := range []string{"PlanPriceAmount", "UnusedRatio", "ConversionPercent"} {
+		require.True(t, db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, column), column)
 	}
 	require.NoError(t, db.Migrator().DropTable(&commerceschema.BlindBoxGrant{}))
 	require.False(t, db.Migrator().HasTable(&commerceschema.BlindBoxGrant{}))
@@ -137,6 +141,33 @@ func TestMigrateWalletTransferFeeFieldsAddsMissingColumns(t *testing.T) {
 	require.NoError(t, db.Raw("SELECT total_debit_quota FROM wallet_transfers WHERE id = ?", 1).Scan(&totalDebitQuota).Error)
 	require.EqualValues(t, 256, totalDebitQuota)
 	require.NoError(t, migrateWalletTransferFeeFields(db))
+}
+
+func TestMigrateSubscriptionClaudeConversionFieldsAddsMissingColumns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE subscription_claude_conversions (
+		id integer primary key,
+		user_id integer not null,
+		user_subscription_id integer not null,
+		request_id text not null,
+		status text not null,
+		source_quota integer not null default 0,
+		target_claude_quota integer not null default 0,
+		ratio_numerator integer not null default 1,
+		ratio_denominator integer not null default 10,
+		created_at integer,
+		updated_at integer
+	)`).Error)
+
+	for _, field := range []string{"PlanPriceAmount", "UnusedRatio", "ConversionPercent"} {
+		require.False(t, db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, field), field)
+	}
+	require.NoError(t, migrateSubscriptionClaudeConversionFields(db))
+	for _, field := range []string{"PlanPriceAmount", "UnusedRatio", "ConversionPercent"} {
+		require.True(t, db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, field), field)
+	}
+	require.NoError(t, migrateSubscriptionClaudeConversionFields(db))
 }
 
 func TestMigrateTokenMarketplaceMultiplierLimitAddsMissingColumn(t *testing.T) {
@@ -347,6 +378,10 @@ func TestMigrateMarketplaceChannelSourceLabelsUpgradesExistingSQLiteTable(t *tes
 		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
 	}
 	require.True(t, db.Migrator().HasTable(&marketplaceschema.Settlement{}))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.RankingSnapshot{}, "CacheHitRate"))
+	require.False(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "CacheHitRate"))
+	require.NoError(t, migrateMarketplaceChannelSourceLabels(db))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "CacheHitRate"))
 	require.NoError(t, migrateMarketplaceChannelSourceLabels(db))
 }
 
@@ -383,6 +418,8 @@ func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *t
 		BaseURLCiphertext: "base", CredentialCiphertext: "credential",
 		Status: "active", InternalChannelID: &internalID,
 	}).Error)
+	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+	require.False(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
 
 	require.NoError(t, migrateUnifiedCreditV1ChannelScope(db))
 	require.NoError(t, migrateUnifiedCreditV1ChannelScope(db))
@@ -391,5 +428,6 @@ func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *t
 	require.Equal(t, gatewayschema.ChannelScopeOfficial, official.ChannelScope)
 	require.NoError(t, db.First(&marketplaceInternal, marketplaceInternal.Id).Error)
 	require.Equal(t, gatewayschema.ChannelScopeExternal, marketplaceInternal.ChannelScope)
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
 	require.True(t, db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}))
 }

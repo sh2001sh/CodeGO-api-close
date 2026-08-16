@@ -39,6 +39,20 @@ type schemaMigrationStep struct {
 	RunOutsideTx func(*gorm.DB) error
 }
 
+type legacyMarketplaceModelFeedback struct {
+	ID        uint64 `gorm:"primaryKey"`
+	ChannelID string `gorm:"column:channel_id"`
+	UserID    int    `gorm:"column:user_id"`
+	Status    string `gorm:"column:status"`
+}
+
+func (legacyMarketplaceModelFeedback) TableName() string {
+	if platformdb.UsingPostgreSQL {
+		return "marketplace.model_consistency_feedback"
+	}
+	return "marketplace_model_consistency_feedback"
+}
+
 // V2MigrationIDs returns the ordered migration contract required by CodeGo v2.
 // Deployment verification uses this list without changing database state.
 func V2MigrationIDs() []string {
@@ -86,9 +100,11 @@ func V2MigrationIDs() []string {
 		"20260816_token_marketplace_multiplier_limit",
 		"20260816_unified_credit_v1_schema",
 		"20260816_unified_credit_v1_channel_scope",
+		"20260816_subscription_claude_conversion_fields",
 		"20260816_daily_lucky_unified_credit_rewards",
 		"20260816_blind_box_prop_gifts",
 		"20260816_marketplace_model_consistency_feedback",
+		"20260816_marketplace_channel_feedback_and_prices",
 	}
 }
 
@@ -242,13 +258,15 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260816_token_marketplace_multiplier_limit", Run: migrateTokenMarketplaceMultiplierLimit},
 		{ID: "20260816_unified_credit_v1_schema", Run: migrateUnifiedCreditV1Schema},
 		{ID: "20260816_unified_credit_v1_channel_scope", Run: migrateUnifiedCreditV1ChannelScope},
+		{ID: "20260816_subscription_claude_conversion_fields", Run: migrateSubscriptionClaudeConversionFields},
 		{ID: "20260816_daily_lucky_unified_credit_rewards", Run: migrateDailyLuckyUnifiedCreditRewards},
 		{ID: "20260816_blind_box_prop_gifts", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&commerceschema.BlindBoxPropGift{})
 		}},
 		{ID: "20260816_marketplace_model_consistency_feedback", Run: func(tx *gorm.DB) error {
-			return tx.AutoMigrate(&marketplaceschema.ModelConsistencyFeedback{})
+			return tx.AutoMigrate(&legacyMarketplaceModelFeedback{})
 		}},
+		{ID: "20260816_marketplace_channel_feedback_and_prices", Run: migrateMarketplaceChannelFeedbackAndPrices},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -350,6 +368,16 @@ func migrateUnifiedCreditV1ChannelScope(tx *gorm.DB) error {
 		Update("channel_scope", gatewayschema.ChannelScopeOfficial).Error; err != nil {
 		return err
 	}
+	if !tx.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled") {
+		if err := tx.Migrator().AddColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"); err != nil {
+			return err
+		}
+	}
+	if err := tx.Model(&gatewayschema.Channel{}).
+		Where("sensitive_word_interception_enabled IS NULL").
+		Update("sensitive_word_interception_enabled", true).Error; err != nil {
+		return err
+	}
 	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
 		return nil
 	}
@@ -403,13 +431,56 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	case "20260815_marketplace_auto_route_pool":
 		return !db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}) ||
 			!db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority")
+	case "20260815_marketplace_channel_source_labels":
+		return !db.Migrator().HasTable(&marketplaceschema.RankingSnapshot{}) ||
+			!db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "CacheHitRate")
 	case "20260816_unified_credit_v1_channel_scope":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) ||
 			db.Migrator().HasTable(&gatewayschema.Channel{}) &&
-				!db.Migrator().HasColumn(&gatewayschema.Channel{}, "ChannelScope")
+				(!db.Migrator().HasColumn(&gatewayschema.Channel{}, "ChannelScope") ||
+					!db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+	case "20260816_subscription_claude_conversion_fields":
+		return !db.Migrator().HasTable(&commerceschema.SubscriptionClaudeConversion{}) ||
+			!db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, "PlanPriceAmount") ||
+			!db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, "UnusedRatio") ||
+			!db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, "ConversionPercent")
 	default:
 		return false
 	}
+}
+
+func migrateMarketplaceChannelFeedbackAndPrices(db *gorm.DB) error {
+	if err := db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.ChannelFeedback{}); err != nil {
+		return err
+	}
+	legacy := legacyMarketplaceModelFeedback{}
+	if !db.Migrator().HasTable(&legacy) {
+		return nil
+	}
+	var rows []legacyMarketplaceModelFeedback
+	if err := db.Find(&rows).Error; err != nil {
+		return err
+	}
+	type key struct {
+		ChannelID string
+		UserID    int
+	}
+	merged := make(map[key]string)
+	for _, row := range rows {
+		itemKey := key{ChannelID: row.ChannelID, UserID: row.UserID}
+		if current, exists := merged[itemKey]; exists && current != row.Status {
+			merged[itemKey] = "questionable"
+		} else if !exists {
+			merged[itemKey] = row.Status
+		}
+	}
+	for itemKey, status := range merged {
+		feedback := marketplaceschema.ChannelFeedback{ChannelID: itemKey.ChannelID, UserID: itemKey.UserID, Status: status}
+		if err := db.Create(&feedback).Error; err != nil {
+			return err
+		}
+	}
+	return db.Migrator().DropTable(&legacy)
 }
 
 func migrateBlindBoxLegacyCreditMarker(tx *gorm.DB) error {
@@ -781,6 +852,31 @@ func migrateSubscriptionCore(tx *gorm.DB) error {
 		return err
 	}
 	return tx.AutoMigrate(&commerceschema.SubscriptionPreConsumeRecord{})
+}
+
+func migrateSubscriptionClaudeConversionFields(tx *gorm.DB) error {
+	model := &commerceschema.SubscriptionClaudeConversion{}
+	if !tx.Migrator().HasTable(model) || !platformdb.UsingSQLite {
+		return tx.AutoMigrate(model)
+	}
+
+	columns := []struct {
+		name string
+		ddl  string
+	}{
+		{name: "plan_price_amount", ddl: `"plan_price_amount" REAL NOT NULL DEFAULT 0`},
+		{name: "unused_ratio", ddl: `"unused_ratio" REAL NOT NULL DEFAULT 0`},
+		{name: "conversion_percent", ddl: `"conversion_percent" INTEGER NOT NULL DEFAULT 0`},
+	}
+	for _, column := range columns {
+		if tx.Migrator().HasColumn(model, column.name) {
+			continue
+		}
+		if err := tx.Exec("ALTER TABLE subscription_claude_conversions ADD COLUMN " + column.ddl).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateSubscriptionPlan(tx *gorm.DB) error {

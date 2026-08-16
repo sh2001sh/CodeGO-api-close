@@ -445,16 +445,25 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			!db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, "PlanPriceAmount") ||
 			!db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, "UnusedRatio") ||
 			!db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, "ConversionPercent")
+	case "20260816_marketplace_channel_feedback_and_prices":
+		return !db.Migrator().HasTable(&marketplaceschema.ChannelFeedback{}) ||
+			db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
+				(!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "ModelPrices") ||
+					!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "SensitiveWordInterceptionEnabled"))
 	default:
 		return false
 	}
 }
 
 func migrateMarketplaceChannelFeedbackAndPrices(db *gorm.DB) error {
-	if db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
-		!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "ModelPrices") {
-		if err := db.Migrator().AddColumn(&marketplaceschema.Channel{}, "ModelPrices"); err != nil {
-			return err
+	if db.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		for _, field := range []string{"ModelPrices", "SensitiveWordInterceptionEnabled"} {
+			if db.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
+				continue
+			}
+			if err := db.Migrator().AddColumn(&marketplaceschema.Channel{}, field); err != nil {
+				return err
+			}
 		}
 	}
 	if err := db.AutoMigrate(&marketplaceschema.ChannelFeedback{}); err != nil {

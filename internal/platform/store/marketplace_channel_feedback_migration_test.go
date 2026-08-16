@@ -28,6 +28,7 @@ func TestMigrateMarketplaceChannelFeedbackMergesConflictingModelVotes(t *testing
 	require.NoError(t, migrateMarketplaceChannelFeedbackAndPrices(db))
 	require.False(t, db.Migrator().HasTable(&legacyMarketplaceModelFeedback{}))
 	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, "ModelPrices"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, "SensitiveWordInterceptionEnabled"))
 	var feedback []marketplaceschema.ChannelFeedback
 	require.NoError(t, db.Order("user_id").Find(&feedback).Error)
 	require.Len(t, feedback, 2)

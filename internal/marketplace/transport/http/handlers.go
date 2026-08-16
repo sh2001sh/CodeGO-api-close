@@ -80,9 +80,11 @@ func ListMyChannels(c *gin.Context) {
 
 func ListMyUsageLogs(c *gin.Context) {
 	result, err := marketplaceapp.ListOwnerUsageLogs(c.GetInt("id"), marketplaceapp.OwnerUsageLogQuery{
-		ChannelID: c.Query("channel_id"),
-		Page:      queryInt(c, "page", 1),
-		PageSize:  queryInt(c, "page_size", 20),
+		ChannelID:      c.Query("channel_id"),
+		StartTimestamp: queryInt64(c, "start_timestamp"),
+		EndTimestamp:   queryInt64(c, "end_timestamp"),
+		Page:           queryInt(c, "page", 1),
+		PageSize:       queryInt(c, "page_size", 20),
 	})
 	respond(c, result, err)
 }
@@ -193,5 +195,10 @@ func queryInt(c *gin.Context, name string, fallback int) int {
 
 func queryFloat(c *gin.Context, name string) float64 {
 	value, _ := strconv.ParseFloat(strings.TrimSpace(c.Query(name)), 64)
+	return value
+}
+
+func queryInt64(c *gin.Context, name string) int64 {
+	value, _ := strconv.ParseInt(strings.TrimSpace(c.Query(name)), 10, 64)
 	return value
 }

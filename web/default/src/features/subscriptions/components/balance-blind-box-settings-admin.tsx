@@ -30,6 +30,7 @@ import {
   normalizeDisplayedTiers,
   parseBlindBoxTiers,
 } from './balance-blind-box-settings-utils'
+import { BlindBoxSettingsMetric } from './blind-box-settings-metric'
 
 const schema = z.object({
   enabled: z.boolean(),
@@ -71,9 +72,10 @@ type Values = z.infer<typeof schema>
 export function BalanceBlindBoxSettingsAdmin() {
   const optionsQuery = useSystemOptions()
   const updateOption = useUpdateOption()
-  const settings = getOptionValue(
-    optionsQuery.data?.data,
-    BALANCE_BLIND_BOX_DEFAULTS
+  const optionData = optionsQuery.data?.data
+  const settings = useMemo(
+    () => getOptionValue(optionData, BALANCE_BLIND_BOX_DEFAULTS),
+    [optionData]
   )
   const defaults = useMemo(() => toFormValues(settings), [settings])
   const form = useForm<Values>({
@@ -98,7 +100,10 @@ export function BalanceBlindBoxSettingsAdmin() {
       toast.info('没有需要保存的统一盲盒变更')
       return
     }
-    for (const update of updates) await updateOption.mutateAsync(update)
+    for (const update of updates) {
+      const response = await updateOption.mutateAsync(update)
+      if (!response.success) return
+    }
     form.reset({ ...values, tiers: formatBlindBoxTiers(normalizedTiers) })
     await optionsQuery.refetch()
   }
@@ -184,7 +189,7 @@ export function BalanceBlindBoxSettingsAdmin() {
           </div>
 
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-            <EconomicsMetric
+            <BlindBoxSettingsMetric
               icon={TrendingUp}
               label='普通池理论期望'
               value={
@@ -193,12 +198,12 @@ export function BalanceBlindBoxSettingsAdmin() {
                   : '--'
               }
             />
-            <EconomicsMetric
+            <BlindBoxSettingsMetric
               icon={Gauge}
               label='普通池理论回报率'
               value={economics ? `${economics.returnRate.toFixed(2)}%` : '--'}
             />
-            <EconomicsMetric
+            <BlindBoxSettingsMetric
               icon={TrendingUp}
               label='单抽额度不低于售价概率'
               value={
@@ -207,7 +212,7 @@ export function BalanceBlindBoxSettingsAdmin() {
                   : '--'
               }
             />
-            <EconomicsMetric
+            <BlindBoxSettingsMetric
               icon={Gauge}
               label='普通池单奖上限'
               value={
@@ -257,34 +262,22 @@ export function BalanceBlindBoxSettingsAdmin() {
             )}
           />
 
-          <Button
-            type='submit'
-            disabled={!form.formState.isDirty || updateOption.isPending}
-          >
-            {updateOption.isPending ? '保存中...' : '保存统一盲盒配置'}
-          </Button>
+          <div className='flex flex-wrap items-center gap-3'>
+            <Button
+              type='submit'
+              disabled={optionsQuery.isLoading || updateOption.isPending}
+            >
+              {updateOption.isPending ? '保存中...' : '保存统一盲盒配置'}
+            </Button>
+            <span className='text-muted-foreground text-xs' aria-live='polite'>
+              {form.formState.isDirty
+                ? '有未保存的修改'
+                : '当前显示值可直接编辑'}
+            </span>
+          </div>
         </form>
       </Form>
     </section>
-  )
-}
-
-function EconomicsMetric(props: {
-  icon: typeof Gauge
-  label: string
-  value: string
-}) {
-  const Icon = props.icon
-  return (
-    <div className='bg-muted/35 rounded-lg border px-3 py-2.5'>
-      <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
-        <Icon className='size-3.5' aria-hidden='true' />
-        {props.label}
-      </div>
-      <div className='mt-1 text-sm font-semibold tabular-nums'>
-        {props.value}
-      </div>
-    </div>
   )
 }
 

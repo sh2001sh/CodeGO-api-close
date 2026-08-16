@@ -90,7 +90,7 @@ func latestRequestStatus(series []RecentRequestBucket) string {
 		if point.RequestCount <= 0 {
 			continue
 		}
-		if point.SuccessRate >= 99 {
+		if point.SuccessRate >= 90 {
 			return "healthy"
 		}
 		if point.SuccessRate >= 85 {
@@ -99,6 +99,45 @@ func latestRequestStatus(series []RecentRequestBucket) string {
 		return "failed"
 	}
 	return "unknown"
+}
+
+func marketplaceHighlights(items []GroupListItem) GroupHighlights {
+	var result GroupHighlights
+	for index := range items {
+		item := items[index]
+		highlight := GroupHighlight{
+			GroupID: item.ID, SystemDisplayName: item.SystemDisplayName,
+			Score: item.Score, Multiplier: item.Multiplier, AvgTTFTMs: item.AvgTTFTMs,
+		}
+		if !item.Observing && betterBest(result.Best, highlight) {
+			value := highlight
+			result.Best = &value
+		}
+		if betterCheapest(result.Cheapest, highlight) {
+			value := highlight
+			result.Cheapest = &value
+		}
+		if item.AvgTTFTMs > 0 && betterFastest(result.Fastest, highlight) {
+			value := highlight
+			result.Fastest = &value
+		}
+	}
+	return result
+}
+
+func betterBest(current *GroupHighlight, candidate GroupHighlight) bool {
+	return current == nil || candidate.Score > current.Score ||
+		(candidate.Score == current.Score && candidate.GroupID < current.GroupID)
+}
+
+func betterCheapest(current *GroupHighlight, candidate GroupHighlight) bool {
+	return current == nil || candidate.Multiplier < current.Multiplier ||
+		(candidate.Multiplier == current.Multiplier && candidate.GroupID < current.GroupID)
+}
+
+func betterFastest(current *GroupHighlight, candidate GroupHighlight) bool {
+	return current == nil || candidate.AvgTTFTMs < current.AvgTTFTMs ||
+		(candidate.AvgTTFTMs == current.AvgTTFTMs && candidate.GroupID < current.GroupID)
 }
 
 func publicSourceLabel(channel marketplaceschema.Channel) string {

@@ -20,6 +20,7 @@ import { ChannelVerificationStatus } from './channel-verification-status'
 import { GPT56MappingStatusView } from './model-verification'
 import { OwnerChannelActions } from './owner-channel-actions'
 import { IncomeMetric } from './owner-channel-metric'
+import { OwnerIncomeOverview } from './owner-income-overview'
 import { MarketplaceStatusBadge } from './status-badge'
 
 export function OwnerChannels(props: { onAdd: () => void }) {
@@ -28,37 +29,6 @@ export function OwnerChannels(props: { onAdd: () => void }) {
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
   const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
   const channels = query.data ?? []
-  const metrics = [
-    {
-      icon: Activity,
-      label: t('渠道总数'),
-      value: String(channels.length),
-    },
-    {
-      icon: RefreshCcw,
-      label: t('运行中'),
-      value: String(
-        channels.filter((channel) =>
-          ['active', 'degraded'].includes(channel.lifecycle_status)
-        ).length
-      ),
-    },
-    {
-      icon: CircleDollarSign,
-      label: t('累计收入'),
-      value: formatQuota(
-        channels.reduce((total, channel) => total + channel.total_income, 0)
-      ),
-    },
-    {
-      icon: Clock3,
-      label: t('待结算'),
-      value: formatQuota(
-        channels.reduce((total, channel) => total + channel.pending_income, 0)
-      ),
-    },
-  ]
-
   return (
     <>
       <section className='border-border bg-card overflow-hidden rounded-lg border'>
@@ -79,24 +49,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
             {t('添加渠道')}
           </Button>
         </header>
-        <div className='border-border bg-muted/20 grid border-y sm:grid-cols-2 xl:grid-cols-4'>
-          {metrics.map(({ icon: Icon, label, value }) => (
-            <div
-              key={label}
-              className='border-border flex min-h-24 items-center gap-3 border-b px-4 py-4 last:border-r-0 sm:border-r xl:border-b-0'
-            >
-              <span className='bg-background flex size-9 shrink-0 items-center justify-center rounded-md border shadow-sm'>
-                <Icon className='text-primary size-4' />
-              </span>
-              <div className='min-w-0'>
-                <div className='text-muted-foreground text-xs'>{label}</div>
-                <div className='mt-1 truncate text-lg font-semibold tabular-nums'>
-                  {value}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <OwnerIncomeOverview channels={channels} />
         <div>
           {query.isLoading ? (
             <div className='space-y-2 p-3'>

@@ -82,16 +82,19 @@ export function SubscriptionClaudeConversionCard(
     maxPercent,
     Math.max(1, conversionPercent || maxPercent)
   )
-  const selectedRatio = selectedConversionPercent / 100
   const unusedPercent = Number(preview?.unused_ratio || 0) * 100
+  const convertsAllRemaining = selectedConversionPercent === maxPercent
+  const selectedRatio = convertsAllRemaining
+    ? Number(preview?.unused_ratio || 0)
+    : selectedConversionPercent / 100
   const remainingPercent = Math.max(
     0,
-    unusedPercent - selectedConversionPercent
+    convertsAllRemaining ? 0 : unusedPercent - selectedConversionPercent
   )
   const estimatedQuota = Math.floor(
     Number(preview?.plan_price_amount || 0) * selectedRatio * quotaPerUnit
   )
-  const endsPass = remainingPercent < 0.01
+  const endsPass = convertsAllRemaining
   const quickPercentages = Array.from(
     new Set([25, 50, maxPercent].filter((value) => value <= maxPercent))
   )
@@ -115,13 +118,18 @@ export function SubscriptionClaudeConversionCard(
         return
       }
       toast.success(
-        t(
-          'Converted {{percent}}% into {{amount}} permanent universal credit.',
-          {
-            percent: result.data.conversion_percent,
-            amount: formatQuota(result.data.target_quota),
-          }
-        )
+        result.data.subscription_ended
+          ? t(
+              'Converted all remaining monthly-pass quota into {{amount}} permanent universal credit.',
+              { amount: formatQuota(result.data.target_quota) }
+            )
+          : t(
+              'Converted {{percent}}% into {{amount}} permanent universal credit.',
+              {
+                percent: result.data.conversion_percent,
+                amount: formatQuota(result.data.target_quota),
+              }
+            )
       )
       setConfirmOpen(false)
       await props.onRefresh?.()
@@ -194,7 +202,9 @@ export function SubscriptionClaudeConversionCard(
                     </span>
                     <span className='text-muted-foreground text-xs'>
                       {t('{{percent}}% available', {
-                        percent: itemPreview?.max_conversion_percent ?? 0,
+                        percent: (
+                          Number(itemPreview?.unused_ratio || 0) * 100
+                        ).toFixed(2),
                       })}
                     </span>
                   </div>
@@ -262,7 +272,7 @@ export function SubscriptionClaudeConversionCard(
                   onClick={() => setConversionPercent(value)}
                 >
                   {value === maxPercent
-                    ? t('All available {{percent}}%', { percent: value })
+                    ? t('Convert all remaining')
                     : `${value}%`}
                 </Button>
               ))}
@@ -290,10 +300,14 @@ export function SubscriptionClaudeConversionCard(
         onClick={() => setConfirmOpen(true)}
       >
         {submitting ? <Loader2 className='animate-spin' /> : <ArrowRightLeft />}
-        {t('Convert {{percent}}%, receive {{amount}}', {
-          percent: selectedConversionPercent,
-          amount: formatQuota(estimatedQuota),
-        })}
+        {convertsAllRemaining
+          ? t('Convert all remaining, receive {{amount}}', {
+              amount: formatQuota(estimatedQuota),
+            })
+          : t('Convert {{percent}}%, receive {{amount}}', {
+              percent: selectedConversionPercent,
+              amount: formatQuota(estimatedQuota),
+            })}
       </Button>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -306,14 +320,18 @@ export function SubscriptionClaudeConversionCard(
               {t(
                 'Convert {{percent}}% of {{plan}} for approximately {{credit}} permanent universal credit. This consumes {{quota}} monthly-pass quota and leaves {{remaining}}%. After any conversion, this monthly pass cannot use an invitation quota refresh. {{ending}} This cannot be undone.',
                 {
-                  percent: selectedConversionPercent,
+                  percent: convertsAllRemaining
+                    ? unusedPercent.toFixed(2)
+                    : selectedConversionPercent,
                   plan: planMeta?.title || t('monthly pass'),
                   credit: formatQuota(estimatedQuota),
                   quota: formatSubscriptionQuotaAmount(
-                    Math.floor(
-                      Number(selected?.subscription.amount_total || 0) *
-                        selectedRatio
-                    )
+                    convertsAllRemaining
+                      ? Number(preview?.remaining_quota || 0)
+                      : Math.floor(
+                          Number(selected?.subscription.amount_total || 0) *
+                            selectedRatio
+                        )
                   ),
                   remaining: remainingPercent.toFixed(0),
                   ending: endsPass

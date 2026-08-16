@@ -44,6 +44,7 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		return nil, err
 	}
 	items := filterAndSortGroups(groups, channels, snapshots, recentSeries, query)
+	highlights := marketplaceHighlights(items)
 	total := len(items)
 	ranked := 0
 	for _, item := range items {
@@ -55,7 +56,7 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	if err := attachChannelFeedback(items, channels, query.ViewerUserID); err != nil {
 		return nil, err
 	}
-	return &GroupListResult{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}, nil
+	return &GroupListResult{Items: items, Highlights: highlights, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}, nil
 }
 
 func GetMarketplaceGroup(slug string, windowHours, viewerUserID int) (*GroupListItem, error) {

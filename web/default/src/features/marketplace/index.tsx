@@ -70,13 +70,7 @@ export function MarketplacePage() {
           <MarketplaceOverview
             total={groups.data?.total ?? 0}
             ranked={groups.data?.ranked_count ?? 0}
-            multiplier={groups.data?.items.reduce<number | undefined>(
-              (lowest, item) =>
-                lowest === undefined || item.multiplier < lowest
-                  ? item.multiplier
-                  : lowest,
-              undefined
-            )}
+            multiplier={groups.data?.highlights.cheapest?.multiplier}
           />
           <Tabs
             value={tab}

@@ -3,15 +3,8 @@ import { ShieldCheck, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import type { MarketplaceGroup } from '../types'
-import { DesktopGroupRow, MobileGroupRow } from './group-rows'
+import { GroupMarketItem } from './group-rows'
 
 export function MarketplaceGroupList(props: {
   groups: MarketplaceGroup[]
@@ -19,7 +12,6 @@ export function MarketplaceGroupList(props: {
   error: boolean
   onRetry: () => void
 }) {
-  const { t } = useTranslation()
   const [expanded, setExpanded] = useState('')
   if (props.loading) return <GroupListSkeleton />
   if (props.error) return <GroupListError onRetry={props.onRetry} />
@@ -29,43 +21,16 @@ export function MarketplaceGroupList(props: {
     setExpanded((current) => (current === groupID ? '' : groupID))
 
   return (
-    <>
-      <div className='hidden lg:block'>
-        <Table>
-          <TableHeader>
-            <TableRow className='bg-muted/30 hover:bg-muted/30'>
-              <TableHead className='w-20 text-center'>{t('名次')}</TableHead>
-              <TableHead className='min-w-72'>{t('渠道与模型')}</TableHead>
-              <TableHead className='min-w-44'>{t('质量')}</TableHead>
-              <TableHead className='min-w-40'>{t('响应')}</TableHead>
-              <TableHead className='text-right'>{t('倍率')}</TableHead>
-              <TableHead className='min-w-36 text-right'>{t('用量')}</TableHead>
-              <TableHead className='w-12' />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {props.groups.map((group) => (
-              <DesktopGroupRow
-                key={group.id}
-                group={group}
-                open={expanded === group.id}
-                onToggle={() => toggle(group.id)}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <div className='divide-border divide-y lg:hidden'>
-        {props.groups.map((group) => (
-          <MobileGroupRow
-            key={group.id}
-            group={group}
-            open={expanded === group.id}
-            onToggle={() => toggle(group.id)}
-          />
-        ))}
-      </div>
-    </>
+    <div className='divide-border divide-y'>
+      {props.groups.map((group) => (
+        <GroupMarketItem
+          key={group.id}
+          group={group}
+          open={expanded === group.id}
+          onToggle={() => toggle(group.id)}
+        />
+      ))}
+    </div>
   )
 }
 

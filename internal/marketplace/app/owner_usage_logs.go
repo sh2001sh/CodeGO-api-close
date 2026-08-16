@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"time"
 
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -41,15 +42,15 @@ func ListOwnerUsageLogs(ownerUserID int, query OwnerUsageLogQuery) (*OwnerUsageL
 		channelByInternalID[channel.InternalChannelID] = channel
 	}
 
-	if err := ownerUsageLogDBQuery(channelIDs).Count(&result.Total).Error; err != nil {
+	if err := ownerUsageLogDBQuery(channelIDs, query).Count(&result.Total).Error; err != nil {
 		return nil, err
 	}
-	result.Summary, err = loadOwnerUsageSummary(ownerUserID, channelIDs, groupIDs)
+	result.Summary, err = loadOwnerUsageSummary(ownerUserID, channelIDs, groupIDs, query)
 	if err != nil {
 		return nil, err
 	}
 	var logs []auditschema.Log
-	if err := ownerUsageLogDBQuery(channelIDs).Order("id desc").
+	if err := ownerUsageLogDBQuery(channelIDs, query).Order("id desc").
 		Limit(query.PageSize).
 		Offset((query.Page - 1) * query.PageSize).
 		Find(&logs).Error; err != nil {
@@ -102,15 +103,22 @@ func loadExternalUserIDs(logs []auditschema.Log) (map[int]string, error) {
 	return result, nil
 }
 
-func ownerUsageLogDBQuery(channelIDs []int) *gorm.DB {
-	return platformdb.LogDB.Model(&auditschema.Log{}).
+func ownerUsageLogDBQuery(channelIDs []int, query OwnerUsageLogQuery) *gorm.DB {
+	db := platformdb.LogDB.Model(&auditschema.Log{}).
 		Where("channel_id IN ?", channelIDs).
 		Where("type IN ?", []int{auditschema.LogTypeConsume, auditschema.LogTypeError})
+	if query.StartTimestamp > 0 {
+		db = db.Where("created_at >= ?", query.StartTimestamp)
+	}
+	if query.EndTimestamp > 0 {
+		db = db.Where("created_at <= ?", query.EndTimestamp)
+	}
+	return db
 }
 
-func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string) (OwnerUsageLogSummary, error) {
+func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string, query OwnerUsageLogQuery) (OwnerUsageLogSummary, error) {
 	var summary OwnerUsageLogSummary
-	if err := ownerUsageLogDBQuery(channelIDs).Select(
+	if err := ownerUsageLogDBQuery(channelIDs, query).Select(
 		"COUNT(*) AS request_count, "+
 			"SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success_count, "+
 			"SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failed_count",
@@ -126,9 +134,16 @@ func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string)
 		OwnerIncome    int64 `gorm:"column:owner_income"`
 	}
 	var totals settlementTotals
-	if err := platformdb.DB.Model(&marketplaceschema.Settlement{}).
+	settlementQuery := platformdb.DB.Model(&marketplaceschema.Settlement{}).
 		Where("owner_user_id = ? AND group_id IN ?", ownerUserID, groupIDs).
-		Select("COALESCE(SUM(consumer_amount), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income").
+		Select("COALESCE(SUM(consumer_amount), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income")
+	if query.StartTimestamp > 0 {
+		settlementQuery = settlementQuery.Where("created_at >= ?", time.Unix(query.StartTimestamp, 0))
+	}
+	if query.EndTimestamp > 0 {
+		settlementQuery = settlementQuery.Where("created_at < ?", time.Unix(query.EndTimestamp+1, 0))
+	}
+	if err := settlementQuery.
 		Scan(&totals).Error; err != nil {
 		return summary, err
 	}
@@ -141,8 +156,13 @@ func normalizeOwnerUsageLogQuery(query OwnerUsageLogQuery) OwnerUsageLogQuery {
 	if query.Page <= 0 {
 		query.Page = 1
 	}
-	if query.PageSize != 50 {
+	if query.PageSize <= 0 {
 		query.PageSize = 20
+	} else if query.PageSize > 100 {
+		query.PageSize = 100
+	}
+	if query.StartTimestamp > 0 && query.EndTimestamp > 0 && query.StartTimestamp > query.EndTimestamp {
+		query.StartTimestamp, query.EndTimestamp = query.EndTimestamp, query.StartTimestamp
 	}
 	return query
 }

@@ -172,8 +172,23 @@ type RecentRequestBucket struct {
 	RequestCount int64   `json:"request_count"`
 }
 
+type GroupHighlight struct {
+	GroupID           string  `json:"group_id"`
+	SystemDisplayName string  `json:"system_display_name"`
+	Score             float64 `json:"score"`
+	Multiplier        float64 `json:"multiplier"`
+	AvgTTFTMs         float64 `json:"avg_ttft_ms"`
+}
+
+type GroupHighlights struct {
+	Best     *GroupHighlight `json:"best"`
+	Cheapest *GroupHighlight `json:"cheapest"`
+	Fastest  *GroupHighlight `json:"fastest"`
+}
+
 type GroupListResult struct {
 	Items       []GroupListItem `json:"items"`
+	Highlights  GroupHighlights `json:"highlights"`
 	Total       int             `json:"total"`
 	Page        int             `json:"page"`
 	PageSize    int             `json:"page_size"`
@@ -233,9 +248,11 @@ type AutoRoutePoolView struct {
 }
 
 type OwnerUsageLogQuery struct {
-	ChannelID string
-	Page      int
-	PageSize  int
+	ChannelID      string
+	StartTimestamp int64
+	EndTimestamp   int64
+	Page           int
+	PageSize       int
 }
 
 type OwnerUsageLogItem struct {

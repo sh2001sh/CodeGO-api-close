@@ -88,11 +88,26 @@ export interface ChannelFeedbackSummary {
 
 export interface MarketplaceGroupList {
   items: MarketplaceGroup[]
+  highlights: MarketplaceGroupHighlights
   total: number
   page: number
   page_size: number
   ranked_count: number
   window_hours: number
+}
+
+export interface MarketplaceGroupHighlight {
+  group_id: string
+  system_display_name: string
+  score: number
+  multiplier: number
+  avg_ttft_ms: number
+}
+
+export interface MarketplaceGroupHighlights {
+  best?: MarketplaceGroupHighlight | null
+  cheapest?: MarketplaceGroupHighlight | null
+  fastest?: MarketplaceGroupHighlight | null
 }
 
 export interface MarketplaceChannel {
@@ -229,6 +244,14 @@ export interface MarketplaceOwnerUsageLogResult {
   total: number
   page: number
   page_size: number
+}
+
+export interface MarketplaceOwnerUsageLogFilters {
+  channelId?: string
+  startTimestamp?: number
+  endTimestamp?: number
+  page: number
+  pageSize: number
 }
 
 export interface MarketplaceAutoRoutePoolItem {

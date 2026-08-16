@@ -7,6 +7,7 @@ import type {
   MarketplaceAutoRoutePool,
   MarketplaceGroupList,
   MarketplaceOwnerUsageLogResult,
+  MarketplaceOwnerUsageLogFilters,
   ChannelFeedbackSummary,
   TokenOption,
 } from './types'
@@ -68,16 +69,20 @@ export async function updateMarketplaceAutoRoutePool(groupIds: string[]) {
   return requireData(response.data)
 }
 
-export async function getMyMarketplaceUsageLogs(params: {
-  channelId?: string
-  page: number
-  pageSize: number
-}) {
+export async function getMyMarketplaceUsageLogs(
+  params: MarketplaceOwnerUsageLogFilters
+) {
   const search = new URLSearchParams({
     page: String(params.page),
     page_size: String(params.pageSize),
   })
   if (params.channelId) search.set('channel_id', params.channelId)
+  if (params.startTimestamp) {
+    search.set('start_timestamp', String(params.startTimestamp))
+  }
+  if (params.endTimestamp) {
+    search.set('end_timestamp', String(params.endTimestamp))
+  }
   const response = await api.get<ApiResponse<MarketplaceOwnerUsageLogResult>>(
     `/api/marketplace/channels/mine/logs?${search.toString()}`
   )

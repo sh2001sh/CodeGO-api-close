@@ -97,11 +97,28 @@ func TestLatestRequestStatusUsesMostRecentNonEmptyBucket(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "unknown", latestRequestStatus(nil))
-	require.Equal(t, "healthy", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 100, RequestCount: 3}}))
-	require.Equal(t, "unstable", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 92, RequestCount: 8}}))
+	require.Equal(t, "healthy", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 90, RequestCount: 3}}))
+	require.Equal(t, "unstable", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 89.99, RequestCount: 8}}))
+	require.Equal(t, "unstable", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 85, RequestCount: 8}}))
+	require.Equal(t, "failed", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 84.99, RequestCount: 8}}))
 	require.Equal(t, "failed", latestRequestStatus([]RecentRequestBucket{
 		{SuccessRate: 100, RequestCount: 4},
 		{SuccessRate: 70, RequestCount: 2},
 		{SuccessRate: 0, RequestCount: 0},
 	}))
+}
+
+func TestMarketplaceHighlightsUseAllFilteredItems(t *testing.T) {
+	items := []GroupListItem{
+		{ID: "page-one", SystemDisplayName: "Page One", Score: 80, Multiplier: 1, AvgTTFTMs: 500},
+		{ID: "global-best", SystemDisplayName: "Global Best", Score: 98, Multiplier: 1.2, AvgTTFTMs: 400},
+		{ID: "global-cheapest", SystemDisplayName: "Global Cheapest", Score: 75, Multiplier: 0.2, AvgTTFTMs: 300},
+		{ID: "global-fastest", SystemDisplayName: "Global Fastest", Score: 70, Multiplier: 0.8, AvgTTFTMs: 80},
+		{ID: "observing", SystemDisplayName: "Observing", Score: 100, Multiplier: 0.1, AvgTTFTMs: 50, Observing: true},
+	}
+
+	highlights := marketplaceHighlights(items)
+	require.Equal(t, "global-best", highlights.Best.GroupID)
+	require.Equal(t, "observing", highlights.Cheapest.GroupID)
+	require.Equal(t, "observing", highlights.Fastest.GroupID)
 }

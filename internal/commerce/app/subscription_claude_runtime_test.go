@@ -76,6 +76,74 @@ func TestConvertMonthlyPassToUnifiedCreditAllRemainingEndsPass(t *testing.T) {
 	assert.LessOrEqual(t, savedSub.EndTime, time.Now().Unix())
 }
 
+func TestConvertMonthlyPassToUnifiedCreditMaxPercentageConsumesFractionalRemainder(t *testing.T) {
+	db, user, plan, sub := setupMonthlyPassConversionTest(t, 99208, 99308, 99408, 49, 20)
+	residualUsage := int64(123)
+	require.NoError(t, db.Model(sub).Update("amount_used", sub.AmountUsed+residualUsage).Error)
+	remaining := sub.AmountTotal - sub.AmountUsed
+
+	preview := BuildSubscriptionClaudeConversionPreview(plan, sub)
+	require.True(t, preview.Eligible)
+	require.Equal(t, 79, preview.MaxConversionPercent)
+
+	result, err := ConvertMonthlyPassToUnifiedCredit("req-full-fractional", user.Id, sub.Id, preview.MaxConversionPercent)
+	require.NoError(t, err)
+	require.True(t, result.SubscriptionEnded)
+	require.Equal(t, remaining, result.SourceQuota)
+	require.Zero(t, result.RemainingRatioAfter)
+
+	var savedSub commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", sub.Id).First(&savedSub).Error)
+	require.Equal(t, savedSub.AmountTotal, savedSub.AmountUsed)
+	require.Equal(t, "cancelled", savedSub.Status)
+
+	var account billingschema.BillingAccount
+	require.NoError(t, db.Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user_subscription", sub.Id, "subscription").First(&account).Error)
+	var snapshot billingschema.BillingBalanceSnapshot
+	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
+	require.Zero(t, snapshot.AvailableBalance)
+}
+
+func TestConvertMonthlyPassToUnifiedCreditAllowsAllBelowOnePercent(t *testing.T) {
+	db, user, plan, sub := setupMonthlyPassConversionTest(t, 99209, 99309, 99409, 49, 0)
+	remaining := int64(12345)
+	require.NoError(t, db.Model(sub).Update("amount_used", sub.AmountTotal-remaining).Error)
+	sub.AmountUsed = sub.AmountTotal - remaining
+
+	preview := BuildSubscriptionClaudeConversionPreview(plan, sub)
+	require.True(t, preview.Eligible)
+	require.Equal(t, 1, preview.MaxConversionPercent)
+	require.Greater(t, preview.PreviewQuota, 0)
+
+	result, err := ConvertMonthlyPassToUnifiedCredit("req-full-sub-percent", user.Id, sub.Id, preview.MaxConversionPercent)
+	require.NoError(t, err)
+	require.True(t, result.SubscriptionEnded)
+	require.Equal(t, remaining, result.SourceQuota)
+	require.Zero(t, result.RemainingRatioAfter)
+}
+
+func TestConvertMonthlyPassToUnifiedCreditWritesOffConversionDustOnly(t *testing.T) {
+	db, user, plan, sub := setupMonthlyPassConversionTest(t, 99210, 99310, 99410, 49, 0)
+	require.NoError(t, db.Model(sub).Update("amount_used", sub.AmountTotal-1).Error)
+
+	preview := BuildSubscriptionClaudeConversionPreview(plan, sub)
+	require.True(t, preview.Eligible)
+	require.Equal(t, int64(1), preview.RemainingQuota)
+	require.Equal(t, 1, preview.PreviewQuota)
+
+	result, err := ConvertMonthlyPassToUnifiedCredit("req-conversion-dust", user.Id, sub.Id, preview.MaxConversionPercent)
+	require.NoError(t, err)
+	require.True(t, result.SubscriptionEnded)
+	require.Equal(t, int64(1), result.SourceQuota)
+	require.Equal(t, 1, result.TargetQuota)
+	require.Equal(t, 101, result.QuotaAfter)
+
+	var savedSub commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", sub.Id).First(&savedSub).Error)
+	require.Equal(t, savedSub.AmountTotal, savedSub.AmountUsed)
+	require.Equal(t, "cancelled", savedSub.Status)
+}
+
 func TestConvertMonthlyPassToUnifiedCreditRecoversInterruptedReservation(t *testing.T) {
 	db, user, _, sub := setupMonthlyPassConversionTest(t, 9207, 9307, 9407, 49, 20)
 	account, err := billingdomain.EnsureBillingAccountTx(db, billingdomain.EnsureAccountParams{

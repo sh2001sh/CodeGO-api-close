@@ -280,7 +280,7 @@ func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, 
 	unusedRatio := decimal.NewFromInt(remaining).Div(decimal.NewFromInt(sub.AmountTotal))
 	maxPercent := unusedRatio.Mul(decimal.NewFromInt(100)).Floor().IntPart()
 	if maxPercent <= 0 {
-		return monthlyPassConversionQuote{}
+		maxPercent = 1
 	}
 	if conversionPercent == 0 {
 		conversionPercent = int(maxPercent)
@@ -290,6 +290,11 @@ func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, 
 	}
 	conversionRatio := decimal.NewFromInt(int64(conversionPercent)).Div(decimal.NewFromInt(100))
 	convertedQuota := decimal.NewFromInt(sub.AmountTotal).Mul(conversionRatio).Floor().IntPart()
+	convertAllRemaining := int64(conversionPercent) == maxPercent
+	if convertAllRemaining {
+		conversionRatio = unusedRatio
+		convertedQuota = remaining
+	}
 	if convertedQuota <= 0 || convertedQuota > remaining {
 		return monthlyPassConversionQuote{}
 	}
@@ -298,6 +303,9 @@ func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, 
 		Mul(decimal.NewFromFloat(platformruntime.QuotaPerUnit)).
 		Floor().
 		IntPart()
+	if target <= 0 && convertAllRemaining {
+		target = 1
+	}
 	if target <= 0 {
 		return monthlyPassConversionQuote{}
 	}

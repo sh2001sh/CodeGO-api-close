@@ -19,8 +19,11 @@ export function MarketSurface(props: {
     1,
     Math.ceil((props.query.data?.total ?? 0) / props.filters.page_size)
   )
+  const updatedAt = props.query.dataUpdatedAt
+    ? new Date(props.query.dataUpdatedAt).toLocaleTimeString()
+    : '--'
   return (
-    <section className='border-border bg-card overflow-hidden rounded-xl border'>
+    <section className='border-border bg-card overflow-hidden rounded-lg border'>
       <div className='flex flex-wrap items-start justify-between gap-3 px-4 py-4 sm:px-5'>
         <div>
           <h3 className='font-semibold'>
@@ -30,17 +33,33 @@ export function MarketSurface(props: {
             {props.summary}
           </p>
         </div>
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={() => void props.query.refetch()}
-          disabled={props.query.isFetching}
-        >
-          <RefreshCcw
-            className={props.query.isFetching ? 'animate-spin' : ''}
-          />
-          {t('刷新数据')}
-        </Button>
+        <div className='flex flex-wrap items-center justify-end gap-3'>
+          <div
+            className='text-muted-foreground flex items-center gap-2 text-xs'
+            aria-live='polite'
+          >
+            <span className='bg-success size-1.5 rounded-full' />
+            <span>
+              {props.query.isFetching
+                ? t('正在更新市场数据')
+                : t('每 30 秒自动刷新')}
+            </span>
+            <span className='tabular-nums'>
+              {t('更新于 {{time}}', { time: updatedAt })}
+            </span>
+          </div>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => void props.query.refetch()}
+            disabled={props.query.isFetching}
+          >
+            <RefreshCcw
+              className={props.query.isFetching ? 'animate-spin' : ''}
+            />
+            {t('刷新数据')}
+          </Button>
+        </div>
       </div>
       {props.ranking && (
         <div className='border-border border-y bg-sky-500/[0.06] px-4 py-3 text-xs leading-5 text-sky-800 dark:text-sky-200'>
@@ -53,7 +72,7 @@ export function MarketSurface(props: {
         filters={props.filters}
         onChange={props.updateFilters}
       />
-      <MarketplaceHighlights groups={props.query.data?.items ?? []} />
+      <MarketplaceHighlights highlights={props.query.data?.highlights} />
       <MarketplaceGroupList
         groups={props.query.data?.items ?? []}
         loading={props.query.isLoading}

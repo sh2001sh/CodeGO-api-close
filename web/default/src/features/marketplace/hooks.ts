@@ -17,7 +17,7 @@ import {
   updateMarketplaceChannel,
   updateMarketplaceAutoRoutePool,
 } from './api'
-import type { GroupFilters } from './types'
+import type { GroupFilters, MarketplaceOwnerUsageLogFilters } from './types'
 
 function verificationRefetchInterval(
   channels: {
@@ -50,6 +50,9 @@ export function useMarketplaceGroups(filters: GroupFilters) {
   return useQuery({
     queryKey: ['marketplace-groups', filters],
     queryFn: () => getMarketplaceGroups(filters),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 }
 
@@ -85,11 +88,9 @@ export function useMyMarketplaceChannels() {
   })
 }
 
-export function useMyMarketplaceUsageLogs(params: {
-  channelId?: string
-  page: number
-  pageSize: number
-}) {
+export function useMyMarketplaceUsageLogs(
+  params: MarketplaceOwnerUsageLogFilters
+) {
   return useQuery({
     queryKey: ['marketplace-channels', 'mine', 'usage-logs', params],
     queryFn: () => getMyMarketplaceUsageLogs(params),

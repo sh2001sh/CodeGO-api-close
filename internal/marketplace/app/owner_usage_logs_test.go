@@ -114,6 +114,42 @@ func TestListOwnerUsageLogsRejectsForeignChannelFilter(t *testing.T) {
 	require.EqualError(t, err, "渠道不存在或无权访问")
 }
 
+func TestListOwnerUsageLogsFiltersRowsAndIncomeByTimeRange(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	internalID := 101
+	reference := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, db.Create(&marketplaceschema.Channel{
+		ID: "owner-channel", OwnerUserID: 10, InternalChannelID: &internalID,
+		Status: "active", ProviderType: "openai",
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{
+		ID: "owner-group", ChannelID: "owner-channel", OwnerUserID: 10,
+		SystemDisplayName: "Owner", InternalGroupName: "Owner", PublicSlug: "owner",
+		SourceType: "marketplace_user", CreditPoolPolicy: "universal",
+		LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1,
+	}).Error)
+	require.NoError(t, logDB.Create([]auditschema.Log{
+		{CreatedAt: reference.Add(-48 * time.Hour).Unix(), Type: auditschema.LogTypeConsume, ChannelId: internalID, RequestId: "old"},
+		{CreatedAt: reference.Add(-2 * time.Hour).Unix(), Type: auditschema.LogTypeConsume, ChannelId: internalID, RequestId: "current"},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Settlement{
+		{RequestID: "old", GroupID: "owner-group", OwnerUserID: 10, ConsumerAmount: 100, OwnerNetAmount: 95, Status: "released", CreatedAt: reference.Add(-48 * time.Hour)},
+		{RequestID: "current", GroupID: "owner-group", OwnerUserID: 10, ConsumerAmount: 200, OwnerNetAmount: 190, Status: "pending", CreatedAt: reference.Add(-2 * time.Hour)},
+	}).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{
+		StartTimestamp: reference.Add(-24 * time.Hour).Unix(),
+		EndTimestamp:   reference.Unix(),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.EqualValues(t, 1, result.Summary.RequestCount)
+	require.Equal(t, int64(200), result.Summary.ConsumerAmount)
+	require.Equal(t, int64(190), result.Summary.OwnerIncome)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "current", result.Items[0].RequestID)
+}
+
 func openOwnerUsageLogTestDB(t *testing.T) (*gorm.DB, *gorm.DB) {
 	t.Helper()
 	originalDB, originalLogDB := platformdb.DB, platformdb.LogDB

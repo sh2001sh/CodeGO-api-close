@@ -451,7 +451,13 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 }
 
 func migrateMarketplaceChannelFeedbackAndPrices(db *gorm.DB) error {
-	if err := db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.ChannelFeedback{}); err != nil {
+	if db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
+		!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "ModelPrices") {
+		if err := db.Migrator().AddColumn(&marketplaceschema.Channel{}, "ModelPrices"); err != nil {
+			return err
+		}
+	}
+	if err := db.AutoMigrate(&marketplaceschema.ChannelFeedback{}); err != nil {
 		return err
 	}
 	legacy := legacyMarketplaceModelFeedback{}

@@ -20,6 +20,7 @@ type Channel struct {
 	CredentialTail                   string         `json:"credential_tail" gorm:"column:credential_tail;size:12"`
 	CredentialVersion                int            `json:"credential_version" gorm:"column:credential_version;not null;default:1"`
 	DeclaredModels                   string         `json:"-" gorm:"column:declared_models;type:text"`
+	ModelPrices                      string         `json:"-" gorm:"column:model_prices;type:text"`
 	ModelVerificationResults         string         `json:"-" gorm:"column:model_verification_results;type:text"`
 	ModelConsistencyStatus           string         `json:"model_consistency_status" gorm:"column:model_consistency_status;size:24;index"`
 	MaxConcurrency                   int            `json:"max_concurrency" gorm:"column:max_concurrency;not null;default:1"`
@@ -129,19 +130,18 @@ func (snapshot *RankingSnapshot) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
-// ModelConsistencyFeedback stores one user's current assessment of one model.
-type ModelConsistencyFeedback struct {
+// ChannelFeedback stores one user's current assessment of a marketplace channel.
+type ChannelFeedback struct {
 	ID        uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
-	ChannelID string    `json:"channel_id" gorm:"column:channel_id;size:64;not null;uniqueIndex:uq_marketplace_model_feedback,priority:1;index"`
-	UserID    int       `json:"-" gorm:"column:user_id;not null;uniqueIndex:uq_marketplace_model_feedback,priority:2;index"`
-	Model     string    `json:"model" gorm:"column:model;size:128;not null;uniqueIndex:uq_marketplace_model_feedback,priority:3"`
+	ChannelID string    `json:"channel_id" gorm:"column:channel_id;size:64;not null;uniqueIndex:uq_marketplace_channel_feedback,priority:1;index"`
+	UserID    int       `json:"-" gorm:"column:user_id;not null;uniqueIndex:uq_marketplace_channel_feedback,priority:2;index"`
 	Status    string    `json:"status" gorm:"column:status;size:24;not null;index"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
 }
 
-func (ModelConsistencyFeedback) TableName() string {
-	return tableName("model_consistency_feedback")
+func (ChannelFeedback) TableName() string {
+	return tableName("channel_feedback")
 }
 
 type Settlement struct {

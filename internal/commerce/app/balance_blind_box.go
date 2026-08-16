@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	balanceBlindBoxPoolVersion = "unified-box-v2"
+	balanceBlindBoxPoolVersion = "unified-box-v3"
 	balanceBlindBoxMaxBatch    = 100
 )
 

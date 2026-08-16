@@ -467,6 +467,7 @@ func TokenAuth() func(c *gin.Context) {
 			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, binding.SourceType)
 			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, binding.CreditPoolPolicy)
 			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, binding.Multiplier)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, binding.ModelPrices)
 		} else if tokenGroup != "" {
 			// check common.UserUsableGroups[userGroup]
 			if _, ok := gatewayroutingapp.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {

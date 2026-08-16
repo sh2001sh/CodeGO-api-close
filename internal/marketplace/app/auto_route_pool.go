@@ -165,6 +165,7 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit
 				GroupID: group.ID, InternalGroup: group.InternalGroupName,
 				OwnerUserID: group.OwnerUserID, SourceType: group.SourceType,
 				CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: group.Multiplier,
+				ModelPrices: decodeChannelModelPrices(channel.ModelPrices),
 			},
 			score: score, priority: priority,
 		})

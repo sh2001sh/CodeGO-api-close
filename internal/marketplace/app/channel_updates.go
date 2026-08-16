@@ -27,7 +27,26 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 		}
 		models, _ := json.Marshal(normalizeModels(*req.DeclaredModels))
 		channel.DeclaredModels = string(models)
+		retainedPrices := make(map[string]ChannelModelPrice)
+		currentPrices := decodeChannelModelPrices(channel.ModelPrices)
+		for _, model := range normalizeModels(*req.DeclaredModels) {
+			if price, ok := channelModelPriceForModel(currentPrices, model); ok {
+				retainedPrices[model] = price
+			}
+		}
+		prices, err := encodeChannelModelPrices(retainedPrices, *req.DeclaredModels)
+		if err != nil {
+			return false, err
+		}
+		channel.ModelPrices = prices
 		reverify = true
+	}
+	if req.ModelPrices != nil {
+		prices, err := encodeChannelModelPrices(*req.ModelPrices, decodeModels(channel.DeclaredModels))
+		if err != nil {
+			return false, err
+		}
+		channel.ModelPrices = prices
 	}
 	if req.Multiplier != nil {
 		if err := applyMultiplierChange(group, channel.ID, channel.SubmittedSourceLabel, *req.Multiplier); err != nil {

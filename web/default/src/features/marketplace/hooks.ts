@@ -13,7 +13,7 @@ import {
   queueMarketplaceVerification,
   reviewMarketplaceChannel,
   setMarketplaceChannelPaused,
-  submitMarketplaceModelFeedback,
+  submitMarketplaceChannelFeedback,
   updateMarketplaceChannel,
   updateMarketplaceAutoRoutePool,
 } from './api'
@@ -31,10 +31,10 @@ function verificationRefetchInterval(
     : false
 }
 
-export function useMarketplaceModelFeedback() {
+export function useMarketplaceChannelFeedback() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: submitMarketplaceModelFeedback,
+    mutationFn: submitMarketplaceChannelFeedback,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] })
     },

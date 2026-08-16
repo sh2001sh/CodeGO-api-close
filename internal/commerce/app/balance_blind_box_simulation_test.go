@@ -14,7 +14,7 @@ func TestUnifiedBlindBoxPoolEconomics(t *testing.T) {
 	setting := blindboxsettings.Get()
 	require.Equal(t, 2.5, setting.BalanceBlindBoxPriceUSD)
 	require.Len(t, setting.BalanceBlindBoxTiers, 14)
-	require.InDelta(t, 0.4366, setting.BalanceBlindBoxTiers[0].Probability, 0.000000001)
+	require.InDelta(t, 0.2066, setting.BalanceBlindBoxTiers[0].Probability, 0.000000001)
 
 	var probability float64
 	var expectedUnifiedCredit float64
@@ -28,7 +28,7 @@ func TestUnifiedBlindBoxPoolEconomics(t *testing.T) {
 		expectedUnifiedCredit += ((tier.MinUSD + tier.MaxUSD) / 2) * tier.Probability
 	}
 	require.InDelta(t, 1, probability, 0.000000001)
-	require.InDelta(t, 1.91625, expectedUnifiedCredit, 0.000001)
+	require.InDelta(t, 2.29881, expectedUnifiedCredit, 0.000001)
 }
 
 func TestUnifiedBlindBoxDrawUsesFrozenPoolAndGuarantees(t *testing.T) {
@@ -101,9 +101,9 @@ func TestUnifiedBlindBoxMillionDrawEconomics(t *testing.T) {
 		float64(stats.smallPityCount)/draws,
 		float64(stats.bigPityCount)/draws,
 	)
-	require.InDelta(t, 2.10, mean, 0.04)
-	require.InDelta(t, 9.8, standardDeviation, 1.0)
-	require.InDelta(t, 0.047, float64(stats.smallPityCount)/draws, 0.006)
+	require.InDelta(t, 2.43, mean, 0.04)
+	require.InDelta(t, 7.0, standardDeviation, 1.0)
+	require.InDelta(t, 0.0062, float64(stats.smallPityCount)/draws, 0.002)
 	require.InDelta(t, 0.0147, float64(stats.bigPityCount)/draws, 0.003)
 }
 

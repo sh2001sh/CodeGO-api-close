@@ -60,7 +60,7 @@ export function BlindBoxPityTrack(props: {
       </div>
 
       <p className='text-muted-foreground border-border/70 border-t px-4 py-3 text-[11px] leading-5 sm:px-5'>
-        三类保底使用独立的有界奖池，顶级大奖仅来自普通池。奖励达到对应档位后，保底进度自动重置。
+        三类保底使用独立的有界奖池，顶级大奖仅来自普通池。奖励达到对应档位后进度自动重置，已入库盲盒的封存结果不会改变。
       </p>
     </section>
   )
@@ -75,7 +75,7 @@ function GuaranteeHeader(props: { firstEligible: boolean }) {
           <h3 className='text-foreground text-sm font-semibold'>首购与保底</h3>
         </div>
         <p className='text-muted-foreground mt-1 text-xs leading-5'>
-          奖励在购买入库时封存，进度也在此时结算；开启只揭晓结果。
+          开启库存时查看保底状态；命中保底的盲盒会在奖励揭晓时明确标注类型。
         </p>
       </div>
       <span

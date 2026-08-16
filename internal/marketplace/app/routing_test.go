@@ -15,7 +15,7 @@ import (
 
 func TestMarketplaceTokenBindingIsStableAndAllowsSelfConsumption(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
-	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &identityschema.Token{}))
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}, &identityschema.Token{}))
 
 	group := marketplaceschema.Group{
 		ID: "group-1", ChannelID: "channel-1", OwnerUserID: 10,
@@ -26,6 +26,7 @@ func TestMarketplaceTokenBindingIsStableAndAllowsSelfConsumption(t *testing.T) {
 		Visibility: marketplacedomain.VisibilityPublic,
 	}
 	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: group.ChannelID, OwnerUserID: group.OwnerUserID, ProviderType: "openai_compatible", BaseURLCiphertext: "url", CredentialCiphertext: "key", ModelPrices: `{"gpt-5":{"input_price_per_million":2,"output_price_per_million":8}}`}).Error)
 	token := identityschema.Token{Id: 1, UserId: 20, Key: "market-token", CrossGroupRetry: true}
 	require.NoError(t, db.Create(&token).Error)
 
@@ -43,11 +44,12 @@ func TestMarketplaceTokenBindingIsStableAndAllowsSelfConsumption(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, group.InternalGroupName, binding.InternalGroup)
 	require.Equal(t, marketplacedomain.CreditPolicyUniversalOnly, binding.CreditPoolPolicy)
+	require.Equal(t, float64(2), binding.ModelPrices["gpt-5"].InputPricePerMillion)
 }
 
 func TestMarketplacePrivateGroupOnlyAllowsOwner(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
-	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}))
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
 
 	group := marketplaceschema.Group{
 		ID: "private-group", ChannelID: "private-channel", OwnerUserID: 10,
@@ -58,6 +60,7 @@ func TestMarketplacePrivateGroupOnlyAllowsOwner(t *testing.T) {
 		Visibility: marketplacedomain.VisibilityPrivate,
 	}
 	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: group.ChannelID, OwnerUserID: group.OwnerUserID, ProviderType: "openai_compatible", BaseURLCiphertext: "url", CredentialCiphertext: "key"}).Error)
 
 	_, err := ResolveTokenGroupBinding(TokenGroupValue(group.ID), 20)
 	require.EqualError(t, err, "市场分组未公开或无权访问")

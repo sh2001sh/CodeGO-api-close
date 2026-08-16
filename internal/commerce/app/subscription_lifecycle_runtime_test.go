@@ -1,9 +1,9 @@
 package app
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,6 +58,42 @@ func TestResolveSubscriptionPurchasePreview_UpgradeUsesFullTargetPrice(t *testin
 	require.NotNil(t, preview)
 	assert.Equal(t, commerceschema.SubscriptionPurchaseActionUpgrade, preview.Action)
 	assert.InDelta(t, 56.67, preview.AmountDue, 0.01)
+}
+
+func TestResolveSubscriptionPurchasePreview_ResetQuotaDoesNotDiscountUpgrade(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 9213, Username: "reset_upgrade_preview", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	currentPlan := &commerceschema.SubscriptionPlan{Id: 9316, Title: "Lite月卡", DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 49, TotalAmount: quotaUnitsFromUSD(350)}
+	targetPlan := &commerceschema.SubscriptionPlan{Id: 9317, Title: "Standard月卡", DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 89, TotalAmount: quotaUnitsFromUSD(650)}
+	require.NoError(t, db.Create(currentPlan).Error)
+	require.NoError(t, db.Create(targetPlan).Error)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{Id: 9413, UserId: user.Id, PlanId: currentPlan.Id, AmountTotal: currentPlan.TotalAmount, AmountUsed: 0, StartTime: now - 10*24*3600, EndTime: now + 20*24*3600, Status: "active"}
+	require.NoError(t, db.Create(sub).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityLedger{UserId: user.Id, RelatedUserId: sub.Id, ChangeType: commerceschema.SubscriptionResetOpportunityChangeUse, Delta: -1, EventKey: "reset-upgrade-price"}).Error)
+
+	preview, err := ResolveSubscriptionPurchasePreview(user.Id, targetPlan)
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseActionUpgrade, preview.Action)
+	assert.Equal(t, targetPlan.PriceAmount, preview.BaseAmountDue)
+}
+
+func TestResolveSubscriptionPurchasePreview_ResetQuotaDoesNotDiscountRenewal(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 9214, Username: "reset_renew_preview", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	plan := &commerceschema.SubscriptionPlan{Id: 9318, Title: "Lite月卡", DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 49, TotalAmount: quotaUnitsFromUSD(350)}
+	require.NoError(t, db.Create(plan).Error)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{Id: 9414, UserId: user.Id, PlanId: plan.Id, AmountTotal: plan.TotalAmount, AmountUsed: quotaUnitsFromUSD(35), StartTime: now - 10*24*3600, EndTime: now + 20*24*3600, Status: "active"}
+	require.NoError(t, db.Create(sub).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityLedger{UserId: user.Id, RelatedUserId: sub.Id, ChangeType: commerceschema.SubscriptionResetOpportunityChangeUse, Delta: -1, EventKey: "reset-renew-price"}).Error)
+
+	preview, err := ResolveSubscriptionPurchasePreview(user.Id, plan)
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseActionRenew, preview.Action)
+	assert.Equal(t, plan.PriceAmount, preview.BaseAmountDue)
 }
 
 func TestResolveSubscriptionPurchasePreview_DepletedHigherTierAllowsLowerTier(t *testing.T) {

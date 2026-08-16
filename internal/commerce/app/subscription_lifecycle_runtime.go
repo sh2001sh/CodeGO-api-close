@@ -76,6 +76,10 @@ func applyManagedSubscriptionPreview(tx *gorm.DB, userID int, targetPlan *commer
 	preview.CurrentPlan = currentPlan
 	remainingQuota := max(currentSub.AmountTotal-currentSub.AmountUsed, 0)
 	hasRemainingQuota := currentSub.AmountTotal <= 0 || hasMeaningfulSubscriptionQuotaRemaining(currentSub)
+	resetUsed, err := subscriptionHasResetOpportunityUsageTx(tx, currentSub.Id)
+	if err != nil {
+		return err
+	}
 
 	switch compareSubscriptionPlanTier(targetPlan, currentPlan) {
 	case -1:
@@ -86,6 +90,12 @@ func applyManagedSubscriptionPreview(tx *gorm.DB, userID int, targetPlan *commer
 			preview.DisabledReason = "cannot subscribe to a lower-tier plan while your current package still has remaining quota"
 		}
 	case 0:
+		if resetUsed {
+			preview.Action = commerceschema.SubscriptionPurchaseActionRenew
+			preview.BaseAmountDue = targetPlan.PriceAmount
+			preview.AmountDue = preview.BaseAmountDue
+			return nil
+		}
 		if !isSubscriptionRenewalEligible(currentSub) {
 			preview.Action = commerceschema.SubscriptionPurchaseActionDisabled
 			preview.BaseAmountDue = 0
@@ -99,7 +109,7 @@ func applyManagedSubscriptionPreview(tx *gorm.DB, userID int, targetPlan *commer
 	default:
 		preview.Action = commerceschema.SubscriptionPurchaseActionUpgrade
 		discount := 0.0
-		if currentPlan.PriceAmount > 0 && currentSub.AmountTotal > 0 && remainingQuota > 0 {
+		if !resetUsed && currentPlan.PriceAmount > 0 && currentSub.AmountTotal > 0 && remainingQuota > 0 {
 			discount = currentPlan.PriceAmount * float64(remainingQuota) / float64(currentSub.AmountTotal)
 		}
 		preview.BaseAmountDue = math.Max(targetPlan.PriceAmount-discount, 0.01)

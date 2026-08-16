@@ -140,8 +140,123 @@ export function ChannelModelsSection(props: {
         </p>
       )}
       <ModelList {...props} />
+      <ChannelModelPrices
+        form={props.form}
+        selectedModels={props.selectedModels}
+      />
     </FormSection>
   )
+}
+
+function ChannelModelPrices(props: {
+  form: ChannelForm
+  selectedModels: string[]
+}) {
+  const { t } = useTranslation()
+  if (props.selectedModels.length === 0) return null
+  const prices = props.form.watch('model_prices')
+  return (
+    <div className='border-border rounded-md border'>
+      <div className='border-border border-b px-3 py-2.5'>
+        <p className='text-sm font-medium'>{t('渠道专属模型价格')}</p>
+        <p className='text-muted-foreground mt-1 text-xs leading-5'>
+          {t(
+            '仅在站点未配置该模型价格时应用于当前渠道；不会修改全站价格，站点价格始终优先。'
+          )}
+        </p>
+      </div>
+      <div className='divide-border divide-y'>
+        {props.selectedModels.map((model) => {
+          const configured = prices[model]
+          return (
+            <div
+              key={model}
+              className='grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_160px_160px] sm:items-end'
+            >
+              <div className='min-w-0'>
+                <p className='truncate text-sm font-medium' title={model}>
+                  {model}
+                </p>
+                <button
+                  type='button'
+                  className='text-primary mt-1 text-xs'
+                  onClick={() => {
+                    const next = { ...props.form.getValues('model_prices') }
+                    if (next[model]) delete next[model]
+                    else
+                      next[model] = {
+                        input_price_per_million: 1,
+                        output_price_per_million: 2,
+                      }
+                    props.form.setValue('model_prices', next, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }}
+                >
+                  {configured ? t('移除渠道价格') : t('配置渠道价格')}
+                </button>
+              </div>
+              {configured && (
+                <>
+                  <FormField label={t('输入 / 百万 Token')}>
+                    <Input
+                      type='number'
+                      min='0.000001'
+                      max='1000000'
+                      step='any'
+                      inputMode='decimal'
+                      value={configured.input_price_per_million}
+                      onChange={(event) =>
+                        updateChannelPrice(
+                          props.form,
+                          model,
+                          'input_price_per_million',
+                          event.target.valueAsNumber
+                        )
+                      }
+                    />
+                  </FormField>
+                  <FormField label={t('输出 / 百万 Token')}>
+                    <Input
+                      type='number'
+                      min='0.000001'
+                      max='1000000'
+                      step='any'
+                      inputMode='decimal'
+                      value={configured.output_price_per_million}
+                      onChange={(event) =>
+                        updateChannelPrice(
+                          props.form,
+                          model,
+                          'output_price_per_million',
+                          event.target.valueAsNumber
+                        )
+                      }
+                    />
+                  </FormField>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function updateChannelPrice(
+  form: ChannelForm,
+  model: string,
+  field: 'input_price_per_million' | 'output_price_per_million',
+  value: number
+) {
+  const prices = { ...form.getValues('model_prices') }
+  prices[model] = { ...prices[model], [field]: value }
+  form.setValue('model_prices', prices, {
+    shouldDirty: true,
+    shouldValidate: true,
+  })
 }
 
 function ModelToolbar(props: {

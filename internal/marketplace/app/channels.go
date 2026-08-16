@@ -59,6 +59,10 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		return nil, nil, err
 	}
 	models, _ := json.Marshal(normalizeModels(req.DeclaredModels))
+	modelPrices, err := encodeChannelModelPrices(req.ModelPrices, req.DeclaredModels)
+	if err != nil {
+		return nil, nil, err
+	}
 	ownerName := loadOwnerDisplayName(ownerUserID)
 	sourceLabel, _ := canonicalSourceLabel(req.SourceLabel)
 	sensitiveWordInterceptionEnabled := true
@@ -72,6 +76,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		BaseURLCiphertext: baseURL, CredentialCiphertext: credential,
 		CredentialTail: credentialTail(req.APIKey), CredentialVersion: 1,
 		DeclaredModels: string(models),
+		ModelPrices:    modelPrices,
 		MaxConcurrency: req.MaxConcurrency, QPS: req.QPS,
 		MaintenanceWindow: strings.TrimSpace(req.MaintenanceWindow), Status: marketplacedomain.LifecycleDraft,
 		SensitiveWordInterceptionEnabled: &sensitiveWordInterceptionEnabled,

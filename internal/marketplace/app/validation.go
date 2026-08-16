@@ -31,6 +31,9 @@ func validateCreateRequest(req CreateChannelRequest) error {
 	if err := validateModels(req.DeclaredModels); err != nil {
 		return err
 	}
+	if _, err := normalizeChannelModelPrices(req.ModelPrices, req.DeclaredModels); err != nil {
+		return err
+	}
 	if err := validateMultiplier(req.Multiplier); err != nil {
 		return err
 	}

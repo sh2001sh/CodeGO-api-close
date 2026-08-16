@@ -12,6 +12,10 @@ import {
   formatPercent,
 } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
+import {
+  ChannelFeedbackButton,
+  ChannelFeedbackSummary,
+} from './channel-feedback'
 import { GroupDetails } from './group-details'
 import { ModelConsistencyBadge } from './model-verification'
 import { MarketplaceStatusBadge } from './status-badge'
@@ -50,14 +54,17 @@ export function DesktopGroupRow(props: {
           <UsageCell group={group} />
         </TableCell>
         <TableCell>
-          <Button
-            variant='ghost'
-            size='icon-sm'
-            onClick={props.onToggle}
-            aria-label={props.open ? t('收起详情') : t('展开详情')}
-          >
-            {props.open ? <ChevronDown /> : <ChevronRight />}
-          </Button>
+          <div className='flex items-center justify-end gap-1.5'>
+            <ChannelFeedbackButton group={group} />
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              onClick={props.onToggle}
+              aria-label={props.open ? t('收起详情') : t('展开详情')}
+            >
+              {props.open ? <ChevronDown /> : <ChevronRight />}
+            </Button>
+          </div>
         </TableCell>
       </TableRow>
       {props.open && (
@@ -130,6 +137,10 @@ export function MobileGroupRow(props: {
           <RecentRequestStatus group={group} />
         </div>
       </button>
+      <div className='mt-3 flex items-center justify-between gap-3'>
+        <ChannelFeedbackSummary group={group} />
+        <ChannelFeedbackButton group={group} />
+      </div>
       {props.open && (
         <div className='pt-4'>
           <GroupDetails group={group} />
@@ -154,6 +165,7 @@ function GroupIdentity(props: { group: MarketplaceGroup }) {
       <div className='mt-2'>
         <ModelPreview models={group.models} />
       </div>
+      <ChannelFeedbackSummary group={group} />
     </div>
   )
 }

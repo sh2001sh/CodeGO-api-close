@@ -22,6 +22,7 @@ import {
 import { BalanceBoxGiftConfirm } from './balance-blind-box-gift-confirm'
 import { BalanceBoxPurchaseWorkspace } from './balance-blind-box-purchase'
 import { BalanceBlindBoxSimulator } from './balance-blind-box-simulator'
+import { BlindBoxPityTrack } from './blind-box-rules-panel'
 import { BoxFigure } from './blind-box-stage'
 
 export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulation'
@@ -165,12 +166,21 @@ function BalanceBoxModeSwitch(props: {
 
 function BalanceBoxWorkspace(props: BalanceBoxPanelViewProps) {
   if (props.mode === 'simulation') {
-    return (
-      <BalanceBlindBoxSimulator priceUSD={props.balance?.price_usd || 2.5} />
-    )
+    return <BalanceBlindBoxSimulator balance={props.balance} />
   }
   if (props.mode === 'purchase') {
     return <BalanceBoxPurchaseWorkspace {...props} />
+  }
+  if (props.mode === 'open') {
+    return (
+      <div className='grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]'>
+        <div className='min-w-0 space-y-4'>
+          <BalanceBoxModeDescription mode={props.mode} />
+          <BlindBoxPityTrack balance={props.balance} />
+        </div>
+        <BalanceBoxActionControls {...props} />
+      </div>
+    )
   }
   return (
     <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
@@ -190,7 +200,7 @@ function BalanceBoxModeDescription(props: { mode: ActionMode }) {
     return (
       <p className='text-muted-foreground text-sm leading-6'>
         从最早入库的盲盒开始开启，单次最多 100
-        个。奖励直接发放到当前持有者账户，开启后不可转赠。
+        个。奖励直接发放到当前持有者账户，揭晓时会标注首抽、小保底或大保底，开启后不可转赠。
       </p>
     )
   }

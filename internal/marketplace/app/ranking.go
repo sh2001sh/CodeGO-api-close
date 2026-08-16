@@ -52,7 +52,7 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		}
 	}
 	items = paginateGroups(items, query.Page, query.PageSize)
-	if err := attachModelConsistencyFeedback(items, channels, query.ViewerUserID); err != nil {
+	if err := attachChannelFeedback(items, channels, query.ViewerUserID); err != nil {
 		return nil, err
 	}
 	return &GroupListResult{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}, nil

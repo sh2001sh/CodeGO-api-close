@@ -11,18 +11,14 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { BalanceBoxQuantityControl } from './balance-blind-box-controls'
 import type { BalanceBoxPanelViewProps } from './balance-blind-box-view'
-import { BlindBoxPityTrack } from './blind-box-rules-panel'
 
 export function BalanceBoxPurchaseWorkspace(props: BalanceBoxPanelViewProps) {
   const unitPrice = props.balance?.price_usd || 2.5
   const totalPrice = unitPrice * props.count
 
   return (
-    <div className='grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)] lg:gap-6'>
-      <div className='min-w-0 space-y-5'>
-        <PurchaseSummary {...props} totalPrice={totalPrice} />
-        <BlindBoxPityTrack balance={props.balance} />
-      </div>
+    <div className='min-w-0 space-y-5'>
+      <PurchaseSummary {...props} totalPrice={totalPrice} />
       <PurchaseCheckout {...props} totalPrice={totalPrice} />
     </div>
   )
@@ -46,7 +42,7 @@ function PurchaseSummary(
             {props.count} 个统一盲盒
           </h3>
           <p className='text-muted-foreground mt-1 max-w-xl text-sm leading-6'>
-            支付完成后进入库存，奖励立即封存；开启只负责揭晓结果。人民币与统一额度购买使用同一奖池和同一保底进度。
+            支付完成后进入库存，奖励立即封存；人民币与统一额度购买使用同一公开奖池，开启时揭晓奖励与保底类型。
           </p>
         </div>
         <div className='text-left sm:text-right'>
@@ -93,7 +89,7 @@ function PurchaseCheckout(
   props: BalanceBoxPanelViewProps & { totalPrice: number }
 ) {
   return (
-    <aside className='border-primary/20 bg-primary/[0.035] min-w-0 space-y-5 rounded-lg border p-4 sm:p-5'>
+    <aside className='border-primary/20 bg-primary/[0.035] min-w-0 rounded-lg border p-4 sm:p-5'>
       <div>
         <div className='app-section-kicker'>结算</div>
         <h3 className='text-foreground mt-1 text-base font-semibold'>
@@ -101,18 +97,26 @@ function PurchaseCheckout(
         </h3>
       </div>
 
-      <BalanceBoxQuantityControl
-        count={props.count}
-        max={props.maxCount}
-        disabled={props.busy}
-        onChange={props.onCountChange}
-      />
+      <div className='mt-5 grid gap-5 md:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.2fr)] md:items-start md:gap-6'>
+        <div className='min-w-0 space-y-4'>
+          <div className='text-foreground text-sm font-semibold'>购买数量</div>
+          <BalanceBoxQuantityControl
+            count={props.count}
+            max={props.maxCount}
+            disabled={props.busy}
+            onChange={props.onCountChange}
+          />
+          <CheckoutSummary {...props} />
+        </div>
 
-      <CheckoutSummary {...props} />
-
-      {props.cashMethods.length > 0 ? <CashMethodPicker {...props} /> : null}
-
-      <PurchasePaymentActions {...props} />
+        <div className='border-border/70 min-w-0 space-y-4 border-t pt-5 md:border-t-0 md:border-l md:pt-0 md:pl-6'>
+          <div className='text-foreground text-sm font-semibold'>支付方式</div>
+          {props.cashMethods.length > 0 ? (
+            <CashMethodPicker {...props} hideHeading />
+          ) : null}
+          <PurchasePaymentActions {...props} />
+        </div>
+      </div>
 
       <Button
         type='button'
@@ -187,14 +191,20 @@ function PurchasePaymentActions(
   )
 }
 
-function CashMethodPicker(props: BalanceBoxPanelViewProps) {
+function CashMethodPicker(
+  props: BalanceBoxPanelViewProps & { hideHeading?: boolean }
+) {
   return (
     <div>
-      <div className='text-foreground text-sm font-semibold'>
-        人民币支付渠道
-      </div>
+      {props.hideHeading ? null : (
+        <div className='text-foreground text-sm font-semibold'>
+          人民币支付渠道
+        </div>
+      )}
       <div
-        className='mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2'
+        className={cn('grid gap-2 sm:grid-cols-2', {
+          'mt-2': !props.hideHeading,
+        })}
         aria-label='人民币支付方式'
       >
         {props.cashMethods.map((method) => {

@@ -73,6 +73,11 @@ export function ChannelEditorForm(props: {
       ? Array.from(new Set([...selectedModels, model]))
       : selectedModels.filter((item) => item !== model)
     form.setValue('declared_models', next, { shouldValidate: true })
+    if (!checked) {
+      const prices = { ...form.getValues('model_prices') }
+      delete prices[model]
+      form.setValue('model_prices', prices, { shouldValidate: true })
+    }
   }
 
   const addManualModel = () => {
@@ -96,6 +101,7 @@ export function ChannelEditorForm(props: {
             provider_type: values.provider_type,
             source_label: values.source_label,
             declared_models: values.declared_models,
+            model_prices: values.model_prices,
             multiplier: values.multiplier,
             visibility: values.visibility,
             max_concurrency: values.max_concurrency,

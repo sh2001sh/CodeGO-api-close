@@ -15,6 +15,9 @@ interface SimulationSession {
   rewardQuota: number
   drawCount: number
   history: SimulationHistoryItem[]
+  smallPityProgress: number
+  pityProgress: number
+  firstDrawEligible: boolean
 }
 
 export function useBalanceBlindBoxSimulator(priceUSD: number) {
@@ -57,6 +60,9 @@ export function useBalanceBlindBoxSimulator(priceUSD: number) {
       rewardQuota: 0,
       drawCount: 0,
       history: [],
+      smallPityProgress: 0,
+      pityProgress: 0,
+      firstDrawEligible: true,
     })
   }
 
@@ -66,7 +72,12 @@ export function useBalanceBlindBoxSimulator(priceUSD: number) {
     try {
       const response = await simulateBalanceBlindBoxes(
         session.balanceQuota,
-        safeCount
+        safeCount,
+        {
+          smallPityProgress: session.smallPityProgress,
+          pityProgress: session.pityProgress,
+          firstDrawEligible: session.firstDrawEligible,
+        }
       )
       if (!isApiSuccess(response) || !response.data) {
         throw new Error(response.message || '模拟抽盒失败')
@@ -78,6 +89,9 @@ export function useBalanceBlindBoxSimulator(priceUSD: number) {
         spentQuota: session.spentQuota + response.data.cost_quota,
         rewardQuota: session.rewardQuota + response.data.reward_quota,
         drawCount: session.drawCount + response.data.draws.length,
+        smallPityProgress: response.data.small_pity_progress,
+        pityProgress: response.data.pity_progress,
+        firstDrawEligible: response.data.first_draw_eligible,
         history: [
           ...response.data.draws.map((item, index) => ({
             ...item,

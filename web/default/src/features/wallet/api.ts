@@ -448,11 +448,19 @@ export async function giftBalanceBlindBoxes(
 
 export async function simulateBalanceBlindBoxes(
   balanceQuota: number,
-  count: number
+  count: number,
+  state: {
+    smallPityProgress: number
+    pityProgress: number
+    firstDrawEligible: boolean
+  }
 ): Promise<ApiResponse<BalanceBlindBoxSimulationResult>> {
   const res = await api.post('/api/blind-box/simulation/draw', {
     balance_quota: balanceQuota,
     count,
+    small_pity_progress: state.smallPityProgress,
+    pity_progress: state.pityProgress,
+    first_draw_eligible: state.firstDrawEligible,
   })
   return res.data
 }

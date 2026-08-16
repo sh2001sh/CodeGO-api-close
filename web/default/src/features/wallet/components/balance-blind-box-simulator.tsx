@@ -1,20 +1,37 @@
-import { BarChart3, Beaker, Loader2, RotateCcw, Sparkles } from 'lucide-react'
+import {
+  BarChart3,
+  Beaker,
+  Loader2,
+  RotateCcw,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react'
 import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import type { BalanceBlindBoxOverview } from '../types'
 import { BalanceBoxQuantityControl } from './balance-blind-box-controls'
 import {
   type SimulationHistoryItem,
   useBalanceBlindBoxSimulator,
 } from './use-balance-blind-box-simulator'
 
-export function BalanceBlindBoxSimulator(props: { priceUSD: number }) {
-  const state = useBalanceBlindBoxSimulator(props.priceUSD)
+export function BalanceBlindBoxSimulator(props: {
+  balance?: BalanceBlindBoxOverview
+}) {
+  const priceUSD = props.balance?.price_usd || 2.5
+  const state = useBalanceBlindBoxSimulator(priceUSD)
   if (!state.session || !state.stats) {
-    return <SimulationSetup priceUSD={props.priceUSD} state={state} />
+    return <SimulationSetup priceUSD={priceUSD} state={state} />
   }
-  return <SimulationWorkspace priceUSD={props.priceUSD} state={state} />
+  return (
+    <SimulationWorkspace
+      priceUSD={priceUSD}
+      balance={props.balance}
+      state={state}
+    />
+  )
 }
 
 function SimulationSetup(props: {
@@ -30,7 +47,7 @@ function SimulationSetup(props: {
         <div className='min-w-0'>
           <h3 className='text-sm font-semibold'>建立模拟额度账户</h3>
           <p className='text-muted-foreground mt-1 max-w-2xl text-xs leading-5'>
-            输入一笔虚拟通用额度，按真实统一盲盒价格和当前奖池连续抽取。模拟结果不会进入钱包、库存或使用记录。
+            输入一笔虚拟通用额度，按真实统一盲盒价格、首抽保底和大小保底连续抽取。模拟结果不会进入钱包、库存或使用记录。
           </p>
         </div>
       </div>
@@ -78,6 +95,7 @@ function SimulationSetup(props: {
 
 function SimulationWorkspace(props: {
   priceUSD: number
+  balance?: BalanceBlindBoxOverview
   state: ReturnType<typeof useBalanceBlindBoxSimulator>
 }) {
   const stats = props.state.stats!
@@ -114,6 +132,7 @@ function SimulationWorkspace(props: {
               disabled={props.state.busy || props.state.maxCount === 0}
               onChange={props.state.setCount}
             />
+            <SimulationGuaranteeStatus stats={stats} balance={props.balance} />
             <div className='flex items-end justify-between gap-3 border-t pt-3'>
               <div>
                 <p className='text-muted-foreground text-[11px]'>
@@ -142,6 +161,74 @@ function SimulationWorkspace(props: {
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function SimulationGuaranteeStatus(props: {
+  stats: NonNullable<ReturnType<typeof useBalanceBlindBoxSimulator>['stats']>
+  balance?: BalanceBlindBoxOverview
+}) {
+  const smallThreshold = props.balance?.small_pity_threshold || 10
+  const bigThreshold = props.balance?.pity_threshold || 50
+  return (
+    <div className='space-y-3 border-t pt-3'>
+      <div className='flex items-center justify-between gap-3'>
+        <div className='flex items-center gap-1.5 text-xs font-semibold'>
+          <ShieldCheck className='text-primary size-3.5' aria-hidden='true' />
+          模拟保底进度
+        </div>
+        <span className='text-muted-foreground text-[10px]'>连续请求保留</span>
+      </div>
+      <div className='flex items-center justify-between gap-3 text-[11px]'>
+        <span className='text-muted-foreground'>首抽保底</span>
+        <span className='font-medium'>
+          {props.stats.firstDrawEligible ? '下一抽触发' : '本轮已触发'}
+        </span>
+      </div>
+      <SimulationPityProgress
+        label='小保底'
+        progress={props.stats.smallPityProgress}
+        threshold={smallThreshold}
+      />
+      <SimulationPityProgress
+        label='大保底'
+        progress={props.stats.pityProgress}
+        threshold={bigThreshold}
+      />
+    </div>
+  )
+}
+
+function SimulationPityProgress(props: {
+  label: string
+  progress: number
+  threshold: number
+}) {
+  const target = Math.max(1, props.threshold - 1)
+  const progress = Math.min(target, Math.max(0, props.progress))
+  const ready = progress >= target
+  return (
+    <div>
+      <div className='mb-1 flex items-center justify-between gap-3 text-[11px]'>
+        <span className='text-muted-foreground'>{props.label}</span>
+        <span className='font-medium tabular-nums'>
+          {ready ? '下一抽触发' : `${progress}/${target}`}
+        </span>
+      </div>
+      <div
+        className='bg-muted h-1.5 overflow-hidden rounded-full'
+        role='progressbar'
+        aria-label={`${props.label}进度`}
+        aria-valuemin={0}
+        aria-valuemax={target}
+        aria-valuenow={progress}
+      >
+        <div
+          className='bg-primary h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none'
+          style={{ width: `${(progress / target) * 100}%` }}
+        />
       </div>
     </div>
   )
@@ -203,7 +290,8 @@ function SimulationHistory(props: { history: SimulationHistoryItem[] }) {
                 {item.reward_title}
               </p>
               <p className='text-muted-foreground mt-0.5 text-[11px]'>
-                第 {item.id} 抽 · {item.reward_tier}
+                第 {item.id} 抽 ·{' '}
+                {guaranteeLabel(item.guarantee_type) ?? item.reward_tier}
               </p>
             </div>
             <span className='bg-muted shrink-0 rounded-md px-2 py-1 text-xs font-medium tabular-nums'>
@@ -216,4 +304,17 @@ function SimulationHistory(props: { history: SimulationHistoryItem[] }) {
       </div>
     </div>
   )
+}
+
+function guaranteeLabel(type: string) {
+  switch (type) {
+    case 'first':
+      return '首抽保底'
+    case 'small':
+      return '小保底'
+    case 'big':
+      return '大保底'
+    default:
+      return null
+  }
 }

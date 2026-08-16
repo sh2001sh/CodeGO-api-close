@@ -231,8 +231,11 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 }
 
 func subscriptionHasResetOpportunityUsageTx(tx *gorm.DB, subscriptionID int) (bool, error) {
-	if tx == nil || subscriptionID <= 0 {
+	if subscriptionID <= 0 {
 		return false, nil
+	}
+	if tx == nil {
+		tx = platformdb.DB
 	}
 	var count int64
 	err := tx.Model(&commerceschema.SubscriptionResetOpportunityLedger{}).

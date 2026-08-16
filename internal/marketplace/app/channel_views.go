@@ -19,6 +19,7 @@ func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Gr
 		SourceLabelStatus: channel.SourceLabelStatus, SourceLabelReviewReason: channel.SourceLabelReviewReason,
 		CredentialTail: channel.CredentialTail, CredentialVersion: channel.CredentialVersion,
 		DeclaredModels:           decodeModels(channel.DeclaredModels),
+		ModelPrices:              decodeChannelModelPrices(channel.ModelPrices),
 		ModelVerificationResults: decodeModelVerificationResults(channel.ModelVerificationResults),
 		ModelConsistencyStatus:   channel.ModelConsistencyStatus,
 		Multiplier:               group.Multiplier, LifecycleStatus: group.LifecycleStatus,

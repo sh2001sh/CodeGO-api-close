@@ -39,9 +39,9 @@ export interface MarketplaceGroup {
   models: string[]
   model_verification_results: ModelVerificationResult[]
   model_consistency_status: ModelConsistencyStatus
-  model_consistency_feedback: ModelConsistencyFeedbackSummary[]
-  can_submit_model_feedback: boolean
-  model_feedback_permission: 'allowed' | 'owner' | 'login_required'
+  channel_feedback: ChannelFeedbackSummary
+  can_submit_channel_feedback: boolean
+  channel_feedback_permission: 'allowed' | 'owner' | 'login_required'
   rank: number
   score: number
   success_rate: number
@@ -62,8 +62,7 @@ export interface MarketplaceGroup {
   updated_at: string
 }
 
-export interface ModelConsistencyFeedbackSummary {
-  model: string
+export interface ChannelFeedbackSummary {
   passed: number
   failed: number
   questionable: number
@@ -93,6 +92,7 @@ export interface MarketplaceChannel {
   credential_tail: string
   credential_version: number
   declared_models: string[]
+  model_prices: Record<string, ChannelModelPrice>
   multiplier: number
   lifecycle_status: MarketplaceStatus
   verification_status: string
@@ -125,6 +125,7 @@ export interface ChannelFormValues {
   base_url: string
   api_key: string
   declared_models: string[]
+  model_prices: Record<string, ChannelModelPrice>
   multiplier: number
   visibility: string
   max_concurrency: number
@@ -137,6 +138,7 @@ export interface ChannelUpdateValues {
   provider_type: string
   source_label: string
   declared_models: string[]
+  model_prices: Record<string, ChannelModelPrice>
   multiplier: number
   visibility: string
   max_concurrency: number
@@ -146,6 +148,11 @@ export interface ChannelUpdateValues {
   base_url?: string
   api_key?: string
   model_consistency_status?: ModelConsistencyStatus
+}
+
+export interface ChannelModelPrice {
+  input_price_per_million: number
+  output_price_per_million: number
 }
 
 export interface GroupFilters {

@@ -40,9 +40,10 @@ type schemaMigrationStep struct {
 }
 
 type legacyMarketplaceModelFeedback struct {
-	ID        uint64 `gorm:"primaryKey"`
-	ChannelID string `gorm:"column:channel_id"`
-	UserID    int    `gorm:"column:user_id"`
+	ID        uint64 `gorm:"primaryKey;autoIncrement"`
+	ChannelID string `gorm:"column:channel_id;uniqueIndex:uq_marketplace_model_feedback,priority:1"`
+	UserID    int    `gorm:"column:user_id;uniqueIndex:uq_marketplace_model_feedback,priority:2"`
+	Model     string `gorm:"column:model;uniqueIndex:uq_marketplace_model_feedback,priority:3"`
 	Status    string `gorm:"column:status"`
 }
 

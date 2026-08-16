@@ -22,6 +22,13 @@ export const channelFormSchema = z.object({
   base_url: z.string().url().startsWith('https://'),
   api_key: z.string().min(1),
   declared_models: z.array(z.string()).min(1),
+  model_prices: z.record(
+    z.string(),
+    z.object({
+      input_price_per_million: z.number().finite().positive().max(1_000_000),
+      output_price_per_million: z.number().finite().positive().max(1_000_000),
+    })
+  ),
   multiplier: z
     .number()
     .finite()
@@ -53,6 +60,7 @@ export const channelFormDefaults: ChannelFormInput = {
   base_url: '',
   api_key: '',
   declared_models: [],
+  model_prices: {},
   multiplier: 1,
   visibility: 'public',
   max_concurrency: 10,
@@ -76,6 +84,7 @@ export function channelFormDefaultsForEdit(
     base_url: '',
     api_key: '',
     declared_models: channel.declared_models,
+    model_prices: channel.model_prices ?? {},
     multiplier: channel.multiplier,
     visibility: channel.visibility as ChannelFormInput['visibility'],
     max_concurrency: channel.max_concurrency,

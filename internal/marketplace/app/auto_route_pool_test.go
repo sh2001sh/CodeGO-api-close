@@ -19,7 +19,7 @@ func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	stableChannelID, cheapChannelID, otherChannelID := 101, 102, 103
 	require.NoError(t, db.Create([]marketplaceschema.Channel{
 		{ID: "stable-channel", OwnerUserID: 11, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &stableChannelID, Status: marketplacedomain.LifecycleActive},
-		{ID: "cheap-channel", OwnerUserID: 12, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &cheapChannelID, Status: marketplacedomain.LifecycleActive},
+		{ID: "cheap-channel", OwnerUserID: 12, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, ModelPrices: `{"gpt-5":{"input_price_per_million":4,"output_price_per_million":12}}`, InternalChannelID: &cheapChannelID, Status: marketplacedomain.LifecycleActive},
 		{ID: "other-channel", OwnerUserID: 13, ProviderType: "anthropic", DeclaredModels: `["claude-sonnet"]`, InternalChannelID: &otherChannelID, Status: marketplacedomain.LifecycleActive},
 	}).Error)
 	require.NoError(t, db.Create([]marketplaceschema.Group{
@@ -41,6 +41,7 @@ func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, bindings, 2)
 	require.Equal(t, "cheap", bindings[0].GroupID)
+	require.Equal(t, float64(4), bindings[0].ModelPrices["gpt-5"].InputPricePerMillion)
 	require.Equal(t, "stable", bindings[1].GroupID)
 	require.Equal(t, "cheap", view.Items[0].GroupID)
 	require.Equal(t, 1, view.Items[0].Priority)

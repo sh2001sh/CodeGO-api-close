@@ -25,6 +25,7 @@ import {
 } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { blindBoxGuaranteeLabel } from '../lib/blind-box-guarantee'
 import {
   RARITY_BADGE,
   RARITY_RING,
@@ -224,7 +225,7 @@ function PrizeRevealCard(props: {
             ) : null}
             {record.is_pity ? (
               <div className='border-primary/30 bg-primary/10 text-primary rounded-full border px-2.5 py-0.5 text-xs font-medium'>
-                保底
+                {blindBoxGuaranteeLabel(record)}
               </div>
             ) : null}
           </div>

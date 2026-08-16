@@ -182,14 +182,24 @@ func openBalanceBlindBox(c *gin.Context) {
 
 func simulateBalanceBlindBoxes(c *gin.Context) {
 	var req struct {
-		BalanceQuota int64 `json:"balance_quota" binding:"required"`
-		Count        int   `json:"count" binding:"required"`
+		BalanceQuota      int64 `json:"balance_quota" binding:"required"`
+		Count             int   `json:"count" binding:"required"`
+		SmallPityProgress int   `json:"small_pity_progress"`
+		PityProgress      int   `json:"pity_progress"`
+		FirstDrawEligible *bool `json:"first_draw_eligible"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpapi.ApiErrorMsg(c, "balance_quota and count are required")
 		return
 	}
-	result, err := commerceapp.SimulateBalanceBlindBoxes(req.BalanceQuota, req.Count)
+	firstDrawEligible := true
+	if req.FirstDrawEligible != nil {
+		firstDrawEligible = *req.FirstDrawEligible
+	}
+	result, err := commerceapp.SimulateBalanceBlindBoxes(req.BalanceQuota, req.Count, commerceapp.BalanceBlindBoxSimulationState{
+		SmallPityProgress: req.SmallPityProgress, PityProgress: req.PityProgress,
+		FirstDrawEligible: firstDrawEligible,
+	})
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

@@ -195,6 +195,11 @@ export function MonthlyPlanRules() {
               '折现时可选择不超过未使用比例的整数百分比，到账通用余额 = 月卡档位价格 × 选择比例。部分折现后月卡继续生效，但从首次折现起永久失去刷新资格。'
             )}
           </p>
+          <p className='text-muted-foreground text-sm leading-6'>
+            {t(
+              '使用邀请奖励刷新额度后，刷新得到的额度仅用于模型调用，不能抵扣该月卡续费或升级价格；续费按套餐原价计算，升级不再抵扣旧卡剩余额度价值。'
+            )}
+          </p>
         </div>
       </div>
     </section>

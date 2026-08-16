@@ -28,13 +28,13 @@ func GetGroup(c *gin.Context) {
 	respond(c, result, err)
 }
 
-func SubmitModelConsistencyFeedback(c *gin.Context) {
-	var req marketplaceapp.ModelConsistencyFeedbackRequest
+func SubmitChannelFeedback(c *gin.Context) {
+	var req marketplaceapp.ChannelFeedbackRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
-	result, err := marketplaceapp.SubmitModelConsistencyFeedback(c.GetInt("id"), c.Param("id"), req)
+	result, err := marketplaceapp.SubmitChannelFeedback(c.GetInt("id"), c.Param("id"), req)
 	respond(c, result, err)
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformmath "github.com/sh2001sh/new-api/internal/platform/mathx"
@@ -105,6 +106,13 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 		var matchName string
 		modelRatio, success, matchName = gatewaystore.GetModelRatio(info.OriginModelName)
 		if !success {
+			if channelPrice, ok := marketplaceChannelModelPrice(c, info.OriginModelName); ok {
+				modelRatio = channelPrice.InputPricePerMillion / 2
+				completionRatio = channelPrice.OutputPricePerMillion / channelPrice.InputPricePerMillion
+				success = true
+			}
+		}
+		if !success {
 			acceptUnsetRatio := false
 			if info.UserSetting.AcceptUnsetRatioModel {
 				acceptUnsetRatio = true
@@ -113,7 +121,9 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 				return types.PriceData{}, modelPriceNotConfiguredError(matchName, info.UserId)
 			}
 		}
-		completionRatio = gatewaystore.GetCompletionRatio(info.OriginModelName)
+		if completionRatio == 0 {
+			completionRatio = gatewaystore.GetCompletionRatio(info.OriginModelName)
+		}
 		cacheRatio, _ = gatewaystore.GetCacheRatio(info.OriginModelName)
 		cacheCreationRatio, _ = gatewaystore.GetCreateCacheRatio(info.OriginModelName)
 		cacheCreationRatio5m = cacheCreationRatio
@@ -169,6 +179,22 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 	}
 	info.PriceData = priceData
 	return priceData, nil
+}
+
+func marketplaceChannelModelPrice(c *gin.Context, modelName string) (marketplacedomain.ChannelModelPrice, bool) {
+	if httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceGroupID) == "" {
+		return marketplacedomain.ChannelModelPrice{}, false
+	}
+	prices, ok := httpctx.GetContextKeyType[map[string]marketplacedomain.ChannelModelPrice](c, constant.ContextKeyMarketplaceModelPrices)
+	if !ok {
+		return marketplacedomain.ChannelModelPrice{}, false
+	}
+	for configuredModel, price := range prices {
+		if strings.EqualFold(configuredModel, strings.TrimSpace(modelName)) {
+			return price, true
+		}
+	}
+	return marketplacedomain.ChannelModelPrice{}, false
 }
 
 func ModelPriceHelperPerCall(c *gin.Context, info *RelayInfo) (types.PriceData, error) {

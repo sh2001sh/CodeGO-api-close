@@ -627,6 +627,7 @@ export interface BalanceBlindBoxSimulationDraw {
   reward_usd: number
   credit_amount: number
   reward_title: string
+  guarantee_type: 'none' | 'first' | 'small' | 'big' | string
 }
 
 export interface BalanceBlindBoxSimulationResult {
@@ -636,6 +637,9 @@ export interface BalanceBlindBoxSimulationResult {
   reward_quota: number
   balance_after: number
   draws: BalanceBlindBoxSimulationDraw[]
+  small_pity_progress: number
+  pity_progress: number
+  first_draw_eligible: boolean
 }
 
 export interface BlindBoxOrderStatus {

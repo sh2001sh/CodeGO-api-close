@@ -51,4 +51,5 @@ func applyMarketplaceAutoBinding(c *gin.Context, binding marketplaceapp.RoutingB
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, binding.SourceType)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, binding.CreditPoolPolicy)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, binding.Multiplier)
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, binding.ModelPrices)
 }

@@ -305,7 +305,7 @@ func migratePrimaryDB() error {
 		&marketplaceschema.Group{},
 		&marketplaceschema.VerificationRun{},
 		&marketplaceschema.RankingSnapshot{},
-		&marketplaceschema.ModelConsistencyFeedback{},
+		&marketplaceschema.ChannelFeedback{},
 		&marketplaceschema.Settlement{},
 		&marketplaceschema.AutoRoutePoolMember{},
 	)

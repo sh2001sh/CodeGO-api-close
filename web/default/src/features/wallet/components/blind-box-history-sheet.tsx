@@ -22,6 +22,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { getBlindBoxHistory, isApiSuccess } from '../api'
+import { blindBoxGuaranteeLabel } from '../lib/blind-box-guarantee'
 import type { BlindBoxHistoryPage, BlindBoxRecord } from '../types'
 import { formatBlindBoxTimestamp, resolveRewardTone } from './blind-box-dialogs'
 
@@ -181,11 +182,11 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
           </div>
           {record.lucky_number ? <LuckyNumberHistory record={record} /> : null}
           <div className='mt-2 flex flex-wrap gap-1.5'>
-            <HistoryTag>
-              统一盲盒
-            </HistoryTag>
+            <HistoryTag>统一盲盒</HistoryTag>
             <HistoryTag>{detail.type}</HistoryTag>
-            {record.is_pity ? <HistoryTag>保底奖励</HistoryTag> : null}
+            {record.is_pity ? (
+              <HistoryTag>{blindBoxGuaranteeLabel(record)}</HistoryTag>
+            ) : null}
             {record.reward_type === 'prop' && record.prop_status ? (
               <HistoryTag>{propStatusLabel(record.prop_status)}</HistoryTag>
             ) : null}

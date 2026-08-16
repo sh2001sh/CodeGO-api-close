@@ -27,6 +27,7 @@ const (
 	ContextKeyMarketplaceSourceType           ContextKey = "marketplace_source_type"
 	ContextKeyMarketplaceCreditPolicy         ContextKey = "marketplace_credit_policy"
 	ContextKeyMarketplaceMultiplier           ContextKey = "marketplace_multiplier"
+	ContextKeyMarketplaceModelPrices          ContextKey = "marketplace_model_prices"
 
 	/* channel related keys */
 	ContextKeyChannelId                ContextKey = "channel_id"

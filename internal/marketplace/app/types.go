@@ -2,32 +2,38 @@ package app
 
 import "time"
 
+import marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+
+type ChannelModelPrice = marketplacedomain.ChannelModelPrice
+
 type CreateChannelRequest struct {
-	ProviderType                     string   `json:"provider_type"`
-	SourceLabel                      string   `json:"source_label"`
-	BaseURL                          string   `json:"base_url"`
-	APIKey                           string   `json:"api_key"`
-	DeclaredModels                   []string `json:"declared_models"`
-	Multiplier                       float64  `json:"multiplier"`
-	Visibility                       string   `json:"visibility"`
-	MaxConcurrency                   int      `json:"max_concurrency"`
-	QPS                              float64  `json:"qps"`
-	MaintenanceWindow                string   `json:"maintenance_window"`
-	SensitiveWordInterceptionEnabled *bool    `json:"sensitive_word_interception_enabled"`
+	ProviderType                     string                       `json:"provider_type"`
+	SourceLabel                      string                       `json:"source_label"`
+	BaseURL                          string                       `json:"base_url"`
+	APIKey                           string                       `json:"api_key"`
+	DeclaredModels                   []string                     `json:"declared_models"`
+	ModelPrices                      map[string]ChannelModelPrice `json:"model_prices"`
+	Multiplier                       float64                      `json:"multiplier"`
+	Visibility                       string                       `json:"visibility"`
+	MaxConcurrency                   int                          `json:"max_concurrency"`
+	QPS                              float64                      `json:"qps"`
+	MaintenanceWindow                string                       `json:"maintenance_window"`
+	SensitiveWordInterceptionEnabled *bool                        `json:"sensitive_word_interception_enabled"`
 }
 
 type UpdateChannelRequest struct {
-	ProviderType                     *string   `json:"provider_type"`
-	DeclaredModels                   *[]string `json:"declared_models"`
-	Multiplier                       *float64  `json:"multiplier"`
-	Visibility                       *string   `json:"visibility"`
-	MaxConcurrency                   *int      `json:"max_concurrency"`
-	QPS                              *float64  `json:"qps"`
-	MaintenanceWindow                *string   `json:"maintenance_window"`
-	SensitiveWordInterceptionEnabled *bool     `json:"sensitive_word_interception_enabled"`
-	BaseURL                          *string   `json:"base_url"`
-	APIKey                           *string   `json:"api_key"`
-	SourceLabel                      *string   `json:"source_label"`
+	ProviderType                     *string                       `json:"provider_type"`
+	DeclaredModels                   *[]string                     `json:"declared_models"`
+	ModelPrices                      *map[string]ChannelModelPrice `json:"model_prices"`
+	Multiplier                       *float64                      `json:"multiplier"`
+	Visibility                       *string                       `json:"visibility"`
+	MaxConcurrency                   *int                          `json:"max_concurrency"`
+	QPS                              *float64                      `json:"qps"`
+	MaintenanceWindow                *string                       `json:"maintenance_window"`
+	SensitiveWordInterceptionEnabled *bool                         `json:"sensitive_word_interception_enabled"`
+	BaseURL                          *string                       `json:"base_url"`
+	APIKey                           *string                       `json:"api_key"`
+	SourceLabel                      *string                       `json:"source_label"`
 }
 
 type AdminUpdateChannelRequest struct {
@@ -45,42 +51,43 @@ type ModelVerificationResult struct {
 }
 
 type ChannelView struct {
-	ID                               string                    `json:"id"`
-	GroupID                          string                    `json:"group_id"`
-	PublicSlug                       string                    `json:"public_slug"`
-	SystemDisplayName                string                    `json:"system_display_name"`
-	ProviderType                     string                    `json:"provider_type"`
-	SubmittedSourceLabel             string                    `json:"submitted_source_label"`
-	ApprovedSourceLabel              string                    `json:"approved_source_label"`
-	SourceLabelStatus                string                    `json:"source_label_status"`
-	SourceLabelReviewReason          string                    `json:"source_label_review_reason"`
-	CredentialTail                   string                    `json:"credential_tail"`
-	CredentialVersion                int                       `json:"credential_version"`
-	DeclaredModels                   []string                  `json:"declared_models"`
-	ModelVerificationResults         []ModelVerificationResult `json:"model_verification_results"`
-	ModelConsistencyStatus           string                    `json:"model_consistency_status"`
-	Multiplier                       float64                   `json:"multiplier"`
-	LifecycleStatus                  string                    `json:"lifecycle_status"`
-	VerificationStatus               string                    `json:"verification_status"`
-	VerificationStage                string                    `json:"verification_stage"`
-	VerificationSummary              string                    `json:"verification_summary"`
-	VerificationDetectorVersion      string                    `json:"verification_detector_version"`
-	VerificationStartedAt            *time.Time                `json:"verification_started_at"`
-	VerificationCompletedAt          *time.Time                `json:"verification_completed_at"`
-	Visibility                       string                    `json:"visibility"`
-	MaxConcurrency                   int                       `json:"max_concurrency"`
-	QPS                              float64                   `json:"qps"`
-	MaintenanceWindow                string                    `json:"maintenance_window"`
-	SensitiveWordInterceptionEnabled bool                      `json:"sensitive_word_interception_enabled"`
-	InternalChannelID                *int                      `json:"internal_channel_id"`
-	LastReviewReason                 string                    `json:"last_review_reason"`
-	VerificationDueAt                *time.Time                `json:"verification_due_at"`
-	RequestCount                     int64                     `json:"request_count"`
-	TotalIncome                      int64                     `json:"total_income"`
-	PendingIncome                    int64                     `json:"pending_income"`
-	ReleasedIncome                   int64                     `json:"released_income"`
-	CreatedAt                        time.Time                 `json:"created_at"`
-	UpdatedAt                        time.Time                 `json:"updated_at"`
+	ID                               string                       `json:"id"`
+	GroupID                          string                       `json:"group_id"`
+	PublicSlug                       string                       `json:"public_slug"`
+	SystemDisplayName                string                       `json:"system_display_name"`
+	ProviderType                     string                       `json:"provider_type"`
+	SubmittedSourceLabel             string                       `json:"submitted_source_label"`
+	ApprovedSourceLabel              string                       `json:"approved_source_label"`
+	SourceLabelStatus                string                       `json:"source_label_status"`
+	SourceLabelReviewReason          string                       `json:"source_label_review_reason"`
+	CredentialTail                   string                       `json:"credential_tail"`
+	CredentialVersion                int                          `json:"credential_version"`
+	DeclaredModels                   []string                     `json:"declared_models"`
+	ModelPrices                      map[string]ChannelModelPrice `json:"model_prices"`
+	ModelVerificationResults         []ModelVerificationResult    `json:"model_verification_results"`
+	ModelConsistencyStatus           string                       `json:"model_consistency_status"`
+	Multiplier                       float64                      `json:"multiplier"`
+	LifecycleStatus                  string                       `json:"lifecycle_status"`
+	VerificationStatus               string                       `json:"verification_status"`
+	VerificationStage                string                       `json:"verification_stage"`
+	VerificationSummary              string                       `json:"verification_summary"`
+	VerificationDetectorVersion      string                       `json:"verification_detector_version"`
+	VerificationStartedAt            *time.Time                   `json:"verification_started_at"`
+	VerificationCompletedAt          *time.Time                   `json:"verification_completed_at"`
+	Visibility                       string                       `json:"visibility"`
+	MaxConcurrency                   int                          `json:"max_concurrency"`
+	QPS                              float64                      `json:"qps"`
+	MaintenanceWindow                string                       `json:"maintenance_window"`
+	SensitiveWordInterceptionEnabled bool                         `json:"sensitive_word_interception_enabled"`
+	InternalChannelID                *int                         `json:"internal_channel_id"`
+	LastReviewReason                 string                       `json:"last_review_reason"`
+	VerificationDueAt                *time.Time                   `json:"verification_due_at"`
+	RequestCount                     int64                        `json:"request_count"`
+	TotalIncome                      int64                        `json:"total_income"`
+	PendingIncome                    int64                        `json:"pending_income"`
+	ReleasedIncome                   int64                        `json:"released_income"`
+	CreatedAt                        time.Time                    `json:"created_at"`
+	UpdatedAt                        time.Time                    `json:"updated_at"`
 }
 
 type GroupQuery struct {
@@ -101,47 +108,45 @@ type GroupQuery struct {
 }
 
 type GroupListItem struct {
-	ID                       string                            `json:"id"`
-	ChannelID                string                            `json:"channel_id"`
-	PublicSlug               string                            `json:"public_slug"`
-	SystemDisplayName        string                            `json:"system_display_name"`
-	SourceType               string                            `json:"source_type"`
-	SourceLabel              string                            `json:"source_label"`
-	ProviderType             string                            `json:"provider_type"`
-	CreditPoolPolicy         string                            `json:"credit_pool_policy"`
-	LifecycleStatus          string                            `json:"lifecycle_status"`
-	VerificationStatus       string                            `json:"verification_status"`
-	VerificationDueAt        *time.Time                        `json:"verification_due_at"`
-	Multiplier               float64                           `json:"multiplier"`
-	Models                   []string                          `json:"models"`
-	ModelVerificationResults []ModelVerificationResult         `json:"model_verification_results"`
-	ModelConsistencyStatus   string                            `json:"model_consistency_status"`
-	ModelConsistencyFeedback []ModelConsistencyFeedbackSummary `json:"model_consistency_feedback"`
-	CanSubmitModelFeedback   bool                              `json:"can_submit_model_feedback"`
-	ModelFeedbackPermission  string                            `json:"model_feedback_permission"`
-	Rank                     int                               `json:"rank"`
-	Score                    float64                           `json:"score"`
-	SuccessRate              float64                           `json:"success_rate"`
-	WilsonSuccessRate        float64                           `json:"wilson_success_rate"`
-	AvgTTFTMs                float64                           `json:"avg_ttft_ms"`
-	AvgLatencyMs             float64                           `json:"avg_latency_ms"`
-	AvgTPS                   float64                           `json:"avg_tps"`
-	CacheHitRate             float64                           `json:"cache_hit_rate"`
-	LatestRequestStatus      string                            `json:"latest_request_status"`
-	RecentRequestSeries      []RecentRequestBucket             `json:"recent_request_series"`
-	RequestCount             int64                             `json:"request_count"`
-	IndependentConsumers     int64                             `json:"independent_consumers"`
-	Observing                bool                              `json:"observing"`
-	UpdatedAt                time.Time                         `json:"updated_at"`
+	ID                        string                    `json:"id"`
+	ChannelID                 string                    `json:"channel_id"`
+	PublicSlug                string                    `json:"public_slug"`
+	SystemDisplayName         string                    `json:"system_display_name"`
+	SourceType                string                    `json:"source_type"`
+	SourceLabel               string                    `json:"source_label"`
+	ProviderType              string                    `json:"provider_type"`
+	CreditPoolPolicy          string                    `json:"credit_pool_policy"`
+	LifecycleStatus           string                    `json:"lifecycle_status"`
+	VerificationStatus        string                    `json:"verification_status"`
+	VerificationDueAt         *time.Time                `json:"verification_due_at"`
+	Multiplier                float64                   `json:"multiplier"`
+	Models                    []string                  `json:"models"`
+	ModelVerificationResults  []ModelVerificationResult `json:"model_verification_results"`
+	ModelConsistencyStatus    string                    `json:"model_consistency_status"`
+	ChannelFeedback           ChannelFeedbackSummary    `json:"channel_feedback"`
+	CanSubmitChannelFeedback  bool                      `json:"can_submit_channel_feedback"`
+	ChannelFeedbackPermission string                    `json:"channel_feedback_permission"`
+	Rank                      int                       `json:"rank"`
+	Score                     float64                   `json:"score"`
+	SuccessRate               float64                   `json:"success_rate"`
+	WilsonSuccessRate         float64                   `json:"wilson_success_rate"`
+	AvgTTFTMs                 float64                   `json:"avg_ttft_ms"`
+	AvgLatencyMs              float64                   `json:"avg_latency_ms"`
+	AvgTPS                    float64                   `json:"avg_tps"`
+	CacheHitRate              float64                   `json:"cache_hit_rate"`
+	LatestRequestStatus       string                    `json:"latest_request_status"`
+	RecentRequestSeries       []RecentRequestBucket     `json:"recent_request_series"`
+	RequestCount              int64                     `json:"request_count"`
+	IndependentConsumers      int64                     `json:"independent_consumers"`
+	Observing                 bool                      `json:"observing"`
+	UpdatedAt                 time.Time                 `json:"updated_at"`
 }
 
-type ModelConsistencyFeedbackRequest struct {
-	Model  string `json:"model"`
+type ChannelFeedbackRequest struct {
 	Status string `json:"status"`
 }
 
-type ModelConsistencyFeedbackSummary struct {
-	Model        string `json:"model"`
+type ChannelFeedbackSummary struct {
 	Passed       int64  `json:"passed"`
 	Failed       int64  `json:"failed"`
 	Questionable int64  `json:"questionable"`
@@ -186,6 +191,7 @@ type RoutingBinding struct {
 	SourceType       string
 	CreditPoolPolicy string
 	Multiplier       float64
+	ModelPrices      map[string]ChannelModelPrice
 }
 
 type AutoRoutePoolUpdateRequest struct {

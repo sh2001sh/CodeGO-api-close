@@ -74,3 +74,29 @@ func TestAppendBillingInfoMarketplaceAlwaysUsesUniversalQuota(t *testing.T) {
 	require.Equal(t, "通用额度", other["billing_quota_label"])
 	require.Equal(t, 0.95, other["marketplace_owner_net_rate"])
 }
+
+func TestBillingQuotaForLogUsesMonthlyPassSettlement(t *testing.T) {
+	info := &gatewaysruntime.RelayInfo{
+		BillingSource:           BillingSourceSubscription,
+		SubscriptionPreConsumed: 10_000,
+		SubscriptionPostDelta:   2_500,
+	}
+	require.Equal(t, 12_500, BillingQuotaForLog(info, 2_500))
+
+	info.BillingSource = BillingSourceWallet
+	require.Equal(t, 2_500, BillingQuotaForLog(info, 2_500))
+}
+
+func TestAppendBillingInfoIncludesMonthlyPassPolicy(t *testing.T) {
+	other := make(map[string]interface{})
+	appendBillingInfo(&gatewaysruntime.RelayInfo{
+		BillingSource:               BillingSourceSubscription,
+		SubscriptionGroupMultiplier: 1.5,
+		SubscriptionQuotaScale:      15,
+		SubscriptionGroupRatio:      0.1,
+	}, other)
+
+	require.Equal(t, 1.5, other["subscription_group_multiplier"])
+	require.Equal(t, float64(15), other["subscription_quota_scale"])
+	require.Equal(t, 0.1, other["subscription_group_ratio"])
+}

@@ -90,7 +90,16 @@ function formatRatioCompact(ratio: number | undefined): string {
 }
 
 function getGroupRatioText(other: LogOtherData | null): string | null {
-  const userGroupRatio = other?.user_group_ratio
+	const subscriptionMultiplier = other?.subscription_group_multiplier
+	if (
+		other?.billing_source === 'subscription' &&
+		subscriptionMultiplier != null &&
+		Number.isFinite(subscriptionMultiplier)
+	) {
+		return `${formatRatioCompact(subscriptionMultiplier)}x`
+	}
+
+	const userGroupRatio = other?.user_group_ratio
   if (
     userGroupRatio != null &&
     userGroupRatio !== -1 &&
@@ -241,17 +250,25 @@ function buildDetailSegments(
           })
         }
       }
-    } else {
-      const userGroupRatio = other.user_group_ratio
-      const groupRatio = other.group_ratio
-      const isUserGroup =
+	} else {
+		const userGroupRatio = other.user_group_ratio
+		const groupRatio = other.group_ratio
+		const subscriptionMultiplier = other.subscription_group_multiplier
+		const isSubscription = other.billing_source === 'subscription'
+		const isUserGroup =
         userGroupRatio != null &&
         Number.isFinite(userGroupRatio) &&
         userGroupRatio !== -1
-      const effectiveRatio = isUserGroup ? userGroupRatio : groupRatio
-      const ratioLabel = isUserGroup
-        ? t('User Exclusive Ratio')
-        : t('Group Ratio')
+		const effectiveRatio = isSubscription
+			? subscriptionMultiplier
+			: isUserGroup
+				? userGroupRatio
+				: groupRatio
+		const ratioLabel = isSubscription
+			? t('Monthly pass multiplier')
+			: isUserGroup
+			? t('User Exclusive Ratio')
+			: t('Group Ratio')
 
       if (effectiveRatio != null && Number.isFinite(effectiveRatio)) {
         segments.push({

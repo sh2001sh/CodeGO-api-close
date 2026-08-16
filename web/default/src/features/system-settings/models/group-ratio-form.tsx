@@ -144,20 +144,6 @@ export const GroupRatioForm = memo(function GroupRatioForm({
 
             <FormField
               control={form.control}
-              name='SubscriptionGroupPolicy'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Monthly pass billing')}</FormLabel>
-                  <FormControl>
-                    <Textarea rows={8} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
               name='DefaultUseAutoGroup'
               render={({ field }) => (
                 <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
@@ -297,6 +283,25 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormDescription>
                     {t(
                       'Nested JSON defining per-group rules for adding (+:), removing (-:), or appending usable groups.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='SubscriptionGroupPolicy'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Monthly pass billing')}</FormLabel>
+                  <FormControl>
+                    <Textarea rows={8} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'JSON map of billing group to monthly-pass enablement and multiplier.'
                     )}
                   </FormDescription>
                   <FormMessage />

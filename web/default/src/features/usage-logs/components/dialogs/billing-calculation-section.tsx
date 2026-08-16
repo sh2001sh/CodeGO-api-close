@@ -161,7 +161,14 @@ function buildBaseFormula(other: LogOtherData, quota: number, t: TFunction) {
 }
 
 function effectiveGroupRatio(other: LogOtherData) {
-  const userRatio = other.user_group_ratio
+	if (
+		other.billing_source === 'subscription' &&
+		other.subscription_group_multiplier != null &&
+		Number.isFinite(other.subscription_group_multiplier)
+	) {
+		return other.subscription_group_multiplier
+	}
+	const userRatio = other.user_group_ratio
   return userRatio != null && Number.isFinite(userRatio) && userRatio !== -1
     ? userRatio
     : (other.group_ratio ?? 1)

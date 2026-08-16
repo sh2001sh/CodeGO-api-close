@@ -205,12 +205,21 @@ function BillingBreakdown(props: {
     }
   }
 
-  const userGR = other.user_group_ratio
-  const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
-  const effectiveGR = isUserGR ? userGR : other.group_ratio
-  if (effectiveGR != null && Number.isFinite(effectiveGR)) {
-    rows.push({
-      label: isUserGR ? t('User Exclusive Ratio') : t('Group Ratio'),
+	const userGR = other.user_group_ratio
+	const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
+	const isSubscription = other.billing_source === 'subscription'
+	const effectiveGR = isSubscription
+		? other.subscription_group_multiplier
+		: isUserGR
+			? userGR
+			: other.group_ratio
+	if (effectiveGR != null && Number.isFinite(effectiveGR)) {
+		rows.push({
+			label: isSubscription
+				? t('Monthly pass multiplier')
+				: isUserGR
+					? t('User Exclusive Ratio')
+					: t('Group Ratio'),
       value: `${formatRatio(effectiveGR)}x`,
     })
   }
@@ -1070,6 +1079,20 @@ export function DetailsDialog(props: DetailsDialogProps) {
             {/* Subscription billing details */}
             {isSubscription && other && (
               <DetailSection label={t('Subscription Billing')}>
+                {other.subscription_group_multiplier != null && (
+                  <DetailRow
+                    label={t('Monthly pass multiplier')}
+                    value={`${other.subscription_group_multiplier}x`}
+                    mono
+                  />
+                )}
+                {other.subscription_group_ratio != null && (
+                  <DetailRow
+                    label={t('Original group ratio')}
+                    value={`${other.subscription_group_ratio}x`}
+                    mono
+                  />
+                )}
                 {other.subscription_plan_id && (
                   <DetailRow
                     label={t('Plan')}

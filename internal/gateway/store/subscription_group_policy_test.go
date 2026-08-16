@@ -25,3 +25,9 @@ func TestSubscriptionGroupPolicyRoundTripAndDefaults(t *testing.T) {
 func TestSubscriptionGroupPolicyRejectsInvalidMultiplier(t *testing.T) {
 	require.Error(t, UpdateSubscriptionGroupPolicyByJSONString(`{"official":{"enabled":true,"multiplier":0}}`))
 }
+
+func TestValidateSubscriptionGroupPolicyRejectsMalformedInput(t *testing.T) {
+	require.Error(t, ValidateSubscriptionGroupPolicyJSONString(`{"official":{"enabled":true,"multiplier":0}}`))
+	require.Error(t, ValidateSubscriptionGroupPolicyJSONString(`[]`))
+	require.NoError(t, ValidateSubscriptionGroupPolicyJSONString(`{"official":{"enabled":false,"multiplier":1.5}}`))
+}

@@ -81,6 +81,8 @@ func validateOptionValue(key string, value string) error {
 		}
 	case "GroupRatio":
 		return gatewaystore.CheckGroupRatio(value)
+	case gatewaystore.SubscriptionGroupPolicyOptionKey:
+		return gatewaystore.ValidateSubscriptionGroupPolicyJSONString(value)
 	case "blind_box_setting.multiplier_card_route_group":
 		group := strings.TrimSpace(value)
 		if !gatewaystore.ContainsGroupRatio(group) {

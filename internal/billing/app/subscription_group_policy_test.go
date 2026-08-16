@@ -47,9 +47,13 @@ func TestSubscriptionGroupPolicyAppliesToPreConsumeAndSettlement(t *testing.T) {
 	require.Equal(t, int64(250), preConsumed)
 	require.Equal(t, 250, session.GetPreConsumedQuota())
 	require.Equal(t, BillingSourceSubscription, info.BillingSource)
+	require.Equal(t, 0.5, info.SubscriptionGroupMultiplier)
+	require.Equal(t, 0.25, info.SubscriptionQuotaScale)
+	require.Equal(t, 2.0, info.SubscriptionGroupRatio)
 
 	require.NoError(t, session.Settle(1_600))
 	require.Equal(t, int64(150), settledDelta)
+	require.Equal(t, 400, BillingQuotaForLog(info, 1_600))
 }
 
 func TestSubscriptionGroupPolicySkipsDisabledAndExternalGroups(t *testing.T) {

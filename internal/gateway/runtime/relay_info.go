@@ -160,14 +160,20 @@ type RelayInfo struct {
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.
 	SubscriptionAmountTotal               int64
 	SubscriptionAmountUsedAfterPreConsume int64
-	BlindBoxRequestId                     string
-	IsClaudeBetaQuery                     bool // /v1/messages?beta=true
-	IsChannelTest                         bool // channel test request
-	RetryIndex                            int
-	LastError                             *types.NewAPIError
-	RuntimeHeadersOverride                map[string]interface{}
-	UseRuntimeHeadersOverride             bool
-	ParamOverrideAudit                    []string
+	// SubscriptionGroupMultiplier is the configured monthly-pass multiplier
+	// for the selected billing group. SubscriptionQuotaScale is the resulting
+	// scale applied to the normal group-priced quota.
+	SubscriptionGroupMultiplier float64
+	SubscriptionQuotaScale      float64
+	SubscriptionGroupRatio      float64
+	BlindBoxRequestId           string
+	IsClaudeBetaQuery           bool // /v1/messages?beta=true
+	IsChannelTest               bool // channel test request
+	RetryIndex                  int
+	LastError                   *types.NewAPIError
+	RuntimeHeadersOverride      map[string]interface{}
+	UseRuntimeHeadersOverride   bool
+	ParamOverrideAudit          []string
 
 	// UpstreamRequestBodySize is the byte size of the marshaled upstream request
 	// body. It is set when the body is wrapped in a BodyStorage (see

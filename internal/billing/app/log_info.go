@@ -169,6 +169,15 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		other["billing_preference"] = relayInfo.UserSetting.BillingPreference
 	}
 	if relayInfo.BillingSource == BillingSourceSubscription {
+		if relayInfo.SubscriptionGroupMultiplier > 0 {
+			other["subscription_group_multiplier"] = relayInfo.SubscriptionGroupMultiplier
+		}
+		if relayInfo.SubscriptionQuotaScale > 0 {
+			other["subscription_quota_scale"] = relayInfo.SubscriptionQuotaScale
+		}
+		if relayInfo.SubscriptionGroupRatio > 0 {
+			other["subscription_group_ratio"] = relayInfo.SubscriptionGroupRatio
+		}
 		if relayInfo.SubscriptionId != 0 {
 			other["subscription_id"] = relayInfo.SubscriptionId
 		}
@@ -206,6 +215,21 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		}
 		other["wallet_quota_deducted"] = 0
 	}
+}
+
+// BillingQuotaForLog returns the amount charged to the selected funding source.
+// The normal usage quota is calculated with the wallet/group ratio. Monthly-pass
+// billing may apply a different scale, so exposing that raw quota would make a
+// monthly-pass request appear undercharged in usage logs.
+func BillingQuotaForLog(relayInfo *relaycommon.RelayInfo, usageQuota int) int {
+	if relayInfo == nil || relayInfo.BillingSource != BillingSourceSubscription {
+		return usageQuota
+	}
+	consumed := relayInfo.SubscriptionPreConsumed + relayInfo.SubscriptionPostDelta
+	if consumed <= 0 {
+		return usageQuota
+	}
+	return int(consumed)
 }
 
 func billingQuotaSource(relayInfo *relaycommon.RelayInfo) (category string, label string) {

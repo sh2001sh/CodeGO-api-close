@@ -51,20 +51,35 @@ func SubscriptionGroupPolicy2JSONString() string {
 }
 
 func UpdateSubscriptionGroupPolicyByJSONString(raw string) error {
-	parsed := make(map[string]SubscriptionGroupPolicy)
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+	parsed, err := parseSubscriptionGroupPolicies(raw)
+	if err != nil {
 		return err
-	}
-	for group, policy := range parsed {
-		if strings.TrimSpace(group) == "" {
-			return errors.New("subscription group policy contains an empty group")
-		}
-		if policy.Multiplier <= 0 || math.IsNaN(policy.Multiplier) || math.IsInf(policy.Multiplier, 0) {
-			return errors.New("subscription group multiplier must be a positive finite number: " + group)
-		}
 	}
 	subscriptionGroupPolicyMu.Lock()
 	subscriptionGroupPolicies = parsed
 	subscriptionGroupPolicyMu.Unlock()
 	return nil
+}
+
+// ValidateSubscriptionGroupPolicyJSONString validates a policy update before it
+// is persisted, keeping an invalid value out of the shared option store.
+func ValidateSubscriptionGroupPolicyJSONString(raw string) error {
+	_, err := parseSubscriptionGroupPolicies(raw)
+	return err
+}
+
+func parseSubscriptionGroupPolicies(raw string) (map[string]SubscriptionGroupPolicy, error) {
+	parsed := make(map[string]SubscriptionGroupPolicy)
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, err
+	}
+	for group, policy := range parsed {
+		if strings.TrimSpace(group) == "" {
+			return nil, errors.New("subscription group policy contains an empty group")
+		}
+		if policy.Multiplier <= 0 || math.IsNaN(policy.Multiplier) || math.IsInf(policy.Multiplier, 0) {
+			return nil, errors.New("subscription group multiplier must be a positive finite number: " + group)
+		}
+	}
+	return parsed, nil
 }

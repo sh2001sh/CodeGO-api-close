@@ -522,6 +522,9 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 				amount:    int64(preConsumedQuota),
 			},
 		}
+		relayInfo.SubscriptionGroupMultiplier = policy.Multiplier
+		relayInfo.SubscriptionQuotaScale = quotaScale
+		relayInfo.SubscriptionGroupRatio = groupRatio
 		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
 			return nil, apiErr
 		}

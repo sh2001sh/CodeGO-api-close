@@ -54,6 +54,56 @@ func probeMarketplaceInferenceTimed(provider, baseURL, apiKey, model string) (in
 	return latencyMS, fmt.Errorf("实际推理检测未通过（HTTP %d）: %s", response.StatusCode, message)
 }
 
+func probeMarketplaceInferenceReportedModel(provider, baseURL, apiKey, model string) (int64, string, error) {
+	endpoint, payload, err := inferenceProbeRequest(provider, baseURL, model)
+	if err != nil {
+		return 0, "", err
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return 0, "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return 0, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	setMarketplaceAuthHeaders(req, provider, apiKey)
+	startedAt := time.Now()
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return 0, "", fmt.Errorf("实际推理请求失败: %w", err)
+	}
+	defer response.Body.Close()
+	latencyMS := time.Since(startedAt).Milliseconds()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		detail, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+		message := strings.TrimSpace(string(detail))
+		if message == "" {
+			message = response.Status
+		}
+		return latencyMS, "", fmt.Errorf("实际推理检测未通过（HTTP %d）: %s", response.StatusCode, message)
+	}
+	var payloadResponse struct {
+		Model        string `json:"model"`
+		ModelVersion string `json:"modelVersion"`
+		Response     struct {
+			Model string `json:"model"`
+		} `json:"response"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&payloadResponse); err != nil {
+		return latencyMS, "", errors.New("上游推理响应格式无效")
+	}
+	for _, reported := range []string{payloadResponse.Model, payloadResponse.Response.Model, payloadResponse.ModelVersion} {
+		if value := strings.TrimSpace(reported); value != "" {
+			return latencyMS, value, nil
+		}
+	}
+	return latencyMS, "", nil
+}
+
 func inferenceProbeRequest(provider, baseURL, model string) (string, map[string]any, error) {
 	switch provider {
 	case "codex":

@@ -66,6 +66,9 @@ func executeNativeVerification(runID string) {
 		).Error
 	})
 	completeVerification(run, channel, group, results, err)
+	if _, mappingErr := runGPT56MappingCheck(channel); mappingErr != nil {
+		return
+	}
 }
 
 func loadVerificationContext(runID string) (*marketplaceschema.VerificationRun, *marketplaceschema.Channel, *marketplaceschema.Group, error) {

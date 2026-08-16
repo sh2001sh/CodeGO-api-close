@@ -128,9 +128,13 @@ export async function fetchMarketplaceModels(
   return requireData(response.data)
 }
 
-export async function queueMarketplaceVerification(channelId: string) {
+export async function queueMarketplaceVerification(
+  channelId: string,
+  admin = false
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
   const response = await api.post<ApiResponse<{ queued: boolean }>>(
-    `/api/marketplace/channels/${channelId}/verify`
+    `${prefix}/channels/${channelId}/verify`
   )
   return requireData(response.data)
 }

@@ -20,12 +20,17 @@ import {
 import type { GroupFilters } from './types'
 
 function verificationRefetchInterval(
-  channels: { lifecycle_status: string; verification_status: string }[]
+  channels: {
+    lifecycle_status: string
+    verification_status: string
+    gpt56_mapping_status?: string
+  }[]
 ) {
   return channels.some(
     (channel) =>
       channel.lifecycle_status === 'verifying' ||
-      ['queued', 'running'].includes(channel.verification_status)
+      ['queued', 'running'].includes(channel.verification_status) ||
+      channel.gpt56_mapping_status === 'running'
   )
     ? 1000
     : false
@@ -114,7 +119,8 @@ export function useMarketplaceMutations() {
     }),
     fetchModels: useMutation({ mutationFn: fetchMarketplaceModels }),
     verify: useMutation({
-      mutationFn: queueMarketplaceVerification,
+      mutationFn: (channelId: string) =>
+        queueMarketplaceVerification(channelId),
       onSuccess: invalidate,
     }),
     pause: useMutation({
@@ -153,6 +159,19 @@ export function useAdminMarketplaceReview() {
         queryKey: ['marketplace-channels'],
       })
       await queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] })
+    },
+  })
+}
+
+export function useAdminMarketplaceVerification() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (channelId: string) =>
+      queueMarketplaceVerification(channelId, true),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['marketplace-channels'],
+      })
     },
   })
 }

@@ -41,6 +41,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 	{
 		adminRoute.GET("/channels", ListAdminChannels)
 		adminRoute.PATCH("/channels/:id", UpdateAdminChannel)
+		adminRoute.POST("/channels/:id/verify", middleware.CriticalRateLimit(), VerifyAdminChannel)
 		adminRoute.DELETE("/channels/:id", DeleteAdminChannel)
 		adminRoute.POST("/channels/:id/review", middleware.CriticalRateLimit(), ReviewChannel)
 	}

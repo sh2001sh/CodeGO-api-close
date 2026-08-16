@@ -1,18 +1,22 @@
 import { useState } from 'react'
-import { Pencil, ShieldCheck, Trash2 } from 'lucide-react'
+import { Pencil, RefreshCcw, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAdminMarketplaceChannels } from '../hooks'
+import {
+  useAdminMarketplaceChannels,
+  useAdminMarketplaceVerification,
+} from '../hooks'
 import type { MarketplaceChannel } from '../types'
 import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
-import { ModelConsistencyBadge } from './model-verification'
+import { GPT56MappingStatusView, ModelConsistencyBadge } from './model-verification'
 import { MarketplaceStatusBadge } from './status-badge'
 
 export function AdminGovernance() {
   const { t } = useTranslation()
   const query = useAdminMarketplaceChannels(true)
+  const verification = useAdminMarketplaceVerification()
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
   const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
 
@@ -72,8 +76,38 @@ export function AdminGovernance() {
                     </span>
                     <span>QPS {channel.qps}</span>
                   </div>
+                  <GPT56MappingStatusView
+                    sourceLabel={channel.submitted_source_label}
+                    models={channel.declared_models}
+                    status={channel.gpt56_mapping_status}
+                    results={channel.gpt56_mapping_results}
+                    checkedAt={channel.gpt56_mapping_checked_at}
+                  />
                 </div>
                 <div className='flex shrink-0 items-center gap-2'>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={
+                      verification.isPending ||
+                      channel.lifecycle_status === 'verifying' ||
+                      ['queued', 'running'].includes(
+                        channel.verification_status
+                      )
+                    }
+                    onClick={() => verification.mutate(channel.id)}
+                  >
+                    <RefreshCcw
+                      className={
+                        channel.lifecycle_status === 'verifying'
+                          ? 'animate-spin'
+                          : undefined
+                      }
+                    />
+                    {channel.lifecycle_status === 'verifying'
+                      ? t('检测中')
+                      : t('重新检测')}
+                  </Button>
                   <Button
                     variant='outline'
                     size='sm'

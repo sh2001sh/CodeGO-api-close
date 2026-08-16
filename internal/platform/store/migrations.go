@@ -98,6 +98,7 @@ func V2MigrationIDs() []string {
 		"20260815_marketplace_numeric_channel_ids",
 		"20260816_wallet_transfer_fee_fields",
 		"20260816_marketplace_incremental_channel_ids",
+		"20260817_marketplace_gpt56_mapping_detection",
 		"20260816_token_marketplace_multiplier_limit",
 		"20260816_unified_credit_v1_schema",
 		"20260816_unified_credit_v1_channel_scope",
@@ -256,6 +257,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260815_marketplace_numeric_channel_ids", Run: migrateMarketplaceNumericChannelIDs},
 		{ID: "20260816_wallet_transfer_fee_fields", Run: migrateWalletTransferFeeFields},
 		{ID: "20260816_marketplace_incremental_channel_ids", Run: migrateMarketplaceIncrementalChannelIDs},
+		{ID: "20260817_marketplace_gpt56_mapping_detection", Run: migrateMarketplaceGPT56MappingDetection},
 		{ID: "20260816_token_marketplace_multiplier_limit", Run: migrateTokenMarketplaceMultiplierLimit},
 		{ID: "20260816_unified_credit_v1_schema", Run: migrateUnifiedCreditV1Schema},
 		{ID: "20260816_unified_credit_v1_channel_scope", Run: migrateUnifiedCreditV1ChannelScope},
@@ -543,6 +545,21 @@ func migrateMarketplaceModelVerification(tx *gorm.DB) error {
 		return tx.AutoMigrate(&marketplaceschema.Channel{})
 	}
 	for _, field := range []string{"ModelVerificationResults", "ModelConsistencyStatus"} {
+		if tx.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&marketplaceschema.Channel{}, field); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateMarketplaceGPT56MappingDetection(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return tx.AutoMigrate(&marketplaceschema.Channel{})
+	}
+	for _, field := range []string{"GPT56MappingResults", "GPT56MappingStatus", "GPT56MappingCheckedAt"} {
 		if tx.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
 			continue
 		}

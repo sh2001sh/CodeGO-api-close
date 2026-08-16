@@ -50,6 +50,15 @@ type ModelVerificationResult struct {
 	TestedAt  time.Time `json:"tested_at"`
 }
 
+type GPT56MappingResult struct {
+	RequestedModel string    `json:"requested_model"`
+	ReportedModel  string    `json:"reported_model,omitempty"`
+	Status         string    `json:"status"`
+	LatencyMS      int64     `json:"latency_ms"`
+	Error          string    `json:"error,omitempty"`
+	TestedAt       time.Time `json:"tested_at"`
+}
+
 type ChannelView struct {
 	ID                               string                       `json:"id"`
 	GroupID                          string                       `json:"group_id"`
@@ -66,6 +75,9 @@ type ChannelView struct {
 	ModelPrices                      map[string]ChannelModelPrice `json:"model_prices"`
 	ModelVerificationResults         []ModelVerificationResult    `json:"model_verification_results"`
 	ModelConsistencyStatus           string                       `json:"model_consistency_status"`
+	GPT56MappingResults              []GPT56MappingResult         `json:"gpt56_mapping_results"`
+	GPT56MappingStatus               string                       `json:"gpt56_mapping_status"`
+	GPT56MappingCheckedAt            *time.Time                   `json:"gpt56_mapping_checked_at"`
 	Multiplier                       float64                      `json:"multiplier"`
 	LifecycleStatus                  string                       `json:"lifecycle_status"`
 	VerificationStatus               string                       `json:"verification_status"`

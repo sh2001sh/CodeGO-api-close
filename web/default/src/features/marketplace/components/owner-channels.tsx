@@ -17,6 +17,7 @@ import type { MarketplaceChannel } from '../types'
 import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
 import { ChannelVerificationStatus } from './channel-verification-status'
+import { GPT56MappingStatusView } from './model-verification'
 import { OwnerChannelActions } from './owner-channel-actions'
 import { IncomeMetric } from './owner-channel-metric'
 import { MarketplaceStatusBadge } from './status-badge'
@@ -175,6 +176,13 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                         </p>
                       )}
                     <ChannelVerificationStatus channel={channel} />
+                    <GPT56MappingStatusView
+                      sourceLabel={channel.submitted_source_label}
+                      models={channel.declared_models}
+                      status={channel.gpt56_mapping_status}
+                      results={channel.gpt56_mapping_results}
+                      checkedAt={channel.gpt56_mapping_checked_at}
+                    />
                     <div className='mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
                       <IncomeMetric
                         icon={CircleDollarSign}

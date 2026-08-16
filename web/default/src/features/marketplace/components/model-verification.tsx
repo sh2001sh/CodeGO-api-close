@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import type {
-  ModelConsistencyStatus,
-  ModelVerificationResult,
+	GPT56MappingResult,
+	GPT56MappingStatus,
+	ModelConsistencyStatus,
+	ModelVerificationResult,
 } from '../types'
 
 const consistencyLabels: Record<ModelConsistencyStatus, string> = {
@@ -12,6 +14,63 @@ const consistencyLabels: Record<ModelConsistencyStatus, string> = {
   passed: '通过',
   failed: '不通过',
   questionable: '存疑',
+}
+
+const mappingLabels: Record<GPT56MappingStatus, string> = {
+  '': '未检测',
+  running: '检测中',
+  matched: '映射正确',
+  mismatch: '映射不一致',
+  insufficient_evidence: '证据不足',
+}
+
+export function GPT56MappingStatusView(props: {
+  sourceLabel: string
+  models: string[]
+  status: GPT56MappingStatus
+  results: GPT56MappingResult[]
+  checkedAt?: string | null
+}) {
+  const { t } = useTranslation()
+  const status = props.status || ''
+  const eligible =
+    ['Codex Plus', 'Codex Pro'].includes(props.sourceLabel) &&
+    ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'].every((model) =>
+      props.models.some((item) => item.toLowerCase() === model)
+    )
+  if (!eligible) return null
+  const tone =
+    status === 'matched'
+      ? 'text-success'
+      : status === 'mismatch'
+        ? 'text-destructive'
+        : status === 'running'
+          ? 'text-primary'
+          : 'text-warning-foreground'
+  return (
+    <div className='mt-3 border-border bg-muted/20 rounded-md border px-3 py-2.5 text-xs'>
+      <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-1'>
+        <span className='font-medium'>{t('GPT-5.6 映射检测')}</span>
+        <span className={cn('font-medium', tone)}>
+          {t(mappingLabels[status])}
+        </span>
+      </div>
+      <div className='text-muted-foreground mt-1'>
+        {props.checkedAt
+          ? `${t('最近检测')}: ${new Date(props.checkedAt).toLocaleString()}`
+          : t('等待首次检测')}
+      </div>
+      {props.results.length > 0 && (
+        <div className='text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1'>
+          {props.results.map((result) => (
+            <span key={result.requested_model}>
+              {result.requested_model}: {result.reported_model || t('未返回模型标识')}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const consistencyIcons = {

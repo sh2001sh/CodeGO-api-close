@@ -153,6 +153,14 @@ func UpdateAdminChannel(c *gin.Context) {
 	respond(c, result, err)
 }
 
+func VerifyAdminChannel(c *gin.Context) {
+	if err := marketplaceapp.QueueNativeVerification(c.Param("id")); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{"queued": true})
+}
+
 func DeleteAdminChannel(c *gin.Context) {
 	respond(c, gin.H{"deleted": true}, marketplaceapp.DeleteAdminChannel(c.Param("id")))
 }

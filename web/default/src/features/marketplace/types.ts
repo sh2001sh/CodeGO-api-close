@@ -9,10 +9,26 @@ export type MarketplaceStatus =
 
 export type ModelConsistencyStatus = '' | 'passed' | 'failed' | 'questionable'
 
+export type GPT56MappingStatus =
+  | ''
+  | 'running'
+  | 'matched'
+  | 'mismatch'
+  | 'insufficient_evidence'
+
 export interface ModelVerificationResult {
   model: string
   status: 'passed' | 'failed'
   listed: boolean
+  latency_ms: number
+  error?: string
+  tested_at: string
+}
+
+export interface GPT56MappingResult {
+  requested_model: string
+  reported_model?: string
+  status: Exclude<GPT56MappingStatus, '' | 'running'>
   latency_ms: number
   error?: string
   tested_at: string
@@ -103,6 +119,9 @@ export interface MarketplaceChannel {
   verification_completed_at?: string | null
   model_verification_results: ModelVerificationResult[]
   model_consistency_status: ModelConsistencyStatus
+  gpt56_mapping_results: GPT56MappingResult[]
+  gpt56_mapping_status: GPT56MappingStatus
+  gpt56_mapping_checked_at?: string | null
   visibility: string
   max_concurrency: number
   qps: number

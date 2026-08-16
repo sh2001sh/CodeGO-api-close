@@ -23,6 +23,9 @@ type Channel struct {
 	ModelPrices                      string         `json:"-" gorm:"column:model_prices;type:text"`
 	ModelVerificationResults         string         `json:"-" gorm:"column:model_verification_results;type:text"`
 	ModelConsistencyStatus           string         `json:"model_consistency_status" gorm:"column:model_consistency_status;size:24;index"`
+	GPT56MappingResults              string         `json:"-" gorm:"column:gpt56_mapping_results;type:text"`
+	GPT56MappingStatus               string         `json:"gpt56_mapping_status" gorm:"column:gpt56_mapping_status;size:32;index"`
+	GPT56MappingCheckedAt            *time.Time     `json:"gpt56_mapping_checked_at" gorm:"column:gpt56_mapping_checked_at;index"`
 	MaxConcurrency                   int            `json:"max_concurrency" gorm:"column:max_concurrency;not null;default:1"`
 	QPS                              float64        `json:"qps" gorm:"column:qps;not null;default:1"`
 	MaintenanceWindow                string         `json:"maintenance_window" gorm:"column:maintenance_window;size:255"`

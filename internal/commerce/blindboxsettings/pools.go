@@ -13,7 +13,7 @@ var defaultTierSettings = []TierSetting{
 	{Name: "200.00-1000.00 统一额度", MinUSD: 200, MaxUSD: 1000, Probability: 0.0001, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "0.95 倍率卡", Probability: 0.06, RewardType: "prop"},
 	{Name: "0.9 倍率卡", Probability: 0.04, RewardType: "prop"},
-	{Name: "0.10 倍率体验卡", Probability: 0.01, RewardType: "prop"},
+	{Name: "0.1 倍率卡", Probability: 0.01, RewardType: "prop"},
 	{Name: "充值九折卡", Probability: 0.03, RewardType: "prop"},
 }
 

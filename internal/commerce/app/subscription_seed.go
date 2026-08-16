@@ -10,6 +10,9 @@ import (
 
 // EnsureDefaultSubscriptionPlans creates built-in plans and repairs legacy preset snapshots.
 func EnsureDefaultSubscriptionPlans() error {
+	if err := migrateLegacyBlindBoxMultiplierProps(); err != nil {
+		return err
+	}
 	plans := defaultSubscriptionPlans()
 	for index := range plans {
 		existing, err := findPresetSubscriptionPlan(plans[index].Title)

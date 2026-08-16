@@ -92,9 +92,12 @@ function rewardTypeLabel(record: BlindBoxRecord) {
 }
 
 function isManualUseProp(record: BlindBoxRecord) {
-  return ['consume_discount_95', 'consume_discount_90'].includes(
-    record.prop_type || ''
-  )
+  return [
+    'consume_discount_95',
+    'consume_discount_90',
+    'consume_discount_10',
+    'monthly_pass_multiplier',
+  ].includes(record.prop_type || '')
 }
 
 export function PrizeRevealHeader(props: {
@@ -249,13 +252,17 @@ function PrizeRevealCard(props: {
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
           {manualUseProp
             ? propActive
-              ? record.prop_type === 'monthly_pass_multiplier'
-                ? '已启用，仅官方指定 GPT 分组可用，累计 15 分钟并可暂停'
-                : '已启用，仅官方渠道可用，持续 24 小时'
+              ? record.prop_type === 'consume_discount_10'
+                ? '已启用，全部现有官方分组通用，累计 15 分钟并可暂停'
+                : record.prop_type === 'monthly_pass_multiplier'
+                  ? '套餐权益已启用，仅套餐分组可用'
+                  : '已启用，仅官方渠道可用，持续 24 小时'
               : propAvailable
-                ? record.prop_type === 'monthly_pass_multiplier'
-                  ? '点击启用后累计可用 15 分钟，可暂停，仅官方指定 GPT 分组生效'
-                  : '点击启用后持续 24 小时，仅官方渠道生效'
+                ? record.prop_type === 'consume_discount_10'
+                  ? '点击启用后累计可用 15 分钟，可暂停，在原有官方分组直接生效'
+                  : record.prop_type === 'monthly_pass_multiplier'
+                    ? '点击启用套餐权益，仅套餐分组生效'
+                    : '点击启用后持续 24 小时，仅官方渠道生效'
                 : '该道具已失效'
             : record.prop_status === 'used'
               ? '已用于最近一次符合条件的订单'

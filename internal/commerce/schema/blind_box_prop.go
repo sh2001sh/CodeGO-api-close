@@ -12,6 +12,7 @@ const (
 	BlindBoxPropTypeSubscriptionDiscount90 = "subscription_discount_90"
 	BlindBoxPropTypeConsumeDiscount95      = "consume_discount_95"
 	BlindBoxPropTypeConsumeDiscount90      = "consume_discount_90"
+	BlindBoxPropTypeConsumeDiscount10      = "consume_discount_10"
 	BlindBoxPropTypeZeroHourMultiplier     = "zero_hour_multiplier"
 	BlindBoxPropTypeMonthlyPassMultiplier  = "monthly_pass_multiplier"
 )

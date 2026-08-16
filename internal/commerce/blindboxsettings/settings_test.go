@@ -13,6 +13,7 @@ func TestGetUsesUnifiedBlindBoxPoolForBothPaymentEntries(t *testing.T) {
 	require.Equal(t, setting.Tiers, setting.BalanceBlindBoxTiers)
 	require.InDelta(t, 0.2066, setting.Tiers[0].Probability, 0.000000001)
 	require.Equal(t, "200.00-1000.00 统一额度", setting.Tiers[9].Name)
+	require.Equal(t, "0.1 倍率卡", setting.Tiers[12].Name)
 	require.Len(t, setting.BalanceBlindBoxFirstDrawTiers, 3)
 	require.Len(t, setting.BalanceBlindBoxSmallPityTiers, 3)
 	require.Len(t, setting.BalanceBlindBoxPityTiers, 3)

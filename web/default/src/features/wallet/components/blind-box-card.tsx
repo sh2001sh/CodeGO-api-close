@@ -142,6 +142,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
         ![
           'consume_discount_95',
           'consume_discount_90',
+          'consume_discount_10',
           'zero_hour_multiplier',
           'monthly_pass_multiplier',
         ].includes(record.prop_type || '')
@@ -157,9 +158,11 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           toast.success(
             record.prop_type === 'zero_hour_multiplier'
               ? '历史 0 倍率道具已启用。'
-              : record.prop_type === 'monthly_pass_multiplier'
-                ? '0.10 倍率体验卡已启用，仅官方指定 GPT 分组可用，累计 15 分钟并可随时暂停。'
-                : `${record.reward_title} 已启用，仅官方渠道可用，24 小时后自动失效。`
+              : record.prop_type === 'consume_discount_10'
+                ? '盲盒 0.1 倍率卡已启用，全部现有官方分组通用，累计 15 分钟并可随时暂停。'
+                : record.prop_type === 'monthly_pass_multiplier'
+                  ? '套餐 0.1 倍率卡已启用，仅套餐分组可用。'
+                  : `${record.reward_title} 已启用，仅官方渠道可用，24 小时后自动失效。`
           )
           await refreshAll()
           await queryClient.invalidateQueries({ queryKey: ['user-groups'] })
@@ -176,9 +179,11 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
       if (
         prop.status !== 'available' &&
         !(
-          ['monthly_pass_multiplier', 'zero_hour_multiplier'].includes(
-            prop.prop_type
-          ) && prop.status === 'paused'
+          [
+            'monthly_pass_multiplier',
+            'consume_discount_10',
+            'zero_hour_multiplier',
+          ].includes(prop.prop_type) && prop.status === 'paused'
         )
       ) {
         return
@@ -189,9 +194,11 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           throw new Error(response.message || t('Failed to use prop'))
         }
         toast.success(
-          ['monthly_pass_multiplier', 'zero_hour_multiplier'].includes(
-            prop.prop_type
-          )
+          [
+            'monthly_pass_multiplier',
+            'consume_discount_10',
+            'zero_hour_multiplier',
+          ].includes(prop.prop_type)
             ? `${prop.title} 已开启，可随时暂停。`
             : t('{{title}} is now active.', { title: prop.title })
         )

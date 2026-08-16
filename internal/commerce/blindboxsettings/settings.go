@@ -189,6 +189,9 @@ func normalizeTierSettings(tiers []TierSetting) []TierSetting {
 		}
 		result[i].RewardType = rewardType
 		result[i].WalletType = inferWalletType(tier)
+		if rewardType == "prop" && strings.TrimSpace(result[i].Name) == "0.10 倍率体验卡" {
+			result[i].Name = "0.1 倍率卡"
+		}
 	}
 	return result
 }

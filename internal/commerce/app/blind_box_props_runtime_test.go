@@ -294,6 +294,51 @@ func TestMultiplierCardsUseProChannelGroup(t *testing.T) {
 	assert.Equal(t, "倍率卡专属组", MultiplierCardRouteGroup())
 }
 
+func TestBlindBoxPointOneMultiplierIsUniversalAndPausable(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8819, Username: "blind_box_point_one", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+
+	var prop *commerceschema.BlindBoxProp
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		prop, err = createBlindBoxPropTx(tx, user.Id, 9901, "0.1 倍率卡")
+		return err
+	}))
+	require.Equal(t, commerceschema.BlindBoxPropTypeConsumeDiscount10, prop.PropType)
+	require.Equal(t, int64(15*60), prop.DurationSeconds)
+
+	active, err := ActivateBlindBoxProp(user.Id, prop.Id)
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.BlindBoxPropStatusActive, active.Status)
+	paused, err := PauseBlindBoxProp(user.Id, prop.Id)
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.BlindBoxPropStatusPaused, paused.Status)
+}
+
+func TestMigrateLegacyBlindBoxMultiplierPropsKeepsMonthlyPassCardsSeparate(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	legacyBlindBox := &commerceschema.BlindBoxProp{
+		UserId: 8820, OpenRecordId: 9902, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		Title: "0.10 倍率体验卡", Status: commerceschema.BlindBoxPropStatusAvailable,
+		Multiplier: 0.1, DurationSeconds: 15 * 60,
+	}
+	monthlyPass := &commerceschema.BlindBoxProp{
+		UserId: 8820, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		Title: "30 分钟 0.1 倍率卡", Status: commerceschema.BlindBoxPropStatusAvailable,
+		Multiplier: 0.1, DurationSeconds: 30 * 60, BenefitReference: "monthly-pass:test",
+	}
+	require.NoError(t, db.Create(legacyBlindBox).Error)
+	require.NoError(t, db.Create(monthlyPass).Error)
+	require.NoError(t, migrateLegacyBlindBoxMultiplierProps())
+
+	require.NoError(t, db.First(legacyBlindBox, legacyBlindBox.Id).Error)
+	require.Equal(t, commerceschema.BlindBoxPropTypeConsumeDiscount10, legacyBlindBox.PropType)
+	require.Equal(t, "0.1 倍率卡", legacyBlindBox.Title)
+	require.NoError(t, db.First(monthlyPass, monthlyPass.Id).Error)
+	require.Equal(t, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, monthlyPass.PropType)
+}
+
 func TestBackfillActiveMonthlyPassBenefitsIsIdempotent(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	now := platformruntime.GetTimestamp()

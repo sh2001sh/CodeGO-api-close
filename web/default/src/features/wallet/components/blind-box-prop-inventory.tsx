@@ -35,9 +35,16 @@ function getPropPresentation(prop: BlindBoxProp): PropPresentation {
         actionLabel: '立即启用',
         manualActivation: true,
       }
+    case 'consume_discount_10':
+      return {
+        description:
+          '全部现有官方分组通用，无需切换专属分组；累计 15 分钟，可暂停。',
+        actionLabel: '立即启用',
+        manualActivation: true,
+      }
     case 'monthly_pass_multiplier':
       return {
-        description: '仅官方指定 GPT 分组可用；累计 15 分钟，可暂停。',
+        description: '套餐赠送权益，仅套餐分组可用；可暂停并保留剩余时间。',
         actionLabel: '立即启用',
         manualActivation: true,
       }
@@ -117,8 +124,15 @@ export function BlindBoxPropInventory(props: {
           const presentation = getPropPresentation(prop)
           const status = getStatusPresentation(prop)
           const expiration = formatExpiration(prop)
+          const pausable = [
+            'monthly_pass_multiplier',
+            'consume_discount_10',
+            'zero_hour_multiplier',
+          ].includes(prop.prop_type)
           const canActivate =
-            presentation.manualActivation && prop.status === 'available'
+            presentation.manualActivation &&
+            (prop.status === 'available' ||
+              (pausable && prop.status === 'paused'))
           const canNavigate =
             prop.status === 'available' && presentation.actionTo
 
@@ -187,7 +201,8 @@ export function BlindBoxPropInventory(props: {
 }
 
 function getPropTitle(prop: BlindBoxProp) {
-  if (prop.prop_type === 'monthly_pass_multiplier') return '0.10 倍率体验卡'
+  if (prop.prop_type === 'consume_discount_10') return '0.1 倍率卡'
+  if (prop.prop_type === 'monthly_pass_multiplier') return '套餐 0.1 倍率卡'
   if (prop.prop_type === 'subscription_discount_90') return '历史套餐折扣卡'
   if (prop.prop_type === 'zero_hour_multiplier') return '历史 0 倍率道具'
   return prop.title

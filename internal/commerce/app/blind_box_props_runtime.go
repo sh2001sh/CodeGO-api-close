@@ -58,6 +58,9 @@ func ActivateBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp,
 		if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier && hasActiveMonthlyPassPropTx(tx, userID) {
 			return errors.New("0.1 倍率卡已经生效")
 		}
+		if prop.PropType == commerceschema.BlindBoxPropTypeConsumeDiscount10 && hasActiveBlindBoxPropTypeTx(tx, userID, prop.PropType) {
+			return errors.New("盲盒 0.1 倍率卡已经生效")
+		}
 		if isPausableBlindBoxMultiplierProp(prop.PropType) {
 			if prop.RemainingSeconds <= 0 {
 				prop.RemainingSeconds = prop.DurationSeconds
@@ -119,7 +122,19 @@ func PauseBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp, er
 
 func isPausableBlindBoxMultiplierProp(propType string) bool {
 	return propType == commerceschema.BlindBoxPropTypeZeroHourMultiplier ||
-		propType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier
+		propType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier ||
+		propType == commerceschema.BlindBoxPropTypeConsumeDiscount10
+}
+
+func hasActiveBlindBoxPropTypeTx(tx *gorm.DB, userID int, propType string) bool {
+	if tx == nil || userID <= 0 || strings.TrimSpace(propType) == "" {
+		return false
+	}
+	var count int64
+	err := tx.Model(&commerceschema.BlindBoxProp{}).
+		Where("user_id = ? AND prop_type = ? AND status = ? AND expires_at > ?", userID, propType, commerceschema.BlindBoxPropStatusActive, platformruntime.GetTimestamp()).
+		Count(&count).Error
+	return err == nil && count > 0
 }
 
 // ConvertBlindBoxDiscountProp converts an unused 10% top-up discount card
@@ -217,6 +232,7 @@ func RequiresOfficialBlindBoxChannel(userID int) bool {
 			Where("user_id = ? AND status = ? AND prop_type IN ? AND (expires_at = 0 OR expires_at > ?)", userID, commerceschema.BlindBoxPropStatusActive, []string{
 				commerceschema.BlindBoxPropTypeConsumeDiscount95,
 				commerceschema.BlindBoxPropTypeConsumeDiscount90,
+				commerceschema.BlindBoxPropTypeConsumeDiscount10,
 				commerceschema.BlindBoxPropTypeZeroHourMultiplier,
 				commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
 			}, now).
@@ -389,6 +405,9 @@ func reserveBlindBoxDiscountPropTx(tx *gorm.DB, userID int, tradeNo string, prop
 
 func getBlindBoxPropSpecByTitle(title string) (commerceschema.BlindBoxPropSpec, bool) {
 	trimmedTitle := strings.TrimSpace(title)
+	if trimmedTitle == "0.10 倍率体验卡" {
+		return getBlindBoxPropSpecByType(commerceschema.BlindBoxPropTypeConsumeDiscount10)
+	}
 	for _, spec := range blindBoxPropSpecs() {
 		if spec.Title == trimmedTitle {
 			return spec, true
@@ -438,6 +457,14 @@ func blindBoxPropSpecs() []commerceschema.BlindBoxPropSpec {
 			Activatable:     true,
 		},
 		{
+			PropType:        commerceschema.BlindBoxPropTypeConsumeDiscount10,
+			Title:           "0.1 倍率卡",
+			DiscountRate:    0.90,
+			Multiplier:      0.10,
+			DurationSeconds: 15 * 60,
+			Activatable:     true,
+		},
+		{
 			PropType:        commerceschema.BlindBoxPropTypeZeroHourMultiplier,
 			Title:           "1 小时 0 倍率卡",
 			Multiplier:      0,
@@ -446,7 +473,7 @@ func blindBoxPropSpecs() []commerceschema.BlindBoxPropSpec {
 		},
 		{
 			PropType:        commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
-			Title:           "0.10 倍率体验卡",
+			Title:           "套餐 0.1 倍率卡",
 			Multiplier:      0.1,
 			DurationSeconds: 15 * 60,
 			Activatable:     true,

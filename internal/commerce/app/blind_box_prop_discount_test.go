@@ -81,10 +81,40 @@ func TestApplyMonthlyPassDiscountRecoversOriginalQuotaWithoutCap(t *testing.T) {
 	}
 	require.NoError(t, db.Create(prop).Error)
 
+	outside, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
+		RequestID: "discount-monthly-pass-outside", UserID: prop.UserId, ChannelID: 30,
+		ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "gpt-5",
+		UsingGroup: "official", Quota: 100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 100, outside.QuotaAfterDiscount)
+	require.Zero(t, outside.DiscountQuota)
+
 	result, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
 		RequestID: "discount-monthly-pass", UserID: prop.UserId, ChannelID: 30,
 		ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "gpt-5",
 		UsingGroup: MonthlyPassGroup, Quota: 100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1000, result.QuotaBeforeDiscount)
+	require.Equal(t, 100, result.QuotaAfterDiscount)
+	require.Equal(t, 900, result.DiscountQuota)
+}
+
+func TestApplyBlindBoxUniversalMultiplierUsesSelectedOfficialGroup(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	prop := &commerceschema.BlindBoxProp{
+		UserId: 7004, PropType: commerceschema.BlindBoxPropTypeConsumeDiscount10,
+		Title: "0.1 倍率卡", Status: commerceschema.BlindBoxPropStatusActive,
+		DiscountRate: 0.9, Multiplier: 0.1,
+		ExpiresAt: platformruntime.GetTimestamp() + 900,
+	}
+	require.NoError(t, db.Create(prop).Error)
+
+	result, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
+		RequestID: "discount-blind-box-universal", UserID: prop.UserId, ChannelID: 31,
+		ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "claude-sonnet-4",
+		UsingGroup: "official-claude", Quota: 1000,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1000, result.QuotaBeforeDiscount)

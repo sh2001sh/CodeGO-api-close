@@ -137,6 +137,23 @@ func appendMonthlyPassBenefitReference(stored, reference string) string {
 	return stored + "|" + reference
 }
 
+// migrateLegacyBlindBoxMultiplierProps separates old blind-box rewards from
+// monthly-pass entitlements that previously shared the same prop type.
+func migrateLegacyBlindBoxMultiplierProps() error {
+	if !platformdb.DB.Migrator().HasTable(&commerceschema.BlindBoxProp{}) {
+		return nil
+	}
+	return platformdb.DB.Model(&commerceschema.BlindBoxProp{}).
+		Where("prop_type = ? AND open_record_id > 0", commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).
+		Updates(map[string]any{
+			"prop_type":     commerceschema.BlindBoxPropTypeConsumeDiscount10,
+			"title":         "0.1 倍率卡",
+			"discount_rate": 0.90,
+			"multiplier":    0.10,
+			"updated_at":    platformruntime.GetTimestamp(),
+		}).Error
+}
+
 func primaryMonthlyPassPropTx(tx *gorm.DB, userID int) (*commerceschema.BlindBoxProp, error) {
 	if tx == nil || userID <= 0 {
 		return nil, errors.New("invalid monthly pass lookup")

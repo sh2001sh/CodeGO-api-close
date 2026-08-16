@@ -33,7 +33,8 @@ const PROP_TITLES: Record<string, string> = {
   subscription_discount_90: '历史套餐折扣卡',
   consume_discount_95: '0.95 倍率卡',
   consume_discount_90: '0.9 倍率卡',
-  monthly_pass_multiplier: '0.10 倍率体验卡',
+  consume_discount_10: '0.1 倍率卡',
+  monthly_pass_multiplier: '套餐 0.1 倍率卡',
   zero_hour_multiplier: '历史 0 倍率道具',
 }
 
@@ -267,8 +268,10 @@ function propDescription(propType: string) {
     return '仅官方渠道可用，启用后按 0.95 倍率计算，持续 24 小时。'
   if (propType === 'consume_discount_90')
     return '仅官方渠道可用，启用后按 0.90 倍率计算，持续 24 小时。'
+  if (propType === 'consume_discount_10')
+    return '全部现有官方分组通用，无需切换专属分组；累计 15 分钟，可暂停。'
   if (propType === 'monthly_pass_multiplier')
-    return '仅官方指定 GPT 分组可用，累计 15 分钟，可暂停。'
+    return '套餐赠送权益，仅套餐分组可用。'
   return '道具已进入“我的道具”，可按页面规则使用。'
 }
 

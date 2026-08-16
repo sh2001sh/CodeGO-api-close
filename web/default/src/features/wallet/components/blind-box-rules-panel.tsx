@@ -191,8 +191,8 @@ export function BlindBoxPropRules() {
       detail: '仅官方渠道，启用后连续 24 小时按 0.90 倍率扣减',
     },
     {
-      title: '0.10 倍率体验卡',
-      detail: '仅官方指定 GPT 分组，累计 15 分钟，可暂停',
+      title: '0.1 倍率卡',
+      detail: '全部现有官方分组通用，不新建分组；累计 15 分钟，可暂停',
     },
   ]
 

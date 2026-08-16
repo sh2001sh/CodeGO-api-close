@@ -96,14 +96,22 @@ func selectBlindBoxConsumptionPropTx(tx *gorm.DB, request billingapp.BlindBoxCon
 		Where("user_id = ? AND status = ? AND prop_type IN ? AND expires_at > ?", request.UserID, commerceschema.BlindBoxPropStatusActive, []string{
 			commerceschema.BlindBoxPropTypeConsumeDiscount95,
 			commerceschema.BlindBoxPropTypeConsumeDiscount90,
+			commerceschema.BlindBoxPropTypeConsumeDiscount10,
 			commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
 		}, now).
 		Order("multiplier asc, id asc").Find(&props).Error
 	if err != nil {
 		return nil, err
 	}
+	if request.UsingGroup == MonthlyPassGroup {
+		for index := range props {
+			if props[index].PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
+				return &props[index], nil
+			}
+		}
+	}
 	for index := range props {
-		if props[index].PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier && request.UsingGroup != MonthlyPassGroup {
+		if props[index].PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
 			continue
 		}
 		return &props[index], nil

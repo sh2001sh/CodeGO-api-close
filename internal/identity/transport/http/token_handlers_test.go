@@ -411,8 +411,8 @@ func TestAddTokenLeavesAccessedTimeUnset(t *testing.T) {
 
 func TestAddTokenSelectsMarketplaceGroupDirectly(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
-	if err := db.AutoMigrate(&marketplaceschema.Group{}); err != nil {
-		t.Fatalf("failed to migrate marketplace group: %v", err)
+	if err := db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}); err != nil {
+		t.Fatalf("failed to migrate marketplace channel and group: %v", err)
 	}
 	group := marketplaceschema.Group{
 		ID: "selectable-market-group", ChannelID: "channel-1", OwnerUserID: 42,
@@ -424,6 +424,16 @@ func TestAddTokenSelectsMarketplaceGroupDirectly(t *testing.T) {
 	}
 	if err := db.Create(&group).Error; err != nil {
 		t.Fatalf("failed to seed marketplace group: %v", err)
+	}
+	channel := marketplaceschema.Channel{
+		ID:                   group.ChannelID,
+		OwnerUserID:          group.OwnerUserID,
+		ProviderType:         "openai_compatible",
+		BaseURLCiphertext:    "url",
+		CredentialCiphertext: "key",
+	}
+	if err := db.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to seed marketplace channel: %v", err)
 	}
 	ctx, recorder := newAuthenticatedContext(t, stdhttp.MethodPost, "/api/token/", map[string]any{
 		"name":                         "market-token",

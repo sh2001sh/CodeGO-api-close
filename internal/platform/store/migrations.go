@@ -872,7 +872,8 @@ func migrateSubscriptionCore(tx *gorm.DB) error {
 
 func migrateSubscriptionClaudeConversionFields(tx *gorm.DB) error {
 	model := &commerceschema.SubscriptionClaudeConversion{}
-	if !tx.Migrator().HasTable(model) || !platformdb.UsingSQLite {
+	isSQLite := tx.Dialector != nil && tx.Dialector.Name() == "sqlite"
+	if !tx.Migrator().HasTable(model) || !isSQLite {
 		return tx.AutoMigrate(model)
 	}
 

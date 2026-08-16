@@ -39,7 +39,7 @@ func CreateMarketplaceChannel(ownerUserID int, req CreateChannelRequest) (*Chann
 	}); err != nil {
 		return nil, err
 	}
-	if err := QueueNativeVerification(channel.ID); err != nil {
+	if err := QueueRequiredVerification(channel.ID); err != nil {
 		return nil, err
 	}
 	return channelView(channel, group), nil
@@ -185,7 +185,7 @@ func UpdateAdminChannel(channelID string, req AdminUpdateChannelRequest) (*Chann
 }
 
 func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest, consistencyStatus *string) (*ChannelView, error) {
-	reverify, err := applyChannelUpdate(channel, group, req)
+	_, err := applyChannelUpdate(channel, group, req)
 	if err != nil {
 		return nil, err
 	}
@@ -201,11 +201,6 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		return tx.Save(group).Error
 	}); err != nil {
 		return nil, err
-	}
-	if reverify {
-		if err := QueueNativeVerification(channel.ID); err != nil {
-			return nil, err
-		}
 	}
 	if channel.InternalChannelID != nil {
 		if err := syncInternalChannel(channel, group); err != nil {

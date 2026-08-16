@@ -109,7 +109,7 @@ func VerifyChannel(c *gin.Context) {
 	}
 	for _, channel := range channels {
 		if channel.ID == c.Param("id") {
-			if err := marketplaceapp.QueueNativeVerification(channel.ID); err != nil {
+			if err := marketplaceapp.QueueRequiredVerification(channel.ID); err != nil {
 				httpapi.ApiError(c, err)
 				return
 			}
@@ -154,7 +154,7 @@ func UpdateAdminChannel(c *gin.Context) {
 }
 
 func VerifyAdminChannel(c *gin.Context) {
-	if err := marketplaceapp.QueueNativeVerification(c.Param("id")); err != nil {
+	if err := marketplaceapp.QueueRequiredVerification(c.Param("id")); err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}

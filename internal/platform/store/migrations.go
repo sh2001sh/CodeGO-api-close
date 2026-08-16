@@ -437,6 +437,11 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	case "20260815_marketplace_channel_source_labels":
 		return !db.Migrator().HasTable(&marketplaceschema.RankingSnapshot{}) ||
 			!db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "CacheHitRate")
+	case "20260817_marketplace_gpt56_mapping_detection":
+		return db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
+			(!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingResults") ||
+				!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingStatus") ||
+				!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingCheckedAt"))
 	case "20260816_unified_credit_v1_channel_scope":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) ||
 			db.Migrator().HasTable(&gatewayschema.Channel{}) &&

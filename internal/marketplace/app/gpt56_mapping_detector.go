@@ -29,19 +29,31 @@ var (
 )
 
 func isGPT56MappingEligible(channel *marketplaceschema.Channel) bool {
+	return len(gpt56MappingModelsForChannel(channel)) > 0
+}
+
+func gpt56MappingModelsForChannel(channel *marketplaceschema.Channel) []string {
 	if channel == nil || (channel.SubmittedSourceLabel != "Codex Plus" && channel.SubmittedSourceLabel != "Codex Pro") {
-		return false
+		return nil
 	}
-	available := make(map[string]struct{}, len(gpt56MappingModels))
-	for _, model := range decodeModels(channel.DeclaredModels) {
-		available[strings.ToLower(strings.TrimSpace(model))] = struct{}{}
-	}
+	supported := make(map[string]string, len(gpt56MappingModels))
 	for _, model := range gpt56MappingModels {
-		if _, ok := available[model]; !ok {
-			return false
-		}
+		supported[model] = model
 	}
-	return true
+	models := make([]string, 0, len(gpt56MappingModels))
+	seen := make(map[string]struct{}, len(gpt56MappingModels))
+	for _, declared := range decodeModels(channel.DeclaredModels) {
+		model, ok := supported[strings.ToLower(strings.TrimSpace(declared))]
+		if !ok {
+			continue
+		}
+		if _, duplicate := seen[model]; duplicate {
+			continue
+		}
+		seen[model] = struct{}{}
+		models = append(models, model)
+	}
+	return models
 }
 
 func runGPT56MappingCheck(channel *marketplaceschema.Channel) (bool, error) {
@@ -60,7 +72,7 @@ func runGPT56MappingCheck(channel *marketplaceschema.Channel) (bool, error) {
 	if err != nil {
 		return true, saveGPT56MappingCheck(channel.ID, []GPT56MappingResult{unavailableGPT56MappingResult()}, GPT56MappingStatusInsufficientEvidence)
 	}
-	results := probeGPT56Mappings(channel.ProviderType, baseURL, credential)
+	results := probeGPT56Mappings(channel.ProviderType, baseURL, credential, gpt56MappingModelsForChannel(channel))
 	return true, saveGPT56MappingCheck(channel.ID, results, gpt56MappingStatus(results))
 }
 
@@ -84,9 +96,9 @@ func unavailableGPT56MappingResult() GPT56MappingResult {
 	return GPT56MappingResult{Status: GPT56MappingStatusInsufficientEvidence, Error: "渠道凭据不可用", TestedAt: time.Now().UTC()}
 }
 
-func probeGPT56Mappings(provider, baseURL, credential string) []GPT56MappingResult {
-	results := make([]GPT56MappingResult, 0, len(gpt56MappingModels))
-	for _, model := range gpt56MappingModels {
+func probeGPT56Mappings(provider, baseURL, credential string, models []string) []GPT56MappingResult {
+	results := make([]GPT56MappingResult, 0, len(models))
+	for _, model := range models {
 		latencyMS, reported, probeErr := probeMarketplaceInferenceReportedModel(provider, baseURL, credential, model)
 		result := GPT56MappingResult{RequestedModel: model, ReportedModel: reported, LatencyMS: latencyMS, TestedAt: time.Now().UTC()}
 		switch {

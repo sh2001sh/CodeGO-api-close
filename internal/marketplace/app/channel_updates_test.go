@@ -86,3 +86,24 @@ func TestOwnerCanDisableSensitiveWordInterception(t *testing.T) {
 	require.NotNil(t, saved.SensitiveWordInterceptionEnabled)
 	require.False(t, *saved.SensitiveWordInterceptionEnabled)
 }
+
+func TestEditingChannelDoesNotResetVerificationState(t *testing.T) {
+	channel := &marketplaceschema.Channel{
+		ID: "edit-without-verification", ProviderType: "openai_compatible",
+		DeclaredModels: `["gpt-4.1"]`, Status: marketplacedomain.LifecycleActive,
+	}
+	group := &marketplaceschema.Group{
+		ID: "edit-without-verification-group", Multiplier: 1,
+		LifecycleStatus:    marketplacedomain.LifecycleActive,
+		VerificationStatus: marketplacedomain.VerificationPassed,
+	}
+	models := []string{"gpt-4.1", "gpt-4.1-mini"}
+
+	requiresManualVerification, err := applyChannelUpdate(channel, group, UpdateChannelRequest{DeclaredModels: &models})
+
+	require.NoError(t, err)
+	require.True(t, requiresManualVerification)
+	require.Equal(t, marketplacedomain.LifecycleActive, channel.Status)
+	require.Equal(t, marketplacedomain.LifecycleActive, group.LifecycleStatus)
+	require.Equal(t, marketplacedomain.VerificationPassed, group.VerificationStatus)
+}

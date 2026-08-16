@@ -84,11 +84,6 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 		reverify = true
 	}
 	normalizeInternalGroupName(group, channel.ID, channel.SubmittedSourceLabel)
-	if reverify {
-		group.LifecycleStatus = marketplacedomain.LifecycleVerifying
-		group.VerificationStatus = marketplacedomain.VerificationQueued
-		group.VerificationDueAt = nil
-	}
 	return reverify, nil
 }
 

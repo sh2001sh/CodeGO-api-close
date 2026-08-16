@@ -35,7 +35,7 @@ export function GPT56MappingStatusView(props: {
   const status = props.status || ''
   const eligible =
     ['Codex Plus', 'Codex Pro'].includes(props.sourceLabel) &&
-    ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'].every((model) =>
+    ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'].some((model) =>
       props.models.some((item) => item.toLowerCase() === model)
     )
   if (!eligible) return null

@@ -10,18 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGPT56MappingEligibilityRequiresCodexSourceAndAllModels(t *testing.T) {
+func TestGPT56MappingEligibilityRequiresCodexSourceAndSupportedModel(t *testing.T) {
 	channel := &marketplaceschema.Channel{
 		SubmittedSourceLabel: "Codex Plus",
-		DeclaredModels:       `["gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna"]`,
+		DeclaredModels:       `["gpt-5.6-sol","other-model","gpt-5.6-luna"]`,
 	}
 	require.True(t, isGPT56MappingEligible(channel))
+	require.Equal(t, []string{"gpt-5.6-sol", "gpt-5.6-luna"}, gpt56MappingModelsForChannel(channel))
 
 	channel.SubmittedSourceLabel = "CC-Max"
 	require.False(t, isGPT56MappingEligible(channel))
 
 	channel.SubmittedSourceLabel = "Codex Pro"
 	channel.DeclaredModels = `["gpt-5.6-sol","gpt-5.6-terra"]`
+	require.True(t, isGPT56MappingEligible(channel))
+
+	channel.DeclaredModels = `["other-model"]`
 	require.False(t, isGPT56MappingEligible(channel))
 }
 

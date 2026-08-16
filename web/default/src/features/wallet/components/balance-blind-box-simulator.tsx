@@ -47,7 +47,7 @@ function SimulationSetup(props: {
         <div className='min-w-0'>
           <h3 className='text-sm font-semibold'>建立模拟额度账户</h3>
           <p className='text-muted-foreground mt-1 max-w-2xl text-xs leading-5'>
-            输入一笔虚拟通用额度，按真实统一盲盒价格、首抽保底和大小保底连续抽取。模拟结果不会进入钱包、库存或使用记录。
+            输入一笔虚拟通用额度，按真实奖池、开启保底和“再来一抽”连续结算。模拟结果不会进入钱包、库存或使用记录。
           </p>
         </div>
       </div>

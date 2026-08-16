@@ -408,6 +408,9 @@ func getBlindBoxPropSpecByTitle(title string) (commerceschema.BlindBoxPropSpec, 
 	if trimmedTitle == "0.10 倍率体验卡" {
 		return getBlindBoxPropSpecByType(commerceschema.BlindBoxPropTypeConsumeDiscount10)
 	}
+	if trimmedTitle == "0.1 倍率卡" {
+		return getBlindBoxPropSpecByType(commerceschema.BlindBoxPropTypeConsumeDiscount10)
+	}
 	for _, spec := range blindBoxPropSpecs() {
 		if spec.Title == trimmedTitle {
 			return spec, true
@@ -458,7 +461,7 @@ func blindBoxPropSpecs() []commerceschema.BlindBoxPropSpec {
 		},
 		{
 			PropType:        commerceschema.BlindBoxPropTypeConsumeDiscount10,
-			Title:           "0.1 倍率卡",
+			Title:           "15 分钟 0.1 倍率卡",
 			DiscountRate:    0.90,
 			Multiplier:      0.10,
 			DurationSeconds: 15 * 60,

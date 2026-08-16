@@ -28,6 +28,9 @@ func calculateUsageConsumptionDiscount(relayInfo *relaycommon.RelayInfo, quota i
 	if relayInfo == nil || relayInfo.ChannelMeta == nil || quota <= 0 {
 		return detail
 	}
+	if relayInfo.BillingSource == BillingSourceSubscription && relayInfo.SubscriptionPackageMultiplier < 1 && relayInfo.SubscriptionPackageMultiplier > 0 {
+		return detail
+	}
 	result, err := applyBlindBoxConsumptionDiscount(BlindBoxConsumptionDiscountRequest{
 		RequestID: relayInfo.RequestId, UserID: relayInfo.UserId,
 		ChannelID: relayInfo.ChannelId, ChannelScope: relayInfo.ChannelScope,

@@ -60,7 +60,7 @@ export function BlindBoxPityTrack(props: {
       </div>
 
       <p className='text-muted-foreground border-border/70 border-t px-4 py-3 text-[11px] leading-5 sm:px-5'>
-        三类保底使用独立的有界奖池，顶级大奖仅来自普通池。奖励达到对应档位后进度自动重置，已入库盲盒的封存结果不会改变。
+        三类保底使用独立奖池，顶级大奖仅来自普通池。只有实际开启盲盒才会增加或重置进度，购买、持有和转赠均不影响保底。
       </p>
     </section>
   )
@@ -110,7 +110,7 @@ function FirstPurchaseGuarantee(props: {
       </div>
       <p className='text-muted-foreground mt-2 text-xs leading-5'>
         {props.eligible
-          ? '首次购买批次的第一个盲盒进入独立首购池，购买多个也只触发一次。'
+          ? '账户首次实际开启的盲盒进入独立首购池，提前购买多个也只触发一次。'
           : '首购保底已经使用，后续按常规奖池和连续保底规则结算。'}
       </p>
     </div>
@@ -179,20 +179,12 @@ function formatRewardRange(minimum: number, maximum: number) {
 export function BlindBoxPropRules() {
   const rules = [
     {
-      title: '充值九折卡',
-      detail: '下次统一额度充值自动按九折结算，仅使用一次',
+      title: '再来一抽',
+      detail: '揭晓后立即补发 1 个待开启盲盒，不占每日购买数量，可重复抽中',
     },
     {
-      title: '0.95 倍率卡',
-      detail: '仅官方渠道，启用后连续 24 小时按 0.95 倍率扣减',
-    },
-    {
-      title: '0.90 倍率卡',
-      detail: '仅官方渠道，启用后连续 24 小时按 0.90 倍率扣减',
-    },
-    {
-      title: '0.1 倍率卡',
-      detail: '全部现有官方分组通用，不新建分组；累计 15 分钟，可暂停',
+      title: '15 分钟 0.1 倍率卡',
+      detail: '低概率权益；全部现有官方分组通用，累计 15 分钟，可暂停',
     },
   ]
 
@@ -218,7 +210,7 @@ export function BlindBoxPropRules() {
         ))}
       </div>
       <p className='text-muted-foreground mt-3 text-xs leading-5'>
-        请求未命中官方渠道时，倍率卡不生效。
+        普通奖池为高波动结构；倍率卡在请求未命中官方渠道时不生效。
       </p>
     </section>
   )

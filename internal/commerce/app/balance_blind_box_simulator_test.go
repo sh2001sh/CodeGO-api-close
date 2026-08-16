@@ -13,7 +13,7 @@ func TestSimulateBalanceBlindBoxesUsesUnifiedPoolWithoutNegativeBalance(t *testi
 	unit := int64(platformruntime.QuotaPerUnit)
 	result, err := SimulateBalanceBlindBoxes(100*unit, 10)
 	require.NoError(t, err)
-	require.Len(t, result.Draws, 10)
+	require.GreaterOrEqual(t, len(result.Draws), 10)
 	require.Equal(t, result.BalanceBefore-result.CostQuota+result.RewardQuota, result.BalanceAfter)
 	require.GreaterOrEqual(t, result.BalanceAfter, int64(0))
 	for _, draw := range result.Draws {
@@ -21,6 +21,25 @@ func TestSimulateBalanceBlindBoxesUsesUnifiedPoolWithoutNegativeBalance(t *testi
 		require.NotEmpty(t, draw.RewardTier)
 		require.NotEmpty(t, draw.RewardTitle)
 	}
+}
+
+func TestSimulateBalanceBlindBoxesOpensExtraDrawReward(t *testing.T) {
+	setBalanceBlindBoxTestSetting(t, 10)
+	setting := blindboxsettings.Get()
+	setting.BalanceBlindBoxTiers = fixedGuaranteePool("next", 1)
+	setting.BalanceBlindBoxFirstDrawTiers = []blindboxsettings.TierSetting{{
+		Name: "再来一抽", Probability: 1, RewardType: "prop",
+	}}
+	blindboxsettings.Set(setting)
+	unit := int64(platformruntime.QuotaPerUnit)
+
+	result, err := SimulateBalanceBlindBoxes(100*unit, 1)
+	require.NoError(t, err)
+	require.Len(t, result.Draws, 2)
+	require.Equal(t, "再来一抽", result.Draws[0].RewardTitle)
+	require.Equal(t, "next", result.Draws[1].RewardTier)
+	require.Equal(t, quotaUnitsFromBlindBoxUSD(1), result.RewardQuota)
+	require.Equal(t, quotaUnitsFromBlindBoxUSD(2.5), result.CostQuota)
 }
 
 func TestSimulateBalanceBlindBoxesRejectsInsufficientOrExcessiveInput(t *testing.T) {

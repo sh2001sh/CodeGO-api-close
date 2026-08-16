@@ -3,10 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { formatNumber } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
-import {
-  ModelConnectivityResults,
-  ModelConsistencyBadge,
-} from './model-verification'
+import { ChannelFeedbackSummary } from './channel-feedback'
+import { ModelConnectivityResults } from './model-verification'
 import { TokenBindPanel } from './token-bind-panel'
 
 export function GroupDetails(props: { group: MarketplaceGroup }) {
@@ -49,8 +47,10 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
           </div>
         ))}
       </div>
-      <div className='mt-4 flex flex-wrap gap-1.5'>
-        <ModelConsistencyBadge status={group.model_consistency_status} />
+      <div className='mt-4'>
+        <ChannelFeedbackSummary group={group} />
+      </div>
+      <div className='mt-3 flex flex-wrap gap-1.5'>
         {group.models.map((model) => (
           <Badge key={model} variant='secondary'>
             {model}

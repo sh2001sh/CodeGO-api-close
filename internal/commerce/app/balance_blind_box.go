@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	balanceBlindBoxPoolVersion = "unified-box-v3"
+	balanceBlindBoxPoolVersion = "unified-box-v4-open-draw"
 	balanceBlindBoxMaxBatch    = 100
 )
 
@@ -78,27 +78,35 @@ func GetBalanceBlindBoxOverview(userID int) (*BalanceBlindBoxOverview, error) {
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) && !isBalanceBlindBoxSchemaMissing(err) {
 		return nil, err
 	}
-	inventory, purchasedToday, issuedCount, err := loadBalanceBlindBoxCounts(platformdb.DB, userID)
+	inventory, purchasedToday, openedCount, err := loadBalanceBlindBoxCounts(platformdb.DB, userID)
 	if err != nil && !isBalanceBlindBoxSchemaMissing(err) {
 		return nil, err
 	}
-	return buildBalanceBlindBoxOverview(setting, balance, inventory, purchasedToday, pity, issuedCount == 0), nil
+	return buildBalanceBlindBoxOverview(setting, balance, inventory, purchasedToday, pity, openedCount == 0), nil
 }
 
-func loadBalanceBlindBoxCounts(db *gorm.DB, userID int) (inventory, purchasedToday, issuedCount int64, err error) {
+func loadBalanceBlindBoxCounts(db *gorm.DB, userID int) (inventory, purchasedToday, openedCount int64, err error) {
 	err = db.Model(&commerceschema.BalanceBlindBoxItem{}).
 		Where("owner_user_id = ? AND status = ?", userID, commerceschema.BalanceBlindBoxItemStatusAvailable).
 		Count(&inventory).Error
 	if err != nil {
 		return
 	}
-	err = db.Model(&commerceschema.BalanceBlindBoxItem{}).Where("purchase_user_id = ?", userID).Count(&issuedCount).Error
+	err = db.Model(&commerceschema.BlindBoxOpenRecord{}).
+		Where("user_id = ? AND pool_type = ?", userID, commerceschema.BlindBoxPoolTypeUnified).
+		Count(&openedCount).Error
 	if err != nil {
 		return
 	}
 	err = db.Model(&commerceschema.BalanceBlindBoxPurchase{}).
 		Where("user_id = ? AND purchase_date = ?", userID, currentBalanceBlindBoxDate()).
 		Select("COALESCE(SUM(quantity), 0)").Scan(&purchasedToday).Error
+	if err != nil {
+		return
+	}
+	var pendingCount int64
+	pendingCount, err = countPendingPaidBlindBoxOrdersTx(db, userID)
+	purchasedToday += pendingCount
 	return
 }
 

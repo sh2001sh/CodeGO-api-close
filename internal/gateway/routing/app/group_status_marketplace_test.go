@@ -43,4 +43,6 @@ func TestMergeMarketplaceGroupModelsUsesDeclaredModels(t *testing.T) {
 	mergeMarketplaceGroupModels(summaries, []string{group.InternalGroupName})
 	require.Len(t, summaries[group.InternalGroupName], 2)
 	require.Equal(t, "gpt-5.2-codex", summaries[group.InternalGroupName][0].Model)
+	displayNames := resolveGroupStatusDisplayNames([]string{group.InternalGroupName})
+	require.Equal(t, group.SystemDisplayName, displayNames[group.InternalGroupName])
 }

@@ -13,11 +13,12 @@ import (
 func TestUnifiedBlindBoxPoolEconomics(t *testing.T) {
 	setting := blindboxsettings.Get()
 	require.Equal(t, 2.5, setting.BalanceBlindBoxPriceUSD)
-	require.Len(t, setting.BalanceBlindBoxTiers, 14)
-	require.InDelta(t, 0.2066, setting.BalanceBlindBoxTiers[0].Probability, 0.000000001)
+	require.Len(t, setting.BalanceBlindBoxTiers, 12)
+	require.InDelta(t, 0.30, setting.BalanceBlindBoxTiers[0].Probability, 0.000000001)
 
 	var probability float64
 	var expectedUnifiedCredit float64
+	var immediateProfitProbability float64
 	for _, tier := range setting.BalanceBlindBoxTiers {
 		probability += tier.Probability
 		if tier.RewardType == commerceschema.BlindBoxRewardTypeProp {
@@ -26,9 +27,13 @@ func TestUnifiedBlindBoxPoolEconomics(t *testing.T) {
 		require.Equal(t, commerceschema.BlindBoxRewardTypeClaudeQuota, tier.RewardType)
 		require.Equal(t, "claude", tier.WalletType)
 		expectedUnifiedCredit += ((tier.MinUSD + tier.MaxUSD) / 2) * tier.Probability
+		if tier.MinUSD >= setting.BalanceBlindBoxPriceUSD && tier.MaxUSD > setting.BalanceBlindBoxPriceUSD {
+			immediateProfitProbability += tier.Probability
+		}
 	}
 	require.InDelta(t, 1, probability, 0.000000001)
-	require.InDelta(t, 2.29881, expectedUnifiedCredit, 0.000001)
+	require.InDelta(t, 2.63925, expectedUnifiedCredit, 0.000001)
+	require.InDelta(t, 0.4163, immediateProfitProbability, 0.000001)
 }
 
 func TestUnifiedBlindBoxDrawUsesFrozenPoolAndGuarantees(t *testing.T) {
@@ -40,20 +45,20 @@ func TestUnifiedBlindBoxDrawUsesFrozenPoolAndGuarantees(t *testing.T) {
 	setting.BalanceBlindBoxSmallPityTiers = fixedGuaranteePool("small", 3)
 	setting.BalanceBlindBoxPityTiers = fixedGuaranteePool("big", 9)
 
-	first := issueSealedBalanceBlindBox(1, 1, setting, &commerceschema.BalanceBlindBoxPityState{}, true)
+	first := drawBalanceBlindBoxReward(1, 1, 1, setting, &commerceschema.BalanceBlindBoxPityState{}, true)
 	require.Equal(t, balanceBlindBoxGuaranteeFirst, first.GuaranteeType)
 	require.Equal(t, "first", first.RewardTier)
 	require.InDelta(t, 2.75, first.RewardUSD, 0.001)
 	require.GreaterOrEqual(t, balanceBlindBoxEquivalentValue(first.RewardType, first.RewardUSD), setting.BalanceBlindBoxFirstDrawGuaranteeUSD)
 
 	smallPity := commerceschema.BalanceBlindBoxPityState{ConsecutiveUnder6USD: setting.BalanceBlindBoxSmallPityThreshold - 1}
-	small := issueSealedBalanceBlindBox(1, 1, setting, &smallPity, false)
+	small := drawBalanceBlindBoxReward(1, 1, 1, setting, &smallPity, false)
 	require.Equal(t, balanceBlindBoxGuaranteeSmall, small.GuaranteeType)
 	require.Equal(t, "small", small.RewardTier)
 	require.GreaterOrEqual(t, balanceBlindBoxEquivalentValue(small.RewardType, small.RewardUSD), setting.BalanceBlindBoxSmallPityGuaranteeUSD)
 
 	bigPity := commerceschema.BalanceBlindBoxPityState{ConsecutiveUnder35USD: setting.BalanceBlindBoxPityThreshold - 1}
-	big := issueSealedBalanceBlindBox(1, 1, setting, &bigPity, false)
+	big := drawBalanceBlindBoxReward(1, 1, 1, setting, &bigPity, false)
 	require.Equal(t, balanceBlindBoxGuaranteeBig, big.GuaranteeType)
 	require.Equal(t, "big", big.RewardTier)
 	require.GreaterOrEqual(t, balanceBlindBoxEquivalentValue(big.RewardType, big.RewardUSD), setting.BalanceBlindBoxPityGuaranteeUSD)
@@ -88,8 +93,18 @@ func TestUnifiedBlindBoxMillionDrawEconomics(t *testing.T) {
 	stats := blindBoxSimulationStats{}
 
 	for range draws {
-		reward, guaranteeType := simulateBalanceBlindBoxDraw(setting, &pity, rng)
-		stats.add(reward, guaranteeType)
+		var outcome float64
+		pendingDraws := 1
+		for pendingDraws > 0 {
+			pendingDraws--
+			reward, guaranteeType, extraDraw := simulateBalanceBlindBoxDraw(setting, &pity, rng)
+			outcome += reward
+			stats.countGuarantee(guaranteeType)
+			if extraDraw {
+				pendingDraws++
+			}
+		}
+		stats.addOutcome(outcome)
 	}
 
 	mean, standardDeviation := stats.result(draws)
@@ -101,10 +116,10 @@ func TestUnifiedBlindBoxMillionDrawEconomics(t *testing.T) {
 		float64(stats.smallPityCount)/draws,
 		float64(stats.bigPityCount)/draws,
 	)
-	require.InDelta(t, 2.43, mean, 0.04)
-	require.InDelta(t, 7.0, standardDeviation, 1.0)
-	require.InDelta(t, 0.0062, float64(stats.smallPityCount)/draws, 0.002)
-	require.InDelta(t, 0.0147, float64(stats.bigPityCount)/draws, 0.003)
+	require.InDelta(t, 2.70, mean, 0.04)
+	require.Greater(t, standardDeviation, 12.0)
+	require.InDelta(t, 0.0031, float64(stats.smallPityCount)/draws, 0.002)
+	require.InDelta(t, 0.0075, float64(stats.bigPityCount)/draws, 0.003)
 }
 
 type blindBoxSimulationStats struct {
@@ -112,9 +127,12 @@ type blindBoxSimulationStats struct {
 	smallPityCount, bigPityCount int
 }
 
-func (stats *blindBoxSimulationStats) add(reward float64, guaranteeType string) {
+func (stats *blindBoxSimulationStats) addOutcome(reward float64) {
 	stats.sum += reward
 	stats.sumSquares += reward * reward
+}
+
+func (stats *blindBoxSimulationStats) countGuarantee(guaranteeType string) {
 	if guaranteeType == balanceBlindBoxGuaranteeSmall {
 		stats.smallPityCount++
 	}
@@ -129,7 +147,7 @@ func (stats blindBoxSimulationStats) result(draws int) (float64, float64) {
 	return mean, math.Sqrt(variance)
 }
 
-func simulateBalanceBlindBoxDraw(setting blindboxsettings.Setting, pity *commerceschema.BalanceBlindBoxPityState, rng *rand.Rand) (float64, string) {
+func simulateBalanceBlindBoxDraw(setting blindboxsettings.Setting, pity *commerceschema.BalanceBlindBoxPityState, rng *rand.Rand) (float64, string, bool) {
 	guaranteeType, guaranteeUSD := resolveBalanceBlindBoxGuarantee(pity, false, setting)
 	tiers := setting.BalanceBlindBoxTiers
 	if guaranteeType != balanceBlindBoxGuaranteeNone {
@@ -144,7 +162,7 @@ func simulateBalanceBlindBoxDraw(setting blindboxsettings.Setting, pity *commerc
 		reward = 0
 	}
 	advanceBalanceBlindBoxPity(pity, rewardType, reward, setting)
-	return reward, guaranteeType
+	return reward, guaranteeType, rewardType == commerceschema.BlindBoxRewardTypeProp && tier.Name == "再来一抽"
 }
 
 func fixedGuaranteePool(name string, reward float64) []blindboxsettings.TierSetting {

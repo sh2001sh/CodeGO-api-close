@@ -70,14 +70,23 @@ func SimulateBalanceBlindBoxes(balanceQuota int64, count int, states ...BalanceB
 		ConsecutiveUnder6USD:  state.SmallPityProgress,
 		ConsecutiveUnder35USD: state.PityProgress,
 	}
-	for index := 0; index < count; index++ {
-		item := issueSealedBalanceBlindBox(0, 0, setting, &pity, state.FirstDrawEligible && index == 0)
+	pendingDraws := count
+	for drawIndex := 0; pendingDraws > 0; drawIndex++ {
+		pendingDraws--
+		item := drawBalanceBlindBoxReward(0, 0, 0, setting, &pity, state.FirstDrawEligible && drawIndex == 0)
 		draw := BalanceBlindBoxSimulationDraw{
 			RewardType: item.RewardType, RewardTier: item.RewardTier, RewardUSD: item.RewardUSD,
 			CreditAmount: item.CreditAmount, RewardTitle: item.RewardTitle, GuaranteeType: item.GuaranteeType,
 		}
 		result.Draws = append(result.Draws, draw)
 		result.RewardQuota += item.CreditAmount
+		advanceBalanceBlindBoxPity(&pity, item.RewardType, item.RewardUSD, setting)
+		if item.RewardType == commerceschema.BlindBoxRewardTypeProp && item.RewardTitle == "再来一抽" {
+			pendingDraws++
+		}
+		if len(result.Draws) >= 10_000 {
+			return nil, errors.New("模拟抽盒触发次数过多，请重试")
+		}
 	}
 	result.BalanceAfter = balanceQuota - costQuota + result.RewardQuota
 	result.SmallPityProgress = pity.ConsecutiveUnder6USD

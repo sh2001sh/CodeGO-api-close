@@ -250,25 +250,27 @@ function PrizeRevealCard(props: {
       </div>
       {record.reward_type === 'prop' ? (
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
-          {manualUseProp
-            ? propActive
-              ? record.prop_type === 'consume_discount_10'
-                ? '已启用，全部现有官方分组通用，累计 15 分钟并可暂停'
-                : record.prop_type === 'monthly_pass_multiplier'
-                  ? '套餐权益已启用，仅套餐分组可用'
-                  : '已启用，仅官方渠道可用，持续 24 小时'
-              : propAvailable
+          {record.prop_type === 'extra_draw'
+            ? '已自动补发 1 个待开启盲盒，可继续在库存中开启'
+            : manualUseProp
+              ? propActive
                 ? record.prop_type === 'consume_discount_10'
-                  ? '点击启用后累计可用 15 分钟，可暂停，在原有官方分组直接生效'
+                  ? '已启用，全部现有官方分组通用，累计 15 分钟并可暂停'
                   : record.prop_type === 'monthly_pass_multiplier'
-                    ? '点击启用套餐权益，仅套餐分组生效'
-                    : '点击启用后持续 24 小时，仅官方渠道生效'
-                : '该道具已失效'
-            : record.prop_status === 'used'
-              ? '已用于最近一次符合条件的订单'
-              : record.prop_status === 'reserved'
-                ? '已锁定到待支付订单，支付完成后自动使用'
-                : '下次满足条件时自动抵扣一次'}
+                    ? '套餐权益已启用，仅实际扣月卡额度时生效'
+                    : '已启用，仅官方渠道可用，持续 24 小时'
+                : propAvailable
+                  ? record.prop_type === 'consume_discount_10'
+                    ? '点击启用后累计可用 15 分钟，可暂停，在原有官方分组直接生效'
+                    : record.prop_type === 'monthly_pass_multiplier'
+                      ? '点击启用套餐权益，无需切换分组'
+                      : '点击启用后持续 24 小时，仅官方渠道生效'
+                  : '该道具已失效'
+              : record.prop_status === 'used'
+                ? '已用于最近一次符合条件的订单'
+                : record.prop_status === 'reserved'
+                  ? '已锁定到待支付订单，支付完成后自动使用'
+                  : '下次满足条件时自动抵扣一次'}
         </div>
       ) : record.reward_type === 'claude_quota' ||
         record.reward_type === 'quota' ? (

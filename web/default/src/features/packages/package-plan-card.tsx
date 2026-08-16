@@ -153,7 +153,7 @@ export function PackagePlanCard(props: {
                 </div>
                 <div className='text-muted-foreground mt-0.5 leading-relaxed'>
                   {t(
-                    '仅限月卡额度，激活期间按 0.1 倍率扣费，不会回退到通用余额。'
+                    '无需切换分组；实际扣月卡额度时额外乘 0.1，余额扣费仍按原倍率。'
                   )}
                 </div>
               </div>

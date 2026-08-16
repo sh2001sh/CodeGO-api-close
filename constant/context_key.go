@@ -21,7 +21,6 @@ const (
 	ContextKeyTokenCrossGroupRetry            ContextKey = "token_cross_group_retry"
 	ContextKeyTokenMarketplaceMultiplierLimit ContextKey = "token_marketplace_multiplier_limit"
 	ContextKeyZeroHourActive                  ContextKey = "zero_hour_active"
-	ContextKeyMonthlyPassActive               ContextKey = "monthly_pass_active"
 	ContextKeyMarketplaceGroupID              ContextKey = "marketplace_group_id"
 	ContextKeyMarketplaceOwnerID              ContextKey = "marketplace_owner_id"
 	ContextKeyMarketplaceSourceType           ContextKey = "marketplace_source_type"

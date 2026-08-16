@@ -27,8 +27,8 @@ const comparisonRows = [
   },
   {
     label: '0.1 倍率卡',
-    monthly: '激活期间固定按 0.1 倍率扣月卡额度',
-    wallet: '不能用于支付月卡专属 0.1 倍率请求',
+    monthly: '实际扣月卡额度时，在分组套餐倍率基础上再乘 0.1',
+    wallet: '从通用余额扣费时不应用套餐卡，按原余额倍率计费',
   },
   {
     label: '额度刷新',
@@ -84,7 +84,7 @@ export function MonthlyPlanRules() {
             </p>
             <p className='text-foreground mt-2 text-sm leading-6 font-medium'>
               {t(
-                '激活后只消耗月卡额度，不会回退到通用余额；月卡额度不足时请求会直接失败。'
+                '无需切换 API Key 分组。系统按资金源顺序结算：实际扣月卡额度时应用 0.1，使用或回退到通用余额时按原倍率扣费。'
               )}
             </p>
           </div>

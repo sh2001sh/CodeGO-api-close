@@ -32,6 +32,13 @@ func ValidateBlindBoxPurchase(userID int, quantity int) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	var walletPurchaseCount int64
+	if err := platformdb.DB.Model(&commerceschema.BalanceBlindBoxPurchase{}).
+		Where("user_id = ? AND purchase_date = ? AND total_quota > 0", userID, currentBalanceBlindBoxDate()).
+		Select("COALESCE(SUM(quantity), 0)").Scan(&walletPurchaseCount).Error; err != nil && !isBalanceBlindBoxSchemaMissing(err) {
+		return 0, err
+	}
+	todayCount += int(walletPurchaseCount)
 	if todayCount+quantity > setting.DailyLimit {
 		return 0, fmt.Errorf("daily blind box limit reached: %d", setting.DailyLimit)
 	}

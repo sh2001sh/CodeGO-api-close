@@ -14,7 +14,14 @@ const (
 	balanceBlindBoxGuaranteeBig   = "big"
 )
 
-func issueSealedBalanceBlindBox(purchaseID, purchaserID int, setting blindboxsettings.Setting, pity *commerceschema.BalanceBlindBoxPityState, first bool) commerceschema.BalanceBlindBoxItem {
+func newUnrevealedBalanceBlindBoxItem(purchaseID, purchaserID, ownerID int) commerceschema.BalanceBlindBoxItem {
+	return commerceschema.BalanceBlindBoxItem{
+		PurchaseId: purchaseID, PurchaseUserId: purchaserID, OwnerUserId: ownerID,
+		PoolVersion: balanceBlindBoxPoolVersion, GuaranteeType: balanceBlindBoxGuaranteeNone,
+	}
+}
+
+func drawBalanceBlindBoxReward(purchaseID, purchaserID, ownerID int, setting blindboxsettings.Setting, pity *commerceschema.BalanceBlindBoxPityState, first bool) commerceschema.BalanceBlindBoxItem {
 	guaranteeType, guaranteeUSD := resolveBalanceBlindBoxGuarantee(pity, first, setting)
 	tiers := setting.BalanceBlindBoxTiers
 	if guaranteeUSD > 0 {
@@ -29,7 +36,7 @@ func issueSealedBalanceBlindBox(purchaseID, purchaserID int, setting blindboxset
 	}
 
 	item := commerceschema.BalanceBlindBoxItem{
-		PurchaseId: purchaseID, PurchaseUserId: purchaserID, OwnerUserId: purchaserID, PoolVersion: balanceBlindBoxPoolVersion,
+		PurchaseId: purchaseID, PurchaseUserId: purchaserID, OwnerUserId: ownerID, PoolVersion: balanceBlindBoxPoolVersion,
 		RewardType: rewardType, RewardTier: tier.Name, RewardUSD: rewardUSD, RewardWalletType: string(walletType),
 		IsPity: guaranteeType != balanceBlindBoxGuaranteeNone, GuaranteeType: guaranteeType,
 	}
@@ -42,9 +49,6 @@ func issueSealedBalanceBlindBox(purchaseID, purchaserID int, setting blindboxset
 		item.CreditAmount = quotaUnitsFromBlindBoxUSD(rewardUSD)
 		item.RewardType = rewardType
 		item.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", rewardUSD)
-	}
-	if pity != nil {
-		advanceBalanceBlindBoxPity(pity, item.RewardType, item.RewardUSD, setting)
 	}
 	return item
 }

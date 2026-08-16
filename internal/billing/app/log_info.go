@@ -172,6 +172,9 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		if relayInfo.SubscriptionGroupMultiplier > 0 {
 			other["subscription_group_multiplier"] = relayInfo.SubscriptionGroupMultiplier
 		}
+		if relayInfo.SubscriptionPackageMultiplier > 0 && relayInfo.SubscriptionPackageMultiplier < 1 {
+			other["subscription_package_multiplier"] = relayInfo.SubscriptionPackageMultiplier
+		}
 		if relayInfo.SubscriptionQuotaScale > 0 {
 			other["subscription_quota_scale"] = relayInfo.SubscriptionQuotaScale
 		}

@@ -24,6 +24,7 @@ import { buildOverviewModelStatus } from './overview-health'
 const groups: SidebarGroupStatusItem[] = [
   {
     group: 'pro',
+    display_name: 'Codex Plus-1x-000001',
     status: 'healthy',
     models: [
       {
@@ -65,7 +66,7 @@ describe('buildOverviewModelStatus', () => {
       result.rows.map((row) => row.model),
       ['gpt-active', 'claude-active']
     )
-    assert.equal(result.rows[0].group, 'pro')
+    assert.equal(result.rows[0].group, 'Codex Plus-1x-000001')
     assert.equal(result.rows[0].status, 'healthy')
     assert.equal(result.activeModelCount, 2)
     assert.equal(result.healthyModelCount, 1)

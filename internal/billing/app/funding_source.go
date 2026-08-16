@@ -49,6 +49,7 @@ type SubscriptionFundingHooks struct {
 	PostConsumeDelta                 func(subscriptionID int, modelName string, delta int64) error
 	RefundPreConsume                 func(requestID string) error
 	SettleReservation                func(requestID string, subscriptionID int, modelName string, actualAmount int64) error
+	GetMonthlyPassMultiplier         func(userID int) float64
 	ApplyBlindBoxConsumptionDiscount func(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error)
 }
 
@@ -73,6 +74,17 @@ func applyBlindBoxConsumptionDiscount(request BlindBoxConsumptionDiscountRequest
 		return BlindBoxConsumptionDiscountResult{QuotaBeforeDiscount: request.Quota, QuotaAfterDiscount: request.Quota, Multiplier: 1}, nil
 	}
 	return subscriptionFundingHooks.ApplyBlindBoxConsumptionDiscount(request)
+}
+
+func getMonthlyPassMultiplier(userID int) float64 {
+	if userID <= 0 || subscriptionFundingHooks.GetMonthlyPassMultiplier == nil {
+		return 1
+	}
+	multiplier := subscriptionFundingHooks.GetMonthlyPassMultiplier(userID)
+	if multiplier <= 0 || multiplier >= 1 {
+		return 1
+	}
+	return multiplier
 }
 
 type FundingSource interface {

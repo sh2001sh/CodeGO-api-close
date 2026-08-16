@@ -11,9 +11,12 @@ func TestGetUsesUnifiedBlindBoxPoolForBothPaymentEntries(t *testing.T) {
 	require.Equal(t, 2.5, setting.UnitPrice)
 	require.Equal(t, 2.5, setting.BalanceBlindBoxPriceUSD)
 	require.Equal(t, setting.Tiers, setting.BalanceBlindBoxTiers)
-	require.InDelta(t, 0.2066, setting.Tiers[0].Probability, 0.000000001)
-	require.Equal(t, "200.00-1000.00 统一额度", setting.Tiers[9].Name)
-	require.Equal(t, "0.1 倍率卡", setting.Tiers[12].Name)
+	require.InDelta(t, 0.30, setting.Tiers[0].Probability, 0.000000001)
+	require.Equal(t, "2000.00-8000.00 统一额度", setting.Tiers[9].Name)
+	require.Equal(t, "再来一抽", setting.Tiers[10].Name)
+	require.Equal(t, "15 分钟 0.1 倍率卡", setting.Tiers[11].Name)
+	require.Equal(t, 10, setting.DailyLimit)
+	require.Equal(t, 10, setting.BalanceBlindBoxDailyPurchaseLimit)
 	require.Len(t, setting.BalanceBlindBoxFirstDrawTiers, 3)
 	require.Len(t, setting.BalanceBlindBoxSmallPityTiers, 3)
 	require.Len(t, setting.BalanceBlindBoxPityTiers, 3)
@@ -26,8 +29,8 @@ func TestGetMigratesKnownLegacyUnifiedPool(t *testing.T) {
 	t.Cleanup(func() { Set(original) })
 
 	setting := original
-	legacy := copyTierSettings(defaultTierSettings)
 	legacyProbabilities := legacyBalanceBlindBoxProbabilities[0]
+	legacy := make([]TierSetting, len(legacyProbabilities))
 	for index := range legacy {
 		legacy[index].Probability = legacyProbabilities[index]
 	}
@@ -36,8 +39,8 @@ func TestGetMigratesKnownLegacyUnifiedPool(t *testing.T) {
 	Set(setting)
 
 	normalized := Get()
-	require.InDelta(t, 0.2066, normalized.BalanceBlindBoxTiers[0].Probability, 0.000000001)
-	require.InDelta(t, 0.0001, normalized.BalanceBlindBoxTiers[9].Probability, 0.000000001)
+	require.InDelta(t, 0.30, normalized.BalanceBlindBoxTiers[0].Probability, 0.000000001)
+	require.InDelta(t, 0.00001, normalized.BalanceBlindBoxTiers[9].Probability, 0.000000001)
 }
 
 func TestGetNormalizesLegacyQuotaRewardsToUnifiedCredit(t *testing.T) {
@@ -58,4 +61,20 @@ func TestGetNormalizesLegacyQuotaRewardsToUnifiedCredit(t *testing.T) {
 		require.Equal(t, "claude_quota", tier.RewardType)
 		require.Equal(t, "claude", tier.WalletType)
 	}
+}
+
+func TestGetCapsBlindBoxDailyLimitsAtTen(t *testing.T) {
+	original := Get()
+	t.Cleanup(func() { Set(original) })
+
+	setting := original
+	setting.DailyLimit = 500
+	setting.BalanceBlindBoxDailyPurchaseLimit = 500
+	setting.CountOptions = []int{1, 5, 10, 20, 50}
+	Set(setting)
+
+	normalized := Get()
+	require.Equal(t, 10, normalized.DailyLimit)
+	require.Equal(t, 10, normalized.BalanceBlindBoxDailyPurchaseLimit)
+	require.Equal(t, []int{1, 5, 10}, normalized.CountOptions)
 }

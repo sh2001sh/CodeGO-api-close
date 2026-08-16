@@ -62,7 +62,7 @@ var currentSetting = Setting{
 	RegistrationRewardEnabled:            true,
 	RegistrationRewardStartAt:            0,
 	RegistrationRewardEndAt:              0,
-	DailyLimit:                           50,
+	DailyLimit:                           10,
 	MonthlyLimit:                         500,
 	DailyOpenLimit:                       5000,
 	FirstPurchaseGuaranteeUSD:            0,
@@ -71,11 +71,11 @@ var currentSetting = Setting{
 	LowRewardThresholdUSD:                1,
 	SubscriptionPrizeProbability:         defaultSubscriptionPrizeProbability,
 	SubscriptionPlanTitle:                defaultSubscriptionPlanTitle,
-	CountOptions:                         []int{1, 5, 10, 20, 50},
+	CountOptions:                         []int{1, 5, 10},
 	Tiers:                                append([]TierSetting(nil), defaultTierSettings...),
 	BalanceBlindBoxEnabled:               true,
 	BalanceBlindBoxPriceUSD:              2.5,
-	BalanceBlindBoxDailyPurchaseLimit:    500,
+	BalanceBlindBoxDailyPurchaseLimit:    10,
 	BalanceBlindBoxTiers:                 append([]TierSetting(nil), defaultBalanceBlindBoxTiers...),
 	BalanceBlindBoxPityThreshold:         50,
 	BalanceBlindBoxPityGuaranteeUSD:      35,
@@ -105,12 +105,12 @@ func init() {
 
 func normalizeCountOptions(options []int) []int {
 	if len(options) == 0 {
-		return []int{1, 5, 10, 20, 50}
+		return []int{1, 5, 10}
 	}
 	seen := make(map[int]struct{}, len(options))
 	result := make([]int, 0, len(options))
 	for _, option := range options {
-		if option <= 0 {
+		if option <= 0 || option > 10 {
 			continue
 		}
 		if _, ok := seen[option]; ok {
@@ -120,7 +120,7 @@ func normalizeCountOptions(options []int) []int {
 		result = append(result, option)
 	}
 	if len(result) == 0 {
-		return []int{1, 5, 10, 20, 50}
+		return []int{1, 5, 10}
 	}
 	sort.Ints(result)
 	return result
@@ -189,8 +189,8 @@ func normalizeTierSettings(tiers []TierSetting) []TierSetting {
 		}
 		result[i].RewardType = rewardType
 		result[i].WalletType = inferWalletType(tier)
-		if rewardType == "prop" && strings.TrimSpace(result[i].Name) == "0.10 倍率体验卡" {
-			result[i].Name = "0.1 倍率卡"
+		if rewardType == "prop" && (strings.TrimSpace(result[i].Name) == "0.10 倍率体验卡" || strings.TrimSpace(result[i].Name) == "0.1 倍率卡") {
+			result[i].Name = "15 分钟 0.1 倍率卡"
 		}
 	}
 	return result
@@ -219,8 +219,8 @@ func Get() Setting {
 	if settingCopy.ExpireDays <= 0 {
 		settingCopy.ExpireDays = 7
 	}
-	if settingCopy.DailyLimit <= 0 {
-		settingCopy.DailyLimit = 50
+	if settingCopy.DailyLimit <= 0 || settingCopy.DailyLimit > 10 {
+		settingCopy.DailyLimit = 10
 	}
 	if settingCopy.MonthlyLimit <= 0 {
 		settingCopy.MonthlyLimit = 500
@@ -282,7 +282,7 @@ func Get() Setting {
 	settingCopy.PityGuaranteeUSD = 0
 	settingCopy.LowRewardThresholdUSD = 0
 	settingCopy.BalanceBlindBoxPriceUSD = 2.5
-	if settingCopy.BalanceBlindBoxDailyPurchaseLimit <= 0 {
+	if settingCopy.BalanceBlindBoxDailyPurchaseLimit <= 0 || settingCopy.BalanceBlindBoxDailyPurchaseLimit > 10 {
 		settingCopy.BalanceBlindBoxDailyPurchaseLimit = 10
 	}
 	if settingCopy.BalanceBlindBoxPityThreshold <= 0 || settingCopy.BalanceBlindBoxPityThreshold >= 1_000_000 {

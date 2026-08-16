@@ -2,7 +2,6 @@ package http
 
 import (
 	"fmt"
-	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	stdhttp "net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +9,7 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -32,7 +32,7 @@ func ListModels(c *gin.Context, modelType int) {
 		})
 		return
 	}
-	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) || httpctx.GetContextKeyBool(c, constant.ContextKeyMonthlyPassActive) {
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
 		filtered := userOpenAIModels[:0]
 		for _, model := range userOpenAIModels {
 			if !gatewaycontract.IsImageGenerationModel(model.Id) {

@@ -166,7 +166,7 @@ function PropsPreview(props: {
         </ul>
       ) : (
         <p className='text-muted-foreground mt-2 text-xs leading-5'>
-          还没有道具，抽中折扣卡或倍率卡后会显示在这里。
+          还没有可管理的倍率卡；“再来一抽”会直接补发到盲盒库存。
         </p>
       )}
 

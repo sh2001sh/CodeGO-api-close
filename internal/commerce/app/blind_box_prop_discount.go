@@ -97,23 +97,12 @@ func selectBlindBoxConsumptionPropTx(tx *gorm.DB, request billingapp.BlindBoxCon
 			commerceschema.BlindBoxPropTypeConsumeDiscount95,
 			commerceschema.BlindBoxPropTypeConsumeDiscount90,
 			commerceschema.BlindBoxPropTypeConsumeDiscount10,
-			commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
 		}, now).
 		Order("multiplier asc, id asc").Find(&props).Error
 	if err != nil {
 		return nil, err
 	}
-	if request.UsingGroup == MonthlyPassGroup {
-		for index := range props {
-			if props[index].PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
-				return &props[index], nil
-			}
-		}
-	}
 	for index := range props {
-		if props[index].PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
-			continue
-		}
 		return &props[index], nil
 	}
 	return nil, gorm.ErrRecordNotFound
@@ -122,10 +111,6 @@ func selectBlindBoxConsumptionPropTx(tx *gorm.DB, request billingapp.BlindBoxCon
 func calculatePropDiscountQuota(prop commerceschema.BlindBoxProp, chargedQuota int) (int, int) {
 	if chargedQuota <= 0 || prop.Multiplier <= 0 || prop.Multiplier >= 1 {
 		return chargedQuota, chargedQuota
-	}
-	if prop.PropType == commerceschema.BlindBoxPropTypeMonthlyPassMultiplier {
-		quotaBefore := int(math.Round(float64(chargedQuota) / prop.Multiplier))
-		return quotaBefore, chargedQuota
 	}
 	quotaAfter := int(math.Round(float64(chargedQuota) * prop.Multiplier))
 	return chargedQuota, quotaAfter

@@ -161,7 +161,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
               : record.prop_type === 'consume_discount_10'
                 ? '盲盒 0.1 倍率卡已启用，全部现有官方分组通用，累计 15 分钟并可随时暂停。'
                 : record.prop_type === 'monthly_pass_multiplier'
-                  ? '套餐 0.1 倍率卡已启用，仅套餐分组可用。'
+                  ? '套餐 0.1 倍率卡已启用，无需切换分组；仅实际扣月卡额度时生效。'
                   : `${record.reward_title} 已启用，仅官方渠道可用，24 小时后自动失效。`
           )
           await refreshAll()

@@ -12,10 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	MonthlyPassGroup                 = "monthly-pass"
-	multiplierCardConcurrentRequests = 10
-)
+const LegacyMonthlyPassGroup = "monthly-pass"
 
 func monthlyPassDurationSeconds(plan *commerceschema.SubscriptionPlan) int64 {
 	if plan == nil {
@@ -253,10 +250,10 @@ func hasActiveMonthlyPassPropTx(tx *gorm.DB, userID int) bool {
 	return err == nil && count > 0
 }
 
-// IsMonthlyPassGroupActive verifies the pausable 0.1-multiplier entitlement.
-func IsMonthlyPassGroupActive(userID int) bool {
+// ActiveMonthlyPassMultiplier returns the active package-only multiplier.
+func ActiveMonthlyPassMultiplier(userID int) float64 {
 	if userID <= 0 {
-		return false
+		return 1
 	}
 	var active bool
 	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
@@ -267,14 +264,15 @@ func IsMonthlyPassGroupActive(userID int) bool {
 		active = hasActiveMonthlyPassPropTx(tx, userID)
 		return nil
 	})
-	return active
+	if active {
+		return 0.1
+	}
+	return 1
 }
 
-// MonthlyPassConcurrentRequests returns the fixed per-user limit for an active
-// 0.1 multiplier card. Card duration controls its available time, not request
-// concurrency.
-func MonthlyPassConcurrentRequests(userID int) int64 {
-	return multiplierCardConcurrentRequests
+// IsMonthlyPassMultiplierActive reports whether the package benefit is active.
+func IsMonthlyPassMultiplierActive(userID int) bool {
+	return ActiveMonthlyPassMultiplier(userID) < 1
 }
 
 // BackfillActiveMonthlyPassBenefits grants one card to each currently active preset monthly subscription.

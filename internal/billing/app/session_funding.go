@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sh2001sh/new-api/constant"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
@@ -15,7 +14,6 @@ import (
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
-	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -80,39 +78,12 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	}
 
 	pref := commercedomain.NormalizeBillingPreference(relayInfo.UserSetting.BillingPreference)
-	monthlyPassMultiplierActive := httpctx.GetContextKeyBool(c, constant.ContextKeyMonthlyPassActive)
 	fundingSourceOrder := commercedomain.NormalizeFundingSourceOrder(
 		relayInfo.UserSetting.FundingSourceOrder,
 		pref,
 	)
-	if monthlyPassMultiplierActive {
-		fundingSourceOrder = []string{BillingSourceSubscription}
-	}
-
 	tryWallet := func() (*BillingSession, *types.NewAPIError) {
-		userQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
-		if err != nil {
-			return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
-		}
-		if userQuota <= 0 || userQuota-preConsumedQuota < 0 {
-			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("通用额度不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(userQuota), logger.FormatQuota(preConsumedQuota)),
-				types.ErrorCodeInsufficientUserQuota,
-				http.StatusForbidden,
-				types.ErrOptionWithSkipRetry(),
-				types.ErrOptionWithNoRecordErrorLog(),
-			)
-		}
-		relayInfo.UserQuota = userQuota
-		funding, err := NewLedgerRelayFundingWithInitialBalance(relayInfo.UserId, relayInfo.RequestId, BillingSourceWallet, &userQuota)
-		if err != nil {
-			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-		}
-		session := &BillingSession{relayInfo: relayInfo, funding: funding}
-		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
-			return nil, apiErr
-		}
-		return session, nil
+		return newWalletBillingSession(c, relayInfo, preConsumedQuota)
 	}
 
 	if relayInfo.MarketplaceCreditPolicy == marketplacedomain.CreditPolicyUniversalOnly {
@@ -130,52 +101,83 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	}
 
 	trySubscription := func() (*BillingSession, *types.NewAPIError) {
-		if isExternalBillingChannel(relayInfo) {
-			return nil, nil
-		}
-		policy := gatewaystore.GetSubscriptionGroupPolicy(relayInfo.UsingGroup)
-		if !policy.Enabled {
-			return nil, nil
-		}
-
-		groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
-		if groupRatio <= 0 {
-			if specialRatio, ok := gatewaystore.GetGroupGroupRatio(relayInfo.UserGroup, relayInfo.UsingGroup); ok {
-				groupRatio = specialRatio
-			} else {
-				groupRatio = gatewaystore.GetGroupRatio(relayInfo.UsingGroup)
-			}
-		}
-		quotaScale := 1.0
-		effectiveSubscriptionMultiplier := groupRatio
-		if !monthlyPassMultiplierActive {
-			quotaScale = policy.Multiplier
-			effectiveSubscriptionMultiplier = policy.Multiplier
-		}
-		if !monthlyPassMultiplierActive && groupRatio > 0 {
-			quotaScale /= groupRatio
-		}
-
-		session := &BillingSession{
-			relayInfo:  relayInfo,
-			quotaScale: quotaScale,
-			funding: &SubscriptionFunding{
-				requestID: relayInfo.RequestId,
-				userID:    relayInfo.UserId,
-				modelName: relayInfo.OriginModelName,
-				amount:    int64(preConsumedQuota),
-			},
-		}
-		relayInfo.SubscriptionGroupMultiplier = effectiveSubscriptionMultiplier
-		relayInfo.SubscriptionQuotaScale = quotaScale
-		relayInfo.SubscriptionGroupRatio = groupRatio
-		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
-			return nil, apiErr
-		}
-		return session, nil
+		return newSubscriptionBillingSession(c, relayInfo, preConsumedQuota)
 	}
 
 	return selectBillingSessionByFundingOrder(fundingSourceOrder, trySubscription, tryWallet)
+}
+
+func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
+	userQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
+	if err != nil {
+		return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+	}
+	if userQuota <= 0 || userQuota-preConsumedQuota < 0 {
+		return nil, types.NewErrorWithStatusCode(
+			fmt.Errorf("通用额度不足, 当前余额: %s, 本次所需: %s", logger.FormatQuota(userQuota), logger.FormatQuota(preConsumedQuota)),
+			types.ErrorCodeInsufficientUserQuota,
+			http.StatusForbidden,
+			types.ErrOptionWithSkipRetry(),
+			types.ErrOptionWithNoRecordErrorLog(),
+		)
+	}
+	relayInfo.UserQuota = userQuota
+	funding, err := NewLedgerRelayFundingWithInitialBalance(relayInfo.UserId, relayInfo.RequestId, BillingSourceWallet, &userQuota)
+	if err != nil {
+		return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+	}
+	session := &BillingSession{relayInfo: relayInfo, funding: funding}
+	if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
+		return nil, apiErr
+	}
+	return session, nil
+}
+
+func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
+	if isExternalBillingChannel(relayInfo) {
+		return nil, nil
+	}
+	policy := gatewaystore.GetSubscriptionGroupPolicy(relayInfo.UsingGroup)
+	if !policy.Enabled {
+		return nil, nil
+	}
+
+	groupRatio := subscriptionBillingGroupRatio(relayInfo)
+	packageMultiplier := getMonthlyPassMultiplier(relayInfo.UserId)
+	quotaScale := policy.Multiplier * packageMultiplier
+	if groupRatio > 0 {
+		quotaScale /= groupRatio
+	}
+
+	session := &BillingSession{
+		relayInfo:  relayInfo,
+		quotaScale: quotaScale,
+		funding: &SubscriptionFunding{
+			requestID: relayInfo.RequestId,
+			userID:    relayInfo.UserId,
+			modelName: relayInfo.OriginModelName,
+			amount:    int64(preConsumedQuota),
+		},
+	}
+	relayInfo.SubscriptionGroupMultiplier = policy.Multiplier * packageMultiplier
+	relayInfo.SubscriptionPackageMultiplier = packageMultiplier
+	relayInfo.SubscriptionQuotaScale = quotaScale
+	relayInfo.SubscriptionGroupRatio = groupRatio
+	if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
+		return nil, apiErr
+	}
+	return session, nil
+}
+
+func subscriptionBillingGroupRatio(relayInfo *relaycommon.RelayInfo) float64 {
+	groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
+	if groupRatio > 0 {
+		return groupRatio
+	}
+	if specialRatio, ok := gatewaystore.GetGroupGroupRatio(relayInfo.UserGroup, relayInfo.UsingGroup); ok {
+		return specialRatio
+	}
+	return gatewaystore.GetGroupRatio(relayInfo.UsingGroup)
 }
 
 type billingSessionFactory func() (*BillingSession, *types.NewAPIError)

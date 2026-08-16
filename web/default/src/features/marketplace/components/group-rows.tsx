@@ -17,7 +17,6 @@ import {
   ChannelFeedbackSummary,
 } from './channel-feedback'
 import { GroupDetails } from './group-details'
-import { ModelConsistencyBadge } from './model-verification'
 import { MarketplaceStatusBadge } from './status-badge'
 
 export function DesktopGroupRow(props: {
@@ -116,7 +115,6 @@ export function MobileGroupRow(props: {
             </div>
             <div className='mt-2 flex flex-wrap items-center gap-1.5'>
               <MarketplaceStatusBadge status={group.lifecycle_status} />
-              <ModelConsistencyBadge status={group.model_consistency_status} />
               <ModelPreview models={group.models} compact />
             </div>
           </div>
@@ -157,7 +155,6 @@ function GroupIdentity(props: { group: MarketplaceGroup }) {
       <div className='flex flex-wrap items-center gap-2'>
         <span className='font-medium'>{group.system_display_name}</span>
         <MarketplaceStatusBadge status={group.lifecycle_status} />
-        <ModelConsistencyBadge status={group.model_consistency_status} />
       </div>
       <div className='text-muted-foreground mt-1 text-xs'>
         {group.provider_type}
@@ -165,7 +162,9 @@ function GroupIdentity(props: { group: MarketplaceGroup }) {
       <div className='mt-2'>
         <ModelPreview models={group.models} />
       </div>
-      <ChannelFeedbackSummary group={group} />
+      <div className='mt-2'>
+        <ChannelFeedbackSummary group={group} />
+      </div>
     </div>
   )
 }

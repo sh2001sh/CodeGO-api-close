@@ -35,11 +35,9 @@ func TestBalanceBlindBoxPurchaseCreatesSealedInventoryAndDebitsOnce(t *testing.T
 	var item commerceschema.BalanceBlindBoxItem
 	require.NoError(t, db.First(&item).Error)
 	require.Equal(t, balanceBlindBoxPoolVersion, item.PoolVersion)
-	if item.RewardType == commerceschema.BlindBoxRewardTypeProp {
-		require.Empty(t, item.RewardWalletType)
-	} else {
-		require.Equal(t, string(commerceschema.BlindBoxRewardWalletTypeClaude), item.RewardWalletType)
-	}
+	require.Empty(t, item.RewardType)
+	require.Empty(t, item.RewardTier)
+	require.Empty(t, item.RewardWalletType)
 	encoded, err := json.Marshal(item)
 	require.NoError(t, err)
 	jsonText := string(encoded)
@@ -93,7 +91,24 @@ func TestBalanceBlindBoxPurchaseEnforcesDailyLimit(t *testing.T) {
 	require.Equal(t, int64(2), overview.InventoryCount)
 }
 
-func TestBalanceBlindBoxGiftAndRegiftPreserveSealedReward(t *testing.T) {
+func TestBalanceBlindBoxPurchaseCountsPendingCashOrdersAgainstDailyLimit(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	setBalanceBlindBoxTestSetting(t, 10)
+	user := createBalanceBlindBoxTestUser(t, db, 8902, "BBX012", 100)
+	require.NoError(t, db.Create(&commerceschema.BlindBoxOrder{
+		UserId: user.Id, Quantity: 10, Money: 25, TradeNo: "pending-cash-limit",
+		Status: constant.TopUpStatusPending, CreateTime: platformruntime.GetTimestamp(),
+	}).Error)
+
+	_, err := PurchaseBalanceBlindBoxes(user.Id, "balance-after-pending-cash", 1)
+	require.ErrorContains(t, err, "今日还可购买 0 个")
+	overview, err := GetBalanceBlindBoxOverview(user.Id)
+	require.NoError(t, err)
+	require.Equal(t, int64(10), overview.PurchasedToday)
+	require.Zero(t, overview.RemainingPurchaseLimit)
+}
+
+func TestBalanceBlindBoxGiftAndRegiftDrawsForFinalOwnerOnOpen(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	setBalanceBlindBoxTestSetting(t, 10)
 	purchaser := createBalanceBlindBoxTestUser(t, db, 8894, "BBX004", 100)
@@ -117,7 +132,8 @@ func TestBalanceBlindBoxGiftAndRegiftPreserveSealedReward(t *testing.T) {
 	require.NoError(t, err)
 	opened, err := OpenBalanceBlindBox(finalOwner.Id, "balance-gift-open", 1)
 	require.NoError(t, err)
-	require.Equal(t, sealed.IsPity, opened.Record.IsPity)
+	require.Empty(t, sealed.RewardType)
+	require.True(t, opened.Record.IsPity)
 	if opened.Record.RewardType != commerceschema.BlindBoxRewardTypeProp {
 		require.GreaterOrEqual(t, opened.Record.RewardUSD, 1.0)
 	}
@@ -139,7 +155,7 @@ func TestBalanceBlindBoxSupportsOpeningOneHundredOwnedItems(t *testing.T) {
 	items := make([]commerceschema.BalanceBlindBoxItem, 100)
 	for index := range items {
 		items[index] = commerceschema.BalanceBlindBoxItem{
-			PurchaseUserId: user.Id, OwnerUserId: user.Id, PoolVersion: balanceBlindBoxPoolVersion,
+			PurchaseUserId: user.Id, OwnerUserId: user.Id, PoolVersion: "unified-box-v3",
 			RewardType: commerceschema.BlindBoxRewardTypeClaudeQuota, RewardTier: "1 统一额度",
 			RewardUSD: 1, CreditAmount: quotaUnitsFromBlindBoxUSD(1), RewardTitle: "1.00 美元奖励",
 			RewardWalletType: string(commerceschema.BlindBoxRewardWalletTypeClaude), GuaranteeType: balanceBlindBoxGuaranteeNone,
@@ -192,6 +208,56 @@ func TestBalanceBlindBoxPityUsesClaudeEquivalentValue(t *testing.T) {
 	)
 	require.Zero(t, pity.ConsecutiveUnder6USD)
 	require.Zero(t, pity.ConsecutiveUnder35USD)
+}
+
+func TestBalanceBlindBoxPityAdvancesOnlyAfterOpen(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	setBalanceBlindBoxTestSetting(t, 10)
+	setting := blindboxsettings.Get()
+	setting.BalanceBlindBoxTiers = fixedGuaranteePool("low", 0.2)
+	blindboxsettings.Set(setting)
+	user := createBalanceBlindBoxTestUser(t, db, 8900, "BBX010", 100)
+	require.NoError(t, db.Create(&commerceschema.BlindBoxOpenRecord{
+		UserId: user.Id, PoolType: commerceschema.BlindBoxPoolTypeUnified,
+		RewardType: commerceschema.BlindBoxRewardTypeClaudeQuota, RewardTitle: "历史奖励",
+	}).Error)
+
+	purchased, err := PurchaseBalanceBlindBoxes(user.Id, "pity-open-only-purchase", 1)
+	require.NoError(t, err)
+	require.Zero(t, purchased.Overview.SmallPityProgress)
+	require.Zero(t, purchased.Overview.PityProgress)
+
+	opened, err := OpenBalanceBlindBox(user.Id, "pity-open-only-open", 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, opened.Overview.SmallPityProgress)
+	require.Equal(t, 1, opened.Overview.PityProgress)
+}
+
+func TestBalanceBlindBoxExtraDrawAddsInventoryWithoutPurchaseCount(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	setBalanceBlindBoxTestSetting(t, 10)
+	setting := blindboxsettings.Get()
+	setting.BalanceBlindBoxFirstDrawTiers = []blindboxsettings.TierSetting{{
+		Name: "再来一抽", Probability: 1, RewardType: commerceschema.BlindBoxRewardTypeProp,
+	}}
+	blindboxsettings.Set(setting)
+	user := createBalanceBlindBoxTestUser(t, db, 8901, "BBX011", 100)
+
+	_, err := PurchaseBalanceBlindBoxes(user.Id, "extra-draw-purchase", 1)
+	require.NoError(t, err)
+	opened, err := OpenBalanceBlindBox(user.Id, "extra-draw-open", 1)
+	require.NoError(t, err)
+	require.Equal(t, "再来一抽", opened.Record.RewardTitle)
+	require.Equal(t, commerceschema.BlindBoxPropTypeExtraDraw, opened.Record.PropType)
+	require.Equal(t, commerceschema.BlindBoxPropStatusUsed, opened.Record.PropStatus)
+	require.Equal(t, int64(1), opened.Overview.InventoryCount)
+	require.Equal(t, int64(1), opened.Overview.PurchasedToday)
+	require.Equal(t, 1, opened.Overview.SmallPityProgress)
+	require.Equal(t, 1, opened.Overview.PityProgress)
+
+	var propCount int64
+	require.NoError(t, db.Model(&commerceschema.BlindBoxProp{}).Count(&propCount).Error)
+	require.Zero(t, propCount)
 }
 
 func setBalanceBlindBoxTestSetting(t *testing.T, dailyLimit int) {

@@ -5555,7 +5555,7 @@
     "月卡与通用余额是两种独立资金：月卡有专属权益和使用范围，通用余额永久有效且适用范围更广。": "Monthly-pass quota and universal balance are separate funding sources. A monthly pass has dedicated benefits and usage limits, while universal balance is permanent and works across a broader scope.",
     "购买月卡赠送 0.1 倍率卡": "Every monthly pass includes a 0.1x multiplier card",
     "倍率卡可随时启用、暂停和继续，只计算实际启用时间。多次获得的剩余时长会合并。": "The card can be activated, paused, and resumed at any time. Only active time is counted, and additional rewards merge into the remaining duration.",
-    "激活后只消耗月卡额度，不会回退到通用余额；月卡额度不足时请求会直接失败。": "While active, it consumes monthly-pass quota only and never falls back to universal balance. Requests fail when monthly-pass quota is insufficient.",
+    "无需切换 API Key 分组。系统按资金源顺序结算：实际扣月卡额度时应用 0.1，使用或回退到通用余额时按原倍率扣费。": "No API key group switch is required. Billing follows your funding-source order: the 0.1x benefit applies only when monthly-pass quota is charged; universal balance usage or fallback keeps the original rate.",
     "15 分钟": "15 minutes",
     "30 分钟": "30 minutes",
     "45 分钟": "45 minutes",
@@ -5572,8 +5572,8 @@
     "仅限管理员开启套餐扣费的官方分组，按分组套餐倍率扣费": "Official groups explicitly enabled for monthly-pass billing, charged at each group's monthly-pass multiplier",
     "按余额倍率扣费，支持范围更广，可用于获准的第三方渠道": "Charged at the balance multiplier with broader coverage, including approved third-party channels",
     "0.1 倍率卡": "0.1x multiplier card",
-    "激活期间固定按 0.1 倍率扣月卡额度": "Charges monthly-pass quota at a fixed 0.1x while active",
-    "不能用于支付月卡专属 0.1 倍率请求": "Cannot fund requests using the monthly-pass-only 0.1x benefit",
+    "实际扣月卡额度时，在分组套餐倍率基础上再乘 0.1": "When monthly-pass quota is charged, multiply the group's subscription rate by another 0.1",
+    "从通用余额扣费时不应用套餐卡，按原余额倍率计费": "Universal balance charges do not use the package card and keep the original wallet rate",
     "额度刷新": "Quota refresh",
     "符合条件时可用邀请奖励清空已用额度，但不延长有效期": "Eligible passes can clear used quota with an invitation reward without extending the expiry date",
     "不支持刷新": "Refresh is not supported",
@@ -5585,6 +5585,6 @@
     "刷新与转余额只能二选一": "Choose either refresh or conversion",
     "月卡折现为通用余额后，该月卡不能再刷新；月卡使用过额度刷新后，也不能再折现为通用余额。两项操作均不可撤销。": "After any conversion to universal balance, that pass can no longer be refreshed. After a quota refresh, that pass can no longer be converted. Both choices are irreversible.",
     "折现时可选择不超过未使用比例的整数百分比，到账通用余额 = 月卡档位价格 × 选择比例。部分折现后月卡继续生效，但从首次折现起永久失去刷新资格。": "Choose a whole-number percentage no greater than the unused share. Universal balance received equals the plan price multiplied by the selected percentage. A partially converted pass remains active but permanently loses refresh eligibility after its first conversion.",
-    "仅限月卡额度，激活期间按 0.1 倍率扣费，不会回退到通用余额。": "Monthly-pass quota only. Charges at 0.1x while active and never falls back to universal balance."
+    "无需切换分组；实际扣月卡额度时额外乘 0.1，余额扣费仍按原倍率。": "No group switch is required. Monthly-pass charges receive an extra 0.1x multiplier, while balance charges keep the original rate."
   }
 }

@@ -131,7 +131,7 @@ export function SidebarGroupStatusPage() {
                   <div className='mb-4 flex items-end justify-between gap-3'>
                     <div className='space-y-1'>
                       <h3 className='text-foreground text-xl font-semibold tracking-tight'>
-                        {group.group}
+                        {group.display_name || group.group}
                       </h3>
                       <p className='text-muted-foreground text-sm'>
                         {(group.source_type ?? 'official') ===

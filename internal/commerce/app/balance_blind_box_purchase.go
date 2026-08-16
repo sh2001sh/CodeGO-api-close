@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
@@ -16,6 +17,7 @@ import (
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -88,36 +90,32 @@ func loadExistingBalanceBlindBoxPurchase(tx *gorm.DB, userID int, requestID stri
 }
 
 func countBalanceBlindBoxPurchasesTx(tx *gorm.DB, userID int) (int64, error) {
-	var count int64
+	var purchasedCount int64
 	err := tx.Model(&commerceschema.BalanceBlindBoxPurchase{}).
 		Where("user_id = ? AND purchase_date = ?", userID, currentBalanceBlindBoxDate()).
+		Select("COALESCE(SUM(quantity), 0)").Scan(&purchasedCount).Error
+	if err != nil {
+		return 0, err
+	}
+	pendingCount, err := countPendingPaidBlindBoxOrdersTx(tx, userID)
+	return purchasedCount + pendingCount, err
+}
+
+func countPendingPaidBlindBoxOrdersTx(tx *gorm.DB, userID int) (int64, error) {
+	dayStart, dayEnd := getBlindBoxDayRange(platformruntime.GetTimestamp())
+	var count int64
+	err := tx.Model(&commerceschema.BlindBoxOrder{}).
+		Where("user_id = ? AND create_time >= ? AND create_time < ? AND status = ? AND money > 0", userID, dayStart, dayEnd, constant.TopUpStatusPending).
 		Select("COALESCE(SUM(quantity), 0)").Scan(&count).Error
 	return count, err
 }
 
 func issueBalanceBlindBoxBatchTx(tx *gorm.DB, purchase *commerceschema.BalanceBlindBoxPurchase, setting blindboxsettings.Setting) error {
-	var pity commerceschema.BalanceBlindBoxPityState
-	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", purchase.UserId).First(&pity).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		pity = commerceschema.BalanceBlindBoxPityState{UserId: purchase.UserId}
-		if err := tx.Create(&pity).Error; err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-	var issuedCount int64
-	if err := tx.Model(&commerceschema.BalanceBlindBoxItem{}).Where("purchase_user_id = ?", purchase.UserId).Count(&issuedCount).Error; err != nil {
-		return err
-	}
 	items := make([]commerceschema.BalanceBlindBoxItem, 0, purchase.Quantity)
-	for index := 0; index < purchase.Quantity; index++ {
-		items = append(items, issueSealedBalanceBlindBox(purchase.Id, purchase.UserId, setting, &pity, issuedCount == 0 && index == 0))
+	for range purchase.Quantity {
+		items = append(items, newUnrevealedBalanceBlindBoxItem(purchase.Id, purchase.UserId, purchase.UserId))
 	}
 	if err := tx.Create(&items).Error; err != nil {
-		return err
-	}
-	if err := tx.Save(&pity).Error; err != nil {
 		return err
 	}
 	return auditapp.RecordLogTx(tx, purchase.UserId, auditschema.LogTypeManage, fmt.Sprintf("统一盲盒入库 %d 个，批次 %d", purchase.Quantity, purchase.Id))

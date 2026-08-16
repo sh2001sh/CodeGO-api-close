@@ -3,6 +3,8 @@ package app
 import (
 	"math"
 	"testing"
+
+	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 )
 
 func TestCalculateUsageConsumptionDiscountWithRate(t *testing.T) {
@@ -53,5 +55,30 @@ func TestNoUsageConsumptionDiscountKeepsQuota(t *testing.T) {
 	}
 	if detail.DiscountTitle != "" {
 		t.Fatalf("no-discount detail should not have a title: %#v", detail)
+	}
+}
+
+func TestPackageMultiplierDoesNotStackBlindBoxConsumptionDiscount(t *testing.T) {
+	previousHooks := subscriptionFundingHooks
+	discountCalled := false
+	RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
+		GetMonthlyPassMultiplier: func(int) float64 { return 0.1 },
+		ApplyBlindBoxConsumptionDiscount: func(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error) {
+			discountCalled = true
+			return BlindBoxConsumptionDiscountResult{QuotaBeforeDiscount: request.Quota, QuotaAfterDiscount: request.Quota / 10}, nil
+		},
+	})
+	t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
+
+	detail := calculateUsageConsumptionDiscount(&relaycommon.RelayInfo{
+		UserId: 42, BillingSource: BillingSourceSubscription, SubscriptionPackageMultiplier: 0.1,
+		ChannelMeta: &relaycommon.ChannelMeta{},
+	}, 1_000)
+
+	if discountCalled {
+		t.Fatal("blind-box multiplier must not stack on package-funded requests")
+	}
+	if detail.QuotaAfterDiscount != 1_000 {
+		t.Fatalf("unexpected stacked discount: %#v", detail)
 	}
 }

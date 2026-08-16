@@ -31,82 +31,158 @@ export function useBalanceBlindBoxPanelState(props: {
   onOpenProps: () => void
 }): BalanceBoxPanelViewProps {
   const balance = props.data?.inventory
+  const local = useBalanceBoxLocalState()
+  const state = deriveBalanceBoxState(
+    balance,
+    local.purchaseCount,
+    local.inventoryActionCount,
+    props.loading,
+    local.busy || props.cashPaying
+  )
+  const contexts = createBalanceBoxContexts({
+    balance,
+    state,
+    local,
+    onRefresh: props.onRefresh,
+  })
+  const handlers = createBalanceBoxHandlers(
+    contexts.purchase,
+    contexts.inventory,
+    state.inventoryMaxCount,
+    local,
+    props.onCashQuantityChange
+  )
+  return buildBalanceBoxViewProps(props, balance, local, state, handlers)
+}
+
+function useBalanceBoxLocalState() {
   const [mode, setMode] = useState<ActionMode>('purchase')
-  const [count, setCount] = useState(1)
+  const [purchaseCount, setPurchaseCount] = useState(1)
+  const [inventoryActionCount, setInventoryActionCount] = useState(1)
   const [busy, setBusy] = useState(false)
   const [recipientId, setRecipientId] = useState('')
   const [recipient, setRecipient] = useState<WalletTransferRecipient | null>(
     null
   )
   const [confirmGift, setConfirmGift] = useState(false)
-  const { maxCount, safeCount, canPurchase, canUseInventory } =
-    deriveBalanceBoxState(
-      mode,
-      balance,
-      count,
-      props.loading,
-      busy || props.cashPaying
-    )
-  const context = createBalanceBoxActionContext({
-    balance,
-    safeCount,
-    canPurchase,
-    canUseInventory,
-    recipient,
-    recipientId,
-    onRefresh: props.onRefresh,
-    setBusy,
-    setRecipient,
-    setRecipientId,
-    setConfirmGift,
-  })
-  const handlers = createBalanceBoxHandlers(
-    context,
+  return {
+    mode,
     setMode,
-    setCount,
+    purchaseCount,
+    setPurchaseCount,
+    inventoryActionCount,
+    setInventoryActionCount,
+    busy,
+    setBusy,
+    recipientId,
     setRecipientId,
+    recipient,
     setRecipient,
+    confirmGift,
     setConfirmGift,
-    props.onCashQuantityChange
-  )
+  }
+}
+
+type BalanceBoxLocalState = ReturnType<typeof useBalanceBoxLocalState>
+type DerivedBalanceBoxState = ReturnType<typeof deriveBalanceBoxState>
+
+function buildBalanceBoxViewProps(
+  props: Parameters<typeof useBalanceBlindBoxPanelState>[0],
+  balance: BalanceBlindBoxOverview | undefined,
+  local: BalanceBoxLocalState,
+  state: DerivedBalanceBoxState,
+  handlers: ReturnType<typeof createBalanceBoxHandlers>
+): BalanceBoxPanelViewProps {
   return {
     balance,
-    mode,
-    count: safeCount,
-    maxCount,
-    busy: busy || props.cashPaying,
-    recipient,
-    recipientId,
-    canPurchase,
-    canUseInventory,
-    confirmGift,
+    mode: local.mode,
+    count: state.purchaseCount,
+    maxCount: state.purchaseMaxCount,
+    inventoryActionCount: state.inventoryActionCount,
+    inventoryMaxCount: state.inventoryMaxCount,
+    busy: local.busy || props.cashPaying,
+    recipient: local.recipient,
+    recipientId: local.recipientId,
+    canPurchase: state.canPurchase,
+    canUseInventory: state.canUseInventory,
+    confirmGift: local.confirmGift,
     cashMethods: props.cashMethods,
     selectedCashMethod: props.selectedCashMethod,
     cashAmountDue: props.cashAmountDue,
     cashPaying: props.cashPaying,
     onCashMethodChange: props.onCashMethodChange,
-    onCashPurchase: () => props.onCashPurchase(safeCount),
+    onCashPurchase: () => props.onCashPurchase(state.purchaseCount),
     onOpenProps: props.onOpenProps,
     ...handlers,
   }
 }
 
+function createBalanceBoxContexts(args: {
+  balance?: BalanceBlindBoxOverview
+  state: DerivedBalanceBoxState
+  local: BalanceBoxLocalState
+  onRefresh: () => Promise<void>
+}) {
+  const shared = {
+    balance: args.balance,
+    recipient: args.local.recipient,
+    recipientId: args.local.recipientId,
+    onRefresh: args.onRefresh,
+    setBusy: args.local.setBusy,
+    setRecipient: args.local.setRecipient,
+    setRecipientId: args.local.setRecipientId,
+    setConfirmGift: args.local.setConfirmGift,
+  }
+  return {
+    purchase: createBalanceBoxActionContext({
+      ...shared,
+      safeCount: args.state.purchaseCount,
+      canPurchase: args.state.canPurchase,
+      canUseInventory: false,
+    }),
+    inventory: createBalanceBoxActionContext({
+      ...shared,
+      safeCount: args.state.inventoryActionCount,
+      canPurchase: false,
+      canUseInventory: args.state.canUseInventory,
+    }),
+  }
+}
+
 function deriveBalanceBoxState(
-  mode: ActionMode,
   balance: BalanceBlindBoxOverview | undefined,
-  count: number,
+  purchaseCount: number,
+  inventoryActionCount: number,
   loading: boolean,
   busy: boolean
 ) {
-  const maxCount = getBalanceBoxMaxCount(mode, balance)
-  const safeCount = Math.min(Math.max(1, count), maxCount)
+  const purchaseMaxCount = Math.max(1, balance?.remaining_purchase_limit || 1)
+  const inventoryMaxCount = Math.max(
+    1,
+    Math.min(100, balance?.inventory_count || 1)
+  )
+  const safePurchaseCount = Math.min(
+    Math.max(1, purchaseCount),
+    purchaseMaxCount
+  )
+  const safeInventoryActionCount = Math.min(
+    Math.max(1, inventoryActionCount),
+    inventoryMaxCount
+  )
   return {
-    maxCount,
-    safeCount,
-    canPurchase: canPurchaseBalanceBoxes(balance, safeCount, loading, busy),
+    purchaseMaxCount,
+    inventoryMaxCount,
+    purchaseCount: safePurchaseCount,
+    inventoryActionCount: safeInventoryActionCount,
+    canPurchase: canPurchaseBalanceBoxes(
+      balance,
+      safePurchaseCount,
+      loading,
+      busy
+    ),
     canUseInventory: canUseBalanceBoxInventory(
       balance,
-      safeCount,
+      safeInventoryActionCount,
       loading,
       busy
     ),
@@ -130,43 +206,39 @@ function createBalanceBoxActionContext(args: {
 }
 
 function createBalanceBoxHandlers(
-  context: BalanceBoxActionContext,
-  setMode: Dispatch<SetStateAction<ActionMode>>,
-  setCount: Dispatch<SetStateAction<number>>,
-  setRecipientId: Dispatch<SetStateAction<string>>,
-  setRecipient: Dispatch<SetStateAction<WalletTransferRecipient | null>>,
-  setConfirmGift: Dispatch<SetStateAction<boolean>>,
+  purchaseContext: BalanceBoxActionContext,
+  inventoryContext: BalanceBoxActionContext,
+  inventoryMaxCount: number,
+  local: BalanceBoxLocalState,
   onCashQuantityChange: (count: number) => void
 ) {
   return {
     onModeChange: (next: ActionMode) => {
-      setMode(next)
-      setCount(1)
-      onCashQuantityChange(1)
+      local.setMode(next)
     },
     onCountChange: (value: number) => {
-      setCount(value)
+      local.setPurchaseCount(value)
       onCashQuantityChange(value)
     },
+    onInventoryCountChange: local.setInventoryActionCount,
     onRecipientIdChange: (value: string) => {
-      setRecipientId(value)
-      setRecipient(null)
+      local.setRecipientId(value)
+      local.setRecipient(null)
     },
-    onPurchase: () => void purchaseBalanceBoxInventory(context),
-    onOpen: () => void openBalanceBoxInventory(context),
-    onLookup: () => void lookupBalanceBoxRecipient(context),
-    onGift: () => void giftBalanceBoxInventory(context),
-    onConfirmGiftChange: setConfirmGift,
+    onPurchase: () => {
+      local.setMode('purchase')
+      void purchaseBalanceBoxInventory(purchaseContext)
+    },
+    onOpen: () => void openBalanceBoxInventory(inventoryContext),
+    onOpenCount: (count: number) => {
+      const safeCount = Math.min(Math.max(1, count), inventoryMaxCount)
+      local.setMode('open')
+      void openBalanceBoxInventory({ ...inventoryContext, count: safeCount })
+    },
+    onLookup: () => void lookupBalanceBoxRecipient(inventoryContext),
+    onGift: () => void giftBalanceBoxInventory(inventoryContext),
+    onConfirmGiftChange: local.setConfirmGift,
   }
-}
-
-function getBalanceBoxMaxCount(
-  mode: ActionMode,
-  balance?: BalanceBlindBoxOverview
-) {
-  if (mode === 'purchase')
-    return Math.max(1, balance?.remaining_purchase_limit || 1)
-  return Math.max(1, Math.min(100, balance?.inventory_count || 1))
 }
 
 function canPurchaseBalanceBoxes(

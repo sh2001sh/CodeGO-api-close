@@ -1,10 +1,11 @@
 import {
+  FlaskConical,
   Gift,
   Loader2,
   PackageOpen,
   Search,
-  ShoppingBag,
-  FlaskConical,
+  ShieldCheck,
+  type LucideIcon,
 } from 'lucide-react'
 import { useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/button'
@@ -16,7 +17,6 @@ import type {
 } from '../types'
 import {
   BalanceBoxMetric,
-  BalanceBoxModeButton,
   BalanceBoxQuantityControl,
 } from './balance-blind-box-controls'
 import { BalanceBoxGiftConfirm } from './balance-blind-box-gift-confirm'
@@ -25,13 +25,15 @@ import { BalanceBlindBoxSimulator } from './balance-blind-box-simulator'
 import { BlindBoxPityTrack } from './blind-box-rules-panel'
 import { BoxFigure } from './blind-box-stage'
 
-export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulation'
+export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulation' | 'pity'
 
 export interface BalanceBoxPanelViewProps {
   balance?: BalanceBlindBoxOverview
   mode: ActionMode
   count: number
   maxCount: number
+  inventoryActionCount: number
+  inventoryMaxCount: number
   busy: boolean
   recipient: WalletTransferRecipient | null
   recipientId: string
@@ -44,9 +46,11 @@ export interface BalanceBoxPanelViewProps {
   cashPaying: boolean
   onModeChange: (mode: ActionMode) => void
   onCountChange: (count: number) => void
+  onInventoryCountChange: (count: number) => void
   onRecipientIdChange: (value: string) => void
   onPurchase: () => void
   onOpen: () => void
+  onOpenCount: (count: number) => void
   onLookup: () => void
   onGift: () => void
   onConfirmGiftChange: (open: boolean) => void
@@ -61,12 +65,14 @@ export function BalanceBoxPanelView(props: BalanceBoxPanelViewProps) {
       <BalanceBoxHeader
         balance={props.balance}
         opening={props.busy && props.mode === 'open'}
+        busy={props.busy}
+        onOpenCount={props.onOpenCount}
       />
-      <div className='space-y-4 px-4 py-4 sm:px-6 sm:py-5'>
-        <BalanceBoxModeSwitch mode={props.mode} onChange={props.onModeChange} />
-        <BalanceBoxWorkspace {...props} />
+      <div className='space-y-5 px-4 py-4 sm:px-6 sm:py-5'>
+        <BalanceBoxPurchaseWorkspace {...props} />
+        <BalanceBoxSecondaryActions {...props} />
       </div>
-      <BalanceBoxGiftConfirm {...props} />
+      <BalanceBoxGiftConfirm {...props} count={props.inventoryActionCount} />
     </section>
   )
 }
@@ -74,19 +80,30 @@ export function BalanceBoxPanelView(props: BalanceBoxPanelViewProps) {
 function BalanceBoxHeader(props: {
   balance?: BalanceBlindBoxOverview
   opening: boolean
+  busy: boolean
+  onOpenCount: (count: number) => void
 }) {
   const reduced = Boolean(useReducedMotion())
   const inventoryCount = props.balance?.inventory_count || 0
   return (
-    <div className='border-primary/20 bg-primary/[0.045] border-b px-4 pt-7 pb-5 sm:px-6'>
-      <div className='relative flex flex-col items-center gap-4'>
-        <BoxFigure
-          reduced={reduced}
-          pending={inventoryCount > 0}
-          opening={props.opening}
-          tone='primary'
-        />
-        <div className='max-w-xl text-center'>
+    <div className='border-primary/20 bg-primary/[0.045] border-b px-4 py-5 sm:px-6'>
+      <div className='relative grid grid-cols-[96px_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-5 lg:grid-cols-[150px_minmax(0,1fr)_minmax(220px,280px)]'>
+        <div className='flex h-28 items-center justify-center sm:h-auto'>
+          <div className='scale-75 sm:scale-100'>
+            <BoxFigure
+              reduced={reduced}
+              pending={inventoryCount > 0}
+              opening={props.opening}
+              tone='primary'
+              onOpen={
+                inventoryCount > 0 && !props.busy
+                  ? () => props.onOpenCount(1)
+                  : undefined
+              }
+            />
+          </div>
+        </div>
+        <div className='min-w-0 text-left'>
           <div className='text-primary text-xs font-semibold'>
             统一盲盒 · {(props.balance?.price_usd || 2.5).toFixed(2)} / 个
           </div>
@@ -96,13 +113,19 @@ function BalanceBoxHeader(props: {
               : '购买可持有、可转赠的统一盲盒'}
           </h2>
           <p className='text-muted-foreground mt-1.5 text-xs leading-5'>
-            人民币与统一额度购买进入同一库存、同一奖池。奖励在入库时封存，转赠不会改变结果。
+            人民币与统一额度购买进入同一库存、同一奖池。奖励在开启时抽取，购买和转赠不会提前推进保底。
           </p>
           <p className='text-primary/90 mt-1 text-[11px] leading-5'>
-            奖励为公开概率的随机额度区间或权益卡；统一额度奖励永久有效。
+            普通池采用高波动结构；抽中“再来一抽”会立即补发 1 个待开启盲盒。
           </p>
+          <BalanceBoxHeaderMetrics balance={props.balance} />
         </div>
-        <BalanceBoxHeaderMetrics balance={props.balance} />
+        <BalanceBoxOpenActions
+          inventoryCount={inventoryCount}
+          busy={props.busy}
+          opening={props.opening}
+          onOpenCount={props.onOpenCount}
+        />
       </div>
     </div>
   )
@@ -110,7 +133,7 @@ function BalanceBoxHeader(props: {
 
 function BalanceBoxHeaderMetrics(props: { balance?: BalanceBlindBoxOverview }) {
   return (
-    <div className='grid w-full max-w-lg grid-cols-3 gap-3 border-t border-teal-500/15 pt-4 text-center'>
+    <div className='mt-4 grid w-full max-w-lg grid-cols-3 gap-3 border-t border-teal-500/15 pt-3 text-center lg:text-left'>
       <BalanceBoxMetric
         label='库存'
         value={`${props.balance?.inventory_count || 0} 个`}
@@ -127,84 +150,107 @@ function BalanceBoxHeaderMetrics(props: { balance?: BalanceBlindBoxOverview }) {
   )
 }
 
-function BalanceBoxModeSwitch(props: {
-  mode: ActionMode
-  onChange: (mode: ActionMode) => void
+function BalanceBoxOpenActions(props: {
+  inventoryCount: number
+  busy: boolean
+  opening: boolean
+  onOpenCount: (count: number) => void
 }) {
-  return (
-    <div
-      className='bg-muted grid grid-cols-2 rounded-lg p-1 sm:grid-cols-4'
-      role='tablist'
-    >
-      <BalanceBoxModeButton
-        active={props.mode === 'purchase'}
-        icon={ShoppingBag}
-        label='购买盲盒'
-        onClick={() => props.onChange('purchase')}
-      />
-      <BalanceBoxModeButton
-        active={props.mode === 'simulation'}
-        icon={FlaskConical}
-        label='模拟抽盒'
-        onClick={() => props.onChange('simulation')}
-      />
-      <BalanceBoxModeButton
-        active={props.mode === 'open'}
-        icon={PackageOpen}
-        label='开启库存'
-        onClick={() => props.onChange('open')}
-      />
-      <BalanceBoxModeButton
-        active={props.mode === 'gift'}
-        icon={Gift}
-        label='赠送库存'
-        onClick={() => props.onChange('gift')}
-      />
-    </div>
-  )
-}
-
-function BalanceBoxWorkspace(props: BalanceBoxPanelViewProps) {
-  if (props.mode === 'simulation') {
-    return <BalanceBlindBoxSimulator balance={props.balance} />
-  }
-  if (props.mode === 'purchase') {
-    return <BalanceBoxPurchaseWorkspace {...props} />
-  }
-  if (props.mode === 'open') {
+  if (props.inventoryCount <= 0) {
     return (
-      <div className='grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]'>
-        <div className='min-w-0 space-y-4'>
-          <BalanceBoxModeDescription mode={props.mode} />
-          <BlindBoxPityTrack balance={props.balance} />
+      <div className='border-border/70 bg-background/55 col-span-2 rounded-lg border px-4 py-3 text-center text-sm lg:col-span-1 lg:text-left'>
+        <div className='font-medium'>库存为空</div>
+        <div className='text-muted-foreground mt-1 text-xs leading-5'>
+          在下方购买后，无需切换即可直接开启。
         </div>
-        <BalanceBoxActionControls {...props} />
       </div>
     )
   }
+  const openAllCount = Math.min(100, props.inventoryCount)
   return (
-    <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
-      <div className='space-y-3'>
-        <BalanceBoxModeDescription mode={props.mode} />
-        {props.mode === 'gift' ? (
-          <BalanceBoxRecipientFields {...props} />
-        ) : null}
-      </div>
-      <BalanceBoxActionControls {...props} />
+    <div className='border-primary/20 bg-background/70 col-span-2 space-y-2 rounded-lg border p-3 lg:col-span-1'>
+      <div className='text-sm font-semibold'>直接开启库存</div>
+      <Button
+        className='w-full'
+        disabled={props.busy}
+        onClick={() => props.onOpenCount(1)}
+      >
+        {props.opening ? (
+          <Loader2 className='size-4 animate-spin' />
+        ) : (
+          <PackageOpen className='size-4' />
+        )}
+        {props.opening ? '开启中…' : '开启 1 个'}
+      </Button>
+      {openAllCount > 1 ? (
+        <Button
+          variant='outline'
+          className='w-full'
+          disabled={props.busy}
+          onClick={() => props.onOpenCount(openAllCount)}
+        >
+          全部开启 {openAllCount} 个
+        </Button>
+      ) : null}
     </div>
   )
 }
 
-function BalanceBoxModeDescription(props: { mode: ActionMode }) {
-  if (props.mode === 'open') {
-    return (
-      <p className='text-muted-foreground text-sm leading-6'>
-        从最早入库的盲盒开始开启，单次最多 100
-        个。奖励直接发放到当前持有者账户，揭晓时会标注首抽、小保底或大保底，开启后不可转赠。
-      </p>
-    )
-  }
-  return null
+function BalanceBoxSecondaryActions(props: BalanceBoxPanelViewProps) {
+  const expanded = ['simulation', 'gift', 'pity'].includes(props.mode)
+  return (
+    <div className='border-border/70 border-t pt-4'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <span className='text-muted-foreground mr-auto text-xs'>更多操作</span>
+        <Button
+          size='sm'
+          variant={props.mode === 'simulation' ? 'secondary' : 'outline'}
+          onClick={() =>
+            props.onModeChange(
+              props.mode === 'simulation' ? 'purchase' : 'simulation'
+            )
+          }
+        >
+          <FlaskConical className='size-4' />
+          模拟抽盒
+        </Button>
+        <Button
+          size='sm'
+          variant={props.mode === 'pity' ? 'secondary' : 'outline'}
+          onClick={() =>
+            props.onModeChange(props.mode === 'pity' ? 'purchase' : 'pity')
+          }
+        >
+          <ShieldCheck className='size-4' />
+          保底进度
+        </Button>
+        <Button
+          size='sm'
+          variant={props.mode === 'gift' ? 'secondary' : 'outline'}
+          onClick={() =>
+            props.onModeChange(props.mode === 'gift' ? 'purchase' : 'gift')
+          }
+        >
+          <Gift className='size-4' />
+          赠送库存
+        </Button>
+      </div>
+      {expanded ? (
+        <div className='mt-4'>
+          {props.mode === 'simulation' ? (
+            <BalanceBlindBoxSimulator balance={props.balance} />
+          ) : props.mode === 'pity' ? (
+            <BlindBoxPityTrack balance={props.balance} />
+          ) : (
+            <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
+              <BalanceBoxRecipientFields {...props} />
+              <BalanceBoxActionControls {...props} />
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {
@@ -251,10 +297,10 @@ function BalanceBoxActionControls(props: BalanceBoxPanelViewProps) {
   return (
     <div className='border-primary/20 bg-primary/[0.035] space-y-4 rounded-lg border p-4'>
       <BalanceBoxQuantityControl
-        count={props.count}
-        max={props.maxCount}
+        count={props.inventoryActionCount}
+        max={props.inventoryMaxCount}
         disabled={props.busy}
-        onChange={props.onCountChange}
+        onChange={props.onInventoryCountChange}
       />
       <BalanceBoxInventoryAction {...props} />
     </div>
@@ -269,7 +315,7 @@ function BalanceBoxInventoryAction(props: BalanceBoxPanelViewProps) {
       disabled={!props.canUseInventory || (gifting && !props.recipient)}
       icon={gifting ? Gift : PackageOpen}
       busyLabel={gifting ? '赠送中…' : '开启中…'}
-      label={`${gifting ? '赠送' : '开启'} ${props.count} 个`}
+      label={`${gifting ? '赠送' : '开启'} ${props.inventoryActionCount} 个`}
       onClick={gifting ? () => props.onConfirmGiftChange(true) : props.onOpen}
     />
   )
@@ -278,7 +324,7 @@ function BalanceBoxInventoryAction(props: BalanceBoxPanelViewProps) {
 function BalanceBoxPrimaryButton(props: {
   busy: boolean
   disabled: boolean
-  icon: typeof ShoppingBag
+  icon: LucideIcon
   busyLabel: string
   label: string
   onClick: () => void

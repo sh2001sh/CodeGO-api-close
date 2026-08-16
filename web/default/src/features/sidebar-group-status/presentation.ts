@@ -77,11 +77,20 @@ export function sortItems(items: SidebarGroupStatusItem[]) {
       ...item,
       models: sortModels(item.models),
     }))
-    .sort((a, b) => a.group.localeCompare(b.group, 'zh-CN'))
+    .sort((a, b) =>
+      (a.display_name || a.group).localeCompare(
+        b.display_name || b.group,
+        'zh-CN'
+      )
+    )
     .sort((a, b) => {
       const left = a.request_count ?? sumModelRequests(a.models)
       const right = b.request_count ?? sumModelRequests(b.models)
-      if (left === right) return a.group.localeCompare(b.group, 'zh-CN')
+      if (left === right)
+        return (a.display_name || a.group).localeCompare(
+          b.display_name || b.group,
+          'zh-CN'
+        )
       return right - left
     })
 }
@@ -147,7 +156,8 @@ function buildFallbackSegments(item: SidebarGroupModelStatusItem) {
   const total = 20
   const successRate = item.success_rate
   const bucketSeconds =
-    item.bucket_seconds ?? inferBucketSeconds(item.series_window ?? item.sample_window, total)
+    item.bucket_seconds ??
+    inferBucketSeconds(item.series_window ?? item.sample_window, total)
   const endTs = Math.floor(Date.now() / 1000)
   const startTs = endTs - bucketSeconds * total
 

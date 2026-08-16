@@ -48,7 +48,10 @@ export function buildOverviewModelStatus(
   limit = DEFAULT_MODEL_LIMIT
 ): OverviewModelStatus {
   const allModels = groups.flatMap((group) =>
-    group.models.map((model) => ({ ...model, group: group.group }))
+    group.models.map((model) => ({
+      ...model,
+      group: group.display_name || group.group,
+    }))
   )
   const activeModels = allModels.filter(
     (model) => (model.request_count ?? 0) > 0

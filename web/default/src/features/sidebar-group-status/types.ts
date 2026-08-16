@@ -42,6 +42,7 @@ export type SidebarGroupStatusBucket = {
 
 export type SidebarGroupStatusItem = {
   group: string
+  display_name?: string
   source_type?: 'official' | 'marketplace_user'
   status: SidebarGroupAvailabilityStatus
   request_count?: number

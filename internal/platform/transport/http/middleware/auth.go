@@ -429,21 +429,20 @@ func TokenAuth() func(c *gin.Context) {
 
 		userGroup := userCache.Group
 		tokenGroup := token.Group
+		legacyMonthlyPassGroup := tokenGroup == commerceapp.LegacyMonthlyPassGroup
+		if legacyMonthlyPassGroup {
+			tokenGroup = commerceapp.MultiplierCardRouteGroup()
+		}
 		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, commerceapp.RequiresOfficialBlindBoxChannel(token.UserId))
 		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelFallback, false)
 		zeroHourActive := tokenGroup == commerceapp.ZeroHourGroup
-		monthlyPassActive := tokenGroup == commerceapp.MonthlyPassGroup
 		if zeroHourActive {
 			if !commerceapp.IsZeroHourGroupActive(token.UserId) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "0 倍率卡已结束，请切回 default 分组")
 				return
 			}
 			userGroup = commerceapp.MultiplierCardRouteGroup()
-		} else if monthlyPassActive {
-			if !commerceapp.IsMonthlyPassGroupActive(token.UserId) {
-				abortWithOpenAiMessage(c, http.StatusForbidden, "0.1 倍率卡未开启或已结束，请切回 default 分组")
-				return
-			}
+		} else if legacyMonthlyPassGroup {
 			userGroup = commerceapp.MultiplierCardRouteGroup()
 		} else if marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
 			httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, false)
@@ -494,10 +493,9 @@ func TokenAuth() func(c *gin.Context) {
 			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, commerceapp.MultiplierCardRouteGroup())
 			httpctx.SetContextKey(c, constant.ContextKeyZeroHourActive, true)
 		}
-		if monthlyPassActive {
+		if legacyMonthlyPassGroup {
 			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, commerceapp.MultiplierCardRouteGroup())
 			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, commerceapp.MultiplierCardRouteGroup())
-			httpctx.SetContextKey(c, constant.ContextKeyMonthlyPassActive, true)
 		}
 		c.Next()
 	}

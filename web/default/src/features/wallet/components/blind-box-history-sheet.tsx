@@ -33,7 +33,8 @@ const PROP_TITLES: Record<string, string> = {
   subscription_discount_90: '历史套餐折扣卡',
   consume_discount_95: '0.95 倍率卡',
   consume_discount_90: '0.9 倍率卡',
-  consume_discount_10: '0.1 倍率卡',
+  consume_discount_10: '15 分钟 0.1 倍率卡',
+  extra_draw: '再来一抽',
   monthly_pass_multiplier: '套餐 0.1 倍率卡',
   zero_hour_multiplier: '历史 0 倍率道具',
 }
@@ -228,6 +229,13 @@ function HistoryTag(props: { children: React.ReactNode }) {
 
 function rewardDetail(record: BlindBoxRecord) {
   if (record.reward_type === 'prop') {
+    if (record.reward_title === '再来一抽') {
+      return {
+        title: '再来一抽',
+        description: '已自动补发 1 个待开启盲盒，不占每日购买数量。',
+        type: '额外机会',
+      }
+    }
     const title = PROP_TITLES[record.prop_type || ''] || record.reward_title
     return {
       title: title || '实用道具奖励',
@@ -260,6 +268,8 @@ function rewardIcon(record: BlindBoxRecord) {
 }
 
 function propDescription(propType: string) {
+  if (propType === 'extra_draw')
+    return '已自动补发 1 个待开启盲盒，不占每日购买数量。'
   if (propType === 'topup_discount_90')
     return '下次钱包充值自动享受九折，仅使用一次。'
   if (propType === 'subscription_discount_90')
@@ -271,7 +281,7 @@ function propDescription(propType: string) {
   if (propType === 'consume_discount_10')
     return '全部现有官方分组通用，无需切换专属分组；累计 15 分钟，可暂停。'
   if (propType === 'monthly_pass_multiplier')
-    return '套餐赠送权益，仅套餐分组可用。'
+    return '套餐赠送权益，无需切换分组；仅实际扣月卡额度时额外乘 0.1。'
   return '道具已进入“我的道具”，可按页面规则使用。'
 }
 

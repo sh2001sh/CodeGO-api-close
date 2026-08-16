@@ -71,7 +71,7 @@ func TestApplyBlindBoxConsumptionDiscountSkipsExternalChannel(t *testing.T) {
 	require.Zero(t, prop.UsedDiscountQuota)
 }
 
-func TestApplyMonthlyPassDiscountRecoversOriginalQuotaWithoutCap(t *testing.T) {
+func TestApplyBlindBoxConsumptionDiscountIgnoresPackageMultiplier(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	prop := &commerceschema.BlindBoxProp{
 		UserId: 7003, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
@@ -81,24 +81,15 @@ func TestApplyMonthlyPassDiscountRecoversOriginalQuotaWithoutCap(t *testing.T) {
 	}
 	require.NoError(t, db.Create(prop).Error)
 
-	outside, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
-		RequestID: "discount-monthly-pass-outside", UserID: prop.UserId, ChannelID: 30,
-		ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "gpt-5",
-		UsingGroup: "official", Quota: 100,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 100, outside.QuotaAfterDiscount)
-	require.Zero(t, outside.DiscountQuota)
-
 	result, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
 		RequestID: "discount-monthly-pass", UserID: prop.UserId, ChannelID: 30,
 		ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "gpt-5",
-		UsingGroup: MonthlyPassGroup, Quota: 100,
+		UsingGroup: "official", Quota: 1000,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1000, result.QuotaBeforeDiscount)
-	require.Equal(t, 100, result.QuotaAfterDiscount)
-	require.Equal(t, 900, result.DiscountQuota)
+	require.Equal(t, 1000, result.QuotaAfterDiscount)
+	require.Zero(t, result.DiscountQuota)
 }
 
 func TestApplyBlindBoxUniversalMultiplierUsesSelectedOfficialGroup(t *testing.T) {

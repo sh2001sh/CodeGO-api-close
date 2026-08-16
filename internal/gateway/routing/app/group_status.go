@@ -34,6 +34,7 @@ type UserGroupModelStatusItem struct {
 
 type UserGroupStatusItem struct {
 	Group        string                     `json:"group"`
+	DisplayName  string                     `json:"display_name"`
 	SourceType   string                     `json:"source_type"`
 	Status       string                     `json:"status"`
 	RequestCount int64                      `json:"request_count"`
@@ -43,6 +44,7 @@ type UserGroupStatusItem struct {
 
 type groupStatusBuildContext struct {
 	groupSources      map[string]string
+	groupDisplayNames map[string]string
 	groupSummaries    map[string][]*GroupModelStatusSummary
 	successRates      map[string]*float64
 	requestCounts     map[string]int64
@@ -66,6 +68,7 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 		return nil, err
 	}
 	groupSources := resolveGroupStatusSources(groupNames)
+	groupDisplayNames := resolveGroupStatusDisplayNames(groupNames)
 
 	groupSummaries := buildPricingGroupModelSummaries(pricing, groupNames)
 	mergeMarketplaceGroupModels(groupSummaries, groupNames)
@@ -74,7 +77,7 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 	groupCacheRates, modelCacheRates := queryGroupCacheHitRates(groupNames, 24)
 
 	context := groupStatusBuildContext{
-		groupSources: groupSources, groupSummaries: groupSummaries,
+		groupSources: groupSources, groupDisplayNames: groupDisplayNames, groupSummaries: groupSummaries,
 		successRates: successRates, requestCounts: requestCounts,
 		seriesByModel: seriesByModel, groupCacheRates: groupCacheRates,
 		modelCacheRates: modelCacheRates, sampleWindowHours: sampleWindowHours,
@@ -118,7 +121,7 @@ func buildUserGroupStatusItem(groupName string, context groupStatusBuildContext)
 		}
 		return modelItems[i].Model < modelItems[j].Model
 	})
-	return UserGroupStatusItem{Group: groupName, SourceType: context.groupSources[groupName], Status: groupStatus,
+	return UserGroupStatusItem{Group: groupName, DisplayName: context.groupDisplayNames[groupName], SourceType: context.groupSources[groupName], Status: groupStatus,
 		RequestCount: groupRequestCount, CacheHitRate: context.groupCacheRates[groupName], Models: modelItems}
 }
 
@@ -171,6 +174,27 @@ func resolveGroupStatusSources(groupNames []string) map[string]string {
 	}
 	for _, group := range groups {
 		result[group.InternalGroupName] = marketplacedomain.SourceTypeMarketplaceUser
+	}
+	return result
+}
+
+func resolveGroupStatusDisplayNames(groupNames []string) map[string]string {
+	result := make(map[string]string, len(groupNames))
+	for _, groupName := range groupNames {
+		result[groupName] = groupName
+	}
+	if platformdb.DB == nil || len(groupNames) == 0 {
+		return result
+	}
+	var groups []marketplaceschema.Group
+	if err := platformdb.DB.Select("internal_group_name", "system_display_name").
+		Where("internal_group_name IN ?", groupNames).Find(&groups).Error; err != nil {
+		return result
+	}
+	for _, group := range groups {
+		if displayName := strings.TrimSpace(group.SystemDisplayName); displayName != "" {
+			result[group.InternalGroupName] = displayName
+		}
 	}
 	return result
 }

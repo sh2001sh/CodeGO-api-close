@@ -61,7 +61,7 @@ func ListRoutePools() ([]gatewaystore.RoutePoolDetail, error) {
 // assigned to channels. It intentionally includes groups that have not opted
 // in yet, so Root can see whether they are still using legacy routing.
 func ListRoutePoolGroups() ([]RoutePoolGroup, error) {
-	channels, err := gatewaystore.ListAllChannelSummaries()
+	channels, err := listOfficialRoutePoolChannels()
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func SaveRoutePoolGroup(group string, enabled bool, members []gatewayschema.Rout
 	if group == "" {
 		return nil, errors.New("group is required")
 	}
-	channels, err := gatewaystore.ListAllChannelSummaries()
+	channels, err := listOfficialRoutePoolChannels()
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +158,20 @@ func SaveRoutePoolGroup(group string, enabled bool, members []gatewayschema.Rout
 		}
 	}
 	return gatewaystore.SaveRoutePool(&pool, members)
+}
+
+func listOfficialRoutePoolChannels() ([]*gatewayschema.Channel, error) {
+	channels, err := gatewaystore.ListAllChannelSummaries()
+	if err != nil {
+		return nil, err
+	}
+	official := make([]*gatewayschema.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if channel != nil && channel.IsOfficial() {
+			official = append(official, channel)
+		}
+	}
+	return official, nil
 }
 
 func SaveRoutePool(pool gatewayschema.RoutePool, members []gatewayschema.RoutePoolMember) (*gatewaystore.RoutePoolDetail, error) {

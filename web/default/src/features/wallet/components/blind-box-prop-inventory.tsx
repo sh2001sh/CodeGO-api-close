@@ -44,7 +44,8 @@ function getPropPresentation(prop: BlindBoxProp): PropPresentation {
       }
     case 'monthly_pass_multiplier':
       return {
-        description: '套餐赠送权益，仅套餐分组可用；可暂停并保留剩余时间。',
+        description:
+          '套餐赠送权益，无需切换分组；仅在实际扣月卡额度时额外乘 0.1，可暂停。',
         actionLabel: '立即启用',
         manualActivation: true,
       }
@@ -201,7 +202,7 @@ export function BlindBoxPropInventory(props: {
 }
 
 function getPropTitle(prop: BlindBoxProp) {
-  if (prop.prop_type === 'consume_discount_10') return '0.1 倍率卡'
+  if (prop.prop_type === 'consume_discount_10') return '15 分钟 0.1 倍率卡'
   if (prop.prop_type === 'monthly_pass_multiplier') return '套餐 0.1 倍率卡'
   if (prop.prop_type === 'subscription_discount_90') return '历史套餐折扣卡'
   if (prop.prop_type === 'zero_hour_multiplier') return '历史 0 倍率道具'

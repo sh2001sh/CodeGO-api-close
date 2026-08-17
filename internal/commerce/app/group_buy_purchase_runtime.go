@@ -165,7 +165,8 @@ func settleGroupBuyOrder(groupBuyID int64) error {
 				if err != nil {
 					return err
 				}
-				if err := addSubscriptionBonusTx(tx, sub, int64(quota)); err != nil {
+				grantKey := fmt.Sprintf("group-buy:%d:member:%d:tier:%d", order.Id, member.Id, quota)
+				if err := addSubscriptionBonusTx(tx, sub, int64(quota), grantKey); err != nil {
 					return err
 				}
 				if err := tx.Model(&commerceschema.GroupBuyMember{}).Where("id = ?", member.Id).
@@ -223,7 +224,9 @@ func reconcileGroupBuyBonus(groupBuyID int64, activeSubscriptionsOnly bool) (int
 			if activeSubscriptionsOnly && sub.Status != "active" {
 				continue
 			}
-			if err := addSubscriptionBonusTx(tx, sub, int64(quotaUnitsFromUSD(delta))); err != nil {
+			targetQuota := quotaUnitsFromUSD(target)
+			grantKey := fmt.Sprintf("group-buy:%d:member:%d:tier:%d", order.Id, member.Id, targetQuota)
+			if err := addSubscriptionBonusTx(tx, sub, int64(quotaUnitsFromUSD(delta)), grantKey); err != nil {
 				return err
 			}
 			if err := tx.Model(&commerceschema.GroupBuyMember{}).Where("id = ?", member.Id).Updates(map[string]any{"bonus_granted": true, "bonus_amount_usd": target}).Error; err != nil {

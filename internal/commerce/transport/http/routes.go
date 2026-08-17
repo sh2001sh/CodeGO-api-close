@@ -102,6 +102,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.GET("/self", getBlindBoxSelf)
 		blindBoxRoute.GET("/history", getBlindBoxHistory)
 		blindBoxRoute.GET("/orders/:trade_no", getBlindBoxOrderStatus)
+		blindBoxRoute.POST("/orders/:trade_no/cancel", middleware.CriticalRateLimit(), cancelBlindBoxOrder)
 		blindBoxRoute.POST("/amount", requestBlindBoxAmount)
 		blindBoxRoute.POST("/pay", middleware.BlindBoxPaymentRateLimit(), requestBlindBoxPay)
 		blindBoxRoute.POST("/props/:id/use", middleware.CriticalRateLimit(), useBlindBoxProp)

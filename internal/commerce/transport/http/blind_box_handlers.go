@@ -5,6 +5,7 @@ import (
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	stdhttp "net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
@@ -228,6 +229,19 @@ func getBlindBoxOrderStatus(c *gin.Context) {
 		return
 	}
 	httpapi.ApiSuccess(c, payload)
+}
+
+func cancelBlindBoxOrder(c *gin.Context) {
+	tradeNo := strings.TrimSpace(c.Param("trade_no"))
+	if tradeNo == "" {
+		httpapi.ApiErrorMsg(c, "invalid trade no")
+		return
+	}
+	if err := commerceapp.CancelPendingBlindBoxOrder(c.GetInt("id"), tradeNo); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, nil)
 }
 
 func requestBlindBoxAmount(c *gin.Context) {

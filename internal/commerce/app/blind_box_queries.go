@@ -59,7 +59,7 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 		}
 	}
 	if err := platformdb.DB.Model(&commerceschema.BlindBoxOrder{}).
-		Where("user_id = ? AND status = ?", userID, constant.TopUpStatusPending).
+		Where("user_id = ? AND status = ? AND create_time > ?", userID, constant.TopUpStatusPending, pendingBlindBoxOrderCutoff(now)).
 		Select("COALESCE(SUM(quantity - opened_count), 0)").
 		Scan(&overview.PendingBoxes).Error; err != nil {
 		return nil, err
@@ -251,9 +251,10 @@ func sumBlindBoxOrderQuantity(userID int, start, end int64) (int, error) {
 		Total int64 `gorm:"column:total"`
 	}
 	var row result
+	cutoff := pendingBlindBoxOrderCutoff(platformruntime.GetTimestamp())
 	err := platformdb.DB.Model(&commerceschema.BlindBoxOrder{}).
 		Select("COALESCE(SUM(quantity), 0) AS total").
-		Where("user_id = ? AND create_time >= ? AND create_time < ? AND status <> ? AND money > 0", userID, start, end, constant.TopUpStatusExpired).
+		Where("user_id = ? AND create_time >= ? AND create_time < ? AND money > 0 AND (status = ? OR (status = ? AND create_time > ?))", userID, start, end, constant.TopUpStatusSuccess, constant.TopUpStatusPending, cutoff).
 		Scan(&row).Error
 	return int(row.Total), err
 }

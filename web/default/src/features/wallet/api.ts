@@ -342,6 +342,13 @@ export async function getBlindBoxOrderStatus(
   return res.data
 }
 
+export async function cancelBlindBoxOrder(
+  tradeNo: string
+): Promise<ApiResponse> {
+  const res = await api.post(`/api/blind-box/orders/${tradeNo}/cancel`)
+  return res.data
+}
+
 export async function openBlindBoxes(
   request: BlindBoxOpenRequest
 ): Promise<BlindBoxOpenResponse> {

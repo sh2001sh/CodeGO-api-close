@@ -105,7 +105,7 @@ func countPendingPaidBlindBoxOrdersTx(tx *gorm.DB, userID int) (int64, error) {
 	dayStart, dayEnd := getBlindBoxDayRange(platformruntime.GetTimestamp())
 	var count int64
 	err := tx.Model(&commerceschema.BlindBoxOrder{}).
-		Where("user_id = ? AND create_time >= ? AND create_time < ? AND status = ? AND money > 0", userID, dayStart, dayEnd, constant.TopUpStatusPending).
+		Where("user_id = ? AND create_time >= ? AND create_time < ? AND status = ? AND create_time > ? AND money > 0", userID, dayStart, dayEnd, constant.TopUpStatusPending, pendingBlindBoxOrderCutoff(platformruntime.GetTimestamp())).
 		Select("COALESCE(SUM(quantity), 0)").Scan(&count).Error
 	return count, err
 }

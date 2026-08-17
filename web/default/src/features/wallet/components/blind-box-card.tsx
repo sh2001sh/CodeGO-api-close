@@ -93,6 +93,8 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     setPaymentState,
     handlePay,
     handleOpenExternal,
+    handleCancelPayment,
+    handleContinuePaymentInBackground,
     handleRetryPayment,
   } = useBlindBoxPayment({
     paymentResult: props.paymentResult,
@@ -301,7 +303,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           )
         }}
         onOpenExternal={handleOpenExternal}
+        onCancel={handleCancelPayment}
         onContinueInBackground={() => {
+          handleContinuePaymentInBackground()
           toast.message('支付正在后台处理，完成后会自动同步结果')
         }}
         onRetry={handleRetryPayment}

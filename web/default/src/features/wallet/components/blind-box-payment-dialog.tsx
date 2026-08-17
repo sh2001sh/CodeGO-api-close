@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import React from 'react'
 import {
   CheckCircle2,
   CircleSlash,
@@ -25,7 +26,6 @@ import {
   QrCode,
   XCircle,
 } from 'lucide-react'
-import React from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -46,17 +46,17 @@ const STATUS_CONFIG = {
     tone: 'border-warning/20 bg-warning/5',
   },
   success: {
-    icon: <CheckCircle2 className='size-5 text-success' />,
+    icon: <CheckCircle2 className='text-success size-5' />,
     title: '支付成功',
     tone: 'border-success/20 bg-success/5',
   },
   failed: {
-    icon: <XCircle className='size-5 text-destructive' />,
+    icon: <XCircle className='text-destructive size-5' />,
     title: '支付失败',
     tone: 'border-destructive/20 bg-destructive/5',
   },
   idle: {
-    icon: <CircleSlash className='size-5 text-muted-foreground' />,
+    icon: <CircleSlash className='text-muted-foreground size-5' />,
     title: '待支付',
     tone: 'border-border/70 bg-background/50',
   },
@@ -66,10 +66,12 @@ export function BlindBoxPaymentDialog(props: {
   state: BlindBoxPaymentState
   onOpenChange: (open: boolean) => void
   onOpenExternal: () => void
+  onCancel: () => Promise<boolean>
   onContinueInBackground?: () => void
   onRetry?: () => void
 }) {
   const [showExitConfirm, setShowExitConfirm] = React.useState(false)
+  const [cancelling, setCancelling] = React.useState(false)
 
   const handleCloseAttempt = () => {
     if (props.state.stage === 'pending') {
@@ -79,22 +81,26 @@ export function BlindBoxPaymentDialog(props: {
     }
   }
 
-  const handleConfirmExit = () => {
-    setShowExitConfirm(false)
-    props.onOpenChange(false)
+  const handleConfirmExit = async () => {
+    setCancelling(true)
+    try {
+      if (await props.onCancel()) {
+        setShowExitConfirm(false)
+      }
+    } finally {
+      setCancelling(false)
+    }
   }
 
   const handleContinueInBackground = () => {
     setShowExitConfirm(false)
     props.onContinueInBackground?.()
-    props.onOpenChange(false)
   }
 
   const elapsedTime = props.state.pollingStartTime
     ? Date.now() - props.state.pollingStartTime
     : 0
-  const isTimedOut =
-    props.state.stage === 'pending' && elapsedTime > TIMEOUT_MS
+  const isTimedOut = props.state.stage === 'pending' && elapsedTime > TIMEOUT_MS
   const statusConfig = STATUS_CONFIG[props.state.stage]
 
   return (
@@ -115,6 +121,7 @@ export function BlindBoxPaymentDialog(props: {
             onContinueInBackground={handleContinueInBackground}
             onConfirmExit={handleConfirmExit}
             onBack={() => setShowExitConfirm(false)}
+            cancelling={cancelling}
           />
         ) : (
           <div className='space-y-4 px-5 py-5'>
@@ -185,8 +192,9 @@ export function BlindBoxPaymentDialog(props: {
 
 function ExitConfirmPanel(props: {
   onContinueInBackground: () => void
-  onConfirmExit: () => void
+  onConfirmExit: () => Promise<void>
   onBack: () => void
+  cancelling: boolean
 }) {
   return (
     <div className='space-y-4 px-5 py-5'>
@@ -195,16 +203,30 @@ function ExitConfirmPanel(props: {
           支付仍在处理中
         </div>
         <div className='text-muted-foreground mt-1 text-sm leading-6'>
-          关闭对话框后，支付结果会自动同步到账户。你可以在账单历史中查看订单状态。
+          后台继续会保留当前订单；取消订单会立即释放本次购买额度。若支付结果稍后才返回，已付款的盲盒仍会自动到账。
         </div>
       </div>
 
       <div className='flex flex-wrap gap-2'>
-        <Button onClick={props.onContinueInBackground}>后台继续</Button>
-        <Button variant='outline' onClick={props.onConfirmExit}>
-          关闭对话框
+        <Button
+          onClick={props.onContinueInBackground}
+          disabled={props.cancelling}
+        >
+          后台继续
         </Button>
-        <Button variant='ghost' onClick={props.onBack}>
+        <Button
+          variant='outline'
+          onClick={props.onConfirmExit}
+          disabled={props.cancelling}
+        >
+          {props.cancelling ? <Loader2 className='animate-spin' /> : null}
+          取消订单
+        </Button>
+        <Button
+          variant='ghost'
+          onClick={props.onBack}
+          disabled={props.cancelling}
+        >
           返回支付
         </Button>
       </div>
@@ -252,7 +274,7 @@ function Metric(props: { label: string; value: string; mono?: boolean }) {
       <div
         className={cn(
           'text-foreground mt-1 text-sm font-semibold',
-          props.mono && 'break-all font-mono'
+          props.mono && 'font-mono break-all'
         )}
       >
         {props.value}

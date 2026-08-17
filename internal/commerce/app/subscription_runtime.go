@@ -187,7 +187,7 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 		if err := ConsumeReservedBlindBoxPropByTradeNoTx(tx, tradeNo, commerceschema.BlindBoxPropOrderTypeSubscription); err != nil {
 			return err
 		}
-		if err := ApplySubscriptionPurchaseBonusTx(tx, order.UserId, sub, plan, preview); err != nil {
+		if err := ApplySubscriptionPurchaseBonusTx(tx, order.UserId, sub, plan, preview, order.TradeNo); err != nil {
 			return err
 		}
 		if err := ApplyGroupBuyPurchaseAfterPaymentTx(tx, order, plan, sub); err != nil {

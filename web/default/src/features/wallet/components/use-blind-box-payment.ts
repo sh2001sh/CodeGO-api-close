@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import {
+  cancelBlindBoxOrder,
   getBlindBoxOrderStatus,
   getBlindBoxSelf,
   isApiSuccess,
@@ -62,12 +63,7 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
   }, [options.paymentResult, options.refreshAll])
 
   useEffect(() => {
-    if (
-      !paymentState.open ||
-      paymentState.stage !== 'pending' ||
-      !paymentState.orderId
-    )
-      return
+    if (paymentState.stage !== 'pending' || !paymentState.orderId) return
     let active = true
     const pollOrder = async () => {
       try {
@@ -90,11 +86,17 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
           return
         }
         if (order.status === 'expired') {
-          setPaymentState((current) => ({
-            ...current,
-            stage: 'failed',
-            message: '订单已过期或支付未完成，请重新发起购买。',
-          }))
+          if (paymentState.open) {
+            setPaymentState((current) => ({
+              ...current,
+              stage: 'failed',
+              message: '订单已过期或支付未完成，请重新发起购买。',
+            }))
+          } else {
+            setPaymentState(EMPTY_PAYMENT_STATE)
+            toast.message('未付款订单已过期，可以重新购买盲盒')
+            await options.refreshAll()
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : ''
@@ -189,6 +191,31 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
     }
   }, [paymentState.formFields, paymentState.formUrl, paymentState.payUrl])
 
+  const handleCancelPayment = useCallback(async () => {
+    if (!paymentState.orderId || paymentState.stage !== 'pending') {
+      setPaymentState(EMPTY_PAYMENT_STATE)
+      return true
+    }
+    try {
+      const response = await cancelBlindBoxOrder(paymentState.orderId)
+      if (!isApiSuccess(response)) {
+        throw new Error(response.message || '取消订单失败')
+      }
+      setPaymentState(EMPTY_PAYMENT_STATE)
+      await options.refreshAll()
+      toast.success('订单已取消，可以重新购买盲盒')
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '取消订单失败'
+      toast.error(message)
+      return false
+    }
+  }, [options.refreshAll, paymentState.orderId, paymentState.stage])
+
+  const handleContinuePaymentInBackground = useCallback(() => {
+    setPaymentState((current) => ({ ...current, open: false }))
+  }, [])
+
   const handleRetryPayment = useCallback(() => {
     if (!paymentState.retryPayload) return
     const method = options.data?.pay_methods?.find(
@@ -217,6 +244,8 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
     setPaymentState,
     handlePay,
     handleOpenExternal,
+    handleCancelPayment,
+    handleContinuePaymentInBackground,
     handleRetryPayment,
   }
 }

@@ -52,8 +52,8 @@ func ValidateBlindBoxPurchase(userID int, quantity int) (float64, error) {
 	return setting.UnitPrice * float64(quantity), nil
 }
 
-// CompleteBlindBoxOrder completes a pending payment. Boxes remain unopened so
-// the user can choose whether to reveal them one at a time or all together.
+// CompleteBlindBoxOrder completes a verified payment. Expired orders are
+// accepted because a provider callback can arrive after a user closes checkout.
 func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPaymentProvider string, actualPaymentMethod string) error {
 	if strings.TrimSpace(tradeNo) == "" {
 		return errors.New("tradeNo is empty")
@@ -70,7 +70,7 @@ func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPayme
 		if order.Status == constant.TopUpStatusSuccess {
 			return nil
 		}
-		if order.Status != constant.TopUpStatusPending {
+		if order.Status != constant.TopUpStatusPending && order.Status != constant.TopUpStatusExpired {
 			return commercedomain.ErrBlindBoxOrderStatusInvalid
 		}
 

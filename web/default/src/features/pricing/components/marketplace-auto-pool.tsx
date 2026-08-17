@@ -92,7 +92,7 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
     try {
       await update.mutateAsync(selectedOrder)
       setSelectedDraft(null)
-      toast.success(t('第三方 Auto 路由池已保存'))
+      toast.success(t('全局 Auto 路由池已保存'))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('路由池保存失败'))
     }
@@ -104,18 +104,18 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
         <div>
           <div className='flex items-center gap-2'>
             <Route className='text-primary size-5' />
-            <h2 className='font-semibold'>{t('我的第三方 Auto 路由池')}</h2>
+            <h2 className='font-semibold'>{t('我的全局 Auto 路由池')}</h2>
           </div>
           <p className='text-muted-foreground mt-2 max-w-2xl text-sm leading-6'>
             {t(
-              '只在你选择的第三方分组中路由，并按保存的优先级依次尝试；初始推荐顺序综合倍率与保守可用率，所有调用均使用通用额度。'
+              '在你选择的官方与第三方分组中路由，并按保存的优先级依次尝试；初始推荐顺序综合倍率与保守可用率。'
             )}
           </p>
           <div className='mt-4 flex flex-wrap gap-2'>
             <Badge variant='outline'>
               {t('分组')}: {selected.size}
             </Badge>
-            <Badge variant='outline'>{t('Token 分组')}: market:auto</Badge>
+            <Badge variant='outline'>{t('Token 分组')}: auto</Badge>
             <Badge variant='outline'>
               {t('额度')}: {t('通用额度')}
             </Badge>
@@ -146,7 +146,7 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
 
       {visibleItems.length === 0 ? (
         <div className='text-muted-foreground px-5 py-16 text-center text-sm'>
-          {t('没有匹配的第三方分组。')}
+          {t('没有匹配的官方或第三方分组。')}
         </div>
       ) : (
         <div className='divide-border divide-y'>
@@ -181,10 +181,10 @@ function SignInRequired() {
   return (
     <div className='border-border flex min-h-72 flex-col items-center justify-center rounded-lg border px-6 text-center'>
       <Route className='text-primary size-7' />
-      <h2 className='mt-4 font-semibold'>{t('登录后配置第三方 Auto')}</h2>
+      <h2 className='mt-4 font-semibold'>{t('登录后配置全局 Auto')}</h2>
       <p className='text-muted-foreground mt-2 max-w-lg text-sm leading-6'>
         {t(
-          '路由池属于个人配置。登录后选择需要使用的第三方分组，再在创建 API Key 时选择“第三方 Auto”。'
+          '路由池属于个人配置。登录后选择需要使用的官方或第三方分组，再在创建 API Key 时选择“Auto”。'
         )}
       </p>
       <Button

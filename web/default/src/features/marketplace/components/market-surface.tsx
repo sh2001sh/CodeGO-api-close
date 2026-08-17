@@ -1,7 +1,9 @@
 import { RefreshCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { useMarketplaceGroups } from '../hooks'
+import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
 import type { GroupFilters } from '../types'
 import { MarketplaceGroupList } from './group-list'
 import { MarketplaceFilters } from './marketplace-filters'
@@ -68,6 +70,35 @@ export function MarketSurface(props: {
           )}
         </div>
       )}
+      <div className='border-border border-b px-4 pt-3 sm:px-5'>
+        <Tabs
+          value={props.filters.source || 'all'}
+          onValueChange={(value) =>
+            props.updateFilters({
+              source: value === 'all' ? '' : value,
+              page: 1,
+            })
+          }
+        >
+          <TabsList
+            variant='line'
+            className='max-w-full justify-start overflow-x-auto'
+          >
+            <TabsTrigger value='all' className='shrink-0 px-3'>
+              {t('全部来源')}
+            </TabsTrigger>
+            {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
+              <TabsTrigger
+                key={source}
+                value={source}
+                className='shrink-0 px-3'
+              >
+                {source}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
       <MarketplaceFilters
         filters={props.filters}
         onChange={props.updateFilters}

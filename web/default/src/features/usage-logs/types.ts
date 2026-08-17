@@ -184,6 +184,9 @@ export interface LogOtherData {
   billing_quota_category?: 'universal' | 'gpt' | 'subscription'
   billing_quota_label?: string
   marketplace_group_id?: string
+  marketplace_group_display_name?: string
+  marketplace_channel_id?: string
+  marketplace_public_slug?: string
   group?: string
   stream_status?: {
     status?: string

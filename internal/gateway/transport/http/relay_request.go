@@ -17,6 +17,7 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformconcurrency "github.com/sh2001sh/new-api/internal/platform/concurrency"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
@@ -136,6 +137,12 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	retryTimes := gatewayroutingapp.EffectiveRetryTimes(relayInfo.TokenGroup)
+	if bindings, found := httpctx.GetContextKeyType[[]marketplaceapp.RoutingBinding](c, constant.ContextKeyUnifiedAutoBindings); found {
+		if remaining := len(bindings) - 1; remaining > retryTimes {
+			retryTimes = remaining
+		}
+		relaycommon.ExpandRequestBudget(requestBudget, len(bindings))
+	}
 	if requestBudget != nil && retryTimes >= requestBudget.MaxAttempts {
 		retryTimes = requestBudget.MaxAttempts - 1
 	}
@@ -208,7 +215,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		faultDomain := c.GetString("channel_fault_domain")
-		releaseFaultDomainSlot, admitted, _ := relaycommon.TryAcquireFaultDomainSlot(faultDomain, relayInfo.OriginModelName, requestProfile.RequestType)
+		releaseFaultDomainSlot, admitted, _ := relaycommon.TryAcquireFaultDomainSlotForUser(faultDomain, relayInfo.OriginModelName, relayInfo.UserId, requestProfile.RequestType)
 		if !admitted {
 			relaycommon.ExcludeFaultDomain(c, faultDomain)
 			relaycommon.ExcludeRouteDecisionCandidate(c, "fault_domain_capacity")
@@ -264,6 +271,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		relaycommon.StartRouteDecisionAttempt(c, relayInfo.RetryIndex, channel.Id, faultDomain)
 		relayInfo.FirstByteTrace.MarkUpstreamStart()
 		upstreamStarted = true
+		releaseChannelConcurrency := relaycommon.BeginChannelRequest(channel.Id)
 
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
@@ -275,6 +283,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		default:
 			newAPIError = relayHandler(c, relayInfo)
 		}
+		releaseChannelConcurrency()
 		if releaseFaultDomainSlot != nil {
 			if newAPIError == nil || relaycommon.IsLocalStreamMaxDurationExceeded(c) {
 				releaseFaultDomainSlot(true, 0)

@@ -13,7 +13,6 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
-import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
 import type { GroupFilters } from '../types'
 
 export function MarketplaceFilters(props: {
@@ -39,7 +38,7 @@ export function MarketplaceFilters(props: {
             onChange={(event) =>
               props.onChange({ search: event.target.value, page: 1 })
             }
-            placeholder={t('搜索渠道 ID、渠道名、模型或来源')}
+            placeholder={t('搜索分组、渠道 ID、模型或来源')}
             className='bg-background pl-9'
           />
         </label>
@@ -53,21 +52,6 @@ export function MarketplaceFilters(props: {
             aria-label={t('指定模型')}
             className='bg-background w-36 sm:w-44'
           />
-          <NativeSelect
-            value={props.filters.source}
-            onChange={(event) =>
-              props.onChange({ source: event.target.value, page: 1 })
-            }
-            aria-label={t('模型来源')}
-            className='bg-background'
-          >
-            <option value=''>{t('全部来源')}</option>
-            {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
-              <option key={source} value={source}>
-                {source}
-              </option>
-            ))}
-          </NativeSelect>
           <NativeSelect
             value={props.filters.provider}
             onChange={(event) =>
@@ -92,9 +76,13 @@ export function MarketplaceFilters(props: {
             className='bg-background'
           >
             <option value=''>{t('全部状态')}</option>
+            <option value='draft'>{t('草稿')}</option>
+            <option value='verifying'>{t('检测中')}</option>
+            <option value='pending_review'>{t('待审核')}</option>
             <option value='active'>{t('可用')}</option>
             <option value='degraded'>{t('质量下降')}</option>
             <option value='suspended'>{t('已暂停')}</option>
+            <option value='disabled'>{t('已停用')}</option>
           </NativeSelect>
           <NativeSelect
             value={props.filters.verification}

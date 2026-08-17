@@ -16,6 +16,13 @@ export type GPT56MappingStatus =
   | 'mismatch'
   | 'insufficient_evidence'
 
+export type ConnectivityTestStatus =
+  | ''
+  | 'queued'
+  | 'running'
+  | 'passed'
+  | 'failed'
+
 export interface ModelVerificationResult {
   model: string
   status: 'passed' | 'failed'
@@ -30,6 +37,8 @@ export interface GPT56MappingResult {
   reported_model?: string
   status: Exclude<GPT56MappingStatus, '' | 'running'>
   latency_ms: number
+  sample_count: number
+  matched_samples: number
   error?: string
   tested_at: string
 }
@@ -54,7 +63,12 @@ export interface MarketplaceGroup {
   multiplier: number
   models: string[]
   model_verification_results: ModelVerificationResult[]
+  connectivity_test_status: ConnectivityTestStatus
+  connectivity_test_checked_at?: string | null
   model_consistency_status: ModelConsistencyStatus
+  auto_probe_enabled: boolean
+  auto_probe_interval_minutes: number
+  auto_probe_model: string
   channel_feedback: ChannelFeedbackSummary
   can_submit_channel_feedback: boolean
   channel_feedback_permission: 'allowed' | 'owner' | 'login_required'
@@ -72,8 +86,10 @@ export interface MarketplaceGroup {
     success_rate: number
     request_count: number
   }>
+  recent_request_bucket_seconds: number
   request_count: number
-  independent_consumers: number
+  max_concurrency: number
+  current_concurrency: number
   observing: boolean
   updated_at: string
 }
@@ -112,6 +128,7 @@ export interface MarketplaceGroupHighlights {
 
 export interface MarketplaceChannel {
   id: string
+  owner_user_id: number
   group_id: string
   public_slug: string
   system_display_name: string
@@ -133,10 +150,17 @@ export interface MarketplaceChannel {
   verification_started_at?: string | null
   verification_completed_at?: string | null
   model_verification_results: ModelVerificationResult[]
+  connectivity_test_status: ConnectivityTestStatus
+  connectivity_test_checked_at?: string | null
   model_consistency_status: ModelConsistencyStatus
   gpt56_mapping_results: GPT56MappingResult[]
   gpt56_mapping_status: GPT56MappingStatus
   gpt56_mapping_checked_at?: string | null
+  auto_probe_enabled: boolean
+  auto_probe_interval_minutes: number
+  auto_probe_model: string
+  auto_probe_last_status: ConnectivityTestStatus
+  auto_probe_last_at?: string | null
   visibility: string
   max_concurrency: number
   qps: number
@@ -151,6 +175,29 @@ export interface MarketplaceChannel {
   released_income: number
   created_at: string
   updated_at: string
+}
+
+export interface AdminMarketplaceChannelFilters {
+  status?: string
+  startTimestamp?: number
+  endTimestamp?: number
+}
+
+export interface AdminOwnerIncomeItem {
+  owner_user_id: number
+  request_count: number
+  total_income: number
+  pending_income: number
+  released_income: number
+}
+
+export interface AdminOwnerIncomeResult {
+  items: AdminOwnerIncomeItem[]
+  owner_count: number
+  request_count: number
+  total_income: number
+  pending_income: number
+  released_income: number
 }
 
 export interface ChannelFormValues {
@@ -182,6 +229,9 @@ export interface ChannelUpdateValues {
   base_url?: string
   api_key?: string
   model_consistency_status?: ModelConsistencyStatus
+  auto_probe_enabled: boolean
+  auto_probe_interval_minutes: number
+  auto_probe_model: string
 }
 
 export interface ChannelModelPrice {
@@ -256,6 +306,7 @@ export interface MarketplaceOwnerUsageLogFilters {
 
 export interface MarketplaceAutoRoutePoolItem {
   group_id: string
+  source_type: 'official' | 'marketplace_user'
   public_slug: string
   system_display_name: string
   source_label: string
@@ -271,7 +322,7 @@ export interface MarketplaceAutoRoutePoolItem {
 }
 
 export interface MarketplaceAutoRoutePool {
-  token_group: 'market:auto'
+  token_group: 'auto'
   selected_count: number
   items: MarketplaceAutoRoutePoolItem[]
 }

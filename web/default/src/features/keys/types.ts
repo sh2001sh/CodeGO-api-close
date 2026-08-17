@@ -106,3 +106,4 @@ export type ApiKeysDialogType =
   | 'delete'
   | 'batch-delete'
   | 'desktop-client'
+  | 'connectivity-test'

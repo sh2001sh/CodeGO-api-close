@@ -1,9 +1,18 @@
-import { Loader2, Pause, Pencil, Play, RefreshCcw, Trash2 } from 'lucide-react'
+import {
+  Activity,
+  Loader2,
+  Pause,
+  Pencil,
+  Play,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useMarketplaceMutations } from '../hooks'
+import { hasGPT56Model } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
 
 export function OwnerChannelActions(props: {
@@ -15,11 +24,19 @@ export function OwnerChannelActions(props: {
   const mutations = useMarketplaceMutations()
   const channel = props.channel
 
-  const act = async (action: 'verify' | 'pause' | 'resume') => {
+  const needsDetection = hasGPT56Model(channel.declared_models)
+  const act = async (
+    action: 'detect' | 'test-connectivity' | 'pause' | 'resume'
+  ) => {
     try {
-      if (action === 'verify') {
-        await mutations.verify.mutateAsync(channel.id)
-        toast.info(t('检测已开始，页面会自动更新进度和结果'))
+      if (action === 'detect') {
+        await mutations.detect.mutateAsync(channel.id)
+        toast.info(t('GPT-5.6 检测已开始，页面会自动更新结果'))
+        return
+      }
+      if (action === 'test-connectivity') {
+        await mutations.testConnectivity.mutateAsync(channel.id)
+        toast.info(t('模型连通性测试已开始，页面会自动更新结果'))
         return
       }
       await mutations.pause.mutateAsync({
@@ -38,22 +55,44 @@ export function OwnerChannelActions(props: {
         <Pencil />
         {t('编辑')}
       </Button>
+      {needsDetection && (
+        <Button
+          variant='outline'
+          size='sm'
+          onClick={() => void act('detect')}
+          disabled={
+            mutations.detect.isPending ||
+            channel.gpt56_mapping_status === 'running'
+          }
+        >
+          <ShieldCheck
+            className={cn(
+              channel.gpt56_mapping_status === 'running' && 'animate-pulse'
+            )}
+          />
+          {channel.gpt56_mapping_status === 'running'
+            ? t('检测中')
+            : t('检测 GPT-5.6')}
+        </Button>
+      )}
       <Button
         variant='outline'
         size='sm'
-        onClick={() => void act('verify')}
+        onClick={() => void act('test-connectivity')}
         disabled={
-          mutations.verify.isPending ||
-          channel.lifecycle_status === 'verifying' ||
-          ['queued', 'running'].includes(channel.verification_status)
+          mutations.testConnectivity.isPending ||
+          ['queued', 'running'].includes(channel.connectivity_test_status)
         }
       >
-        <RefreshCcw
+        <Activity
           className={cn(
-            channel.lifecycle_status === 'verifying' && 'animate-spin'
+            ['queued', 'running'].includes(channel.connectivity_test_status) &&
+              'animate-pulse'
           )}
         />
-        {channel.lifecycle_status === 'verifying' ? t('检测中') : t('重新检测')}
+        {['queued', 'running'].includes(channel.connectivity_test_status)
+          ? t('测试中')
+          : t('测试连通性')}
       </Button>
       {channel.lifecycle_status === 'suspended' ? (
         <Button variant='outline' size='sm' onClick={() => void act('resume')}>
@@ -83,7 +122,9 @@ export function OwnerChannelActions(props: {
         <Trash2 />
         {t('删除')}
       </Button>
-      {(mutations.pause.isPending || mutations.verify.isPending) && (
+      {(mutations.pause.isPending ||
+        mutations.detect.isPending ||
+        mutations.testConnectivity.isPending) && (
         <Loader2 className='text-muted-foreground size-4 animate-spin' />
       )}
     </div>

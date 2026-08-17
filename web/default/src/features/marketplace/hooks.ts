@@ -5,32 +5,40 @@ import {
   deleteMarketplaceChannel,
   fetchMarketplaceModels,
   getAdminMarketplaceChannels,
+  getAdminOwnerIncome,
   getMarketplaceGroups,
   getMarketplaceAutoRoutePool,
   getMyMarketplaceChannels,
   getMyMarketplaceUsageLogs,
   getTokenOptions,
-  queueMarketplaceVerification,
+  queueMarketplaceDetection,
+  queueMarketplaceConnectivityTest,
   reviewMarketplaceChannel,
   setMarketplaceChannelPaused,
   submitMarketplaceChannelFeedback,
   updateMarketplaceChannel,
   updateMarketplaceAutoRoutePool,
 } from './api'
-import type { GroupFilters, MarketplaceOwnerUsageLogFilters } from './types'
+import type {
+  AdminMarketplaceChannelFilters,
+  GroupFilters,
+  MarketplaceOwnerUsageLogFilters,
+} from './types'
 
 function verificationRefetchInterval(
   channels: {
     lifecycle_status: string
     verification_status: string
     gpt56_mapping_status?: string
+    connectivity_test_status?: string
   }[]
 ) {
   return channels.some(
     (channel) =>
       channel.lifecycle_status === 'verifying' ||
       ['queued', 'running'].includes(channel.verification_status) ||
-      channel.gpt56_mapping_status === 'running'
+      channel.gpt56_mapping_status === 'running' ||
+      ['queued', 'running'].includes(channel.connectivity_test_status ?? '')
   )
     ? 1000
     : false
@@ -119,9 +127,13 @@ export function useMarketplaceMutations() {
       onSuccess: invalidate,
     }),
     fetchModels: useMutation({ mutationFn: fetchMarketplaceModels }),
-    verify: useMutation({
+    detect: useMutation({
+      mutationFn: (channelId: string) => queueMarketplaceDetection(channelId),
+      onSuccess: invalidate,
+    }),
+    testConnectivity: useMutation({
       mutationFn: (channelId: string) =>
-        queueMarketplaceVerification(channelId),
+        queueMarketplaceConnectivityTest(channelId),
       onSuccess: invalidate,
     }),
     pause: useMutation({
@@ -140,13 +152,25 @@ export function useMarketplaceMutations() {
   }
 }
 
-export function useAdminMarketplaceChannels(enabled: boolean) {
+export function useAdminMarketplaceChannels(
+  filters: AdminMarketplaceChannelFilters,
+  enabled: boolean
+) {
   return useQuery({
-    queryKey: ['marketplace-channels', 'admin'],
-    queryFn: () => getAdminMarketplaceChannels(),
+    queryKey: ['marketplace-channels', 'admin', filters],
+    queryFn: () => getAdminMarketplaceChannels(filters),
     enabled,
+    placeholderData: (previousData) => previousData,
     refetchInterval: (query) =>
       verificationRefetchInterval(query.state.data ?? []),
+  })
+}
+
+export function useAdminOwnerIncome(filters: AdminMarketplaceChannelFilters) {
+  return useQuery({
+    queryKey: ['marketplace-owner-income', 'admin', filters],
+    queryFn: () => getAdminOwnerIncome(filters),
+    placeholderData: (previousData) => previousData,
   })
 }
 
@@ -164,11 +188,13 @@ export function useAdminMarketplaceReview() {
   })
 }
 
-export function useAdminMarketplaceVerification() {
+export function useAdminMarketplaceVerification(action: 'detect' | 'test') {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (channelId: string) =>
-      queueMarketplaceVerification(channelId, true),
+      action === 'detect'
+        ? queueMarketplaceDetection(channelId, true)
+        : queueMarketplaceConnectivityTest(channelId, true),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ['marketplace-channels'],

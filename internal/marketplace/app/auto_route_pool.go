@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -13,9 +14,10 @@ import (
 )
 
 const maxAutoRoutePoolMembers = 50
+const officialAutoRoutePrefix = "official:"
 
-// ListAutoRoutePool returns every eligible third-party group and marks the
-// groups currently selected by the user.
+// ListAutoRoutePool returns every eligible official and marketplace group and
+// marks the groups currently selected by the user.
 func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 	groups, channels, err := loadAutoRouteGroups(ownerUserID)
 	if err != nil {
@@ -40,7 +42,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 		}
 		availability, score := autoRouteMetrics(group, snapshots[group.ID])
 		items = append(items, AutoRoutePoolItem{
-			GroupID: group.ID, PublicSlug: group.PublicSlug,
+			GroupID: group.ID, SourceType: marketplacedomain.SourceTypeMarketplaceUser, PublicSlug: group.PublicSlug,
 			SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID),
 			SourceLabel:       publicSourceLabel(channel),
 			LifecycleStatus:   group.LifecycleStatus,
@@ -53,6 +55,13 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 			Selected:          isSelected,
 			Priority:          priority,
 		})
+	}
+	officialItems := loadOfficialAutoRouteItems(ownerUserID, selected)
+	for _, item := range officialItems {
+		if item.Selected {
+			selectedCount++
+		}
+		items = append(items, item)
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].Selected != items[j].Selected {
@@ -67,7 +76,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 		return items[i].GroupID < items[j].GroupID
 	})
 	return &AutoRoutePoolView{
-		TokenGroup: marketplacedomain.TokenAutoGroupValue, SelectedCount: selectedCount, Items: items,
+		TokenGroup: gatewayroutingapp.AutoGroupName, SelectedCount: selectedCount, Items: items,
 	}, nil
 }
 
@@ -75,7 +84,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*AutoRoutePoolView, error) {
 	groupIDs := normalizeAutoRouteGroupIDs(req.GroupIDs)
 	if len(groupIDs) > maxAutoRoutePoolMembers {
-		return nil, errors.New("第三方 Auto 路由池最多可添加 50 个分组")
+		return nil, errors.New("全局 Auto 路由池最多可添加 50 个分组")
 	}
 	groups, _, err := loadAutoRouteGroups(ownerUserID)
 	if err != nil {
@@ -85,9 +94,12 @@ func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*Aut
 	for _, group := range groups {
 		eligible[group.ID] = struct{}{}
 	}
+	for _, item := range loadOfficialAutoRouteItems(ownerUserID, nil) {
+		eligible[item.GroupID] = struct{}{}
+	}
 	for _, groupID := range groupIDs {
 		if _, ok := eligible[groupID]; !ok {
-			return nil, errors.New("路由池包含不可用或无权访问的第三方分组")
+			return nil, errors.New("路由池包含不可用或无权访问的分组")
 		}
 	}
 
@@ -122,14 +134,14 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit
 	}
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
-		return nil, errors.New("第三方 Auto 路由需要模型名称")
+		return nil, errors.New("全局 Auto 路由需要模型名称")
 	}
 	selected, err := loadAutoRoutePoolSelection(ownerUserID)
 	if err != nil {
 		return nil, err
 	}
 	if len(selected) == 0 {
-		return nil, errors.New("第三方 Auto 路由池为空，请先在创建 API Key 时添加分组")
+		return nil, errors.New("Auto 路由池为空，请先添加官方或第三方分组")
 	}
 	groups, channels, err := loadAutoRouteGroups(ownerUserID)
 	if err != nil {
@@ -162,12 +174,34 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit
 		_, score := autoRouteMetrics(group, snapshots[group.ID])
 		candidates = append(candidates, scoredBinding{
 			binding: RoutingBinding{
-				GroupID: group.ID, InternalGroup: group.InternalGroupName,
+				RouteKey: group.ID,
+				GroupID:  group.ID, InternalGroup: group.InternalGroupName,
 				OwnerUserID: group.OwnerUserID, SourceType: group.SourceType,
 				CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: group.Multiplier,
 				ModelPrices: decodeChannelModelPrices(channel.ModelPrices),
+				Models:      decodeModels(channel.DeclaredModels),
 			},
 			score: score, priority: priority,
+		})
+	}
+	for _, item := range loadOfficialAutoRouteItems(ownerUserID, selected) {
+		priority, ok := selected[item.GroupID]
+		if !ok || !containsFold(item.Models, modelName) {
+			continue
+		}
+		if !MultiplierWithinLimit(item.Multiplier, multiplierLimit) {
+			overLimitCount++
+			continue
+		}
+		candidates = append(candidates, scoredBinding{
+			binding: RoutingBinding{
+				RouteKey: item.GroupID, InternalGroup: strings.TrimPrefix(item.GroupID, officialAutoRoutePrefix),
+				SourceType:       marketplacedomain.SourceTypeOfficial,
+				CreditPoolPolicy: marketplacedomain.CreditPolicyOfficialDefault,
+				Multiplier:       item.Multiplier,
+				Models:           item.Models,
+			},
+			score: item.RouteScore, priority: priority,
 		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -187,9 +221,18 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit
 		if overLimitCount > 0 {
 			return nil, multiplierLimitExceededError(multiplierLimit)
 		}
-		return nil, errors.New("第三方 Auto 路由池没有支持该模型的可用分组")
+		return nil, errors.New("Auto 路由池没有支持该模型的可用分组")
 	}
 	return bindings, nil
+}
+
+func HasConfiguredAutoRoutePool(ownerUserID int) bool {
+	var count int64
+	if platformdb.DB.Model(&marketplaceschema.AutoRoutePoolMember{}).
+		Where("owner_user_id = ?", ownerUserID).Count(&count).Error != nil {
+		return false
+	}
+	return count > 0
 }
 
 func loadAutoRouteGroups(ownerUserID int) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {

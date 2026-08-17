@@ -30,6 +30,9 @@ func ReconcileMarketplaceChannels() error {
 		channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
 		channel.SourceLabelReviewReason = ""
 		normalizeInternalGroupName(&group, channel.ID, label)
+		if err := backfillConnectivityTestStatus(channel); err != nil {
+			return err
+		}
 
 		if group.VerificationStatus == marketplacedomain.VerificationPassed &&
 			group.LifecycleStatus != marketplacedomain.LifecycleSuspended &&
@@ -54,7 +57,7 @@ func ReconcileMarketplaceChannels() error {
 		if err := platformdb.DB.Save(&group).Error; err != nil {
 			return err
 		}
-		upgrade, err := needsVerificationUpgrade(channel.ID)
+		upgrade, err := needsVerificationUpgrade(channel)
 		if err != nil {
 			return err
 		}
@@ -69,7 +72,7 @@ func ReconcileMarketplaceChannels() error {
 			if err := platformdb.DB.Save(&group).Error; err != nil {
 				return err
 			}
-			if err := QueueNativeVerification(channel.ID); err != nil {
+			if err := QueueRequiredVerification(channel.ID); err != nil {
 				return err
 			}
 		}
@@ -77,9 +80,32 @@ func ReconcileMarketplaceChannels() error {
 	return nil
 }
 
-func needsVerificationUpgrade(channelID string) (bool, error) {
+func backfillConnectivityTestStatus(channel *marketplaceschema.Channel) error {
+	if isGPT56MappingEligible(channel) || channel.ConnectivityTestStatus != "" {
+		return nil
+	}
 	var latest marketplaceschema.VerificationRun
-	err := platformdb.DB.Where("channel_id = ?", channelID).Order("created_at desc").First(&latest).Error
+	err := platformdb.DB.Where("channel_id = ?", channel.ID).Order("created_at desc").First(&latest).Error
+	if err != nil {
+		if isNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if latest.Status != marketplacedomain.VerificationPassed && latest.Status != marketplacedomain.VerificationFailed {
+		return nil
+	}
+	channel.ConnectivityTestStatus = latest.Status
+	channel.ConnectivityTestCheckedAt = latest.CompletedAt
+	return nil
+}
+
+func needsVerificationUpgrade(channel *marketplaceschema.Channel) (bool, error) {
+	if isGPT56MappingEligible(channel) {
+		return channel.GPT56MappingCheckedAt == nil, nil
+	}
+	var latest marketplaceschema.VerificationRun
+	err := platformdb.DB.Where("channel_id = ?", channel.ID).Order("created_at desc").First(&latest).Error
 	if err != nil {
 		if isNotFound(err) {
 			return true, nil

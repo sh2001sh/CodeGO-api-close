@@ -32,7 +32,7 @@ export function AutoPoolRow(props: {
           </span>
         </div>
         <div className='text-muted-foreground mt-1 truncate text-xs'>
-          {item.source_label || t('来源待审核')} ·{' '}
+          {item.source_type === 'official' ? t('官方分组') : item.source_label || t('来源待审核')} ·{' '}
           {item.models.slice(0, 3).join(' / ')}
         </div>
       </div>
@@ -97,7 +97,7 @@ export function RouteOrder({
       <div className='text-sm font-medium'>{t('当前路由顺序')}</div>
       {items.length === 0 ? (
         <p className='text-muted-foreground mt-2 text-xs leading-5'>
-          {t('选择至少一个分组后即可创建第三方 Auto API Key。')}
+          {t('选择至少一个分组后即可使用 Auto API Key。')}
         </p>
       ) : (
         <ol className='mt-2 space-y-1.5'>

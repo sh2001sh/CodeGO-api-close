@@ -45,6 +45,7 @@ import {
   getTieredBillingSummary,
   hasAnyCacheTokens,
   parseLogOther,
+  getUsageLogGroupDisplayName,
   isViolationFeeLog,
 } from '../../lib/format'
 import {
@@ -503,8 +504,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
       const other = parseLogOther(log.other)
       const displayName = sensitiveVisible ? tokenName : '••••'
-      let group = log.group
-      if (!group) group = other?.group || ''
+      const group = getUsageLogGroupDisplayName(log.group, other)
 
       const metaParts: string[] = []
       const groupRatioText = getGroupRatioText(other)

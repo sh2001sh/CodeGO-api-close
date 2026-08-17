@@ -1,12 +1,14 @@
-import { CheckCircle2, CircleHelp, Minus, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleHelp, Loader2, Minus, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { hasGPT56Model } from '../lib/verification'
 import type {
-	GPT56MappingResult,
-	GPT56MappingStatus,
-	ModelConsistencyStatus,
-	ModelVerificationResult,
+  GPT56MappingResult,
+  GPT56MappingStatus,
+  ConnectivityTestStatus,
+  ModelConsistencyStatus,
+  ModelVerificationResult,
 } from '../types'
 
 const consistencyLabels: Record<ModelConsistencyStatus, string> = {
@@ -25,7 +27,6 @@ const mappingLabels: Record<GPT56MappingStatus, string> = {
 }
 
 export function GPT56MappingStatusView(props: {
-  sourceLabel: string
   models: string[]
   status: GPT56MappingStatus
   results: GPT56MappingResult[]
@@ -33,12 +34,7 @@ export function GPT56MappingStatusView(props: {
 }) {
   const { t } = useTranslation()
   const status = props.status || ''
-  const eligible =
-    ['Codex Plus', 'Codex Pro'].includes(props.sourceLabel) &&
-    ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'].some((model) =>
-      props.models.some((item) => item.toLowerCase() === model)
-    )
-  if (!eligible) return null
+  if (!hasGPT56Model(props.models)) return null
   const tone =
     status === 'matched'
       ? 'text-success'
@@ -48,9 +44,9 @@ export function GPT56MappingStatusView(props: {
           ? 'text-primary'
           : 'text-warning-foreground'
   return (
-    <div className='mt-3 border-border bg-muted/20 rounded-md border px-3 py-2.5 text-xs'>
+    <div className='border-border bg-muted/20 mt-3 rounded-md border px-3 py-2.5 text-xs'>
       <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-1'>
-        <span className='font-medium'>{t('GPT-5.6 映射检测')}</span>
+        <span className='font-medium'>{t('GPT-5.6 映射检测 · 必做')}</span>
         <span className={cn('font-medium', tone)}>
           {t(mappingLabels[status])}
         </span>
@@ -64,11 +60,104 @@ export function GPT56MappingStatusView(props: {
         <div className='text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1'>
           {props.results.map((result) => (
             <span key={result.requested_model}>
-              {result.requested_model}: {result.reported_model || t('未返回模型标识')}
+              {result.requested_model}:{' '}
+              {result.reported_model || t('未返回模型标识')}
+              {result.sample_count > 0 && (
+                <>
+                  {' '}
+                  · {result.matched_samples}/{result.sample_count}
+                </>
+              )}
             </span>
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+const connectivityLabels: Record<ConnectivityTestStatus, string> = {
+  '': '未测试',
+  queued: '等待测试',
+  running: '测试中',
+  passed: '测试通过',
+  failed: '测试失败',
+}
+
+export function ConnectivityTestStatusView(props: {
+  status: ConnectivityTestStatus
+  results: ModelVerificationResult[]
+  checkedAt?: string | null
+  required: boolean
+  showErrors?: boolean
+}) {
+  const { t } = useTranslation()
+  const status = props.status || ''
+  const running = status === 'queued' || status === 'running'
+  const Icon =
+    status === 'passed'
+      ? CheckCircle2
+      : status === 'failed'
+        ? XCircle
+        : running
+          ? Loader2
+          : Minus
+  return (
+    <div className='border-border bg-muted/20 mt-3 rounded-md border px-3 py-2.5 text-xs'>
+      <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-1'>
+        <span className='font-medium'>
+          {t('模型连通性测试')} · {props.required ? t('必做') : t('可选')}
+        </span>
+        <span
+          className={cn(
+            'flex items-center gap-1 font-medium',
+            status === 'passed' && 'text-success',
+            status === 'failed' && 'text-destructive',
+            running && 'text-primary',
+            status === '' && 'text-muted-foreground'
+          )}
+        >
+          <Icon className={cn('size-3.5', running && 'animate-spin')} />
+          {t(connectivityLabels[status])}
+        </span>
+      </div>
+      <div className='text-muted-foreground mt-1'>
+        {props.checkedAt
+          ? `${t('最近测试')}: ${new Date(props.checkedAt).toLocaleString()}`
+          : props.required
+            ? t('等待首次测试')
+            : t('GPT-5.6 检测通过后可跳过此项')}
+      </div>
+      <ModelConnectivityResults
+        results={props.results}
+        showErrors={props.showErrors}
+        embedded
+      />
+    </div>
+  )
+}
+
+export function AutoProbeStatusView(props: {
+  enabled: boolean
+  intervalMinutes: number
+  model: string
+  status: ConnectivityTestStatus
+  checkedAt?: string | null
+}) {
+  const { t } = useTranslation()
+  if (!props.enabled) return null
+  return (
+    <div className='border-border bg-muted/20 mt-3 rounded-md border px-3 py-2.5 text-xs'>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <span className='font-medium'>{t('自动探针')}</span>
+        <span className={props.status === 'passed' ? 'text-success font-medium' : props.status === 'failed' ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+          {props.status === 'passed' ? t('通过') : props.status === 'failed' ? t('失败') : t('等待首次探测')}
+        </span>
+      </div>
+      <p className='text-muted-foreground mt-1'>
+        {t('{{model}} · 每 {{minutes}} 分钟', { model: props.model, minutes: props.intervalMinutes })}
+        {props.checkedAt ? ` · ${new Date(props.checkedAt).toLocaleString()}` : ''}
+      </p>
     </div>
   )
 }
@@ -105,14 +194,39 @@ export function ModelConsistencyBadge(props: {
   )
 }
 
+export function ModelConsistencyStatusView(props: {
+  status: ModelConsistencyStatus
+  checkedAt?: string | null
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className='flex flex-wrap items-center gap-2'>
+      <ModelConsistencyBadge status={props.status} />
+      <span className='text-muted-foreground text-xs tabular-nums'>
+        {props.checkedAt
+          ? t('检测于 {{time}}', {
+              time: new Date(props.checkedAt).toLocaleString(),
+            })
+          : t('暂无检测时间')}
+      </span>
+    </div>
+  )
+}
+
 export function ModelConnectivityResults(props: {
   results: ModelVerificationResult[]
   showErrors?: boolean
+  embedded?: boolean
 }) {
   const { t } = useTranslation()
   if (props.results.length === 0) return null
   return (
-    <div className='text-foreground mt-3 overflow-hidden rounded-md border'>
+    <div
+      className={cn(
+        'text-foreground mt-3 overflow-hidden',
+        props.embedded ? 'border-border border-t' : 'rounded-md border'
+      )}
+    >
       <div className='bg-muted/30 text-muted-foreground grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2 text-[11px] font-medium'>
         <span>{t('逐模型连通性')}</span>
         <span>{t('结果')}</span>
@@ -148,7 +262,9 @@ function ModelConnectivityRow(props: {
             {props.result.listed ? t('上游列表已发现') : t('上游列表未发现')}
           </span>
           {props.showError && props.result.error && (
-            <span className='text-destructive break-all'>{props.result.error}</span>
+            <span className='text-destructive break-all'>
+              {props.result.error}
+            </span>
           )}
         </div>
       </div>
@@ -160,7 +276,9 @@ function ModelConnectivityRow(props: {
       >
         <Icon className='size-3.5' />
         <span>{passed ? t('通过') : t('失败')}</span>
-        {props.result.latency_ms > 0 && <span>· {props.result.latency_ms}ms</span>}
+        {props.result.latency_ms > 0 && (
+          <span>· {props.result.latency_ms}ms</span>
+        )}
       </div>
     </div>
   )

@@ -1,9 +1,8 @@
-import { ChevronDown, ChevronRight, Radio, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, Radio } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { formatMultiplier } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
 import {
   ChannelFeedbackButton,
@@ -11,7 +10,9 @@ import {
 } from './channel-feedback'
 import { GroupDetails } from './group-details'
 import { GroupMetrics } from './group-metrics'
+import { ModelConsistencyBadge } from './model-verification'
 import { MarketplaceStatusBadge } from './status-badge'
+import { TokenBindPanel } from './token-bind-panel'
 
 export function GroupMarketItem(props: {
   group: MarketplaceGroup
@@ -22,7 +23,7 @@ export function GroupMarketItem(props: {
   const group = props.group
 
   return (
-    <article className='bg-card hover:bg-muted/10 transition-colors'>
+    <article className='border-border bg-card hover:border-primary/30 rounded-md border transition-colors'>
       <div className='px-4 py-5 sm:px-5'>
         <header className='flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between'>
           <div className='flex min-w-0 items-start gap-3.5'>
@@ -33,6 +34,9 @@ export function GroupMarketItem(props: {
                   {group.system_display_name}
                 </h4>
                 <MarketplaceStatusBadge status={group.lifecycle_status} />
+                <ModelConsistencyBadge
+                  status={group.model_consistency_status}
+                />
               </div>
               <div className='text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
                 {group.source_label && (
@@ -53,14 +57,6 @@ export function GroupMarketItem(props: {
             </div>
           </div>
           <div className='flex flex-wrap items-center gap-2 xl:justify-end'>
-            <div className='border-border bg-background min-w-28 rounded-md border px-3 py-2 text-right'>
-              <div className='text-muted-foreground text-[11px]'>
-                {t('通用额度倍率')}
-              </div>
-              <div className='text-primary mt-0.5 text-xl font-semibold tabular-nums'>
-                {formatMultiplier(group.multiplier)}x
-              </div>
-            </div>
             <ChannelFeedbackButton group={group} />
             <Button
               variant='ghost'
@@ -75,15 +71,16 @@ export function GroupMarketItem(props: {
         </header>
 
         <GroupMetrics group={group} />
+        <div className='mt-3'>
+          <TokenBindPanel groupId={group.id} compact />
+        </div>
 
         <div className='mt-3 flex flex-wrap items-center justify-between gap-2'>
           <ChannelFeedbackSummary group={group} />
           {group.observing && (
-            <span className='text-muted-foreground inline-flex items-center gap-1 text-xs'>
-              <Users className='size-3.5' />
-              {t('观测样本 {{requests}}/100 请求 · {{users}}/10 用户', {
+            <span className='text-muted-foreground text-xs'>
+              {t('样本仍在积累 · 已记录 {{requests}} 次请求', {
                 requests: group.request_count,
-                users: group.independent_consumers,
               })}
             </span>
           )}

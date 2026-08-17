@@ -35,7 +35,7 @@ import { BlindBoxSettingsMetric } from './blind-box-settings-metric'
 const schema = z.object({
   enabled: z.boolean(),
   priceUSD: z.coerce.number().positive().max(10000),
-  dailyPurchaseLimit: z.coerce.number().int().min(1).max(10),
+  dailyPurchaseLimit: z.coerce.number().int().min(1),
   firstDrawGuaranteeUSD: z.coerce.number().min(0).max(100000),
   smallPityThreshold: z.coerce.number().int().min(1).max(10000),
   smallPityGuaranteeUSD: z.coerce.number().min(0).max(100000),

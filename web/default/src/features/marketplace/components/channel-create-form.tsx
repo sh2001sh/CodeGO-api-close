@@ -109,6 +109,9 @@ export function ChannelEditorForm(props: {
             maintenance_window: values.maintenance_window,
             sensitive_word_interception_enabled:
               values.sensitive_word_interception_enabled,
+            auto_probe_enabled: values.auto_probe_enabled,
+            auto_probe_interval_minutes: values.auto_probe_interval_minutes,
+            auto_probe_model: values.auto_probe_model,
             ...(values.base_url ? { base_url: values.base_url } : {}),
             ...(values.api_key ? { api_key: values.api_key } : {}),
             ...(props.admin
@@ -121,10 +124,10 @@ export function ChannelEditorForm(props: {
               : {}),
           },
         })
-        toast.success(t('渠道已更新，必要时将重新检测'))
+        toast.success(t('渠道已更新；渠道信息变化时需重新完成对应检测或测试'))
       } else {
         await mutations.create.mutateAsync(values)
-        toast.success(t('渠道已提交，检测通过后将自动上架'))
+        toast.success(t('渠道已提交，必做检测或测试通过后将自动上架'))
         form.reset(channelFormDefaults)
         setAvailableModels([])
       }
@@ -154,7 +157,7 @@ export function ChannelEditorForm(props: {
       <div className='border-border bg-muted/15 flex justify-end border-t px-4 py-4 sm:px-5'>
         <Button type='submit' disabled={pending}>
           {pending && <Loader2 className='animate-spin' />}
-          {editing ? t('保存并重新检测') : t('提交并开始检测')}
+          {editing ? t('保存修改') : t('提交并执行必做校验')}
         </Button>
       </div>
     </form>

@@ -50,6 +50,7 @@ import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-p
 import type { UsageLog } from '../../data/schema'
 import {
   parseLogOther,
+  getUsageLogGroupDisplayName,
   getParamOverrideActionLabel,
   parseAuditLine,
   decodeBillingExprB64,
@@ -587,10 +588,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 />
               )}
 
-              {(props.log.group || other?.group) && (
+              {getUsageLogGroupDisplayName(props.log.group, other) && (
                 <DetailRow
                   label={t('Group')}
-                  value={props.log.group || other?.group || ''}
+                  value={getUsageLogGroupDisplayName(props.log.group, other)}
                   mono
                 />
               )}

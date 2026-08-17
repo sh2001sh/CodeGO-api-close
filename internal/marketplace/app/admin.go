@@ -16,10 +16,13 @@ import (
 	"gorm.io/gorm"
 )
 
-func ListAdminChannels(status string) ([]ChannelView, error) {
+func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
+	if input.StartTimestamp > 0 && input.EndTimestamp > 0 && input.StartTimestamp > input.EndTimestamp {
+		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
+	}
 	query := platformdb.DB.Model(&marketplaceschema.Channel{})
-	if strings.TrimSpace(status) != "" {
-		query = query.Where("status = ?", status)
+	if strings.TrimSpace(input.Status) != "" {
+		query = query.Where("status = ?", input.Status)
 	}
 	var channels []marketplaceschema.Channel
 	if err := query.Order("updated_at desc").Find(&channels).Error; err != nil {
@@ -29,10 +32,19 @@ func ListAdminChannels(status string) ([]ChannelView, error) {
 	if err != nil {
 		return nil, err
 	}
+	earnings, err := earningsByGroupIDsInRange(groupIDs(groups), input.StartTimestamp, input.EndTimestamp)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]ChannelView, 0, len(channels))
 	for index := range channels {
 		if group := groups[channels[index].ID]; group != nil {
-			result = append(result, *channelView(&channels[index], group))
+			view := channelView(&channels[index], group)
+			view.RequestCount = earnings[group.ID].RequestCount
+			view.TotalIncome = earnings[group.ID].TotalIncome
+			view.PendingIncome = earnings[group.ID].PendingIncome
+			view.ReleasedIncome = earnings[group.ID].ReleasedIncome
+			result = append(result, *view)
 		}
 	}
 	return result, nil

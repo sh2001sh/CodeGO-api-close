@@ -361,6 +361,7 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
         />
       </FormField>
       <ChannelInterceptionPolicy form={form} />
+      <ChannelAutoProbePolicy form={form} />
     </FormSection>
   )
 }
@@ -386,6 +387,54 @@ function ChannelInterceptionPolicy({ form }: { form: ChannelForm }) {
           })
         }
         aria-label={t('敏感词拦截')}
+      />
+    </div>
+  )
+}
+
+function ChannelAutoProbePolicy({ form }: { form: ChannelForm }) {
+  const { t } = useTranslation()
+  const enabled = form.watch('auto_probe_enabled')
+  const models = form.watch('declared_models')
+  return (
+    <div className='border-border grid gap-3 rounded-md border p-3 sm:grid-cols-[minmax(0,1fr)_130px_180px_auto] sm:items-end'>
+      <div>
+        <p className='text-sm font-medium'>{t('自动探针')}</p>
+        <p className='text-muted-foreground mt-1 text-xs leading-5'>
+          {t('按间隔测试指定模型，并将最新结果同步到市场健康状态。')}
+        </p>
+      </div>
+      <FormField label={t('间隔（分钟）')}>
+        <Input
+          type='number'
+          min='1'
+          max='1440'
+          disabled={!enabled}
+          {...form.register('auto_probe_interval_minutes', { valueAsNumber: true })}
+        />
+      </FormField>
+      <FormField label={t('探针模型')}>
+        <NativeSelect
+          disabled={!enabled || models.length === 0}
+          {...form.register('auto_probe_model')}
+        >
+          <option value=''>{t('选择模型')}</option>
+          {models.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
+        </NativeSelect>
+      </FormField>
+      <Switch
+        checked={enabled}
+        onCheckedChange={(checked) => {
+          form.setValue('auto_probe_enabled', checked, { shouldDirty: true })
+          if (checked && !form.getValues('auto_probe_model') && models[0]) {
+            form.setValue('auto_probe_model', models[0], { shouldDirty: true })
+          }
+        }}
+        aria-label={t('自动探针')}
       />
     </div>
   )

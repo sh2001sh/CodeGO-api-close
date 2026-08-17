@@ -26,6 +26,7 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 			return false, err
 		}
 		models, _ := json.Marshal(normalizeModels(*req.DeclaredModels))
+		modelsChanged := channel.DeclaredModels != string(models)
 		channel.DeclaredModels = string(models)
 		retainedPrices := make(map[string]ChannelModelPrice)
 		currentPrices := decodeChannelModelPrices(channel.ModelPrices)
@@ -39,7 +40,7 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 			return false, err
 		}
 		channel.ModelPrices = prices
-		reverify = true
+		reverify = reverify || modelsChanged
 	}
 	if req.ModelPrices != nil {
 		prices, err := encodeChannelModelPrices(*req.ModelPrices, decodeModels(channel.DeclaredModels))
@@ -70,9 +71,13 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 			channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
 			channel.SourceLabelReviewReason = ""
 			refreshInternalGroupName(group, channel.ID, label)
+			reverify = true
 		}
 	}
 	applyCapacityUpdate(channel, req)
+	if err := applyAutoProbeUpdate(channel, req); err != nil {
+		return false, err
+	}
 	if req.SensitiveWordInterceptionEnabled != nil {
 		channel.SensitiveWordInterceptionEnabled = req.SensitiveWordInterceptionEnabled
 	}
@@ -83,8 +88,50 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	if changed {
 		reverify = true
 	}
+	if reverify {
+		invalidateChannelVerification(channel, group)
+	}
 	normalizeInternalGroupName(group, channel.ID, channel.SubmittedSourceLabel)
 	return reverify, nil
+}
+
+func applyAutoProbeUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) error {
+	enabled := channel.AutoProbeEnabled
+	interval := channel.AutoProbeIntervalMinutes
+	model := channel.AutoProbeModel
+	if req.AutoProbeEnabled != nil {
+		enabled = *req.AutoProbeEnabled
+	}
+	if req.AutoProbeIntervalMinutes != nil {
+		interval = *req.AutoProbeIntervalMinutes
+	}
+	if req.AutoProbeModel != nil {
+		model = strings.TrimSpace(*req.AutoProbeModel)
+	}
+	if interval == 0 {
+		interval = 10
+	}
+	if err := validateAutoProbe(enabled, interval, model, decodeModels(channel.DeclaredModels)); err != nil {
+		return err
+	}
+	channel.AutoProbeEnabled = enabled
+	channel.AutoProbeIntervalMinutes = interval
+	channel.AutoProbeModel = model
+	return nil
+}
+
+func invalidateChannelVerification(channel *marketplaceschema.Channel, group *marketplaceschema.Group) {
+	channel.ModelVerificationResults = "[]"
+	channel.ConnectivityTestStatus = ""
+	channel.ConnectivityTestCheckedAt = nil
+	channel.GPT56MappingResults = "[]"
+	channel.GPT56MappingStatus = ""
+	channel.GPT56MappingCheckedAt = nil
+	channel.Status = marketplacedomain.LifecycleDraft
+	group.LifecycleStatus = marketplacedomain.LifecycleDraft
+	group.VerificationStatus = marketplacedomain.VerificationQueued
+	group.VerificationDueAt = nil
+	group.PublishedAt = nil
 }
 
 func normalizeInternalGroupName(group *marketplaceschema.Group, channelID, sourceLabel string) {
@@ -127,18 +174,27 @@ func applyCapacityUpdate(channel *marketplaceschema.Channel, req UpdateChannelRe
 func applyCredentialUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) (bool, error) {
 	changed := false
 	if req.BaseURL != nil {
-		if err := ValidateMarketplaceURL(*req.BaseURL); err != nil {
+		normalized := strings.TrimRight(strings.TrimSpace(*req.BaseURL), "/")
+		if err := ValidateMarketplaceURL(normalized); err != nil {
 			return false, err
 		}
-		value, err := platformsecurity.EncryptSecret(strings.TrimRight(strings.TrimSpace(*req.BaseURL), "/"))
-		if err != nil {
-			return false, err
+		current, decryptErr := platformsecurity.DecryptSecret(channel.BaseURLCiphertext)
+		if decryptErr != nil || strings.TrimRight(strings.TrimSpace(current), "/") != normalized {
+			value, err := platformsecurity.EncryptSecret(normalized)
+			if err != nil {
+				return false, err
+			}
+			channel.BaseURLCiphertext = value
+			changed = true
 		}
-		channel.BaseURLCiphertext = value
-		changed = true
 	}
 	if req.APIKey != nil && strings.TrimSpace(*req.APIKey) != "" {
-		value, err := platformsecurity.EncryptSecret(strings.TrimSpace(*req.APIKey))
+		normalized := strings.TrimSpace(*req.APIKey)
+		current, err := platformsecurity.DecryptSecret(channel.CredentialCiphertext)
+		if err == nil && strings.TrimSpace(current) == normalized {
+			return changed, nil
+		}
+		value, err := platformsecurity.EncryptSecret(normalized)
 		if err != nil {
 			return false, err
 		}

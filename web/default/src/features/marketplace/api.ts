@@ -9,6 +9,8 @@ import type {
   MarketplaceOwnerUsageLogResult,
   MarketplaceOwnerUsageLogFilters,
   ChannelFeedbackSummary,
+  AdminMarketplaceChannelFilters,
+  AdminOwnerIncomeResult,
   TokenOption,
 } from './types'
 
@@ -144,6 +146,32 @@ export async function queueMarketplaceVerification(
   return requireData(response.data)
 }
 
+export async function queueMarketplaceDetection(
+  channelId: string,
+  admin = false
+) {
+  return queueMarketplaceChannelAction(channelId, 'detect', admin)
+}
+
+export async function queueMarketplaceConnectivityTest(
+  channelId: string,
+  admin = false
+) {
+  return queueMarketplaceChannelAction(channelId, 'test', admin)
+}
+
+async function queueMarketplaceChannelAction(
+  channelId: string,
+  action: 'detect' | 'test',
+  admin: boolean
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.post<ApiResponse<{ queued: boolean }>>(
+    `${prefix}/channels/${channelId}/${action}`
+  )
+  return requireData(response.data)
+}
+
 export async function setMarketplaceChannelPaused(
   channelId: string,
   paused: boolean
@@ -172,9 +200,38 @@ export async function getTokenOptions(): Promise<TokenOption[]> {
   return requireData(response.data).items
 }
 
-export async function getAdminMarketplaceChannels(status = '') {
+export async function getAdminMarketplaceChannels(
+  filters: AdminMarketplaceChannelFilters
+) {
+  const search = new URLSearchParams()
+  if (filters.status) search.set('status', filters.status)
+  if (filters.startTimestamp) {
+    search.set('start_timestamp', String(filters.startTimestamp))
+  }
+  if (filters.endTimestamp) {
+    search.set('end_timestamp', String(filters.endTimestamp))
+  }
   const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
-    `/api/marketplace/admin/channels?status=${encodeURIComponent(status)}`
+    `/api/marketplace/admin/channels?${search.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function getAdminOwnerIncome(
+  filters: Pick<
+    AdminMarketplaceChannelFilters,
+    'startTimestamp' | 'endTimestamp'
+  >
+) {
+  const search = new URLSearchParams()
+  if (filters.startTimestamp) {
+    search.set('start_timestamp', String(filters.startTimestamp))
+  }
+  if (filters.endTimestamp) {
+    search.set('end_timestamp', String(filters.endTimestamp))
+  }
+  const response = await api.get<ApiResponse<AdminOwnerIncomeResult>>(
+    `/api/marketplace/admin/owner-income?${search.toString()}`
   )
   return requireData(response.data)
 }

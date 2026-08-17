@@ -3,6 +3,7 @@ package app
 import (
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
@@ -35,11 +36,12 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	groups, channels = filterGroupsBySource(groups, channels, query.Source)
 	snapshots, err := buildRanking(groups, channels, query.WindowHours)
 	if err != nil {
 		return nil, err
 	}
-	recentSeries, err := marketplaceRecentRequestSeries(groups, channels, 6)
+	recentSeries, err := marketplaceRecentRequestSeries(groups, channels)
 	if err != nil {
 		return nil, err
 	}
@@ -57,6 +59,24 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		return nil, err
 	}
 	return &GroupListResult{Items: items, Highlights: highlights, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}, nil
+}
+
+func filterGroupsBySource(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, source string) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return groups, channels
+	}
+	filtered := make([]marketplaceschema.Group, 0, len(groups))
+	filteredChannels := make(map[string]marketplaceschema.Channel, len(groups))
+	for _, group := range groups {
+		channel, ok := channels[group.ChannelID]
+		if !ok || !strings.EqualFold(publicSourceLabel(channel), source) {
+			continue
+		}
+		filtered = append(filtered, group)
+		filteredChannels[group.ChannelID] = channel
+	}
+	return filtered, filteredChannels
 }
 
 func GetMarketplaceGroup(slug string, windowHours, viewerUserID int) (*GroupListItem, error) {
@@ -195,11 +215,12 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 	wilson := wilsonLowerBound(successCount, total.requestCount, 1.96) * 100
 	requestMin, consumerMin := rankingThresholds(hours)
 	observing := total.requestCount < requestMin || consumers < consumerMin || group.VerificationStatus != marketplacedomain.VerificationPassed
-	score := wilson * 0.4
-	score += inverseMetricScore(weighted(total.ttftTotal, total.ttftWeight), 3000) * 0.25
-	score += inverseMetricScore(weighted(total.latencyTotal, total.latencyWeight), 30000) * 0.15
+	score := wilson * 0.35
+	score += inverseMetricScore(weighted(total.ttftTotal, total.ttftWeight), 3000) * 0.2
+	score += inverseMetricScore(weighted(total.latencyTotal, total.latencyWeight), 30000) * 0.1
 	score += cappedMetricScore(weighted(total.tpsTotal, total.tpsWeight), 100) * 0.1
-	score += inverseMetricScore(group.Multiplier, 3) * 0.1
+	score += cappedMetricScore(total.cacheHitRate, 100) * 0.05
+	score += inverseMetricScore(group.Multiplier, 3) * 0.2
 	return marketplaceschema.RankingSnapshot{
 		GroupID: group.ID, WindowHours: hours, RankingVersion: rankingVersion,
 		Score: round1(score), RawSuccessRate: round2(successRate), WilsonSuccessRate: round2(wilson),
@@ -208,40 +229,6 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 		CacheHitRate: round2(total.cacheHitRate),
 		RequestCount: total.requestCount, IndependentConsumers: consumers, Observing: observing, CalculatedAt: time.Now().UTC(),
 	}
-}
-
-func marketplaceRecentRequestSeries(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) (map[int][]RecentRequestBucket, error) {
-	channelIDs := make([]int, 0, len(groups))
-	seen := make(map[int]struct{}, len(groups))
-	for _, group := range groups {
-		channel := channels[group.ChannelID]
-		if channel.InternalChannelID == nil || *channel.InternalChannelID <= 0 {
-			continue
-		}
-		channelID := *channel.InternalChannelID
-		if _, ok := seen[channelID]; ok {
-			continue
-		}
-		seen[channelID] = struct{}{}
-		channelIDs = append(channelIDs, channelID)
-	}
-	rows, err := auditprojection.QuerySeriesByChannels(hours, channelIDs)
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[int][]RecentRequestBucket, len(rows))
-	for _, row := range rows {
-		points := row.Series
-		if len(points) > 12 {
-			points = points[len(points)-12:]
-		}
-		series := make([]RecentRequestBucket, 0, len(points))
-		for _, point := range points {
-			series = append(series, RecentRequestBucket{Ts: point.Ts, SuccessRate: round2(point.SuccessRate), RequestCount: point.RequestCount})
-		}
-		result[row.ChannelID] = series
-	}
-	return result, nil
 }
 
 func independentConsumerCountsByChannel(channelIDs []int, hours int) map[int]int64 {

@@ -21,7 +21,7 @@ export function MarketplaceGroupList(props: {
     setExpanded((current) => (current === groupID ? '' : groupID))
 
   return (
-    <div className='divide-border divide-y'>
+    <div className='bg-muted/35 space-y-2 p-2'>
       {props.groups.map((group) => (
         <GroupMarketItem
           key={group.id}

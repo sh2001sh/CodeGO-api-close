@@ -104,6 +104,18 @@ func DeleteChannel(c *gin.Context) {
 }
 
 func VerifyChannel(c *gin.Context) {
+	queueOwnedChannelAction(c, marketplaceapp.QueueRequiredVerification)
+}
+
+func DetectChannel(c *gin.Context) {
+	queueOwnedChannelAction(c, marketplaceapp.QueueGPT56MappingVerification)
+}
+
+func TestChannelConnectivity(c *gin.Context) {
+	queueOwnedChannelAction(c, marketplaceapp.QueueConnectivityTest)
+}
+
+func queueOwnedChannelAction(c *gin.Context, queue func(string) error) {
 	channels, err := marketplaceapp.ListOwnerChannels(c.GetInt("id"))
 	if err != nil {
 		httpapi.ApiError(c, err)
@@ -111,7 +123,7 @@ func VerifyChannel(c *gin.Context) {
 	}
 	for _, channel := range channels {
 		if channel.ID == c.Param("id") {
-			if err := marketplaceapp.QueueRequiredVerification(channel.ID); err != nil {
+			if err := queue(channel.ID); err != nil {
 				httpapi.ApiError(c, err)
 				return
 			}
@@ -141,7 +153,19 @@ func BindToken(c *gin.Context) {
 }
 
 func ListAdminChannels(c *gin.Context) {
-	result, err := marketplaceapp.ListAdminChannels(c.Query("status"))
+	result, err := marketplaceapp.ListAdminChannels(marketplaceapp.AdminChannelQuery{
+		Status:         c.Query("status"),
+		StartTimestamp: queryInt64(c, "start_timestamp"),
+		EndTimestamp:   queryInt64(c, "end_timestamp"),
+	})
+	respond(c, result, err)
+}
+
+func ListAdminOwnerIncome(c *gin.Context) {
+	result, err := marketplaceapp.ListAdminOwnerIncome(marketplaceapp.AdminOwnerIncomeQuery{
+		StartTimestamp: queryInt64(c, "start_timestamp"),
+		EndTimestamp:   queryInt64(c, "end_timestamp"),
+	})
 	respond(c, result, err)
 }
 
@@ -156,7 +180,19 @@ func UpdateAdminChannel(c *gin.Context) {
 }
 
 func VerifyAdminChannel(c *gin.Context) {
-	if err := marketplaceapp.QueueRequiredVerification(c.Param("id")); err != nil {
+	queueAdminChannelAction(c, marketplaceapp.QueueRequiredVerification)
+}
+
+func DetectAdminChannel(c *gin.Context) {
+	queueAdminChannelAction(c, marketplaceapp.QueueGPT56MappingVerification)
+}
+
+func TestAdminChannelConnectivity(c *gin.Context) {
+	queueAdminChannelAction(c, marketplaceapp.QueueConnectivityTest)
+}
+
+func queueAdminChannelAction(c *gin.Context, queue func(string) error) {
+	if err := queue(c.Param("id")); err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}

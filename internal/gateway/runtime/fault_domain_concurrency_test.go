@@ -47,16 +47,37 @@ func TestFaultDomainConcurrencyShrinksAfterTransientFailures(t *testing.T) {
 	domain := "test-concurrency-domain"
 	model := "gpt-test-concurrency"
 	for i := 0; i < faultDomainConcurrencyFailureThreshold; i++ {
-		release, acquired, snapshot := TryAcquireFaultDomainSlot(domain, model)
+		release, acquired, snapshot := TryAcquireFaultDomainSlotForUser(domain, model, 42)
 		require.True(t, acquired)
 		require.Equal(t, faultDomainInitialConcurrency, snapshot.Limit)
+		require.Equal(t, faultDomainInitialConcurrency, snapshot.UserLimit)
 		release(false, 504)
 	}
 
-	release, acquired, snapshot := TryAcquireFaultDomainSlot(domain, model)
+	release, acquired, snapshot := TryAcquireFaultDomainSlotForUser(domain, model, 42)
 	require.True(t, acquired)
-	require.Equal(t, faultDomainInitialConcurrency/2, snapshot.Limit)
+	require.Equal(t, faultDomainInitialConcurrency, snapshot.Limit)
+	require.Equal(t, faultDomainInitialConcurrency/2, snapshot.UserLimit)
 	release(true, 0)
+}
+
+func TestFaultDomainConcurrencyFailureIsolatedByUser(t *testing.T) {
+	resetFaultDomainConcurrencyForTest(t)
+	domain := "test-user-isolation-domain"
+	model := "gpt-test-user-isolation"
+	for i := 0; i < faultDomainConcurrencyFailureThreshold; i++ {
+		release, acquired, _ := TryAcquireFaultDomainSlotForUser(domain, model, 7)
+		require.True(t, acquired)
+		release(false, 503)
+	}
+
+	_, acquired, snapshot := TryAcquireFaultDomainSlotForUser(domain, model, 7)
+	require.True(t, acquired)
+	require.Equal(t, faultDomainInitialConcurrency/2, snapshot.UserLimit)
+	otherRelease, acquired, snapshot := TryAcquireFaultDomainSlotForUser(domain, model, 8)
+	require.True(t, acquired)
+	require.Equal(t, faultDomainInitialConcurrency, snapshot.UserLimit)
+	otherRelease(true, 0)
 }
 
 func TestFaultDomainConcurrencyDoesNotShrinkForStreamClosureOrGatewayTimeout(t *testing.T) {

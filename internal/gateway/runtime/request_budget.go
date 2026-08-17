@@ -56,6 +56,22 @@ func RequestBudgetFromContext(c *gin.Context) *RequestBudget {
 	return budget
 }
 
+// ExpandRequestBudget allows a configured Auto pool to visit its remaining
+// groups while preserving the original request deadline.
+func ExpandRequestBudget(budget *RequestBudget, attempts int) {
+	if budget == nil || attempts <= 0 {
+		return
+	}
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if attempts > budget.MaxAttempts {
+		budget.MaxAttempts = attempts
+	}
+	if attempts > budget.MaxFaultDomains {
+		budget.MaxFaultDomains = attempts
+	}
+}
+
 func (b *RequestBudget) TryBeginAttempt(now time.Time, faultDomain string) bool {
 	if b == nil {
 		return true

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGPT56MappingEligibilityRequiresCodexSourceAndSupportedModel(t *testing.T) {
+func TestGPT56MappingEligibilityRequiresSupportedModel(t *testing.T) {
 	channel := &marketplaceschema.Channel{
 		SubmittedSourceLabel: "Codex Plus",
 		DeclaredModels:       `["gpt-5.6-sol","other-model","gpt-5.6-luna"]`,
@@ -19,7 +19,7 @@ func TestGPT56MappingEligibilityRequiresCodexSourceAndSupportedModel(t *testing.
 	require.Equal(t, []string{"gpt-5.6-sol", "gpt-5.6-luna"}, gpt56MappingModelsForChannel(channel))
 
 	channel.SubmittedSourceLabel = "CC-Max"
-	require.False(t, isGPT56MappingEligible(channel))
+	require.True(t, isGPT56MappingEligible(channel))
 
 	channel.SubmittedSourceLabel = "Codex Pro"
 	channel.DeclaredModels = `["gpt-5.6-sol","gpt-5.6-terra"]`
@@ -63,4 +63,24 @@ func TestGPT56MappingProbeReadsReportedModel(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, latencyMS, int64(0))
 	require.Equal(t, "gpt-5.6-sol", reported)
+}
+
+func TestGPT56MappingProbeRequiresAllSamplesToMatch(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		reported := "gpt-5.6-sol"
+		if requests == 3 {
+			reported = "gpt-5.6-luna"
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"model":"` + reported + `","choices":[{"message":{"content":"OK"}}]}`))
+	}))
+	defer server.Close()
+
+	result := probeGPT56MappingModel("openai_compatible", server.URL, "test-key", "gpt-5.6-sol")
+	require.Equal(t, gpt56MappingSampleCount, requests)
+	require.Equal(t, GPT56MappingStatusMismatch, result.Status)
+	require.Equal(t, 2, result.MatchedSamples)
+	require.Equal(t, gpt56MappingSampleCount, result.SampleCount)
 }

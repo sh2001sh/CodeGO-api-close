@@ -208,19 +208,22 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 		helper.Done(c)
 
 	case types.RelayFormatClaude:
-		var streamResponse dto.ChatCompletionsStreamResponse
-		if err := platformencoding.Unmarshal(platformtext.StringToByteSlice(lastStreamData), &streamResponse); err != nil {
-			platformobservability.SysLog("error unmarshalling stream response: " + err.Error())
-			return
+		if c != nil && c.Request != nil {
+			helper.SetStreamWorkerContext(c, c.Request.Context())
 		}
-
 		info.ClaudeConvertInfo.Usage = usage
-
-		claudeResponses := gatewaytranslation.StreamResponseOpenAI2Claude(&streamResponse, info)
-		for _, resp := range claudeResponses {
-			_ = helper.ClaudeData(c, *resp)
+		trimmedLastStreamData := strings.TrimSpace(lastStreamData)
+		if trimmedLastStreamData != "" && !strings.HasPrefix(trimmedLastStreamData, "[DONE]") {
+			if err := HandleStreamFormat(c, info, trimmedLastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+				platformobservability.SysLog("handle final Claude stream response failed: " + err.Error())
+			}
 		}
-		info.ClaudeConvertInfo.Done = true
+		for _, resp := range gatewaytranslation.FinalizeOpenAI2Claude(info, usage) {
+			if err := helper.ClaudeData(c, *resp); err != nil {
+				platformobservability.SysLog("send final Claude response failed: " + err.Error())
+				return
+			}
+		}
 
 	case types.RelayFormatGemini:
 		var streamResponse dto.ChatCompletionsStreamResponse

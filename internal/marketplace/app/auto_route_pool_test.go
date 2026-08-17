@@ -75,7 +75,7 @@ func TestAutoRoutePoolFiltersGroupsAboveTokenMultiplierLimit(t *testing.T) {
 	require.Equal(t, "cheap", bindings[0].GroupID)
 
 	_, err = ResolveAutoRouteBindings(20, "gpt-5", 0.25)
-	require.EqualError(t, err, "第三方 Auto 路由池中支持该模型的渠道倍率均超过 API Key 上限 0.25x")
+	require.EqualError(t, err, "Auto 路由池中支持该模型的分组倍率均超过 API Key 上限 0.25x")
 }
 
 func TestAutoRoutePoolRejectsForeignPrivateGroup(t *testing.T) {
@@ -96,7 +96,7 @@ func TestAutoRoutePoolRejectsForeignPrivateGroup(t *testing.T) {
 	require.NoError(t, db.Create(&group).Error)
 
 	_, err := ReplaceAutoRoutePool(20, AutoRoutePoolUpdateRequest{GroupIDs: []string{"private"}})
-	require.EqualError(t, err, "路由池包含不可用或无权访问的第三方分组")
+	require.EqualError(t, err, "路由池包含不可用或无权访问的分组")
 }
 
 func TestMarketplaceAutoTokenGroupIsReserved(t *testing.T) {

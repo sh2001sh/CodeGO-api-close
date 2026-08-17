@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useState } from 'react'
 import { ApiKeysDeleteDialog } from './api-keys-delete-dialog'
 import { ApiKeysMutateDrawer } from './api-keys-mutate-drawer'
+import { ApiKeyConnectivityTestDialog } from './api-key-connectivity-test-dialog'
 import { useApiKeys } from './api-keys-provider'
 import { CCSwitchDialog } from './dialogs/cc-switch-dialog'
 
@@ -51,6 +52,11 @@ export function ApiKeysDialogs() {
         open={open === 'desktop-client'}
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
         tokenId={currentRow?.id ?? null}
+      />
+      <ApiKeyConnectivityTestDialog
+        apiKey={currentRow}
+        open={open === 'connectivity-test'}
+        onOpenChange={(isOpen) => !isOpen && setOpen(null)}
       />
     </>
   )

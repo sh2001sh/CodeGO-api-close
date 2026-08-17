@@ -17,6 +17,56 @@ func stopReasonOpenAI2Claude(reason string) string {
 	return openAIFinishReasonToClaudeStopReason(reason)
 }
 
+func stopOpenAI2ClaudeBlocks(info *relaycommon.RelayInfo) []*dto.ClaudeResponse {
+	if info == nil || info.ClaudeConvertInfo == nil {
+		return nil
+	}
+
+	switch info.ClaudeConvertInfo.LastMessagesType {
+	case relaycommon.LastMessageTypeText, relaycommon.LastMessageTypeThinking:
+		return []*dto.ClaudeResponse{generateStopBlock(info.ClaudeConvertInfo.Index)}
+	case relaycommon.LastMessageTypeTools:
+		base := info.ClaudeConvertInfo.ToolCallBaseIndex
+		stops := make([]*dto.ClaudeResponse, 0, info.ClaudeConvertInfo.ToolCallMaxIndexOffset+1)
+		for offset := 0; offset <= info.ClaudeConvertInfo.ToolCallMaxIndexOffset; offset++ {
+			stops = append(stops, generateStopBlock(base+offset))
+		}
+		return stops
+	default:
+		return nil
+	}
+}
+
+// FinalizeOpenAI2Claude closes an unfinished Claude response when the upstream stream ends.
+func FinalizeOpenAI2Claude(info *relaycommon.RelayInfo, usage *dto.Usage) []*dto.ClaudeResponse {
+	if info == nil || info.ClaudeConvertInfo == nil || info.ClaudeConvertInfo.Done {
+		return nil
+	}
+
+	claudeResponses := stopOpenAI2ClaudeBlocks(info)
+	stopReason := stopReasonOpenAI2Claude(info.FinishReason)
+	if stopReason == "" {
+		stopReason = "end_turn"
+	}
+	if usage == nil {
+		usage = info.ClaudeConvertInfo.Usage
+	}
+	if usage == nil {
+		usage = &dto.Usage{}
+	}
+	claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
+		Type:  "message_delta",
+		Usage: buildClaudeUsageFromOpenAIUsage(usage),
+		Delta: &dto.ClaudeMediaMessage{
+			StopReason: platformruntime.GetPointer[string](stopReason),
+		},
+	})
+	claudeResponses = append(claudeResponses, &dto.ClaudeResponse{Type: "message_stop"})
+	info.ClaudeConvertInfo.LastMessagesType = relaycommon.LastMessageTypeNone
+	info.ClaudeConvertInfo.Done = true
+	return claudeResponses
+}
+
 func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamResponse, info *relaycommon.RelayInfo) []*dto.ClaudeResponse {
 	if info.ClaudeConvertInfo.Done {
 		return nil
@@ -24,15 +74,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 
 	var claudeResponses []*dto.ClaudeResponse
 	stopOpenBlocks := func() {
-		switch info.ClaudeConvertInfo.LastMessagesType {
-		case relaycommon.LastMessageTypeText, relaycommon.LastMessageTypeThinking:
-			claudeResponses = append(claudeResponses, generateStopBlock(info.ClaudeConvertInfo.Index))
-		case relaycommon.LastMessageTypeTools:
-			base := info.ClaudeConvertInfo.ToolCallBaseIndex
-			for offset := 0; offset <= info.ClaudeConvertInfo.ToolCallMaxIndexOffset; offset++ {
-				claudeResponses = append(claudeResponses, generateStopBlock(base+offset))
-			}
-		}
+		claudeResponses = append(claudeResponses, stopOpenAI2ClaudeBlocks(info)...)
 	}
 	stopOpenBlocksAndAdvance := func() {
 		if info.ClaudeConvertInfo.LastMessagesType == relaycommon.LastMessageTypeNone {
@@ -158,22 +200,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 
 		if len(openAIResponse.Choices) > 0 && openAIResponse.Choices[0].FinishReason != nil && *openAIResponse.Choices[0].FinishReason != "" {
 			info.FinishReason = *openAIResponse.Choices[0].FinishReason
-			stopOpenBlocks()
-			oaiUsage := openAIResponse.Usage
-			if oaiUsage == nil {
-				oaiUsage = info.ClaudeConvertInfo.Usage
-			}
-			if oaiUsage != nil {
-				claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
-					Type:  "message_delta",
-					Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage),
-					Delta: &dto.ClaudeMediaMessage{
-						StopReason: platformruntime.GetPointer[string](stopReasonOpenAI2Claude(info.FinishReason)),
-					},
-				})
-			}
-			claudeResponses = append(claudeResponses, &dto.ClaudeResponse{Type: "message_stop"})
-			info.ClaudeConvertInfo.Done = true
+			claudeResponses = append(claudeResponses, FinalizeOpenAI2Claude(info, openAIResponse.Usage)...)
 		}
 		return claudeResponses
 	}
@@ -184,20 +211,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			oaiUsage = info.ClaudeConvertInfo.Usage
 		}
 		if oaiUsage != nil {
-			stopOpenBlocks()
-			stopReason := stopReasonOpenAI2Claude(info.FinishReason)
-			if stopReason == "" {
-				stopReason = "end_turn"
-			}
-			claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
-				Type:  "message_delta",
-				Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage),
-				Delta: &dto.ClaudeMediaMessage{
-					StopReason: platformruntime.GetPointer[string](stopReason),
-				},
-			})
-			claudeResponses = append(claudeResponses, &dto.ClaudeResponse{Type: "message_stop"})
-			info.ClaudeConvertInfo.Done = true
+			claudeResponses = append(claudeResponses, FinalizeOpenAI2Claude(info, oaiUsage)...)
 		}
 		return claudeResponses
 	}
@@ -206,11 +220,6 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 	doneChunk := chosenChoice.FinishReason != nil && *chosenChoice.FinishReason != ""
 	if doneChunk {
 		info.FinishReason = *chosenChoice.FinishReason
-		oaiUsage := openAIResponse.Usage
-		if oaiUsage == nil {
-			oaiUsage = info.ClaudeConvertInfo.Usage
-			return claudeResponses
-		}
 	}
 
 	var claudeResponse dto.ClaudeResponse
@@ -317,23 +326,8 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 		claudeResponses = append(claudeResponses, &claudeResponse)
 	}
 
-	if doneChunk || info.ClaudeConvertInfo.Done {
-		stopOpenBlocks()
-		oaiUsage := openAIResponse.Usage
-		if oaiUsage == nil {
-			oaiUsage = info.ClaudeConvertInfo.Usage
-		}
-		if oaiUsage != nil {
-			claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
-				Type:  "message_delta",
-				Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage),
-				Delta: &dto.ClaudeMediaMessage{
-					StopReason: platformruntime.GetPointer[string](stopReasonOpenAI2Claude(info.FinishReason)),
-				},
-			})
-		}
-		claudeResponses = append(claudeResponses, &dto.ClaudeResponse{Type: "message_stop"})
-		info.ClaudeConvertInfo.Done = true
+	if doneChunk {
+		claudeResponses = append(claudeResponses, FinalizeOpenAI2Claude(info, openAIResponse.Usage)...)
 		return claudeResponses
 	}
 

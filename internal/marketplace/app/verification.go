@@ -19,156 +19,6 @@ import (
 	"gorm.io/gorm"
 )
 
-const nativeDetectorVersion = "3.0.0"
-
-// QueueRequiredVerification selects the publish gate required by the channel's declared models.
-func QueueRequiredVerification(channelID string) error {
-	channel, _, err := loadChannelGroup(channelID)
-	if err != nil {
-		return err
-	}
-	if isGPT56MappingEligible(channel) {
-		return QueueGPT56MappingVerification(channelID)
-	}
-	return QueueNativeVerification(channelID)
-}
-
-// QueueGPT56MappingVerification verifies live connectivity and model identity together.
-func QueueGPT56MappingVerification(channelID string) error {
-	channel, _, err := loadChannelGroup(channelID)
-	if err != nil {
-		return err
-	}
-	if !isGPT56MappingEligible(channel) {
-		return QueueNativeVerification(channelID)
-	}
-	if err := setChannelVerificationQueued(channelID); err != nil {
-		return err
-	}
-	go executeGPT56MappingVerification(channelID)
-	return nil
-}
-
-// QueueNativeVerification persists the run before executing the bounded compatibility probe.
-func QueueNativeVerification(channelID string) error {
-	run := &marketplaceschema.VerificationRun{
-		ChannelID: channelID, Status: marketplacedomain.VerificationQueued,
-		Stage: "basic_security", DetectorName: "NativeCompatibilityDetector",
-		DetectorVersion: nativeDetectorVersion, RulesetVersion: "marketplace-v1",
-	}
-	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(run).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).
-			Updates(map[string]any{
-				"status":                     marketplacedomain.LifecycleVerifying,
-				"model_verification_results": "[]",
-			}).Error; err != nil {
-			return err
-		}
-		return tx.Model(&marketplaceschema.Group{}).Where("channel_id = ?", channelID).Updates(map[string]any{
-			"lifecycle_status":    marketplacedomain.LifecycleVerifying,
-			"verification_status": marketplacedomain.VerificationQueued,
-			"verification_due_at": nil,
-		}).Error
-	}); err != nil {
-		return err
-	}
-	go executeNativeVerification(run.ID)
-	return nil
-}
-
-func setChannelVerificationQueued(channelID string) error {
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).
-			Update("status", marketplacedomain.LifecycleVerifying).Error; err != nil {
-			return err
-		}
-		return tx.Model(&marketplaceschema.Group{}).Where("channel_id = ?", channelID).Updates(map[string]any{
-			"lifecycle_status":    marketplacedomain.LifecycleVerifying,
-			"verification_status": marketplacedomain.VerificationQueued,
-			"verification_due_at": nil,
-		}).Error
-	})
-}
-
-func executeNativeVerification(runID string) {
-	run, channel, group, err := loadVerificationContext(runID)
-	if err != nil {
-		return
-	}
-	now := time.Now().UTC()
-	_ = platformdb.DB.Model(run).Updates(map[string]any{"status": marketplacedomain.VerificationRunning, "started_at": now}).Error
-	results, err := probeMarketplaceChannel(channel, func(stage string) {
-		_ = platformdb.DB.Model(run).Update("stage", stage).Error
-	}, func(results []ModelVerificationResult) {
-		_ = platformdb.DB.Model(channel).Update(
-			"model_verification_results", encodeModelVerificationResults(results),
-		).Error
-	})
-	completeVerification(run, channel, group, results, err)
-}
-
-func executeGPT56MappingVerification(channelID string) {
-	channel, group, err := loadChannelGroup(channelID)
-	if err != nil || !isGPT56MappingEligible(channel) {
-		return
-	}
-	_, err = runGPT56MappingCheck(channel)
-	if err != nil {
-		return
-	}
-	if err := platformdb.DB.First(channel, "id = ?", channelID).Error; err != nil {
-		return
-	}
-	completeGPT56MappingVerification(channel, group)
-}
-
-func completeGPT56MappingVerification(channel *marketplaceschema.Channel, group *marketplaceschema.Group) {
-	now := time.Now().UTC()
-	lifecycle := marketplacedomain.LifecycleDraft
-	verification := marketplacedomain.VerificationFailed
-	if channel.GPT56MappingStatus == GPT56MappingStatusMatched {
-		if channel.InternalChannelID == nil {
-			if err := createInternalChannel(channel, group); err == nil {
-				lifecycle = marketplacedomain.LifecycleActive
-				verification = marketplacedomain.VerificationPassed
-			}
-		} else if err := syncInternalChannel(channel, group); err == nil {
-			lifecycle = marketplacedomain.LifecycleActive
-			verification = marketplacedomain.VerificationPassed
-		}
-	}
-	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(channel).Update("status", lifecycle).Error; err != nil {
-			return err
-		}
-		updates := map[string]any{"lifecycle_status": lifecycle, "verification_status": verification}
-		if verification == marketplacedomain.VerificationPassed {
-			updates["verification_due_at"] = now.Add(7 * 24 * time.Hour)
-			updates["published_at"] = now
-		}
-		return tx.Model(group).Updates(updates).Error
-	})
-}
-
-func loadVerificationContext(runID string) (*marketplaceschema.VerificationRun, *marketplaceschema.Channel, *marketplaceschema.Group, error) {
-	var run marketplaceschema.VerificationRun
-	if err := platformdb.DB.First(&run, "id = ?", runID).Error; err != nil {
-		return nil, nil, nil, err
-	}
-	var channel marketplaceschema.Channel
-	if err := platformdb.DB.First(&channel, "id = ?", run.ChannelID).Error; err != nil {
-		return nil, nil, nil, err
-	}
-	var group marketplaceschema.Group
-	if err := platformdb.DB.First(&group, "channel_id = ?", channel.ID).Error; err != nil {
-		return nil, nil, nil, err
-	}
-	return &run, &channel, &group, nil
-}
-
 func probeMarketplaceChannel(
 	channel *marketplaceschema.Channel,
 	reportStage func(string),
@@ -298,18 +148,18 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	now := time.Now().UTC()
 	expires := now.Add(7 * 24 * time.Hour)
 	status := marketplacedomain.VerificationPassed
-	lifecycle := marketplacedomain.LifecycleActive
+	lifecycle := marketplacedomain.LifecycleDraft
 	originalModels := channel.DeclaredModels
 	passedModels, rejectedModels := selectVerifiedModels(results)
 	if len(passedModels) == 0 && probeErr == nil {
 		probeErr = errors.New("没有模型通过连通性检测")
 	}
-	if len(passedModels) > 0 && len(rejectedModels) > 0 {
+	if !isGPT56MappingEligible(channel) && len(passedModels) > 0 && len(rejectedModels) > 0 {
 		encoded, _ := json.Marshal(passedModels)
 		channel.DeclaredModels = string(encoded)
 		probeErr = nil
 	}
-	if probeErr == nil {
+	if probeErr == nil && !isGPT56MappingEligible(channel) {
 		if channel.InternalChannelID == nil {
 			probeErr = createInternalChannel(channel, group)
 		} else {
@@ -323,31 +173,65 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	if probeErr != nil {
 		channel.DeclaredModels = originalModels
 		status = marketplacedomain.VerificationFailed
-		lifecycle = marketplacedomain.LifecycleDraft
 		summary = verificationSummary(results, probeErr)
+	}
+	connectivityStatus := status
+	if isGPT56MappingEligible(channel) {
+		status, lifecycle = requiredVerificationState(channel)
+	} else if connectivityStatus == marketplacedomain.VerificationPassed {
+		lifecycle = marketplacedomain.LifecycleActive
 	}
 	hash := sha256.Sum256([]byte(run.ID + channel.ID + status + now.Format(time.RFC3339Nano)))
 	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(run).Updates(map[string]any{
-			"status": status, "stage": "protocol", "summary": summary,
+			"status": connectivityStatus, "stage": "protocol", "summary": summary,
 			"evidence_hash": hex.EncodeToString(hash[:]), "completed_at": now, "expires_at": expires,
 		}).Error; err != nil {
 			return err
 		}
 		updates := map[string]any{"verification_status": status, "lifecycle_status": lifecycle}
-		if probeErr == nil {
+		if status == marketplacedomain.VerificationPassed {
 			updates["verification_due_at"] = expires
 			updates["published_at"] = now
 		}
 		if err := tx.Model(group).Updates(updates).Error; err != nil {
 			return err
 		}
-		channelUpdates := map[string]any{"status": lifecycle}
+		channelUpdates := map[string]any{
+			"status":                       lifecycle,
+			"connectivity_test_status":     connectivityStatus,
+			"connectivity_test_checked_at": now,
+		}
 		if probeErr == nil && channel.DeclaredModels != originalModels {
 			channelUpdates["declared_models"] = channel.DeclaredModels
 		}
 		return tx.Model(channel).Updates(channelUpdates).Error
 	})
+}
+
+func requiredVerificationState(channel *marketplaceschema.Channel) (string, string) {
+	if isGPT56MappingEligible(channel) {
+		switch channel.GPT56MappingStatus {
+		case GPT56MappingStatusMatched:
+			return marketplacedomain.VerificationPassed, marketplacedomain.LifecycleActive
+		case GPT56MappingStatusRunning:
+			return marketplacedomain.VerificationRunning, marketplacedomain.LifecycleVerifying
+		case GPT56MappingStatusMismatch, GPT56MappingStatusInsufficientEvidence:
+			return marketplacedomain.VerificationFailed, marketplacedomain.LifecycleDraft
+		default:
+			return marketplacedomain.VerificationQueued, marketplacedomain.LifecycleDraft
+		}
+	}
+	switch channel.ConnectivityTestStatus {
+	case marketplacedomain.VerificationPassed:
+		return marketplacedomain.VerificationPassed, marketplacedomain.LifecycleActive
+	case marketplacedomain.VerificationRunning:
+		return marketplacedomain.VerificationRunning, marketplacedomain.LifecycleVerifying
+	case marketplacedomain.VerificationFailed:
+		return marketplacedomain.VerificationFailed, marketplacedomain.LifecycleDraft
+	default:
+		return marketplacedomain.VerificationQueued, marketplacedomain.LifecycleDraft
+	}
 }
 
 func verifyDeclaredModels(declared, upstream []string) error {

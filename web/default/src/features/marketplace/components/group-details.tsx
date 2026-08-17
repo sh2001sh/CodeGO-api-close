@@ -1,11 +1,18 @@
-import { CircleDollarSign, Gauge, ShieldCheck } from 'lucide-react'
+import {
+  Activity,
+  CircleDollarSign,
+  Gauge,
+  ShieldCheck,
+  Timer,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { formatNumber } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
-import { ChannelFeedbackSummary } from './channel-feedback'
-import { ModelConnectivityResults } from './model-verification'
-import { TokenBindPanel } from './token-bind-panel'
+import {
+  ModelConnectivityResults,
+  ModelConsistencyStatusView,
+} from './model-verification'
 
 export function GroupDetails(props: { group: MarketplaceGroup }) {
   const { t } = useTranslation()
@@ -14,7 +21,14 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
     {
       icon: ShieldCheck,
       label: t('检测状态'),
-      value: group.verification_status,
+      value:
+        group.verification_status === 'passed'
+          ? t('通过')
+          : group.verification_status === 'failed'
+            ? t('未通过')
+            : group.verification_status === 'running'
+              ? t('检测中')
+              : group.verification_status || t('未检测'),
     },
     {
       icon: Gauge,
@@ -31,7 +45,18 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
   ]
   return (
     <div className='px-4 py-5 sm:px-6'>
-      <div className='border-border grid border-y sm:grid-cols-3'>
+      <div>
+        <div className='text-muted-foreground text-xs font-medium'>
+          {t('分组模型一致性')}
+        </div>
+        <div className='mt-2'>
+          <ModelConsistencyStatusView
+            status={group.model_consistency_status}
+            checkedAt={group.verification_completed_at}
+          />
+        </div>
+      </div>
+      <div className='border-border mt-4 grid border-y sm:grid-cols-3'>
         {evidence.map(({ icon: Icon, label, value }) => (
           <div
             key={label}
@@ -47,8 +72,26 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
           </div>
         ))}
       </div>
-      <div className='mt-4'>
-        <ChannelFeedbackSummary group={group} />
+      <div className='mt-4 grid gap-3 text-xs sm:grid-cols-3'>
+        <SecondaryMetric
+          icon={Timer}
+          label={t('总延迟')}
+          value={
+            group.avg_latency_ms
+              ? `${formatNumber(Math.round(group.avg_latency_ms))} ms`
+              : '--'
+          }
+        />
+        <SecondaryMetric
+          icon={Activity}
+          label={t('输出速度')}
+          value={group.avg_tps ? `${group.avg_tps.toFixed(1)} TPS` : '--'}
+        />
+        <SecondaryMetric
+          icon={Gauge}
+          label={t('缓存命中')}
+          value={`${group.cache_hit_rate.toFixed(1)}%`}
+        />
       </div>
       <div className='mt-3 flex flex-wrap gap-1.5'>
         {group.models.map((model) => (
@@ -60,15 +103,26 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
       <ModelConnectivityResults results={group.model_verification_results} />
       {group.observing && (
         <p className='text-muted-foreground mt-3 text-xs'>
-          {t('样本进度：{{requests}}/100 请求 · {{users}}/10 用户', {
+          {t('当前仍处于样本观测期，已记录 {{requests}} 次请求。', {
             requests: group.request_count,
-            users: group.independent_consumers,
           })}
         </p>
       )}
-      <div className='mt-4'>
-        <TokenBindPanel groupId={group.id} />
-      </div>
+    </div>
+  )
+}
+
+function SecondaryMetric(props: {
+  icon: typeof Gauge
+  label: string
+  value: string
+}) {
+  const Icon = props.icon
+  return (
+    <div className='flex items-center gap-2'>
+      <Icon className='text-muted-foreground size-3.5' />
+      <span className='text-muted-foreground'>{props.label}</span>
+      <span className='ml-auto font-medium tabular-nums'>{props.value}</span>
     </div>
   )
 }

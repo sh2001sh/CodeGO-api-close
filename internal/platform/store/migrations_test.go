@@ -404,6 +404,44 @@ func TestMigrateMarketplaceModelVerificationUpgradesExistingSQLiteTable(t *testi
 	require.NoError(t, migrateMarketplaceModelVerification(db))
 }
 
+func TestMigrateMarketplaceChannelProbeFieldsUpgradesExistingSQLiteTable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE marketplace_channels (
+		id text primary key,
+		owner_user_id integer not null,
+		provider_type text not null,
+		base_url_ciphertext text not null,
+		credential_ciphertext text not null,
+		status text not null
+	)`).Error)
+
+	require.NoError(t, migrateMarketplaceChannelConnectivityTest(db))
+	require.NoError(t, migrateMarketplaceChannelAutoProbe(db))
+	for _, field := range []string{
+		"ConnectivityTestStatus",
+		"ConnectivityTestCheckedAt",
+		"AutoProbeEnabled",
+		"AutoProbeIntervalMinutes",
+		"AutoProbeModel",
+		"AutoProbeLastStatus",
+		"AutoProbeLastAt",
+	} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
+	}
+	for _, field := range []string{
+		"ConnectivityTestStatus",
+		"ConnectivityTestCheckedAt",
+		"AutoProbeEnabled",
+		"AutoProbeLastStatus",
+		"AutoProbeLastAt",
+	} {
+		require.True(t, db.Migrator().HasIndex(&marketplaceschema.Channel{}, field), field)
+	}
+	require.NoError(t, migrateMarketplaceChannelConnectivityTest(db))
+	require.NoError(t, migrateMarketplaceChannelAutoProbe(db))
+}
+
 func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)

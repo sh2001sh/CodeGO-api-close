@@ -99,6 +99,8 @@ func V2MigrationIDs() []string {
 		"20260816_wallet_transfer_fee_fields",
 		"20260816_marketplace_incremental_channel_ids",
 		"20260817_marketplace_gpt56_mapping_detection",
+		"20260817_marketplace_channel_connectivity_test",
+		"20260817_marketplace_channel_auto_probe",
 		"20260816_token_marketplace_multiplier_limit",
 		"20260816_unified_credit_v1_schema",
 		"20260816_unified_credit_v1_channel_scope",
@@ -258,6 +260,8 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260816_wallet_transfer_fee_fields", Run: migrateWalletTransferFeeFields},
 		{ID: "20260816_marketplace_incremental_channel_ids", Run: migrateMarketplaceIncrementalChannelIDs},
 		{ID: "20260817_marketplace_gpt56_mapping_detection", Run: migrateMarketplaceGPT56MappingDetection},
+		{ID: "20260817_marketplace_channel_connectivity_test", Run: migrateMarketplaceChannelConnectivityTest},
+		{ID: "20260817_marketplace_channel_auto_probe", Run: migrateMarketplaceChannelAutoProbe},
 		{ID: "20260816_token_marketplace_multiplier_limit", Run: migrateTokenMarketplaceMultiplierLimit},
 		{ID: "20260816_unified_credit_v1_schema", Run: migrateUnifiedCreditV1Schema},
 		{ID: "20260816_unified_credit_v1_channel_scope", Run: migrateUnifiedCreditV1ChannelScope},
@@ -442,6 +446,16 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			(!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingResults") ||
 				!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingStatus") ||
 				!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingCheckedAt"))
+	case "20260817_marketplace_channel_connectivity_test":
+		return marketplaceChannelSchemaNeedsRepair(db,
+			[]string{"ConnectivityTestStatus", "ConnectivityTestCheckedAt"},
+			[]string{"ConnectivityTestStatus", "ConnectivityTestCheckedAt"},
+		)
+	case "20260817_marketplace_channel_auto_probe":
+		return marketplaceChannelSchemaNeedsRepair(db,
+			[]string{"AutoProbeEnabled", "AutoProbeIntervalMinutes", "AutoProbeModel", "AutoProbeLastStatus", "AutoProbeLastAt"},
+			[]string{"AutoProbeEnabled", "AutoProbeLastStatus", "AutoProbeLastAt"},
+		)
 	case "20260816_unified_credit_v1_channel_scope":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) ||
 			db.Migrator().HasTable(&gatewayschema.Channel{}) &&
@@ -460,6 +474,23 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	default:
 		return false
 	}
+}
+
+func marketplaceChannelSchemaNeedsRepair(db *gorm.DB, fields, indexes []string) bool {
+	if !db.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return false
+	}
+	for _, field := range fields {
+		if !db.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
+			return true
+		}
+	}
+	for _, index := range indexes {
+		if !db.Migrator().HasIndex(&marketplaceschema.Channel{}, index) {
+			return true
+		}
+	}
+	return false
 }
 
 func migrateMarketplaceChannelFeedbackAndPrices(db *gorm.DB) error {
@@ -569,6 +600,54 @@ func migrateMarketplaceGPT56MappingDetection(tx *gorm.DB) error {
 			continue
 		}
 		if err := tx.Migrator().AddColumn(&marketplaceschema.Channel{}, field); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateMarketplaceChannelConnectivityTest(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return tx.AutoMigrate(&marketplaceschema.Channel{})
+	}
+	for _, field := range []string{"ConnectivityTestStatus", "ConnectivityTestCheckedAt"} {
+		if tx.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&marketplaceschema.Channel{}, field); err != nil {
+			return err
+		}
+	}
+	return ensureMarketplaceChannelIndexes(tx, "ConnectivityTestStatus", "ConnectivityTestCheckedAt")
+}
+
+func migrateMarketplaceChannelAutoProbe(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return tx.AutoMigrate(&marketplaceschema.Channel{})
+	}
+	for _, field := range []string{
+		"AutoProbeEnabled",
+		"AutoProbeIntervalMinutes",
+		"AutoProbeModel",
+		"AutoProbeLastStatus",
+		"AutoProbeLastAt",
+	} {
+		if tx.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&marketplaceschema.Channel{}, field); err != nil {
+			return err
+		}
+	}
+	return ensureMarketplaceChannelIndexes(tx, "AutoProbeEnabled", "AutoProbeLastStatus", "AutoProbeLastAt")
+}
+
+func ensureMarketplaceChannelIndexes(tx *gorm.DB, fields ...string) error {
+	for _, field := range fields {
+		if tx.Migrator().HasIndex(&marketplaceschema.Channel{}, field) {
+			continue
+		}
+		if err := tx.Migrator().CreateIndex(&marketplaceschema.Channel{}, field); err != nil {
 			return err
 		}
 	}

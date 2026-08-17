@@ -142,6 +142,14 @@ export async function updateApiKeyStatus(
   return res.data
 }
 
+export async function testApiKeyConnectivity(
+  id: number,
+  model: string
+): Promise<ApiResponse<{ model: string; group: string; channel_id: number; latency_ms: number }>> {
+  const res = await api.post(`/api/token/${id}/test`, { model })
+  return res.data
+}
+
 // Fetch the real (unmasked) key for a token by ID
 export async function fetchTokenKey(
   id: number

@@ -3,7 +3,9 @@ package app
 import (
 	"sort"
 	"strings"
+	"time"
 
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 )
@@ -46,7 +48,7 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, query GroupQuery) bool {
 	search := strings.ToLower(strings.TrimSpace(query.Search))
 	if search != "" {
-		haystack := strings.ToLower(channel.ID + " " + marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID) + " " + group.PublicSlug + " " + channel.ProviderType + " " + publicSourceLabel(channel) + " " + strings.Join(models, " "))
+		haystack := strings.ToLower(group.ID + " " + group.SystemDisplayName + " " + channel.ID + " " + marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID) + " " + group.PublicSlug + " " + channel.ProviderType + " " + publicSourceLabel(channel) + " " + strings.Join(models, " "))
 		if !strings.Contains(haystack, search) {
 			return false
 		}
@@ -64,6 +66,9 @@ func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.
 }
 
 func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, snapshot marketplaceschema.RankingSnapshot, recentSeries []RecentRequestBucket) GroupListItem {
+	if len(recentSeries) == 0 {
+		recentSeries = emptyMarketplaceRecentRequestSeries(time.Now().Unix())
+	}
 	return GroupListItem{
 		ID: group.ID, ChannelID: channel.ID, PublicSlug: group.PublicSlug,
 		SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID),
@@ -72,23 +77,53 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		CreditPoolPolicy: group.CreditPoolPolicy,
 		LifecycleStatus:  group.LifecycleStatus, VerificationStatus: group.VerificationStatus,
 		VerificationDueAt: group.VerificationDueAt, Multiplier: group.Multiplier, Models: models,
-		ModelVerificationResults: publicModelVerificationResults(channel.ModelVerificationResults),
-		ModelConsistencyStatus:   channel.ModelConsistencyStatus,
-		Rank:                     snapshot.Rank, Score: snapshot.Score, SuccessRate: snapshot.RawSuccessRate,
+		VerificationCompletedAt:   latestModelVerificationAt(channel.ModelVerificationResults),
+		ModelVerificationResults:  publicModelVerificationResults(channel.ModelVerificationResults),
+		ConnectivityTestStatus:    channel.ConnectivityTestStatus,
+		ConnectivityTestCheckedAt: channel.ConnectivityTestCheckedAt,
+		ModelConsistencyStatus:    channel.ModelConsistencyStatus,
+		Rank:                      snapshot.Rank, Score: snapshot.Score, SuccessRate: snapshot.RawSuccessRate,
 		WilsonSuccessRate: snapshot.WilsonSuccessRate, AvgTTFTMs: snapshot.AvgTTFTMs,
 		AvgLatencyMs: snapshot.AvgLatencyMs, AvgTPS: snapshot.AvgTPS,
-		CacheHitRate: snapshot.CacheHitRate, LatestRequestStatus: latestRequestStatus(recentSeries),
-		RecentRequestSeries: recentSeries,
-		RequestCount:        snapshot.RequestCount, IndependentConsumers: snapshot.IndependentConsumers,
+		CacheHitRate: snapshot.CacheHitRate, LatestRequestStatus: latestRequestStatus(channel, recentSeries),
+		RecentRequestSeries: recentSeries, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
+		RequestCount: snapshot.RequestCount, MaxConcurrency: channel.MaxConcurrency,
+		CurrentConcurrency: activeMarketplaceChannelRequests(channel), IndependentConsumers: snapshot.IndependentConsumers,
 		Observing: snapshot.Observing, UpdatedAt: group.UpdatedAt,
 	}
 }
 
-func latestRequestStatus(series []RecentRequestBucket) string {
+func activeMarketplaceChannelRequests(channel marketplaceschema.Channel) int {
+	if channel.InternalChannelID == nil {
+		return 0
+	}
+	return gatewayruntime.ActiveChannelRequests(*channel.InternalChannelID)
+}
+
+func latestModelVerificationAt(raw string) *time.Time {
+	results := decodeModelVerificationResults(raw)
+	var latest time.Time
+	for _, result := range results {
+		if result.TestedAt.After(latest) {
+			latest = result.TestedAt
+		}
+	}
+	if latest.IsZero() {
+		return nil
+	}
+	return &latest
+}
+
+func latestRequestStatus(channel marketplaceschema.Channel, series []RecentRequestBucket) string {
+	latestBucketAt := time.Time{}
 	for index := len(series) - 1; index >= 0; index-- {
 		point := series[index]
 		if point.RequestCount <= 0 {
 			continue
+		}
+		latestBucketAt = time.Unix(point.Ts, 0)
+		if status, ok := newerChannelHealthStatus(channel, latestBucketAt); ok {
+			return status
 		}
 		if point.SuccessRate >= 90 {
 			return "healthy"
@@ -98,7 +133,33 @@ func latestRequestStatus(series []RecentRequestBucket) string {
 		}
 		return "failed"
 	}
+	if status, ok := newerChannelHealthStatus(channel, latestBucketAt); ok {
+		return status
+	}
 	return "unknown"
+}
+
+func newerChannelHealthStatus(channel marketplaceschema.Channel, after time.Time) (string, bool) {
+	status := ""
+	checkedAt := time.Time{}
+	if channel.ConnectivityTestCheckedAt != nil && channel.ConnectivityTestCheckedAt.After(checkedAt) {
+		checkedAt = *channel.ConnectivityTestCheckedAt
+		status = channel.ConnectivityTestStatus
+	}
+	if channel.AutoProbeLastAt != nil && channel.AutoProbeLastAt.After(checkedAt) {
+		checkedAt = *channel.AutoProbeLastAt
+		status = channel.AutoProbeLastStatus
+	}
+	if checkedAt.IsZero() || !checkedAt.After(after) {
+		return "", false
+	}
+	if status == marketplacedomain.VerificationPassed {
+		return "healthy", true
+	}
+	if status == marketplacedomain.VerificationFailed {
+		return "failed", true
+	}
+	return "", false
 }
 
 func marketplaceHighlights(items []GroupListItem) GroupHighlights {

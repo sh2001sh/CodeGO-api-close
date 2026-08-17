@@ -20,6 +20,7 @@ const (
 	GPT56MappingStatusMismatch             = "mismatch"
 	GPT56MappingStatusInsufficientEvidence = "insufficient_evidence"
 	GPT56MappingSchedulerInterval          = time.Hour
+	gpt56MappingSampleCount                = 3
 )
 
 var (
@@ -33,7 +34,7 @@ func isGPT56MappingEligible(channel *marketplaceschema.Channel) bool {
 }
 
 func gpt56MappingModelsForChannel(channel *marketplaceschema.Channel) []string {
-	if channel == nil || (channel.SubmittedSourceLabel != "Codex Plus" && channel.SubmittedSourceLabel != "Codex Pro") {
+	if channel == nil {
 		return nil
 	}
 	supported := make(map[string]string, len(gpt56MappingModels))
@@ -99,23 +100,59 @@ func unavailableGPT56MappingResult() GPT56MappingResult {
 func probeGPT56Mappings(provider, baseURL, credential string, models []string) []GPT56MappingResult {
 	results := make([]GPT56MappingResult, 0, len(models))
 	for _, model := range models {
-		latencyMS, reported, probeErr := probeMarketplaceInferenceReportedModel(provider, baseURL, credential, model)
-		result := GPT56MappingResult{RequestedModel: model, ReportedModel: reported, LatencyMS: latencyMS, TestedAt: time.Now().UTC()}
-		switch {
-		case probeErr != nil:
-			result.Status = GPT56MappingStatusInsufficientEvidence
-			result.Error = truncateVerificationError(probeErr.Error())
-		case sameModelID(model, reported):
-			result.Status = GPT56MappingStatusMatched
-		case strings.TrimSpace(reported) == "":
-			result.Status = GPT56MappingStatusInsufficientEvidence
-			result.Error = "上游响应未返回模型标识"
-		default:
-			result.Status = GPT56MappingStatusMismatch
-		}
-		results = append(results, result)
+		results = append(results, probeGPT56MappingModel(provider, baseURL, credential, model))
 	}
 	return results
+}
+
+func probeGPT56MappingModel(provider, baseURL, credential, model string) GPT56MappingResult {
+	result := GPT56MappingResult{
+		RequestedModel: model,
+		SampleCount:    gpt56MappingSampleCount,
+		TestedAt:       time.Now().UTC(),
+	}
+	reportedModels := make([]string, 0, gpt56MappingSampleCount)
+	errorsSeen := make([]string, 0, gpt56MappingSampleCount)
+	for sample := 0; sample < gpt56MappingSampleCount; sample++ {
+		latencyMS, reported, probeErr := probeMarketplaceInferenceReportedModel(provider, baseURL, credential, model)
+		result.LatencyMS += latencyMS
+		if probeErr != nil {
+			errorsSeen = append(errorsSeen, truncateVerificationError(probeErr.Error()))
+			continue
+		}
+		reported = strings.TrimSpace(reported)
+		if reported == "" {
+			errorsSeen = append(errorsSeen, "上游响应未返回模型标识")
+			continue
+		}
+		reportedModels = append(reportedModels, reported)
+		if sameModelID(model, reported) {
+			result.MatchedSamples++
+		}
+	}
+	if result.SampleCount > 0 {
+		result.LatencyMS /= int64(result.SampleCount)
+	}
+	result.ReportedModel = strings.Join(normalizeModels(reportedModels), ", ")
+	switch {
+	case hasMismatchedReportedModel(model, reportedModels):
+		result.Status = GPT56MappingStatusMismatch
+	case result.MatchedSamples == result.SampleCount:
+		result.Status = GPT56MappingStatusMatched
+	default:
+		result.Status = GPT56MappingStatusInsufficientEvidence
+		result.Error = strings.Join(normalizeModels(errorsSeen), "; ")
+	}
+	return result
+}
+
+func hasMismatchedReportedModel(expected string, reported []string) bool {
+	for _, model := range reported {
+		if !sameModelID(expected, model) {
+			return true
+		}
+	}
+	return false
 }
 
 func sameModelID(expected, actual string) bool {
@@ -160,7 +197,7 @@ func decodeGPT56MappingResults(raw string) []GPT56MappingResult {
 	return results
 }
 
-// StartGPT56MappingScheduler checks eligible Codex Plus and Pro channels once per day.
+// StartGPT56MappingScheduler checks eligible GPT-5.6 channels once per day.
 func StartGPT56MappingScheduler(ctx context.Context) {
 	gpt56SchedulerOnce.Do(func() {
 		go func() {
@@ -185,7 +222,10 @@ func runDueGPT56MappingChecks(ctx context.Context) {
 	}
 	var channels []marketplaceschema.Channel
 	dueBefore := time.Now().UTC().Add(-24 * time.Hour)
-	if err := platformdb.DB.Where("submitted_source_label IN ? AND (gpt56_mapping_checked_at IS NULL OR gpt56_mapping_checked_at <= ?)", []string{"Codex Plus", "Codex Pro"}, dueBefore).Find(&channels).Error; err != nil {
+	if err := platformdb.DB.Where(
+		"(declared_models LIKE ? OR declared_models LIKE ? OR declared_models LIKE ?) AND (gpt56_mapping_checked_at IS NULL OR gpt56_mapping_checked_at <= ?)",
+		"%gpt-5.6-sol%", "%gpt-5.6-terra%", "%gpt-5.6-luna%", dueBefore,
+	).Find(&channels).Error; err != nil {
 		platformobservability.SysError("load due GPT-5.6 mapping checks: " + err.Error())
 		return
 	}

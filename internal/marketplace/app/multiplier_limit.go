@@ -31,7 +31,7 @@ func EnforceMultiplierLimit(multiplier, limit float64) error {
 }
 
 func multiplierLimitExceededError(limit float64) error {
-	return errors.New("第三方 Auto 路由池中支持该模型的渠道倍率均超过 API Key 上限 " + formatLimitMultiplier(limit) + "x")
+	return errors.New("Auto 路由池中支持该模型的分组倍率均超过 API Key 上限 " + formatLimitMultiplier(limit) + "x")
 }
 
 func formatLimitMultiplier(value float64) string {

@@ -6,6 +6,7 @@ import (
 
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 )
 
 func startControlBackgroundTasks() {
@@ -21,6 +22,7 @@ func startControlBackgroundTasks() {
 	}
 
 	gatewayexecutionapp.StartAutomaticChannelTestTask()
+	marketplaceapp.StartMarketplaceAutoProbeTask()
 	gatewayexecutionapp.StartCodexCredentialAutoRefreshTask()
 	gatewayroutingapp.StartChannelUpstreamModelUpdateTask()
 }

@@ -87,10 +87,12 @@ func TestOwnerCanDisableSensitiveWordInterception(t *testing.T) {
 	require.False(t, *saved.SensitiveWordInterceptionEnabled)
 }
 
-func TestEditingChannelDoesNotResetVerificationState(t *testing.T) {
+func TestEditingChannelInformationInvalidatesVerificationState(t *testing.T) {
 	channel := &marketplaceschema.Channel{
 		ID: "edit-without-verification", ProviderType: "openai_compatible",
 		DeclaredModels: `["gpt-4.1"]`, Status: marketplacedomain.LifecycleActive,
+		ModelVerificationResults: `[{}]`, ConnectivityTestStatus: marketplacedomain.VerificationPassed,
+		GPT56MappingResults: `[{}]`, GPT56MappingStatus: GPT56MappingStatusMatched,
 	}
 	group := &marketplaceschema.Group{
 		ID: "edit-without-verification-group", Multiplier: 1,
@@ -103,7 +105,65 @@ func TestEditingChannelDoesNotResetVerificationState(t *testing.T) {
 
 	require.NoError(t, err)
 	require.True(t, requiresManualVerification)
+	require.Equal(t, marketplacedomain.LifecycleDraft, channel.Status)
+	require.Equal(t, marketplacedomain.LifecycleDraft, group.LifecycleStatus)
+	require.Equal(t, marketplacedomain.VerificationQueued, group.VerificationStatus)
+	require.Equal(t, "[]", channel.ModelVerificationResults)
+	require.Empty(t, channel.ConnectivityTestStatus)
+	require.Equal(t, "[]", channel.GPT56MappingResults)
+	require.Empty(t, channel.GPT56MappingStatus)
+}
+
+func TestEditingCapacityDoesNotInvalidateVerificationState(t *testing.T) {
+	channel := &marketplaceschema.Channel{
+		ID: "capacity-only", ProviderType: "openai_compatible",
+		DeclaredModels: `["gpt-4.1"]`, Status: marketplacedomain.LifecycleActive,
+		ModelVerificationResults: `[{}]`, ConnectivityTestStatus: marketplacedomain.VerificationPassed,
+		MaxConcurrency: 10, QPS: 5,
+	}
+	group := &marketplaceschema.Group{
+		ID: "capacity-only-group", Multiplier: 1,
+		LifecycleStatus:    marketplacedomain.LifecycleActive,
+		VerificationStatus: marketplacedomain.VerificationPassed,
+	}
+	concurrency := 20
+	qps := 8.0
+
+	requiresManualVerification, err := applyChannelUpdate(channel, group, UpdateChannelRequest{
+		MaxConcurrency: &concurrency,
+		QPS:            &qps,
+	})
+
+	require.NoError(t, err)
+	require.False(t, requiresManualVerification)
 	require.Equal(t, marketplacedomain.LifecycleActive, channel.Status)
 	require.Equal(t, marketplacedomain.LifecycleActive, group.LifecycleStatus)
 	require.Equal(t, marketplacedomain.VerificationPassed, group.VerificationStatus)
+	require.Equal(t, marketplacedomain.VerificationPassed, channel.ConnectivityTestStatus)
+	require.Equal(t, `[{}]`, channel.ModelVerificationResults)
+}
+
+func TestRequiredVerificationStateUsesDetectionForGPT56(t *testing.T) {
+	channel := &marketplaceschema.Channel{
+		DeclaredModels:         `["gpt-5.6-sol"]`,
+		GPT56MappingStatus:     GPT56MappingStatusMatched,
+		ConnectivityTestStatus: "",
+	}
+
+	verification, lifecycle := requiredVerificationState(channel)
+
+	require.Equal(t, marketplacedomain.VerificationPassed, verification)
+	require.Equal(t, marketplacedomain.LifecycleActive, lifecycle)
+}
+
+func TestRequiredVerificationStateUsesConnectivityWithoutGPT56(t *testing.T) {
+	channel := &marketplaceschema.Channel{
+		DeclaredModels:         `["gpt-4.1"]`,
+		ConnectivityTestStatus: marketplacedomain.VerificationPassed,
+	}
+
+	verification, lifecycle := requiredVerificationState(channel)
+
+	require.Equal(t, marketplacedomain.VerificationPassed, verification)
+	require.Equal(t, marketplacedomain.LifecycleActive, lifecycle)
 }

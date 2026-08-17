@@ -47,20 +47,20 @@ func handleNonOpenAIStreamFormat(c *gin.Context, info *relaycommon.RelayInfo, ch
 }
 
 func handleNonOpenAIFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, responseID string, createAt int64, model string, usage *dto.Usage) {
-	if usage == nil {
-		return
-	}
-	finalChunk := gatewaystream.GenerateFinalUsageResponse(responseID, createAt, model, *usage)
-
 	switch info.RelayFormat {
 	case types.RelayFormatClaude:
-		info.ClaudeConvertInfo.Usage = usage
-		claudeResponses := gatewaytranslation.StreamResponseOpenAI2Claude(finalChunk, info)
+		if c != nil && c.Request != nil {
+			gatewaystream.SetStreamWorkerContext(c, c.Request.Context())
+		}
+		claudeResponses := gatewaytranslation.FinalizeOpenAI2Claude(info, usage)
 		for _, resp := range claudeResponses {
 			_ = gatewaystream.ClaudeData(c, *resp)
 		}
-		info.ClaudeConvertInfo.Done = true
 	case types.RelayFormatGemini:
+		if usage == nil {
+			return
+		}
+		finalChunk := gatewaystream.GenerateFinalUsageResponse(responseID, createAt, model, *usage)
 		geminiResponse := gatewaytranslation.StreamResponseOpenAI2Gemini(finalChunk, info)
 		if geminiResponse == nil {
 			return

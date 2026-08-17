@@ -92,7 +92,7 @@ func TestGetNormalizesLegacyQuotaRewardsToUnifiedCredit(t *testing.T) {
 	}
 }
 
-func TestGetCapsBlindBoxDailyLimitsAtTen(t *testing.T) {
+func TestGetPreservesConfiguredUnifiedBlindBoxDailyLimit(t *testing.T) {
 	original := Get()
 	t.Cleanup(func() { Set(original) })
 
@@ -104,6 +104,6 @@ func TestGetCapsBlindBoxDailyLimitsAtTen(t *testing.T) {
 
 	normalized := Get()
 	require.Equal(t, 10, normalized.DailyLimit)
-	require.Equal(t, 10, normalized.BalanceBlindBoxDailyPurchaseLimit)
+	require.Equal(t, 500, normalized.BalanceBlindBoxDailyPurchaseLimit)
 	require.Equal(t, []int{1, 5, 10}, normalized.CountOptions)
 }

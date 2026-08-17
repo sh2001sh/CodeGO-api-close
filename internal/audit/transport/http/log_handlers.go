@@ -3,6 +3,7 @@ package http
 import (
 	"github.com/gin-gonic/gin"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	stdhttp "net/http"
@@ -18,6 +19,10 @@ func GetAllLogs(c *gin.Context) {
 		httpapi.ApiError(c, err)
 		return
 	}
+	if err := marketplaceapp.EnrichUsageLogMarketplaceIdentity(logs); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
 
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
@@ -30,6 +35,10 @@ func GetUserLogs(c *gin.Context) {
 
 	logs, total, err := auditapp.ListUserLogs(c.GetInt("id"), query)
 	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	if err := marketplaceapp.EnrichUsageLogMarketplaceIdentity(logs); err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
@@ -69,6 +78,10 @@ func GetLogByKey(c *gin.Context) {
 			"success": false,
 			"message": err.Error(),
 		})
+		return
+	}
+	if err := marketplaceapp.EnrichUsageLogMarketplaceIdentity(logs); err != nil {
+		httpapi.ApiError(c, err)
 		return
 	}
 

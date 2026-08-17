@@ -43,6 +43,23 @@ func validateCreateRequest(req CreateChannelRequest) error {
 	if req.MaxConcurrency <= 0 || req.MaxConcurrency > 10000 || req.QPS <= 0 || req.QPS > 10000 {
 		return errors.New("容量声明必须是有效的最大并发和 QPS")
 	}
+	if err := validateAutoProbe(req.AutoProbeEnabled, req.AutoProbeIntervalMinutes, req.AutoProbeModel, req.DeclaredModels); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateAutoProbe(enabled bool, intervalMinutes int, model string, models []string) error {
+	if !enabled {
+		return nil
+	}
+	if intervalMinutes < 1 || intervalMinutes > 1440 {
+		return errors.New("自动探针间隔必须在 1 到 1440 分钟之间")
+	}
+	model = strings.TrimSpace(model)
+	if model == "" || !containsFold(normalizeModels(models), model) {
+		return errors.New("自动探针模型必须来自渠道已声明模型")
+	}
 	return nil
 }
 

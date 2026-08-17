@@ -80,6 +80,11 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		MaxConcurrency: req.MaxConcurrency, QPS: req.QPS,
 		MaintenanceWindow: strings.TrimSpace(req.MaintenanceWindow), Status: marketplacedomain.LifecycleDraft,
 		SensitiveWordInterceptionEnabled: &sensitiveWordInterceptionEnabled,
+		AutoProbeEnabled:                 req.AutoProbeEnabled, AutoProbeIntervalMinutes: req.AutoProbeIntervalMinutes,
+		AutoProbeModel: strings.TrimSpace(req.AutoProbeModel),
+	}
+	if channel.AutoProbeIntervalMinutes == 0 {
+		channel.AutoProbeIntervalMinutes = 10
 	}
 	group := newMarketplaceGroup(channelID, ownerUserID, ownerName, sourceLabel, req.Multiplier, req.Visibility)
 	return channel, group, nil
@@ -132,38 +137,6 @@ func ListOwnerChannels(ownerUserID int) ([]ChannelView, error) {
 			view.ReleasedIncome = earnings[group.ID].ReleasedIncome
 			result = append(result, *view)
 		}
-	}
-	return result, nil
-}
-
-type ownerChannelEarnings struct {
-	GroupID        string `gorm:"column:group_id"`
-	RequestCount   int64  `gorm:"column:request_count"`
-	TotalIncome    int64  `gorm:"column:total_income"`
-	PendingIncome  int64  `gorm:"column:pending_income"`
-	ReleasedIncome int64  `gorm:"column:released_income"`
-}
-
-func earningsByGroupIDs(ids []string) (map[string]ownerChannelEarnings, error) {
-	result := make(map[string]ownerChannelEarnings, len(ids))
-	if len(ids) == 0 {
-		return result, nil
-	}
-	var rows []ownerChannelEarnings
-	err := platformdb.DB.Model(&marketplaceschema.Settlement{}).
-		Select(`group_id,
-			COUNT(*) AS request_count,
-			COALESCE(SUM(owner_net_amount), 0) AS total_income,
-			COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income,
-			COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount ELSE 0 END), 0) AS released_income`).
-		Where("group_id IN ?", ids).
-		Group("group_id").
-		Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		result[row.GroupID] = row
 	}
 	return result, nil
 }

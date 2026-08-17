@@ -35,15 +35,14 @@ export function useApiKeyGroupOptions() {
       })
     )
     const autoOption: ApiKeyGroupOption = {
-      value: 'market:auto',
-      label: '第三方 Auto',
+      value: 'auto',
+      label: 'Auto',
       desc:
         autoPool && autoPool.selected_count > 0
-          ? `从路由池中的 ${autoPool.selected_count} 个第三方分组自动选择 · 仅使用通用额度`
-          : '请在创建 API Key 时配置第三方路由池 · 仅使用通用额度',
+          ? `从全局路由池中的 ${autoPool.selected_count} 个分组自动选择`
+          : '保留系统 Auto 策略，或配置全局路由池以指定官方与第三方分组',
       ratio: '动态',
       category: 'marketplace_auto',
-      disabled: !autoPool || autoPool.selected_count === 0,
       models: Array.from(
         new Set(
           (autoPool?.items ?? [])

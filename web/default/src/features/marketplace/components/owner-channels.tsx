@@ -17,7 +17,7 @@ import type { MarketplaceChannel } from '../types'
 import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
 import { ChannelVerificationStatus } from './channel-verification-status'
-import { GPT56MappingStatusView } from './model-verification'
+import { AutoProbeStatusView, GPT56MappingStatusView } from './model-verification'
 import { OwnerChannelActions } from './owner-channel-actions'
 import { IncomeMetric } from './owner-channel-metric'
 import { OwnerIncomeOverview } from './owner-income-overview'
@@ -130,11 +130,17 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                       )}
                     <ChannelVerificationStatus channel={channel} />
                     <GPT56MappingStatusView
-                      sourceLabel={channel.submitted_source_label}
                       models={channel.declared_models}
                       status={channel.gpt56_mapping_status}
                       results={channel.gpt56_mapping_results}
                       checkedAt={channel.gpt56_mapping_checked_at}
+                    />
+                    <AutoProbeStatusView
+                      enabled={channel.auto_probe_enabled}
+                      intervalMinutes={channel.auto_probe_interval_minutes}
+                      model={channel.auto_probe_model}
+                      status={channel.auto_probe_last_status}
+                      checkedAt={channel.auto_probe_last_at}
                     />
                     <div className='mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
                       <IncomeMetric

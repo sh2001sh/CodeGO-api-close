@@ -27,6 +27,8 @@ const (
 	ContextKeyMarketplaceCreditPolicy         ContextKey = "marketplace_credit_policy"
 	ContextKeyMarketplaceMultiplier           ContextKey = "marketplace_multiplier"
 	ContextKeyMarketplaceModelPrices          ContextKey = "marketplace_model_prices"
+	ContextKeyUnifiedAutoBindings             ContextKey = "unified_auto_bindings"
+	ContextKeyUnifiedAutoIndex                ContextKey = "unified_auto_index"
 
 	/* channel related keys */
 	ContextKeyChannelId                ContextKey = "channel_id"

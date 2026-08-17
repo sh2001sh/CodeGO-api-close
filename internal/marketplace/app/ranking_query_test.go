@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -48,6 +49,8 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	models := []string{"gpt-5.2-codex", "gpt-4.1"}
 
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "123456"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "group-filter"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "Codex Plus"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Model: "5.2"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Source: "Codex Plus"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Provider: "openai_compatible"}))
@@ -62,6 +65,54 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	payload, err := json.Marshal(item)
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), "owner_display_name")
+	require.NotContains(t, string(payload), "independent_consumers")
+}
+
+func TestFilterGroupsBySourceKeepsOnlyApprovedSource(t *testing.T) {
+	groups := []marketplaceschema.Group{
+		{ID: "plus-group", ChannelID: "plus-channel"},
+		{ID: "pro-group", ChannelID: "pro-channel"},
+	}
+	channels := map[string]marketplaceschema.Channel{
+		"plus-channel": {
+			ID: "plus-channel", ApprovedSourceLabel: "Codex Plus",
+			SourceLabelStatus: marketplacedomain.SourceLabelApproved,
+		},
+		"pro-channel": {
+			ID: "pro-channel", ApprovedSourceLabel: "Codex Pro",
+			SourceLabelStatus: marketplacedomain.SourceLabelApproved,
+		},
+	}
+
+	filtered, filteredChannels := filterGroupsBySource(groups, channels, "codex plus")
+	require.Equal(t, []string{"plus-group"}, []string{filtered[0].ID})
+	require.Len(t, filteredChannels, 1)
+	require.Contains(t, filteredChannels, "plus-channel")
+}
+
+func TestGroupListItemUsesLatestModelVerificationTime(t *testing.T) {
+	t.Parallel()
+	earlier := time.Date(2026, 8, 17, 8, 0, 0, 0, time.UTC)
+	later := earlier.Add(5 * time.Minute)
+	encoded := encodeModelVerificationResults([]ModelVerificationResult{
+		{Model: "gpt-a", Status: "passed", TestedAt: earlier},
+		{Model: "gpt-b", Status: "passed", TestedAt: later},
+	})
+
+	item := groupListItem(
+		marketplaceschema.Group{ID: "group-time", ChannelID: "channel-time"},
+		marketplaceschema.Channel{ID: "channel-time", ModelVerificationResults: encoded},
+		nil,
+		marketplaceschema.RankingSnapshot{IndependentConsumers: 7},
+		nil,
+	)
+
+	require.NotNil(t, item.VerificationCompletedAt)
+	require.Equal(t, later, *item.VerificationCompletedAt)
+	payload, err := json.Marshal(item)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), "verification_completed_at")
+	require.NotContains(t, string(payload), "independent_consumers")
 }
 
 func TestPublicPendingReviewGroupIsLoadedForMarketplace(t *testing.T) {
@@ -96,12 +147,13 @@ func TestPublicPendingReviewGroupIsLoadedForMarketplace(t *testing.T) {
 func TestLatestRequestStatusUsesMostRecentNonEmptyBucket(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "unknown", latestRequestStatus(nil))
-	require.Equal(t, "healthy", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 90, RequestCount: 3}}))
-	require.Equal(t, "unstable", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 89.99, RequestCount: 8}}))
-	require.Equal(t, "unstable", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 85, RequestCount: 8}}))
-	require.Equal(t, "failed", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 84.99, RequestCount: 8}}))
-	require.Equal(t, "failed", latestRequestStatus([]RecentRequestBucket{
+	channel := marketplaceschema.Channel{}
+	require.Equal(t, "unknown", latestRequestStatus(channel, nil))
+	require.Equal(t, "healthy", latestRequestStatus(channel, []RecentRequestBucket{{SuccessRate: 90, RequestCount: 3}}))
+	require.Equal(t, "unstable", latestRequestStatus(channel, []RecentRequestBucket{{SuccessRate: 89.99, RequestCount: 8}}))
+	require.Equal(t, "unstable", latestRequestStatus(channel, []RecentRequestBucket{{SuccessRate: 85, RequestCount: 8}}))
+	require.Equal(t, "failed", latestRequestStatus(channel, []RecentRequestBucket{{SuccessRate: 84.99, RequestCount: 8}}))
+	require.Equal(t, "failed", latestRequestStatus(channel, []RecentRequestBucket{
 		{SuccessRate: 100, RequestCount: 4},
 		{SuccessRate: 70, RequestCount: 2},
 		{SuccessRate: 0, RequestCount: 0},

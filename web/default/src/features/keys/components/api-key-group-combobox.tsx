@@ -211,7 +211,7 @@ export function ApiKeyGroupCombobox({
               onSelect={handleSelect}
             />
             <GroupOptions
-              heading={t('第三方 Auto')}
+              heading={t('全局 Auto')}
               options={marketplaceAutoOptions}
               value={value}
               onSelect={handleSelect}

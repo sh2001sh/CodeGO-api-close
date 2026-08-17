@@ -41,13 +41,14 @@ func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBi
 		return nil, errors.New("市场分组未公开或无权访问")
 	}
 	var channel marketplaceschema.Channel
-	if err := platformdb.DB.Select("model_prices").First(&channel, "id = ?", group.ChannelID).Error; err != nil {
+	if err := platformdb.DB.Select("model_prices", "declared_models").First(&channel, "id = ?", group.ChannelID).Error; err != nil {
 		return nil, err
 	}
 	return &RoutingBinding{
 		GroupID: group.ID, InternalGroup: group.InternalGroupName, OwnerUserID: group.OwnerUserID,
 		SourceType: group.SourceType, CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: group.Multiplier,
 		ModelPrices: decodeChannelModelPrices(channel.ModelPrices),
+		Models:      decodeModels(channel.DeclaredModels),
 	}, nil
 }
 

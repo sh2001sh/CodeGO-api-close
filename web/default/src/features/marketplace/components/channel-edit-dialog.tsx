@@ -24,7 +24,7 @@ export function ChannelEditDialog(props: {
           <DialogTitle>{t('编辑渠道')}</DialogTitle>
           <DialogDescription>
             {t(
-              '使用与添加渠道一致的表单；连接或模型变更后会重新执行真实检测。'
+              'Provider、来源、连接凭据或模型变化后，旧结果会失效；倍率、并发、QPS 等服务参数不会影响结果。'
             )}
           </DialogDescription>
         </DialogHeader>

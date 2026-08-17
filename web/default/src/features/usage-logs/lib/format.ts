@@ -106,6 +106,23 @@ export function parseLogOther(other: string): LogOtherData | null {
 }
 
 /**
+ * Prefer the public marketplace identity over the internal routing group.
+ */
+export function getUsageLogGroupDisplayName(
+  logGroup: string | null | undefined,
+  other: LogOtherData | null
+): string {
+  return (
+    other?.marketplace_group_display_name ||
+    other?.marketplace_channel_id ||
+    other?.marketplace_group_id ||
+    logGroup ||
+    other?.group ||
+    ''
+  )
+}
+
+/**
  * Get time color based on duration (in seconds)
  */
 export function getTimeColor(

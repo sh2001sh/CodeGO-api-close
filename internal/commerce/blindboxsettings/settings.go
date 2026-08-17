@@ -284,7 +284,7 @@ func Get() Setting {
 	if settingCopy.BalanceBlindBoxPriceUSD <= 0 {
 		settingCopy.BalanceBlindBoxPriceUSD = 2.5
 	}
-	if settingCopy.BalanceBlindBoxDailyPurchaseLimit <= 0 || settingCopy.BalanceBlindBoxDailyPurchaseLimit > 10 {
+	if settingCopy.BalanceBlindBoxDailyPurchaseLimit <= 0 {
 		settingCopy.BalanceBlindBoxDailyPurchaseLimit = 10
 	}
 	if settingCopy.BalanceBlindBoxPityThreshold <= 0 || settingCopy.BalanceBlindBoxPityThreshold >= 1_000_000 {

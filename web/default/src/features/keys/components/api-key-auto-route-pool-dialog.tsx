@@ -25,13 +25,15 @@ export function ApiKeyAutoRoutePoolDialog() {
         onClick={() => setOpen(true)}
       >
         <Route className='size-4' />
-        {t('配置第三方 Auto 路由池')}
+        {t('配置全局 Auto 路由池')}
       </Button>
       <DialogContent className='flex max-h-[88dvh] !max-w-5xl flex-col gap-0 overflow-hidden p-0'>
         <DialogHeader className='border-b px-5 py-4 pr-12'>
-          <DialogTitle>{t('配置第三方 Auto 路由池')}</DialogTitle>
+          <DialogTitle>{t('配置全局 Auto 路由池')}</DialogTitle>
           <DialogDescription>
-            {t('选择第三方分组并调整优先级，保存后即可在当前 API Key 中选择第三方 Auto。')}
+            {t(
+              '选择官方或第三方分组并调整优先级，保存后所有 Auto API Key 都使用这套路由池。'
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className='min-h-0 flex-1 overflow-y-auto p-4 sm:p-5'>

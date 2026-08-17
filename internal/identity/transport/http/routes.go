@@ -157,6 +157,7 @@ func RegisterDesktopRoutes(apiRouter *gin.RouterGroup) {
 		tokenRoute.GET("/", GetAllTokens)
 		tokenRoute.GET("/search", middleware.SearchRateLimit(), SearchTokens)
 		tokenRoute.GET("/:id", GetToken)
+		tokenRoute.POST("/:id/test", middleware.CriticalRateLimit(), TestTokenConnectivity)
 		tokenRoute.POST("/:id/key", middleware.CriticalRateLimit(), middleware.DisableCache(), GetTokenKey)
 		tokenRoute.POST("/", AddToken)
 		tokenRoute.PUT("/", UpdateToken)

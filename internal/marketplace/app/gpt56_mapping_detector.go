@@ -19,6 +19,8 @@ const (
 	GPT56MappingStatusMatched              = "matched"
 	GPT56MappingStatusMismatch             = "mismatch"
 	GPT56MappingStatusInsufficientEvidence = "insufficient_evidence"
+	GPT56MappingSampleStatusError          = "error"
+	GPT56MappingSampleStatusMissingModel   = "missing_model"
 	GPT56MappingSchedulerInterval          = time.Hour
 	gpt56MappingSampleCount                = 3
 )
@@ -71,14 +73,31 @@ func runGPT56MappingCheck(channel *marketplaceschema.Channel) (bool, error) {
 	}
 	baseURL, credential, err := gpt56MappingCredentials(channel)
 	if err != nil {
-		return true, saveGPT56MappingCheck(channel.ID, []GPT56MappingResult{unavailableGPT56MappingResult()}, GPT56MappingStatusInsufficientEvidence)
+		return true, saveGPT56MappingCheck(
+			channel.ID,
+			unavailableGPT56MappingResults(gpt56MappingModelsForChannel(channel)),
+			GPT56MappingStatusInsufficientEvidence,
+		)
 	}
-	results := probeGPT56Mappings(channel.ProviderType, baseURL, credential, gpt56MappingModelsForChannel(channel))
+	results, err := probeGPT56MappingsWithProgress(
+		channel.ProviderType,
+		baseURL,
+		credential,
+		gpt56MappingModelsForChannel(channel),
+		func(progress []GPT56MappingResult) error {
+			return saveGPT56MappingProgress(channel.ID, progress)
+		},
+	)
+	if err != nil {
+		return true, err
+	}
 	return true, saveGPT56MappingCheck(channel.ID, results, gpt56MappingStatus(results))
 }
 
 func markGPT56MappingCheckRunning(channelID string) error {
-	return platformdb.DB.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).Update("gpt56_mapping_status", GPT56MappingStatusRunning).Error
+	return platformdb.DB.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).Updates(map[string]any{
+		"gpt56_mapping_results": "[]", "gpt56_mapping_status": GPT56MappingStatusRunning, "gpt56_mapping_checked_at": nil,
+	}).Error
 }
 
 func gpt56MappingCredentials(channel *marketplaceschema.Channel) (string, string, error) {
@@ -93,22 +112,69 @@ func gpt56MappingCredentials(channel *marketplaceschema.Channel) (string, string
 	return baseURL, credential, nil
 }
 
-func unavailableGPT56MappingResult() GPT56MappingResult {
-	return GPT56MappingResult{Status: GPT56MappingStatusInsufficientEvidence, Error: "渠道凭据不可用", TestedAt: time.Now().UTC()}
-}
-
-func probeGPT56Mappings(provider, baseURL, credential string, models []string) []GPT56MappingResult {
+func unavailableGPT56MappingResults(models []string) []GPT56MappingResult {
 	results := make([]GPT56MappingResult, 0, len(models))
 	for _, model := range models {
-		results = append(results, probeGPT56MappingModel(provider, baseURL, credential, model))
+		results = append(results, GPT56MappingResult{
+			RequestedModel: model,
+			Status:         GPT56MappingStatusInsufficientEvidence,
+			SampleCount:    gpt56MappingSampleCount,
+			Error:          "渠道凭据不可用",
+			TestedAt:       time.Now().UTC(),
+		})
 	}
 	return results
 }
 
+func probeGPT56Mappings(provider, baseURL, credential string, models []string) []GPT56MappingResult {
+	results, _ := probeGPT56MappingsWithProgress(provider, baseURL, credential, models, nil)
+	return results
+}
+
 func probeGPT56MappingModel(provider, baseURL, credential, model string) GPT56MappingResult {
+	result, _ := probeGPT56MappingModelWithProgress(provider, baseURL, credential, model, nil)
+	return result
+}
+
+func probeGPT56MappingsWithProgress(
+	provider, baseURL, credential string,
+	models []string,
+	onProgress func([]GPT56MappingResult) error,
+) ([]GPT56MappingResult, error) {
+	results := make([]GPT56MappingResult, len(models))
+	for index, model := range models {
+		results[index] = GPT56MappingResult{
+			RequestedModel: model,
+			Status:         GPT56MappingStatusRunning,
+			SampleCount:    gpt56MappingSampleCount,
+			TestedAt:       time.Now().UTC(),
+		}
+	}
+	for index, model := range models {
+		result, err := probeGPT56MappingModelWithProgress(provider, baseURL, credential, model, func(progress GPT56MappingResult) error {
+			results[index] = progress
+			if onProgress == nil {
+				return nil
+			}
+			return onProgress(results)
+		})
+		if err != nil {
+			return results, err
+		}
+		results[index] = result
+	}
+	return results, nil
+}
+
+func probeGPT56MappingModelWithProgress(
+	provider, baseURL, credential, model string,
+	onProgress func(GPT56MappingResult) error,
+) (GPT56MappingResult, error) {
 	result := GPT56MappingResult{
 		RequestedModel: model,
+		Status:         GPT56MappingStatusRunning,
 		SampleCount:    gpt56MappingSampleCount,
+		Samples:        make([]GPT56MappingSample, 0, gpt56MappingSampleCount),
 		TestedAt:       time.Now().UTC(),
 	}
 	reportedModels := make([]string, 0, gpt56MappingSampleCount)
@@ -116,18 +182,21 @@ func probeGPT56MappingModel(provider, baseURL, credential, model string) GPT56Ma
 	for sample := 0; sample < gpt56MappingSampleCount; sample++ {
 		latencyMS, reported, probeErr := probeMarketplaceInferenceReportedModel(provider, baseURL, credential, model)
 		result.LatencyMS += latencyMS
-		if probeErr != nil {
-			errorsSeen = append(errorsSeen, truncateVerificationError(probeErr.Error()))
-			continue
+		mappingSample := buildGPT56MappingSample(sample+1, model, reported, latencyMS, probeErr)
+		result.Samples = append(result.Samples, mappingSample)
+		if mappingSample.Error != "" {
+			errorsSeen = append(errorsSeen, mappingSample.Error)
 		}
-		reported = strings.TrimSpace(reported)
-		if reported == "" {
-			errorsSeen = append(errorsSeen, "上游响应未返回模型标识")
-			continue
+		if mappingSample.ReportedModel != "" {
+			reportedModels = append(reportedModels, mappingSample.ReportedModel)
 		}
-		reportedModels = append(reportedModels, reported)
-		if sameModelID(model, reported) {
+		if mappingSample.Status == GPT56MappingStatusMatched {
 			result.MatchedSamples++
+		}
+		if onProgress != nil {
+			if err := onProgress(result); err != nil {
+				return result, err
+			}
 		}
 	}
 	if result.SampleCount > 0 {
@@ -143,7 +212,28 @@ func probeGPT56MappingModel(provider, baseURL, credential, model string) GPT56Ma
 		result.Status = GPT56MappingStatusInsufficientEvidence
 		result.Error = strings.Join(normalizeModels(errorsSeen), "; ")
 	}
-	return result
+	return result, nil
+}
+
+func buildGPT56MappingSample(index int, expected, reported string, latencyMS int64, probeErr error) GPT56MappingSample {
+	sample := GPT56MappingSample{Index: index, LatencyMS: latencyMS, TestedAt: time.Now().UTC()}
+	if probeErr != nil {
+		sample.Status = GPT56MappingSampleStatusError
+		sample.Error = truncateVerificationError(probeErr.Error())
+		return sample
+	}
+	sample.ReportedModel = strings.TrimSpace(reported)
+	if sample.ReportedModel == "" {
+		sample.Status = GPT56MappingSampleStatusMissingModel
+		sample.Error = "上游响应未返回模型标识"
+		return sample
+	}
+	if sameModelID(expected, sample.ReportedModel) {
+		sample.Status = GPT56MappingStatusMatched
+	} else {
+		sample.Status = GPT56MappingStatusMismatch
+	}
+	return sample
 }
 
 func hasMismatchedReportedModel(expected string, reported []string) bool {
@@ -189,10 +279,39 @@ func saveGPT56MappingCheck(channelID string, results []GPT56MappingResult, statu
 	}).Error
 }
 
+func saveGPT56MappingProgress(channelID string, results []GPT56MappingResult) error {
+	encoded, err := json.Marshal(results)
+	if err != nil {
+		return err
+	}
+	return platformdb.DB.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).Updates(map[string]any{
+		"gpt56_mapping_results": string(encoded), "gpt56_mapping_status": GPT56MappingStatusRunning,
+	}).Error
+}
+
 func decodeGPT56MappingResults(raw string) []GPT56MappingResult {
 	var results []GPT56MappingResult
 	if json.Unmarshal([]byte(raw), &results) != nil || results == nil {
 		return []GPT56MappingResult{}
+	}
+	return results
+}
+
+func publicGPT56MappingResults(raw string) []GPT56MappingResult {
+	results := decodeGPT56MappingResults(raw)
+	for resultIndex := range results {
+		results[resultIndex].Error = ""
+		for sampleIndex := range results[resultIndex].Samples {
+			sample := &results[resultIndex].Samples[sampleIndex]
+			switch sample.Status {
+			case GPT56MappingSampleStatusError:
+				sample.Error = "请求失败，未获得可验证结果"
+			case GPT56MappingSampleStatusMissingModel:
+				sample.Error = "上游响应未返回模型标识"
+			default:
+				sample.Error = ""
+			}
+		}
 	}
 	return results
 }

@@ -83,4 +83,38 @@ func TestGPT56MappingProbeRequiresAllSamplesToMatch(t *testing.T) {
 	require.Equal(t, GPT56MappingStatusMismatch, result.Status)
 	require.Equal(t, 2, result.MatchedSamples)
 	require.Equal(t, gpt56MappingSampleCount, result.SampleCount)
+	require.Len(t, result.Samples, gpt56MappingSampleCount)
+	require.Equal(t, GPT56MappingStatusMismatch, result.Samples[2].Status)
+	require.Equal(t, "gpt-5.6-luna", result.Samples[2].ReportedModel)
+}
+
+func TestGPT56MappingProbeReportsEachSampleProgress(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 3 {
+			http.Error(writer, "temporary upstream failure", http.StatusBadGateway)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"model":"gpt-5.6-terra","choices":[{"message":{"content":"OK"}}]}`))
+	}))
+	defer server.Close()
+
+	progressCounts := make([]int, 0, gpt56MappingSampleCount)
+	result, err := probeGPT56MappingModelWithProgress(
+		"openai_compatible", server.URL, "test-key", "gpt-5.6-terra",
+		func(progress GPT56MappingResult) error {
+			progressCounts = append(progressCounts, len(progress.Samples))
+			require.Equal(t, GPT56MappingStatusRunning, progress.Status)
+			return nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, []int{1, 2, 3}, progressCounts)
+	require.Equal(t, GPT56MappingStatusInsufficientEvidence, result.Status)
+	require.Equal(t, 2, result.MatchedSamples)
+	require.Equal(t, GPT56MappingSampleStatusError, result.Samples[2].Status)
+	require.Contains(t, result.Samples[2].Error, "temporary upstream failure")
 }

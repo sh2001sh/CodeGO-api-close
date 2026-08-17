@@ -380,6 +380,11 @@ func migrateUnifiedCreditV1ChannelScope(tx *gorm.DB) error {
 			return err
 		}
 	}
+	if !tx.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency") {
+		if err := tx.Migrator().AddColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"); err != nil {
+			return err
+		}
+	}
 	if err := tx.Model(&gatewayschema.Channel{}).
 		Where("sensitive_word_interception_enabled IS NULL").
 		Update("sensitive_word_interception_enabled", true).Error; err != nil {
@@ -460,7 +465,8 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) ||
 			db.Migrator().HasTable(&gatewayschema.Channel{}) &&
 				(!db.Migrator().HasColumn(&gatewayschema.Channel{}, "ChannelScope") ||
-					!db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+					!db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled") ||
+					!db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
 	case "20260816_subscription_claude_conversion_fields":
 		return !db.Migrator().HasTable(&commerceschema.SubscriptionClaudeConversion{}) ||
 			!db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, "PlanPriceAmount") ||

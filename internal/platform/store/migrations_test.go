@@ -52,6 +52,7 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	platformdb.DB = db
 	platformdb.UsingSQLite = true
 	platformdb.UsingPostgreSQL = false
+	require.NoError(t, db.AutoMigrate(&gatewayschema.Channel{}))
 	for _, tableName := range []string{
 		"user_companion_pets",
 		"daily_mission_rewards",
@@ -102,6 +103,12 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.False(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
 	require.NoError(t, ApplyV2Migrations(context.Background(), false))
 	require.True(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.False(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260816_unified_credit_v1_channel_scope"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
 	for _, tableName := range []string{
 		"user_companion_pets",
 		"daily_mission_rewards",
@@ -458,6 +465,8 @@ func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *t
 	}).Error)
 	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
 	require.False(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.False(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
 
 	require.NoError(t, migrateUnifiedCreditV1ChannelScope(db))
 	require.NoError(t, migrateUnifiedCreditV1ChannelScope(db))
@@ -467,5 +476,6 @@ func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *t
 	require.NoError(t, db.First(&marketplaceInternal, marketplaceInternal.Id).Error)
 	require.Equal(t, gatewayschema.ChannelScopeExternal, marketplaceInternal.ChannelScope)
 	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
 	require.True(t, db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}))
 }

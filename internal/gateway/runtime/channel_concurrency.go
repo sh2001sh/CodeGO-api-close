@@ -9,10 +9,22 @@ var channelConcurrency = struct {
 
 // BeginChannelRequest tracks one process-local in-flight upstream request.
 func BeginChannelRequest(channelID int) func() {
+	release, _ := TryBeginChannelRequest(channelID, 0)
+	return release
+}
+
+// TryBeginChannelRequest reserves one process-local channel slot. A positive
+// limit is enforced atomically; zero disables the per-channel gate for legacy
+// and official channels.
+func TryBeginChannelRequest(channelID, limit int) (func(), bool) {
 	if channelID <= 0 {
-		return func() {}
+		return func() {}, true
 	}
 	channelConcurrency.Lock()
+	if limit > 0 && channelConcurrency.active[channelID] >= limit {
+		channelConcurrency.Unlock()
+		return func() {}, false
+	}
 	channelConcurrency.active[channelID]++
 	channelConcurrency.Unlock()
 	var once sync.Once
@@ -26,7 +38,7 @@ func BeginChannelRequest(channelID int) func() {
 			}
 			channelConcurrency.Unlock()
 		})
-	}
+	}, true
 }
 
 // ActiveChannelRequests returns the current process-local in-flight count.

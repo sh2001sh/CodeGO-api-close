@@ -1,7 +1,7 @@
-import { ChevronDown, ChevronRight, Radio } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronDown, ChevronRight, FileText, Radio } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { MarketplaceGroup } from '../types'
 import {
@@ -10,7 +10,10 @@ import {
 } from './channel-feedback'
 import { GroupDetails } from './group-details'
 import { GroupMetrics } from './group-metrics'
-import { ModelConsistencyBadge } from './model-verification'
+import {
+  GroupModelResults,
+  GroupModelVerificationReport,
+} from './group-model-verification'
 import { MarketplaceStatusBadge } from './status-badge'
 import { TokenBindPanel } from './token-bind-panel'
 
@@ -21,6 +24,8 @@ export function GroupMarketItem(props: {
 }) {
   const { t } = useTranslation()
   const group = props.group
+  const [reportOpen, setReportOpen] = useState(false)
+  const reportID = `model-report-${group.id}`
 
   return (
     <article className='border-border bg-card hover:border-primary/30 rounded-md border transition-colors'>
@@ -34,9 +39,6 @@ export function GroupMarketItem(props: {
                   {group.system_display_name}
                 </h4>
                 <MarketplaceStatusBadge status={group.lifecycle_status} />
-                <ModelConsistencyBadge
-                  status={group.model_consistency_status}
-                />
               </div>
               <div className='text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
                 {group.source_label && (
@@ -51,13 +53,21 @@ export function GroupMarketItem(props: {
                   {t('{{count}} 个模型', { count: group.models.length })}
                 </span>
               </div>
-              <div className='mt-2.5 flex flex-wrap gap-1.5'>
-                <ModelPreview models={group.models} />
-              </div>
+              <GroupModelResults group={group} />
             </div>
           </div>
           <div className='flex flex-wrap items-center gap-2 xl:justify-end'>
             <ChannelFeedbackButton group={group} />
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => setReportOpen((current) => !current)}
+              aria-expanded={reportOpen}
+              aria-controls={reportID}
+            >
+              <FileText />
+              {reportOpen ? t('收起报告') : t('查看报告')}
+            </Button>
             <Button
               variant='ghost'
               size='icon'
@@ -86,27 +96,17 @@ export function GroupMarketItem(props: {
           )}
         </div>
       </div>
+      {reportOpen && (
+        <div id={reportID}>
+          <GroupModelVerificationReport group={group} />
+        </div>
+      )}
       {props.open && (
         <div className='border-border bg-muted/15 border-t'>
           <GroupDetails group={group} />
         </div>
       )}
     </article>
-  )
-}
-
-function ModelPreview({ models }: { models: string[] }) {
-  const visible = models.slice(0, 4)
-  const remaining = models.length - visible.length
-  return (
-    <>
-      {visible.map((model) => (
-        <Badge key={model} variant='secondary' className='max-w-52 truncate'>
-          {model}
-        </Badge>
-      ))}
-      {remaining > 0 && <Badge variant='outline'>+{remaining}</Badge>}
-    </>
   )
 }
 

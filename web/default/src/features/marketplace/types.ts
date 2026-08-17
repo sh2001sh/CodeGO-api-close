@@ -35,10 +35,20 @@ export interface ModelVerificationResult {
 export interface GPT56MappingResult {
   requested_model: string
   reported_model?: string
-  status: Exclude<GPT56MappingStatus, '' | 'running'>
+  status: Exclude<GPT56MappingStatus, ''>
   latency_ms: number
   sample_count: number
   matched_samples: number
+  samples?: GPT56MappingSample[]
+  error?: string
+  tested_at: string
+}
+
+export interface GPT56MappingSample {
+  index: number
+  status: 'matched' | 'mismatch' | 'error' | 'missing_model'
+  reported_model?: string
+  latency_ms: number
   error?: string
   tested_at: string
 }
@@ -66,6 +76,9 @@ export interface MarketplaceGroup {
   connectivity_test_status: ConnectivityTestStatus
   connectivity_test_checked_at?: string | null
   model_consistency_status: ModelConsistencyStatus
+  gpt56_mapping_results: GPT56MappingResult[]
+  gpt56_mapping_status: GPT56MappingStatus
+  gpt56_mapping_checked_at?: string | null
   auto_probe_enabled: boolean
   auto_probe_interval_minutes: number
   auto_probe_model: string
@@ -216,22 +229,22 @@ export interface ChannelFormValues {
 }
 
 export interface ChannelUpdateValues {
-  provider_type: string
-  source_label: string
-  declared_models: string[]
-  model_prices: Record<string, ChannelModelPrice>
-  multiplier: number
-  visibility: string
-  max_concurrency: number
-  qps: number
-  maintenance_window: string
-  sensitive_word_interception_enabled: boolean
+  provider_type?: string
+  source_label?: string
+  declared_models?: string[]
+  model_prices?: Record<string, ChannelModelPrice>
+  multiplier?: number
+  visibility?: string
+  max_concurrency?: number
+  qps?: number
+  maintenance_window?: string
+  sensitive_word_interception_enabled?: boolean
   base_url?: string
   api_key?: string
   model_consistency_status?: ModelConsistencyStatus
-  auto_probe_enabled: boolean
-  auto_probe_interval_minutes: number
-  auto_probe_model: string
+  auto_probe_enabled?: boolean
+  auto_probe_interval_minutes?: number
+  auto_probe_model?: string
 }
 
 export interface ChannelModelPrice {

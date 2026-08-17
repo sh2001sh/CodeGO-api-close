@@ -2,10 +2,7 @@ import { CheckCircle2, CircleHelp, Loader2, Minus, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { hasGPT56Model } from '../lib/verification'
 import type {
-  GPT56MappingResult,
-  GPT56MappingStatus,
   ConnectivityTestStatus,
   ModelConsistencyStatus,
   ModelVerificationResult,
@@ -16,64 +13,6 @@ const consistencyLabels: Record<ModelConsistencyStatus, string> = {
   passed: '通过',
   failed: '不通过',
   questionable: '存疑',
-}
-
-const mappingLabels: Record<GPT56MappingStatus, string> = {
-  '': '未检测',
-  running: '检测中',
-  matched: '映射正确',
-  mismatch: '映射不一致',
-  insufficient_evidence: '证据不足',
-}
-
-export function GPT56MappingStatusView(props: {
-  models: string[]
-  status: GPT56MappingStatus
-  results: GPT56MappingResult[]
-  checkedAt?: string | null
-}) {
-  const { t } = useTranslation()
-  const status = props.status || ''
-  if (!hasGPT56Model(props.models)) return null
-  const tone =
-    status === 'matched'
-      ? 'text-success'
-      : status === 'mismatch'
-        ? 'text-destructive'
-        : status === 'running'
-          ? 'text-primary'
-          : 'text-warning-foreground'
-  return (
-    <div className='border-border bg-muted/20 mt-3 rounded-md border px-3 py-2.5 text-xs'>
-      <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-1'>
-        <span className='font-medium'>{t('GPT-5.6 映射检测 · 必做')}</span>
-        <span className={cn('font-medium', tone)}>
-          {t(mappingLabels[status])}
-        </span>
-      </div>
-      <div className='text-muted-foreground mt-1'>
-        {props.checkedAt
-          ? `${t('最近检测')}: ${new Date(props.checkedAt).toLocaleString()}`
-          : t('等待首次检测')}
-      </div>
-      {props.results.length > 0 && (
-        <div className='text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1'>
-          {props.results.map((result) => (
-            <span key={result.requested_model}>
-              {result.requested_model}:{' '}
-              {result.reported_model || t('未返回模型标识')}
-              {result.sample_count > 0 && (
-                <>
-                  {' '}
-                  · {result.matched_samples}/{result.sample_count}
-                </>
-              )}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 const connectivityLabels: Record<ConnectivityTestStatus, string> = {
@@ -150,13 +89,30 @@ export function AutoProbeStatusView(props: {
     <div className='border-border bg-muted/20 mt-3 rounded-md border px-3 py-2.5 text-xs'>
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <span className='font-medium'>{t('自动探针')}</span>
-        <span className={props.status === 'passed' ? 'text-success font-medium' : props.status === 'failed' ? 'text-destructive font-medium' : 'text-muted-foreground'}>
-          {props.status === 'passed' ? t('通过') : props.status === 'failed' ? t('失败') : t('等待首次探测')}
+        <span
+          className={
+            props.status === 'passed'
+              ? 'text-success font-medium'
+              : props.status === 'failed'
+                ? 'text-destructive font-medium'
+                : 'text-muted-foreground'
+          }
+        >
+          {props.status === 'passed'
+            ? t('通过')
+            : props.status === 'failed'
+              ? t('失败')
+              : t('等待首次探测')}
         </span>
       </div>
       <p className='text-muted-foreground mt-1'>
-        {t('{{model}} · 每 {{minutes}} 分钟', { model: props.model, minutes: props.intervalMinutes })}
-        {props.checkedAt ? ` · ${new Date(props.checkedAt).toLocaleString()}` : ''}
+        {t('{{model}} · 每 {{minutes}} 分钟', {
+          model: props.model,
+          minutes: props.intervalMinutes,
+        })}
+        {props.checkedAt
+          ? ` · ${new Date(props.checkedAt).toLocaleString()}`
+          : ''}
       </p>
     </div>
   )

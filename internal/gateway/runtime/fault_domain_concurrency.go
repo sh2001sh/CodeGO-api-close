@@ -18,7 +18,6 @@ const (
 
 type faultDomainConcurrencyState struct {
 	active int
-	limit  int
 	users  map[string]*faultDomainUserConcurrencyState
 }
 
@@ -38,9 +37,10 @@ var faultDomainConcurrency = struct {
 // FaultDomainConcurrencySnapshot is internal telemetry for route audits and tests.
 type FaultDomainConcurrencySnapshot struct {
 	Domain     string
+	Scope      string
 	Model      string
 	Active     int
-	Limit      int
+	Limit      int // deprecated shared limit; always zero because admission is per user
 	UserActive int
 	UserLimit  int
 }
@@ -50,18 +50,23 @@ type FaultDomainConcurrencySnapshot struct {
 // wrapper uses one shared anonymous user key; relay requests should call
 // TryAcquireFaultDomainSlotForUser instead.
 func TryAcquireFaultDomainSlot(domain, model string, requestTypes ...RequestType) (release func(success bool, statusCode int), acquired bool, snapshot FaultDomainConcurrencySnapshot) {
-	return TryAcquireFaultDomainSlotForUser(domain, model, 0, requestTypes...)
+	return TryAcquireFaultDomainSlotForUser(domain, domain, model, 0, requestTypes...)
 }
 
 // TryAcquireFaultDomainSlotForUser reserves one in-flight upstream request.
-// The fault-domain ceiling remains shared, while adaptive capacity is tracked
-// per user so one user's upstream pressure does not throttle every user.
-func TryAcquireFaultDomainSlotForUser(domain, model string, userID int, requestTypes ...RequestType) (release func(success bool, statusCode int), acquired bool, snapshot FaultDomainConcurrencySnapshot) {
+// Admission and adaptive capacity are tracked per user. A provider fault
+// domain is still used for health/cooldown scope, but never as a shared
+// concurrency ceiling.
+func TryAcquireFaultDomainSlotForUser(domain, scope, model string, userID int, requestTypes ...RequestType) (release func(success bool, statusCode int), acquired bool, snapshot FaultDomainConcurrencySnapshot) {
 	domain = normalizeFaultDomain(domain)
+	scope = normalizeFaultDomain(scope)
 	if domain == "" || model == "" {
-		return func(bool, int) {}, true, FaultDomainConcurrencySnapshot{Domain: domain, Model: model}
+		return func(bool, int) {}, true, FaultDomainConcurrencySnapshot{Domain: domain, Scope: scope, Model: model}
 	}
-	key := domain + "\x00" + model + "\x00" + string(normalizedRequestType(requestTypes...))
+	if scope == "" {
+		scope = domain
+	}
+	key := scope + "\x00" + domain + "\x00" + model + "\x00" + string(normalizedRequestType(requestTypes...))
 	userKey := strconv.Itoa(userID)
 	if userID <= 0 {
 		userKey = "anonymous"
@@ -70,7 +75,6 @@ func TryAcquireFaultDomainSlotForUser(domain, model string, userID int, requestT
 	state := faultDomainConcurrency.states[key]
 	if state == nil {
 		state = &faultDomainConcurrencyState{
-			limit: faultDomainInitialConcurrency,
 			users: make(map[string]*faultDomainUserConcurrencyState),
 		}
 		faultDomainConcurrency.states[key] = state
@@ -82,13 +86,13 @@ func TryAcquireFaultDomainSlotForUser(domain, model string, userID int, requestT
 	}
 	snapshot = FaultDomainConcurrencySnapshot{
 		Domain:     domain,
+		Scope:      scope,
 		Model:      model,
 		Active:     state.active,
-		Limit:      state.limit,
 		UserActive: userState.active,
 		UserLimit:  userState.limit,
 	}
-	if state.active >= state.limit || userState.active >= userState.limit {
+	if userState.active >= userState.limit {
 		faultDomainConcurrency.Unlock()
 		return func(bool, int) {}, false, snapshot
 	}

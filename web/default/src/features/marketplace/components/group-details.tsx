@@ -6,13 +6,8 @@ import {
   Timer,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Badge } from '@/components/ui/badge'
 import { formatNumber } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
-import {
-  ModelConnectivityResults,
-  ModelConsistencyStatusView,
-} from './model-verification'
 
 export function GroupDetails(props: { group: MarketplaceGroup }) {
   const { t } = useTranslation()
@@ -45,18 +40,7 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
   ]
   return (
     <div className='px-4 py-5 sm:px-6'>
-      <div>
-        <div className='text-muted-foreground text-xs font-medium'>
-          {t('分组模型一致性')}
-        </div>
-        <div className='mt-2'>
-          <ModelConsistencyStatusView
-            status={group.model_consistency_status}
-            checkedAt={group.verification_completed_at}
-          />
-        </div>
-      </div>
-      <div className='border-border mt-4 grid border-y sm:grid-cols-3'>
+      <div className='border-border grid border-y sm:grid-cols-3'>
         {evidence.map(({ icon: Icon, label, value }) => (
           <div
             key={label}
@@ -93,14 +77,6 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
           value={`${group.cache_hit_rate.toFixed(1)}%`}
         />
       </div>
-      <div className='mt-3 flex flex-wrap gap-1.5'>
-        {group.models.map((model) => (
-          <Badge key={model} variant='secondary'>
-            {model}
-          </Badge>
-        ))}
-      </div>
-      <ModelConnectivityResults results={group.model_verification_results} />
       {group.observing && (
         <p className='text-muted-foreground mt-3 text-xs'>
           {t('当前仍处于样本观测期，已记录 {{requests}} 次请求。', {

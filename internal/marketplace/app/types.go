@@ -57,14 +57,24 @@ type ModelVerificationResult struct {
 }
 
 type GPT56MappingResult struct {
-	RequestedModel string    `json:"requested_model"`
-	ReportedModel  string    `json:"reported_model,omitempty"`
-	Status         string    `json:"status"`
-	LatencyMS      int64     `json:"latency_ms"`
-	SampleCount    int       `json:"sample_count"`
-	MatchedSamples int       `json:"matched_samples"`
-	Error          string    `json:"error,omitempty"`
-	TestedAt       time.Time `json:"tested_at"`
+	RequestedModel string               `json:"requested_model"`
+	ReportedModel  string               `json:"reported_model,omitempty"`
+	Status         string               `json:"status"`
+	LatencyMS      int64                `json:"latency_ms"`
+	SampleCount    int                  `json:"sample_count"`
+	MatchedSamples int                  `json:"matched_samples"`
+	Samples        []GPT56MappingSample `json:"samples,omitempty"`
+	Error          string               `json:"error,omitempty"`
+	TestedAt       time.Time            `json:"tested_at"`
+}
+
+type GPT56MappingSample struct {
+	Index         int       `json:"index"`
+	Status        string    `json:"status"`
+	ReportedModel string    `json:"reported_model,omitempty"`
+	LatencyMS     int64     `json:"latency_ms"`
+	Error         string    `json:"error,omitempty"`
+	TestedAt      time.Time `json:"tested_at"`
 }
 
 type ChannelView struct {
@@ -180,6 +190,9 @@ type GroupListItem struct {
 	Models                     []string                  `json:"models"`
 	ModelVerificationResults   []ModelVerificationResult `json:"model_verification_results"`
 	ModelConsistencyStatus     string                    `json:"model_consistency_status"`
+	GPT56MappingResults        []GPT56MappingResult      `json:"gpt56_mapping_results"`
+	GPT56MappingStatus         string                    `json:"gpt56_mapping_status"`
+	GPT56MappingCheckedAt      *time.Time                `json:"gpt56_mapping_checked_at"`
 	ConnectivityTestStatus     string                    `json:"connectivity_test_status"`
 	ConnectivityTestCheckedAt  *time.Time                `json:"connectivity_test_checked_at"`
 	ChannelFeedback            ChannelFeedbackSummary    `json:"channel_feedback"`

@@ -115,6 +115,44 @@ func TestGroupListItemUsesLatestModelVerificationTime(t *testing.T) {
 	require.NotContains(t, string(payload), "independent_consumers")
 }
 
+func TestGroupListItemReturnsSanitizedGPT56MappingReport(t *testing.T) {
+	t.Parallel()
+	checkedAt := time.Date(2026, 8, 17, 9, 30, 0, 0, time.UTC)
+	encoded, err := json.Marshal([]GPT56MappingResult{{
+		RequestedModel: "gpt-5.6-terra",
+		Status:         GPT56MappingStatusInsufficientEvidence,
+		SampleCount:    3,
+		MatchedSamples: 2,
+		Error:          "raw secret upstream error",
+		Samples: []GPT56MappingSample{{
+			Index: 3, Status: GPT56MappingSampleStatusError,
+			Error: "raw secret upstream error", TestedAt: checkedAt,
+		}},
+	}})
+	require.NoError(t, err)
+
+	item := groupListItem(
+		marketplaceschema.Group{ID: "group-report", ChannelID: "channel-report"},
+		marketplaceschema.Channel{
+			ID: "channel-report", GPT56MappingResults: string(encoded),
+			GPT56MappingStatus:    GPT56MappingStatusInsufficientEvidence,
+			GPT56MappingCheckedAt: &checkedAt,
+		},
+		[]string{"gpt-5.6-terra"},
+		marketplaceschema.RankingSnapshot{},
+		nil,
+	)
+
+	require.Equal(t, GPT56MappingStatusInsufficientEvidence, item.GPT56MappingStatus)
+	require.Equal(t, checkedAt, *item.GPT56MappingCheckedAt)
+	require.Len(t, item.GPT56MappingResults, 1)
+	require.Empty(t, item.GPT56MappingResults[0].Error)
+	require.Equal(t, "请求失败，未获得可验证结果", item.GPT56MappingResults[0].Samples[0].Error)
+	payload, err := json.Marshal(item)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "raw secret upstream error")
+}
+
 func TestPublicPendingReviewGroupIsLoadedForMarketplace(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))

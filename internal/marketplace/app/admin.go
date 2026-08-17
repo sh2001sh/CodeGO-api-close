@@ -125,6 +125,7 @@ func createInternalChannel(channel *marketplaceschema.Channel, group *marketplac
 		Type: providerChannelType(channel.ProviderType), Key: channel.CredentialCiphertext,
 		Status: constant.ChannelStatusEnabled, Name: group.SystemDisplayName,
 		ChannelScope:                     gatewayschema.ChannelScopeExternal,
+		MarketplaceMaxConcurrency:        channel.MaxConcurrency,
 		SensitiveWordInterceptionEnabled: channel.SensitiveWordInterceptionEnabled,
 		CreatedTime:                      platformruntime.GetTimestamp(), BaseURL: &baseURL,
 		Models: strings.Join(decodeModels(channel.DeclaredModels), ","), Group: group.InternalGroupName,

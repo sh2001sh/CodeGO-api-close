@@ -14,11 +14,12 @@ import type { MarketplaceChannel } from '../types'
 import { AdminIncomeFilter, type AdminIncomeRange } from './admin-income-filter'
 import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
+import { GPT56MappingStatusView } from './gpt56-mapping-report'
 import {
   ConnectivityTestStatusView,
-  GPT56MappingStatusView,
   ModelConsistencyBadge,
 } from './model-verification'
+import { SensitiveWordPolicyControl } from './sensitive-word-policy-control'
 import { MarketplaceStatusBadge } from './status-badge'
 
 export function AdminGovernance() {
@@ -127,6 +128,7 @@ export function AdminGovernance() {
                       {t('结算请求')}: {channel.request_count.toLocaleString()}
                     </span>
                   </div>
+                  <SensitiveWordPolicyControl channel={channel} admin />
                   <GPT56MappingStatusView
                     models={channel.declared_models}
                     status={channel.gpt56_mapping_status}

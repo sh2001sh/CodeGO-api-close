@@ -23,6 +23,7 @@ type Channel struct {
 	Status                           int     `json:"status" gorm:"default:1"`
 	Name                             string  `json:"name" gorm:"index"`
 	ChannelScope                     string  `json:"channel_scope" gorm:"column:channel_scope;type:varchar(16);not null;default:'official';index"`
+	MarketplaceMaxConcurrency        int     `json:"marketplace_max_concurrency" gorm:"column:marketplace_max_concurrency;not null;default:0"`
 	SensitiveWordInterceptionEnabled *bool   `json:"sensitive_word_interception_enabled" gorm:"column:sensitive_word_interception_enabled;default:true"`
 	Weight                           *uint   `json:"weight" gorm:"default:0"`
 	CreatedTime                      int64   `json:"created_time" gorm:"bigint"`

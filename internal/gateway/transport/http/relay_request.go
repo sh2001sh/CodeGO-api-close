@@ -214,17 +214,49 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 
+		releaseChannelConcurrency, channelAdmitted := relaycommon.TryBeginChannelRequest(
+			channel.Id,
+			channel.MarketplaceMaxConcurrency,
+		)
+		if !channelAdmitted {
+			addUsedChannel(c, channel.Id)
+			relaycommon.ExcludeRouteDecisionCandidate(c, "channel_capacity")
+			// This is local backpressure, not an upstream failure. Do not feed it
+			// into channel health or the auto-group circuit.
+			newAPIError = types.NewErrorWithStatusCode(
+				errors.New("channel concurrency limit reached"),
+				types.ErrorCodeGetChannelFailed,
+				http.StatusServiceUnavailable,
+			)
+			if retryTimes-retryParam.GetRetry() > 0 {
+				relaycommon.RecordRouteDecisionRetry(c)
+				continue
+			}
+			break
+		}
+		addUsedChannel(c, channel.Id)
+
 		faultDomain := c.GetString("channel_fault_domain")
-		releaseFaultDomainSlot, admitted, _ := relaycommon.TryAcquireFaultDomainSlotForUser(faultDomain, relayInfo.OriginModelName, relayInfo.UserId, requestProfile.RequestType)
+		capacityScope := httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceGroupID)
+		if capacityScope == "" {
+			capacityScope = httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+		}
+		if capacityScope == "" {
+			capacityScope = fmt.Sprintf("channel:%d", channel.Id)
+		}
+		releaseFaultDomainSlot, admitted, _ := relaycommon.TryAcquireFaultDomainSlotForUser(
+			faultDomain,
+			capacityScope,
+			relayInfo.OriginModelName,
+			relayInfo.UserId,
+			requestProfile.RequestType,
+		)
 		if !admitted {
 			relaycommon.ExcludeFaultDomain(c, faultDomain)
 			relaycommon.ExcludeRouteDecisionCandidate(c, "fault_domain_capacity")
-			// The current route was selected successfully but its shared upstream
-			// concurrency window is temporarily full. Prefer a different fault
-			// domain on the next selection; when this is the only route, retain one
-			// controlled retry of the selected channel instead of converting local
-			// backpressure into a misleading "no available channel" error.
-			httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, channel.Id)
+			releaseChannelConcurrency()
+			// Fault-domain capacity is local backpressure. It is not a channel
+			// failure and must not enter channel or auto-group cooldown accounting.
 			newAPIError = types.NewErrorWithStatusCode(
 				errors.New("upstream fault domain is at capacity"),
 				types.ErrorCodeGetChannelFailed,
@@ -232,16 +264,15 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			)
 			if retryTimes-retryParam.GetRetry() > 0 {
 				relaycommon.RecordRouteDecisionRetry(c)
-				gatewayroutingapp.RecordAutoGroupFailure(c, relayInfo.OriginModelName)
 				continue
 			}
 			break
 		}
-		addUsedChannel(c, channel.Id)
 		relayInfo.FirstByteTrace.MarkRequestBodyRestoreStarted()
 		bodyErr := restoreRelayRequestBody(c)
 		relayInfo.FirstByteTrace.MarkRequestBodyRestoreDone()
 		if bodyErr != nil {
+			releaseChannelConcurrency()
 			releaseFaultDomainSlot(true, 0)
 			newAPIError = bodyErr
 			break
@@ -252,11 +283,13 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = billingapp.PreConsumeRelayBilling(c, currentPriceData.QuotaToPreConsume, relayInfo)
 			relayInfo.FirstByteTrace.MarkBillingReserveDone()
 			if newAPIError != nil {
+				releaseChannelConcurrency()
 				releaseFaultDomainSlot(true, 0)
 				break
 			}
 		}
 		if requestBudget != nil && !requestBudget.TryBeginAttempt(time.Now(), faultDomain) {
+			releaseChannelConcurrency()
 			releaseFaultDomainSlot(true, 0)
 			relaycommon.ExcludeRouteDecisionCandidate(c, "request_budget_exhausted")
 			newAPIError = types.NewErrorWithStatusCode(
@@ -271,7 +304,6 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		relaycommon.StartRouteDecisionAttempt(c, relayInfo.RetryIndex, channel.Id, faultDomain)
 		relayInfo.FirstByteTrace.MarkUpstreamStart()
 		upstreamStarted = true
-		releaseChannelConcurrency := relaycommon.BeginChannelRequest(channel.Id)
 
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:

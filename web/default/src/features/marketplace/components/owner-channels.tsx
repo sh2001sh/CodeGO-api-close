@@ -17,10 +17,12 @@ import type { MarketplaceChannel } from '../types'
 import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
 import { ChannelVerificationStatus } from './channel-verification-status'
-import { AutoProbeStatusView, GPT56MappingStatusView } from './model-verification'
+import { GPT56MappingStatusView } from './gpt56-mapping-report'
+import { AutoProbeStatusView } from './model-verification'
 import { OwnerChannelActions } from './owner-channel-actions'
 import { IncomeMetric } from './owner-channel-metric'
 import { OwnerIncomeOverview } from './owner-income-overview'
+import { SensitiveWordPolicyControl } from './sensitive-word-policy-control'
 import { MarketplaceStatusBadge } from './status-badge'
 
 export function OwnerChannels(props: { onAdd: () => void }) {
@@ -129,6 +131,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                         </p>
                       )}
                     <ChannelVerificationStatus channel={channel} />
+                    <SensitiveWordPolicyControl channel={channel} />
                     <GPT56MappingStatusView
                       models={channel.declared_models}
                       status={channel.gpt56_mapping_status}

@@ -8,6 +8,7 @@ import type { GroupFilters } from '../types'
 import { MarketplaceGroupList } from './group-list'
 import { MarketplaceFilters } from './marketplace-filters'
 import { MarketplaceHighlights } from './marketplace-highlights'
+import { MarketplaceMultiplierTrend } from './marketplace-multiplier-trend'
 
 export function MarketSurface(props: {
   filters: GroupFilters
@@ -103,6 +104,12 @@ export function MarketSurface(props: {
         filters={props.filters}
         onChange={props.updateFilters}
       />
+      {!props.ranking && (
+        <MarketplaceMultiplierTrend
+          model={props.filters.model}
+          onModelChange={(model) => props.updateFilters({ model, page: 1 })}
+        />
+      )}
       <MarketplaceHighlights highlights={props.query.data?.highlights} />
       <MarketplaceGroupList
         groups={props.query.data?.items ?? []}

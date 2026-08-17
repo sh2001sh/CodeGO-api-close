@@ -10,7 +10,15 @@ import (
 )
 
 func SaveChannelInfo(channel *gatewayschema.Channel) error {
-	return platformdb.DB.Model(channel).Update("channel_info", channel.ChannelInfo).Error
+	if err := platformdb.DB.Model(channel).Update("channel_info", channel.ChannelInfo).Error; err != nil {
+		return err
+	}
+	channelSyncLock.Lock()
+	if cached := channelsIDM[channel.Id]; cached != nil {
+		cached.ChannelInfo = channel.ChannelInfo
+	}
+	channelSyncLock.Unlock()
+	return nil
 }
 
 func SaveChannelWithoutKey(channel *gatewayschema.Channel) error {

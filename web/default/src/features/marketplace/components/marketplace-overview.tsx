@@ -82,10 +82,12 @@ export function MarketplaceOverview(props: {
             <WalletCards className='size-5' />
           </span>
           <div>
-            <div className='text-sm font-semibold'>{t('仅使用通用额度')}</div>
+            <div className='text-sm font-semibold'>
+              {t('支持套餐与通用余额')}
+            </div>
             <p className='text-muted-foreground mt-2 text-xs leading-5'>
               {t(
-                '分组市场中的第三方分组，无论使用 GPT、Claude 或其他模型，调用时都只扣除通用额度。'
+                '第三方分组默认支持套餐和通用余额；套餐倍率按余额倍率的统一换算规则计算。'
               )}
             </p>
           </div>

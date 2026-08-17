@@ -23,6 +23,14 @@ func ListGroups(c *gin.Context) {
 	respond(c, result, err)
 }
 
+func ListMultiplierTrends(c *gin.Context) {
+	result, err := marketplaceapp.ListMultiplierTrends(marketplaceapp.MultiplierTrendQuery{
+		RangeHours: queryInt(c, "range_hours", 24),
+		Model:      c.Query("model"),
+	})
+	respond(c, result, err)
+}
+
 func GetGroup(c *gin.Context) {
 	result, err := marketplaceapp.GetMarketplaceGroup(c.Param("slug"), queryInt(c, "window_hours", 24), c.GetInt("id"))
 	respond(c, result, err)
@@ -155,6 +163,7 @@ func BindToken(c *gin.Context) {
 func ListAdminChannels(c *gin.Context) {
 	result, err := marketplaceapp.ListAdminChannels(marketplaceapp.AdminChannelQuery{
 		Status:         c.Query("status"),
+		OwnerSearch:    c.Query("owner_search"),
 		StartTimestamp: queryInt64(c, "start_timestamp"),
 		EndTimestamp:   queryInt64(c, "end_timestamp"),
 	})
@@ -163,6 +172,7 @@ func ListAdminChannels(c *gin.Context) {
 
 func ListAdminOwnerIncome(c *gin.Context) {
 	result, err := marketplaceapp.ListAdminOwnerIncome(marketplaceapp.AdminOwnerIncomeQuery{
+		OwnerSearch:    c.Query("owner_search"),
 		StartTimestamp: queryInt64(c, "start_timestamp"),
 		EndTimestamp:   queryInt64(c, "end_timestamp"),
 	})

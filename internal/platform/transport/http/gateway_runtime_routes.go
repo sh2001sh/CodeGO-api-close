@@ -31,6 +31,10 @@ func registerRelayCompatibilityRoutes(router *gin.Engine) {
 	{
 		websocketCompatibility.GET("/responses", gatewayhttp.ResponsesWebsocket)
 		websocketCompatibility.GET("/backend-api/codex/responses", gatewayhttp.ResponsesWebsocket)
+		websocketCompatibility.GET("/responses/:id", gatewayhttp.GetResponsesBackground)
+		websocketCompatibility.POST("/responses/:id/cancel", gatewayhttp.CancelResponsesBackground)
+		websocketCompatibility.GET("/backend-api/codex/responses/:id", gatewayhttp.GetResponsesBackground)
+		websocketCompatibility.POST("/backend-api/codex/responses/:id/cancel", gatewayhttp.CancelResponsesBackground)
 	}
 
 	compatibility := router.Group("")
@@ -40,10 +44,10 @@ func registerRelayCompatibilityRoutes(router *gin.Engine) {
 	compatibility.Use(middleware.ModelRequestRateLimit())
 	compatibility.Use(middleware.Distribute())
 	{
-		compatibility.POST("/responses", gatewayhttp.RelayWithCanonicalPath("/v1/responses", types.RelayFormatOpenAIResponses))
+		compatibility.POST("/responses", gatewayhttp.ResponsesCreateWithCanonicalPath("/v1/responses"))
 		compatibility.POST("/responses/compact", gatewayhttp.RelayWithCanonicalPath("/v1/responses/compact", types.RelayFormatOpenAIResponsesCompaction))
 		compatibility.POST("/alpha/search", gatewayhttp.RelayWithCanonicalPath("/v1/alpha/search", types.RelayFormatOpenAIAlphaSearch))
-		compatibility.POST("/backend-api/codex/responses", gatewayhttp.RelayWithCanonicalPath("/v1/responses", types.RelayFormatOpenAIResponses))
+		compatibility.POST("/backend-api/codex/responses", gatewayhttp.ResponsesCreateWithCanonicalPath("/v1/responses"))
 		compatibility.POST("/backend-api/codex/responses/compact", gatewayhttp.RelayWithCanonicalPath("/v1/responses/compact", types.RelayFormatOpenAIResponsesCompaction))
 		compatibility.POST("/backend-api/codex/alpha/search", gatewayhttp.RelayWithCanonicalPath("/v1/alpha/search", types.RelayFormatOpenAIAlphaSearch))
 	}
@@ -120,6 +124,8 @@ func registerRelayCoreRoutes(router *gin.Engine) {
 	responsesWebsocketRouter.Use(middleware.TokenAuth())
 	{
 		responsesWebsocketRouter.GET("/responses", gatewayhttp.ResponsesWebsocket)
+		responsesWebsocketRouter.GET("/responses/:id", gatewayhttp.GetResponsesBackground)
+		responsesWebsocketRouter.POST("/responses/:id/cancel", gatewayhttp.CancelResponsesBackground)
 	}
 
 	relayV1Router := router.Group("/v1")
@@ -139,7 +145,7 @@ func registerRelayCoreRoutes(router *gin.Engine) {
 		httpRouter.POST("/messages", gatewayhttp.RelayWithFormat(types.RelayFormatClaude))
 		httpRouter.POST("/completions", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAI))
 		httpRouter.POST("/chat/completions", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAI))
-		httpRouter.POST("/responses", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIResponses))
+		httpRouter.POST("/responses", gatewayhttp.ResponsesCreate)
 		httpRouter.POST("/responses/compact", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIResponsesCompaction))
 		httpRouter.POST("/alpha/search", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIAlphaSearch))
 		httpRouter.POST("/edits", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAIImage))

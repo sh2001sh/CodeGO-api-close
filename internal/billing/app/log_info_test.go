@@ -63,15 +63,15 @@ func TestAppendBillingInfoIncludesQuotaSource(t *testing.T) {
 	}
 }
 
-func TestAppendBillingInfoMarketplaceAlwaysUsesUniversalQuota(t *testing.T) {
+func TestAppendBillingInfoMarketplaceUsesSelectedFundingSource(t *testing.T) {
 	other := make(map[string]interface{})
 	appendBillingInfo(&gatewaysruntime.RelayInfo{
-		BillingSource:      BillingSourceWallet,
+		BillingSource:      BillingSourceSubscription,
 		MarketplaceGroupID: "Codex-Plus-abc123",
 	}, other)
 
-	require.Equal(t, "universal", other["billing_quota_category"])
-	require.Equal(t, "通用额度", other["billing_quota_label"])
+	require.Equal(t, "subscription", other["billing_quota_category"])
+	require.Equal(t, "GPT 套餐额度", other["billing_quota_label"])
 	require.Equal(t, 0.95, other["marketplace_owner_net_rate"])
 }
 
@@ -92,11 +92,13 @@ func TestAppendBillingInfoIncludesMonthlyPassPolicy(t *testing.T) {
 	appendBillingInfo(&gatewaysruntime.RelayInfo{
 		BillingSource:               BillingSourceSubscription,
 		SubscriptionGroupMultiplier: 1.5,
+		SubscriptionPackageMultiplier: 0.9,
 		SubscriptionQuotaScale:      15,
 		SubscriptionGroupRatio:      0.1,
 	}, other)
 
 	require.Equal(t, 1.5, other["subscription_group_multiplier"])
+	require.Equal(t, 0.9, other["subscription_package_multiplier"])
 	require.Equal(t, float64(15), other["subscription_quota_scale"])
 	require.Equal(t, 0.1, other["subscription_group_ratio"])
 }

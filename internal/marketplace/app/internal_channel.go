@@ -25,6 +25,8 @@ func syncInternalChannel(channel *marketplaceschema.Channel, group *marketplaces
 	internal.Group = group.InternalGroupName
 	internal.ChannelScope = gatewayschema.ChannelScopeExternal
 	internal.MarketplaceMaxConcurrency = channel.MaxConcurrency
+	internal.MarketplaceUserMaxConcurrency = channel.UserMaxConcurrency
 	internal.SensitiveWordInterceptionEnabled = channel.SensitiveWordInterceptionEnabled
+	internal.ChannelInfo.ResponsesCapabilities = decodeMarketplaceCapabilities(channel.TransportCapabilities)
 	return gatewaystore.UpdateChannel(internal)
 }

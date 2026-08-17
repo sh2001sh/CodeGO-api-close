@@ -35,7 +35,8 @@ export const channelFormSchema = z.object({
     .positive('倍率必须大于 0')
     .max(1_000_000, '倍率不能超过 1000000x'),
   visibility: z.enum(['private', 'unlisted', 'public']),
-  max_concurrency: z.number().int().min(1).max(10000),
+  max_concurrency: z.number().int().min(0).max(10000),
+  user_max_concurrency: z.number().int().min(0).max(10000),
   qps: z.number().positive().max(10000),
   maintenance_window: z.string().max(255),
   sensitive_word_interception_enabled: z.boolean(),
@@ -67,6 +68,7 @@ export const channelFormDefaults: ChannelFormInput = {
   multiplier: 1,
   visibility: 'public',
   max_concurrency: 10,
+  user_max_concurrency: 0,
   qps: 5,
   maintenance_window: '',
   sensitive_word_interception_enabled: true,
@@ -94,13 +96,15 @@ export function channelFormDefaultsForEdit(
     multiplier: channel.multiplier,
     visibility: channel.visibility as ChannelFormInput['visibility'],
     max_concurrency: channel.max_concurrency,
+    user_max_concurrency: channel.user_max_concurrency ?? 0,
     qps: channel.qps,
     maintenance_window: channel.maintenance_window,
     sensitive_word_interception_enabled:
       channel.sensitive_word_interception_enabled,
     auto_probe_enabled: channel.auto_probe_enabled,
     auto_probe_interval_minutes: channel.auto_probe_interval_minutes || 10,
-    auto_probe_model: channel.auto_probe_model || channel.declared_models[0] || '',
+    auto_probe_model:
+      channel.auto_probe_model || channel.declared_models[0] || '',
     model_consistency_status: channel.model_consistency_status || 'none',
   }
 }

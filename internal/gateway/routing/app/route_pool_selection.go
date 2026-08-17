@@ -258,6 +258,19 @@ func GetRoutePoolSelection(c *gin.Context) (RoutePoolSelection, bool) {
 	return selection, ok && selection.PoolID > 0 && selection.ProcurementCostMultiplier > 0
 }
 
+// SetRoutePoolSelectionSnapshot restores a previously selected procurement
+// route for deferred execution without running route selection again.
+func SetRoutePoolSelectionSnapshot(c *gin.Context, selection RoutePoolSelection, faultDomain string) {
+	if c == nil || selection.PoolID <= 0 || selection.ProcurementCostMultiplier <= 0 {
+		return
+	}
+	c.Set(routePoolContextKey, selection)
+	if faultDomain != "" {
+		c.Set(routePoolFaultDomainContextKey, faultDomain)
+		c.Set("channel_fault_domain", faultDomain)
+	}
+}
+
 func chooseRoutePoolHealthyCandidate(candidates []scoredRoutePoolCandidate) *scoredRoutePoolCandidate {
 	if len(candidates) == 0 {
 		return nil

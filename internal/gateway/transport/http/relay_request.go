@@ -12,6 +12,7 @@ import (
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
+	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -89,6 +90,10 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 	relayInfo.FirstByteTrace = firstByteTrace
+	if err := bindResponsesWebsocketRoute(c); err != nil {
+		newAPIError = types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		return
+	}
 	firstByteTrace.MarkRelayInfoReady()
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
 		if specialMultiplierUnsupportedRelay(relayFormat, relayInfo.OriginModelName) {
@@ -142,6 +147,10 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			retryTimes = remaining
 		}
 		relaycommon.ExpandRequestBudget(requestBudget, len(bindings))
+	}
+	if responsesws.FromContext(c) != nil {
+		retryTimes = 1
+		relaycommon.ExpandRequestBudget(requestBudget, 2)
 	}
 	if requestBudget != nil && retryTimes >= requestBudget.MaxAttempts {
 		retryTimes = requestBudget.MaxAttempts - 1
@@ -214,9 +223,11 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 
-		releaseChannelConcurrency, channelAdmitted := relaycommon.TryBeginChannelRequest(
+		releaseChannelConcurrency, channelAdmitted := relaycommon.TryBeginChannelRequestForUser(
 			channel.Id,
+			relayInfo.UserId,
 			channel.MarketplaceMaxConcurrency,
+			channel.MarketplaceUserMaxConcurrency,
 		)
 		if !channelAdmitted {
 			addUsedChannel(c, channel.Id)

@@ -119,7 +119,7 @@ func TestEditingCapacityDoesNotInvalidateVerificationState(t *testing.T) {
 		ID: "capacity-only", ProviderType: "openai_compatible",
 		DeclaredModels: `["gpt-4.1"]`, Status: marketplacedomain.LifecycleActive,
 		ModelVerificationResults: `[{}]`, ConnectivityTestStatus: marketplacedomain.VerificationPassed,
-		MaxConcurrency: 10, QPS: 5,
+		MaxConcurrency: 10, UserMaxConcurrency: 2, QPS: 5,
 	}
 	group := &marketplaceschema.Group{
 		ID: "capacity-only-group", Multiplier: 1,
@@ -127,11 +127,13 @@ func TestEditingCapacityDoesNotInvalidateVerificationState(t *testing.T) {
 		VerificationStatus: marketplacedomain.VerificationPassed,
 	}
 	concurrency := 20
+	userConcurrency := 3
 	qps := 8.0
 
 	requiresManualVerification, err := applyChannelUpdate(channel, group, UpdateChannelRequest{
-		MaxConcurrency: &concurrency,
-		QPS:            &qps,
+		MaxConcurrency:     &concurrency,
+		UserMaxConcurrency: &userConcurrency,
+		QPS:                &qps,
 	})
 
 	require.NoError(t, err)
@@ -141,6 +143,31 @@ func TestEditingCapacityDoesNotInvalidateVerificationState(t *testing.T) {
 	require.Equal(t, marketplacedomain.VerificationPassed, group.VerificationStatus)
 	require.Equal(t, marketplacedomain.VerificationPassed, channel.ConnectivityTestStatus)
 	require.Equal(t, `[{}]`, channel.ModelVerificationResults)
+	require.Equal(t, 20, channel.MaxConcurrency)
+	require.Equal(t, 3, channel.UserMaxConcurrency)
+}
+
+func TestEditingCapacityAcceptsZeroAsUnlimited(t *testing.T) {
+	channel := &marketplaceschema.Channel{MaxConcurrency: 10, UserMaxConcurrency: 2, QPS: 5}
+	group := &marketplaceschema.Group{Multiplier: 1}
+	unlimited := 0
+
+	requiresManualVerification, err := applyChannelUpdate(channel, group, UpdateChannelRequest{
+		MaxConcurrency:     &unlimited,
+		UserMaxConcurrency: &unlimited,
+	})
+
+	require.NoError(t, err)
+	require.False(t, requiresManualVerification)
+	require.Zero(t, channel.MaxConcurrency)
+	require.Zero(t, channel.UserMaxConcurrency)
+}
+
+func TestValidateConcurrencyLimitRejectsOutOfRangeValues(t *testing.T) {
+	require.NoError(t, validateConcurrencyLimit(0))
+	require.NoError(t, validateConcurrencyLimit(10000))
+	require.Error(t, validateConcurrencyLimit(-1))
+	require.Error(t, validateConcurrencyLimit(10001))
 }
 
 func TestRequiredVerificationStateUsesDetectionForGPT56(t *testing.T) {

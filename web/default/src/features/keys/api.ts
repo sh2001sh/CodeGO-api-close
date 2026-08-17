@@ -53,6 +53,8 @@ export interface ApiKeyGroupOptionData {
   label: string
   desc: string
   ratio?: number | string
+  subscriptionEnabled?: boolean
+  subscriptionRatio?: number
   category: 'official' | 'marketplace' | 'marketplace_auto'
   disabled?: boolean
   models?: string[]
@@ -66,6 +68,8 @@ interface MarketplaceGroupListResponse {
     lifecycle_status: string
     verification_status: string
     multiplier: number
+    subscription_enabled: boolean
+    subscription_multiplier: number
     models: string[]
   }>
 }
@@ -145,7 +149,14 @@ export async function updateApiKeyStatus(
 export async function testApiKeyConnectivity(
   id: number,
   model: string
-): Promise<ApiResponse<{ model: string; group: string; channel_id: number; latency_ms: number }>> {
+): Promise<
+  ApiResponse<{
+    model: string
+    group: string
+    channel_id: number
+    latency_ms: number
+  }>
+> {
   const res = await api.post(`/api/token/${id}/test`, { model })
   return res.data
 }
@@ -191,8 +202,10 @@ export async function getSelectableMarketplaceGroups(): Promise<
     .map((group) => ({
       value: `market:${group.id}`,
       label: group.system_display_name,
-      desc: `${group.source_label || '来源待审核'} · 仅使用通用额度`,
+      desc: `${group.source_label || '来源待审核'} · 余额与套餐均可使用`,
       ratio: group.multiplier,
+      subscriptionEnabled: group.subscription_enabled,
+      subscriptionRatio: group.subscription_multiplier,
       category: 'marketplace' as const,
       models: group.models,
     }))

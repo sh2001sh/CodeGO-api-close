@@ -200,8 +200,8 @@ export function BalanceBlindBoxSettingsAdmin() {
             />
             <BlindBoxSettingsMetric
               icon={Gauge}
-              label='普通池理论回报率'
-              value={economics ? `${economics.returnRate.toFixed(2)}%` : '--'}
+              label='普通池理论返奖率'
+              value={economics ? `${economics.payoutRate.toFixed(2)}%` : '--'}
             />
             <BlindBoxSettingsMetric
               icon={TrendingUp}
@@ -221,7 +221,7 @@ export function BalanceBlindBoxSettingsAdmin() {
             />
           </div>
           <p className='text-muted-foreground text-xs leading-5'>
-            理论指标包含“再来一抽”的连锁期望，不包含首抽、小保底和大保底；用户短期实际回报会围绕理论值波动。
+            理论返奖率按奖励期望除以单盒售价计算，包含“再来一抽”的连锁期望，不包含首抽、小保底和大保底；账户回报率则按开抽前后余额变化计算。
           </p>
 
           <FormField

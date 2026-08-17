@@ -661,6 +661,28 @@ func GetNextEnabledChannelKey(channel *gatewayschema.Channel) (string, int, *typ
 	}
 }
 
+// GetEnabledChannelKeyByIndex returns the exact pinned key for a persistent
+// transport session and rejects keys that have since been disabled.
+func GetEnabledChannelKeyByIndex(channel *gatewayschema.Channel, index int) (string, *types.NewAPIError) {
+	if channel == nil || index < 0 {
+		return "", types.NewError(errors.New("invalid pinned channel key"), types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+	}
+	keys := channel.GetKeys()
+	if index >= len(keys) {
+		return "", types.NewError(errors.New("pinned channel key no longer exists"), types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+	}
+	if channel.ChannelInfo.IsMultiKey && channel.ChannelInfo.MultiKeyStatusList != nil {
+		if status, exists := channel.ChannelInfo.MultiKeyStatusList[index]; exists && status != constant.ChannelStatusEnabled {
+			return "", types.NewError(errors.New("pinned channel key is disabled"), types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+		}
+	}
+	key := strings.TrimSpace(keys[index])
+	if key == "" {
+		return "", types.NewError(errors.New("pinned channel key is empty"), types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+	}
+	return key, nil
+}
+
 // IsChannelEnabledForGroupModel reports whether the channel can serve the group/model pair.
 func IsChannelEnabledForGroupModel(group string, modelName string, channelID int) bool {
 	if group == "" || modelName == "" || channelID <= 0 {

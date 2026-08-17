@@ -36,10 +36,19 @@ export function GroupMetrics({ group }: { group: MarketplaceGroup }) {
       <PrimaryMetric
         icon={Activity}
         label={t('当前 / 最大并发')}
-        value={`${formatNumber(group.current_concurrency)} / ${formatNumber(group.max_concurrency)}`}
-      />
+        value={`${formatNumber(group.current_concurrency)} / ${formatConcurrencyLimit(group.max_concurrency, t('不限'))}`}
+      >
+        <div className='text-muted-foreground mt-1 text-[11px] tabular-nums'>
+          {t('单用户上限')}:{' '}
+          {formatConcurrencyLimit(group.user_max_concurrency, t('不限'))}
+        </div>
+      </PrimaryMetric>
     </div>
   )
+}
+
+function formatConcurrencyLimit(limit: number | undefined, unlimited: string) {
+  return !limit ? unlimited : formatNumber(limit)
 }
 
 function PrimaryMetric(props: {

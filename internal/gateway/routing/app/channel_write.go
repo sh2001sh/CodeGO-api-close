@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	gatewaycapability "github.com/sh2001sh/new-api/internal/gateway/capability"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -168,6 +169,7 @@ func createChannelsForInsert(req AddChannelRequest, keys []string) []gatewaysche
 		}
 		channel := baseChannel
 		channel.Key = key
+		markChannelCapabilitiesPending(&channel)
 		if req.BatchAddSetKeyPrefix2Name && len(keys) > 1 {
 			keyPrefix := channel.Key
 			if len(channel.Key) > 8 {
@@ -195,6 +197,9 @@ func AddChannel(req AddChannelRequest) error {
 	channels := createChannelsForInsert(req, keys)
 	if err := gatewaystore.BatchInsertChannels(channels); err != nil {
 		return err
+	}
+	for index := range channels {
+		queueChannelCapabilityProbe(channels[index].Id)
 	}
 	refreshChannelRuntimeCache()
 	return nil
@@ -271,6 +276,11 @@ func UpdateChannel(patch ChannelPatch) (*ChannelPatch, error) {
 	}
 
 	patch.ChannelInfo = originChannel.ChannelInfo
+	pendingModel := firstChannelProbeModel(&patch.Channel)
+	if pendingModel == "" {
+		pendingModel = firstChannelProbeModel(originChannel)
+	}
+	patch.ChannelInfo.ResponsesCapabilities = gatewaycapability.PendingResponsesCapabilities(pendingModel)
 	if patch.MultiKeyMode != nil && *patch.MultiKeyMode != "" {
 		patch.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*patch.MultiKeyMode)
 	}
@@ -294,6 +304,7 @@ func UpdateChannel(patch ChannelPatch) (*ChannelPatch, error) {
 		gatewayruntime.InvalidateChannelAffinityForChannel(patch.Id)
 	}
 	refreshChannelRuntimeCache()
+	queueChannelCapabilityProbe(patch.Id)
 	patch.Key = ""
 	sanitizeChannel(&patch.Channel)
 	return &patch, nil

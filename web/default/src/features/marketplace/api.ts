@@ -8,6 +8,7 @@ import type {
   MarketplaceGroupList,
   MarketplaceOwnerUsageLogResult,
   MarketplaceOwnerUsageLogFilters,
+  MarketplaceMultiplierTrend,
   ChannelFeedbackSummary,
   AdminMarketplaceChannelFilters,
   AdminOwnerIncomeResult,
@@ -45,6 +46,18 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
   })
   const response = await api.get<ApiResponse<MarketplaceGroupList>>(
     `/api/marketplace/groups?${params.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceMultiplierTrends(input: {
+  rangeHours: number
+  model: string
+}) {
+  const params = new URLSearchParams({ range_hours: String(input.rangeHours) })
+  if (input.model) params.set('model', input.model)
+  const response = await api.get<ApiResponse<MarketplaceMultiplierTrend>>(
+    `/api/marketplace/multiplier-trends?${params.toString()}`
   )
   return requireData(response.data)
 }
@@ -205,6 +218,7 @@ export async function getAdminMarketplaceChannels(
 ) {
   const search = new URLSearchParams()
   if (filters.status) search.set('status', filters.status)
+  if (filters.ownerSearch) search.set('owner_search', filters.ownerSearch)
   if (filters.startTimestamp) {
     search.set('start_timestamp', String(filters.startTimestamp))
   }
@@ -220,10 +234,11 @@ export async function getAdminMarketplaceChannels(
 export async function getAdminOwnerIncome(
   filters: Pick<
     AdminMarketplaceChannelFilters,
-    'startTimestamp' | 'endTimestamp'
+    'ownerSearch' | 'startTimestamp' | 'endTimestamp'
   >
 ) {
   const search = new URLSearchParams()
+  if (filters.ownerSearch) search.set('owner_search', filters.ownerSearch)
   if (filters.startTimestamp) {
     search.set('start_timestamp', String(filters.startTimestamp))
   }

@@ -16,6 +16,7 @@ type CreateChannelRequest struct {
 	Multiplier                       float64                      `json:"multiplier"`
 	Visibility                       string                       `json:"visibility"`
 	MaxConcurrency                   int                          `json:"max_concurrency"`
+	UserMaxConcurrency               int                          `json:"user_max_concurrency"`
 	QPS                              float64                      `json:"qps"`
 	MaintenanceWindow                string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled *bool                        `json:"sensitive_word_interception_enabled"`
@@ -31,6 +32,7 @@ type UpdateChannelRequest struct {
 	Multiplier                       *float64                      `json:"multiplier"`
 	Visibility                       *string                       `json:"visibility"`
 	MaxConcurrency                   *int                          `json:"max_concurrency"`
+	UserMaxConcurrency               *int                          `json:"user_max_concurrency"`
 	QPS                              *float64                      `json:"qps"`
 	MaintenanceWindow                *string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled *bool                         `json:"sensitive_word_interception_enabled"`
@@ -70,6 +72,7 @@ type GPT56MappingResult struct {
 
 type GPT56MappingSample struct {
 	Index         int       `json:"index"`
+	Variant       string    `json:"variant,omitempty"`
 	Status        string    `json:"status"`
 	ReportedModel string    `json:"reported_model,omitempty"`
 	LatencyMS     int64     `json:"latency_ms"`
@@ -77,9 +80,21 @@ type GPT56MappingSample struct {
 	TestedAt      time.Time `json:"tested_at"`
 }
 
+type GPT56MappingRunView struct {
+	ID          string               `json:"id"`
+	ParentRunID string               `json:"parent_run_id,omitempty"`
+	Level       string               `json:"level"`
+	Trigger     string               `json:"trigger"`
+	Status      string               `json:"status"`
+	Results     []GPT56MappingResult `json:"results"`
+	StartedAt   time.Time            `json:"started_at"`
+	CompletedAt *time.Time           `json:"completed_at"`
+}
+
 type ChannelView struct {
 	ID                               string                       `json:"id"`
 	OwnerUserID                      int                          `json:"owner_user_id"`
+	OwnerExternalID                  string                       `json:"owner_external_id"`
 	GroupID                          string                       `json:"group_id"`
 	PublicSlug                       string                       `json:"public_slug"`
 	SystemDisplayName                string                       `json:"system_display_name"`
@@ -99,6 +114,9 @@ type ChannelView struct {
 	GPT56MappingResults              []GPT56MappingResult         `json:"gpt56_mapping_results"`
 	GPT56MappingStatus               string                       `json:"gpt56_mapping_status"`
 	GPT56MappingCheckedAt            *time.Time                   `json:"gpt56_mapping_checked_at"`
+	GPT56MappingLevel                string                       `json:"gpt56_mapping_level"`
+	GPT56MappingTrigger              string                       `json:"gpt56_mapping_trigger"`
+	GPT56MappingHistory              []GPT56MappingRunView        `json:"gpt56_mapping_history"`
 	AutoProbeEnabled                 bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         int                          `json:"auto_probe_interval_minutes"`
 	AutoProbeModel                   string                       `json:"auto_probe_model"`
@@ -114,6 +132,7 @@ type ChannelView struct {
 	VerificationCompletedAt          *time.Time                   `json:"verification_completed_at"`
 	Visibility                       string                       `json:"visibility"`
 	MaxConcurrency                   int                          `json:"max_concurrency"`
+	UserMaxConcurrency               int                          `json:"user_max_concurrency"`
 	QPS                              float64                      `json:"qps"`
 	MaintenanceWindow                string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled bool                         `json:"sensitive_word_interception_enabled"`
@@ -130,21 +149,24 @@ type ChannelView struct {
 
 type AdminChannelQuery struct {
 	Status         string
+	OwnerSearch    string
 	StartTimestamp int64
 	EndTimestamp   int64
 }
 
 type AdminOwnerIncomeQuery struct {
+	OwnerSearch    string
 	StartTimestamp int64
 	EndTimestamp   int64
 }
 
 type AdminOwnerIncomeItem struct {
-	OwnerUserID    int   `json:"owner_user_id"`
-	RequestCount   int64 `json:"request_count"`
-	TotalIncome    int64 `json:"total_income"`
-	PendingIncome  int64 `json:"pending_income"`
-	ReleasedIncome int64 `json:"released_income"`
+	OwnerUserID     int    `json:"owner_user_id"`
+	OwnerExternalID string `json:"owner_external_id"`
+	RequestCount    int64  `json:"request_count"`
+	TotalIncome     int64  `json:"total_income"`
+	PendingIncome   int64  `json:"pending_income"`
+	ReleasedIncome  int64  `json:"released_income"`
 }
 
 type AdminOwnerIncomeResult struct {
@@ -187,12 +209,16 @@ type GroupListItem struct {
 	VerificationDueAt          *time.Time                `json:"verification_due_at"`
 	VerificationCompletedAt    *time.Time                `json:"verification_completed_at"`
 	Multiplier                 float64                   `json:"multiplier"`
+	SubscriptionEnabled        bool                      `json:"subscription_enabled"`
+	SubscriptionMultiplier     float64                   `json:"subscription_multiplier"`
 	Models                     []string                  `json:"models"`
 	ModelVerificationResults   []ModelVerificationResult `json:"model_verification_results"`
 	ModelConsistencyStatus     string                    `json:"model_consistency_status"`
 	GPT56MappingResults        []GPT56MappingResult      `json:"gpt56_mapping_results"`
 	GPT56MappingStatus         string                    `json:"gpt56_mapping_status"`
 	GPT56MappingCheckedAt      *time.Time                `json:"gpt56_mapping_checked_at"`
+	GPT56MappingLevel          string                    `json:"gpt56_mapping_level"`
+	GPT56MappingTrigger        string                    `json:"gpt56_mapping_trigger"`
 	ConnectivityTestStatus     string                    `json:"connectivity_test_status"`
 	ConnectivityTestCheckedAt  *time.Time                `json:"connectivity_test_checked_at"`
 	ChannelFeedback            ChannelFeedbackSummary    `json:"channel_feedback"`
@@ -211,6 +237,7 @@ type GroupListItem struct {
 	RecentRequestBucketSeconds int64                     `json:"recent_request_bucket_seconds"`
 	RequestCount               int64                     `json:"request_count"`
 	MaxConcurrency             int                       `json:"max_concurrency"`
+	UserMaxConcurrency         int                       `json:"user_max_concurrency"`
 	CurrentConcurrency         int                       `json:"current_concurrency"`
 	IndependentConsumers       int64                     `json:"-"`
 	Observing                  bool                      `json:"observing"`
@@ -257,6 +284,33 @@ type GroupListResult struct {
 	PageSize    int             `json:"page_size"`
 	RankedCount int             `json:"ranked_count"`
 	WindowHours int             `json:"window_hours"`
+}
+
+type MultiplierTrendQuery struct {
+	RangeHours int
+	Model      string
+}
+
+type MultiplierTrendPoint struct {
+	Timestamp       int64    `json:"timestamp"`
+	ReliableMin     *float64 `json:"reliable_min"`
+	ListedMin       *float64 `json:"listed_min"`
+	Median          *float64 `json:"median"`
+	ReliableGroupID string   `json:"reliable_group_id,omitempty"`
+	EligibleCount   int      `json:"eligible_count"`
+	TotalCount      int      `json:"total_count"`
+}
+
+type MultiplierTrendSource struct {
+	Source string                 `json:"source"`
+	Points []MultiplierTrendPoint `json:"points"`
+}
+
+type MultiplierTrendResult struct {
+	RangeHours    int                     `json:"range_hours"`
+	BucketSeconds int64                   `json:"bucket_seconds"`
+	Models        []string                `json:"models"`
+	Sources       []MultiplierTrendSource `json:"sources"`
 }
 
 type TokenBindingRequest struct {

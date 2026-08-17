@@ -17,10 +17,11 @@ export function BillingCalculationSection(
 ) {
   const { t } = useTranslation()
   const calculation = buildCalculation(props.log, props.other, t)
-  const isDiscounted = calculation.discountMultiplier < 1
-  const isNinetyPercentCard =
-    props.other.usage_discount_source === 'blind_box_multiplier_card' &&
-    Math.abs(calculation.discountMultiplier - 0.9) < 0.000001
+  const hasUsageDiscount = calculation.usageDiscountMultiplier < 1
+  const hasPackageDiscount = calculation.packageMultiplier < 1
+  const appliedMultiplier = hasPackageDiscount
+    ? calculation.packageMultiplier
+    : calculation.usageDiscountMultiplier
 
   return (
     <section className='min-w-0 space-y-1.5'>
@@ -29,10 +30,12 @@ export function BillingCalculationSection(
           <Calculator className='size-3.5' aria-hidden='true' />
           {t('Charge Calculation')}
         </span>
-        {isNinetyPercentCard ? (
+        {hasUsageDiscount || hasPackageDiscount ? (
           <span className='text-success flex items-center gap-1 text-xs font-medium'>
             <BadgeCheck className='size-3.5' aria-hidden='true' />
-            {t('0.9 multiplier card applied')}
+            {t('{{multiplier}}x multiplier card applied', {
+              multiplier: formatRatioCompact(appliedMultiplier),
+            })}
           </span>
         ) : null}
       </div>
@@ -43,21 +46,39 @@ export function BillingCalculationSection(
           label={t('Base charge')}
           formula={calculation.baseFormula}
         />
-        {isDiscounted ? (
+        {hasUsageDiscount ? (
           <CalculationRow
             index={2}
             label={props.other.usage_discount_title || t('Multiplier discount')}
-            formula={`${formatLogQuota(calculation.beforeDiscount)} × ${formatRatio(calculation.discountMultiplier)} = ${formatLogQuota(calculation.afterDiscount)}`}
+            formula={`${formatLogQuota(calculation.beforeDiscount)} × ${formatRatio(calculation.usageDiscountMultiplier)} = ${formatLogQuota(calculation.afterDiscount)}`}
             meta={t('Saved {{quota}}', {
-              quota: formatLogQuota(calculation.savedQuota),
+              quota: formatLogQuota(calculation.usageSavedQuota),
+            })}
+            highlighted
+          />
+        ) : null}
+        {calculation.subscriptionFormula ? (
+          <CalculationRow
+            index={hasUsageDiscount ? 3 : 2}
+            label={t('Plan group conversion')}
+            formula={calculation.subscriptionFormula}
+          />
+        ) : null}
+        {hasPackageDiscount ? (
+          <CalculationRow
+            index={hasUsageDiscount ? 4 : 3}
+            label={t('Plan multiplier card')}
+            formula={`${formatLogQuota(calculation.beforePackageDiscount)} × ${formatRatio(calculation.packageMultiplier)} = ${formatLogQuota(calculation.finalCharge)}`}
+            meta={t('Saved {{quota}}', {
+              quota: formatLogQuota(calculation.packageSavedQuota),
             })}
             highlighted
           />
         ) : null}
         <CalculationRow
-          index={isDiscounted ? 3 : 2}
+          index={calculation.finalStepIndex}
           label={t('Final charge')}
-          formula={formatLogQuota(calculation.afterDiscount)}
+          formula={formatLogQuota(calculation.finalCharge)}
           strong
         />
         {!calculation.hasDiscountAudit ? (
@@ -124,18 +145,89 @@ function buildCalculation(log: UsageLog, other: LogOtherData, t: TFunction) {
     other.usage_discount_multiplier != null
   const beforeDiscount = other.quota_before_discount ?? log.quota
   const afterDiscount = other.quota_after_discount ?? log.quota
-  const discountMultiplier = other.usage_discount_multiplier ?? 1
-  const savedQuota =
+  const usageDiscountMultiplier = validDiscountMultiplier(
+    other.usage_discount_multiplier
+  )
+  const usageSavedQuota =
     other.usage_discount_quota ?? Math.max(0, beforeDiscount - afterDiscount)
+  const isSubscription = other.billing_source === 'subscription'
+  const packageMultiplier = isSubscription
+    ? validDiscountMultiplier(other.subscription_package_multiplier)
+    : 1
+  const beforePackageDiscount = isSubscription
+    ? subscriptionChargeBeforePackage(other, afterDiscount, packageMultiplier)
+    : afterDiscount
+  const finalCharge = log.quota
+  const subscriptionFormula = isSubscription
+    ? buildSubscriptionFormula(
+        other,
+        afterDiscount,
+        beforePackageDiscount,
+        packageMultiplier,
+        t
+      )
+    : null
+  const stepCount =
+    2 +
+    (usageDiscountMultiplier < 1 ? 1 : 0) +
+    (subscriptionFormula ? 1 : 0) +
+    (packageMultiplier < 1 ? 1 : 0)
 
   return {
     hasDiscountAudit,
     beforeDiscount,
     afterDiscount,
-    discountMultiplier,
-    savedQuota,
+    usageDiscountMultiplier,
+    usageSavedQuota,
+    packageMultiplier,
+    beforePackageDiscount,
+    packageSavedQuota: Math.max(0, beforePackageDiscount - finalCharge),
+    finalCharge,
+    subscriptionFormula,
+    finalStepIndex: stepCount,
     baseFormula: buildBaseFormula(other, beforeDiscount, t),
   }
+}
+
+function buildSubscriptionFormula(
+  other: LogOtherData,
+  walletQuota: number,
+  convertedQuota: number,
+  packageMultiplier: number,
+  t: TFunction
+) {
+  const walletRatio = billingGroupRatio(other)
+  const planRatio = validPositiveRatio(other.subscription_group_multiplier)
+  if (walletRatio > 0 && planRatio > 0) {
+    return t('Plan conversion formula', {
+      quota: formatLogQuota(walletQuota),
+      walletRatio: formatRatio(walletRatio),
+      planRatio: formatRatio(planRatio),
+      converted: formatLogQuota(convertedQuota),
+    })
+  }
+
+  const quotaScale = validPositiveRatio(other.subscription_quota_scale)
+  const groupScale = quotaScale / packageMultiplier
+  return t('Plan scale formula', {
+    quota: formatLogQuota(walletQuota),
+    scale: formatRatio(groupScale || 1),
+    converted: formatLogQuota(convertedQuota),
+  })
+}
+
+function subscriptionChargeBeforePackage(
+  other: LogOtherData,
+  walletQuota: number,
+  packageMultiplier: number
+) {
+  const walletRatio = billingGroupRatio(other)
+  const planRatio = validPositiveRatio(other.subscription_group_multiplier)
+  if (walletRatio > 0 && planRatio > 0) {
+    return Math.round((walletQuota / walletRatio) * planRatio)
+  }
+  const quotaScale = validPositiveRatio(other.subscription_quota_scale)
+  return Math.round(walletQuota * (quotaScale / packageMultiplier || 1))
 }
 
 function buildBaseFormula(other: LogOtherData, quota: number, t: TFunction) {
@@ -161,19 +253,34 @@ function buildBaseFormula(other: LogOtherData, quota: number, t: TFunction) {
 }
 
 function effectiveGroupRatio(other: LogOtherData) {
-	if (
-		other.billing_source === 'subscription' &&
-		other.subscription_group_multiplier != null &&
-		Number.isFinite(other.subscription_group_multiplier)
-	) {
-		return other.subscription_group_multiplier
-	}
-	const userRatio = other.user_group_ratio
+  return billingGroupRatio(other)
+}
+
+function billingGroupRatio(other: LogOtherData) {
+  if (other.billing_source === 'subscription') {
+    const originalRatio = validPositiveRatio(other.subscription_group_ratio)
+    if (originalRatio > 0) return originalRatio
+  }
+  const userRatio = other.user_group_ratio
   return userRatio != null && Number.isFinite(userRatio) && userRatio !== -1
     ? userRatio
     : (other.group_ratio ?? 1)
 }
 
+function validDiscountMultiplier(value: number | undefined) {
+  return value != null && Number.isFinite(value) && value > 0 && value < 1
+    ? value
+    : 1
+}
+
+function validPositiveRatio(value: number | undefined) {
+  return value != null && Number.isFinite(value) && value > 0 ? value : 0
+}
+
 function formatRatio(value: number) {
   return Number.isFinite(value) ? value.toFixed(4) : '1.0000'
+}
+
+function formatRatioCompact(value: number) {
+  return formatRatio(value).replace(/\.?0+$/, '')
 }

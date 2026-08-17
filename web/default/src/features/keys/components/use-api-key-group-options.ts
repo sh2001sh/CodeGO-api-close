@@ -51,6 +51,6 @@ export function useApiKeyGroupOptions() {
         )
       ).sort((left, right) => left.localeCompare(right)),
     }
-    return [...officialGroups, autoOption, ...marketplaceGroups]
+    return [autoOption, ...officialGroups, ...marketplaceGroups]
   }, [autoPool, groupsData?.data, marketplaceGroups])
 }

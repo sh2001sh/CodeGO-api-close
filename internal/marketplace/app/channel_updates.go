@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
@@ -74,7 +75,9 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 			reverify = true
 		}
 	}
-	applyCapacityUpdate(channel, req)
+	if err := applyCapacityUpdate(channel, req); err != nil {
+		return false, err
+	}
 	if err := applyAutoProbeUpdate(channel, req); err != nil {
 		return false, err
 	}
@@ -127,6 +130,8 @@ func invalidateChannelVerification(channel *marketplaceschema.Channel, group *ma
 	channel.GPT56MappingResults = "[]"
 	channel.GPT56MappingStatus = ""
 	channel.GPT56MappingCheckedAt = nil
+	channel.GPT56MappingLevel = ""
+	channel.GPT56MappingTrigger = ""
 	channel.Status = marketplacedomain.LifecycleDraft
 	group.LifecycleStatus = marketplacedomain.LifecycleDraft
 	group.VerificationStatus = marketplacedomain.VerificationQueued
@@ -159,9 +164,18 @@ func applyMultiplierChange(group *marketplaceschema.Group, channelID, sourceLabe
 	return nil
 }
 
-func applyCapacityUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) {
-	if req.MaxConcurrency != nil && *req.MaxConcurrency > 0 && *req.MaxConcurrency <= 10000 {
+func applyCapacityUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) error {
+	if req.MaxConcurrency != nil {
+		if err := validateConcurrencyLimit(*req.MaxConcurrency); err != nil {
+			return fmt.Errorf("渠道总并发: %w", err)
+		}
 		channel.MaxConcurrency = *req.MaxConcurrency
+	}
+	if req.UserMaxConcurrency != nil {
+		if err := validateConcurrencyLimit(*req.UserMaxConcurrency); err != nil {
+			return fmt.Errorf("单用户并发: %w", err)
+		}
+		channel.UserMaxConcurrency = *req.UserMaxConcurrency
 	}
 	if req.QPS != nil && *req.QPS > 0 && *req.QPS <= 10000 {
 		channel.QPS = *req.QPS
@@ -169,6 +183,7 @@ func applyCapacityUpdate(channel *marketplaceschema.Channel, req UpdateChannelRe
 	if req.MaintenanceWindow != nil {
 		channel.MaintenanceWindow = strings.TrimSpace(*req.MaintenanceWindow)
 	}
+	return nil
 }
 
 func applyCredentialUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) (bool, error) {

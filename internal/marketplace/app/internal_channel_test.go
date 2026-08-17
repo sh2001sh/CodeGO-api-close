@@ -18,7 +18,8 @@ func TestSyncInternalChannelUpdatesMarketplaceConcurrency(t *testing.T) {
 		ID: "marketplace-channel", InternalChannelID: &internal.Id,
 		ProviderType: "openai_compatible", DeclaredModels: `["gpt-5"]`,
 		BaseURLCiphertext: "encrypted-url", CredentialCiphertext: "encrypted-key",
-		MaxConcurrency: 7, SensitiveWordInterceptionEnabled: boolPointer(false),
+		MaxConcurrency: 7, UserMaxConcurrency: 2,
+		SensitiveWordInterceptionEnabled: boolPointer(false),
 	}
 	group := &marketplaceschema.Group{
 		ID: "marketplace-group", SystemDisplayName: "Marketplace Group",
@@ -28,6 +29,7 @@ func TestSyncInternalChannelUpdatesMarketplaceConcurrency(t *testing.T) {
 	require.NoError(t, syncInternalChannel(channel, group))
 	require.NoError(t, db.First(&internal, internal.Id).Error)
 	require.Equal(t, 7, internal.MarketplaceMaxConcurrency)
+	require.Equal(t, 2, internal.MarketplaceUserMaxConcurrency)
 	require.Equal(t, gatewayschema.ChannelScopeExternal, internal.ChannelScope)
 	require.NotNil(t, internal.SensitiveWordInterceptionEnabled)
 	require.False(t, *internal.SensitiveWordInterceptionEnabled)

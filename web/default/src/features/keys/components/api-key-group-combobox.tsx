@@ -205,14 +205,14 @@ export function ApiKeyGroupCombobox({
           <CommandList className='max-h-[360px]'>
             <CommandEmpty>{t('No group found.')}</CommandEmpty>
             <GroupOptions
-              heading={t('CodeGo 官方')}
-              options={officialOptions}
+              heading={t('全局 Auto')}
+              options={marketplaceAutoOptions}
               value={value}
               onSelect={handleSelect}
             />
             <GroupOptions
-              heading={t('全局 Auto')}
-              options={marketplaceAutoOptions}
+              heading={t('CodeGo 官方')}
+              options={officialOptions}
               value={value}
               onSelect={handleSelect}
             />

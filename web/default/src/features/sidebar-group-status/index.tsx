@@ -113,8 +113,7 @@ export function SidebarGroupStatusPage() {
               ))}
             </div>
             <span className='text-muted-foreground text-xs'>
-              官方分组可按模型使用 GPT
-              套餐或对应钱包；第三方分组固定只使用通用额度。
+              官方与第三方分组均可按页面所示倍率使用套餐或对应余额。
             </span>
           </div>
 
@@ -136,7 +135,7 @@ export function SidebarGroupStatusPage() {
                       <p className='text-muted-foreground text-sm'>
                         {(group.source_type ?? 'official') ===
                         'marketplace_user'
-                          ? '第三方渠道 · 仅通用额度'
+                          ? '第三方渠道 · 套餐与余额'
                           : '官方渠道'}{' '}
                         · {group.models.length} 个模型
                       </p>

@@ -14,6 +14,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var queueMarketplaceVerification = QueueRequiredVerification
+
 func CreateMarketplaceChannel(ownerUserID int, req CreateChannelRequest) (*ChannelView, error) {
 	if ownerUserID <= 0 {
 		return nil, errors.New("用户未登录")
@@ -39,7 +41,8 @@ func CreateMarketplaceChannel(ownerUserID int, req CreateChannelRequest) (*Chann
 	}); err != nil {
 		return nil, err
 	}
-	if err := QueueRequiredVerification(channel.ID); err != nil {
+	queueMarketplaceCapabilityProbe(channel.ID)
+	if err := queueMarketplaceVerification(channel.ID); err != nil {
 		return nil, err
 	}
 	return channelView(channel, group), nil
@@ -77,7 +80,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		CredentialTail: credentialTail(req.APIKey), CredentialVersion: 1,
 		DeclaredModels: string(models),
 		ModelPrices:    modelPrices,
-		MaxConcurrency: req.MaxConcurrency, QPS: req.QPS,
+		MaxConcurrency: req.MaxConcurrency, UserMaxConcurrency: req.UserMaxConcurrency, QPS: req.QPS,
 		MaintenanceWindow: strings.TrimSpace(req.MaintenanceWindow), Status: marketplacedomain.LifecycleDraft,
 		SensitiveWordInterceptionEnabled: &sensitiveWordInterceptionEnabled,
 		AutoProbeEnabled:                 req.AutoProbeEnabled, AutoProbeIntervalMinutes: req.AutoProbeIntervalMinutes,
@@ -86,6 +89,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 	if channel.AutoProbeIntervalMinutes == 0 {
 		channel.AutoProbeIntervalMinutes = 10
 	}
+	markMarketplaceCapabilitiesPending(channel)
 	group := newMarketplaceGroup(channelID, ownerUserID, ownerName, sourceLabel, req.Multiplier, req.Visibility)
 	return channel, group, nil
 }
@@ -107,7 +111,7 @@ func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLab
 		SystemDisplayName: marketplaceDisplayName(sourceLabel, multiplier, channelID),
 		InternalGroupName: marketplaceInternalGroupName(sourceLabel, groupID),
 		OwnerDisplayName:  ownerName, SourceType: marketplacedomain.SourceTypeMarketplaceUser,
-		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: multiplier,
+		CreditPoolPolicy: marketplacedomain.CreditPolicySubscriptionAndUniversal, Multiplier: multiplier,
 		RoutingVersion: 1, LifecycleStatus: marketplacedomain.LifecycleVerifying,
 		VerificationStatus: marketplacedomain.VerificationQueued, Visibility: visibility,
 	}
@@ -158,6 +162,7 @@ func UpdateAdminChannel(channelID string, req AdminUpdateChannelRequest) (*Chann
 }
 
 func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest, consistencyStatus *string) (*ChannelView, error) {
+	transportFingerprint := marketplaceTransportFingerprint(channel)
 	_, err := applyChannelUpdate(channel, group, req)
 	if err != nil {
 		return nil, err
@@ -166,6 +171,10 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		if err := applyModelConsistencyStatus(channel, *consistencyStatus); err != nil {
 			return nil, err
 		}
+	}
+	transportChanged := transportFingerprint != marketplaceTransportFingerprint(channel)
+	if transportChanged {
+		markMarketplaceCapabilitiesPending(channel)
 	}
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(channel).Error; err != nil {
@@ -179,6 +188,9 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		if err := syncInternalChannel(channel, group); err != nil {
 			return nil, err
 		}
+	}
+	if transportChanged {
+		queueMarketplaceCapabilityProbe(channel.ID)
 	}
 	return channelView(channel, group), nil
 }

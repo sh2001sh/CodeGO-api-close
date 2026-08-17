@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	"github.com/stretchr/testify/require"
@@ -113,6 +114,33 @@ func TestGroupListItemUsesLatestModelVerificationTime(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(payload), "verification_completed_at")
 	require.NotContains(t, string(payload), "independent_consumers")
+}
+
+func TestFilterAndSortGroupsMapsCurrentConcurrencyByInternalChannel(t *testing.T) {
+	group := marketplaceschema.Group{ID: "group-concurrency", ChannelID: "channel-concurrency"}
+	internalChannelID := 808
+	channel := marketplaceschema.Channel{
+		ID:                 "channel-concurrency",
+		InternalChannelID:  &internalChannelID,
+		MaxConcurrency:     12,
+		UserMaxConcurrency: 3,
+	}
+	release, admitted := gatewayruntime.TryBeginChannelRequest(internalChannelID, channel.MaxConcurrency)
+	require.True(t, admitted)
+	defer release()
+
+	items := filterAndSortGroups(
+		[]marketplaceschema.Group{group},
+		map[string]marketplaceschema.Channel{channel.ID: channel},
+		map[string]marketplaceschema.RankingSnapshot{},
+		nil,
+		GroupQuery{},
+	)
+
+	require.Len(t, items, 1)
+	require.Equal(t, 12, items[0].MaxConcurrency)
+	require.Equal(t, 3, items[0].UserMaxConcurrency)
+	require.Equal(t, 1, items[0].CurrentConcurrency)
 }
 
 func TestGroupListItemReturnsSanitizedGPT56MappingReport(t *testing.T) {

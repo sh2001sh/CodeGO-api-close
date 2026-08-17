@@ -46,11 +46,31 @@ export interface GPT56MappingResult {
 
 export interface GPT56MappingSample {
   index: number
+  variant?: string
   status: 'matched' | 'mismatch' | 'error' | 'missing_model'
   reported_model?: string
   latency_ms: number
   error?: string
   tested_at: string
+}
+
+export type GPT56MappingLevel = 'daily_light' | 'confirmation'
+
+export type GPT56MappingTrigger =
+  | 'scheduled'
+  | 'manual'
+  | 'initial'
+  | 'confirmation'
+
+export interface GPT56MappingRun {
+  id: string
+  parent_run_id?: string
+  level: GPT56MappingLevel
+  trigger: GPT56MappingTrigger
+  status: Exclude<GPT56MappingStatus, ''>
+  results: GPT56MappingResult[]
+  started_at: string
+  completed_at?: string | null
 }
 
 export interface MarketplaceGroup {
@@ -71,6 +91,8 @@ export interface MarketplaceGroup {
   verification_completed_at?: string | null
   verification_due_at?: string | null
   multiplier: number
+  subscription_enabled: boolean
+  subscription_multiplier: number
   models: string[]
   model_verification_results: ModelVerificationResult[]
   connectivity_test_status: ConnectivityTestStatus
@@ -79,6 +101,8 @@ export interface MarketplaceGroup {
   gpt56_mapping_results: GPT56MappingResult[]
   gpt56_mapping_status: GPT56MappingStatus
   gpt56_mapping_checked_at?: string | null
+  gpt56_mapping_level?: GPT56MappingLevel | ''
+  gpt56_mapping_trigger?: GPT56MappingTrigger | ''
   auto_probe_enabled: boolean
   auto_probe_interval_minutes: number
   auto_probe_model: string
@@ -102,6 +126,7 @@ export interface MarketplaceGroup {
   recent_request_bucket_seconds: number
   request_count: number
   max_concurrency: number
+  user_max_concurrency: number
   current_concurrency: number
   observing: boolean
   updated_at: string
@@ -125,6 +150,30 @@ export interface MarketplaceGroupList {
   window_hours: number
 }
 
+export type MultiplierTrendMetric = 'reliable_min' | 'listed_min' | 'median'
+
+export interface MarketplaceMultiplierTrendPoint {
+  timestamp: number
+  reliable_min: number | null
+  listed_min: number | null
+  median: number | null
+  reliable_group_id?: string
+  eligible_count: number
+  total_count: number
+}
+
+export interface MarketplaceMultiplierTrendSource {
+  source: string
+  points: MarketplaceMultiplierTrendPoint[]
+}
+
+export interface MarketplaceMultiplierTrend {
+  range_hours: number
+  bucket_seconds: number
+  models: string[]
+  sources: MarketplaceMultiplierTrendSource[]
+}
+
 export interface MarketplaceGroupHighlight {
   group_id: string
   system_display_name: string
@@ -142,6 +191,7 @@ export interface MarketplaceGroupHighlights {
 export interface MarketplaceChannel {
   id: string
   owner_user_id: number
+  owner_external_id: string
   group_id: string
   public_slug: string
   system_display_name: string
@@ -169,6 +219,9 @@ export interface MarketplaceChannel {
   gpt56_mapping_results: GPT56MappingResult[]
   gpt56_mapping_status: GPT56MappingStatus
   gpt56_mapping_checked_at?: string | null
+  gpt56_mapping_level?: GPT56MappingLevel | ''
+  gpt56_mapping_trigger?: GPT56MappingTrigger | ''
+  gpt56_mapping_history: GPT56MappingRun[]
   auto_probe_enabled: boolean
   auto_probe_interval_minutes: number
   auto_probe_model: string
@@ -176,6 +229,7 @@ export interface MarketplaceChannel {
   auto_probe_last_at?: string | null
   visibility: string
   max_concurrency: number
+  user_max_concurrency: number
   qps: number
   maintenance_window: string
   sensitive_word_interception_enabled: boolean
@@ -192,12 +246,14 @@ export interface MarketplaceChannel {
 
 export interface AdminMarketplaceChannelFilters {
   status?: string
+  ownerSearch?: string
   startTimestamp?: number
   endTimestamp?: number
 }
 
 export interface AdminOwnerIncomeItem {
   owner_user_id: number
+  owner_external_id: string
   request_count: number
   total_income: number
   pending_income: number
@@ -223,6 +279,7 @@ export interface ChannelFormValues {
   multiplier: number
   visibility: string
   max_concurrency: number
+  user_max_concurrency: number
   qps: number
   maintenance_window: string
   sensitive_word_interception_enabled: boolean
@@ -236,6 +293,7 @@ export interface ChannelUpdateValues {
   multiplier?: number
   visibility?: string
   max_concurrency?: number
+  user_max_concurrency?: number
   qps?: number
   maintenance_window?: string
   sensitive_word_interception_enabled?: boolean

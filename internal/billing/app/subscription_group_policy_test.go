@@ -114,8 +114,39 @@ func TestMonthlyPassMultiplierAppliesToSubscriptionFunding(t *testing.T) {
 	require.NotNil(t, session)
 	require.Equal(t, int64(100), preConsumed)
 	require.Equal(t, BillingSourceSubscription, info.BillingSource)
-	require.Equal(t, 0.1, info.SubscriptionGroupMultiplier)
+	require.Equal(t, 1.0, info.SubscriptionGroupMultiplier)
+	require.Equal(t, 0.1, info.SubscriptionPackageMultiplier)
 	require.Equal(t, 0.1, info.SubscriptionQuotaScale)
+}
+
+func TestMarketplaceGroupUsesDerivedSubscriptionMultiplier(t *testing.T) {
+	previousHooks := subscriptionFundingHooks
+	var preConsumed int64
+	RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
+		PreConsume: func(_ string, _ int, _ string, amount int64) (*SubscriptionFundingPreConsumeResult, error) {
+			preConsumed = amount
+			return &SubscriptionFundingPreConsumeResult{UserSubscriptionID: 299, PreConsumed: amount, AmountTotal: 10_000, AmountUsedAfter: amount}, nil
+		},
+	})
+	t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		UserId: 3, OriginModelName: "gpt-5", RequestId: "marketplace-subscription-funded",
+		UsingGroup: "marketplace-internal", MarketplaceGroupID: "marketplace-group",
+		MarketplaceMultiplier: 0.06, ChannelMeta: &relaycommon.ChannelMeta{ChannelScope: gatewayschema.ChannelScopeExternal},
+		IsPlayground: true, ForcePreConsume: true,
+		UserSetting: dto.UserSetting{FundingSourceOrder: []string{BillingSourceSubscription, BillingSourceWallet}},
+		PriceData:   types.PriceData{GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 0.06}},
+	}
+
+	session, apiErr := NewBillingSession(ctx, info, 60)
+	require.Nil(t, apiErr)
+	require.NotNil(t, session)
+	require.Equal(t, int64(600), preConsumed)
+	require.Equal(t, BillingSourceSubscription, info.BillingSource)
+	require.InDelta(t, 0.6, info.SubscriptionGroupMultiplier, 1e-9)
+	require.InDelta(t, 10, info.SubscriptionQuotaScale, 1e-9)
 }
 
 func TestMonthlyPassMultiplierDoesNotApplyAfterWalletFallback(t *testing.T) {

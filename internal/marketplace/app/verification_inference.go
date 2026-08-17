@@ -55,7 +55,20 @@ func probeMarketplaceInferenceTimed(provider, baseURL, apiKey, model string) (in
 }
 
 func probeMarketplaceInferenceReportedModel(provider, baseURL, apiKey, model string) (int64, string, error) {
-	endpoint, payload, err := inferenceProbeRequest(provider, baseURL, model)
+	return probeMarketplaceInferenceReportedModelWithVariant(
+		provider, baseURL, apiKey, model, gpt56ProbeVariant{
+			Name: "default", Prompt: "Reply with OK.", MaxOutputTokens: 8,
+		},
+	)
+}
+
+func probeMarketplaceInferenceReportedModelWithVariant(
+	provider, baseURL, apiKey, model string,
+	variant gpt56ProbeVariant,
+) (int64, string, error) {
+	endpoint, payload, err := inferenceProbeRequestWithPrompt(
+		provider, baseURL, model, variant.Prompt, variant.MaxOutputTokens,
+	)
 	if err != nil {
 		return 0, "", err
 	}
@@ -105,28 +118,39 @@ func probeMarketplaceInferenceReportedModel(provider, baseURL, apiKey, model str
 }
 
 func inferenceProbeRequest(provider, baseURL, model string) (string, map[string]any, error) {
+	return inferenceProbeRequestWithPrompt(provider, baseURL, model, "Reply with OK.", 8)
+}
+
+func inferenceProbeRequestWithPrompt(
+	provider, baseURL, model, prompt string,
+	maxOutputTokens int,
+) (string, map[string]any, error) {
+	if maxOutputTokens <= 0 {
+		maxOutputTokens = 8
+	}
 	switch provider {
 	case "codex":
 		endpoint, err := apiEndpoint(baseURL, "/v1/responses")
 		return endpoint, map[string]any{
-			"model": model, "input": "Reply with OK.", "max_output_tokens": 8,
+			"model": model, "input": prompt, "max_output_tokens": maxOutputTokens,
 		}, err
 	case "anthropic":
 		endpoint, err := apiEndpoint(baseURL, "/v1/messages")
 		return endpoint, map[string]any{
-			"model": model, "max_tokens": 8,
-			"messages": []map[string]string{{"role": "user", "content": "Reply with OK."}},
+			"model": model, "max_tokens": maxOutputTokens,
+			"messages": []map[string]string{{"role": "user", "content": prompt}},
 		}, err
 	case "gemini":
 		endpoint, err := geminiInferenceEndpoint(baseURL, model)
 		return endpoint, map[string]any{
-			"contents": []map[string]any{{"parts": []map[string]string{{"text": "Reply with OK."}}}},
+			"contents":         []map[string]any{{"parts": []map[string]string{{"text": prompt}}}},
+			"generationConfig": map[string]any{"maxOutputTokens": maxOutputTokens},
 		}, err
 	default:
 		endpoint, err := apiEndpoint(baseURL, "/v1/chat/completions")
 		return endpoint, map[string]any{
-			"model": model, "max_tokens": 8,
-			"messages": []map[string]string{{"role": "user", "content": "Reply with OK."}},
+			"model": model, "max_tokens": maxOutputTokens,
+			"messages": []map[string]string{{"role": "user", "content": prompt}},
 		}, err
 	}
 }

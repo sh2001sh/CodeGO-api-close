@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
+	routepin "github.com/sh2001sh/new-api/internal/gateway/routepin"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
@@ -45,6 +46,10 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 	httpctx.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 
 	key, index, newAPIError := gatewaystore.GetNextEnabledChannelKey(channel)
+	if pinnedIndex, pinned := routepin.KeyIndex(c, channel.Id); pinned {
+		index = pinnedIndex
+		key, newAPIError = gatewaystore.GetEnabledChannelKeyByIndex(channel, pinnedIndex)
+	}
 	if newAPIError != nil {
 		return newAPIError
 	}

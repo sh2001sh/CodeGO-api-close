@@ -31,7 +31,7 @@ export function TokenBindPanel(props: { groupId: string; compact?: boolean }) {
           {t('绑定到指定 Token')}
         </div>
         <p className='text-muted-foreground mt-1 text-xs leading-5'>
-          {t('仅影响所选 API Key；此市场分组使用通用额度。')}
+          {t('仅影响所选 API Key；系统按资金源顺序使用套餐或通用余额。')}
         </p>
       </div>
       <div className='flex items-center gap-2'>

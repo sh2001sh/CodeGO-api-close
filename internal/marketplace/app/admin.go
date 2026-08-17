@@ -21,6 +21,16 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
 	}
 	query := platformdb.DB.Model(&marketplaceschema.Channel{})
+	if normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch); normalizedSearch != "" {
+		ownerUserIDs, err := ownerUserIDsByExternalID(normalizedSearch)
+		if err != nil {
+			return nil, err
+		}
+		if len(ownerUserIDs) == 0 {
+			return []ChannelView{}, nil
+		}
+		query = query.Where("owner_user_id IN ?", ownerUserIDs)
+	}
 	if strings.TrimSpace(input.Status) != "" {
 		query = query.Where("status = ?", input.Status)
 	}
@@ -36,10 +46,19 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 	if err != nil {
 		return nil, err
 	}
+	ownerUserIDs := make([]int, 0, len(channels))
+	for index := range channels {
+		ownerUserIDs = append(ownerUserIDs, channels[index].OwnerUserID)
+	}
+	externalIDs, err := ownerExternalIDs(ownerUserIDs)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]ChannelView, 0, len(channels))
 	for index := range channels {
 		if group := groups[channels[index].ID]; group != nil {
 			view := channelView(&channels[index], group)
+			view.OwnerExternalID = externalIDs[channels[index].OwnerUserID]
 			view.RequestCount = earnings[group.ID].RequestCount
 			view.TotalIncome = earnings[group.ID].TotalIncome
 			view.PendingIncome = earnings[group.ID].PendingIncome
@@ -126,11 +145,13 @@ func createInternalChannel(channel *marketplaceschema.Channel, group *marketplac
 		Status: constant.ChannelStatusEnabled, Name: group.SystemDisplayName,
 		ChannelScope:                     gatewayschema.ChannelScopeExternal,
 		MarketplaceMaxConcurrency:        channel.MaxConcurrency,
+		MarketplaceUserMaxConcurrency:    channel.UserMaxConcurrency,
 		SensitiveWordInterceptionEnabled: channel.SensitiveWordInterceptionEnabled,
 		CreatedTime:                      platformruntime.GetTimestamp(), BaseURL: &baseURL,
 		Models: strings.Join(decodeModels(channel.DeclaredModels), ","), Group: group.InternalGroupName,
 		OtherInfo: string(metadata),
 	}
+	internal.ChannelInfo.ResponsesCapabilities = decodeMarketplaceCapabilities(channel.TransportCapabilities)
 	if err := gatewaystore.CreateChannel(internal); err != nil {
 		return err
 	}

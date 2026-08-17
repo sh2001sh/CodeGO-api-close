@@ -14,9 +14,9 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { DateTimePicker } from '@/components/datetime-picker'
 import type { ApiKeyFormValues } from '../lib'
-import { ApiKeyFormSection } from './api-key-form-section'
 import { ApiKeyAutoRoutePoolDialog } from './api-key-auto-route-pool-dialog'
 import { ApiKeyAvailableModelsDialog } from './api-key-available-models-dialog'
+import { ApiKeyFormSection } from './api-key-form-section'
 import {
   ApiKeyGroupCombobox,
   type ApiKeyGroupOption,
@@ -122,25 +122,25 @@ function GroupField(props: { form: ApiKeyForm; groups: ApiKeyGroupOption[] }) {
         )
         return (
           <FormItem>
-          <FormLabel>{t('Group')}</FormLabel>
-          <FormControl>
-            <ApiKeyGroupCombobox
-              options={props.groups}
-              value={field.value}
-              onValueChange={field.onChange}
-              placeholder={t('Select a group')}
-            />
-          </FormControl>
-          {field.value?.startsWith('market:') && (
-            <FormDescription>
-              {t('第三方分组只使用通用额度，并按所示倍率计费。')}
-            </FormDescription>
-          )}
-          <div className='mt-2 flex flex-wrap gap-2'>
-            <ApiKeyAvailableModelsDialog option={selectedOption} />
-            <ApiKeyAutoRoutePoolDialog />
-          </div>
-          <FormMessage />
+            <FormLabel>{t('Group')}</FormLabel>
+            <FormControl>
+              <ApiKeyGroupCombobox
+                options={props.groups}
+                value={field.value}
+                onValueChange={field.onChange}
+                placeholder={t('Select a group')}
+              />
+            </FormControl>
+            {field.value?.startsWith('market:') && (
+              <FormDescription>
+                {t('第三方分组可按所示倍率使用套餐或通用余额。')}
+              </FormDescription>
+            )}
+            <div className='mt-2 flex flex-wrap gap-2'>
+              <ApiKeyAvailableModelsDialog option={selectedOption} />
+              <ApiKeyAutoRoutePoolDialog />
+            </div>
+            <FormMessage />
           </FormItem>
         )
       }}

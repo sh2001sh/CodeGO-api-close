@@ -18,6 +18,16 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 			COALESCE(SUM(owner_net_amount), 0) AS total_income,
 			COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income,
 			COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount ELSE 0 END), 0) AS released_income`)
+	if normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch); normalizedSearch != "" {
+		ownerUserIDs, err := ownerUserIDsByExternalID(normalizedSearch)
+		if err != nil {
+			return nil, err
+		}
+		if len(ownerUserIDs) == 0 {
+			return &AdminOwnerIncomeResult{Items: []AdminOwnerIncomeItem{}}, nil
+		}
+		query = query.Where("owner_user_id IN ?", ownerUserIDs)
+	}
 	if input.StartTimestamp > 0 {
 		query = query.Where("created_at >= ?", time.Unix(input.StartTimestamp, 0))
 	}
@@ -29,8 +39,17 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 	if err := query.Group("owner_user_id").Order("total_income DESC, owner_user_id ASC").Scan(&result.Items).Error; err != nil {
 		return nil, err
 	}
-	result.OwnerCount = len(result.Items)
+	ownerUserIDs := make([]int, 0, len(result.Items))
 	for _, item := range result.Items {
+		ownerUserIDs = append(ownerUserIDs, item.OwnerUserID)
+	}
+	externalIDs, err := ownerExternalIDs(ownerUserIDs)
+	if err != nil {
+		return nil, err
+	}
+	result.OwnerCount = len(result.Items)
+	for index, item := range result.Items {
+		result.Items[index].OwnerExternalID = externalIDs[item.OwnerUserID]
 		result.RequestCount += item.RequestCount
 		result.TotalIncome += item.TotalIncome
 		result.PendingIncome += item.PendingIncome

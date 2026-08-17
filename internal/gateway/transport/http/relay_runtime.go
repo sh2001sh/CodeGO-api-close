@@ -21,6 +21,7 @@ import (
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
+	routepin "github.com/sh2001sh/new-api/internal/gateway/routepin"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
@@ -89,6 +90,20 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 }
 
 func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gatewayroutingapp.RetryParam) (*gatewayschema.Channel, *types.NewAPIError) {
+	if pin, pinned := routepin.FromContext(c); pinned {
+		channel, err := gatewaystore.LoadChannelByID(pin.ChannelID, true)
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if setupErr := gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, info.OriginModelName); setupErr != nil {
+			return nil, setupErr
+		}
+		if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
+			info.RoutePoolID = selection.PoolID
+			info.ProcurementCostMultiplier = selection.ProcurementCostMultiplier
+		}
+		return channel, nil
+	}
 	if info.ChannelMeta == nil {
 		autoBan := c.GetBool("auto_ban")
 		autoBanInt := 1

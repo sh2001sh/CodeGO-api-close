@@ -10,6 +10,7 @@ import (
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformschema "github.com/sh2001sh/new-api/internal/platform/schema"
@@ -85,6 +86,8 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 		"gateway_route_plans",
 		"gateway_execution_attempts",
 		"gateway_usage_evidence",
+		"gateway_responses_background_jobs",
+		"gateway_responses_background_events",
 		"route_pools",
 		"route_pool_members",
 		"blind_box_orders",
@@ -109,6 +112,14 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.True(t, appliedMigrationNeedsRepair(db, "20260816_unified_credit_v1_channel_scope"))
 	require.NoError(t, ApplyV2Migrations(context.Background(), false))
 	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceUserMaxConcurrency"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency"))
+	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "MarketplaceUserMaxConcurrency"))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260817_marketplace_channel_concurrency_limits"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceUserMaxConcurrency"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency"))
 	for _, tableName := range []string{
 		"user_companion_pets",
 		"daily_mission_rewards",
@@ -133,6 +144,34 @@ func TestMigrateMarketplaceAutoRoutePoolIsIdempotent(t *testing.T) {
 	require.True(t, db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}))
 	require.True(t, db.Migrator().HasIndex(&marketplaceschema.AutoRoutePoolMember{}, "uq_marketplace_auto_pool_member"))
 	require.True(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+}
+
+func TestMigrateMarketplaceSubscriptionBillingUpgradesExistingGroupsAndSettlements(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &marketplaceschema.Settlement{}))
+
+	group := marketplaceschema.Group{
+		ID: "group", ChannelID: "channel", OwnerUserID: 1, PublicSlug: "group",
+		SystemDisplayName: "group", InternalGroupName: "group",
+		SourceType:       marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly,
+		Multiplier:       0.06, LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public",
+	}
+	require.NoError(t, db.Create(&group).Error)
+	settlement := marketplaceschema.Settlement{
+		ID: "settlement", RequestID: "request", GroupID: group.ID,
+		OwnerUserID: 1, ConsumerUserID: 2, ConsumerAmount: 60,
+		PlatformCommission: 3, OwnerNetAmount: 57, Multiplier: 0.06,
+		Status: "pending",
+	}
+	require.NoError(t, db.Create(&settlement).Error)
+
+	require.NoError(t, migrateMarketplaceSubscriptionBilling(db))
+	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
+	require.Equal(t, marketplacedomain.CreditPolicySubscriptionAndUniversal, group.CreditPoolPolicy)
+	require.NoError(t, db.First(&settlement, "id = ?", settlement.ID).Error)
+	require.Equal(t, int64(60), settlement.SettlementGrossAmount)
 }
 
 func TestMigrateWalletTransferFeeFieldsAddsMissingColumns(t *testing.T) {
@@ -425,6 +464,7 @@ func TestMigrateMarketplaceChannelProbeFieldsUpgradesExistingSQLiteTable(t *test
 
 	require.NoError(t, migrateMarketplaceChannelConnectivityTest(db))
 	require.NoError(t, migrateMarketplaceChannelAutoProbe(db))
+	require.NoError(t, migrateMarketplaceTransportCapabilities(db))
 	for _, field := range []string{
 		"ConnectivityTestStatus",
 		"ConnectivityTestCheckedAt",
@@ -433,6 +473,7 @@ func TestMigrateMarketplaceChannelProbeFieldsUpgradesExistingSQLiteTable(t *test
 		"AutoProbeModel",
 		"AutoProbeLastStatus",
 		"AutoProbeLastAt",
+		"TransportCapabilities",
 	} {
 		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
 	}
@@ -447,6 +488,7 @@ func TestMigrateMarketplaceChannelProbeFieldsUpgradesExistingSQLiteTable(t *test
 	}
 	require.NoError(t, migrateMarketplaceChannelConnectivityTest(db))
 	require.NoError(t, migrateMarketplaceChannelAutoProbe(db))
+	require.NoError(t, migrateMarketplaceTransportCapabilities(db))
 }
 
 func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *testing.T) {

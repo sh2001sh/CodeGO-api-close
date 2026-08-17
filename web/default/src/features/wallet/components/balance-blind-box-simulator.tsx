@@ -252,7 +252,7 @@ function SimulationMetrics(props: {
     ],
     ['累计投入', formatUsdAmount(quotaUnitsToUsd(props.stats.spentQuota))],
     ['累计额度奖励', formatUsdAmount(quotaUnitsToUsd(props.stats.rewardQuota))],
-    ['本次实际回报率', `${props.stats.returnRate.toFixed(1)}%`],
+    ['账户回报率', `${props.stats.accountReturnRate.toFixed(1)}%`],
   ]
   return (
     <div className='border-t'>
@@ -268,8 +268,10 @@ function SimulationMetrics(props: {
         ))}
       </div>
       <div className='bg-muted/30 text-muted-foreground border-t px-4 py-2 text-[11px] leading-5 sm:px-5'>
-        普通奖池理论回报率约 {economics.returnRate.toFixed(2)}
-        %，包含“再来一抽”、不含首抽与大小保底；上方为本次随机结果，短期可能高于或低于理论值。
+        账户回报率按开抽前后余额变化计算；累计返奖率为{' '}
+        {props.stats.payoutRate.toFixed(2)}%，普通奖池理论返奖率约{' '}
+        {economics.payoutRate.toFixed(2)}
+        %。理论值包含“再来一抽”，不含首抽与大小保底。
       </div>
     </div>
   )

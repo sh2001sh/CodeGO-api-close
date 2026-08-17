@@ -7,6 +7,7 @@ import {
   getAdminMarketplaceChannels,
   getAdminOwnerIncome,
   getMarketplaceGroups,
+  getMarketplaceMultiplierTrends,
   getMarketplaceAutoRoutePool,
   getMyMarketplaceChannels,
   getMyMarketplaceUsageLogs,
@@ -64,6 +65,18 @@ export function useMarketplaceGroups(filters: GroupFilters) {
   })
 }
 
+export function useMarketplaceMultiplierTrends(
+  rangeHours: number,
+  model: string
+) {
+  return useQuery({
+    queryKey: ['marketplace-multiplier-trends', rangeHours, model],
+    queryFn: () => getMarketplaceMultiplierTrends({ rangeHours, model }),
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  })
+}
+
 export function useMarketplaceAutoRoutePool(enabled = true) {
   return useQuery({
     queryKey: ['marketplace-auto-route-pool'],
@@ -118,6 +131,9 @@ export function useMarketplaceMutations() {
   const invalidate = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] }),
+      queryClient.invalidateQueries({
+        queryKey: ['marketplace-multiplier-trends'],
+      }),
       queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] }),
     ])
   }
@@ -184,6 +200,9 @@ export function useAdminMarketplaceReview() {
         queryKey: ['marketplace-channels'],
       })
       await queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] })
+      await queryClient.invalidateQueries({
+        queryKey: ['marketplace-multiplier-trends'],
+      })
     },
   })
 }
@@ -198,6 +217,9 @@ export function useAdminMarketplaceVerification(action: 'detect' | 'test') {
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ['marketplace-channels'],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['marketplace-multiplier-trends'],
       })
     },
   })
@@ -216,6 +238,9 @@ export function useMarketplaceChannelUpdate(admin: boolean) {
       })
       await queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] })
       await queryClient.invalidateQueries({
+        queryKey: ['marketplace-multiplier-trends'],
+      })
+      await queryClient.invalidateQueries({
         queryKey: ['selectable-marketplace-groups'],
       })
     },
@@ -231,6 +256,9 @@ export function useMarketplaceChannelDelete(admin: boolean) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] }),
         queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['marketplace-multiplier-trends'],
+        }),
         queryClient.invalidateQueries({
           queryKey: ['marketplace-auto-route-pool'],
         }),

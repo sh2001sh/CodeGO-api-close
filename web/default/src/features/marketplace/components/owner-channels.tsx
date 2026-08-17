@@ -137,6 +137,9 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                       status={channel.gpt56_mapping_status}
                       results={channel.gpt56_mapping_results}
                       checkedAt={channel.gpt56_mapping_checked_at}
+                      level={channel.gpt56_mapping_level}
+                      trigger={channel.gpt56_mapping_trigger}
+                      history={channel.gpt56_mapping_history}
                     />
                     <AutoProbeStatusView
                       enabled={channel.auto_probe_enabled}

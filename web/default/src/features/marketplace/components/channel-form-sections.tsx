@@ -410,7 +410,9 @@ function ChannelAutoProbePolicy({ form }: { form: ChannelForm }) {
           min='1'
           max='1440'
           disabled={!enabled}
-          {...form.register('auto_probe_interval_minutes', { valueAsNumber: true })}
+          {...form.register('auto_probe_interval_minutes', {
+            valueAsNumber: true,
+          })}
         />
       </FormField>
       <FormField label={t('探针模型')}>
@@ -444,7 +446,7 @@ function StrategyMetrics(props: { form: ChannelForm }) {
   const { t } = useTranslation()
   const { form } = props
   return (
-    <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+    <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
       <FormField
         label={t('消费倍率')}
         error={form.formState.errors.multiplier?.message}
@@ -458,14 +460,25 @@ function StrategyMetrics(props: { form: ChannelForm }) {
         />
       </FormField>
       <FormField
-        label={t('最大并发')}
+        label={t('渠道总并发（0 不限制）')}
         error={form.formState.errors.max_concurrency?.message}
       >
         <Input
           type='number'
-          min='1'
+          min='0'
           max='10000'
           {...form.register('max_concurrency', { valueAsNumber: true })}
+        />
+      </FormField>
+      <FormField
+        label={t('单用户并发（0 不限制）')}
+        error={form.formState.errors.user_max_concurrency?.message}
+      >
+        <Input
+          type='number'
+          min='0'
+          max='10000'
+          {...form.register('user_max_concurrency', { valueAsNumber: true })}
         />
       </FormField>
       <FormField label='QPS' error={form.formState.errors.qps?.message}>

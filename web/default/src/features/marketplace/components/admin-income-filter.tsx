@@ -1,7 +1,8 @@
-import { RefreshCcw, RotateCcw } from 'lucide-react'
+import { RefreshCcw, RotateCcw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import type { AdminOwnerIncomeResult } from '../types'
 
@@ -12,6 +13,8 @@ export interface AdminIncomeRange {
 
 export function AdminIncomeFilter(props: {
   report?: AdminOwnerIncomeResult
+  ownerSearch: string
+  onOwnerSearchChange: (value: string) => void
   range: AdminIncomeRange
   onRangeChange: (range: AdminIncomeRange) => void
   onRefresh: () => void
@@ -43,6 +46,18 @@ export function AdminIncomeFilter(props: {
           />
         </div>
         <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+          <div className='relative w-full sm:w-48'>
+            <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
+            <Input
+              value={props.ownerSearch}
+              onChange={(event) =>
+                props.onOwnerSearchChange(event.currentTarget.value)
+              }
+              placeholder={t('搜索渠道主外部 ID')}
+              aria-label={t('搜索渠道主外部 ID')}
+              className='pl-9'
+            />
+          </div>
           <CompactDateTimeRangePicker
             start={props.range.start}
             end={props.range.end}
@@ -85,7 +100,7 @@ export function AdminIncomeFilter(props: {
               className='border-border grid grid-cols-2 gap-x-4 gap-y-1 border-b px-4 py-2.5 text-xs last:border-b-0 sm:grid-cols-[minmax(8rem,1fr)_repeat(4,minmax(6rem,auto))] sm:items-center'
             >
               <span className='text-foreground font-medium tabular-nums'>
-                {t('渠道主 ID')}: {item.owner_user_id}
+                {t('渠道主 ID')}: {item.owner_external_id || '--'}
               </span>
               <ReportValue
                 label={t('收益')}

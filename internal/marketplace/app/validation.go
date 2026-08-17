@@ -40,11 +40,24 @@ func validateCreateRequest(req CreateChannelRequest) error {
 	if err := validateVisibility(req.Visibility); err != nil {
 		return err
 	}
-	if req.MaxConcurrency <= 0 || req.MaxConcurrency > 10000 || req.QPS <= 0 || req.QPS > 10000 {
-		return errors.New("容量声明必须是有效的最大并发和 QPS")
+	if err := validateConcurrencyLimit(req.MaxConcurrency); err != nil {
+		return fmt.Errorf("渠道总并发: %w", err)
+	}
+	if err := validateConcurrencyLimit(req.UserMaxConcurrency); err != nil {
+		return fmt.Errorf("单用户并发: %w", err)
+	}
+	if req.QPS <= 0 || req.QPS > 10000 {
+		return errors.New("QPS 必须大于 0 且不能超过 10000")
 	}
 	if err := validateAutoProbe(req.AutoProbeEnabled, req.AutoProbeIntervalMinutes, req.AutoProbeModel, req.DeclaredModels); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateConcurrencyLimit(limit int) error {
+	if limit < 0 || limit > 10000 {
+		return errors.New("必须在 0 到 10000 之间，0 表示不限制")
 	}
 	return nil
 }

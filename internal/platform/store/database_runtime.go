@@ -70,6 +70,9 @@ func InitPrimaryDB() error {
 		if err := migrateMarketplaceAutoRoutePool(platformdb.DB); err != nil {
 			return err
 		}
+		if err := migrateMarketplaceTransportCapabilities(platformdb.DB); err != nil {
+			return err
+		}
 	}
 
 	if !platformconfig.IsMasterNode {
@@ -243,6 +246,8 @@ func migratePrimaryDB() error {
 
 	err := platformdb.DB.AutoMigrate(
 		&gatewayschema.Channel{},
+		&gatewayschema.ResponsesBackgroundJob{},
+		&gatewayschema.ResponsesBackgroundEvent{},
 		&identityschema.Token{},
 		&identityschema.User{},
 		&identitydomain.PasskeyCredential{},
@@ -304,7 +309,9 @@ func migratePrimaryDB() error {
 		&marketplaceschema.ChannelIDSequence{},
 		&marketplaceschema.Group{},
 		&marketplaceschema.VerificationRun{},
+		&marketplaceschema.GPT56MappingRun{},
 		&marketplaceschema.RankingSnapshot{},
+		&marketplaceschema.MultiplierTrendSnapshot{},
 		&marketplaceschema.ChannelFeedback{},
 		&marketplaceschema.Settlement{},
 		&marketplaceschema.AutoRoutePoolMember{},

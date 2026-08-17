@@ -4,8 +4,11 @@ const (
 	SourceTypeOfficial        = "official"
 	SourceTypeMarketplaceUser = "marketplace_user"
 
-	CreditPolicyOfficialDefault = "official_model_default"
-	CreditPolicyUniversalOnly   = "marketplace_universal_only"
+	CreditPolicyOfficialDefault          = "official_model_default"
+	CreditPolicyUniversalOnly            = "marketplace_universal_only"
+	CreditPolicySubscriptionAndUniversal = "marketplace_subscription_and_universal"
+
+	MarketplaceSubscriptionMultiplierScale = 10.0
 
 	LifecycleDraft         = "draft"
 	LifecycleVerifying     = "verifying"
@@ -40,6 +43,15 @@ const (
 	TokenGroupPrefix    = "market:"
 	TokenAutoGroupValue = TokenGroupPrefix + "auto"
 )
+
+// SubscriptionMultiplier converts a marketplace wallet multiplier into the
+// equivalent subscription multiplier using the official 1x / 0.1x baseline.
+func SubscriptionMultiplier(walletMultiplier float64) float64 {
+	if walletMultiplier <= 0 {
+		return 0
+	}
+	return walletMultiplier * MarketplaceSubscriptionMultiplierScale
+}
 
 func AcceptsTraffic(status string) bool {
 	return status == LifecycleActive || status == LifecycleDegraded

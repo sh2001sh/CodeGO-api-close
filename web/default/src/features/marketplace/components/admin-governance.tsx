@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useDeferredValue, useState } from 'react'
 import { Activity, Pencil, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
@@ -25,14 +25,18 @@ import { MarketplaceStatusBadge } from './status-badge'
 export function AdminGovernance() {
   const { t } = useTranslation()
   const [incomeRange, setIncomeRange] = useState<AdminIncomeRange>({})
+  const [ownerSearch, setOwnerSearch] = useState('')
+  const deferredOwnerSearch = useDeferredValue(ownerSearch.trim())
   const query = useAdminMarketplaceChannels(
     {
+      ownerSearch: deferredOwnerSearch,
       startTimestamp: toTimestamp(incomeRange.start),
       endTimestamp: toTimestamp(incomeRange.end),
     },
     true
   )
   const ownerIncomeQuery = useAdminOwnerIncome({
+    ownerSearch: deferredOwnerSearch,
     startTimestamp: toTimestamp(incomeRange.start),
     endTimestamp: toTimestamp(incomeRange.end),
   })
@@ -53,6 +57,8 @@ export function AdminGovernance() {
       </div>
       <AdminIncomeFilter
         report={ownerIncomeQuery.data}
+        ownerSearch={ownerSearch}
+        onOwnerSearchChange={setOwnerSearch}
         range={incomeRange}
         onRangeChange={setIncomeRange}
         onRefresh={() => {
@@ -93,7 +99,7 @@ export function AdminGovernance() {
                   <div className='text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs'>
                     <span className='tabular-nums'>ID {channel.id}</span>
                     <span className='text-foreground font-medium tabular-nums'>
-                      {t('渠道主 ID')}: {channel.owner_user_id}
+                      {t('渠道主 ID')}: {channel.owner_external_id || '--'}
                     </span>
                     <span>{channel.provider_type}</span>
                     <span className='text-foreground font-medium'>
@@ -107,7 +113,11 @@ export function AdminGovernance() {
                       {t('检测')}: {channel.verification_status}
                     </span>
                     <span>
-                      {t('并发')} {channel.max_concurrency}
+                      {t('总并发')} {channel.max_concurrency || t('不限')}
+                    </span>
+                    <span>
+                      {t('单用户并发')}{' '}
+                      {channel.user_max_concurrency || t('不限')}
                     </span>
                     <span>QPS {channel.qps}</span>
                   </div>
@@ -134,6 +144,9 @@ export function AdminGovernance() {
                     status={channel.gpt56_mapping_status}
                     results={channel.gpt56_mapping_results}
                     checkedAt={channel.gpt56_mapping_checked_at}
+                    level={channel.gpt56_mapping_level}
+                    trigger={channel.gpt56_mapping_trigger}
+                    history={channel.gpt56_mapping_history}
                   />
                   <ConnectivityTestStatusView
                     status={channel.connectivity_test_status}

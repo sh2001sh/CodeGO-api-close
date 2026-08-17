@@ -36,7 +36,11 @@ func QueueGPT56MappingVerification(channelID string) error {
 	if err := setRequiredVerificationQueued(channelID); err != nil {
 		return err
 	}
-	go executeGPT56MappingVerification(channelID)
+	trigger := GPT56MappingTriggerManual
+	if channel.InternalChannelID == nil {
+		trigger = GPT56MappingTriggerInitial
+	}
+	go executeGPT56MappingVerification(channelID, trigger)
 	return nil
 }
 
@@ -119,12 +123,14 @@ func executeNativeVerification(runID string) {
 	completeVerification(run, channel, group, results, err)
 }
 
-func executeGPT56MappingVerification(channelID string) {
+func executeGPT56MappingVerification(channelID, trigger string) {
 	channel, group, err := loadChannelGroup(channelID)
 	if err != nil || !isGPT56MappingEligible(channel) {
 		return
 	}
-	_, err = runGPT56MappingCheck(channel)
+	_, err = runGPT56MappingCheckWithRequest(channel, gpt56CheckRequest{
+		Level: GPT56MappingLevelConfirmation, Trigger: trigger,
+	})
 	if err != nil {
 		return
 	}

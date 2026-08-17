@@ -105,6 +105,7 @@ export function ChannelEditorForm(props: {
             multiplier: values.multiplier,
             visibility: values.visibility,
             max_concurrency: values.max_concurrency,
+            user_max_concurrency: values.user_max_concurrency,
             qps: values.qps,
             maintenance_window: values.maintenance_window,
             sensitive_word_interception_enabled:

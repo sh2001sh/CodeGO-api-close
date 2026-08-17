@@ -24,6 +24,7 @@ type Channel struct {
 	Name                             string  `json:"name" gorm:"index"`
 	ChannelScope                     string  `json:"channel_scope" gorm:"column:channel_scope;type:varchar(16);not null;default:'official';index"`
 	MarketplaceMaxConcurrency        int     `json:"marketplace_max_concurrency" gorm:"column:marketplace_max_concurrency;not null;default:0"`
+	MarketplaceUserMaxConcurrency    int     `json:"marketplace_user_max_concurrency" gorm:"column:marketplace_user_max_concurrency;not null;default:0"`
 	SensitiveWordInterceptionEnabled *bool   `json:"sensitive_word_interception_enabled" gorm:"column:sensitive_word_interception_enabled;default:true"`
 	Weight                           *uint   `json:"weight" gorm:"default:0"`
 	CreatedTime                      int64   `json:"created_time" gorm:"bigint"`
@@ -72,6 +73,37 @@ type ChannelInfo struct {
 	MultiKeyDisabledTime   map[int]int64         `json:"multi_key_disabled_time,omitempty"`   // key禁用时间列表，key index -> time
 	MultiKeyPollingIndex   int                   `json:"multi_key_polling_index"`             // 多Key模式下轮询的key索引
 	MultiKeyMode           constant.MultiKeyMode `json:"multi_key_mode"`
+	ResponsesCapabilities  ResponsesCapabilities `json:"responses_capabilities,omitempty"`
+}
+
+const (
+	CapabilityStatusUnknown     = "unknown"
+	CapabilityStatusPending     = "pending"
+	CapabilityStatusSupported   = "supported"
+	CapabilityStatusUnsupported = "unsupported"
+	CapabilityStatusError       = "error"
+)
+
+type CapabilityProbeState struct {
+	Status      string `json:"status,omitempty"`
+	CheckedAt   int64  `json:"checked_at,omitempty"`
+	Model       string `json:"model,omitempty"`
+	ErrorClass  string `json:"error_class,omitempty"`
+	HTTPStatus  int    `json:"http_status,omitempty"`
+	ProbeKeyIdx int    `json:"probe_key_index,omitempty"`
+}
+
+type ResponsesCapabilities struct {
+	WebSocket        CapabilityProbeState `json:"websocket,omitempty"`
+	NativeBackground CapabilityProbeState `json:"native_background,omitempty"`
+}
+
+func (capabilities ResponsesCapabilities) SupportsWebSocket() bool {
+	return capabilities.WebSocket.Status == CapabilityStatusSupported
+}
+
+func (capabilities ResponsesCapabilities) SupportsNativeBackground() bool {
+	return capabilities.NativeBackground.Status == CapabilityStatusSupported
 }
 
 // Value implements driver.Valuer interface

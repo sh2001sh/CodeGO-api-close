@@ -206,21 +206,21 @@ function BillingBreakdown(props: {
     }
   }
 
-	const userGR = other.user_group_ratio
-	const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
-	const isSubscription = other.billing_source === 'subscription'
-	const effectiveGR = isSubscription
-		? other.subscription_group_multiplier
-		: isUserGR
-			? userGR
-			: other.group_ratio
-	if (effectiveGR != null && Number.isFinite(effectiveGR)) {
-		rows.push({
-			label: isSubscription
-				? t('Subscription multiplier')
-				: isUserGR
-					? t('User Exclusive Ratio')
-					: t('Group Ratio'),
+  const userGR = other.user_group_ratio
+  const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
+  const isSubscription = other.billing_source === 'subscription'
+  const effectiveGR = isSubscription
+    ? other.subscription_group_multiplier
+    : isUserGR
+      ? userGR
+      : other.group_ratio
+  if (effectiveGR != null && Number.isFinite(effectiveGR)) {
+    rows.push({
+      label: isSubscription
+        ? t('Subscription multiplier')
+        : isUserGR
+          ? t('User Exclusive Ratio')
+          : t('Group Ratio'),
       value: `${formatRatio(effectiveGR)}x`,
     })
   }
@@ -1084,6 +1084,15 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   <DetailRow
                     label={t('Subscription multiplier')}
                     value={`${other.subscription_group_multiplier}x`}
+                    mono
+                  />
+                )}
+                {other.subscription_package_multiplier != null && (
+                  <DetailRow
+                    label={t('Plan multiplier card')}
+                    value={t('{{multiplier}}x applied', {
+                      multiplier: other.subscription_package_multiplier,
+                    })}
                     mono
                   />
                 )}

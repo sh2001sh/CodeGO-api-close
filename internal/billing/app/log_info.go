@@ -239,10 +239,6 @@ func billingQuotaSource(relayInfo *relaycommon.RelayInfo) (category string, labe
 	if relayInfo == nil {
 		return "", ""
 	}
-	if relayInfo.MarketplaceGroupID != "" {
-		return "universal", "通用额度"
-	}
-
 	switch relayInfo.BillingSource {
 	case BillingSourceWallet:
 		return "universal", "通用额度"

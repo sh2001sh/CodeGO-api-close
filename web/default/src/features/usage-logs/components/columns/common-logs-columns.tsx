@@ -68,17 +68,32 @@ interface DetailSegment {
 
 function UsageDiscountBadge(props: { other: LogOtherData | null }) {
   const { t } = useTranslation()
-  const multiplier = props.other?.usage_discount_multiplier
-  const isNinetyPercentCard =
+  const packageMultiplier = props.other?.subscription_package_multiplier
+  const isPackageCard =
+    props.other?.billing_source === 'subscription' &&
+    packageMultiplier != null &&
+    packageMultiplier > 0 &&
+    packageMultiplier < 1
+  const usageMultiplier = props.other?.usage_discount_multiplier
+  const isUsageCard =
     props.other?.usage_discount_source === 'blind_box_multiplier_card' &&
-    multiplier != null &&
-    Math.abs(multiplier - 0.9) < 0.000001
-  if (!isNinetyPercentCard) return null
+    usageMultiplier != null &&
+    usageMultiplier > 0 &&
+    usageMultiplier < 1
+  if (!isPackageCard && !isUsageCard) return null
+
+  const multiplier = isPackageCard ? packageMultiplier : usageMultiplier
 
   return (
     <span className='border-success/30 bg-success/10 text-success inline-flex w-fit items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium'>
       <BadgeCheck className='size-3' aria-hidden='true' />
-      {t('0.9 multiplier card')}
+      {isPackageCard
+        ? t('{{multiplier}}x plan multiplier card', {
+            multiplier: formatRatioCompact(multiplier),
+          })
+        : t('{{multiplier}}x multiplier card', {
+            multiplier: formatRatioCompact(multiplier),
+          })}
     </span>
   )
 }
@@ -91,16 +106,16 @@ function formatRatioCompact(ratio: number | undefined): string {
 }
 
 function getGroupRatioText(other: LogOtherData | null): string | null {
-	const subscriptionMultiplier = other?.subscription_group_multiplier
-	if (
-		other?.billing_source === 'subscription' &&
-		subscriptionMultiplier != null &&
-		Number.isFinite(subscriptionMultiplier)
-	) {
-		return `${formatRatioCompact(subscriptionMultiplier)}x`
-	}
+  const subscriptionMultiplier = other?.subscription_group_multiplier
+  if (
+    other?.billing_source === 'subscription' &&
+    subscriptionMultiplier != null &&
+    Number.isFinite(subscriptionMultiplier)
+  ) {
+    return `${formatRatioCompact(subscriptionMultiplier)}x`
+  }
 
-	const userGroupRatio = other?.user_group_ratio
+  const userGroupRatio = other?.user_group_ratio
   if (
     userGroupRatio != null &&
     userGroupRatio !== -1 &&
@@ -251,25 +266,25 @@ function buildDetailSegments(
           })
         }
       }
-	} else {
-		const userGroupRatio = other.user_group_ratio
-		const groupRatio = other.group_ratio
-		const subscriptionMultiplier = other.subscription_group_multiplier
-		const isSubscription = other.billing_source === 'subscription'
-		const isUserGroup =
+    } else {
+      const userGroupRatio = other.user_group_ratio
+      const groupRatio = other.group_ratio
+      const subscriptionMultiplier = other.subscription_group_multiplier
+      const isSubscription = other.billing_source === 'subscription'
+      const isUserGroup =
         userGroupRatio != null &&
         Number.isFinite(userGroupRatio) &&
         userGroupRatio !== -1
-		const effectiveRatio = isSubscription
-			? subscriptionMultiplier
-			: isUserGroup
-				? userGroupRatio
-				: groupRatio
-		const ratioLabel = isSubscription
-			? t('Subscription multiplier')
-			: isUserGroup
-			? t('User Exclusive Ratio')
-			: t('Group Ratio')
+      const effectiveRatio = isSubscription
+        ? subscriptionMultiplier
+        : isUserGroup
+          ? userGroupRatio
+          : groupRatio
+      const ratioLabel = isSubscription
+        ? t('Subscription multiplier')
+        : isUserGroup
+          ? t('User Exclusive Ratio')
+          : t('Group Ratio')
 
       if (effectiveRatio != null && Number.isFinite(effectiveRatio)) {
         segments.push({

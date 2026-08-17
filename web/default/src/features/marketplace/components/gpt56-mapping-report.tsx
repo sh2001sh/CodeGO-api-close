@@ -10,10 +10,15 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { hasGPT56Model } from '../lib/verification'
 import type {
+  GPT56MappingLevel,
   GPT56MappingResult,
+  GPT56MappingRun,
   GPT56MappingSample,
   GPT56MappingStatus,
+  GPT56MappingTrigger,
 } from '../types'
+import { GPT56MappingHistory } from './gpt56-mapping-history'
+import { mappingLevelLabel, mappingTriggerLabel } from './gpt56-mapping-labels'
 
 const statusLabels: Record<GPT56MappingStatus, string> = {
   '': '未检测',
@@ -28,6 +33,9 @@ export function GPT56MappingStatusView(props: {
   status: GPT56MappingStatus
   results: GPT56MappingResult[]
   checkedAt?: string | null
+  level?: GPT56MappingLevel | ''
+  trigger?: GPT56MappingTrigger | ''
+  history?: GPT56MappingRun[]
   embedded?: boolean
 }) {
   const { t } = useTranslation()
@@ -55,18 +63,22 @@ export function GPT56MappingStatusView(props: {
           <MappingStatus status={props.status} />
         </div>
         <p className='text-muted-foreground mt-1 leading-5'>
-          {mappingExplanation(props.status, t)}
+          {mappingExplanation(props.status, props.level, t)}
         </p>
-        <p className='text-muted-foreground mt-1 tabular-nums'>
+        <div className='text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1 tabular-nums'>
           {props.status === 'running' && total > 0
-            ? t('已完成 {{completed}} / {{total}} 次探测', {
+            ? t('已完成 {{completed}} / {{total}} 次请求', {
                 completed,
                 total,
               })
             : props.checkedAt
-              ? `${t('最近检测')}: ${new Date(props.checkedAt).toLocaleString()}`
+              ? `${t('检测完成时间')}: ${new Date(props.checkedAt).toLocaleString()}`
               : t('等待首次检测')}
-        </p>
+          {props.level && <span>{mappingLevelLabel(props.level, t)}</span>}
+          {props.trigger && (
+            <span>{mappingTriggerLabel(props.trigger, t)}</span>
+          )}
+        </div>
         {props.status === 'running' && total > 0 && (
           <div
             className='bg-muted mt-2 h-1.5 overflow-hidden rounded-full'
@@ -93,6 +105,9 @@ export function GPT56MappingStatusView(props: {
               />
             ))}
         </div>
+      )}
+      {props.history && props.history.length > 0 && (
+        <GPT56MappingHistory runs={props.history} />
       )}
     </div>
   )
@@ -184,6 +199,7 @@ function MappingSampleRow({ sample }: { sample: GPT56MappingSample }) {
     <div className='grid gap-1 px-3 py-2 sm:grid-cols-[72px_minmax(0,1fr)_auto] sm:items-start sm:gap-3'>
       <span className='text-muted-foreground tabular-nums'>
         {t('第 {{index}} 次', { index: sample.index })}
+        {sample.variant ? ` · ${sampleVariantLabel(sample.variant, t)}` : ''}
       </span>
       <div className='min-w-0'>
         <p
@@ -215,17 +231,31 @@ function MappingSampleRow({ sample }: { sample: GPT56MappingSample }) {
 
 function mappingExplanation(
   status: GPT56MappingStatus,
+  level: GPT56MappingLevel | '' | undefined,
   t: (value: string) => string
 ) {
-  if (status === 'matched')
-    return t('所有模型的 3 次探测均返回请求的模型标识。')
-  if (status === 'mismatch') return t('至少一次探测返回了不同的模型标识。')
+  if (status === 'matched') return t('本轮所有请求均返回了预期的模型标识。')
+  if (status === 'mismatch')
+    return level === 'daily_light'
+      ? t('轻量检测发现异常，系统将自动进行确认检测，尚未据此下线。')
+      : t('确认检测发现模型标识不一致，当前分组已停止参与路由。')
   if (status === 'insufficient_evidence') {
     return t(
-      '没有发现错误映射，但存在失败或缺少模型标识的样本；每个模型必须 3/3 一致才算通过。'
+      '本轮存在网络失败或缺少模型标识的请求，证据不足，不会据此自动下线。'
     )
   }
   if (status === 'running')
-    return t('正在逐模型执行 3 次独立探测，结果会自动更新。')
-  return t('每个 GPT-5.6 模型会连续探测 3 次并核对上游返回的模型标识。')
+    return level === 'daily_light'
+      ? t('正在执行每日轻量检测；发现异常后会自动进入确认检测。')
+      : t('正在执行确认检测，结果会随请求完成自动更新。')
+  return t('每日执行轻量检测；轻量异常会自动复检，只有确认异常才会下线。')
+}
+
+function sampleVariantLabel(variant: string, t: (value: string) => string) {
+  const labels: Record<string, string> = {
+    exact_reply: '精确回复',
+    short_answer: '短回答',
+    simple_fact: '简单事实',
+  }
+  return t(labels[variant] ?? variant)
 }

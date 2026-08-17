@@ -134,17 +134,17 @@ func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, p
 }
 
 func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
-	if isExternalBillingChannel(relayInfo) {
+	if isExternalBillingChannel(relayInfo) && relayInfo.MarketplaceGroupID == "" {
 		return nil, nil
 	}
-	policy := gatewaystore.GetSubscriptionGroupPolicy(relayInfo.UsingGroup)
-	if !policy.Enabled {
+	subscriptionMultiplier, enabled := subscriptionGroupMultiplier(relayInfo)
+	if !enabled {
 		return nil, nil
 	}
 
 	groupRatio := subscriptionBillingGroupRatio(relayInfo)
 	packageMultiplier := getMonthlyPassMultiplier(relayInfo.UserId)
-	quotaScale := policy.Multiplier * packageMultiplier
+	quotaScale := subscriptionMultiplier * packageMultiplier
 	if groupRatio > 0 {
 		quotaScale /= groupRatio
 	}
@@ -159,7 +159,7 @@ func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayI
 			amount:    int64(preConsumedQuota),
 		},
 	}
-	relayInfo.SubscriptionGroupMultiplier = policy.Multiplier * packageMultiplier
+	relayInfo.SubscriptionGroupMultiplier = subscriptionMultiplier
 	relayInfo.SubscriptionPackageMultiplier = packageMultiplier
 	relayInfo.SubscriptionQuotaScale = quotaScale
 	relayInfo.SubscriptionGroupRatio = groupRatio
@@ -167,6 +167,15 @@ func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayI
 		return nil, apiErr
 	}
 	return session, nil
+}
+
+func subscriptionGroupMultiplier(relayInfo *relaycommon.RelayInfo) (float64, bool) {
+	if relayInfo.MarketplaceGroupID != "" {
+		multiplier := marketplacedomain.SubscriptionMultiplier(relayInfo.MarketplaceMultiplier)
+		return multiplier, multiplier > 0
+	}
+	policy := gatewaystore.GetSubscriptionGroupPolicy(relayInfo.UsingGroup)
+	return policy.Multiplier, policy.Enabled && policy.Multiplier > 0
 }
 
 func subscriptionBillingGroupRatio(relayInfo *relaycommon.RelayInfo) float64 {

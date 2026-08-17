@@ -67,6 +67,8 @@ export function GroupModelVerificationReport(props: {
           status={group.gpt56_mapping_status}
           results={group.gpt56_mapping_results ?? []}
           checkedAt={group.gpt56_mapping_checked_at}
+          level={group.gpt56_mapping_level}
+          trigger={group.gpt56_mapping_trigger}
           embedded
         />
       )}

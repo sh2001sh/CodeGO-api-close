@@ -40,8 +40,8 @@ function MarketplaceRules() {
     <aside className='border-border bg-muted/20 border-t px-5 py-6 xl:border-t-0 xl:border-l xl:px-6'>
       <h3 className='font-semibold'>{t('市场结算规则')}</h3>
       <div className='mt-5 space-y-5'>
-        <Rule icon={WalletCards} title={t('仅使用通用额度')}>
-          {t('分组市场中的第三方分组，无论模型类型，调用时都只扣除通用额度。')}
+        <Rule icon={WalletCards} title={t('支持套餐与通用余额')}>
+          {t('第三方分组默认支持套餐和通用余额，并分别按页面所示倍率扣费。')}
         </Rule>
         <Rule icon={Percent} title={t('95% 渠道收入')}>
           {t('平台收取 5% 调用佣金，其余 95% 进入渠道主待结算收入。')}

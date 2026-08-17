@@ -15,6 +15,7 @@ import (
 	communityschema "github.com/sh2001sh/new-api/internal/community/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	workflowschema "github.com/sh2001sh/new-api/internal/workflow/schema"
@@ -99,8 +100,10 @@ func V2MigrationIDs() []string {
 		"20260816_wallet_transfer_fee_fields",
 		"20260816_marketplace_incremental_channel_ids",
 		"20260817_marketplace_gpt56_mapping_detection",
+		"20260817_marketplace_gpt56_mapping_history",
 		"20260817_marketplace_channel_connectivity_test",
 		"20260817_marketplace_channel_auto_probe",
+		"20260817_marketplace_channel_concurrency_limits",
 		"20260816_token_marketplace_multiplier_limit",
 		"20260816_unified_credit_v1_schema",
 		"20260816_unified_credit_v1_channel_scope",
@@ -109,6 +112,10 @@ func V2MigrationIDs() []string {
 		"20260816_blind_box_prop_gifts",
 		"20260816_marketplace_model_consistency_feedback",
 		"20260816_marketplace_channel_feedback_and_prices",
+		"20260817_marketplace_multiplier_trends",
+		"20260817_marketplace_subscription_billing",
+		"20260817_marketplace_transport_capabilities",
+		"20260817_responses_background",
 	}
 }
 
@@ -260,8 +267,10 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260816_wallet_transfer_fee_fields", Run: migrateWalletTransferFeeFields},
 		{ID: "20260816_marketplace_incremental_channel_ids", Run: migrateMarketplaceIncrementalChannelIDs},
 		{ID: "20260817_marketplace_gpt56_mapping_detection", Run: migrateMarketplaceGPT56MappingDetection},
+		{ID: "20260817_marketplace_gpt56_mapping_history", Run: migrateMarketplaceGPT56MappingHistory},
 		{ID: "20260817_marketplace_channel_connectivity_test", Run: migrateMarketplaceChannelConnectivityTest},
 		{ID: "20260817_marketplace_channel_auto_probe", Run: migrateMarketplaceChannelAutoProbe},
+		{ID: "20260817_marketplace_channel_concurrency_limits", Run: migrateMarketplaceChannelConcurrencyLimits},
 		{ID: "20260816_token_marketplace_multiplier_limit", Run: migrateTokenMarketplaceMultiplierLimit},
 		{ID: "20260816_unified_credit_v1_schema", Run: migrateUnifiedCreditV1Schema},
 		{ID: "20260816_unified_credit_v1_channel_scope", Run: migrateUnifiedCreditV1ChannelScope},
@@ -274,6 +283,14 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&legacyMarketplaceModelFeedback{})
 		}},
 		{ID: "20260816_marketplace_channel_feedback_and_prices", Run: migrateMarketplaceChannelFeedbackAndPrices},
+		{ID: "20260817_marketplace_multiplier_trends", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.MultiplierTrendSnapshot{})
+		}},
+		{ID: "20260817_marketplace_subscription_billing", Run: migrateMarketplaceSubscriptionBilling},
+		{ID: "20260817_marketplace_transport_capabilities", Run: migrateMarketplaceTransportCapabilities},
+		{ID: "20260817_responses_background", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{})
+		}},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -451,6 +468,10 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			(!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingResults") ||
 				!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingStatus") ||
 				!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingCheckedAt"))
+	case "20260817_marketplace_gpt56_mapping_history":
+		return !db.Migrator().HasTable(&marketplaceschema.GPT56MappingRun{}) ||
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingLevel") ||
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "GPT56MappingTrigger")
 	case "20260817_marketplace_channel_connectivity_test":
 		return marketplaceChannelSchemaNeedsRepair(db,
 			[]string{"ConnectivityTestStatus", "ConnectivityTestCheckedAt"},
@@ -461,6 +482,12 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			[]string{"AutoProbeEnabled", "AutoProbeIntervalMinutes", "AutoProbeModel", "AutoProbeLastStatus", "AutoProbeLastAt"},
 			[]string{"AutoProbeEnabled", "AutoProbeLastStatus", "AutoProbeLastAt"},
 		)
+	case "20260817_marketplace_channel_concurrency_limits":
+		return db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency") ||
+			db.Migrator().HasTable(&gatewayschema.Channel{}) &&
+				(!db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency") ||
+					!db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceUserMaxConcurrency"))
 	case "20260816_unified_credit_v1_channel_scope":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) ||
 			db.Migrator().HasTable(&gatewayschema.Channel{}) &&
@@ -477,9 +504,80 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
 				(!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "ModelPrices") ||
 					!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+	case "20260817_marketplace_multiplier_trends":
+		return !db.Migrator().HasTable(&marketplaceschema.MultiplierTrendSnapshot{})
+	case "20260817_marketplace_subscription_billing":
+		return marketplaceSubscriptionBillingNeedsRepair(db)
+	case "20260817_marketplace_transport_capabilities":
+		return db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "TransportCapabilities")
+	case "20260817_responses_background":
+		return !db.Migrator().HasTable(&gatewayschema.ResponsesBackgroundJob{}) ||
+			!db.Migrator().HasTable(&gatewayschema.ResponsesBackgroundEvent{})
 	default:
 		return false
 	}
+}
+
+func migrateMarketplaceSubscriptionBilling(tx *gorm.DB) error {
+	if tx.Migrator().HasTable(&marketplaceschema.Group{}) {
+		if err := tx.Model(&marketplaceschema.Group{}).
+			Where("source_type = ?", marketplacedomain.SourceTypeMarketplaceUser).
+			Update("credit_pool_policy", marketplacedomain.CreditPolicySubscriptionAndUniversal).Error; err != nil {
+			return err
+		}
+	}
+	if !tx.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+		return tx.AutoMigrate(&marketplaceschema.Settlement{})
+	}
+	if err := tx.AutoMigrate(&marketplaceschema.Settlement{}); err != nil {
+		return err
+	}
+	return tx.Model(&marketplaceschema.Settlement{}).
+		Where("settlement_gross_amount = 0").
+		Update("settlement_gross_amount", gorm.Expr("consumer_amount")).Error
+}
+
+func marketplaceSubscriptionBillingNeedsRepair(db *gorm.DB) bool {
+	if !db.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+		return true
+	}
+	for _, field := range []string{"BillingSource", "SettlementGrossAmount", "SubscriptionMultiplier"} {
+		if !db.Migrator().HasColumn(&marketplaceschema.Settlement{}, field) {
+			return true
+		}
+	}
+	if !db.Migrator().HasTable(&marketplaceschema.Group{}) {
+		return false
+	}
+	var legacyCount int64
+	if err := db.Model(&marketplaceschema.Group{}).
+		Where("source_type = ? AND credit_pool_policy <> ?", marketplacedomain.SourceTypeMarketplaceUser, marketplacedomain.CreditPolicySubscriptionAndUniversal).
+		Count(&legacyCount).Error; err != nil {
+		return true
+	}
+	return legacyCount > 0
+}
+
+func migrateMarketplaceChannelConcurrencyLimits(tx *gorm.DB) error {
+	if tx.Migrator().HasTable(&marketplaceschema.Channel{}) &&
+		!tx.Migrator().HasColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency") {
+		if err := tx.Migrator().AddColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency"); err != nil {
+			return err
+		}
+	}
+	if !tx.Migrator().HasTable(&gatewayschema.Channel{}) {
+		return nil
+	}
+	for _, field := range []string{"MarketplaceMaxConcurrency", "MarketplaceUserMaxConcurrency"} {
+		if tx.Migrator().HasColumn(&gatewayschema.Channel{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&gatewayschema.Channel{}, field); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func marketplaceChannelSchemaNeedsRepair(db *gorm.DB, fields, indexes []string) bool {
@@ -612,6 +710,26 @@ func migrateMarketplaceGPT56MappingDetection(tx *gorm.DB) error {
 	return nil
 }
 
+func migrateMarketplaceGPT56MappingHistory(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		if err := tx.AutoMigrate(&marketplaceschema.Channel{}); err != nil {
+			return err
+		}
+	}
+	for _, field := range []string{"GPT56MappingLevel", "GPT56MappingTrigger"} {
+		if tx.Migrator().HasColumn(&marketplaceschema.Channel{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&marketplaceschema.Channel{}, field); err != nil {
+			return err
+		}
+	}
+	if err := ensureMarketplaceChannelIndexes(tx, "GPT56MappingLevel", "GPT56MappingTrigger"); err != nil {
+		return err
+	}
+	return tx.AutoMigrate(&marketplaceschema.GPT56MappingRun{})
+}
+
 func migrateMarketplaceChannelConnectivityTest(tx *gorm.DB) error {
 	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
 		return tx.AutoMigrate(&marketplaceschema.Channel{})
@@ -646,6 +764,16 @@ func migrateMarketplaceChannelAutoProbe(tx *gorm.DB) error {
 		}
 	}
 	return ensureMarketplaceChannelIndexes(tx, "AutoProbeEnabled", "AutoProbeLastStatus", "AutoProbeLastAt")
+}
+
+func migrateMarketplaceTransportCapabilities(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Channel{}) {
+		return tx.AutoMigrate(&marketplaceschema.Channel{})
+	}
+	if tx.Migrator().HasColumn(&marketplaceschema.Channel{}, "TransportCapabilities") {
+		return nil
+	}
+	return tx.Migrator().AddColumn(&marketplaceschema.Channel{}, "TransportCapabilities")
 }
 
 func ensureMarketplaceChannelIndexes(tx *gorm.DB, fields ...string) error {

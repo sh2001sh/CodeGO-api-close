@@ -33,8 +33,11 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
     {
       icon: CircleDollarSign,
       label: t('基础消耗 1000 时'),
-      value: t('实际扣除 {{amount}} 通用额度', {
-        amount: formatNumber(Math.round(1000 * group.multiplier)),
+      value: t('余额 {{wallet}} · 套餐 {{subscription}}', {
+        wallet: formatNumber(Math.round(1000 * group.multiplier)),
+        subscription: formatNumber(
+          Math.round(1000 * group.subscription_multiplier)
+        ),
       }),
     },
   ]

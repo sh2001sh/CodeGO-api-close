@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/sh2001sh/new-api/constant"
+	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
@@ -38,6 +39,8 @@ func ResponsesWebsocket(c *gin.Context) {
 	deadline, _ := sessionCtx.Deadline()
 	_ = conn.SetReadDeadline(deadline)
 	state := &responsesWebsocketState{}
+	upstreamSession := responsesws.NewSession()
+	defer upstreamSession.Close()
 
 	for {
 		if sessionCtx.Err() != nil {
@@ -77,7 +80,7 @@ func ResponsesWebsocket(c *gin.Context) {
 			continue
 		}
 
-		responseID, output, completed, executeErr := executeResponsesWebsocketTurn(c, conn, sessionCtx, turn.body)
+		responseID, output, completed, executeErr := executeResponsesWebsocketTurn(c, conn, sessionCtx, upstreamSession, turn.body)
 		if executeErr != nil {
 			return
 		}
@@ -97,11 +100,11 @@ func responsesWebsocketErrorDetails(err error) (int, string, string, string) {
 	return http.StatusBadRequest, "invalid_request_error", err.Error(), ""
 }
 
-func executeResponsesWebsocketTurn(parent *gin.Context, conn *websocket.Conn, sessionCtx context.Context, body []byte) (string, []byte, bool, error) {
+func executeResponsesWebsocketTurn(parent *gin.Context, conn *websocket.Conn, sessionCtx context.Context, upstreamSession *responsesws.Session, body []byte) (string, []byte, bool, error) {
 	turnCtx, cancelTurn := context.WithCancel(sessionCtx)
 	defer cancelTurn()
 	writer := newResponsesWebsocketHTTPWriter(conn, cancelTurn)
-	c := newResponsesWebsocketTurnContext(parent, writer, turnCtx, body)
+	c := newResponsesWebsocketTurnContext(parent, writer, turnCtx, upstreamSession, body)
 	defer platformhttpx.CleanupBodyStorage(c)
 
 	middleware.ModelRequestRateLimitWithHandler(
@@ -116,7 +119,7 @@ func executeResponsesWebsocketTurn(parent *gin.Context, conn *websocket.Conn, se
 	return responseID, output, completed, nil
 }
 
-func newResponsesWebsocketTurnContext(parent *gin.Context, writer http.ResponseWriter, requestContext context.Context, body []byte) *gin.Context {
+func newResponsesWebsocketTurnContext(parent *gin.Context, writer http.ResponseWriter, requestContext context.Context, upstreamSession *responsesws.Session, body []byte) *gin.Context {
 	request, _ := http.NewRequestWithContext(requestContext, http.MethodPost, "/v1/responses", bytes.NewReader(body))
 	request.Header = cloneResponsesWebsocketTurnHeaders(parent.Request.Header)
 	request.Header.Set("Content-Type", "application/json")
@@ -128,6 +131,8 @@ func newResponsesWebsocketTurnContext(parent *gin.Context, writer http.ResponseW
 	c, _ := gin.CreateTestContext(writer)
 	c.Request = request
 	c.Keys = cloneGinContextKeys(parent.Keys)
+	responsesws.Attach(c, upstreamSession)
+	responsesws.ApplyRoutePin(c, upstreamSession)
 	requestID := platformruntime.GetTimeString() + platformruntime.GetRandomString(8)
 	traceID := parent.GetString(constant.TraceIdKey)
 	c.Set(constant.RequestIdKey, requestID)

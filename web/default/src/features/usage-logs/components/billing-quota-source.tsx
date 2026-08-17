@@ -9,7 +9,6 @@ function resolveBillingQuotaCategory(
   other: LogOtherData | null | undefined
 ): BillingQuotaCategory | null {
   if (!other) return null
-  if (other.marketplace_group_id) return 'universal'
   if (other.billing_quota_category) return other.billing_quota_category
 
   switch (other.billing_source) {

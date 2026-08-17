@@ -39,6 +39,7 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 
 	want := map[string]bool{
 		"GET /api/marketplace/groups":                     false,
+		"GET /api/marketplace/multiplier-trends":          false,
 		"GET /api/marketplace/auto-route-pool":            false,
 		"PUT /api/marketplace/auto-route-pool":            false,
 		"POST /api/marketplace/groups/:id/bind-token":     false,

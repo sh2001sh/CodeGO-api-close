@@ -13,6 +13,7 @@ import (
 	rerankcommon "github.com/sh2001sh/new-api/internal/gateway/execution/providers/rerankcommon"
 	"github.com/sh2001sh/new-api/internal/gateway/execution/providers/synchttp"
 	"github.com/sh2001sh/new-api/internal/gateway/execution/reasoning"
+	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	gatewaytranslation "github.com/sh2001sh/new-api/internal/gateway/translation"
@@ -601,6 +602,19 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 		return synchttp.DoFormAPIRequest(a, c, info, requestBody)
 	} else if info.RelayMode == gatewaycontract.RelayModeRealtime {
 		return synchttp.DoWSSRequest(a, c, info, requestBody)
+	} else if info.RelayMode == gatewaycontract.RelayModeResponses && info.IsStream {
+		if session := responsesws.FromContext(c); session != nil && session.NativeEnabled() {
+			requestURL, err := a.GetRequestURL(info)
+			if err != nil {
+				return nil, err
+			}
+			headers := http.Header{}
+			if err := a.SetupRequestHeader(c, &headers, info); err != nil {
+				return nil, err
+			}
+			return session.Do(c.Request.Context(), requestURL, headers, requestBody)
+		}
+		return synchttp.DoAPIRequest(a, c, info, requestBody)
 	} else {
 		return synchttp.DoAPIRequest(a, c, info, requestBody)
 	}

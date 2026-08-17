@@ -28,6 +28,7 @@ func normalizeGroupQuery(query GroupQuery) GroupQuery {
 
 func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, recentSeries map[int][]RecentRequestBucket, query GroupQuery) []GroupListItem {
 	items := make([]GroupListItem, 0, len(groups))
+	currentConcurrency := activeMarketplaceChannelRequests(channels)
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
 		models := decodeModels(channel.DeclaredModels)
@@ -39,7 +40,9 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 		if channel.InternalChannelID != nil {
 			channelID = *channel.InternalChannelID
 		}
-		items = append(items, groupListItem(group, channel, models, snapshot, recentSeries[channelID]))
+		item := groupListItem(group, channel, models, snapshot, recentSeries[channelID])
+		item.CurrentConcurrency = currentConcurrency[channelID]
+		items = append(items, item)
 	}
 	sortGroupItems(items, query.Sort, query.Direction)
 	return items
@@ -76,7 +79,9 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		ProviderType:     channel.ProviderType,
 		CreditPoolPolicy: group.CreditPoolPolicy,
 		LifecycleStatus:  group.LifecycleStatus, VerificationStatus: group.VerificationStatus,
-		VerificationDueAt: group.VerificationDueAt, Multiplier: group.Multiplier, Models: models,
+		VerificationDueAt: group.VerificationDueAt, Multiplier: group.Multiplier,
+		SubscriptionEnabled:    group.CreditPoolPolicy == marketplacedomain.CreditPolicySubscriptionAndUniversal,
+		SubscriptionMultiplier: marketplacedomain.SubscriptionMultiplier(group.Multiplier), Models: models,
 		VerificationCompletedAt:   latestModelVerificationAt(channel.ModelVerificationResults),
 		ModelVerificationResults:  publicModelVerificationResults(channel.ModelVerificationResults),
 		ConnectivityTestStatus:    channel.ConnectivityTestStatus,
@@ -85,22 +90,28 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		GPT56MappingResults:       publicGPT56MappingResults(channel.GPT56MappingResults),
 		GPT56MappingStatus:        channel.GPT56MappingStatus,
 		GPT56MappingCheckedAt:     channel.GPT56MappingCheckedAt,
+		GPT56MappingLevel:         channel.GPT56MappingLevel,
+		GPT56MappingTrigger:       channel.GPT56MappingTrigger,
 		Rank:                      snapshot.Rank, Score: snapshot.Score, SuccessRate: snapshot.RawSuccessRate,
 		WilsonSuccessRate: snapshot.WilsonSuccessRate, AvgTTFTMs: snapshot.AvgTTFTMs,
 		AvgLatencyMs: snapshot.AvgLatencyMs, AvgTPS: snapshot.AvgTPS,
 		CacheHitRate: snapshot.CacheHitRate, LatestRequestStatus: latestRequestStatus(channel, recentSeries),
 		RecentRequestSeries: recentSeries, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 		RequestCount: snapshot.RequestCount, MaxConcurrency: channel.MaxConcurrency,
-		CurrentConcurrency: activeMarketplaceChannelRequests(channel), IndependentConsumers: snapshot.IndependentConsumers,
-		Observing: snapshot.Observing, UpdatedAt: group.UpdatedAt,
+		UserMaxConcurrency:   channel.UserMaxConcurrency,
+		IndependentConsumers: snapshot.IndependentConsumers,
+		Observing:            snapshot.Observing, UpdatedAt: group.UpdatedAt,
 	}
 }
 
-func activeMarketplaceChannelRequests(channel marketplaceschema.Channel) int {
-	if channel.InternalChannelID == nil {
-		return 0
+func activeMarketplaceChannelRequests(channels map[string]marketplaceschema.Channel) map[int]int {
+	channelIDs := make([]int, 0, len(channels))
+	for _, channel := range channels {
+		if channel.InternalChannelID != nil && *channel.InternalChannelID > 0 {
+			channelIDs = append(channelIDs, *channel.InternalChannelID)
+		}
 	}
-	return gatewayruntime.ActiveChannelRequests(*channel.InternalChannelID)
+	return gatewayruntime.ActiveChannelRequestsForChannels(channelIDs)
 }
 
 func latestModelVerificationAt(raw string) *time.Time {

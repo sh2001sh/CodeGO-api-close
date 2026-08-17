@@ -20,12 +20,15 @@ const (
 )
 
 type RecordParams struct {
-	RequestID      string
-	GroupID        string
-	OwnerUserID    int
-	ConsumerUserID int
-	Amount         int64
-	Multiplier     float64
+	RequestID              string
+	GroupID                string
+	OwnerUserID            int
+	ConsumerUserID         int
+	BillingSource          string
+	ConsumerDebitAmount    int64
+	SettlementGrossAmount  int64
+	WalletMultiplier       float64
+	SubscriptionMultiplier float64
 }
 
 type ReleaseHook func(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error
@@ -38,12 +41,12 @@ var (
 func RegisterReleaseHook(hook ReleaseHook) { releaseHook = hook }
 
 func Record(params RecordParams) error {
-	if params.RequestID == "" || params.GroupID == "" || params.OwnerUserID <= 0 || params.Amount <= 0 {
+	if params.RequestID == "" || params.GroupID == "" || params.OwnerUserID <= 0 || params.SettlementGrossAmount <= 0 {
 		return nil
 	}
-	commission := percentage(params.Amount, 5)
+	commission := percentage(params.SettlementGrossAmount, 5)
 	fee := int64(0)
-	ownerNet := params.Amount - commission
+	ownerNet := params.SettlementGrossAmount - commission
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
 			AccountType: "marketplace_owner_pending", OwnerType: "user", OwnerID: int64(params.OwnerUserID), QuotaUnit: "quota",
@@ -59,9 +62,11 @@ func Record(params RecordParams) error {
 		}
 		settlement := marketplaceschema.Settlement{
 			RequestID: params.RequestID, GroupID: params.GroupID, OwnerUserID: params.OwnerUserID,
-			ConsumerUserID: params.ConsumerUserID, ConsumerAmount: params.Amount,
+			ConsumerUserID: params.ConsumerUserID, BillingSource: params.BillingSource,
+			ConsumerAmount: params.ConsumerDebitAmount, SettlementGrossAmount: params.SettlementGrossAmount,
 			PlatformCommission: commission, TransactionFee: fee, OwnerNetAmount: ownerNet,
-			Multiplier: params.Multiplier, Status: statusPending, PendingAccountID: account.AccountID,
+			Multiplier: params.WalletMultiplier, SubscriptionMultiplier: params.SubscriptionMultiplier,
+			Status: statusPending, PendingAccountID: account.AccountID,
 			AvailableAt: time.Now().UTC().Add(24 * time.Hour),
 		}
 		result := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "request_id"}}, DoNothing: true}).Create(&settlement)

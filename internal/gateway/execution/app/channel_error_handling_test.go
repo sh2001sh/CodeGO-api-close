@@ -130,6 +130,11 @@ func TestRetryCurrentChannelForResponsesBeforeSemanticOutput(t *testing.T) {
 		http.StatusBadGateway,
 	)
 	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, streamClosed))
+	context.Set("use_channel", []string{"72", "72"})
+	require.True(t, shouldRetryCurrentChannelIfNoAlternative(context, streamClosed))
+	context.Set("use_channel", []string{"72", "73"})
+	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, streamClosed))
+	context.Set("use_channel", []string{"72"})
 
 	context.Set(string(constant.ContextKeyStreamContentDelivered), true)
 	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, streamClosed))
@@ -170,6 +175,7 @@ func TestOnlyRoute429RetriesCurrentChannelWithoutCooling(t *testing.T) {
 	context.Set("original_model", "gpt-5.6-sol")
 	context.Set("use_channel", []string{"6"})
 	context.Set(string(constant.ContextKeyRelayAttemptStage), gatewaystream.AttemptStageSelected)
+	context.Set("channel_affinity_skip_retry_on_failure", true)
 	httpctx.SetContextKey(context, constant.ContextKeyUsingGroup, "plus-only-route")
 
 	originalHasAlternative := hasAlternativeSelectableRoute
@@ -190,6 +196,7 @@ func TestOnlyRoute429RetriesCurrentChannelWithoutCooling(t *testing.T) {
 	))
 
 	require.Equal(t, 6, httpctx.GetContextKeyInt(context, constant.ContextKeyRetryFallbackChannelID))
+	require.False(t, relaycommon.ShouldSkipRetryAfterChannelAffinityFailure(context))
 	_, cooled := relaycommon.GetChannelHealth(6, "gpt-5.6-sol")
 	require.False(t, cooled)
 }

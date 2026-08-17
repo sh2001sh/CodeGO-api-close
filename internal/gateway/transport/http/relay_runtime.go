@@ -7,7 +7,6 @@ import (
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -268,12 +267,8 @@ func retryLastUsedSoleRoute(c *gin.Context, retryParam *gatewayroutingapp.RetryP
 		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
 		return nil, selectGroup
 	}
-	usedChannels := c.GetStringSlice("use_channel")
-	if len(usedChannels) != 1 {
-		return nil, selectGroup
-	}
-	channelID, err := strconv.Atoi(strings.TrimSpace(usedChannels[0]))
-	if err != nil || channelID <= 0 {
+	channelID, singleChannel := gatewayruntime.SingleUsedChannelID(c)
+	if !singleChannel {
 		return nil, selectGroup
 	}
 	channel, err := gatewaystore.GetCachedChannel(channelID)

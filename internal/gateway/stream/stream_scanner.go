@@ -89,22 +89,29 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	var maxTimer *time.Timer
 	var progressTimer *time.Timer
 	var progressTimerC <-chan time.Time
-	progressNotify := make(chan struct{}, 1)
+	var progressNotify chan struct{}
+	waitingForInitialProgress := false
 	if firstByteTimeout > 0 {
 		firstByteTimer = time.NewTimer(firstByteTimeout)
 		defer firstByteTimer.Stop()
 	}
-	if streamingMaxDuration > 0 && adaptiveProgressTimeout <= 0 {
+	if streamingMaxDuration > 0 {
 		maxTimer = time.NewTimer(streamingMaxDuration)
 		defer maxTimer.Stop()
 	}
-	if adaptiveInitialTimeout > 0 {
-		progressTimer = time.NewTimer(adaptiveInitialTimeout)
-		progressTimerC = progressTimer.C
-		defer progressTimer.Stop()
-	} else {
-		progressNotify = nil
+	if adaptiveProgressTimeout > 0 {
+		progressNotify = make(chan struct{}, 1)
+		if adaptiveInitialTimeout > 0 {
+			progressTimer = time.NewTimer(adaptiveInitialTimeout)
+			progressTimerC = progressTimer.C
+			waitingForInitialProgress = true
+		}
 	}
+	defer func() {
+		if progressTimer != nil {
+			progressTimer.Stop()
+		}
+	}()
 
 	generalSettings := platformgeneral.GetSetting()
 	pingEnabled := generalSettings.PingIntervalEnabled && !info.DisablePing
@@ -282,39 +289,64 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	})
 
 	normalScannerEnd := false
-	select {
-	case <-scannerDone:
-		normalScannerEnd = info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors()
-		stop(false)
-	case <-streamingFirstByteTimer(firstByteTimer):
-		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, fmt.Errorf("first byte timeout after %s", firstByteTimeout))
-		stop(true)
-		closeTimedOutStream(resp)
-	case <-ticker.C:
-		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
-		stop(true)
-		closeTimedOutStream(resp)
-	case <-progressNotify:
-		resetStreamTimer(progressTimer, adaptiveProgressTimeout)
-	case <-progressTimerC:
-		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout,
-			fmt.Errorf("semantic progress timeout after %s", adaptiveProgressTimeout))
-		stop(true)
-		closeTimedOutStream(resp)
-	case <-streamingMaxTimer(maxTimer):
-		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonMaxDuration, nil)
-		relaycommon.MarkLocalStreamMaxDurationExceeded(c)
-		stop(true)
-		closeTimedOutStream(resp)
-	case <-stopChan:
-		// A handler, ping, or worker failure must interrupt a Scanner blocked in
-		// an upstream Read. Otherwise it occupies a routing candidate until idle
-		// timeout after the downstream attempt has already been abandoned.
-		closeTimedOutStream(resp)
-	case <-c.Request.Context().Done():
-		MarkClientGone(c)
-		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
-		stop(true)
+	monitoring := true
+	for monitoring {
+		select {
+		case <-scannerDone:
+			normalScannerEnd = info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors()
+			stop(false)
+			monitoring = false
+		case <-streamingFirstByteTimer(firstByteTimer):
+			relaycommon.MarkLocalStreamTimeout(c, relaycommon.LocalStreamTimeoutFirstByte)
+			info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, fmt.Errorf("first byte timeout after %s", firstByteTimeout))
+			stop(true)
+			closeTimedOutStream(resp)
+			monitoring = false
+		case <-ticker.C:
+			relaycommon.MarkLocalStreamTimeout(c, relaycommon.LocalStreamTimeoutIdle)
+			info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, nil)
+			stop(true)
+			closeTimedOutStream(resp)
+			monitoring = false
+		case <-progressNotify:
+			waitingForInitialProgress = false
+			if progressTimer == nil {
+				progressTimer = time.NewTimer(adaptiveProgressTimeout)
+				progressTimerC = progressTimer.C
+			} else {
+				resetStreamTimer(progressTimer, adaptiveProgressTimeout)
+			}
+		case <-progressTimerC:
+			timeoutReason := relaycommon.LocalStreamTimeoutAdaptiveProgress
+			timeout := adaptiveProgressTimeout
+			if waitingForInitialProgress {
+				timeoutReason = relaycommon.LocalStreamTimeoutAdaptiveInitial
+				timeout = adaptiveInitialTimeout
+			}
+			relaycommon.MarkLocalStreamTimeout(c, timeoutReason)
+			info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout,
+				fmt.Errorf("semantic progress timeout after %s", timeout))
+			stop(true)
+			closeTimedOutStream(resp)
+			monitoring = false
+		case <-streamingMaxTimer(maxTimer):
+			info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonMaxDuration, nil)
+			relaycommon.MarkLocalStreamMaxDurationExceeded(c)
+			stop(true)
+			closeTimedOutStream(resp)
+			monitoring = false
+		case <-stopChan:
+			// A handler, ping, or worker failure must interrupt a Scanner blocked in
+			// an upstream Read. Otherwise it occupies a routing candidate until idle
+			// timeout after the downstream attempt has already been abandoned.
+			closeTimedOutStream(resp)
+			monitoring = false
+		case <-c.Request.Context().Done():
+			MarkClientGone(c)
+			info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
+			stop(true)
+			monitoring = false
+		}
 	}
 
 	if !normalScannerEnd {

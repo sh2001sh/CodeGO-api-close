@@ -59,11 +59,18 @@ func StreamAdaptiveProgressTimeoutForRequest(c *gin.Context, model string, promp
 // semantic event on a long-context GPT stream before progress-based renewal
 // becomes active.
 func StreamAdaptiveInitialTimeoutForRequest(c *gin.Context, model string, promptTokens int) time.Duration {
+	if IsSingleChannelRoute(c) {
+		return 0
+	}
 	if timeout := StreamAdaptiveProgressTimeoutForRequest(c, model, promptTokens); timeout > 0 {
+		initialTimeout := timeout
 		if constant.StreamingAdaptiveInitialTimeout > 0 {
-			return time.Duration(constant.StreamingAdaptiveInitialTimeout) * time.Second
+			initialTimeout = time.Duration(constant.StreamingAdaptiveInitialTimeout) * time.Second
 		}
-		return timeout
+		if retryTimeout := RetryableResponsesAttemptTimeout(c); retryTimeout > 0 && retryTimeout < initialTimeout {
+			return retryTimeout
+		}
+		return initialTimeout
 	}
 	return 0
 }

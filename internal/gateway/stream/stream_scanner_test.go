@@ -131,6 +131,71 @@ func TestScanResponseEndsAdaptiveLongContextWhenSemanticProgressStops(t *testing
 	require.Less(t, time.Since(started), 3*time.Second)
 	require.Equal(t, gatewaycontract.StreamEndReasonTimeout, info.StreamStatus.EndReason)
 	require.False(t, relaycommon.IsLocalStreamMaxDurationExceeded(context))
+	require.Equal(t, relaycommon.LocalStreamTimeoutAdaptiveInitial, relaycommon.LocalStreamTimeoutReason(context))
+}
+
+func TestScanResponseSingleChannelUsesAbsoluteMaxInsteadOfInitialDeadline(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldMaxDuration := constant.StreamingLongContextMaxDuration
+	oldProgress := constant.StreamingAdaptiveProgressTimeout
+	oldInitial := constant.StreamingAdaptiveInitialTimeout
+	constant.StreamingTimeout = 5
+	constant.StreamingLongContextMaxDuration = 1
+	constant.StreamingAdaptiveProgressTimeout = 1
+	constant.StreamingAdaptiveInitialTimeout = 1
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingLongContextMaxDuration = oldMaxDuration
+		constant.StreamingAdaptiveProgressTimeout = oldProgress
+		constant.StreamingAdaptiveInitialTimeout = oldInitial
+	})
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	relaycommon.MarkSingleChannelRoute(context, true)
+	body := &blockingReader{closed: make(chan struct{})}
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+
+	ScanResponse(context, &http.Response{Body: body}, info, func(string, *Result) {})
+
+	require.Equal(t, gatewaycontract.StreamEndReasonMaxDuration, info.StreamStatus.EndReason)
+	require.Equal(t, relaycommon.LocalStreamTimeoutMaxDuration, relaycommon.LocalStreamTimeoutReason(context))
+}
+
+func TestScanResponseStartsProgressDeadlineAfterFirstSemanticSignal(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldMaxDuration := constant.StreamingLongContextMaxDuration
+	oldProgress := constant.StreamingAdaptiveProgressTimeout
+	oldInitial := constant.StreamingAdaptiveInitialTimeout
+	constant.StreamingTimeout = 5
+	constant.StreamingLongContextMaxDuration = 10
+	constant.StreamingAdaptiveProgressTimeout = 1
+	constant.StreamingAdaptiveInitialTimeout = 0
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingLongContextMaxDuration = oldMaxDuration
+		constant.StreamingAdaptiveProgressTimeout = oldProgress
+		constant.StreamingAdaptiveInitialTimeout = oldInitial
+	})
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	relaycommon.MarkSingleChannelRoute(context, true)
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	go func() {
+		_, _ = io.WriteString(writer, "data: semantic\n\n")
+	}()
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+
+	ScanResponse(context, &http.Response{Body: reader}, info, func(_ string, result *Result) {
+		result.MarkProgress()
+	})
+
+	require.Equal(t, gatewaycontract.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+	require.Equal(t, relaycommon.LocalStreamTimeoutAdaptiveProgress, relaycommon.LocalStreamTimeoutReason(context))
 }
 
 func TestScanResponseRenewsAdaptiveDeadlineOnSemanticProgress(t *testing.T) {

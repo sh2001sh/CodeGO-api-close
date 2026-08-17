@@ -5,9 +5,15 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/types"
 )
 
 const requestBudgetContextKey = "gateway_request_budget"
+
+const (
+	responsesStreamRetryBudget       = 150 * time.Second
+	responsesFirstAttemptWaitTimeout = 60 * time.Second
+)
 
 type RequestBudget struct {
 	StartedAt        time.Time `json:"started_at"`
@@ -32,7 +38,7 @@ func StartRequestBudget(c *gin.Context, profile RequestProfile, startedAt time.T
 	}
 	budget := &RequestBudget{
 		StartedAt:       startedAt,
-		Deadline:        startedAt.Add(requestBudgetDuration(profile.RequestType)),
+		Deadline:        startedAt.Add(requestBudgetDuration(profile)),
 		MaxAttempts:     2,
 		MaxFaultDomains: 2,
 		faultDomains:    make(map[string]struct{}, 2),
@@ -42,6 +48,29 @@ func StartRequestBudget(c *gin.Context, profile RequestProfile, startedAt time.T
 		UpdateRouteDecisionBudget(c, budget)
 	}
 	return budget
+}
+
+// RetryableResponsesAttemptTimeout returns the first-attempt wait cap only
+// while a text Responses stream still has a real retry available.
+func RetryableResponsesAttemptTimeout(c *gin.Context) time.Duration {
+	if c == nil || IsImageGenerationRequest(c) {
+		return 0
+	}
+	if IsSingleChannelRoute(c) {
+		return 0
+	}
+	if _, specificChannel := c.Get("specific_channel_id"); specificChannel {
+		return 0
+	}
+	profile, found := RequestProfileFromContext(c)
+	if !found || !profile.IsStream || profile.Protocol != string(types.RelayFormatOpenAIResponses) {
+		return 0
+	}
+	budget := RequestBudgetFromContext(c)
+	if budget == nil || !budget.CanRetry(time.Now()) {
+		return 0
+	}
+	return responsesFirstAttemptWaitTimeout
 }
 
 func RequestBudgetFromContext(c *gin.Context) *RequestBudget {
@@ -124,8 +153,11 @@ func (b *RequestBudget) Remaining(now time.Time) time.Duration {
 	return remaining
 }
 
-func requestBudgetDuration(requestType RequestType) time.Duration {
-	switch requestType {
+func requestBudgetDuration(profile RequestProfile) time.Duration {
+	if profile.IsStream && profile.Protocol == string(types.RelayFormatOpenAIResponses) && profile.RequestType != RequestTypeImageStream {
+		return responsesStreamRetryBudget
+	}
+	switch profile.RequestType {
 	case RequestTypeChatShortStream:
 		return 35 * time.Second
 	case RequestTypeChatLongStream:

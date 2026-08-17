@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
@@ -83,7 +84,7 @@ func TestResponseHeaderTimeoutForRequest(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			info := &relaycommon.RelayInfo{OriginModelName: testCase.model, RelayMode: testCase.relayMode}
 			info.SetEstimatePromptTokens(testCase.promptTokens)
-			require.Equal(t, testCase.expected, responseHeaderTimeoutForRequest(info))
+			require.Equal(t, testCase.expected, responseHeaderTimeoutForRequest(nil, info))
 		})
 	}
 }
@@ -101,8 +102,34 @@ func TestResponseHeaderTimeoutCanBeDisabledForTextWithoutAffectingImages(t *test
 
 	text := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", RelayMode: gatewaycontract.RelayModeResponses}
 	image := &relaycommon.RelayInfo{OriginModelName: "gpt-image-2", RelayMode: gatewaycontract.RelayModeImagesGenerations}
-	require.Zero(t, responseHeaderTimeoutForRequest(text))
-	require.Equal(t, 120*time.Second, responseHeaderTimeoutForRequest(image))
+	require.Zero(t, responseHeaderTimeoutForRequest(nil, text))
+	require.Equal(t, 120*time.Second, responseHeaderTimeoutForRequest(nil, image))
+}
+
+func TestRetryableResponsesFirstAttemptBoundsResponseHeaderWait(t *testing.T) {
+	previous := platformconfig.RelayResponseHeaderTimeout
+	platformconfig.RelayResponseHeaderTimeout = 0
+	t.Cleanup(func() { platformconfig.RelayResponseHeaderTimeout = previous })
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	profile := relaycommon.InitializeRequestProfile(
+		context,
+		"gpt-5.6-sol",
+		context.Request.URL.Path,
+		relaycommon.RequestProfileHint{IsStream: true},
+	)
+	budget := relaycommon.StartRequestBudget(context, profile, time.Now())
+	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", RelayMode: gatewaycontract.RelayModeResponses, IsStream: true}
+
+	markResponsesStreamRetrySafeBeforeConnect(context, info)
+	require.True(t, context.GetBool(string(constant.ContextKeyResponsesStreamRetrySafe)))
+	require.Equal(t, 60*time.Second, responseHeaderTimeoutForRequest(context, info))
+
+	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
+	require.Zero(t, responseHeaderTimeoutForRequest(context, info))
 }
 
 func TestSetupAPIRequestHeaderForwardsRemoteCompactionFeature(t *testing.T) {

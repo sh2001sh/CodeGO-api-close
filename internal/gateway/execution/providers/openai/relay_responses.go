@@ -254,6 +254,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	} else {
 		helper.IsClientGone(c)
 	}
+	streamEndReason := ""
+	upstreamEOF := false
+	if info.StreamStatus != nil {
+		streamEndReason = string(info.StreamStatus.EndReason)
+		upstreamEOF = info.StreamStatus.EndReason == gatewaycontract.StreamEndReasonEOF
+	}
+	localTimeoutReason := relaycommon.LocalStreamTimeoutReason(c)
 	c.Set("responses_stream_lifecycle", map[string]interface{}{
 		"received_events":            info.ReceivedResponseCount,
 		"semantic_output_seen":       sawSemanticOutput.Load(),
@@ -262,6 +269,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		"pre_output_events_dropped":  preOutputEventsDropped,
 		"first_output_timeout_ms":    firstOutputTimeout.Milliseconds(),
 		"first_output_timed_out":     firstOutputTimedOut.Load(),
+		"stream_end_reason":          streamEndReason,
+		"local_timeout_reason":       localTimeoutReason,
+		"upstream_eof":               upstreamEOF,
+		"client_disconnected":        c.GetBool(string(constant.ContextKeyClientGone)),
 	})
 
 	if firstOutputTimedOut.Load() && !sawSemanticOutput.Load() {
@@ -269,6 +280,20 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			fmt.Errorf("upstream produced no semantic output before %s", firstOutputTimeout),
 			types.ErrorCodeChannelResponseTimeExceeded,
 			http.StatusGatewayTimeout,
+		)
+	}
+
+	if localTimeoutReason != "" && !sawResponseCompleted.Load() {
+		options := make([]types.NewAPIErrorOptions, 0, 1)
+		if c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+			_ = sendSyntheticResponsesFailure(c, info, "gateway stream timeout: "+localTimeoutReason)
+			options = append(options, types.ErrOptionWithSkipRetry())
+		}
+		return nil, types.NewOpenAIError(
+			fmt.Errorf("gateway stream timeout: %s", localTimeoutReason),
+			types.ErrorCodeChannelResponseTimeExceeded,
+			http.StatusGatewayTimeout,
+			options...,
 		)
 	}
 

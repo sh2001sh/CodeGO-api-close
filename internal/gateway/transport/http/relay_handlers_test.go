@@ -228,6 +228,31 @@ func TestShouldRetryLateResponsesStreamBeforeSemanticContent(t *testing.T) {
 	require.True(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldRetryResponsesFailureAfterLegacyNinetySecondBudget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set("original_model", "gpt-5.6-sol")
+	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	startedAt := time.Now().Add(-121 * time.Second)
+	httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, startedAt)
+	profile := relaycommon.InitializeRequestProfile(
+		ctx,
+		"gpt-5.6-sol",
+		ctx.Request.URL.Path,
+		relaycommon.RequestProfileHint{IsStream: true, HasUpstreamState: true},
+	)
+	budget := relaycommon.StartRequestBudget(ctx, profile, startedAt)
+	require.True(t, budget.TryBeginAttempt(startedAt, "provider:a"))
+	err := types.NewOpenAIError(
+		errors.New("responses stream closed before response.completed"),
+		types.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	)
+
+	require.True(t, shouldRetry(ctx, err, 1))
+}
+
 func TestRouteSelectionWaitIsLimitedAndHonorsCancellation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

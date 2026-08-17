@@ -142,6 +142,51 @@ func TestOaiResponsesStreamHandlerTimesOutBeforeSemanticOutput(t *testing.T) {
 	require.Empty(t, recorder.Body.String())
 }
 
+func TestOaiResponsesStreamHandlerMapsAdaptiveTimeoutToGatewayTimeout(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldFirstByteTimeout := constant.StreamingFirstByteTimeout
+	oldMaxDuration := constant.StreamingLongContextMaxDuration
+	oldProgress := constant.StreamingAdaptiveProgressTimeout
+	oldInitial := constant.StreamingAdaptiveInitialTimeout
+	constant.StreamingTimeout = 5
+	constant.StreamingFirstByteTimeout = 0
+	constant.StreamingLongContextMaxDuration = 10
+	constant.StreamingAdaptiveProgressTimeout = 1
+	constant.StreamingAdaptiveInitialTimeout = 1
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingFirstByteTimeout = oldFirstByteTimeout
+		constant.StreamingLongContextMaxDuration = oldMaxDuration
+		constant.StreamingAdaptiveProgressTimeout = oldProgress
+		constant.StreamingAdaptiveInitialTimeout = oldInitial
+	})
+
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	go func() {
+		_, _ = io.WriteString(writer, `data: {"type":"response.created","response":{"id":"resp_123"}}`+"\n\n")
+	}()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	relaycommon.MarkLongContextRequest(c, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}
+	resp := &http.Response{StatusCode: http.StatusOK, Body: reader, Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, info, resp)
+
+	require.Nil(t, usage)
+	require.NotNil(t, err)
+	require.Equal(t, http.StatusGatewayTimeout, err.StatusCode)
+	require.Equal(t, types.ErrorCodeChannelResponseTimeExceeded, err.GetErrorCode())
+	require.False(t, types.IsSkipRetryError(err))
+	lifecycleValue, found := c.Get("responses_stream_lifecycle")
+	require.True(t, found)
+	lifecycle := lifecycleValue.(map[string]interface{})
+	require.Equal(t, relaycommon.LocalStreamTimeoutAdaptiveInitial, lifecycle["local_timeout_reason"])
+	require.Equal(t, false, lifecycle["upstream_eof"])
+}
+
 func TestOaiResponsesStreamHandlerFlushesLifecycleBeforeSemanticOutput(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	constant.StreamingTimeout = 30

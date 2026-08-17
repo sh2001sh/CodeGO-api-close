@@ -40,6 +40,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		shouldRetryPreservedOnlyRoute(c, preserveOnlyRoute)
 	if retryFallbackChannel {
 		httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, channelError.ChannelId)
+		gatewayruntime.AllowRetryAfterChannelAffinityFailure(c)
 	}
 	if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected && !preserveOnlyRoute {
 		// A retry must leave the complete upstream fault domain. Channel IDs
@@ -213,7 +214,8 @@ func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIE
 		if budget := gatewayruntime.RequestBudgetFromContext(c); budget != nil && !budget.CanRetry(time.Now()) {
 			return false
 		}
-		return len(c.GetStringSlice("use_channel")) == 1
+		_, singleChannel := gatewayruntime.SingleUsedChannelID(c)
+		return singleChannel
 	}
 	if err.GetErrorCode() != types.ErrorCodeChannelResponseTimeExceeded && err.StatusCode != http.StatusGatewayTimeout && err.StatusCode != 524 {
 		startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
@@ -224,7 +226,7 @@ func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIE
 			return false
 		}
 	}
-	if len(c.GetStringSlice("use_channel")) != 1 {
+	if _, singleChannel := gatewayruntime.SingleUsedChannelID(c); !singleChannel {
 		return false
 	}
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||
@@ -239,7 +241,10 @@ func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIE
 // without this marker, a transient 429/502 on a sole route is misreported as
 // "no available channel" instead of returning the real upstream result.
 func shouldRetryPreservedOnlyRoute(c *gin.Context, preserveOnlyRoute bool) bool {
-	if c == nil || !preserveOnlyRoute || len(c.GetStringSlice("use_channel")) != 1 {
+	if c == nil || !preserveOnlyRoute {
+		return false
+	}
+	if _, singleChannel := gatewayruntime.SingleUsedChannelID(c); !singleChannel {
 		return false
 	}
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||

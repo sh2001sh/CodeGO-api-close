@@ -7,10 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
-	routepin "github.com/sh2001sh/new-api/internal/gateway/routepin"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
-	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 )
@@ -45,11 +44,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 	httpctx.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
 	httpctx.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 
-	key, index, newAPIError := gatewaystore.GetNextEnabledChannelKey(channel)
-	if pinnedIndex, pinned := routepin.KeyIndex(c, channel.Id); pinned {
-		index = pinnedIndex
-		key, newAPIError = gatewaystore.GetEnabledChannelKeyByIndex(channel, pinnedIndex)
-	}
+	key, index, newAPIError := selectChannelKeyForRequest(c, channel)
 	if newAPIError != nil {
 		return newAPIError
 	}
@@ -69,6 +64,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 	// A retry can choose a different channel in the same Gin context. Always
 	// refresh the effective domain so capacity and cooldowns follow that channel.
 	c.Set("channel_fault_domain", faultDomain)
+	classifySelectedChannelRoute(c, channel.Id, modelName)
 	httpctx.SetContextKey(c, constant.ContextKeySystemPromptOverride, false)
 
 	switch channel.Type {
@@ -90,6 +86,20 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 		c.Set("bot_id", channel.Other)
 	}
 	return nil
+}
+
+func classifySelectedChannelRoute(c *gin.Context, channelID int, modelName string) {
+	profile, found := gatewayruntime.RequestProfileFromContext(c)
+	if !found || !profile.IsStream || profile.Protocol != string(types.RelayFormatOpenAIResponses) {
+		return
+	}
+	alternative, err := hasAlternativeSelectableRoute(channelID, selectedChannelGroup(c), modelName)
+	if err != nil {
+		platformobservability.SysError("classify selected channel route failed: " + err.Error())
+		gatewayruntime.MarkSingleChannelRoute(c, false)
+		return
+	}
+	gatewayruntime.MarkSingleChannelRoute(c, !alternative)
 }
 
 func normalizedChannelScope(channel *gatewayschema.Channel) string {

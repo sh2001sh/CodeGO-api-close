@@ -21,3 +21,20 @@ func TestInvalidateChannelAffinityReenablesRetry(t *testing.T) {
 
 	require.False(t, ShouldSkipRetryAfterChannelAffinityFailure(context))
 }
+
+func TestAllowRetryAfterAffinityFailureKeepsAffinityContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(nil)
+	setChannelAffinityContext(context, channelAffinityMeta{
+		CacheKey:  "codex:test",
+		SkipRetry: true,
+	})
+	context.Set(ginKeyChannelAffinitySkipRetry, true)
+
+	AllowRetryAfterChannelAffinityFailure(context)
+
+	require.False(t, ShouldSkipRetryAfterChannelAffinityFailure(context))
+	cacheKey, _, found := getChannelAffinityContext(context)
+	require.True(t, found)
+	require.Equal(t, "codex:test", cacheKey)
+}

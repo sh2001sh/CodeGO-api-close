@@ -133,7 +133,8 @@ func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
 func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (*http.Response, error) {
 	var client *http.Client
 	var err error
-	responseHeaderTimeout := responseHeaderTimeoutForRequest(info)
+	markResponsesStreamRetrySafeBeforeConnect(c, info)
+	responseHeaderTimeout := responseHeaderTimeoutForRequest(c, info)
 	if info.ChannelSetting.Proxy != "" {
 		client, err = platformhttpx.NewProxyHTTPClientWithResponseHeaderTimeout(info.ChannelSetting.Proxy, responseHeaderTimeout)
 		if err != nil {
@@ -190,7 +191,7 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	return resp, nil
 }
 
-func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration {
+func responseHeaderTimeoutForRequest(c *gin.Context, info *relaycommon.RelayInfo) time.Duration {
 	baseTimeout := time.Duration(platformconfig.RelayResponseHeaderTimeout) * time.Second
 	if info == nil {
 		return baseTimeout
@@ -203,6 +204,9 @@ func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration 
 		}
 		return maxDuration(baseTimeout, imageTimeout)
 	}
+	if retryTimeout := relaycommon.RetryableResponsesAttemptTimeout(c); retryTimeout > 0 {
+		return minPositiveDuration(baseTimeout, retryTimeout)
+	}
 	if baseTimeout <= 0 {
 		return 0
 	}
@@ -213,6 +217,20 @@ func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration 
 		return maxDuration(baseTimeout, 90*time.Second)
 	}
 	return maxDuration(baseTimeout, 75*time.Second)
+}
+
+func minPositiveDuration(configured, fallback time.Duration) time.Duration {
+	if configured <= 0 || fallback < configured {
+		return fallback
+	}
+	return configured
+}
+
+func markResponsesStreamRetrySafeBeforeConnect(c *gin.Context, info *relaycommon.RelayInfo) {
+	if c == nil || info == nil || !info.IsStream || info.RelayMode != gatewaycontract.RelayModeResponses || relaycommon.IsImageGenerationRequest(c) {
+		return
+	}
+	c.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
 }
 
 func maxDuration(left, right time.Duration) time.Duration {

@@ -56,3 +56,19 @@ func TestRefineRequestProfileUsesPromptAndConversationState(t *testing.T) {
 	require.Equal(t, PromptSizeLarge, profile.PromptSizeBucket)
 	require.Equal(t, MigrationUpstreamStateBound, profile.MigrationCapability)
 }
+
+func TestRefineRequestProfileMarksResponsesImageTool(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	stream := true
+	request := &dto.OpenAIResponsesRequest{
+		Stream: &stream,
+		Tools:  []byte(`[{"type":"image_generation"}]`),
+	}
+
+	profile := RefineRequestProfile(context, types.RelayFormatOpenAIResponses, request, 1_000)
+
+	require.Equal(t, RequestTypeImageStream, profile.RequestType)
+	require.True(t, IsImageGenerationRequest(context))
+}

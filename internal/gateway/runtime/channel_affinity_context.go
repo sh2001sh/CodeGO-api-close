@@ -434,6 +434,14 @@ func ShouldSkipRetryAfterChannelAffinityFailure(c *gin.Context) bool {
 	return meta.SkipRetry
 }
 
+// AllowRetryAfterChannelAffinityFailure clears only the request-local veto.
+// The successful affinity cache entry remains intact for later requests.
+func AllowRetryAfterChannelAffinityFailure(c *gin.Context) {
+	if c != nil {
+		c.Set(ginKeyChannelAffinitySkipRetry, false)
+	}
+}
+
 // InvalidateChannelAffinityForCurrentRequest removes a stale affinity entry before normal routing resumes.
 func InvalidateChannelAffinityForCurrentRequest(c *gin.Context) {
 	cacheKey, _, ok := getChannelAffinityContext(c)

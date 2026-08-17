@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/dto"
+	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -88,7 +89,10 @@ func RefineRequestProfile(c *gin.Context, format types.RelayFormat, request dto.
 	cacheAffinity, upstreamState := requestConversationState(request)
 	profile.HasConversationState = cacheAffinity || upstreamState
 	profile.MigrationCapability = migrationCapability(cacheAffinity, upstreamState)
-	image := format == types.RelayFormatOpenAIImage || IsImageGenerationRequest(c)
+	image := format == types.RelayFormatOpenAIImage || IsImageGenerationRequest(c) || requestUsesImageGeneration(request)
+	if image {
+		MarkImageGenerationRequest(c)
+	}
 	profile.RequestType = classifyRequestType(profile, requestPath(c), image)
 	setRequestProfile(c, profile)
 	return profile
@@ -215,6 +219,19 @@ func requestHasTools(request dto.Request) bool {
 	default:
 		return false
 	}
+}
+
+func requestUsesImageGeneration(request dto.Request) bool {
+	responsesRequest, ok := request.(*dto.OpenAIResponsesRequest)
+	if !ok {
+		return false
+	}
+	for _, tool := range responsesRequest.GetToolsMap() {
+		if strings.EqualFold(strings.TrimSpace(platformencoding.Interface2String(tool["type"])), "image_generation") {
+			return true
+		}
+	}
+	return false
 }
 
 func requestConversationState(request dto.Request) (cacheAffinity bool, upstreamState bool) {

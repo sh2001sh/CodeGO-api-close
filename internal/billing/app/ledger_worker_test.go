@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
@@ -14,6 +15,15 @@ import (
 )
 
 func TestRunLedgerWorkerBatchRebuildsSnapshotAndPublishesEvents(t *testing.T) {
+	originalDB := platformdb.DB
+	originalUsingSQLite := platformdb.UsingSQLite
+	originalUsingPostgreSQL := platformdb.UsingPostgreSQL
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformdb.UsingSQLite = originalUsingSQLite
+		platformdb.UsingPostgreSQL = originalUsingPostgreSQL
+	})
+
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	platformdb.DB = db
@@ -61,4 +71,51 @@ func TestRunLedgerWorkerBatchRebuildsSnapshotAndPublishesEvents(t *testing.T) {
 	require.Equal(t, 1, processed)
 	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).Where("status = ?", billingschema.BillingOutboxStatusPending).Count(&pending).Error)
 	require.Zero(t, pending)
+}
+
+func TestCleanupPublishedLedgerOutboxBatchPreservesRecentAndPendingEvents(t *testing.T) {
+	originalDB := platformdb.DB
+	originalUsingSQLite := platformdb.UsingSQLite
+	originalUsingPostgreSQL := platformdb.UsingPostgreSQL
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformdb.UsingSQLite = originalUsingSQLite
+		platformdb.UsingPostgreSQL = originalUsingPostgreSQL
+	})
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	platformdb.DB = db
+	platformdb.UsingSQLite = true
+	platformdb.UsingPostgreSQL = false
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingOutboxEvent{}))
+
+	now := time.Now().UTC()
+	oldPublishedAt := now.Add(-ledgerOutboxPublishedRetention - time.Hour)
+	recentPublishedAt := now.Add(-time.Hour)
+	events := []billingschema.BillingOutboxEvent{
+		{AccountID: "old", IdempotencyKey: "old", Status: billingschema.BillingOutboxStatusPublished, PublishedAt: &oldPublishedAt},
+		{AccountID: "recent", IdempotencyKey: "recent", Status: billingschema.BillingOutboxStatusPublished, PublishedAt: &recentPublishedAt},
+		{AccountID: "pending", IdempotencyKey: "pending", Status: billingschema.BillingOutboxStatusPending, PublishedAt: &oldPublishedAt},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	removed, err := cleanupPublishedLedgerOutboxBatch(context.Background(), now, 10)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, removed)
+
+	var remaining []billingschema.BillingOutboxEvent
+	require.NoError(t, db.Order("account_id").Find(&remaining).Error)
+	require.Len(t, remaining, 2)
+	require.Equal(t, "pending", remaining[0].AccountID)
+	require.Equal(t, "recent", remaining[1].AccountID)
+}
+
+func TestLedgerReconciliationDueUsesPerAccountInterval(t *testing.T) {
+	now := time.Now().UTC()
+	accountID := "reconcile-interval-test"
+	require.True(t, ledgerReconciliationDue(accountID, now))
+	markLedgerReconciled(accountID, now)
+	require.False(t, ledgerReconciliationDue(accountID, now.Add(ledgerReconciliationInterval-time.Second)))
+	require.True(t, ledgerReconciliationDue(accountID, now.Add(ledgerReconciliationInterval)))
 }

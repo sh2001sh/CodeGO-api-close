@@ -3,11 +3,25 @@ package store
 import (
 	"fmt"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"sort"
+	"sync"
+	"time"
 
 	"os"
 	"strings"
 )
+
+type groupStatusCacheEntry struct {
+	expiresAt time.Time
+	rows      []GroupModelRequestBucket
+}
+
+var groupStatusCache = struct {
+	sync.Mutex
+	items map[string]groupStatusCacheEntry
+}{items: make(map[string]groupStatusCacheEntry)}
 
 func ListGroupStatusGroups() ([]string, error) {
 	groupColumn := abilityGroupColumn()
@@ -49,6 +63,20 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 		}
 		filteredGroups = append(filteredGroups, groupName)
 	}
+	sort.Strings(filteredGroups)
+	cacheTTL := time.Duration(platformconfig.GroupStatusCacheSeconds) * time.Second
+	if cacheTTL <= 0 {
+		cacheTTL = 10 * time.Second
+	}
+	cacheKey := fmt.Sprintf("%d:%d:%d:%s", startTime, endTime, bucketSize, strings.Join(filteredGroups, "\x00"))
+	now := time.Now()
+	groupStatusCache.Lock()
+	if cached, ok := groupStatusCache.items[cacheKey]; ok && now.Before(cached.expiresAt) {
+		rows := append([]GroupModelRequestBucket(nil), cached.rows...)
+		groupStatusCache.Unlock()
+		return rows, nil
+	}
+	groupStatusCache.Unlock()
 
 	groupColumn := logGroupColumn()
 	bucketExpr := logBucketIndexExpr(startTime, bucketSize)
@@ -78,6 +106,25 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 	if err != nil {
 		return nil, err
 	}
+	groupStatusCache.Lock()
+	if len(groupStatusCache.items) >= 128 {
+		for key, item := range groupStatusCache.items {
+			if now.After(item.expiresAt) {
+				delete(groupStatusCache.items, key)
+			}
+		}
+		if len(groupStatusCache.items) >= 128 {
+			for key := range groupStatusCache.items {
+				delete(groupStatusCache.items, key)
+				break
+			}
+		}
+	}
+	groupStatusCache.items[cacheKey] = groupStatusCacheEntry{
+		expiresAt: now.Add(cacheTTL),
+		rows:      append([]GroupModelRequestBucket(nil), rows...),
+	}
+	groupStatusCache.Unlock()
 	return rows, nil
 }
 

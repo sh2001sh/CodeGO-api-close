@@ -135,7 +135,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	switch info.RelayFormat {
 	case types.RelayFormatClaude:
 		if hasSpecialPlan && specialPlan.ClaudeBaseURL != "" {
-			return fmt.Sprintf("%s/v1/messages", specialPlan.ClaudeBaseURL), nil
+			return relaycommon.JoinBaseURLPath(specialPlan.ClaudeBaseURL, "/v1/messages"), nil
 		}
 		if strings.HasPrefix(info.UpstreamModelName, "bot") {
 			return fmt.Sprintf("%s/api/v3/bots/chat/completions", baseURL), nil
@@ -163,7 +163,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 			if baseURL == channelconstant.ChannelBaseURLs[channelconstant.ChannelTypeVolcEngine] {
 				return "wss://openspeech.bytedance.com/api/v1/tts/ws_binary", nil
 			}
-			return fmt.Sprintf("%s/v1/audio/speech", baseURL), nil
+			return relaycommon.JoinBaseURLPath(baseURL, "/v1/audio/speech"), nil
 		}
 	}
 	return "", fmt.Errorf("unsupported relay mode: %d", info.RelayMode)

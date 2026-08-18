@@ -15,7 +15,7 @@ func TestUnifiedBlindBoxPoolEconomics(t *testing.T) {
 	setting := blindboxsettings.Get()
 	require.Equal(t, 2.5, setting.BalanceBlindBoxPriceUSD)
 	require.Len(t, setting.BalanceBlindBoxTiers, 12)
-	require.InDelta(t, 0.29311, setting.BalanceBlindBoxTiers[0].Probability, 0.000000001)
+	require.InDelta(t, 0.52177312, setting.BalanceBlindBoxTiers[0].Probability, 0.000000001)
 
 	var probability float64
 	var expectedUnifiedCredit float64
@@ -34,8 +34,8 @@ func TestUnifiedBlindBoxPoolEconomics(t *testing.T) {
 		}
 	}
 	require.InDelta(t, 1, probability, 0.000000001)
-	require.InDelta(t, 2.408679149, expectedUnifiedCredit, 0.000001)
-	require.InDelta(t, 0.48319, immediateProfitProbability, 0.000001)
+	require.InDelta(t, 2.462739442, expectedUnifiedCredit, 0.000001)
+	require.InDelta(t, 0.45378818, immediateProfitProbability, 0.000001)
 }
 
 func TestUnifiedBlindBoxDrawUsesFrozenPoolAndGuarantees(t *testing.T) {
@@ -120,9 +120,10 @@ func TestUnifiedBlindBoxMillionDrawEconomics(t *testing.T) {
 	)
 	require.InDelta(t, 2.51644, mean, 0.04)
 	require.InDelta(t, 100.66, mean/setting.BalanceBlindBoxPriceUSD*100, 0.5)
-	require.Greater(t, standardDeviation, 4.0)
-	require.InDelta(t, 0.0012, float64(stats.smallPityCount)/draws, 0.0007)
-	require.InDelta(t, 0.0085, float64(stats.bigPityCount)/draws, 0.003)
+	require.Greater(t, standardDeviation, 2.5)
+	require.Less(t, standardDeviation, 3.7)
+	require.InDelta(t, 0.0020, float64(stats.smallPityCount)/draws, 0.0007)
+	require.InDelta(t, 0.0025, float64(stats.bigPityCount)/draws, 0.001)
 }
 
 func TestUnifiedBlindBoxAnnualTenDrawEconomics(t *testing.T) {
@@ -205,8 +206,9 @@ func TestUnifiedBlindBoxFortyPurchaseSessionDistribution(t *testing.T) {
 	profitRate := float64(profitable) / sessions
 	median := returns[sessions/2]
 	t.Logf("sessions=%d purchases=%d profitable_rate=%.6f median_return=%.6f p10=%.6f p90=%.6f", sessions, purchasesPerSession, profitRate, median, returns[sessions/10], returns[sessions*9/10])
-	require.InDelta(t, 0.35, profitRate, 0.03)
-	require.InDelta(t, 0.93, median, 0.05)
+	require.InDelta(t, 0.50, profitRate, 0.02)
+	require.GreaterOrEqual(t, median, 0.99)
+	require.LessOrEqual(t, median, 1.01)
 }
 
 type blindBoxSimulationStats struct {

@@ -159,7 +159,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		if (info.RelayFormat == types.RelayFormatClaude || info.RelayFormat == types.RelayFormatGemini) &&
 			info.RelayMode != gatewaycontract.RelayModeResponses &&
 			info.RelayMode != gatewaycontract.RelayModeResponsesCompact {
-			return fmt.Sprintf("%s/v1/chat/completions", info.ChannelBaseUrl), nil
+			return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/chat/completions"), nil
 		}
 		return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, info.RequestURLPath, info.ChannelType), nil
 	}

@@ -66,6 +66,7 @@ func initEnvironment() {
 	}
 
 	platformconfig.DebugEnabled = os.Getenv("DEBUG") == "true"
+	platformconfig.SQLDebugEnabled = platformconfig.GetEnvOrDefaultBool("SQL_DEBUG", false)
 	platformtext.SetDebugEnabled(platformconfig.DebugEnabled)
 	platformconfig.MemoryCacheEnabled = os.Getenv("MEMORY_CACHE_ENABLED") == "true"
 	platformconfig.IsMasterNode = os.Getenv("NODE_TYPE") != "slave"
@@ -94,6 +95,10 @@ func initEnvironment() {
 	platformconfig.ImageResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("IMAGE_RESPONSE_HEADER_TIMEOUT", 120)
 	platformconfig.RelayMaxIdleConns = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_IDLE_CONNS", 500)
 	platformconfig.RelayMaxIdleConnsPerHost = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_IDLE_CONNS_PER_HOST", 100)
+	platformconfig.RelayMaxConnsPerHost = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONNS_PER_HOST", 0)
+	platformconfig.RelayIdleConnTimeoutSeconds = platformconfig.GetEnvOrDefaultInt("RELAY_IDLE_CONN_TIMEOUT_SECONDS", 90)
+	platformconfig.RelayTLSHandshakeTimeoutSeconds = platformconfig.GetEnvOrDefaultInt("RELAY_TLS_HANDSHAKE_TIMEOUT_SECONDS", 10)
+	platformconfig.GroupStatusCacheSeconds = platformconfig.GetEnvOrDefaultInt("GROUP_STATUS_CACHE_SECONDS", 10)
 	platformconfig.RelayMaxConcurrentRequests = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONCURRENT_REQUESTS", 400)
 	platformconfig.GeminiSafetySetting = platformconfig.GetEnvOrDefaultString("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 	platformconfig.CohereSafetySetting = platformconfig.GetEnvOrDefaultString("COHERE_SAFETY_SETTING", "NONE")

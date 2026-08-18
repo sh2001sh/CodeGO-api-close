@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	defaultSQLMaxIdleConnections = 5
-	defaultSQLMaxOpenConnections = 20
+	defaultSQLMaxIdleConnections = 15
+	defaultSQLMaxOpenConnections = 50
 	defaultSQLMaxLifetimeSeconds = 300
 )
 
@@ -46,7 +46,7 @@ func InitPrimaryDB() error {
 		platformobservability.FatalLog(err.Error())
 		return err
 	}
-	if platformconfig.DebugEnabled {
+	if platformconfig.SQLDebugEnabled {
 		db = db.Debug()
 	}
 	platformdb.DB = db
@@ -99,7 +99,7 @@ func InitLogDB() error {
 		platformobservability.FatalLog(err.Error())
 		return err
 	}
-	if platformconfig.DebugEnabled {
+	if platformconfig.SQLDebugEnabled {
 		db = db.Debug()
 	}
 	platformdb.LogDB = db

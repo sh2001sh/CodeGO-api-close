@@ -23,7 +23,7 @@ type BillingOutboxEvent struct {
 	AggregateID    string          `json:"aggregate_id" gorm:"column:aggregate_id;size:64"`
 	EventType      string          `json:"event_type" gorm:"column:event_type;size:64"`
 	Payload        json.RawMessage `json:"payload" gorm:"column:payload;type:json"`
-	IdempotencyKey string          `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:uq_billing_outbox_idempotency"`
+	IdempotencyKey string          `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:idx_outbox_events_idempotency_key"`
 	Status         string          `json:"status" gorm:"column:status;size:16;index:idx_billing_outbox_status_created"`
 	Attempts       int             `json:"attempts" gorm:"column:attempts"`
 	LastError      string          `json:"last_error" gorm:"column:last_error;type:text"`

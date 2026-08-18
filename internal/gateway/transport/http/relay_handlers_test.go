@@ -89,6 +89,15 @@ func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldNotRetryDeterministicNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	err := types.NewOpenAIError(errors.New("endpoint not found"), types.ErrorCodeBadResponseStatusCode, http.StatusNotFound)
+
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
 func TestShouldNotRetryAfterResponsesCreateWasWrittenUpstream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

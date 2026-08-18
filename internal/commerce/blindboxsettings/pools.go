@@ -1,16 +1,16 @@
 package blindboxsettings
 
 var defaultTierSettings = []TierSetting{
-	{Name: "0.20-0.80 统一额度", MinUSD: 0.2, MaxUSD: 0.8, Probability: 0.29311, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "0.80-1.50 统一额度", MinUSD: 0.8, MaxUSD: 1.5, Probability: 0.13, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "1.50-2.50 统一额度", MinUSD: 1.5, MaxUSD: 2.5, Probability: 0.08, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "2.50-3.69 统一额度", MinUSD: 2.5, MaxUSD: 3.69, Probability: 0.429317727273, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "4.50-12.00 统一额度", MinUSD: 4.5, MaxUSD: 12, Probability: 0.045, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "12.00-30.00 统一额度", MinUSD: 12, MaxUSD: 30, Probability: 0.008, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "30.00-100.00 统一额度", MinUSD: 30, MaxUSD: 100, Probability: 0.0007, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "100.00-300.00 统一额度", MinUSD: 100, MaxUSD: 300, Probability: 0.00015, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "300.00-500.00 统一额度", MinUSD: 300, MaxUSD: 500, Probability: 0.00002, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "500.00 统一额度", MinUSD: 500, MaxUSD: 500, Probability: 0.000002272727, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "0.20-0.80 统一额度", MinUSD: 0.2, MaxUSD: 0.8, Probability: 0.52177312, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "0.80-1.50 统一额度", MinUSD: 0.8, MaxUSD: 1.5, Probability: 0, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "1.50-2.50 统一额度", MinUSD: 1.5, MaxUSD: 2.5, Probability: 0.0107387, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "2.50-3.69 统一额度", MinUSD: 2.5, MaxUSD: 3.69, Probability: 0.30367707, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "4.50-12.00 统一额度", MinUSD: 4.5, MaxUSD: 12, Probability: 0.15, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "12.00-30.00 统一额度", MinUSD: 12, MaxUSD: 30, Probability: 0.0001, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "30.00-100.00 统一额度", MinUSD: 30, MaxUSD: 100, Probability: 0.00001, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "100.00-300.00 统一额度", MinUSD: 100, MaxUSD: 300, Probability: 0.000001, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "300.00-500.00 统一额度", MinUSD: 300, MaxUSD: 500, Probability: 0.0000001, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "500.00 统一额度", MinUSD: 500, MaxUSD: 500, Probability: 0.00000001, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "再来一抽", Probability: 0.0127, RewardType: "prop"},
 	{Name: "15 分钟 0.1 倍率卡", Probability: 0.001, RewardType: "prop"},
 }

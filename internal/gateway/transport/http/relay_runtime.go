@@ -223,6 +223,12 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if gatewaystore.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
 		return false
 	}
+	if types.IsChannelError(openaiErr) {
+		if code >= 400 && code < 500 && !gatewaystore.ShouldRetryByStatusCode(code) {
+			return false
+		}
+		return true
+	}
 	return gatewaystore.ShouldRetryByStatusCode(code)
 }
 
@@ -326,6 +332,9 @@ func recordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) {
 	if c.Request != nil && c.Request.URL != nil {
 		other["request_path"] = c.Request.URL.Path
 	}
+	if trace, found := c.Get(finalRelayTimingContextKey); found {
+		other["first_byte_trace"] = trace
+	}
 	gatewayruntime.AttachRouteLogInfo(c, other)
 
 	auditapp.RecordErrorLog(
@@ -341,6 +350,15 @@ func recordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) {
 		c.GetString("group"),
 		other,
 	)
+}
+
+const finalRelayTimingContextKey = "final_relay_first_byte_trace"
+
+func attachFinalRelayTiming(c *gin.Context, trace *relaycommon.FirstByteTrace) {
+	if c == nil || trace == nil {
+		return
+	}
+	c.Set(finalRelayTimingContextKey, trace.ProgressSnapshot(time.Now()))
 }
 
 func shouldRecordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) bool {

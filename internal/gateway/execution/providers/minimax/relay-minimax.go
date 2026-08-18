@@ -21,11 +21,11 @@ func GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	default:
 		switch info.RelayMode {
 		case gatewaycontract.RelayModeChatCompletions:
-			return fmt.Sprintf("%s/v1/text/chatcompletion_v2", baseURL), nil
+			return relaycommon.JoinBaseURLPath(baseURL, "/v1/text/chatcompletion_v2"), nil
 		case gatewaycontract.RelayModeImagesGenerations:
-			return fmt.Sprintf("%s/v1/image_generation", baseURL), nil
+			return relaycommon.JoinBaseURLPath(baseURL, "/v1/image_generation"), nil
 		case gatewaycontract.RelayModeAudioSpeech:
-			return fmt.Sprintf("%s/v1/t2a_v2", baseURL), nil
+			return relaycommon.JoinBaseURLPath(baseURL, "/v1/t2a_v2"), nil
 		default:
 			return "", fmt.Errorf("unsupported relay mode: %d", info.RelayMode)
 		}

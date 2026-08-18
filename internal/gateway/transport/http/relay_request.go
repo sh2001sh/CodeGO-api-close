@@ -51,6 +51,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	defer func() {
 		gatewayroutingapp.EndAutoGroupAttempt(c)
 		relaycommon.ReleaseAllCoolingFallbacks(c)
+		attachFinalRelayTiming(c, firstByteTrace)
 		newAPIError = refundRelayBillingIfNeeded(c, relayInfo, newAPIError)
 		if shouldRecordRelayFailureSample(upstreamStarted, newAPIError) {
 			recordRelayFailure(relayInfo)

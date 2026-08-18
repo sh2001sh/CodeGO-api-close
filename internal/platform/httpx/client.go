@@ -37,21 +37,33 @@ func newOutboundTransport(proxyFunc func(*http.Request) (*url.URL, error), dialC
 }
 
 func newOutboundTransportWithResponseHeaderTimeout(proxyFunc func(*http.Request) (*url.URL, error), dialContext func(context.Context, string, string) (net.Conn, error), responseHeaderTimeout time.Duration) *http.Transport {
+	idleConnTimeout := time.Duration(platformconfig.RelayIdleConnTimeoutSeconds) * time.Second
+	if idleConnTimeout <= 0 {
+		idleConnTimeout = 90 * time.Second
+	}
+	tlsHandshakeTimeout := time.Duration(platformconfig.RelayTLSHandshakeTimeoutSeconds) * time.Second
+	if tlsHandshakeTimeout <= 0 {
+		tlsHandshakeTimeout = outboundConnectionTimeout
+	}
+	dialer := &net.Dialer{Timeout: outboundConnectionTimeout, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
-		MaxIdleConns:        platformconfig.RelayMaxIdleConns,
-		MaxIdleConnsPerHost: platformconfig.RelayMaxIdleConnsPerHost,
-		ForceAttemptHTTP2:   true,
-		Proxy:               proxyFunc,
-		DialContext:         dialContext,
+		MaxIdleConns:          platformconfig.RelayMaxIdleConns,
+		MaxIdleConnsPerHost:   platformconfig.RelayMaxIdleConnsPerHost,
+		MaxConnsPerHost:       platformconfig.RelayMaxConnsPerHost,
+		IdleConnTimeout:       idleConnTimeout,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true,
+		Proxy:                 proxyFunc,
+		DialContext:           dialContext,
 	}
 	if responseHeaderTimeout > 0 {
 		transport.ResponseHeaderTimeout = responseHeaderTimeout
 	}
 	// Do not couple connection establishment to the optional response-header
 	// budget. Disabling the latter must not permit stalled TCP/TLS handshakes.
-	transport.TLSHandshakeTimeout = outboundConnectionTimeout
+	transport.TLSHandshakeTimeout = tlsHandshakeTimeout
 	if transport.DialContext == nil {
-		transport.DialContext = (&net.Dialer{Timeout: outboundConnectionTimeout}).DialContext
+		transport.DialContext = dialer.DialContext
 	}
 	if platformconfig.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = platformconfig.InsecureTLSConfig

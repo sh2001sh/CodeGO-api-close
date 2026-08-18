@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -170,7 +171,7 @@ func resolveVideoURL(channel *gatewayschema.Channel, task *workflowschema.Task, 
 		return videoURL, nil
 	case constant.ChannelTypeOpenAI:
 		req.Header.Set("Authorization", "Bearer "+channel.Key)
-		return fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID()), nil
+		return gatewayruntime.JoinBaseURLPath(baseURL, fmt.Sprintf("/v1/videos/%s/content", task.GetUpstreamTaskID())), nil
 	default:
 		return task.GetResultURL(), nil
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	luckysettings "github.com/sh2001sh/new-api/internal/commerce/luckysettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
@@ -119,6 +120,8 @@ func V2MigrationIDs() []string {
 		"20260817_marketplace_transport_capabilities",
 		"20260817_responses_background",
 		"20260818_multiplier_precision",
+		"20260819_group_status_log_index",
+		"20260819_redundant_write_indexes",
 	}
 }
 
@@ -299,6 +302,8 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260818_multiplier_precision", Run: migrateMultiplierPrecision},
 		{ID: "20260818_commerce_invoice_request_items", Run: migrateCommerceInvoiceRequestItems},
+		{ID: "20260819_group_status_log_index", RunOutsideTx: migrateGroupStatusLogIndex},
+		{ID: "20260819_redundant_write_indexes", RunOutsideTx: migrateRedundantWriteIndexes},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -338,6 +343,59 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.Create(&schemaMigration{ID: step.ID}).Error
 		}); err != nil {
 			return fmt.Errorf("apply migration %s: %w", step.ID, err)
+		}
+	}
+	return nil
+}
+
+// migrateGroupStatusLogIndex adds the bounded time-window index used by the
+// group-status aggregation. It runs outside a transaction so PostgreSQL can
+// build the index concurrently on a busy production log table.
+func migrateGroupStatusLogIndex(_ *gorm.DB) error {
+	db := platformdb.LogDB
+	if db == nil {
+		db = platformdb.DB
+	}
+	if db == nil || !db.Migrator().HasTable("logs") {
+		return nil
+	}
+	var statement string
+	switch {
+	case platformdb.LogSQLType == platformdb.DatabaseTypePostgreSQL || (platformdb.LogDB == platformdb.DB && platformdb.UsingPostgreSQL):
+		statement = fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_group_status_window ON logs (created_at, type, "group", model_name) WHERE model_name <> '' AND "group" <> '' AND type IN (%d, %d)`, auditschema.LogTypeConsume, auditschema.LogTypeError)
+	case platformdb.LogSQLType == platformdb.DatabaseTypeMySQL || (platformdb.LogDB == platformdb.DB && platformdb.UsingMySQL):
+		statement = "CREATE INDEX idx_logs_group_status_window ON logs (created_at, type, `group`, model_name)"
+	default:
+		statement = "CREATE INDEX IF NOT EXISTS idx_logs_group_status_window ON logs (created_at, type, `group`, model_name)"
+	}
+	if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		return err
+	}
+	return nil
+}
+
+// migrateRedundantWriteIndexes removes indexes duplicated by older SQL
+// constraints and later GORM tags. The surviving indexes enforce the same
+// uniqueness while avoiding duplicate work on every billing write.
+func migrateRedundantWriteIndexes(_ *gorm.DB) error {
+	if !platformdb.UsingPostgreSQL || platformdb.DB == nil {
+		return nil
+	}
+	indexes := []string{
+		"billing.uq_billing_ledger_entries_idempotency",
+		"billing.uq_billing_reservations_idempotency",
+		"billing.uq_billing_settlements_idempotency",
+		"billing.uq_billing_settlements_reservation",
+		"billing.uq_billing_outbox_idempotency",
+		"billing.idx_billing_ledger_entries_account_id",
+		"billing.idx_billing_settlements_reservation_id",
+		"gateway.idx_gateway_request_executions_request_id",
+		"gateway.idx_gateway_route_plans_request_id",
+		"gateway.idx_gateway_usage_evidence_request_id",
+	}
+	for _, index := range indexes {
+		if err := platformdb.DB.Exec("DROP INDEX CONCURRENTLY IF EXISTS " + index).Error; err != nil {
+			return fmt.Errorf("drop redundant index %s: %w", index, err)
 		}
 	}
 	return nil

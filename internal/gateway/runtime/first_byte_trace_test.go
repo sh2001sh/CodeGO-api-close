@@ -91,6 +91,26 @@ func TestFirstByteTraceReturnsNilWithoutAnUpstreamEvent(t *testing.T) {
 	require.Nil(t, NewFirstByteTrace(time.Now()).Snapshot())
 }
 
+func TestFirstByteTraceProgressSnapshotCapturesIncompleteUpstreamWait(t *testing.T) {
+	startedAt := time.Unix(1_700_000_000, 0)
+	trace := NewFirstByteTrace(startedAt)
+	trace.requestValidAt = startedAt.Add(10 * time.Millisecond)
+	trace.admittedAt = startedAt.Add(15 * time.Millisecond)
+	trace.relayInfoReadyAt = startedAt.Add(20 * time.Millisecond)
+	trace.preflightDoneAt = startedAt.Add(40 * time.Millisecond)
+	trace.routeSelectedAt = startedAt.Add(50 * time.Millisecond)
+	trace.upstreamStartAt = startedAt.Add(75 * time.Millisecond)
+	trace.upstreamRequestReadyAt = startedAt.Add(80 * time.Millisecond)
+
+	snapshot := trace.ProgressSnapshot(startedAt.Add(2 * time.Second))
+
+	require.Equal(t, int64(2_000), snapshot["elapsed_ms"])
+	require.Equal(t, int64(1_925), snapshot["upstream_elapsed_ms"])
+	require.Equal(t, int64(10), snapshot["request_validation_ms"])
+	require.Equal(t, int64(10), snapshot["route_selection_ms"])
+	require.Zero(t, snapshot["upstream_response_headers_ms"])
+}
+
 func TestRelayInfoMarksTraceForFirstSemanticResponse(t *testing.T) {
 	startedAt := time.Now().Add(-time.Second)
 	info := &RelayInfo{StartTime: startedAt, FirstByteTrace: NewFirstByteTrace(startedAt)}

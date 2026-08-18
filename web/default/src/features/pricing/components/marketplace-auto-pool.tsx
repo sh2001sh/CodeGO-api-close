@@ -237,6 +237,12 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
           modelOptions={modelOptions}
           sortBy={sortBy}
           onSortChange={setSortBy}
+          onReset={() => {
+            setSearch('')
+            setSourceFilter('all')
+            setModelFilter('all')
+            setSortBy('route')
+          }}
         />
       </div>
 
@@ -247,7 +253,7 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
             : t('没有匹配的待选择分组。')}
         </div>
       ) : (
-        <div className='divide-border divide-y'>
+        <div className='grid gap-3 p-4 sm:grid-cols-2 lg:p-5'>
           {availableItems.map((item) => (
             <AutoPoolRow
               key={item.group_id}

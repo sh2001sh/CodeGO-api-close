@@ -248,7 +248,7 @@ func (a *TaskAdaptor) buildVideoURL(_, fileID string) string {
 		return ""
 	}
 
-	url := fmt.Sprintf("%s/v1/files/retrieve?file_id=%s", a.baseURL, fileID)
+	url := relaycommon.JoinBaseURLPath(a.baseURL, "/v1/files/retrieve") + "?file_id=" + fileID
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {

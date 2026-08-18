@@ -17,7 +17,7 @@ const (
 
 type RequestExecution struct {
 	ExecutionID     string    `gorm:"column:execution_id;primaryKey;size:64"`
-	RequestID       string    `gorm:"column:request_id;size:64;uniqueIndex"`
+	RequestID       string    `gorm:"column:request_id;size:64;uniqueIndex:idx_request_executions_request_id"`
 	TraceID         string    `gorm:"column:trace_id;size:64;index"`
 	UserID          int       `gorm:"column:user_id;index"`
 	TokenID         int       `gorm:"column:token_id;index"`
@@ -51,7 +51,7 @@ func (record *RequestExecution) BeforeCreate(_ *gorm.DB) error {
 
 type GatewayRoutePlan struct {
 	RoutePlanID string    `gorm:"column:route_plan_id;primaryKey;size:64"`
-	RequestID   string    `gorm:"column:request_id;size:64;uniqueIndex"`
+	RequestID   string    `gorm:"column:request_id;size:64;uniqueIndex:idx_route_plans_request_id"`
 	TraceID     string    `gorm:"column:trace_id;size:64;index"`
 	Status      string    `gorm:"column:status;size:32"`
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
@@ -91,7 +91,7 @@ func (attempt *ExecutionAttempt) BeforeCreate(_ *gorm.DB) error {
 type UsageEvidence struct {
 	UsageEvidenceID string    `gorm:"column:usage_evidence_id;primaryKey;size:64"`
 	ExecutionID     string    `gorm:"column:execution_id;size:64;index"`
-	RequestID       string    `gorm:"column:request_id;size:64;uniqueIndex"`
+	RequestID       string    `gorm:"column:request_id;size:64;uniqueIndex:idx_usage_evidence_request_id"`
 	TraceID         string    `gorm:"column:trace_id;size:64;index"`
 	ActualAmount    int64     `gorm:"column:actual_amount"`
 	CreatedAt       time.Time `gorm:"column:created_at;autoCreateTime"`

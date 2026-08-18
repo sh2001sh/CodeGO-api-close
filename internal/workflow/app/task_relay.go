@@ -200,22 +200,13 @@ func shouldRetryTaskRelay(c *gin.Context, taskErr *dto.TaskError, retryTimes int
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
-	if taskErr.StatusCode == http.StatusTooManyRequests || taskErr.StatusCode == http.StatusTemporaryRedirect {
-		return true
-	}
-	if taskErr.StatusCode/100 == 5 {
-		if gatewaystore.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode) {
-			return false
-		}
-		return true
-	}
-	if taskErr.StatusCode == http.StatusBadRequest || taskErr.StatusCode == http.StatusRequestTimeout {
-		return false
-	}
 	if taskErr.LocalError || taskErr.StatusCode/100 == 2 {
 		return false
 	}
-	return true
+	if gatewaystore.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode) {
+		return false
+	}
+	return gatewaystore.ShouldRetryByStatusCode(taskErr.StatusCode)
 }
 
 func addUsedTaskChannel(c *gin.Context, channelID int) {

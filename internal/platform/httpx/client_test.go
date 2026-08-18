@@ -108,6 +108,30 @@ func TestDisabledResponseHeaderTimeoutKeepsConnectionDeadline(t *testing.T) {
 	require.Equal(t, outboundConnectionTimeout, transport.TLSHandshakeTimeout)
 }
 
+func TestOutboundTransportKeepsConnectionsReusable(t *testing.T) {
+	previousIdle := platformconfig.RelayIdleConnTimeoutSeconds
+	previousTLS := platformconfig.RelayTLSHandshakeTimeoutSeconds
+	previousMax := platformconfig.RelayMaxConnsPerHost
+	t.Cleanup(func() {
+		platformconfig.RelayIdleConnTimeoutSeconds = previousIdle
+		platformconfig.RelayTLSHandshakeTimeoutSeconds = previousTLS
+		platformconfig.RelayMaxConnsPerHost = previousMax
+		ResetProxyClientCache()
+		InitHTTPClient()
+	})
+	platformconfig.RelayIdleConnTimeoutSeconds = 75
+	platformconfig.RelayTLSHandshakeTimeoutSeconds = 7
+	platformconfig.RelayMaxConnsPerHost = 32
+	InitHTTPClient()
+
+	transport, ok := GetHTTPClient().Transport.(*http.Transport)
+	require.True(t, ok)
+	require.Equal(t, 75*time.Second, transport.IdleConnTimeout)
+	require.Equal(t, 7*time.Second, transport.TLSHandshakeTimeout)
+	require.Equal(t, 32, transport.MaxConnsPerHost)
+	require.Equal(t, 1*time.Second, transport.ExpectContinueTimeout)
+}
+
 func assertSpecificClientResponseHeaderTimeout(t *testing.T, client *http.Client, expected time.Duration) {
 	t.Helper()
 	transport, ok := client.Transport.(*http.Transport)

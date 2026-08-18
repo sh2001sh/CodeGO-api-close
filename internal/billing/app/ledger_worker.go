@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
@@ -13,18 +14,35 @@ import (
 )
 
 const (
-	ledgerWorkerAccountBatchSize = 24
-	ledgerWorkerInterval         = 2 * time.Second
+	ledgerWorkerAccountBatchSize   = 24
+	ledgerWorkerInterval           = 2 * time.Second
+	ledgerReconciliationInterval   = 30 * time.Minute
+	ledgerOutboxCleanupInterval    = time.Minute
+	ledgerOutboxPublishedRetention = 72 * time.Hour
+	ledgerOutboxCleanupBatchSize   = 5000
 )
+
+var ledgerReconciliationState = struct {
+	sync.Mutex
+	lastByAccount map[string]time.Time
+}{lastByAccount: make(map[string]time.Time)}
 
 // StartLedgerWorker begins asynchronous outbox processing for the ledger runtime.
 func StartLedgerWorker(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(ledgerWorkerInterval)
 		defer ticker.Stop()
+		var lastCleanup time.Time
 		for {
 			if _, err := RunLedgerWorkerBatch(ctx, ledgerWorkerAccountBatchSize); err != nil {
 				platformobservability.SysError("ledger worker batch failed: " + err.Error())
+			}
+			now := time.Now().UTC()
+			if lastCleanup.IsZero() || now.Sub(lastCleanup) >= ledgerOutboxCleanupInterval {
+				if _, err := cleanupPublishedLedgerOutboxBatch(ctx, now, ledgerOutboxCleanupBatchSize); err != nil {
+					platformobservability.SysError("ledger outbox cleanup failed: " + err.Error())
+				}
+				lastCleanup = now
 			}
 			select {
 			case <-ctx.Done():
@@ -97,12 +115,15 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 	}
 
 	processed := 0
+	now := time.Now().UTC()
+	reconcile := ledgerReconciliationDue(accountID, now)
 	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := rebuildBalanceSnapshotTx(tx, accountID); err != nil {
-			return err
+		if reconcile {
+			if err := rebuildBalanceSnapshotTx(tx, accountID); err != nil {
+				return err
+			}
 		}
 
-		now := time.Now().UTC()
 		result := tx.Model(&billingschema.BillingOutboxEvent{}).
 			Where("account_id = ? AND status = ?", accountID, billingschema.BillingOutboxStatusPending).
 			Updates(map[string]any{
@@ -116,7 +137,39 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 		processed = int(result.RowsAffected)
 		return nil
 	})
+	if err == nil && reconcile {
+		markLedgerReconciled(accountID, now)
+	}
 	return processed, err
+}
+
+func ledgerReconciliationDue(accountID string, now time.Time) bool {
+	ledgerReconciliationState.Lock()
+	defer ledgerReconciliationState.Unlock()
+	last, found := ledgerReconciliationState.lastByAccount[accountID]
+	return !found || now.Sub(last) >= ledgerReconciliationInterval
+}
+
+func markLedgerReconciled(accountID string, now time.Time) {
+	ledgerReconciliationState.Lock()
+	ledgerReconciliationState.lastByAccount[accountID] = now
+	ledgerReconciliationState.Unlock()
+}
+
+func cleanupPublishedLedgerOutboxBatch(ctx context.Context, now time.Time, limit int) (int64, error) {
+	if platformdb.DB == nil || limit <= 0 {
+		return 0, nil
+	}
+	cutoff := now.Add(-ledgerOutboxPublishedRetention)
+	ids := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
+		Select("event_id").
+		Where("status = ? AND published_at < ?", billingschema.BillingOutboxStatusPublished, cutoff).
+		Order("published_at asc").
+		Limit(limit)
+	result := platformdb.DB.WithContext(ctx).
+		Where("event_id IN (?)", ids).
+		Delete(&billingschema.BillingOutboxEvent{})
+	return result.RowsAffected, result.Error
 }
 
 func markLedgerOutboxAccountFailure(ctx context.Context, accountID string, cause error) error {

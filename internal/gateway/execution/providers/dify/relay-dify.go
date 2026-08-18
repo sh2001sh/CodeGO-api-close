@@ -24,7 +24,7 @@ import (
 )
 
 func uploadDifyFile(c *gin.Context, info *relaycommon.RelayInfo, user string, media dto.MediaContent) *DifyFile {
-	uploadURL := fmt.Sprintf("%s/v1/files/upload", info.ChannelBaseUrl)
+	uploadURL := relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/files/upload")
 	switch media.Type {
 	case dto.ContentTypeImageURL:
 		imageMedia := media.GetImageMedia()

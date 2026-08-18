@@ -11,6 +11,10 @@ var SessionSecret = uuid.New().String()
 var CryptoSecret = uuid.New().String()
 
 var DebugEnabled bool
+
+// SQLDebugEnabled is intentionally separate from application debug logging.
+// Production instances should keep GORM SQL tracing disabled unless explicitly opted in.
+var SQLDebugEnabled bool
 var MemoryCacheEnabled bool
 var IsMasterNode bool
 
@@ -38,5 +42,9 @@ var RelayResponseHeaderTimeout int
 var ImageResponseHeaderTimeout int
 var RelayMaxIdleConns int
 var RelayMaxIdleConnsPerHost int
+var RelayMaxConnsPerHost int
+var RelayIdleConnTimeoutSeconds int
+var RelayTLSHandshakeTimeoutSeconds int
+var GroupStatusCacheSeconds int
 var RelayMaxConcurrentRequests int
 var TrustedProxies []string

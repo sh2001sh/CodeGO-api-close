@@ -1,32 +1,34 @@
 # Main Goal
-Refactor the model marketplace to distinguish CodeGo official groups, third-party groups, and a user-configurable third-party Auto group.
+Improve production API latency and reliability across Nginx, application timing, edge/direct baselines, and PostgreSQL, then deploy and verify the complete local change set.
 
-# Current Status
-- Complete: backend Auto route pool model, APIs, token group support, candidate routing, billing context, and tests.
-- Complete: model marketplace has CodeGo official, third-party group, and third-party Auto views.
-- Complete: users can build a personal Auto pool from eligible third-party groups.
-- Complete: API key creation exposes third-party Auto and direct third-party groups.
-- Complete: SQLite startup creates the Auto route pool table without PostgreSQL or Redis.
-- Complete: desktop and 390px mobile browser validation passed after fixing Tabs height overflow.
+# Status
+- Production Nginx SSE/Upgrade, buffering, keepalive, TLS, HTTP/2, and detailed timing-log changes are live and validated.
+- Cloudflare HTTP/3 is enabled. Cloudflare and localhost-origin baselines exist; EdgeOne still needs an authorized test hostname.
+- Production PostgreSQL memory, WAL, autovacuum, I/O timing, pg_stat_statements, and index changes are live.
+- Local code adds failed-request phase timing, transport/retry/URL fixes, group-status caching/index migration, ledger reconciliation throttling, and 72-hour published-outbox cleanup.
+- Full Go tests and the frontend production build pass.
 
-# Key Decisions
-- Auto token group is `market:auto`.
-- Each user maintains a personal pool of eligible marketplace groups.
-- Auto routing only considers pool members supporting the requested model.
-- Candidate score is multiplier divided by conservative availability squared; lower is preferred.
-- Third-party calls always consume general quota and retain the existing 5% marketplace commission flow.
-- Local SQLite remains a supported simple test path; Redis is optional.
+# Key Context
+- Production currently runs `sha-6a56770`; local work is not yet committed or deployed.
+- Preserve all user changes in blind-box, routing, provider, workflow, HTTP client, database, and frontend files.
+- Do not commit the generated `.backend-live.out.log` change.
+- Production PostgreSQL retains the existing unique indexes; duplicate GORM-created indexes have been removed and schema tags now reuse the surviving names.
+- About 1.26 million published outbox rows are eligible for 72-hour cleanup. The query uses the existing `published_at` index and deletes 5,000 rows per minute.
+- Converting the active 2-3 GB logs/outbox tables to native partitions requires an online shadow-table/backfill/cutover project; it is not part of this no-downtime release.
+- Source ports remain restricted to Cloudflare IPs; do not expose them only for a direct public benchmark.
 
 # Verification
-- Focused Go tests passed for marketplace app/HTTP, platform store/middleware, and identity HTTP.
-- Frontend ESLint, typecheck, and production build passed.
-- Local `/api/status`, `/api/marketplace/groups`, and `/pricing` returned HTTP 200.
-- SQLite table `marketplace_auto_route_pool_members` exists after normal local startup.
-- Playwright desktop/mobile screenshots show no overlap; browser console has no errors.
+- `go test ./... -count=1` passed.
+- `npm run build:check` in `web/default` passed.
+- Focused billing, gateway, and store tests passed after fixing ledger worker test database isolation.
 - `git diff --check` passed.
+- Docker daemon is unavailable locally; CI must perform the final container build.
 
 # Next Actions
-- None for this feature. Local service remains available at `http://127.0.0.1:3000`.
+- Review final staged diff, commit source changes excluding `.backend-live.out.log`, and push `v2-refactor-20260711`.
+- Wait for all multi-architecture images and manifests, then deploy control, gateway, workflow, ledger, and migration/verification jobs.
+- Verify schema migrations, tables/columns/indexes, service health, timing logs, outbox cleanup, pg_stat_statements load, and disk headroom.
+- Capture post-deploy Cloudflare and origin baselines and document the EdgeOne and partition-migration prerequisites.
 
 # Blockers
-- None.
+- EdgeOne cannot be benchmarked truthfully until a test hostname is routed through an authorized EdgeOne property.

@@ -43,7 +43,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	baseURL := info.ChannelBaseUrl
 	if specialPlan, ok := channelconstant.ChannelSpecialBases[baseURL]; ok {
 		if info.RelayFormat == types.RelayFormatClaude {
-			return fmt.Sprintf("%s/v1/messages", specialPlan.ClaudeBaseURL), nil
+			return relaycommon.JoinBaseURLPath(specialPlan.ClaudeBaseURL, "/v1/messages"), nil
 		}
 		if info.RelayFormat == types.RelayFormatOpenAI {
 			return fmt.Sprintf("%s/chat/completions", specialPlan.OpenAIBaseURL), nil
@@ -55,15 +55,15 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		return fmt.Sprintf("%s/anthropic/v1/messages", info.ChannelBaseUrl), nil
 	default:
 		if info.RelayMode == gatewaycontract.RelayModeRerank {
-			return fmt.Sprintf("%s/v1/rerank", info.ChannelBaseUrl), nil
+			return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/rerank"), nil
 		} else if info.RelayMode == gatewaycontract.RelayModeEmbeddings {
-			return fmt.Sprintf("%s/v1/embeddings", info.ChannelBaseUrl), nil
+			return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/embeddings"), nil
 		} else if info.RelayMode == gatewaycontract.RelayModeChatCompletions {
-			return fmt.Sprintf("%s/v1/chat/completions", info.ChannelBaseUrl), nil
+			return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/chat/completions"), nil
 		} else if info.RelayMode == gatewaycontract.RelayModeCompletions {
-			return fmt.Sprintf("%s/v1/completions", info.ChannelBaseUrl), nil
+			return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/completions"), nil
 		}
-		return fmt.Sprintf("%s/v1/chat/completions", info.ChannelBaseUrl), nil
+		return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/chat/completions"), nil
 	}
 }
 

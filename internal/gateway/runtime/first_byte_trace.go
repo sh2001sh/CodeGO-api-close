@@ -110,13 +110,27 @@ func (t *FirstByteTrace) mark(target *time.Time) {
 
 // Snapshot returns millisecond durations suitable for operational logs.
 func (t *FirstByteTrace) Snapshot() map[string]int64 {
+	return t.snapshot(false, time.Time{})
+}
+
+// ProgressSnapshot returns completed stages even when a request failed before
+// semantic output. The current elapsed values make no-output failures
+// diagnosable without recording request content or credentials.
+func (t *FirstByteTrace) ProgressSnapshot(now time.Time) map[string]int64 {
+	return t.snapshot(true, now)
+}
+
+func (t *FirstByteTrace) snapshot(includeProgress bool, now time.Time) map[string]int64 {
 	if t == nil {
 		return nil
 	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	if t.firstSemanticAt.IsZero() {
+	if t.firstSemanticAt.IsZero() && !includeProgress {
 		return nil
+	}
+	if now.IsZero() {
+		now = time.Now()
 	}
 	snapshot := map[string]int64{
 		"ingress_ms":                       durationMilliseconds(t.startedAt, t.relayInfoReadyAt),
@@ -162,6 +176,16 @@ func (t *FirstByteTrace) Snapshot() map[string]int64 {
 	if !t.firstTextReadAt.IsZero() {
 		snapshot["upstream_first_text_read_ms"] = durationMilliseconds(t.upstreamStartAt, t.firstTextReadAt)
 		snapshot["text_read_to_handler_ms"] = durationMilliseconds(t.firstTextReadAt, t.firstTextAt)
+	}
+	if includeProgress {
+		snapshot["elapsed_ms"] = durationMilliseconds(t.startedAt, now)
+		if !t.upstreamStartAt.IsZero() {
+			upstreamEnd := t.firstSemanticAt
+			if upstreamEnd.IsZero() {
+				upstreamEnd = now
+			}
+			snapshot["upstream_elapsed_ms"] = durationMilliseconds(t.upstreamStartAt, upstreamEnd)
+		}
 	}
 	return snapshot
 }

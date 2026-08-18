@@ -111,6 +111,49 @@ func (f *LedgerRelayFunding) PreConsume(amount int) error {
 	return nil
 }
 
+// ReserveAdditional expands the request's open wallet reservation for a higher-priced retry.
+func (f *LedgerRelayFunding) ReserveAdditional(amount int64) error {
+	if amount <= 0 {
+		return nil
+	}
+	if f.reservationID == "" {
+		return fmt.Errorf("ledger reservation is missing")
+	}
+	maxInt := int(^uint(0) >> 1)
+	if amount > int64(maxInt-f.reserved) {
+		return fmt.Errorf("additional reservation amount is too large")
+	}
+
+	target := f.reserved + int(amount)
+	reservation, err := billingdomain.IncreaseReservation(billingdomain.IncreaseReservationParams{
+		ReservationID:  f.reservationID,
+		Amount:         amount,
+		IdempotencyKey: f.idempotencyKey(fmt.Sprintf("reserve-increase-%d", target)),
+	})
+	if err != nil {
+		return err
+	}
+	if reservation.ReservedAmount != int64(target) {
+		return billingdomain.ErrLedgerConflict
+	}
+
+	if err := f.projectLegacyDelta(int(amount)); err != nil {
+		_, releaseErr := billingdomain.ReleaseReservation(billingdomain.ReleaseReservationParams{
+			ReservationID:  f.reservationID,
+			IdempotencyKey: f.idempotencyKey("release-after-increase-projection-failure"),
+			ReasonCode:     "legacy_projection_failed",
+		})
+		if releaseErr != nil {
+			return fmt.Errorf("project additional legacy balance: %w; release reservation: %v", err, releaseErr)
+		}
+		return err
+	}
+
+	f.reserved = target
+	f.legacyHeld += int(amount)
+	return nil
+}
+
 func (f *LedgerRelayFunding) Settle(delta int) error {
 	if f.reservationID == "" {
 		return fmt.Errorf("ledger reservation is missing")

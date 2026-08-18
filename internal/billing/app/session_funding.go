@@ -48,7 +48,11 @@ func newFundingInsufficientError(source string, err error) *types.NewAPIError {
 
 func (s *BillingSession) reserveFunding(delta int) error {
 	if funding, ok := s.funding.(ReservableFundingSource); ok {
-		return funding.ReserveAdditional(int64(delta))
+		err := funding.ReserveAdditional(int64(delta))
+		if insufficientErr := newFundingInsufficientError(s.funding.Source(), err); insufficientErr != nil {
+			return insufficientErr
+		}
+		return err
 	}
 	if _, ok := s.funding.(*SubscriptionFunding); ok {
 		return nil

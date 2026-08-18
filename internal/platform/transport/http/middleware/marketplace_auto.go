@@ -21,6 +21,7 @@ func selectMarketplaceAutoChannel(c *gin.Context, tokenGroup, modelName string) 
 	if !isLegacyMarketplaceAuto && !isGlobalAuto {
 		return nil, tokenGroup, false, nil
 	}
+	gatewayruntime.MarkAutoRouteRequest(c)
 	userID := httpctx.GetContextKeyInt(c, constant.ContextKeyUserId)
 	if isGlobalAuto && !marketplaceapp.HasConfiguredAutoRoutePool(userID) {
 		return nil, tokenGroup, false, nil

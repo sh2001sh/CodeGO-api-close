@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -13,6 +14,10 @@ const requestBudgetContextKey = "gateway_request_budget"
 const (
 	responsesStreamRetryBudget       = 150 * time.Second
 	responsesFirstAttemptWaitTimeout = 60 * time.Second
+	responsesShortAttemptDefault     = 30 * time.Second
+	responsesShortAttemptMin         = 15 * time.Second
+	responsesShortAttemptMax         = 30 * time.Second
+	responsesAdaptiveTTFTMinSamples  = 10
 )
 
 type RequestBudget struct {
@@ -56,7 +61,7 @@ func RetryableResponsesAttemptTimeout(c *gin.Context) time.Duration {
 	if c == nil || IsImageGenerationRequest(c) {
 		return 0
 	}
-	if IsSingleChannelRoute(c) {
+	if IsSingleChannelRoute(c) && !HasRemainingCrossGroupRoute(c) {
 		return 0
 	}
 	if _, specificChannel := c.Get("specific_channel_id"); specificChannel {
@@ -70,7 +75,23 @@ func RetryableResponsesAttemptTimeout(c *gin.Context) time.Duration {
 	if budget == nil || !budget.CanRetry(time.Now()) {
 		return 0
 	}
-	return responsesFirstAttemptWaitTimeout
+	if profile.RequestType == RequestTypeChatLongStream || profile.RequestType == RequestTypeToolCallStream {
+		return responsesFirstAttemptWaitTimeout
+	}
+	channelID := c.GetInt(string(constant.ContextKeyChannelId))
+	model := c.GetString(string(constant.ContextKeyOriginalModel))
+	health, found := GetChannelHealth(channelID, model, profile.RequestType)
+	if !found || health.TTFTSamples < responsesAdaptiveTTFTMinSamples || health.TTFTP95Milliseconds <= 0 {
+		return responsesShortAttemptDefault
+	}
+	timeout := time.Duration(health.TTFTP95Milliseconds*1.25) * time.Millisecond
+	if timeout < responsesShortAttemptMin {
+		return responsesShortAttemptMin
+	}
+	if timeout > responsesShortAttemptMax {
+		return responsesShortAttemptMax
+	}
+	return timeout
 }
 
 func RequestBudgetFromContext(c *gin.Context) *RequestBudget {

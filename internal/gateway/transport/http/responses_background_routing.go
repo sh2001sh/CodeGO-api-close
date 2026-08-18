@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
@@ -13,6 +14,7 @@ import (
 type responsesBackgroundRoutingContext struct {
 	UsingGroup                string                                      `json:"using_group"`
 	TokenGroup                string                                      `json:"token_group"`
+	AutomaticRouting          bool                                        `json:"automatic_routing,omitempty"`
 	MarketplaceGroupID        string                                      `json:"marketplace_group_id,omitempty"`
 	MarketplaceOwnerID        int                                         `json:"marketplace_owner_id,omitempty"`
 	MarketplaceSourceType     string                                      `json:"marketplace_source_type,omitempty"`
@@ -28,6 +30,7 @@ func captureResponsesBackgroundRoutingContext(c *gin.Context) (string, error) {
 	snapshot := responsesBackgroundRoutingContext{
 		UsingGroup:              httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup),
 		TokenGroup:              httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup),
+		AutomaticRouting:        gatewayruntime.IsAutoRouteRequest(c),
 		MarketplaceGroupID:      httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceGroupID),
 		MarketplaceOwnerID:      httpctx.GetContextKeyInt(c, constant.ContextKeyMarketplaceOwnerID),
 		MarketplaceSourceType:   httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceSourceType),
@@ -60,6 +63,9 @@ func restoreResponsesBackgroundRoutingContext(c *gin.Context, ciphertext string)
 	}
 	httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, snapshot.UsingGroup)
 	httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, snapshot.TokenGroup)
+	if snapshot.AutomaticRouting {
+		gatewayruntime.MarkAutoRouteRequest(c)
+	}
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceGroupID, snapshot.MarketplaceGroupID)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceOwnerID, snapshot.MarketplaceOwnerID)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, snapshot.MarketplaceSourceType)

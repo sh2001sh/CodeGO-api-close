@@ -1,19 +1,16 @@
 package app
 
 import (
-	"errors"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
-	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
-	"github.com/sh2001sh/new-api/internal/platform/logger"
 )
 
 // RetryParam carries group/model selection state across relay retries.
@@ -80,80 +77,9 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 	userGroup := httpctx.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
 
 	if param.TokenGroup == AutoGroupName {
-		if len(gatewaygroups.GetAutoGroups()) == 0 {
-			return nil, selectGroup, errors.New("auto groups is not enabled")
-		}
-		autoGroups := OrderAutoGroups(userGroup, param.ModelName)
-		fallbackGroups := OrderAutoFallbackGroups(userGroup, param.ModelName, autoGroups)
-		candidateGroups := append(append([]string{}, autoGroups...), fallbackGroups...)
-		gatewayruntime.UpdateRouteDecisionCandidates(param.Ctx, len(candidateGroups))
-		gatewayruntime.MarkRemainingCrossGroupRoutes(param.Ctx, 0)
-		startGroupIndex := 0
-		crossGroupRetry := httpctx.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
-
-		if lastGroupIndex, exists := httpctx.GetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex); exists {
-			if idx, ok := lastGroupIndex.(int); ok {
-				startGroupIndex = idx
-				if param.GetRetry() > 0 {
-					// Auto routing is ordered by effective user cost. Once a group
-					// has failed, continue with the next cheapest healthy group
-					// instead of retrying the same group and hiding available
-					// capacity behind its transient failure.
-					startGroupIndex++
-				}
-			}
-		}
-
-		for i := startGroupIndex; i < len(candidateGroups); i++ {
-			autoGroup := candidateGroups[i]
-			priorityRetry := param.GetRetry()
-			if i > startGroupIndex {
-				priorityRetry = 0
-			}
-			logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: %d", autoGroup, priorityRetry)
-
-			channel, _ = getHealthySatisfiedChannelWithMode(param.Ctx, autoGroup, param.ModelName, priorityRetry, false)
-			if channel == nil {
-				gatewayruntime.ExcludeRouteDecisionCandidate(param.Ctx, "no_healthy_channel")
-				logger.LogDebug(param.Ctx, "No available channel in group %s for model %s at priorityRetry %d, trying next group", autoGroup, param.ModelName, priorityRetry)
-				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i+1)
-				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupRetryIndex, 0)
-				// Preserve the outer retry budget so transport can retry the sole
-				// previously used channel after every alternative group is exhausted.
-				continue
-			}
-			httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, autoGroup)
-			selectGroup = autoGroup
-			markRemainingAutoGroupRoutes(param.Ctx, candidateGroups, i, param.ModelName)
-			gatewayruntime.SelectRouteDecisionCandidate(param.Ctx, autoGroup, channel.Id, false)
-			logger.LogDebug(param.Ctx, "Auto selected group: %s", autoGroup)
-
-			if crossGroupRetry && priorityRetry >= platformconfig.RetryTimes {
-				logger.LogDebug(param.Ctx, "Current group %s retries exhausted (priorityRetry=%d >= RetryTimes=%d), preparing switch to next group for next retry", autoGroup, priorityRetry, platformconfig.RetryTimes)
-				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i+1)
-				param.SetRetry(0)
-				param.ResetRetryNextTry()
-			} else {
-				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i)
-			}
-			break
-		}
-		// Only after every automatic group has no healthy candidate may a
-		// cooling channel be used as a last-resort recovery probe. This keeps a
-		// temporarily bad cheap group from masking a healthy fallback group.
-		if channel == nil {
-			for i, autoGroup := range candidateGroups {
-				channel, _ = getHealthySatisfiedChannelWithMode(param.Ctx, autoGroup, param.ModelName, 0, true)
-				if channel == nil {
-					continue
-				}
-				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i)
-				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, autoGroup)
-				selectGroup = autoGroup
-				markRemainingAutoGroupRoutes(param.Ctx, candidateGroups, i, param.ModelName)
-				gatewayruntime.SelectRouteDecisionCandidate(param.Ctx, autoGroup, channel.Id, false)
-				break
-			}
+		channel, selectGroup, err = selectAutoGroupChannel(param, userGroup)
+		if err != nil {
+			return nil, selectGroup, err
 		}
 	} else {
 		channel, err = getHealthySatisfiedChannelWithContext(param.Ctx, param.TokenGroup, param.ModelName, param.GetRetry())
@@ -207,8 +133,15 @@ func getHealthySatisfiedChannelWithMode(c *gin.Context, group string, modelName 
 			degradedCandidate = degraded
 		}
 	}
-	if degradedCandidate != nil || !allowLastResort {
-		return degradedCandidate, nil
+	if degradedCandidate != nil {
+		if reserveLegacyCandidateProbe(c, degradedCandidate, modelName, routePoolProbeRecovery) {
+			return degradedCandidate, nil
+		}
+		if !allowLastResort {
+			return nil, nil
+		}
+	} else if !allowLastResort {
+		return nil, nil
 	}
 	return selectLegacyLastResortChannel(c, group, modelName, retry), nil
 }
@@ -223,11 +156,14 @@ func selectLegacyLastResortChannel(c *gin.Context, group, modelName string, retr
 		if err != nil || channel == nil || channelAlreadyUsed(c, channel.Id) || channelExcludedByScope(c, channel) {
 			continue
 		}
-		health, found := gatewayruntime.GetChannelHealth(channel.Id, modelName, requestType)
-		if !found || health.State != gatewayruntime.ChannelHealthCooling || !health.CoolingUntil.After(time.Now()) {
+		now := time.Now()
+		health, found := routePoolChannelHealth(c, channel.Id, modelName, requestType)
+		domain := gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL())
+		domainHealth, domainFound := routePoolFaultDomainHealth(c, domain, modelName, requestType)
+		if !activeRoutePoolCircuit(health, found, now) && !activeRoutePoolCircuit(domainHealth, domainFound, now) {
 			continue
 		}
-		if gatewayruntime.TryStartChannelLastResortProbe(channel.Id, modelName, requestType) && c != nil {
+		if reserveLegacyCandidateProbe(c, channel, modelName, routePoolProbeLastResort) && c != nil {
 			gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
 		} else if c != nil {
 			// A busy recovery lease is not grounds to reject the request. Keep a
@@ -263,9 +199,15 @@ func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelNam
 			priority = channel.GetPriority()
 			found = true
 		}
-		health, healthFound := gatewayruntime.GetChannelHealth(channel.Id, modelName, requestType)
-		if healthFound && health.State == gatewayruntime.ChannelHealthCooling {
-			if !health.CoolingUntil.After(time.Now()) && degraded == nil {
+		now := time.Now()
+		health, healthFound := routePoolChannelHealth(c, channel.Id, modelName, requestType)
+		domainHealth, domainFound := routePoolFaultDomainHealth(c, faultDomain, modelName, requestType)
+		if activeRoutePoolCircuit(health, healthFound, now) || activeRoutePoolCircuit(domainHealth, domainFound, now) {
+			continue
+		}
+		if healthFound && (health.State == gatewayruntime.ChannelHealthCooling || health.State == gatewayruntime.ChannelHealthHalfOpen) ||
+			domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen) {
+			if degraded == nil {
 				// When legacy routing is still in use, an expired circuit may be
 				// selected only after all healthy candidates are exhausted. Its
 				// next successes are counted as recovery probes by channel health.

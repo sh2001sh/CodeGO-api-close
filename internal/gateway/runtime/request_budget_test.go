@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
@@ -82,6 +83,88 @@ func TestResponsesStreamSingleChannelDoesNotUseFastAttemptTimeout(t *testing.T) 
 	require.Zero(t, RetryableResponsesAttemptTimeout(context))
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 	require.Equal(t, 1, budget.FaultDomainsUsed)
+}
+
+func TestResponsesStreamSingleChannelUsesTimeoutWithCrossGroupFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	profile := RequestProfile{
+		RequestType: RequestTypeChatLongStream,
+		Protocol:    string(types.RelayFormatOpenAIResponses),
+		IsStream:    true,
+	}
+	setRequestProfile(context, profile)
+	budget := StartRequestBudget(context, profile, time.Now())
+	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
+	MarkSingleChannelRoute(context, true)
+	MarkRemainingCrossGroupRoutes(context, 1)
+
+	require.Equal(t, responsesFirstAttemptWaitTimeout, RetryableResponsesAttemptTimeout(context))
+}
+
+func TestResponsesShortStreamUsesAdaptiveTTFTTimeout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	profile := RequestProfile{
+		RequestType: RequestTypeChatShortStream,
+		Protocol:    string(types.RelayFormatOpenAIResponses),
+		IsStream:    true,
+	}
+	setRequestProfile(context, profile)
+	StartRequestBudget(context, profile, time.Now())
+	context.Set(string(constant.ContextKeyChannelId), 912_345)
+	context.Set(string(constant.ContextKeyOriginalModel), "gpt-adaptive-timeout")
+	for sample := 0; sample < responsesAdaptiveTTFTMinSamples; sample++ {
+		RecordChannelSuccess(912_345, "gpt-adaptive-timeout", 16*time.Second, RequestTypeChatShortStream)
+	}
+
+	require.Equal(t, 20*time.Second, RetryableResponsesAttemptTimeout(context))
+}
+
+func TestResponsesShortStreamUsesConservativeDefaultWithoutSamples(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	profile := RequestProfile{
+		RequestType: RequestTypeChatShortStream,
+		Protocol:    string(types.RelayFormatOpenAIResponses),
+		IsStream:    true,
+	}
+	setRequestProfile(context, profile)
+	StartRequestBudget(context, profile, time.Now())
+
+	require.Equal(t, responsesShortAttemptDefault, RetryableResponsesAttemptTimeout(context))
+}
+
+func TestResponsesShortStreamClampsAdaptiveTTFTTimeout(t *testing.T) {
+	testCases := []struct {
+		name      string
+		channelID int
+		model     string
+		ttft      time.Duration
+		expected  time.Duration
+	}{
+		{name: "minimum", channelID: 912_346, model: "gpt-adaptive-min", ttft: time.Second, expected: responsesShortAttemptMin},
+		{name: "maximum", channelID: 912_347, model: "gpt-adaptive-max", ttft: 40 * time.Second, expected: responsesShortAttemptMax},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			context, _ := gin.CreateTestContext(httptest.NewRecorder())
+			profile := RequestProfile{
+				RequestType: RequestTypeChatShortStream,
+				Protocol:    string(types.RelayFormatOpenAIResponses),
+				IsStream:    true,
+			}
+			setRequestProfile(context, profile)
+			StartRequestBudget(context, profile, time.Now())
+			context.Set(string(constant.ContextKeyChannelId), testCase.channelID)
+			context.Set(string(constant.ContextKeyOriginalModel), testCase.model)
+			for sample := 0; sample < responsesAdaptiveTTFTMinSamples; sample++ {
+				RecordChannelSuccess(testCase.channelID, testCase.model, testCase.ttft, RequestTypeChatShortStream)
+			}
+
+			require.Equal(t, testCase.expected, RetryableResponsesAttemptTimeout(context))
+		})
+	}
 }
 
 func TestSpecificChannelDoesNotUseFastResponsesRetryWindow(t *testing.T) {

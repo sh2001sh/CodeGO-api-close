@@ -49,6 +49,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	defer func() {
+		gatewayroutingapp.EndAutoGroupAttempt(c)
 		relaycommon.ReleaseAllCoolingFallbacks(c)
 		newAPIError = refundRelayBillingIfNeeded(c, relayInfo, newAPIError)
 		if shouldRecordRelayFailureSample(upstreamStarted, newAPIError) {
@@ -316,6 +317,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		relaycommon.StartRouteDecisionAttempt(c, relayInfo.RetryIndex, channel.Id, faultDomain)
 		relayInfo.FirstByteTrace.MarkUpstreamStart()
 		upstreamStarted = true
+		gatewayroutingapp.BeginAutoGroupAttempt(c, relayInfo.OriginModelName)
 
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
@@ -327,6 +329,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		default:
 			newAPIError = relayHandler(c, relayInfo)
 		}
+		gatewayroutingapp.EndAutoGroupAttempt(c)
 		releaseChannelConcurrency()
 		if releaseFaultDomainSlot != nil {
 			if newAPIError == nil || relaycommon.IsLocalStreamMaxDurationExceeded(c) {
@@ -353,6 +356,10 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			relaycommon.RecordChannelSuccess(channel.Id, relayInfo.OriginModelName, ttft, requestProfile.RequestType)
 			relaycommon.RecordChannelCredentialSuccess(channel.Id)
 			relaycommon.RecordFaultDomainSuccess(c.GetString("channel_fault_domain"), relayInfo.OriginModelName, requestProfile.RequestType)
+			if relaycommon.IsAutoRouteRequest(c) {
+				relaycommon.RecordUserChannelSuccess(c, channel.Id, relayInfo.OriginModelName, ttft, requestProfile.RequestType)
+				relaycommon.RecordUserFaultDomainSuccess(c, c.GetString("channel_fault_domain"), relayInfo.OriginModelName, requestProfile.RequestType)
+			}
 			relayInfo.LastError = nil
 			return
 		}

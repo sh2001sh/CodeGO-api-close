@@ -126,7 +126,7 @@ func TestRetryableResponsesFirstAttemptBoundsResponseHeaderWait(t *testing.T) {
 
 	markResponsesStreamRetrySafeBeforeConnect(context, info)
 	require.True(t, context.GetBool(string(constant.ContextKeyResponsesStreamRetrySafe)))
-	require.Equal(t, 60*time.Second, responseHeaderTimeoutForRequest(context, info))
+	require.Equal(t, 30*time.Second, responseHeaderTimeoutForRequest(context, info))
 
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 	require.Zero(t, responseHeaderTimeoutForRequest(context, info))

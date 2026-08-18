@@ -103,7 +103,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
 		recordChannelTransientFailure(c, channelError.ChannelId, modelName, err)
 		if shouldRecordIncompleteStreamFaultDomainFailure(c, err) {
-			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), modelName, channelError.ChannelId, c.GetString(constant.RequestIdKey), retryableFailureCooldown(c, err), gatewayruntime.RequestTypeFromContext(c))
+			recordFaultDomainTransientFailure(c, channelError.ChannelId, modelName, err)
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	} else if failureClass == upstreamFailureIncompleteStream && preserveOnlyRoute {
@@ -116,10 +116,9 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）被上游拒绝访问，已进行凭据级短冷却并切换备用渠道", channelError.ChannelName, channelError.ChannelId))
 	} else if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !preserveOnlyRoute {
-		cooldown := retryableFailureCooldown(c, err)
 		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
 		if shouldRecordFaultDomainFailure(c, err) {
-			gatewayruntime.RecordFaultDomainChannelFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), channelError.ChannelId, c.GetString(constant.RequestIdKey), cooldown, gatewayruntime.RequestTypeFromContext(c))
+			recordFaultDomainTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
@@ -289,12 +288,35 @@ func isLocalStreamMaxDuration(c *gin.Context) bool {
 
 func recordChannelTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
 	requestID := c.GetString(constant.RequestIdKey)
-	if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
-		(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
-		gatewayruntime.RecordChannelGatewayFailureForRequest(channelID, modelName, requestID, err.StatusCode, gatewayruntime.RequestTypeFromContext(c))
+	requestType := gatewayruntime.RequestTypeFromContext(c)
+	if gatewayruntime.IsAutoRouteRequest(c) {
+		gatewayruntime.RecordChannelSoftFailureForRequest(channelID, modelName, requestID, requestType)
+		if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
+			(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
+			gatewayruntime.RecordUserChannelGatewayFailureForRequest(c, channelID, modelName, requestID, err.StatusCode, requestType)
+			return
+		}
+		gatewayruntime.RecordUserChannelRetryableFailureForRequest(c, channelID, modelName, requestID, retryableFailureCooldown(c, err), requestType)
 		return
 	}
-	gatewayruntime.RecordChannelRetryableFailureForRequest(channelID, modelName, requestID, retryableFailureCooldown(c, err), gatewayruntime.RequestTypeFromContext(c))
+	if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
+		(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
+		gatewayruntime.RecordChannelGatewayFailureForRequest(channelID, modelName, requestID, err.StatusCode, requestType)
+		return
+	}
+	gatewayruntime.RecordChannelRetryableFailureForRequest(channelID, modelName, requestID, retryableFailureCooldown(c, err), requestType)
+}
+
+func recordFaultDomainTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
+	domain := c.GetString("channel_fault_domain")
+	requestID := c.GetString(constant.RequestIdKey)
+	cooldown := retryableFailureCooldown(c, err)
+	requestType := gatewayruntime.RequestTypeFromContext(c)
+	if gatewayruntime.IsAutoRouteRequest(c) {
+		gatewayruntime.RecordUserFaultDomainFailure(c, domain, modelName, requestID, cooldown, requestType)
+		return
+	}
+	gatewayruntime.RecordFaultDomainChannelFailure(domain, modelName, channelID, requestID, cooldown, requestType)
 }
 
 func isGatewayFailureStatus(statusCode int) bool {

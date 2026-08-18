@@ -11,6 +11,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
@@ -265,6 +266,7 @@ func TestResponsesBackgroundRoutingContextRoundTrip(t *testing.T) {
 	source, _ := gin.CreateTestContext(httptest.NewRecorder())
 	httpctx.SetContextKey(source, constant.ContextKeyUsingGroup, "market_u0100")
 	httpctx.SetContextKey(source, constant.ContextKeyTokenGroup, "token-group")
+	gatewayruntime.MarkAutoRouteRequest(source)
 	httpctx.SetContextKey(source, constant.ContextKeyMarketplaceGroupID, "market-group")
 	httpctx.SetContextKey(source, constant.ContextKeyMarketplaceOwnerID, 42)
 	httpctx.SetContextKey(source, constant.ContextKeyMarketplaceSourceType, "marketplace_user")
@@ -285,6 +287,7 @@ func TestResponsesBackgroundRoutingContextRoundTrip(t *testing.T) {
 
 	require.Equal(t, "market_u0100", httpctx.GetContextKeyString(target, constant.ContextKeyUsingGroup))
 	require.Equal(t, "token-group", httpctx.GetContextKeyString(target, constant.ContextKeyTokenGroup))
+	require.True(t, gatewayruntime.IsAutoRouteRequest(target))
 	require.Equal(t, "market-group", httpctx.GetContextKeyString(target, constant.ContextKeyMarketplaceGroupID))
 	require.Equal(t, 42, httpctx.GetContextKeyInt(target, constant.ContextKeyMarketplaceOwnerID))
 	require.Equal(t, 0.8, httpctx.GetContextKeyFloat64(target, constant.ContextKeyMarketplaceMultiplier))

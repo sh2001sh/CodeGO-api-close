@@ -134,13 +134,13 @@ func TestRoutePoolLastResortProbeRejectsConcurrentProbeWhenLeaseIsBusy(t *testin
 		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelID, modelName, time.Minute)
 	}
 
-	probe := reserveRoutePoolLastResortProbe([]scoredRoutePoolCandidate{{
+	probe := reserveRoutePoolLastResortProbe(nil, []scoredRoutePoolCandidate{{
 		channel:      &gatewayschema.Channel{Id: channelID},
 		channelProbe: true,
 	}}, modelName)
 	assert.NotNil(t, probe)
 	assert.Equal(t, channelID, probe.channel.Id)
-	concurrentProbe := reserveRoutePoolLastResortProbe([]scoredRoutePoolCandidate{{
+	concurrentProbe := reserveRoutePoolLastResortProbe(nil, []scoredRoutePoolCandidate{{
 		channel:      &gatewayschema.Channel{Id: channelID},
 		channelProbe: true,
 	}}, modelName)
@@ -193,7 +193,7 @@ func TestRoutePoolEmergencyRetryProbeAllowsOnlyBoundedExtraSlot(t *testing.T) {
 		},
 	}}
 
-	assert.NotNil(t, reserveRoutePoolEmergencyRetryProbe(candidate, modelName))
-	assert.NotNil(t, reserveRoutePoolEmergencyRetryProbe(candidate, modelName))
-	assert.Nil(t, reserveRoutePoolEmergencyRetryProbe(candidate, modelName))
+	assert.NotNil(t, reserveRoutePoolEmergencyRetryProbe(nil, candidate, modelName))
+	assert.NotNil(t, reserveRoutePoolEmergencyRetryProbe(nil, candidate, modelName))
+	assert.Nil(t, reserveRoutePoolEmergencyRetryProbe(nil, candidate, modelName))
 }

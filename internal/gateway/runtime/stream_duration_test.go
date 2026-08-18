@@ -88,7 +88,7 @@ func TestRetryableShortResponsesUsesSemanticOutputWindow(t *testing.T) {
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 
 	require.Zero(t, StreamAdaptiveProgressTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
-	require.Equal(t, 60*time.Second, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
+	require.Equal(t, responsesShortAttemptDefault, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
 }
 
 func TestSingleChannelResponsesHasNoAdaptiveInitialDeadline(t *testing.T) {

@@ -212,6 +212,37 @@ func TestAutoRetryMovesToNextCheapestGroup(t *testing.T) {
 	require.False(t, gatewayruntime.HasRemainingCrossGroupRoute(context))
 }
 
+func TestAutoSelectionPreservesRetryAfterCandidatesAreExhausted(t *testing.T) {
+	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
+	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()
+	originalSelector := selectRandomSatisfiedChannel
+	t.Cleanup(func() {
+		require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(originalAutoGroups))
+		require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		selectRandomSatisfiedChannel = originalSelector
+	})
+
+	require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(`["low","fallback"]`))
+	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"low":"低价","fallback":"备用"}`))
+	selectRandomSatisfiedChannel = func(_ string, _ string, _ int) (*gatewayschema.Channel, error) {
+		return nil, nil
+	}
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	retry := 1
+	channel, group, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        context,
+		TokenGroup: AutoGroupName,
+		ModelName:  "gpt-auto-retry-preserve-after-exhaustion",
+		Retry:      &retry,
+	})
+
+	require.NoError(t, err)
+	assert.Nil(t, channel)
+	assert.Equal(t, AutoGroupName, group)
+	assert.Equal(t, 1, retry, "candidate exhaustion must not erase the outer retry budget")
+}
+
 func TestAutoSelectionIgnoresLaterGroupsWithoutModelRoutes(t *testing.T) {
 	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
 	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()

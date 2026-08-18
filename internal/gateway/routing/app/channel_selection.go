@@ -118,7 +118,8 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 				logger.LogDebug(param.Ctx, "No available channel in group %s for model %s at priorityRetry %d, trying next group", autoGroup, param.ModelName, priorityRetry)
 				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i+1)
 				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupRetryIndex, 0)
-				param.SetRetry(0)
+				// Preserve the outer retry budget so transport can retry the sole
+				// previously used channel after every alternative group is exhausted.
 				continue
 			}
 			httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, autoGroup)

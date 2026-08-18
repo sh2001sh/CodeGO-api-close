@@ -359,26 +359,29 @@ func migrateGroupStatusLogIndex(_ *gorm.DB) error {
 	if db == nil || !db.Migrator().HasTable("logs") {
 		return nil
 	}
-	var statement string
-	switch {
-	case platformdb.LogSQLType == platformdb.DatabaseTypePostgreSQL || (platformdb.LogDB == platformdb.DB && platformdb.UsingPostgreSQL):
-		statement = fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_group_status_window ON logs (created_at, type, "group", model_name) WHERE model_name <> '' AND "group" <> '' AND type IN (%d, %d)`, auditschema.LogTypeConsume, auditschema.LogTypeError)
-	case platformdb.LogSQLType == platformdb.DatabaseTypeMySQL || (platformdb.LogDB == platformdb.DB && platformdb.UsingMySQL):
-		statement = "CREATE INDEX idx_logs_group_status_window ON logs (created_at, type, `group`, model_name)"
-	default:
-		statement = "CREATE INDEX IF NOT EXISTS idx_logs_group_status_window ON logs (created_at, type, `group`, model_name)"
-	}
+	statement := groupStatusLogIndexStatement(db.Dialector.Name())
 	if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 		return err
 	}
 	return nil
 }
 
+func groupStatusLogIndexStatement(dialect string) string {
+	switch dialect {
+	case "postgres":
+		return fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_group_status_window ON logs (created_at, type, "group", model_name) WHERE model_name <> '' AND "group" <> '' AND type IN (%d, %d)`, auditschema.LogTypeConsume, auditschema.LogTypeError)
+	case "mysql":
+		return "CREATE INDEX idx_logs_group_status_window ON logs (created_at, type, `group`, model_name)"
+	default:
+		return "CREATE INDEX IF NOT EXISTS idx_logs_group_status_window ON logs (created_at, type, `group`, model_name)"
+	}
+}
+
 // migrateRedundantWriteIndexes removes indexes duplicated by older SQL
 // constraints and later GORM tags. The surviving indexes enforce the same
 // uniqueness while avoiding duplicate work on every billing write.
 func migrateRedundantWriteIndexes(_ *gorm.DB) error {
-	if !platformdb.UsingPostgreSQL || platformdb.DB == nil {
+	if platformdb.DB == nil || platformdb.DB.Dialector.Name() != "postgres" {
 		return nil
 	}
 	indexes := []string{

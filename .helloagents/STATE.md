@@ -9,7 +9,7 @@ Improve production API latency and reliability across Nginx, application timing,
 - Full Go tests and the frontend production build pass.
 
 # Key Context
-- Production currently runs `sha-6a56770`; local work is not yet committed or deployed.
+- Production still runs `sha-6a56770`. Commit `07042f44a` built successfully but deployment stopped before container replacement because the log-index migration selected SQLite quoting for a PostgreSQL `LogDB`.
 - Preserve all user changes in blind-box, routing, provider, workflow, HTTP client, database, and frontend files.
 - Do not commit the generated `.backend-live.out.log` change.
 - Production PostgreSQL retains the existing unique indexes; duplicate GORM-created indexes have been removed and schema tags now reuse the surviving names.
@@ -23,10 +23,11 @@ Improve production API latency and reliability across Nginx, application timing,
 - Focused billing, gateway, and store tests passed after fixing ledger worker test database isolation.
 - `git diff --check` passed.
 - Docker daemon is unavailable locally; CI must perform the final container build.
+- The migration fix now derives SQL syntax from `LogDB.Dialector.Name()` and has PostgreSQL/MySQL/SQLite regression coverage; the full Go suite passes again.
 
 # Next Actions
-- Review final staged diff, commit source changes excluding `.backend-live.out.log`, and push `v2-refactor-20260711`.
-- Wait for all multi-architecture images and manifests, then deploy control, gateway, workflow, ledger, and migration/verification jobs.
+- Commit and push the migration dialect fix, excluding `.backend-live.out.log`.
+- Wait for replacement multi-architecture images and manifests, then rerun the backed-up deployment flow.
 - Verify schema migrations, tables/columns/indexes, service health, timing logs, outbox cleanup, pg_stat_statements load, and disk headroom.
 - Capture post-deploy Cloudflare and origin baselines and document the EdgeOne and partition-migration prerequisites.
 

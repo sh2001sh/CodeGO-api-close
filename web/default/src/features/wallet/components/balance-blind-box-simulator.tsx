@@ -261,7 +261,8 @@ function SimulationMetrics(props: {
         ))}
       </div>
       <div className='bg-muted/30 text-muted-foreground border-t px-4 py-2 text-[11px] leading-5 sm:px-5'>
-        累计收益率 =（累计额度奖励 − 累计投入）÷ 累计投入；仅反映本次模拟结果。
+        累计收益率 =（当前模拟余额 − 初始模拟额度）÷
+        初始模拟额度；累计投入和奖励单独统计。
       </div>
     </div>
   )

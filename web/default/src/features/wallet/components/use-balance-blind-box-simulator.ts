@@ -42,8 +42,8 @@ export function useBalanceBlindBoxSimulator(priceUSD: number) {
       ...session,
       netQuota: session.balanceQuota - session.initialQuota,
       yieldRate: calculateAccountYieldRate(
-        session.spentQuota,
-        session.rewardQuota
+        session.initialQuota,
+        session.balanceQuota
       ),
     }
   }, [session])

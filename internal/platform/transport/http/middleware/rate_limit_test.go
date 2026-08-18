@@ -41,6 +41,32 @@ func TestBlindBoxOpenRateLimitIsScopedToUser(t *testing.T) {
 	require.False(t, otherUser.IsAborted())
 }
 
+func TestRegistrationRateLimitAllowsFiveAttemptsPerTenMinutesPerIP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalRedisEnabled := platformcache.RedisEnabled
+	platformcache.RedisEnabled = false
+	t.Cleanup(func() { platformcache.RedisEnabled = originalRedisEnabled })
+
+	limiter := RegistrationRateLimit()
+	request := func(ip string) *gin.Context {
+		context, _ := gin.CreateTestContext(httptest.NewRecorder())
+		context.Request = httptest.NewRequest(http.MethodPost, "/api/user/register", nil)
+		context.Request.RemoteAddr = ip + ":1234"
+		limiter(context)
+		return context
+	}
+
+	for range 5 {
+		allowed := request("198.51.100.41")
+		require.False(t, allowed.IsAborted())
+	}
+	limited := request("198.51.100.41")
+	require.True(t, limited.IsAborted())
+	require.Equal(t, http.StatusTooManyRequests, limited.Writer.Status())
+	otherIP := request("198.51.100.42")
+	require.False(t, otherIP.IsAborted())
+}
+
 func TestBalanceBlindBoxOpenRateLimitIsScopedToUser(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	originalRedisEnabled := platformcache.RedisEnabled

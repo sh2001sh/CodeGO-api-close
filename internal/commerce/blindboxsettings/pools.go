@@ -1,10 +1,10 @@
 package blindboxsettings
 
 var defaultTierSettings = []TierSetting{
-	{Name: "0.20-0.80 统一额度", MinUSD: 0.2, MaxUSD: 0.8, Probability: 0.22, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "0.20-0.80 统一额度", MinUSD: 0.2, MaxUSD: 0.8, Probability: 0.29311, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "0.80-1.50 统一额度", MinUSD: 0.8, MaxUSD: 1.5, Probability: 0.13, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "1.50-2.50 统一额度", MinUSD: 1.5, MaxUSD: 2.5, Probability: 0.08, RewardType: "claude_quota", WalletType: "claude"},
-	{Name: "2.50-3.69 统一额度", MinUSD: 2.5, MaxUSD: 3.69, Probability: 0.502427727273, RewardType: "claude_quota", WalletType: "claude"},
+	{Name: "2.50-3.69 统一额度", MinUSD: 2.5, MaxUSD: 3.69, Probability: 0.429317727273, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "4.50-12.00 统一额度", MinUSD: 4.5, MaxUSD: 12, Probability: 0.045, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "12.00-30.00 统一额度", MinUSD: 12, MaxUSD: 30, Probability: 0.008, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "30.00-100.00 统一额度", MinUSD: 30, MaxUSD: 100, Probability: 0.0007, RewardType: "claude_quota", WalletType: "claude"},

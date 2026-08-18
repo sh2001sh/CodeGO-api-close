@@ -11,9 +11,14 @@ import (
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+const balanceBlindBoxGiftCoolingSeconds = int64(72 * 60 * 60)
+
+var ErrBalanceBlindBoxGiftCooling = errors.New("新用户购买的盲盒仍在冷却期，暂不可赠送")
 
 type GiftBalanceBlindBoxRequest struct {
 	RecipientExternalId string `json:"recipient_external_id"`
@@ -65,6 +70,9 @@ func executeBalanceBlindBoxGiftTx(tx *gorm.DB, senderUserID int, req GiftBalance
 	if err != nil {
 		return err
 	}
+	if err := ensureBalanceBlindBoxGiftCoolingPassed(tx, items); err != nil {
+		return err
+	}
 	*gift = commerceschema.BalanceBlindBoxGift{
 		RequestId: req.RequestId, SenderUserId: senderUserID, RecipientUserId: recipient.Id,
 		SenderExternalId: sender.ExternalId, RecipientExternalId: recipientRow.ExternalId,
@@ -81,6 +89,38 @@ func executeBalanceBlindBoxGiftTx(tx *gorm.DB, senderUserID int, req GiftBalance
 		return err
 	}
 	return auditapp.RecordLogTx(tx, recipient.Id, auditschema.LogTypeManage, fmt.Sprintf("收到用户 %s 赠送的余额盲盒 %d 个，赠送记录 %d", sender.ExternalId, req.Count, gift.Id))
+}
+
+func ensureBalanceBlindBoxGiftCoolingPassed(tx *gorm.DB, items []commerceschema.BalanceBlindBoxItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	sourceIDs := make([]int, 0, len(items))
+	seen := make(map[int]struct{}, len(items))
+	for _, item := range items {
+		if item.PurchaseUserId <= 0 {
+			continue
+		}
+		if _, found := seen[item.PurchaseUserId]; found {
+			continue
+		}
+		seen[item.PurchaseUserId] = struct{}{}
+		sourceIDs = append(sourceIDs, item.PurchaseUserId)
+	}
+	if len(sourceIDs) == 0 {
+		return nil
+	}
+	cutoff := platformruntime.GetTimestamp() - balanceBlindBoxGiftCoolingSeconds
+	var coolingUsers int64
+	if err := tx.Model(&identityschema.User{}).
+		Where("id IN ? AND created_at > ?", sourceIDs, cutoff).
+		Count(&coolingUsers).Error; err != nil {
+		return err
+	}
+	if coolingUsers > 0 {
+		return ErrBalanceBlindBoxGiftCooling
+	}
+	return nil
 }
 
 func lockBalanceBlindBoxGiftItems(tx *gorm.DB, senderUserID, count int) ([]commerceschema.BalanceBlindBoxItem, error) {

@@ -241,6 +241,54 @@ func HasConfiguredAutoRoutePool(ownerUserID int) bool {
 	return count > 0
 }
 
+// ListSelectedAutoRouteModels returns the deduplicated models exposed by the
+// user's configured Auto route pool. The boolean distinguishes an empty pool
+// from a user who has not configured the pool and should use legacy AutoGroups.
+func ListSelectedAutoRouteModels(ownerUserID int) ([]string, bool, error) {
+	selected, err := loadAutoRoutePoolSelection(ownerUserID)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(selected) == 0 {
+		return nil, false, nil
+	}
+
+	models := make(map[string]string)
+	groups, channels, err := loadAutoRouteGroups(ownerUserID)
+	if err != nil {
+		return nil, true, err
+	}
+	for _, group := range groups {
+		if _, ok := selected[group.ID]; !ok {
+			continue
+		}
+		for _, model := range decodeModels(channels[group.ChannelID].DeclaredModels) {
+			key := strings.ToLower(strings.TrimSpace(model))
+			if key != "" {
+				models[key] = strings.TrimSpace(model)
+			}
+		}
+	}
+	for _, item := range loadOfficialAutoRouteItems(ownerUserID, selected) {
+		if !item.Selected {
+			continue
+		}
+		for _, model := range item.Models {
+			key := strings.ToLower(strings.TrimSpace(model))
+			if key != "" {
+				models[key] = strings.TrimSpace(model)
+			}
+		}
+	}
+
+	result := make([]string, 0, len(models))
+	for _, model := range models {
+		result = append(result, model)
+	}
+	sort.Strings(result)
+	return result, true, nil
+}
+
 func loadAutoRouteGroups(ownerUserID int) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
 	var groups []marketplaceschema.Group
 	err := platformdb.DB.Where(

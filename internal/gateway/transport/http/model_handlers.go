@@ -9,6 +9,7 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 )
@@ -24,7 +25,18 @@ func ListModels(c *gin.Context, modelType int) {
 	}
 	tokenGroup := httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup)
 
-	userOpenAIModels, err := gatewayroutingapp.CollectUserOpenAIModels(userID, tokenModelLimitEnabled, tokenModelLimit, tokenGroup)
+	var userOpenAIModels []dto.OpenAIModels
+	var err error
+	normalizedTokenGroup := gatewayroutingapp.NormalizeTokenGroup(tokenGroup)
+	if !tokenModelLimitEnabled && normalizedTokenGroup == gatewayroutingapp.AutoGroupName && marketplaceapp.HasConfiguredAutoRoutePool(userID) {
+		var poolModels []string
+		poolModels, _, err = marketplaceapp.ListSelectedAutoRouteModels(userID)
+		if err == nil {
+			userOpenAIModels = gatewayroutingapp.CollectOpenAIModelsForNames(userID, poolModels)
+		}
+	} else {
+		userOpenAIModels, err = gatewayroutingapp.CollectUserOpenAIModels(userID, tokenModelLimitEnabled, tokenModelLimit, normalizedTokenGroup)
+	}
 	if err != nil {
 		c.JSON(stdhttp.StatusOK, gin.H{
 			"success": false,

@@ -40,7 +40,7 @@ func TestGPT56MappingStatusPrefersMismatch(t *testing.T) {
 	require.Equal(t, GPT56MappingStatusMismatch, gpt56MappingStatus([]GPT56MappingResult{
 		{Status: GPT56MappingStatusMatched},
 		{Status: GPT56MappingStatusMismatch},
-		{Status: GPT56MappingStatusInsufficientEvidence},
+		{Status: GPT56MappingStatusMismatch},
 	}))
 	require.Equal(t, GPT56MappingStatusInsufficientEvidence, gpt56MappingStatus([]GPT56MappingResult{
 		{Status: GPT56MappingStatusMatched},
@@ -178,10 +178,25 @@ func TestGPT56MappingProbeReportsEachSampleProgress(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}, progressCounts)
-	require.Equal(t, GPT56MappingStatusInsufficientEvidence, result.Status)
+	require.Equal(t, GPT56MappingStatusMatched, result.Status)
 	require.Equal(t, policy.sampleCount()-1, result.MatchedSamples)
 	require.Equal(t, GPT56MappingSampleStatusError, result.Samples[2].Status)
 	require.Contains(t, result.Samples[2].Error, "temporary upstream failure")
+}
+
+func TestGPT56MappingProbeKeepsInsufficientEvidenceWhenAllRequestsFail(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		http.Error(writer, "temporary upstream failure", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	policy := gpt56Policy(GPT56MappingLevelDailyLight)
+	result, err := probeGPT56MappingModelWithProgress(
+		"openai_compatible", server.URL, "test-key", "gpt-5.6-terra", policy, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, GPT56MappingStatusInsufficientEvidence, result.Status)
+	require.Zero(t, result.MatchedSamples)
 }
 
 func TestGPT56MappingHistoryKeepsPreviousRuns(t *testing.T) {

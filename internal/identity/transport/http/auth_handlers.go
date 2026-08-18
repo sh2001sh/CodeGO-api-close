@@ -143,6 +143,8 @@ func handleAuthError(c *gin.Context, err error) {
 		errors.Is(err, identityapp.ErrUsernameOrPasswordError),
 		errors.Is(err, identityapp.ErrEmailVerificationNeeded),
 		errors.Is(err, identityapp.ErrVerificationCodeInvalid),
+		errors.Is(err, identityapp.ErrEmailDomainNotAllowed),
+		errors.Is(err, identityapp.ErrEmailAliasNotAllowed),
 		errors.Is(err, identityapp.ErrUserExists),
 		errors.Is(err, identityapp.ErrSessionSaveFailed),
 		errors.Is(err, identityapp.ErrRegisterFailed),

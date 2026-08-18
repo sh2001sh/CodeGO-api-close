@@ -17,6 +17,7 @@ var (
 	ErrWalletTransferPasswordIncorrect    = errors.New("支付密码错误")
 	ErrWalletTransferPasswordLocked       = errors.New("支付密码已临时锁定")
 	ErrWalletTransferInsufficientBalance  = errors.New("通用额度余额不足")
+	ErrWalletTransferRewardLocked         = errors.New("盲盒奖励正在释放，暂不可转出")
 	ErrWalletTransferAccountPassword      = errors.New("当前登录密码错误")
 	ErrWalletTransferPasswordConfirmation = errors.New("两次输入的支付密码不一致")
 	ErrWalletTransferEmailRequired        = errors.New("请先绑定邮箱后再设置支付密码")

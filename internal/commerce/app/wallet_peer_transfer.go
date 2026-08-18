@@ -241,6 +241,9 @@ func executeWalletTransferTx(tx *gorm.DB, sender, recipient *identityschema.User
 	if senderBalance < int(totalDebit) {
 		return commerceschema.ErrWalletTransferInsufficientBalance
 	}
+	if err := billingapp.EnsureWalletTransferQuotaTx(tx, sender.Id, totalDebit); err != nil {
+		return err
+	}
 	operationID := "wallet-transfer:" + req.RequestId
 	if err := billingapp.DebitClaudeWalletQuotaTxWithReason(tx, sender.Id, int(req.AmountQuota), operationID+":debit", "wallet_peer_transfer_debit"); err != nil {
 		return err
@@ -339,6 +342,9 @@ func maskWalletTransferName(value string) string {
 }
 
 func mapWalletTransferError(err error) error {
+	if errors.Is(err, billingapp.ErrWalletRewardTransferLocked) {
+		return commerceschema.ErrWalletTransferRewardLocked
+	}
 	if errors.Is(err, billingdomain.ErrInsufficientBalance) {
 		return commerceschema.ErrWalletTransferInsufficientBalance
 	}

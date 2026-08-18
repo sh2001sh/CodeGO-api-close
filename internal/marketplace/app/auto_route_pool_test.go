@@ -36,6 +36,10 @@ func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	view, err := ReplaceAutoRoutePool(20, AutoRoutePoolUpdateRequest{GroupIDs: []string{"cheap", "stable", "other"}})
 	require.NoError(t, err)
 	require.Equal(t, 3, view.SelectedCount)
+	models, configured, err := ListSelectedAutoRouteModels(20)
+	require.NoError(t, err)
+	require.True(t, configured)
+	require.Equal(t, []string{"claude-sonnet", "gpt-5"}, models)
 
 	bindings, err := ResolveAutoRouteBindings(20, "gpt-5", 0)
 	require.NoError(t, err)

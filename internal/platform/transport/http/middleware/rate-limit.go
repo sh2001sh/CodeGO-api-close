@@ -201,18 +201,10 @@ func BlindBoxPaymentRateLimit() func(c *gin.Context) {
 	return userRateLimitFactory(10, 60, "BBP")
 }
 
-// RegistrationRateLimit protects account creation from automated bursts while
-// keeping a reasonable allowance for shared residential networks.
+// RegistrationRateLimit allows up to five account-creation attempts from the
+// same IP in a rolling ten-minute window.
 func RegistrationRateLimit() gin.HandlerFunc {
-	burstLimiter := rateLimitFactory(3, 10*60, "RG10")
-	dailyLimiter := rateLimitFactory(5, 24*60*60, "RG24")
-	return func(c *gin.Context) {
-		burstLimiter(c)
-		if c.IsAborted() {
-			return
-		}
-		dailyLimiter(c)
-	}
+	return rateLimitFactory(5, 10*60, "RG10")
 }
 
 func DownloadRateLimit() func(c *gin.Context) {

@@ -41,13 +41,13 @@ func TestEnrichUsageLogMarketplaceIdentity(t *testing.T) {
 
 	first := decodeUsageLogOther(t, logs[0].Other)
 	require.Equal(t, "group-1", first[logMarketplaceGroupIDKey])
-	require.Equal(t, "Codex Plus-0.8x-10001", first[logMarketplaceGroupDisplayNameKey])
+	require.Equal(t, "10001-Codex Plus-0.8x", first[logMarketplaceGroupDisplayNameKey])
 	require.Equal(t, "10001", first[logMarketplaceChannelIDKey])
 	require.Equal(t, "mg_codex_plus", first[logMarketplacePublicSlugKey])
 	require.Equal(t, "value", first["preserved"])
 
 	second := decodeUsageLogOther(t, logs[1].Other)
-	require.Equal(t, "Codex Pro-1.5x-10002", second[logMarketplaceGroupDisplayNameKey])
+	require.Equal(t, "10002-Codex Pro-1.5x", second[logMarketplaceGroupDisplayNameKey])
 	require.JSONEq(t, `{"group_ratio":1}`, logs[2].Other)
 }
 
@@ -83,7 +83,7 @@ func TestEnrichUsageLogMarketplaceIdentityResolvesInternalGroupName(t *testing.T
 	require.NoError(t, EnrichUsageLogMarketplaceIdentity(logs))
 	other := decodeUsageLogOther(t, logs[0].Other)
 	require.Equal(t, "group-3", other[logMarketplaceGroupIDKey])
-	require.Equal(t, "Codex Pro-0.6x-10003", other[logMarketplaceGroupDisplayNameKey])
+	require.Equal(t, "10003-Codex Pro-0.6x", other[logMarketplaceGroupDisplayNameKey])
 }
 
 func decodeUsageLogOther(t *testing.T, raw string) map[string]interface{} {

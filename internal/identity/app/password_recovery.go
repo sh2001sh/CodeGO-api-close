@@ -159,3 +159,16 @@ func validateVerificationEmail(email string) error {
 	}
 	return nil
 }
+
+// validateRegistrationEmail always rejects aliases because registration is a
+// high-risk account-creation path, even when email verification is disabled.
+func validateRegistrationEmail(email string) error {
+	if err := validateVerificationEmail(email); err != nil {
+		return err
+	}
+	parts := strings.SplitN(strings.TrimSpace(email), "@", 2)
+	if len(parts) == 2 && (strings.Contains(parts[0], "+") || strings.Contains(parts[0], ".")) {
+		return ErrEmailAliasNotAllowed
+	}
+	return nil
+}

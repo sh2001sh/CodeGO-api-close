@@ -61,5 +61,5 @@ func marketplaceDisplayName(sourceLabel string, multiplier float64, channelID st
 		label = "来源待审核"
 	}
 	multiplierText := marketplacedomain.FormatMultiplier(multiplier)
-	return label + "-" + multiplierText + "x-" + strings.TrimSpace(channelID)
+	return strings.TrimSpace(channelID) + "-" + label + "-" + multiplierText + "x"
 }

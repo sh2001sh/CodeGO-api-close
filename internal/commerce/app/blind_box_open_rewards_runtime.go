@@ -65,12 +65,20 @@ func creditBlindBoxRewardByWalletTx(tx *gorm.DB, userID int, amount int64, walle
 	if idempotencyKey == "" {
 		return errors.New("blind box reward idempotency key is required")
 	}
+	var err error
 	switch walletType {
 	case commerceschema.BlindBoxRewardWalletTypeClaude:
-		return billingapp.CreditClaudeWalletQuotaTx(tx, userID, int(amount), idempotencyKey, reasonCode)
+		err = billingapp.CreditClaudeWalletQuotaTx(tx, userID, int(amount), idempotencyKey, reasonCode)
 	default:
-		return billingapp.CreditClaudeWalletQuotaTx(tx, userID, int(amount), idempotencyKey, reasonCode)
+		err = billingapp.CreditClaudeWalletQuotaTx(tx, userID, int(amount), idempotencyKey, reasonCode)
 	}
+	if err != nil {
+		return err
+	}
+	if reasonCode == "blind_box_reward" {
+		return billingapp.CreateWalletRewardHoldTx(tx, userID, amount, idempotencyKey)
+	}
+	return nil
 }
 
 func applyBlindBoxWalletRewardTx(tx *gorm.DB, userID int, openRecordID int, amount int64, walletType commerceschema.BlindBoxRewardWalletType) error {

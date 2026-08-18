@@ -283,6 +283,7 @@ func createBalanceBlindBoxTestUser(t *testing.T, db *gorm.DB, id int, externalID
 		Id: id, Username: "balance_box_" + externalID, ExternalId: externalID,
 		ClaudeQuota: int(math.Round(balanceUSD * float64(platformruntime.QuotaPerUnit))),
 		AffCode:     "aff-" + externalID, Status: constant.UserStatusEnabled,
+		CreatedAt: platformruntime.GetTimestamp() - int64((73 * time.Hour).Seconds()),
 	}
 	require.NoError(t, db.Create(user).Error)
 	return user

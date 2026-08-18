@@ -184,6 +184,9 @@ func findOrCreateOAuthUser(provider oauth.Provider, oauthUser *oauth.OAuthUser, 
 	}
 	if oauthUser.Email != "" {
 		user.Email = oauthUser.Email
+		if err := validateRegistrationEmail(user.Email); err != nil {
+			return nil, err
+		}
 	}
 	user.Role = constant.RoleCommonUser
 	user.Status = constant.UserStatusEnabled

@@ -57,6 +57,11 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID str
 	if err := applyLedgerDeltaTx(tx, account, userID, amount, operationID, defaultReasonCode(reasonCode, "wallet_debit")); err != nil {
 		return err
 	}
+	if reasonCode != "wallet_peer_transfer_debit" && reasonCode != "wallet_peer_transfer_fee" {
+		if err := ConsumeWalletRewardHoldsTx(tx, account.AccountID, int64(amount)); err != nil {
+			return err
+		}
+	}
 	if err := mirrored.applyDelta(tx, userID, amount); err != nil {
 		return err
 	}

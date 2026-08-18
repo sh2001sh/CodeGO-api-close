@@ -38,7 +38,7 @@ func TestPendingSourceLabelIsNotSearchableOrReturned(t *testing.T) {
 	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "渠道主"}))
 	item := groupListItem(group, channel, nil, marketplaceschema.RankingSnapshot{}, nil)
 	require.Empty(t, item.SourceLabel)
-	require.Equal(t, "来源待审核-0x-channel-1", item.SystemDisplayName)
+	require.Equal(t, "channel-1-来源待审核-0x", item.SystemDisplayName)
 }
 
 func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *testing.T) {
@@ -61,7 +61,7 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	item := groupListItem(group, channel, models, marketplaceschema.RankingSnapshot{}, nil)
 	require.Equal(t, channel.ID, item.ChannelID)
 	require.Equal(t, channel.ProviderType, item.ProviderType)
-	require.Equal(t, "Codex Plus-0x-123456789012", item.SystemDisplayName)
+	require.Equal(t, "123456789012-Codex Plus-0x", item.SystemDisplayName)
 
 	payload, err := json.Marshal(item)
 	require.NoError(t, err)

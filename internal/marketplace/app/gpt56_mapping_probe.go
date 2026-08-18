@@ -104,13 +104,21 @@ stop:
 		result.LatencyMS /= int64(len(result.Samples))
 	}
 	result.ReportedModel = strings.Join(normalizeModels(reportedModels), ", ")
+	// Only responses that identify a model are evidence for mixed-model
+	// detection; transport failures must not dilute a real mismatch.
+	reportedSamples := result.MatchedSamples + mismatchedSamples
 	switch {
-	case mismatchedSamples*2 > result.SampleCount:
+	case reportedSamples > 0 && mismatchedSamples*2 > reportedSamples:
 		result.Status = GPT56MappingStatusMismatch
-	case mismatchedSamples > 0 || len(errorsSeen) > 0:
+	case mismatchedSamples > 0:
 		result.Status = GPT56MappingStatusInsufficientEvidence
-	default:
+	case result.MatchedSamples > 0:
+		// Transport failures do not prove that an upstream mixed models. As
+		// long as at least one response identifies the requested model and no
+		// other model was reported, keep the mapping usable.
 		result.Status = GPT56MappingStatusMatched
+	default:
+		result.Status = GPT56MappingStatusInsufficientEvidence
 	}
 	result.Error = strings.Join(normalizeModels(errorsSeen), "; ")
 	return result, nil

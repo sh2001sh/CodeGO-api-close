@@ -32,13 +32,19 @@ type InvoiceEligibleOrder struct {
 }
 
 type CreateInvoiceRequestInput struct {
-	SourceType  string `json:"source_type"`
-	TradeNo     string `json:"trade_no"`
-	InvoiceType string `json:"invoice_type"`
-	Title       string `json:"title"`
-	TaxNumber   string `json:"tax_number"`
-	Email       string `json:"email"`
-	Remark      string `json:"remark"`
+	Orders      []InvoiceOrderInput `json:"orders"`
+	SourceType  string              `json:"source_type"`
+	TradeNo     string              `json:"trade_no"`
+	InvoiceType string              `json:"invoice_type"`
+	Title       string              `json:"title"`
+	TaxNumber   string              `json:"tax_number"`
+	Email       string              `json:"email"`
+	Remark      string              `json:"remark"`
+}
+
+type InvoiceOrderInput struct {
+	SourceType string `json:"source_type"`
+	TradeNo    string `json:"trade_no"`
 }
 
 type UpdateInvoiceRequestInput struct {
@@ -136,30 +142,75 @@ func ListAdminInvoiceRequests(status string, page *platformpagination.PageInfo) 
 	return page, nil
 }
 
-// CreateInvoiceRequest validates a paid order inside a transaction and reserves it for one application.
+// CreateInvoiceRequest validates paid orders inside a transaction and reserves them for one application.
 func CreateInvoiceRequest(userID int, input CreateInvoiceRequestInput) (*commerceschema.InvoiceRequest, error) {
 	if err := validateInvoiceCreateInput(&input); err != nil {
 		return nil, err
 	}
 	request := &commerceschema.InvoiceRequest{}
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		eligible, err := loadInvoiceEligibleOrderTx(tx, userID, input.SourceType, input.TradeNo)
-		if err != nil {
-			return err
+		orders := make([]*InvoiceEligibleOrder, 0, len(input.Orders))
+		seen := make(map[string]struct{}, len(input.Orders))
+		currency := ""
+		for _, orderInput := range input.Orders {
+			key := invoiceOrderKey(orderInput.SourceType, orderInput.TradeNo)
+			if _, ok := seen[key]; ok {
+				return ErrInvoiceOrderUnavailable
+			}
+			seen[key] = struct{}{}
+			eligible, err := loadInvoiceEligibleOrderTx(tx, userID, orderInput.SourceType, orderInput.TradeNo)
+			if err != nil {
+				return err
+			}
+			var existing commerceschema.InvoiceRequestItem
+			if err := tx.Where("source_type = ? AND trade_no = ?", orderInput.SourceType, orderInput.TradeNo).First(&existing).Error; err == nil {
+				return ErrInvoiceAlreadyRequested
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if currency == "" {
+				currency = eligible.Currency
+			} else if currency != eligible.Currency {
+				return errors.New("合并开票的订单币种必须一致")
+			}
+			orders = append(orders, eligible)
 		}
-		var existing commerceschema.InvoiceRequest
-		if err := tx.Where("source_type = ? AND trade_no = ?", input.SourceType, input.TradeNo).First(&existing).Error; err == nil {
-			return ErrInvoiceAlreadyRequested
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
+		if len(orders) == 0 {
+			return errors.New("请选择可开票订单")
+		}
+		amount := 0.0
+		for _, order := range orders {
+			amount += order.OrderAmount
+		}
+		tradeNo := input.Orders[0].TradeNo
+		if len(orders) > 1 {
+			tradeNo = "batch-" + platformruntime.GetUUID()
 		}
 		*request = commerceschema.InvoiceRequest{
-			UserID: userID, SourceType: input.SourceType, TradeNo: input.TradeNo,
-			OrderAmount: eligible.OrderAmount, Currency: eligible.Currency, OrderTitle: eligible.OrderTitle,
+			UserID: userID, SourceType: input.Orders[0].SourceType, TradeNo: tradeNo,
+			OrderAmount: amount, Currency: currency, OrderTitle: orders[0].OrderTitle,
+			OrderCount:  len(orders),
 			InvoiceType: input.InvoiceType, Title: input.Title, TaxNumber: input.TaxNumber,
 			Email: input.Email, Remark: input.Remark, Status: commerceschema.InvoiceStatusPending,
 		}
-		return tx.Create(request).Error
+		if len(orders) > 1 {
+			request.SourceType = commerceschema.InvoiceSourceBatch
+			request.OrderTitle = "合并开票"
+		}
+		if err := tx.Create(request).Error; err != nil {
+			return err
+		}
+		for index, order := range orders {
+			itemInput := input.Orders[index]
+			if err := tx.Create(&commerceschema.InvoiceRequestItem{
+				InvoiceID: request.ID, UserID: userID, SourceType: itemInput.SourceType,
+				TradeNo: itemInput.TradeNo, OrderAmount: order.OrderAmount,
+				Currency: order.Currency, OrderTitle: order.OrderTitle, PaidAt: order.PaidAt,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -193,12 +244,22 @@ func UpdateAdminInvoiceRequest(id int64, adminID int, input UpdateInvoiceRequest
 }
 
 func invoiceRequestedOrders(userID int) (map[string]bool, error) {
+	var items []commerceschema.InvoiceRequestItem
+	if err := platformdb.DB.Select("source_type, trade_no").Where("user_id = ?", userID).Find(&items).Error; err != nil {
+		return nil, err
+	}
 	var requests []commerceschema.InvoiceRequest
 	if err := platformdb.DB.Select("source_type, trade_no").Where("user_id = ?", userID).Find(&requests).Error; err != nil {
 		return nil, err
 	}
-	result := make(map[string]bool, len(requests))
+	result := make(map[string]bool, len(items)+len(requests))
+	for _, item := range items {
+		result[invoiceOrderKey(item.SourceType, item.TradeNo)] = true
+	}
 	for _, request := range requests {
+		if request.SourceType == commerceschema.InvoiceSourceBatch {
+			continue
+		}
 		result[invoiceOrderKey(request.SourceType, request.TradeNo)] = true
 	}
 	return result, nil
@@ -243,10 +304,22 @@ func validateInvoiceCreateInput(input *CreateInvoiceRequestInput) error {
 		return errors.New("invalid invoice request")
 	}
 	input.SourceType, input.TradeNo = strings.TrimSpace(input.SourceType), strings.TrimSpace(input.TradeNo)
+	if len(input.Orders) == 0 && input.SourceType != "" && input.TradeNo != "" {
+		input.Orders = []InvoiceOrderInput{{SourceType: input.SourceType, TradeNo: input.TradeNo}}
+	}
+	for index := range input.Orders {
+		input.Orders[index].SourceType = strings.TrimSpace(input.Orders[index].SourceType)
+		input.Orders[index].TradeNo = strings.TrimSpace(input.Orders[index].TradeNo)
+	}
 	input.InvoiceType, input.Title = strings.TrimSpace(input.InvoiceType), strings.TrimSpace(input.Title)
 	input.TaxNumber, input.Email, input.Remark = strings.TrimSpace(input.TaxNumber), strings.TrimSpace(input.Email), strings.TrimSpace(input.Remark)
-	if (input.SourceType != commerceschema.InvoiceSourceTopUp && input.SourceType != commerceschema.InvoiceSourceSubscription) || input.TradeNo == "" {
+	if len(input.Orders) == 0 {
 		return errors.New("请选择可开票订单")
+	}
+	for _, order := range input.Orders {
+		if (order.SourceType != commerceschema.InvoiceSourceTopUp && order.SourceType != commerceschema.InvoiceSourceSubscription) || order.TradeNo == "" {
+			return errors.New("请选择可开票订单")
+		}
 	}
 	if input.InvoiceType != commerceschema.InvoiceTypePersonal && input.InvoiceType != commerceschema.InvoiceTypeEnterprise {
 		return errors.New("请选择发票类型")

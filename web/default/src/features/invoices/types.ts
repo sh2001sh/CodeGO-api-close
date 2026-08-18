@@ -32,11 +32,12 @@ export type InvoiceEligibleOrder = {
 export type InvoiceRequest = {
   id: number
   user_id: number
-  source_type: InvoiceSourceType
+  source_type: InvoiceSourceType | 'batch'
   trade_no: string
   order_amount: number
   currency: string
   order_title: string
+  order_count: number
   invoice_type: InvoiceType
   title: string
   tax_number: string
@@ -59,6 +60,7 @@ export type InvoicePage = {
 }
 
 export type CreateInvoiceRequestPayload = {
+  orders: Array<Pick<InvoiceEligibleOrder, 'source_type' | 'trade_no'>>
   source_type: InvoiceSourceType
   trade_no: string
   invoice_type: InvoiceType

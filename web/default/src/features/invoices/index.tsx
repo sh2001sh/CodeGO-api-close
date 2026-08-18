@@ -37,6 +37,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { SectionPageLayout } from '@/components/layout'
 import { getInvoiceEligibleOrders, getInvoiceRequests } from './api'
 import { InvoiceAdminPanel } from './components/invoice-admin-panel'
@@ -112,8 +113,8 @@ function SummaryCard({
 export function Invoices() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.auth.user)
-  const [selectedOrder, setSelectedOrder] =
-    useState<InvoiceEligibleOrder | null>(null)
+  const [selectedOrderKeys, setSelectedOrderKeys] = useState<string[]>([])
+  const [dialogOrders, setDialogOrders] = useState<InvoiceEligibleOrder[]>([])
   const orders = useQuery({
     queryKey: ['invoice-eligible-orders'],
     queryFn: getInvoiceEligibleOrders,
@@ -130,15 +131,37 @@ export function Invoices() {
     void queryClient.invalidateQueries({ queryKey: ['invoice-requests'] })
   }
 
-  const eligibleOrders = orders.data ?? []
+  const eligibleOrders = useMemo(() => orders.data ?? [], [orders.data])
   const requestItems = requests.data?.items
   const invoiceRequests = requestItems ?? []
   const requestSummary = useMemo(
     () => buildRequestSummary(requestItems),
     [requestItems]
   )
-  const readyToApplyCount = eligibleOrders.filter((order) => !order.requested)
-    .length
+  const readyToApplyCount = eligibleOrders.filter(
+    (order) => !order.requested
+  ).length
+  const selectedOrders = useMemo(
+    () =>
+      eligibleOrders.filter(
+        (order) =>
+          !order.requested &&
+          selectedOrderKeys.includes(order.source_type + '-' + order.trade_no)
+      ),
+    [eligibleOrders, selectedOrderKeys]
+  )
+  const selectedTotal = selectedOrders.reduce(
+    (sum, order) => sum + order.order_amount,
+    0
+  )
+  const toggleOrder = (order: InvoiceEligibleOrder) => {
+    const key = order.source_type + '-' + order.trade_no
+    setSelectedOrderKeys((current) =>
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key]
+    )
+  }
 
   return (
     <>
@@ -194,9 +217,28 @@ export function Invoices() {
                       </CardDescription>
                     </div>
                     <CardAction className='static'>
-                      <Badge variant='secondary'>
-                        {readyToApplyCount} 笔待申请
-                      </Badge>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <Badge variant='secondary'>
+                          {readyToApplyCount} 笔待申请
+                        </Badge>
+                        {selectedOrders.length > 0 ? (
+                          <span className='text-muted-foreground text-xs tabular-nums'>
+                            已选 {selectedOrders.length} 笔 ·{' '}
+                            {selectedOrders[0].currency}{' '}
+                            {selectedTotal.toFixed(2)}
+                          </span>
+                        ) : null}
+                        <Button
+                          size='sm'
+                          disabled={selectedOrders.length === 0}
+                          onClick={() => setDialogOrders(selectedOrders)}
+                        >
+                          <FilePlus2 />
+                          {selectedOrders.length > 1
+                            ? `合并开票（${selectedOrders.length}）`
+                            : '申请发票'}
+                        </Button>
+                      </div>
                     </CardAction>
                   </div>
                 </CardHeader>
@@ -212,7 +254,7 @@ export function Invoices() {
                     </p>
                   ) : null}
                   {eligibleOrders.length === 0 ? (
-                    <div className='flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed bg-muted/20 px-6 text-center'>
+                    <div className='bg-muted/20 flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-6 text-center'>
                       <ReceiptText className='text-muted-foreground size-5' />
                       <p className='font-medium'>暂无符合条件的已支付订单</p>
                       <p className='text-muted-foreground max-w-md text-sm'>
@@ -225,6 +267,14 @@ export function Invoices() {
                       key={order.source_type + '-' + order.trade_no}
                       className='bg-background/75 border-border/80 flex flex-col gap-3 rounded-2xl border px-4 py-4 sm:flex-row sm:items-start sm:justify-between'
                     >
+                      <Checkbox
+                        checked={selectedOrderKeys.includes(
+                          order.source_type + '-' + order.trade_no
+                        )}
+                        disabled={order.requested}
+                        onCheckedChange={() => toggleOrder(order)}
+                        aria-label={`选择${order.order_title}`}
+                      />
                       <div className='min-w-0 space-y-2'>
                         <div className='flex flex-wrap items-center gap-2'>
                           <h3 className='font-medium'>{order.order_title}</h3>
@@ -249,7 +299,7 @@ export function Invoices() {
                         size='sm'
                         variant={order.requested ? 'outline' : 'default'}
                         disabled={order.requested}
-                        onClick={() => setSelectedOrder(order)}
+                        onClick={() => setDialogOrders([order])}
                         className='sm:min-w-28'
                       >
                         <FilePlus2 />
@@ -338,9 +388,12 @@ export function Invoices() {
       </SectionPageLayout>
 
       <InvoiceRequestDialog
-        order={selectedOrder}
-        open={Boolean(selectedOrder)}
-        onOpenChange={(open) => !open && setSelectedOrder(null)}
+        key={dialogOrders
+          .map((order) => order.source_type + '-' + order.trade_no)
+          .join('|')}
+        orders={dialogOrders}
+        open={dialogOrders.length > 0}
+        onOpenChange={(open) => !open && setDialogOrders([])}
         onSubmitted={refresh}
       />
     </>

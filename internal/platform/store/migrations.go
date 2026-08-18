@@ -84,6 +84,7 @@ func V2MigrationIDs() []string {
 		"20260804_daily_lucky_reward_notifications",
 		"20260805_billing_outbox_pending_lookup",
 		"20260808_commerce_invoice_requests",
+		"20260818_commerce_invoice_request_items",
 		"20260812_blind_box_daily_lucky_numbers",
 		"20260813_balance_blind_box",
 		"20260813_balance_blind_box_small_pity",
@@ -297,6 +298,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{})
 		}},
 		{ID: "20260818_multiplier_precision", Run: migrateMultiplierPrecision},
+		{ID: "20260818_commerce_invoice_request_items", Run: migrateCommerceInvoiceRequestItems},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -339,6 +341,15 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}
 	}
 	return nil
+}
+
+func migrateCommerceInvoiceRequestItems(tx *gorm.DB) error {
+	if !tx.Migrator().HasColumn(&commerceschema.InvoiceRequest{}, "OrderCount") {
+		if err := tx.Migrator().AddColumn(&commerceschema.InvoiceRequest{}, "OrderCount"); err != nil {
+			return err
+		}
+	}
+	return tx.AutoMigrate(&commerceschema.InvoiceRequestItem{})
 }
 
 func migrateUnifiedCreditV1Schema(tx *gorm.DB) error {

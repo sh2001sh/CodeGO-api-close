@@ -180,8 +180,10 @@ export function InvoiceAdminPanel() {
                         用户 #{request.user_id} · {request.order_title}
                       </div>
                       <div className='text-muted-foreground text-xs'>
-                        {request.trade_no} · {request.currency}{' '}
-                        {request.order_amount.toFixed(2)}
+                        {request.order_count > 1
+                          ? `合并 ${request.order_count} 笔订单`
+                          : request.trade_no}{' '}
+                        · {request.currency} {request.order_amount.toFixed(2)}
                       </div>
                     </TableCell>
                     <TableCell className='align-top whitespace-normal'>

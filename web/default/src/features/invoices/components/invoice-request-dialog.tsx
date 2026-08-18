@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Building2,
   CalendarDays,
@@ -44,13 +44,14 @@ import type {
 } from '../types'
 
 type InvoiceRequestDialogProps = {
-  order: InvoiceEligibleOrder | null
+  orders: InvoiceEligibleOrder[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmitted: () => void
 }
 
 const emptyForm = (): CreateInvoiceRequestPayload => ({
+  orders: [],
   source_type: 'topup',
   trade_no: '',
   invoice_type: 'personal',
@@ -60,8 +61,21 @@ const emptyForm = (): CreateInvoiceRequestPayload => ({
   remark: '',
 })
 
-function formatMoney(order: InvoiceEligibleOrder) {
-  return order.currency + ' ' + order.order_amount.toFixed(2)
+function formForOrders(orders: InvoiceEligibleOrder[]) {
+  const first = orders[0]
+  return {
+    ...emptyForm(),
+    orders: orders.map(({ source_type, trade_no }) => ({
+      source_type,
+      trade_no,
+    })),
+    source_type: first?.source_type ?? 'topup',
+    trade_no: first?.trade_no ?? '',
+  }
+}
+
+function formatMoney(amount: number, currency: string) {
+  return currency + ' ' + amount.toFixed(2)
 }
 
 function formatDate(timestamp: number) {
@@ -77,22 +91,15 @@ function getOrderSourceLabel(sourceType: InvoiceEligibleOrder['source_type']) {
 }
 
 export function InvoiceRequestDialog({
-  order,
+  orders,
   open,
   onOpenChange,
   onSubmitted,
 }: InvoiceRequestDialogProps) {
-  const [form, setForm] = useState<CreateInvoiceRequestPayload>(emptyForm)
+  const [form, setForm] = useState<CreateInvoiceRequestPayload>(() =>
+    formForOrders(orders)
+  )
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    if (!order || !open) return
-    setForm({
-      ...emptyForm(),
-      source_type: order.source_type,
-      trade_no: order.trade_no,
-    })
-  }, [open, order])
 
   const update = <K extends keyof CreateInvoiceRequestPayload>(
     key: K,
@@ -100,7 +107,7 @@ export function InvoiceRequestDialog({
   ) => setForm((current) => ({ ...current, [key]: value }))
 
   const submit = async () => {
-    if (!order) return
+    if (orders.length === 0) return
     setSubmitting(true)
     try {
       await createInvoiceRequest(form)
@@ -116,11 +123,21 @@ export function InvoiceRequestDialog({
 
   const isEnterprise = form.invoice_type === 'enterprise'
   const submitDisabled = useMemo(() => {
-    if (!order) return true
+    if (orders.length === 0) return true
     if (!form.title.trim() || !form.email.trim()) return true
     if (isEnterprise && !form.tax_number.trim()) return true
     return submitting
-  }, [form.email, form.tax_number, form.title, isEnterprise, order, submitting])
+  }, [
+    form.email,
+    form.tax_number,
+    form.title,
+    isEnterprise,
+    orders.length,
+    submitting,
+  ])
+
+  const currency = orders[0]?.currency ?? 'CNY'
+  const totalAmount = orders.reduce((sum, order) => sum + order.order_amount, 0)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,44 +145,52 @@ export function InvoiceRequestDialog({
         <DialogHeader className='border-b px-5 pt-5 pb-4 sm:px-6'>
           <DialogTitle>申请电子发票</DialogTitle>
           <DialogDescription>
-            {order
-              ? '确认订单后填写开票信息，提交后可在发票页持续跟踪处理状态。'
+            {orders.length > 0
+              ? orders.length > 1
+                ? `已选择 ${orders.length} 笔订单，将合并为一张发票。`
+                : '确认订单后填写开票信息，提交后可在发票页持续跟踪处理状态。'
               : '请选择订单'}
           </DialogDescription>
         </DialogHeader>
 
         <div className='space-y-4 px-5 py-4 sm:px-6'>
-          {order ? (
+          {orders.length > 0 ? (
             <div className='bg-background/75 border-border/80 rounded-2xl border px-4 py-4'>
               <div className='flex flex-wrap items-start justify-between gap-3'>
                 <div className='space-y-1'>
                   <div className='flex flex-wrap items-center gap-2'>
-                    <h3 className='font-medium'>{order.order_title}</h3>
+                    <h3 className='font-medium'>
+                      {orders.length > 1 ? '合并开票' : orders[0].order_title}
+                    </h3>
                     <Badge variant='outline'>
-                      {getOrderSourceLabel(order.source_type)}
+                      {orders.length > 1
+                        ? `${orders.length} 笔订单`
+                        : getOrderSourceLabel(orders[0].source_type)}
                     </Badge>
                   </div>
                   <p className='text-muted-foreground text-sm'>
-                    本次申请将绑定到这笔订单，提交后不可改绑到其他订单。
+                    提交后订单会被锁定到本次申请，已申请订单不能再次开票。
                   </p>
                 </div>
                 <div className='text-right'>
                   <div className='text-lg font-semibold'>
-                    {formatMoney(order)}
+                    {formatMoney(totalAmount, currency)}
                   </div>
-                  <div className='text-muted-foreground mt-1 text-xs'>
-                    {order.trade_no}
+                  <div className='text-muted-foreground mt-1 max-w-64 text-xs'>
+                    {orders.map((order) => order.trade_no).join(' · ')}
                   </div>
                 </div>
               </div>
               <div className='text-muted-foreground mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm'>
-                <span className='inline-flex items-center gap-1.5'>
-                  <CalendarDays className='size-4' />
-                  {formatDate(order.paid_at)}
-                </span>
+                {orders.length === 1 ? (
+                  <span className='inline-flex items-center gap-1.5'>
+                    <CalendarDays className='size-4' />
+                    {formatDate(orders[0].paid_at)}
+                  </span>
+                ) : null}
                 <span className='inline-flex items-center gap-1.5'>
                   <ReceiptText className='size-4' />
-                  已支付订单
+                  {orders.length} 笔已支付订单
                 </span>
               </div>
             </div>

@@ -35,6 +35,50 @@ func TestCreateInvoiceRequestReservesPaidTopUpOnce(t *testing.T) {
 	}
 }
 
+func TestCreateInvoiceRequestCombinesMultiplePaidOrders(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	user := &identityschema.User{Id: 93, Username: "invoice-batch-user", Password: "password123", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default"}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := platformruntime.GetTimestamp()
+	if err := db.Create([]commerceschema.TopUp{
+		{UserId: user.Id, Money: 12.5, TradeNo: "invoice-batch-1", Status: constant.TopUpStatusSuccess, CreateTime: now, CompleteTime: now},
+		{UserId: user.Id, Money: 18, TradeNo: "invoice-batch-2", Status: constant.TopUpStatusSuccess, CreateTime: now, CompleteTime: now},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	body := map[string]any{
+		"orders": []map[string]any{
+			{"source_type": commerceschema.InvoiceSourceTopUp, "trade_no": "invoice-batch-1"},
+			{"source_type": commerceschema.InvoiceSourceTopUp, "trade_no": "invoice-batch-2"},
+		},
+		"invoice_type": commerceschema.InvoiceTypePersonal,
+		"title":        "测试用户", "email": "invoice@example.com",
+	}
+	ctx, recorder := newCommerceContext(t, "POST", "/api/invoices/requests", body, user.Id)
+	createInvoiceRequest(ctx)
+	if response := decodeCommerceResponse(t, recorder); !response.Success {
+		t.Fatalf("expected combined request success, got %#v", response)
+	}
+
+	var request commerceschema.InvoiceRequest
+	if err := db.Where("user_id = ?", user.Id).First(&request).Error; err != nil {
+		t.Fatal(err)
+	}
+	if request.SourceType != commerceschema.InvoiceSourceBatch || request.OrderCount != 2 || request.OrderAmount != 30.5 {
+		t.Fatalf("unexpected combined request: %#v", request)
+	}
+	var itemCount int64
+	if err := db.Model(&commerceschema.InvoiceRequestItem{}).Where("invoice_id = ?", request.ID).Count(&itemCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if itemCount != 2 {
+		t.Fatalf("expected two invoice items, got %d", itemCount)
+	}
+}
+
 func TestInvoiceEligibleOrdersSkipSubscriptionTopUpMirror(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 	user := &identityschema.User{Id: 90, Username: "invoice-sub-user", Password: "password123", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default"}

@@ -92,6 +92,9 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                 <div className='font-medium'>{request.order_title}</div>
                 <div className='text-muted-foreground text-sm'>
                   {formatMoney(request)}
+                  {request.order_count > 1
+                    ? ` · 合并 ${request.order_count} 笔订单`
+                    : ''}
                 </div>
               </div>
               <InvoiceStatusBadge status={request.status} />
@@ -103,7 +106,9 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
               </div>
               <div>
                 <div className='text-muted-foreground text-xs'>订单号</div>
-                <div className='mt-1 font-mono text-xs'>{request.trade_no}</div>
+                <div className='mt-1 font-mono text-xs'>
+                  {request.order_count > 1 ? '合并申请' : request.trade_no}
+                </div>
               </div>
               <div>
                 <div className='text-muted-foreground text-xs'>申请时间</div>
@@ -140,7 +145,10 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                   <div className='space-y-1'>
                     <div className='font-medium'>{request.order_title}</div>
                     <div className='text-muted-foreground text-xs'>
-                      {formatMoney(request)} · {request.trade_no}
+                      {formatMoney(request)} ·{' '}
+                      {request.order_count > 1
+                        ? `合并 ${request.order_count} 笔订单`
+                        : request.trade_no}
                     </div>
                     <div className='text-sm'>{request.title}</div>
                   </div>

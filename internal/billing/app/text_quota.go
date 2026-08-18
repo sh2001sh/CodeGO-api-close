@@ -500,14 +500,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
 	appendUsageConsumptionDiscountInfo(other, discountDetail)
-	if decision, ok := gatewayruntime.GetRouteDecision(ctx); ok {
-		adminInfo, _ := other["admin_info"].(map[string]interface{})
-		if adminInfo == nil {
-			adminInfo = make(map[string]interface{})
-		}
-		adminInfo["route_decision"] = decision
-		other["admin_info"] = adminInfo
-	}
+	gatewayruntime.AttachRouteLogInfo(ctx, other)
 
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,

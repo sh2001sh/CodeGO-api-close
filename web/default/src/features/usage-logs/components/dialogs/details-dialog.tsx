@@ -68,6 +68,7 @@ import {
 import type { LogOtherData } from '../../types'
 import { BillingQuotaSourceBadge } from '../billing-quota-source'
 import { BillingCalculationSection } from './billing-calculation-section'
+import { RouteSummarySection } from './route-summary-section'
 
 function timingTextColorClass(
   variant: 'success' | 'warning' | 'danger'
@@ -514,6 +515,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const useChannel = other?.admin_info?.use_channel
   const channelChain =
     useChannel && useChannel.length > 0 ? useChannel.join(' → ') : undefined
+  const routeGroupName = getUsageLogGroupDisplayName(props.log.group, other)
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -665,6 +667,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 />
               )}
             </div>
+
+            {other?.route_summary && (
+              <RouteSummarySection
+                summary={other.route_summary}
+                groupName={routeGroupName}
+                failed={props.log.type === 5}
+              />
+            )}
 
             {props.isAdmin && timingTrace && hasDetailedTiming && (
               <DetailSection label={t('Gateway Timing Breakdown')}>

@@ -121,6 +121,23 @@ export interface LogOtherData {
     admin_username?: string
     admin_id?: number | string
   }
+  route_summary?: {
+    mode: 'auto'
+    candidate_count: number
+    selected_order?: number
+    skipped_count?: number
+    retry_count?: number
+    fallback: boolean
+    skip_reasons?: Array<
+      | 'unavailable'
+      | 'capacity_limit'
+      | 'credential_cooling'
+      | 'failed_route'
+      | 'selection_error'
+      | 'setup_error'
+      | 'stream_circuit'
+    >
+  }
   request_path?: string
   status?: 'failed'
   status_code?: number

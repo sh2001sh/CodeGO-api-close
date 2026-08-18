@@ -1,27 +1,20 @@
 import { useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { Check, LoaderCircle, Route, Search, ShieldCheck } from 'lucide-react'
+import { Check, LoaderCircle, Route, ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   useMarketplaceAutoRoutePool,
   useMarketplaceAutoRoutePoolUpdate,
 } from '@/features/marketplace/hooks'
 import type { MarketplaceAutoRoutePoolItem } from '@/features/marketplace/types'
 import {
+  AutoPoolFilters,
   AutoPoolRow,
   AutoPoolSkeleton,
-  RouteOrder,
+  type AutoPoolSort,
 } from './marketplace-auto-pool-parts'
 
 export function MarketplaceAutoPool(props: { authenticated: boolean }) {
@@ -44,9 +37,11 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
   const selectedOrder = selectedDraft ?? serverSelected
   const selected = useMemo(() => new Set(selectedOrder), [selectedOrder])
 
-  const visibleItems = useMemo(() => {
+  const availableItems = useMemo(() => {
     const keyword = search.trim().toLowerCase()
-    const items = query.data?.items ?? []
+    const items = (query.data?.items ?? []).filter(
+      (item) => !selected.has(item.group_id)
+    )
     const filtered = items.filter((item) => {
       const matchesKeyword =
         !keyword ||
@@ -69,12 +64,9 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
       if (sortBy === 'cache') return right.cache_hit_rate - left.cache_hit_rate
       if (sortBy === 'latency')
         return left.avg_latency_ms - right.avg_latency_ms
-      return (
-        (left.selected ? 0 : 1) - (right.selected ? 0 : 1) ||
-        left.route_score - right.route_score
-      )
+      return left.route_score - right.route_score
     })
-  }, [modelFilter, query.data?.items, search, sortBy, sourceFilter])
+  }, [modelFilter, query.data?.items, search, selected, sortBy, sourceFilter])
 
   const sourceOptions = useMemo(
     () =>
@@ -105,6 +97,9 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
       .map((groupID) => itemsByID.get(groupID))
       .filter((item): item is MarketplaceAutoRoutePoolItem => Boolean(item))
   }, [query.data?.items, selectedOrder])
+  const hasChanges =
+    selectedOrder.length !== serverSelected.length ||
+    selectedOrder.some((groupID, index) => groupID !== serverSelected[index])
 
   if (!props.authenticated) return <SignInRequired />
   if (query.isLoading) return <AutoPoolSkeleton />
@@ -151,7 +146,7 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
 
   return (
     <section className='border-border overflow-hidden rounded-lg border'>
-      <div className='bg-muted/25 grid gap-5 border-b px-4 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.55fr)] lg:px-5'>
+      <div className='bg-muted/25 border-b px-4 py-5 lg:px-5'>
         <div>
           <div className='flex items-center gap-2'>
             <Route className='text-primary size-5' />
@@ -172,72 +167,24 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
             </Badge>
           </div>
         </div>
-        <RouteOrder items={routeOrder} />
       </div>
 
-      <div className='flex flex-col gap-3 border-b px-4 py-3 lg:px-5'>
-        <div className='flex flex-col gap-2 xl:flex-row xl:items-center'>
-          <div className='relative w-full xl:max-w-sm'>
-            <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t('搜索分组、来源或模型')}
-              className='pl-9'
-            />
+      <div className='border-b'>
+        <div className='flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-5'>
+          <div>
+            <div className='flex items-center gap-2'>
+              <h3 className='text-sm font-semibold'>{t('已选择路由')}</h3>
+              <Badge variant='secondary'>{routeOrder.length}</Badge>
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              {t('请求按以下顺序尝试；使用箭头调整优先级。')}
+            </p>
           </div>
-          <Select
-            value={sourceFilter}
-            onValueChange={(value) => setSourceFilter(value || 'all')}
+          <Button
+            onClick={save}
+            disabled={update.isPending || !hasChanges}
+            className='gap-2'
           >
-            <SelectTrigger className='w-full xl:w-44'>
-              <SelectValue placeholder={t('按来源筛选')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='all'>{t('全部来源')}</SelectItem>
-              {sourceOptions.map((source) => (
-                <SelectItem key={source} value={source}>
-                  {source}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={modelFilter}
-            onValueChange={(value) => setModelFilter(value || 'all')}
-          >
-            <SelectTrigger className='w-full xl:w-52'>
-              <SelectValue placeholder={t('按模型筛选')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='all'>{t('全部模型')}</SelectItem>
-              {modelOptions.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={sortBy}
-            onValueChange={(value) =>
-              setSortBy((value || 'route') as AutoPoolSort)
-            }
-          >
-            <SelectTrigger className='w-full xl:w-44'>
-              <SelectValue placeholder={t('排序')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='route'>{t('推荐路由顺序')}</SelectItem>
-              <SelectItem value='multiplier'>{t('倍率从低到高')}</SelectItem>
-              <SelectItem value='success'>{t('成功率从高到低')}</SelectItem>
-              <SelectItem value='cache'>{t('缓存命中率从高到低')}</SelectItem>
-              <SelectItem value='latency'>{t('延迟从低到高')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className='flex justify-end'>
-          <Button onClick={save} disabled={update.isPending} className='gap-2'>
             {update.isPending ? (
               <LoaderCircle className='size-4 animate-spin' />
             ) : (
@@ -246,41 +193,72 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
             {t('保存路由池')}
           </Button>
         </div>
+        {routeOrder.length === 0 ? (
+          <div className='text-muted-foreground px-5 py-10 text-center text-sm'>
+            {t('尚未选择路由，请从下方待选择项中添加。')}
+          </div>
+        ) : (
+          <div className='divide-border divide-y'>
+            {routeOrder.map((item, index) => (
+              <AutoPoolRow
+                key={item.group_id}
+                item={item}
+                selected
+                order={index + 1}
+                onToggle={(checked) => toggle(item.group_id, checked)}
+                onMoveUp={() => move(item.group_id, -1)}
+                onMoveDown={() => move(item.group_id, 1)}
+                canMoveUp={index > 0}
+                canMoveDown={index < routeOrder.length - 1}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {visibleItems.length === 0 ? (
+      <div className='flex flex-col gap-3 border-b px-4 py-3 lg:px-5'>
+        <div>
+          <div className='flex items-center gap-2'>
+            <h3 className='text-sm font-semibold'>{t('待选择项')}</h3>
+            <Badge variant='outline'>{availableItems.length}</Badge>
+          </div>
+          <p className='text-muted-foreground mt-1 text-xs'>
+            {t('选择后会追加到上方路由列表末尾。')}
+          </p>
+        </div>
+        <AutoPoolFilters
+          search={search}
+          onSearchChange={setSearch}
+          sourceFilter={sourceFilter}
+          onSourceFilterChange={setSourceFilter}
+          sourceOptions={sourceOptions}
+          modelFilter={modelFilter}
+          onModelFilterChange={setModelFilter}
+          modelOptions={modelOptions}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+        />
+      </div>
+
+      {availableItems.length === 0 ? (
         <div className='text-muted-foreground px-5 py-16 text-center text-sm'>
-          {t('没有匹配的官方或第三方分组。')}
+          {query.data.items.length === selected.size
+            ? t('所有可用分组都已加入路由池。')
+            : t('没有匹配的待选择分组。')}
         </div>
       ) : (
         <div className='divide-border divide-y'>
-          {visibleItems.map((item) => (
+          {availableItems.map((item) => (
             <AutoPoolRow
               key={item.group_id}
               item={item}
-              selected={selected.has(item.group_id)}
-              order={
-                routeOrder.findIndex(
-                  (entry) => entry.group_id === item.group_id
-                ) + 1
-              }
+              selected={false}
+              order={0}
               onToggle={(checked) => toggle(item.group_id, checked)}
               onMoveUp={() => move(item.group_id, -1)}
               onMoveDown={() => move(item.group_id, 1)}
-              canMoveUp={
-                routeOrder.findIndex(
-                  (entry) => entry.group_id === item.group_id
-                ) > 0
-              }
-              canMoveDown={
-                routeOrder.findIndex(
-                  (entry) => entry.group_id === item.group_id
-                ) >= 0 &&
-                routeOrder.findIndex(
-                  (entry) => entry.group_id === item.group_id
-                ) <
-                  routeOrder.length - 1
-              }
+              canMoveUp={false}
+              canMoveDown={false}
             />
           ))}
         </div>
@@ -288,8 +266,6 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
     </section>
   )
 }
-
-type AutoPoolSort = 'route' | 'multiplier' | 'success' | 'cache' | 'latency'
 
 function SignInRequired() {
   const { t } = useTranslation()

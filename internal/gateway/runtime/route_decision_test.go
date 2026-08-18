@@ -1,12 +1,14 @@
 package runtime
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,4 +67,51 @@ func TestFinishRouteDecisionAttemptWithoutStartedAttemptIsNoOp(t *testing.T) {
 	require.True(t, found)
 	require.Empty(t, decision.Attempts)
 	require.Zero(t, decision.AttemptsUsed)
+}
+
+func TestAttachRouteLogInfoBuildsIdentifierFreeAutoSummary(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(constant.RequestIdKey, "route-log-test")
+	StartRouteDecision(context, "gpt-test", "auto")
+	MarkAutoRouteRequest(context)
+	httpctx.SetContextKey(context, constant.ContextKeyUnifiedAutoBindings, []string{"internal-a", "internal-b", "internal-c"})
+	httpctx.SetContextKey(context, constant.ContextKeyUnifiedAutoIndex, 2)
+	UpdateRouteDecisionCandidates(context, 3)
+	ExcludeRouteDecisionCandidate(context, "marketplace_auto_unavailable")
+	SelectRouteDecisionCandidate(context, "internal-c", 42, false)
+
+	other := make(map[string]interface{})
+	AttachRouteLogInfo(context, other)
+
+	summary, ok := other[routeSummaryLogKey].(RouteLogSummary)
+	require.True(t, ok)
+	require.Equal(t, 3, summary.CandidateCount)
+	require.Equal(t, 3, summary.SelectedOrder)
+	require.Equal(t, 2, summary.SkippedCount)
+	require.True(t, summary.Fallback)
+	require.Equal(t, []string{"unavailable"}, summary.SkipReasons)
+	require.NotContains(t, fmt.Sprint(summary), "internal-c")
+	require.NotContains(t, fmt.Sprint(summary), "42")
+
+	adminInfo, ok := other[adminInfoLogKey].(map[string]interface{})
+	require.True(t, ok)
+	_, ok = adminInfo["route_decision"].(RouteDecision)
+	require.True(t, ok)
+}
+
+func TestAttachRouteLogInfoCountsExhaustedCandidates(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	StartRouteDecision(context, "gpt-test", "auto")
+	MarkAutoRouteRequest(context)
+	httpctx.SetContextKey(context, constant.ContextKeyUnifiedAutoBindings, []string{"a", "b"})
+	httpctx.SetContextKey(context, constant.ContextKeyUnifiedAutoIndex, -1)
+	UpdateRouteDecisionCandidates(context, 2)
+
+	other := make(map[string]interface{})
+	AttachRouteLogInfo(context, other)
+	summary := other[routeSummaryLogKey].(RouteLogSummary)
+	require.Zero(t, summary.SelectedOrder)
+	require.Equal(t, 2, summary.SkippedCount)
 }

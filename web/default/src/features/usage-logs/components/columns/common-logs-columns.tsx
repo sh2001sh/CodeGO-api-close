@@ -527,6 +527,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         metaParts.push(sensitiveVisible ? group : '••••')
       }
       if (groupRatioText) metaParts.push(groupRatioText)
+      if (other?.route_summary) {
+        const order = other.route_summary.selected_order
+        metaParts.push(
+          order ? t('Auto · 第 {{order}} 路', { order }) : t('Auto · 未命中')
+        )
+      }
 
       return (
         <div className='flex max-w-[200px] flex-col gap-0.5'>

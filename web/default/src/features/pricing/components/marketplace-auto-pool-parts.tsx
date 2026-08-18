@@ -1,9 +1,113 @@
-import { ArrowDown, ArrowUp } from 'lucide-react'
+import { ArrowDown, ArrowUp, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MarketplaceAutoRoutePoolItem } from '@/features/marketplace/types'
+
+export type AutoPoolSort =
+  | 'route'
+  | 'multiplier'
+  | 'success'
+  | 'cache'
+  | 'latency'
+
+export function AutoPoolFilters(props: {
+  search: string
+  onSearchChange: (value: string) => void
+  sourceFilter: string
+  onSourceFilterChange: (value: string) => void
+  sourceOptions: string[]
+  modelFilter: string
+  onModelFilterChange: (value: string) => void
+  modelOptions: string[]
+  sortBy: AutoPoolSort
+  onSortChange: (value: AutoPoolSort) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className='flex flex-col gap-2 xl:flex-row xl:items-center'>
+      <div className='relative w-full xl:max-w-sm'>
+        <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
+        <Input
+          value={props.search}
+          onChange={(event) => props.onSearchChange(event.target.value)}
+          placeholder={t('搜索分组、来源或模型')}
+          className='pl-9'
+        />
+      </div>
+      <PoolSelect
+        value={props.sourceFilter}
+        onChange={props.onSourceFilterChange}
+        placeholder={t('按来源筛选')}
+        allLabel={t('全部来源')}
+        options={props.sourceOptions}
+        className='xl:w-44'
+      />
+      <PoolSelect
+        value={props.modelFilter}
+        onChange={props.onModelFilterChange}
+        placeholder={t('按模型筛选')}
+        allLabel={t('全部模型')}
+        options={props.modelOptions}
+        className='xl:w-52'
+      />
+      <Select
+        value={props.sortBy}
+        onValueChange={(value) =>
+          props.onSortChange((value || 'route') as AutoPoolSort)
+        }
+      >
+        <SelectTrigger className='w-full xl:w-44'>
+          <SelectValue placeholder={t('排序')} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value='route'>{t('推荐路由顺序')}</SelectItem>
+          <SelectItem value='multiplier'>{t('倍率从低到高')}</SelectItem>
+          <SelectItem value='success'>{t('成功率从高到低')}</SelectItem>
+          <SelectItem value='cache'>{t('缓存命中率从高到低')}</SelectItem>
+          <SelectItem value='latency'>{t('延迟从低到高')}</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function PoolSelect(props: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  allLabel: string
+  options: string[]
+  className: string
+}) {
+  return (
+    <Select
+      value={props.value}
+      onValueChange={(value) => props.onChange(value || 'all')}
+    >
+      <SelectTrigger className={`w-full ${props.className}`}>
+        <SelectValue placeholder={props.placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value='all'>{props.allLabel}</SelectItem>
+        {props.options.map((option) => (
+          <SelectItem key={option} value={option}>
+            {option}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
 
 export function AutoPoolRow(props: {
   item: MarketplaceAutoRoutePoolItem
@@ -29,7 +133,7 @@ export function AutoPoolRow(props: {
             ? t('官方可用')
             : t('待观测')
   return (
-    <label className='hover:bg-muted/20 grid cursor-pointer gap-3 px-4 py-4 transition-colors lg:grid-cols-[28px_minmax(220px,1.4fr)_100px_110px_110px_110px_110px] lg:items-center lg:px-5'>
+    <label className='hover:bg-muted/20 grid cursor-pointer gap-3 px-4 py-4 transition-colors lg:grid-cols-[28px_minmax(220px,1.4fr)_90px_100px_100px_100px_100px_100px] lg:items-center lg:px-5'>
       <Checkbox checked={props.selected} onCheckedChange={props.onToggle} />
       <div className='min-w-0'>
         <div className='flex items-center gap-2'>
@@ -68,7 +172,7 @@ export function AutoPoolRow(props: {
         value={`${item.availability.toFixed(1)}%`}
       />
       {props.selected && (
-        <div className='flex justify-end gap-1 lg:col-span-5'>
+        <div className='flex justify-end gap-1 lg:col-span-7 lg:col-start-2'>
           <PriorityButton
             label={t('提高路由优先级')}
             disabled={!props.canMoveUp}
@@ -108,40 +212,6 @@ function PriorityButton(props: {
     >
       <Icon className='size-4' />
     </Button>
-  )
-}
-
-export function RouteOrder({
-  items,
-}: {
-  items: MarketplaceAutoRoutePoolItem[]
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className='border-border bg-background rounded-lg border px-4 py-3'>
-      <div className='text-sm font-medium'>{t('当前路由顺序')}</div>
-      {items.length === 0 ? (
-        <p className='text-muted-foreground mt-2 text-xs leading-5'>
-          {t('选择至少一个分组后即可使用 Auto API Key。')}
-        </p>
-      ) : (
-        <ol className='mt-2 space-y-1.5'>
-          {items.slice(0, 4).map((item, index) => (
-            <li key={item.group_id} className='flex items-center gap-2 text-xs'>
-              <span className='text-muted-foreground w-4 tabular-nums'>
-                {index + 1}
-              </span>
-              <span className='min-w-0 flex-1 truncate'>
-                {item.system_display_name}
-              </span>
-              <span className='text-muted-foreground tabular-nums'>
-                {item.multiplier}x
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
   )
 }
 

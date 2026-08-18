@@ -214,6 +214,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
 	appendUsageConsumptionDiscountInfo(other, discountDetail)
+	relaycommon.AttachRouteLogInfo(ctx, other)
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.InputTokens,
@@ -322,6 +323,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
 	appendUsageConsumptionDiscountInfo(other, discountDetail)
+	relaycommon.AttachRouteLogInfo(ctx, other)
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.PromptTokens,

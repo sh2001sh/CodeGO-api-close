@@ -326,6 +326,7 @@ func recordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) {
 	if c.Request != nil && c.Request.URL != nil {
 		other["request_path"] = c.Request.URL.Path
 	}
+	gatewayruntime.AttachRouteLogInfo(c, other)
 
 	auditapp.RecordErrorLog(
 		c,

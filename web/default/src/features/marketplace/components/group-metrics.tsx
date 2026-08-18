@@ -14,7 +14,7 @@ import { RecentRequestStrip } from './recent-request-strip'
 export function GroupMetrics({ group }: { group: MarketplaceGroup }) {
   const { t } = useTranslation()
   return (
-    <div className='border-border mt-4 grid grid-cols-2 border-y sm:grid-cols-4'>
+    <div className='border-border mt-4 grid grid-cols-2 border-y sm:grid-cols-5'>
       <PrimaryMetric
         icon={Gauge}
         label={t('成功率')}
@@ -32,6 +32,14 @@ export function GroupMetrics({ group }: { group: MarketplaceGroup }) {
         icon={CircleDollarSign}
         label={t('额度倍率')}
         value={`${formatMultiplier(group.multiplier)}x`}
+      />
+      <PrimaryMetric
+        icon={Activity}
+        label={t('缓存命中率')}
+        value={
+          group.request_count > 0 ? `${group.cache_hit_rate.toFixed(1)}%` : '--'
+        }
+        title={t('近 24 小时请求中的缓存读取命中比例')}
       />
       <PrimaryMetric
         icon={Activity}

@@ -49,3 +49,11 @@ func KeyIndex(c *gin.Context, channelID int) (int, bool) {
 	}
 	return pin.KeyIndex, true
 }
+
+func Clear(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set(contextKey, nil)
+	httpctx.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, "")
+}

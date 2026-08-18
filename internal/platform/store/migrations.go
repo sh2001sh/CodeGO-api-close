@@ -116,6 +116,7 @@ func V2MigrationIDs() []string {
 		"20260817_marketplace_subscription_billing",
 		"20260817_marketplace_transport_capabilities",
 		"20260817_responses_background",
+		"20260818_multiplier_precision",
 	}
 }
 
@@ -291,6 +292,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260817_responses_background", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{})
 		}},
+		{ID: "20260818_multiplier_precision", Run: migrateMultiplierPrecision},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -424,6 +426,52 @@ func migrateUnifiedCreditV1ChannelScope(tx *gorm.DB) error {
 		Update("channel_scope", gatewayschema.ChannelScopeExternal).Error
 }
 
+func migrateMultiplierPrecision(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) {
+		if err := tx.AutoMigrate(&commerceschema.BlindBoxPropDiscountUsage{}); err != nil {
+			return err
+		}
+	} else if !tx.Migrator().HasColumn(&commerceschema.BlindBoxPropDiscountUsage{}, "EffectiveMultiplier") {
+		if tx.Dialector.Name() == "sqlite" {
+			if err := tx.Exec("ALTER TABLE blind_box_prop_discount_usages ADD COLUMN effective_multiplier decimal(8,4) NOT NULL DEFAULT 1").Error; err != nil {
+				return err
+			}
+		} else if err := tx.Migrator().AddColumn(&commerceschema.BlindBoxPropDiscountUsage{}, "EffectiveMultiplier"); err != nil {
+			return err
+		}
+	}
+	var usages []commerceschema.BlindBoxPropDiscountUsage
+	if err := tx.Find(&usages).Error; err != nil {
+		return err
+	}
+	for index := range usages {
+		usage := &usages[index]
+		nominalMultiplier := usage.Multiplier
+		var prop commerceschema.BlindBoxProp
+		if err := tx.Select("multiplier").First(&prop, usage.PropId).Error; err == nil {
+			nominalMultiplier = prop.Multiplier
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		effectiveMultiplier := usage.EffectiveMultiplier
+		discountRate := usage.DiscountRate
+		if usage.QuotaBeforeDiscount > 0 {
+			effectiveMultiplier = float64(usage.QuotaAfterDiscount) / float64(usage.QuotaBeforeDiscount)
+			discountRate = float64(usage.DiscountQuota) / float64(usage.QuotaBeforeDiscount)
+		}
+		if err := tx.Model(&commerceschema.BlindBoxPropDiscountUsage{}).
+			Where("id = ?", usage.Id).
+			Updates(map[string]any{
+				"multiplier":           marketplacedomain.NormalizeMultiplier(nominalMultiplier),
+				"effective_multiplier": marketplacedomain.NormalizeMultiplier(effectiveMultiplier),
+				"discount_rate":        marketplacedomain.NormalizeMultiplier(discountRate),
+			}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // migrateDailyLuckyUnifiedCreditRewards scales only the historical defaults.
 // Custom operator settings are left untouched, while a deployment that still
 // has the old 1/10/50/100 ladder is moved to the smaller unified-credit ladder.
@@ -513,7 +561,12 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "TransportCapabilities")
 	case "20260817_responses_background":
 		return !db.Migrator().HasTable(&gatewayschema.ResponsesBackgroundJob{}) ||
-			!db.Migrator().HasTable(&gatewayschema.ResponsesBackgroundEvent{})
+			!db.Migrator().HasTable(&gatewayschema.ResponsesBackgroundEvent{}) ||
+			!db.Migrator().HasColumn(&gatewayschema.ResponsesBackgroundJob{}, "NativeBackground") ||
+			!db.Migrator().HasColumn(&gatewayschema.ResponsesBackgroundJob{}, "UpstreamSequence")
+	case "20260818_multiplier_precision":
+		return !db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) ||
+			!db.Migrator().HasColumn(&commerceschema.BlindBoxPropDiscountUsage{}, "EffectiveMultiplier")
 	default:
 		return false
 	}

@@ -48,6 +48,7 @@ export const channelFormSchema = z.object({
   param_override: z.string().optional(),
   header_override: z.string().optional(),
   settings: z.string().optional(),
+  sensitive_word_interception_enabled: z.boolean(),
   other: z.string().optional(),
   // Multi-key options (not sent to backend directly)
   multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
@@ -107,6 +108,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   param_override: '',
   header_override: '',
   settings: '{}',
+  sensitive_word_interception_enabled: true,
   other: '',
   multi_key_mode: 'single',
   multi_key_type: 'random',
@@ -240,6 +242,8 @@ export function transformChannelToFormDefaults(
     param_override: channel.param_override || '',
     header_override: channel.header_override || '',
     settings: channel.settings || '{}',
+    sensitive_word_interception_enabled:
+      channel.sensitive_word_interception_enabled ?? true,
     other: channel.other || '',
     multi_key_mode: 'single',
     multi_key_type: channel.channel_info.multi_key_mode || 'random',
@@ -421,6 +425,8 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     param_override: formData.param_override || null,
     header_override: formData.header_override || null,
     settings: buildSettingsJSON(formData),
+    sensitive_word_interception_enabled:
+      formData.sensitive_word_interception_enabled,
     other: formData.other || '',
   }
 
@@ -469,6 +475,8 @@ export function transformFormDataToUpdatePayload(
     param_override: formData.param_override || null,
     header_override: formData.header_override || null,
     settings: buildSettingsJSON(formData),
+    sensitive_word_interception_enabled:
+      formData.sensitive_word_interception_enabled,
     other: formData.other || '',
   }
 

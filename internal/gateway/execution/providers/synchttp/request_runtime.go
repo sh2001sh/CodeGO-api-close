@@ -186,8 +186,12 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 		c.Set(constant.UpstreamRequestIdKey, upID)
 	}
 
-	_ = req.Body.Close()
-	_ = c.Request.Body.Close()
+	if req.Body != nil {
+		_ = req.Body.Close()
+	}
+	if c != nil && c.Request != nil && c.Request.Body != nil {
+		_ = c.Request.Body.Close()
+	}
 	return resp, nil
 }
 
@@ -281,6 +285,29 @@ func DoAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 	resp, err := DoRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
+	}
+	return resp, nil
+}
+
+// DoAPIRequestAt sends a follow-up request to an already resolved upstream URL
+// while preserving the selected channel's authentication, proxy and overrides.
+func DoAPIRequestAt(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo, method, target string, requestBody io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(c.Request.Context(), method, target, requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("new follow-up request failed: %w", err)
+	}
+	headers := req.Header
+	if err := a.SetupRequestHeader(c, &headers, info); err != nil {
+		return nil, fmt.Errorf("setup follow-up request header failed: %w", err)
+	}
+	headerOverride, err := resolveHeaderOverride(info, c)
+	if err != nil {
+		return nil, err
+	}
+	applyHeaderOverrideToRequest(req, headerOverride)
+	resp, err := DoRequest(c, req, info)
+	if err != nil {
+		return nil, fmt.Errorf("do follow-up request failed: %w", err)
 	}
 	return resp, nil
 }

@@ -17,7 +17,10 @@ type BlindBoxPropDiscountUsage struct {
 	QuotaAfterDiscount  int64   `json:"quota_after_discount" gorm:"bigint;not null"`
 	DiscountQuota       int64   `json:"discount_quota" gorm:"bigint;not null"`
 	DiscountRate        float64 `json:"discount_rate" gorm:"type:decimal(8,4);not null"`
+	// Multiplier is the configured/nominal card multiplier. The effective
+	// multiplier can differ slightly because quota is settled in integers.
 	Multiplier          float64 `json:"multiplier" gorm:"type:decimal(8,4);not null"`
+	EffectiveMultiplier float64 `json:"effective_multiplier" gorm:"column:effective_multiplier;type:decimal(8,4);not null;default:1"`
 	RemainingQuota      int64   `json:"remaining_quota" gorm:"bigint;not null"`
 	CreatedAt           int64   `json:"created_at" gorm:"bigint;index"`
 }

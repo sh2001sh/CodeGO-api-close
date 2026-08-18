@@ -603,6 +603,13 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 	} else if info.RelayMode == gatewaycontract.RelayModeRealtime {
 		return synchttp.DoWSSRequest(a, c, info, requestBody)
 	} else if info.RelayMode == gatewaycontract.RelayModeResponses && info.IsStream {
+		if c.GetBool(string(constant.ContextKeyNativeBackground)) {
+			rawBody, err := io.ReadAll(io.LimitReader(requestBody, 32<<20))
+			if err != nil {
+				return nil, err
+			}
+			return doNativeBackgroundRequest(a, c, info, rawBody)
+		}
 		if session := responsesws.FromContext(c); session != nil && session.NativeEnabled() {
 			requestURL, err := a.GetRequestURL(info)
 			if err != nil {
@@ -612,7 +619,25 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 			if err := a.SetupRequestHeader(c, &headers, info); err != nil {
 				return nil, err
 			}
-			return session.Do(c.Request.Context(), requestURL, headers, requestBody)
+			var rawBody []byte
+			if requestBody != nil {
+				rawBody, err = io.ReadAll(io.LimitReader(requestBody, 32<<20))
+				if err != nil {
+					return nil, err
+				}
+			}
+			response, nativeErr := session.Do(c.Request.Context(), requestURL, headers, bytes.NewReader(rawBody))
+			if nativeErr == nil {
+				return response, nil
+			}
+			// Only dial/handshake failures are replayed. Once a response.create
+			// frame may have been written, HTTP fallback could duplicate work.
+			if !responsesws.CanFallbackToHTTP(nativeErr) ||
+				errors.Is(nativeErr, responsesws.ErrResponseInFlight) ||
+				c.Request.Context().Err() != nil {
+				return nil, nativeErr
+			}
+			return synchttp.DoAPIRequest(a, c, info, bytes.NewReader(rawBody))
 		}
 		return synchttp.DoAPIRequest(a, c, info, requestBody)
 	} else {

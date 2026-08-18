@@ -72,16 +72,17 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 	if len(recentSeries) == 0 {
 		recentSeries = emptyMarketplaceRecentRequestSeries(time.Now().Unix())
 	}
+	groupMultiplier := marketplacedomain.NormalizeMultiplier(group.Multiplier)
 	return GroupListItem{
 		ID: group.ID, ChannelID: channel.ID, PublicSlug: group.PublicSlug,
-		SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID),
+		SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), groupMultiplier, channel.ID),
 		SourceType:        group.SourceType, SourceLabel: publicSourceLabel(channel),
 		ProviderType:     channel.ProviderType,
 		CreditPoolPolicy: group.CreditPoolPolicy,
 		LifecycleStatus:  group.LifecycleStatus, VerificationStatus: group.VerificationStatus,
-		VerificationDueAt: group.VerificationDueAt, Multiplier: group.Multiplier,
+		VerificationDueAt: group.VerificationDueAt, Multiplier: groupMultiplier,
 		SubscriptionEnabled:    group.CreditPoolPolicy == marketplacedomain.CreditPolicySubscriptionAndUniversal,
-		SubscriptionMultiplier: marketplacedomain.SubscriptionMultiplier(group.Multiplier), Models: models,
+		SubscriptionMultiplier: marketplacedomain.SubscriptionMultiplier(groupMultiplier), Models: models,
 		VerificationCompletedAt:   latestModelVerificationAt(channel.ModelVerificationResults),
 		ModelVerificationResults:  publicModelVerificationResults(channel.ModelVerificationResults),
 		ConnectivityTestStatus:    channel.ConnectivityTestStatus,

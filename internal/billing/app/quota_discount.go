@@ -11,6 +11,8 @@ type usageConsumptionDiscount struct {
 	QuotaBeforeDiscount int
 	DiscountRate        float64
 	DiscountMultiplier  float64
+	NominalMultiplier   float64
+	EffectiveMultiplier float64
 	DiscountQuota       int
 	QuotaAfterDiscount  int
 	DiscountTitle       string
@@ -46,6 +48,8 @@ func calculateUsageConsumptionDiscount(relayInfo *relaycommon.RelayInfo, quota i
 	detail.DiscountQuota = result.DiscountQuota
 	detail.DiscountRate = result.DiscountRate
 	detail.DiscountMultiplier = result.Multiplier
+	detail.NominalMultiplier = result.NominalMultiplier
+	detail.EffectiveMultiplier = result.EffectiveMultiplier
 	detail.DiscountTitle = result.Title
 	detail.PropID = result.PropID
 	detail.RemainingQuota = result.RemainingDiscountQuota
@@ -57,18 +61,28 @@ func calculateUsageConsumptionDiscountWithRate(quota int, rate float64) usageCon
 	detail := usageConsumptionDiscount{
 		QuotaBeforeDiscount: quota,
 		DiscountMultiplier:  1,
+		NominalMultiplier:   1,
+		EffectiveMultiplier: 1,
 		QuotaAfterDiscount:  quota,
 	}
 	if quota <= 0 || rate <= 0 {
 		return detail
 	}
 
-	detail.DiscountRate = rate
-	detail.DiscountMultiplier = 1 - rate
+	detail.DiscountRate = normalizeUsageMultiplier(rate)
+	detail.DiscountMultiplier = normalizeUsageMultiplier(1 - rate)
+	detail.NominalMultiplier = detail.DiscountMultiplier
 	detail.QuotaAfterDiscount = int(math.Round(float64(quota) * detail.DiscountMultiplier))
 	detail.DiscountQuota = quota - detail.QuotaAfterDiscount
+	if quota > 0 {
+		detail.EffectiveMultiplier = normalizeUsageMultiplier(float64(detail.QuotaAfterDiscount) / float64(quota))
+	}
 	detail.DiscountTitle = consumptionDiscountTitle(detail.DiscountMultiplier)
 	return detail
+}
+
+func normalizeUsageMultiplier(value float64) float64 {
+	return math.Round(value*10000) / 10000
 }
 
 func consumptionDiscountTitle(multiplier float64) string {
@@ -93,6 +107,8 @@ func appendUsageConsumptionDiscountInfo(
 	other["quota_after_discount"] = detail.QuotaAfterDiscount
 	other["usage_discount_rate"] = detail.DiscountRate
 	other["usage_discount_multiplier"] = detail.DiscountMultiplier
+	other["usage_discount_nominal_multiplier"] = detail.NominalMultiplier
+	other["usage_discount_effective_multiplier"] = detail.EffectiveMultiplier
 	other["usage_discount_quota"] = detail.DiscountQuota
 	if detail.DiscountRate > 0 {
 		other["usage_discount_source"] = "blind_box_multiplier_card"

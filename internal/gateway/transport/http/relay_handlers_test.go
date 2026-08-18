@@ -89,6 +89,16 @@ func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldNotRetryAfterResponsesCreateWasWrittenUpstream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set(string(constant.ContextKeyResponsesReplayForbidden), true)
+	err := types.NewOpenAIError(errors.New("upstream websocket closed"), types.ErrorCodeBadResponseStatusCode, 524)
+
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
 func TestShouldRetryCapacityBeforeResponseDelivery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

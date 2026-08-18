@@ -154,6 +154,7 @@ func applyMultiplierChange(group *marketplaceschema.Group, channelID, sourceLabe
 	if err := validateMultiplier(multiplier); err != nil {
 		return err
 	}
+	multiplier = marketplacedomain.NormalizeMultiplier(multiplier)
 	if group.Multiplier == multiplier {
 		return nil
 	}

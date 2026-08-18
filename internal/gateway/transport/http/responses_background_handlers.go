@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -33,10 +34,30 @@ func ResponsesCreate(c *gin.Context) {
 		return
 	}
 	if request.Background == nil || !*request.Background {
+		session := attachResponsesHTTPWebSocket(c, &request)
+		if session != nil {
+			defer session.Close()
+		}
 		relayRequest(c, types.RelayFormatOpenAIResponses)
 		return
 	}
 	createResponsesBackground(c, &request)
+}
+
+func attachResponsesHTTPWebSocket(c *gin.Context, request *dto.OpenAIResponsesRequest) *responsesws.Session {
+	if c == nil || request == nil || request.Stream == nil || !*request.Stream {
+		return nil
+	}
+	channelID := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId)
+	keyIndex := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+	channel, err := gatewaystore.LoadChannelByID(channelID, true)
+	if err != nil || channel == nil || !channel.ChannelInfo.ResponsesCapabilities.SupportsWebSocketFor(request.Model, keyIndex) {
+		return nil
+	}
+	session := responsesws.NewSession()
+	responsesws.Attach(c, session)
+	c.Set("responses_ephemeral_websocket", true)
+	return session
 }
 
 func ResponsesCreateWithCanonicalPath(path string) gin.HandlerFunc {
@@ -64,7 +85,10 @@ func createResponsesBackground(c *gin.Context, request *dto.OpenAIResponsesReque
 		respondRelayError(c, types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry()))
 		return
 	}
-	executionRequest, err := normalizeBackgroundExecutionRequest(raw, previousResponseID)
+	channelID := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId)
+	keyIndex := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+	nativeBackground := selectedRouteSupportsNativeBackground(channelID, keyIndex, request.Model)
+	executionRequest, err := normalizeBackgroundExecutionRequest(raw, previousResponseID, nativeBackground)
 	if err != nil {
 		respondRelayError(c, types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry()))
 		return
@@ -84,12 +108,11 @@ func createResponsesBackground(c *gin.Context, request *dto.OpenAIResponsesReque
 		respondRelayError(c, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry()))
 		return
 	}
-	channelID := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId)
-	keyIndex := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
 	var routingContextCiphertext string
 	if previousJob != nil {
 		channelID = previousJob.ChannelID
 		keyIndex = previousJob.KeyIndex
+		nativeBackground = previousJob.NativeBackground
 		routingContextCiphertext = previousJob.RoutingContextCiphertext
 	} else {
 		routingContextCiphertext, err = captureResponsesBackgroundRoutingContext(c)
@@ -102,11 +125,11 @@ func createResponsesBackground(c *gin.Context, request *dto.OpenAIResponsesReque
 	job := &gatewayschema.ResponsesBackgroundJob{
 		ID:     "resp_bg_" + strings.ReplaceAll(platformruntime.GetUUID(), "-", ""),
 		UserID: httpctx.GetContextKeyInt(c, constant.ContextKeyUserId), TokenID: httpctx.GetContextKeyInt(c, constant.ContextKeyTokenId),
-		Model: request.Model, Status: gatewayschema.ResponsesBackgroundQueued, Stream: stream,
+		Model: request.Model, Status: gatewayschema.ResponsesBackgroundQueued, Stream: stream, NativeBackground: nativeBackground,
 		ChannelID:         channelID,
 		KeyIndex:          keyIndex,
 		RequestCiphertext: requestCiphertext, AuthorizationCiphertext: authorizationCiphertext,
-		ClientIPCiphertext: clientIPCiphertext, RoutingContextCiphertext: routingContextCiphertext, LastSequence: -1,
+		ClientIPCiphertext: clientIPCiphertext, RoutingContextCiphertext: routingContextCiphertext, LastSequence: -1, UpstreamSequence: -1,
 	}
 	if job.UserID <= 0 || job.TokenID <= 0 || job.ChannelID <= 0 {
 		respondRelayError(c, types.NewError(errors.New("background request context is incomplete"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry()))
@@ -230,17 +253,28 @@ func streamResponsesBackgroundEvents(c *gin.Context, job *gatewayschema.Response
 	}
 }
 
-func normalizeBackgroundExecutionRequest(raw []byte, previousResponseID string) ([]byte, error) {
+func normalizeBackgroundExecutionRequest(raw []byte, previousResponseID string, native bool) ([]byte, error) {
 	var request map[string]any
 	if err := platformencoding.Unmarshal(raw, &request); err != nil {
 		return nil, err
 	}
-	request["background"] = false
+	request["background"] = native
 	request["stream"] = true
 	if previousResponseID != "" {
 		request["previous_response_id"] = previousResponseID
 	}
 	return platformencoding.Marshal(request)
+}
+
+func selectedRouteSupportsNativeBackground(channelID, keyIndex int, model string) bool {
+	if channelID <= 0 {
+		return false
+	}
+	channel, err := gatewaystore.LoadChannelByID(channelID, true)
+	if err != nil || channel == nil {
+		return false
+	}
+	return channel.ChannelInfo.ResponsesCapabilities.SupportsNativeBackgroundFor(model, keyIndex)
 }
 
 func resolveResponsesBackgroundPrevious(c *gin.Context, previousResponseID string) (*gatewayschema.ResponsesBackgroundJob, string, error) {

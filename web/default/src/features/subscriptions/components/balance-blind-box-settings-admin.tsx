@@ -188,7 +188,7 @@ export function BalanceBlindBoxSettingsAdmin() {
             />
           </div>
 
-          <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+          <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
             <BlindBoxSettingsMetric
               icon={TrendingUp}
               label='普通池理论期望'
@@ -197,11 +197,6 @@ export function BalanceBlindBoxSettingsAdmin() {
                   ? `${economics.expectedRewardUSD.toFixed(3)} USD`
                   : '--'
               }
-            />
-            <BlindBoxSettingsMetric
-              icon={Gauge}
-              label='普通池理论返奖率'
-              value={economics ? `${economics.payoutRate.toFixed(2)}%` : '--'}
             />
             <BlindBoxSettingsMetric
               icon={TrendingUp}
@@ -221,7 +216,7 @@ export function BalanceBlindBoxSettingsAdmin() {
             />
           </div>
           <p className='text-muted-foreground text-xs leading-5'>
-            理论返奖率按奖励期望除以单盒售价计算，包含“再来一抽”的连锁期望，不包含首抽、小保底和大保底；账户回报率则按开抽前后余额变化计算。
+            普通池静态数据不作为用户收益承诺；实际累计收益率以模拟抽盒结果为准，并纳入“再来一抽”、首抽、小保底和大保底。
           </p>
 
           <FormField

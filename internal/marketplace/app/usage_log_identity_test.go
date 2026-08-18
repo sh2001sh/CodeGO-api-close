@@ -68,6 +68,24 @@ func TestEnrichUsageLogMarketplaceIdentityIgnoresInvalidOrUnknownLogs(t *testing
 	}
 }
 
+func TestEnrichUsageLogMarketplaceIdentityResolvesInternalGroupName(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
+	require.NoError(t, db.Create(&marketplaceschema.Channel{
+		ID: "10003", ApprovedSourceLabel: "Codex Pro", SourceLabelStatus: marketplacedomain.SourceLabelApproved,
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{
+		ID: "group-3", ChannelID: "10003", PublicSlug: "mg_codex_terra",
+		SystemDisplayName: "Codex Pro", InternalGroupName: "Codex-Terra-f81c2a", Multiplier: 0.6,
+	}).Error)
+
+	logs := []*auditschema.Log{{Group: "Codex-Terra-f81c2a"}}
+	require.NoError(t, EnrichUsageLogMarketplaceIdentity(logs))
+	other := decodeUsageLogOther(t, logs[0].Other)
+	require.Equal(t, "group-3", other[logMarketplaceGroupIDKey])
+	require.Equal(t, "Codex Pro-0.6x-10003", other[logMarketplaceGroupDisplayNameKey])
+}
+
 func decodeUsageLogOther(t *testing.T, raw string) map[string]interface{} {
 	t.Helper()
 	var other map[string]interface{}

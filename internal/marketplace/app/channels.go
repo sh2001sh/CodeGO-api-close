@@ -103,6 +103,7 @@ func newMarketplaceChannelID(tx *gorm.DB) (string, error) {
 }
 
 func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLabel string, multiplier float64, visibility string) *marketplaceschema.Group {
+	multiplier = marketplacedomain.NormalizeMultiplier(multiplier)
 	groupID := platformruntime.GetUUID()
 	compact := strings.ReplaceAll(groupID, "-", "")
 	return &marketplaceschema.Group{

@@ -62,17 +62,18 @@ func StreamAdaptiveInitialTimeoutForRequest(c *gin.Context, model string, prompt
 	if IsSingleChannelRoute(c) {
 		return 0
 	}
+	retryTimeout := RetryableResponsesAttemptTimeout(c)
 	if timeout := StreamAdaptiveProgressTimeoutForRequest(c, model, promptTokens); timeout > 0 {
 		initialTimeout := timeout
 		if constant.StreamingAdaptiveInitialTimeout > 0 {
 			initialTimeout = time.Duration(constant.StreamingAdaptiveInitialTimeout) * time.Second
 		}
-		if retryTimeout := RetryableResponsesAttemptTimeout(c); retryTimeout > 0 && retryTimeout < initialTimeout {
+		if retryTimeout > 0 && retryTimeout < initialTimeout {
 			return retryTimeout
 		}
 		return initialTimeout
 	}
-	return 0
+	return retryTimeout
 }
 
 // StreamFirstOutputTimeoutForRequest returns an optional wait for a GPT stream

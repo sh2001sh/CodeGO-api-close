@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
@@ -13,6 +14,24 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+func TestResponsesCapabilitiesNeedProbeRetriesTransientWebSocketFailure(t *testing.T) {
+	now := time.Now()
+	capabilities := gatewayschema.ResponsesCapabilities{
+		WebSocket: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusError, CheckedAt: now.Unix(), ErrorClass: "close_1013",
+		},
+		NativeBackground: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusUnsupported, CheckedAt: now.Unix(), ErrorClass: "unsupported",
+		},
+	}
+	require.True(t, responsesCapabilitiesNeedProbe(capabilities, now))
+
+	capabilities.WebSocket = gatewayschema.CapabilityProbeState{
+		Status: gatewayschema.CapabilityStatusError, CheckedAt: now.Unix(), ErrorClass: "http_401",
+	}
+	require.False(t, responsesCapabilitiesNeedProbe(capabilities, now))
+}
 
 func TestCreateChannelsForInsertMarksCapabilitiesPending(t *testing.T) {
 	channels := createChannelsForInsert(AddChannelRequest{

@@ -99,19 +99,19 @@ func gpt56MappingStatus(results []GPT56MappingResult) string {
 	if len(results) == 0 {
 		return GPT56MappingStatusInsufficientEvidence
 	}
-	matched := 0
+	insufficient := false
 	for _, result := range results {
 		if result.Status == GPT56MappingStatusMismatch {
 			return GPT56MappingStatusMismatch
 		}
-		if result.Status == GPT56MappingStatusMatched {
-			matched++
+		if result.Status == GPT56MappingStatusInsufficientEvidence {
+			insufficient = true
 		}
 	}
-	if matched == len(results) {
-		return GPT56MappingStatusMatched
+	if insufficient {
+		return GPT56MappingStatusInsufficientEvidence
 	}
-	return GPT56MappingStatusInsufficientEvidence
+	return GPT56MappingStatusMatched
 }
 
 func sameModelID(expected, actual string) bool {

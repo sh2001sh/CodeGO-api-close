@@ -384,6 +384,11 @@ export interface MarketplaceAutoRoutePoolItem {
   lifecycle_status: MarketplaceStatus
   multiplier: number
   availability: number
+  success_rate: number
+  cache_hit_rate: number
+  avg_latency_ms: number
+  latest_request_status: string
+  metrics_available: boolean
   route_score: number
   observing: boolean
   request_count: number

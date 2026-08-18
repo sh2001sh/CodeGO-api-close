@@ -20,15 +20,12 @@ import (
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
-	routepin "github.com/sh2001sh/new-api/internal/gateway/routepin"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
-	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
-	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"github.com/sh2001sh/new-api/types"
@@ -86,145 +83,6 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 		return r.GetTokenCountMeta()
 	}
 	return meta
-}
-
-func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gatewayroutingapp.RetryParam) (*gatewayschema.Channel, *types.NewAPIError) {
-	if pin, pinned := routepin.FromContext(c); pinned {
-		channel, err := gatewaystore.LoadChannelByID(pin.ChannelID, true)
-		if err != nil {
-			return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-		}
-		if setupErr := gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, info.OriginModelName); setupErr != nil {
-			return nil, setupErr
-		}
-		if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
-			info.RoutePoolID = selection.PoolID
-			info.ProcurementCostMultiplier = selection.ProcurementCostMultiplier
-		}
-		return channel, nil
-	}
-	if info.ChannelMeta == nil {
-		autoBan := c.GetBool("auto_ban")
-		autoBanInt := 1
-		if !autoBan {
-			autoBanInt = 0
-		}
-		return &gatewayschema.Channel{
-			Id:      c.GetInt("channel_id"),
-			Type:    c.GetInt("channel_type"),
-			Name:    c.GetString("channel_name"),
-			AutoBan: &autoBanInt,
-		}, nil
-	}
-	if channel, handled, channelErr := nextUnifiedAutoChannel(c, info, retryParam); handled {
-		return channel, channelErr
-	}
-
-	c.Set(routeSelectionExhaustedContextKey, false)
-	channel, selectGroup, err := gatewayroutingapp.CacheGetRandomSatisfiedChannel(retryParam)
-	if err == nil && channel == nil {
-		channel, selectGroup = retryFallbackChannel(c, retryParam, selectGroup)
-		if channel == nil {
-			channel, selectGroup = retryLastUsedSoleRoute(c, retryParam, selectGroup)
-		}
-	}
-	if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
-		info.RoutePoolID = selection.PoolID
-		info.ProcurementCostMultiplier = selection.ProcurementCostMultiplier
-	}
-	info.PriceData.GroupRatioInfo = relaycommon.HandleGroupRatio(c, info)
-	if err != nil {
-		c.Set(routeSelectionExhaustedContextKey, true)
-		gatewayruntime.ExcludeRouteDecisionCandidate(c, "no_selectable_candidate")
-		return nil, types.NewError(
-			fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）：%s", selectGroup, info.OriginModelName, err.Error()),
-			types.ErrorCodeGetChannelFailed,
-			types.ErrOptionWithSkipRetry(),
-		)
-	}
-	if channel == nil {
-		c.Set(routeSelectionExhaustedContextKey, true)
-		gatewayruntime.ExcludeRouteDecisionCandidate(c, "no_selectable_candidate")
-		return nil, types.NewError(
-			fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName),
-			types.ErrorCodeGetChannelFailed,
-			types.ErrOptionWithSkipRetry(),
-		)
-	}
-
-	newAPIError := gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
-	if newAPIError != nil {
-		return nil, newAPIError
-	}
-	return channel, nil
-}
-
-func nextUnifiedAutoChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gatewayroutingapp.RetryParam) (*gatewayschema.Channel, bool, *types.NewAPIError) {
-	if c == nil || info == nil || retryParam == nil || retryParam.GetRetry() <= 0 {
-		return nil, false, nil
-	}
-	bindings, found := httpctx.GetContextKeyType[[]marketplaceapp.RoutingBinding](c, constant.ContextKeyUnifiedAutoBindings)
-	if !found || len(bindings) == 0 {
-		return nil, false, nil
-	}
-	start := httpctx.GetContextKeyInt(c, constant.ContextKeyUnifiedAutoIndex) + 1
-	for index := start; index < len(bindings); index++ {
-		binding := bindings[index]
-		candidateRetry := 0
-		channel, _, err := gatewayroutingapp.CacheGetRandomSatisfiedChannel(&gatewayroutingapp.RetryParam{
-			Ctx: c, TokenGroup: binding.InternalGroup, ModelName: info.OriginModelName, Retry: &candidateRetry,
-		})
-		if err != nil || channel == nil {
-			gatewayruntime.ExcludeRouteDecisionCandidate(c, "unified_auto_unavailable")
-			continue
-		}
-		httpctx.SetContextKey(c, constant.ContextKeyUnifiedAutoIndex, index)
-		applyUnifiedAutoBinding(c, info, binding)
-		retryParam.TokenGroup = binding.InternalGroup
-		if setupErr := gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, info.OriginModelName); setupErr != nil {
-			gatewayruntime.ExcludeRouteDecisionCandidate(c, "unified_auto_setup_failed")
-			continue
-		}
-		return channel, true, nil
-	}
-	c.Set(routeSelectionExhaustedContextKey, true)
-	return nil, true, types.NewError(
-		errors.New("Auto 路由池中的分组均已尝试且当前不可用"),
-		types.ErrorCodeGetChannelFailed,
-		types.ErrOptionWithSkipRetry(),
-	)
-}
-
-func applyUnifiedAutoBinding(c *gin.Context, info *relaycommon.RelayInfo, binding marketplaceapp.RoutingBinding) {
-	httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, binding.InternalGroup)
-	httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, binding.InternalGroup)
-	info.UsingGroup = binding.InternalGroup
-	info.TokenGroup = binding.InternalGroup
-	if binding.SourceType == marketplacedomain.SourceTypeMarketplaceUser {
-		httpctx.SetContextKey(c, constant.ContextKeyMarketplaceGroupID, binding.GroupID)
-		httpctx.SetContextKey(c, constant.ContextKeyMarketplaceOwnerID, binding.OwnerUserID)
-		httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, binding.SourceType)
-		httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, binding.CreditPoolPolicy)
-		httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, binding.Multiplier)
-		httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, binding.ModelPrices)
-		info.MarketplaceGroupID = binding.GroupID
-		info.MarketplaceOwnerID = binding.OwnerUserID
-		info.MarketplaceSourceType = binding.SourceType
-		info.MarketplaceCreditPolicy = binding.CreditPoolPolicy
-		info.MarketplaceMultiplier = binding.Multiplier
-		return
-	}
-	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceGroupID, "")
-	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceOwnerID, 0)
-	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, "")
-	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, "")
-	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, float64(0))
-	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, map[string]marketplaceapp.ChannelModelPrice{})
-	info.MarketplaceGroupID = ""
-	info.MarketplaceOwnerID = 0
-	info.MarketplaceSourceType = ""
-	info.MarketplaceCreditPolicy = ""
-	info.MarketplaceMultiplier = 0
 }
 
 func retryFallbackChannel(c *gin.Context, retryParam *gatewayroutingapp.RetryParam, selectGroup string) (*gatewayschema.Channel, string) {
@@ -312,7 +170,15 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if c != nil && c.GetBool(string(constant.ContextKeyClientGone)) {
 		return false
 	}
+	if c != nil && c.GetBool(string(constant.ContextKeyResponsesReplayForbidden)) {
+		return false
+	}
 	if gatewayruntime.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		return false
+	}
+	if profile, found := gatewayruntime.RequestProfileFromContext(c); found && profile.HasTools {
+		// Hosted tools may have produced external side effects before the stream
+		// became visible. Do not replay an ambiguous attempt automatically.
 		return false
 	}
 	if retryTimes <= 0 {

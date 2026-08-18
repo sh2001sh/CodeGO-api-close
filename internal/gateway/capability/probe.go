@@ -24,6 +24,9 @@ type ProbeInput struct {
 type ProbeResult struct {
 	WebSocket        gatewayschema.CapabilityProbeState
 	NativeBackground gatewayschema.CapabilityProbeState
+	BackgroundCreate gatewayschema.CapabilityProbeState
+	BackgroundResume gatewayschema.CapabilityProbeState
+	BackgroundCancel gatewayschema.CapabilityProbeState
 }
 
 func ProbeResponsesTransports(ctx context.Context, input ProbeInput) ProbeResult {
@@ -40,13 +43,16 @@ func ProbeResponsesTransports(ctx context.Context, input ProbeInput) ProbeResult
 		Model:       strings.TrimSpace(input.Model),
 		ProbeKeyIdx: input.KeyIndex,
 	}
-	result := ProbeResult{WebSocket: base, NativeBackground: base}
+	result := ProbeResult{WebSocket: base, NativeBackground: base, BackgroundCreate: base, BackgroundResume: base, BackgroundCancel: base}
 	endpoint, err := responsesEndpoint(input.BaseURL)
 	if err != nil || strings.TrimSpace(input.APIKey) == "" || base.Model == "" {
 		result.WebSocket.Status = gatewayschema.CapabilityStatusError
 		result.WebSocket.ErrorClass = "invalid_probe_input"
 		result.NativeBackground.Status = gatewayschema.CapabilityStatusError
 		result.NativeBackground.ErrorClass = "invalid_probe_input"
+		result.BackgroundCreate = result.NativeBackground
+		result.BackgroundResume = result.NativeBackground
+		result.BackgroundCancel = result.NativeBackground
 		return result
 	}
 
@@ -58,11 +64,18 @@ func ProbeResponsesTransports(ctx context.Context, input ProbeInput) ProbeResult
 		result.NativeBackground.Status = gatewayschema.CapabilityStatusError
 		result.NativeBackground.HTTPStatus = status
 		result.NativeBackground.ErrorClass = errorClass
+		result.BackgroundCreate = result.NativeBackground
+		result.BackgroundResume = result.NativeBackground
+		result.BackgroundCancel = result.NativeBackground
 		return result
 	}
 
 	result.WebSocket = probeWebSocket(ctx, endpoint, input, base)
-	result.NativeBackground = probeNativeBackground(ctx, client, endpoint, input, base)
+	background := probeNativeBackground(ctx, client, endpoint, input, base)
+	result.NativeBackground = background.Aggregate
+	result.BackgroundCreate = background.Create
+	result.BackgroundResume = background.Resume
+	result.BackgroundCancel = background.Cancel
 	return result
 }
 
@@ -92,7 +105,7 @@ func PendingResponsesCapabilities(model string) gatewayschema.ResponsesCapabilit
 		CheckedAt: now,
 		Model:     strings.TrimSpace(model),
 	}
-	return gatewayschema.ResponsesCapabilities{WebSocket: state, NativeBackground: state}
+	return gatewayschema.ResponsesCapabilities{WebSocket: state, NativeBackground: state, BackgroundCreate: state, BackgroundResume: state, BackgroundCancel: state}
 }
 
 func responsesEndpoint(baseURL string) (string, error) {
@@ -127,5 +140,5 @@ func probeInputError(input ProbeInput, class string) ProbeResult {
 		ErrorClass:  class,
 		ProbeKeyIdx: input.KeyIndex,
 	}
-	return ProbeResult{WebSocket: state, NativeBackground: state}
+	return ProbeResult{WebSocket: state, NativeBackground: state, BackgroundCreate: state, BackgroundResume: state, BackgroundCancel: state}
 }

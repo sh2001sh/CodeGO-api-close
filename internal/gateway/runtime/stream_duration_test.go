@@ -74,6 +74,23 @@ func TestRetryableResponsesFirstAttemptUsesShorterInitialWindow(t *testing.T) {
 	require.Equal(t, 120*time.Second, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
 }
 
+func TestRetryableShortResponsesUsesSemanticOutputWindow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	profile := RequestProfile{
+		RequestType: RequestTypeChatShortStream,
+		Protocol:    string(types.RelayFormatOpenAIResponses),
+		IsStream:    true,
+	}
+	setRequestProfile(context, profile)
+	budget := StartRequestBudget(context, profile, time.Now())
+	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
+
+	require.Zero(t, StreamAdaptiveProgressTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
+	require.Equal(t, 60*time.Second, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
+}
+
 func TestSingleChannelResponsesHasNoAdaptiveInitialDeadline(t *testing.T) {
 	oldProgress := constant.StreamingAdaptiveProgressTimeout
 	oldInitial := constant.StreamingAdaptiveInitialTimeout

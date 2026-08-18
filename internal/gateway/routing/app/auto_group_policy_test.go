@@ -159,31 +159,48 @@ func TestAutoRetryMovesToNextCheapestGroup(t *testing.T) {
 	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
 	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()
 	originalSelector := selectRandomSatisfiedChannel
+	originalSelectableRoute := hasSelectableAutoGroupRoute
 	t.Cleanup(func() {
 		require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(originalAutoGroups))
 		require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
 		selectRandomSatisfiedChannel = originalSelector
+		hasSelectableAutoGroupRoute = originalSelectableRoute
 	})
 
 	require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(`["low","fallback"]`))
 	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"low":"低价","fallback":"备用"}`))
-	calledGroups := make([]string, 0, 1)
+	calledGroups := make([]string, 0, 2)
 	priority := int64(1)
 	selectRandomSatisfiedChannel = func(group string, _ string, _ int) (*gatewayschema.Channel, error) {
 		calledGroups = append(calledGroups, group)
-		if group == "fallback" {
-			return &gatewayschema.Channel{Id: 39, Priority: &priority}, nil
+		if group == "low" {
+			return &gatewayschema.Channel{Id: 38, Priority: &priority}, nil
 		}
-		return nil, nil
+		return &gatewayschema.Channel{Id: 39, Priority: &priority}, nil
+	}
+	hasSelectableAutoGroupRoute = func(group, _ string) (bool, error) {
+		return group == "fallback", nil
 	}
 
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	context.Set(string(constant.ContextKeyAutoGroup), "low")
-	retry := 1
+	retry := 0
+	firstChannel, firstGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        context,
+		TokenGroup: AutoGroupName,
+		ModelName:  "gpt-auto-retry-next-group",
+		Retry:      &retry,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstChannel)
+	require.Equal(t, 38, firstChannel.Id)
+	require.Equal(t, "low", firstGroup)
+	require.True(t, gatewayruntime.HasRemainingCrossGroupRoute(context))
+
+	retry = 1
 	channel, group, err := CacheGetRandomSatisfiedChannel(&RetryParam{
 		Ctx:        context,
 		TokenGroup: AutoGroupName,
-		ModelName:  "gpt-auto-retry-stays-group",
+		ModelName:  "gpt-auto-retry-next-group",
 		Retry:      &retry,
 	})
 
@@ -191,7 +208,42 @@ func TestAutoRetryMovesToNextCheapestGroup(t *testing.T) {
 	require.NotNil(t, channel)
 	require.Equal(t, 39, channel.Id)
 	require.Equal(t, "fallback", group)
-	require.Equal(t, "fallback", calledGroups[len(calledGroups)-1])
+	require.Equal(t, []string{"low", "fallback"}, calledGroups)
+	require.False(t, gatewayruntime.HasRemainingCrossGroupRoute(context))
+}
+
+func TestAutoSelectionIgnoresLaterGroupsWithoutModelRoutes(t *testing.T) {
+	originalAutoGroups := gatewaygroups.AutoGroups2JsonString()
+	originalUsableGroups := gatewaygroups.UserUsableGroups2JSONString()
+	originalSelector := selectRandomSatisfiedChannel
+	originalSelectableRoute := hasSelectableAutoGroupRoute
+	t.Cleanup(func() {
+		require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(originalAutoGroups))
+		require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		selectRandomSatisfiedChannel = originalSelector
+		hasSelectableAutoGroupRoute = originalSelectableRoute
+	})
+
+	require.NoError(t, gatewaygroups.UpdateAutoGroupsByJsonString(`["plus","claude-only"]`))
+	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"plus":"Plus","claude-only":"Claude"}`))
+	priority := int64(1)
+	selectRandomSatisfiedChannel = func(group string, _ string, _ int) (*gatewayschema.Channel, error) {
+		if group == "plus" {
+			return &gatewayschema.Channel{Id: 6, Priority: &priority}, nil
+		}
+		return nil, nil
+	}
+	hasSelectableAutoGroupRoute = func(string, string) (bool, error) { return false, nil }
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	channel, group, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx: context, TokenGroup: AutoGroupName, ModelName: "gpt-5.6-sol", Retry: new(int),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, "plus", group)
+	require.False(t, gatewayruntime.HasRemainingCrossGroupRoute(context))
 }
 
 func TestCacheSelectionSkipsCoolingChannelEvenWithLegacyProbeContext(t *testing.T) {

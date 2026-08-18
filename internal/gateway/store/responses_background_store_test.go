@@ -69,3 +69,26 @@ func TestResponsesBackgroundCancelQueuedAndRunning(t *testing.T) {
 	require.Equal(t, gatewayschema.ResponsesBackgroundRunning, canceledRunning.Status)
 	require.True(t, canceledRunning.CancelRequested)
 }
+
+func TestResponsesBackgroundLeaseRecoversOnlyNativeJobWithUpstreamID(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	originalDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() { platformdb.DB = originalDB })
+	require.NoError(t, db.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}))
+	stale := time.Now().UTC().Add(-time.Minute)
+	jobs := []*gatewayschema.ResponsesBackgroundJob{
+		{ID: "native", UserID: 1, TokenID: 2, Model: "gpt-5", Status: gatewayschema.ResponsesBackgroundRunning, NativeBackground: true, UpstreamResponseID: "resp_upstream", UpstreamSequence: 3, ClaimedAt: &stale, ChannelID: 3, RequestCiphertext: "request", AuthorizationCiphertext: "auth", RoutingContextCiphertext: "route"},
+		{ID: "local", UserID: 1, TokenID: 2, Model: "gpt-5", Status: gatewayschema.ResponsesBackgroundRunning, NativeBackground: false, ClaimedAt: &stale, ChannelID: 3, RequestCiphertext: "request", AuthorizationCiphertext: "auth", RoutingContextCiphertext: "route"},
+	}
+	require.NoError(t, db.Create(jobs).Error)
+
+	recoverable, err := ListRecoverableResponsesBackgroundJobs(10, time.Now().UTC().Add(-30*time.Second))
+	require.NoError(t, err)
+	require.Len(t, recoverable, 1)
+	require.Equal(t, "native", recoverable[0].ID)
+	claimed, err := ClaimResponsesBackgroundJobWithLease("native", time.Now().UTC(), 30*time.Second)
+	require.NoError(t, err)
+	require.True(t, claimed)
+}

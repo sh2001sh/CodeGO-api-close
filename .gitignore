@@ -36,6 +36,7 @@ data/
 .gocache-temp
 .gopath
 .tmp/
+.codex-temp/
 .playwright-cli/
 artifacts/
 output/playwright/

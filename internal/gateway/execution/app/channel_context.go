@@ -93,6 +93,10 @@ func classifySelectedChannelRoute(c *gin.Context, channelID int, modelName strin
 	if !found || !profile.IsStream || profile.Protocol != string(types.RelayFormatOpenAIResponses) {
 		return
 	}
+	if gatewayruntime.HasRemainingCrossGroupRoute(c) {
+		gatewayruntime.MarkSingleChannelRoute(c, false)
+		return
+	}
 	alternative, err := hasAlternativeSelectableRoute(channelID, selectedChannelGroup(c), modelName)
 	if err != nil {
 		platformobservability.SysError("classify selected channel route failed: " + err.Error())

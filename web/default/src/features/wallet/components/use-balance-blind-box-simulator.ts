@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { calculateAccountReturnRate } from '@/lib/blind-box-economics'
+import { calculateAccountYieldRate } from '@/lib/blind-box-economics'
 import { parseQuotaFromDollars } from '@/lib/format'
 import { isApiSuccess, simulateBalanceBlindBoxes } from '../api'
 import type { BalanceBlindBoxSimulationDraw } from '../types'
@@ -41,14 +41,10 @@ export function useBalanceBlindBoxSimulator(priceUSD: number) {
     return {
       ...session,
       netQuota: session.balanceQuota - session.initialQuota,
-      accountReturnRate: calculateAccountReturnRate(
-        session.initialQuota,
-        session.balanceQuota
+      yieldRate: calculateAccountYieldRate(
+        session.spentQuota,
+        session.rewardQuota
       ),
-      payoutRate:
-        session.spentQuota > 0
-          ? (session.rewardQuota / session.spentQuota) * 100
-          : 0,
     }
   }, [session])
 

@@ -62,7 +62,7 @@ func (channel *Channel) IsOfficial() bool {
 }
 
 func (channel *Channel) ShouldInterceptSensitiveWords() bool {
-	return channel == nil || channel.IsOfficial() || channel.SensitiveWordInterceptionEnabled == nil || *channel.SensitiveWordInterceptionEnabled
+	return channel == nil || channel.SensitiveWordInterceptionEnabled == nil || *channel.SensitiveWordInterceptionEnabled
 }
 
 type ChannelInfo struct {
@@ -96,6 +96,9 @@ type CapabilityProbeState struct {
 type ResponsesCapabilities struct {
 	WebSocket        CapabilityProbeState `json:"websocket,omitempty"`
 	NativeBackground CapabilityProbeState `json:"native_background,omitempty"`
+	BackgroundCreate CapabilityProbeState `json:"background_create,omitempty"`
+	BackgroundResume CapabilityProbeState `json:"background_resume,omitempty"`
+	BackgroundCancel CapabilityProbeState `json:"background_cancel,omitempty"`
 }
 
 func (capabilities ResponsesCapabilities) SupportsWebSocket() bool {
@@ -103,7 +106,38 @@ func (capabilities ResponsesCapabilities) SupportsWebSocket() bool {
 }
 
 func (capabilities ResponsesCapabilities) SupportsNativeBackground() bool {
-	return capabilities.NativeBackground.Status == CapabilityStatusSupported
+	if capabilities.BackgroundCreate.Status == "" && capabilities.BackgroundResume.Status == "" && capabilities.BackgroundCancel.Status == "" {
+		return capabilities.NativeBackground.Status == CapabilityStatusSupported
+	}
+	return capabilities.SupportsNativeBackgroundFor("", -1)
+}
+
+func (capabilities ResponsesCapabilities) SupportsWebSocketFor(model string, keyIndex int) bool {
+	return capabilityStateSupports(capabilities.WebSocket, model, keyIndex)
+}
+
+func (capabilities ResponsesCapabilities) SupportsNativeBackgroundFor(model string, keyIndex int) bool {
+	if capabilities.BackgroundCreate.Status == "" && capabilities.BackgroundResume.Status == "" && capabilities.BackgroundCancel.Status == "" {
+		return capabilityStateSupports(capabilities.NativeBackground, model, keyIndex)
+	}
+	state := capabilities.NativeBackground
+	if state.Status == "" {
+		state = capabilities.BackgroundCreate
+	}
+	return capabilityStateSupports(state, model, keyIndex) &&
+		capabilityStateSupports(capabilities.BackgroundCreate, model, keyIndex) &&
+		capabilityStateSupports(capabilities.BackgroundResume, model, keyIndex) &&
+		capabilityStateSupports(capabilities.BackgroundCancel, model, keyIndex)
+}
+
+func capabilityStateSupports(state CapabilityProbeState, model string, keyIndex int) bool {
+	if state.Status != CapabilityStatusSupported {
+		return false
+	}
+	if strings.TrimSpace(model) != "" && strings.TrimSpace(state.Model) != "" && !strings.EqualFold(strings.TrimSpace(model), strings.TrimSpace(state.Model)) {
+		return false
+	}
+	return keyIndex < 0 || state.ProbeKeyIdx < 0 || state.ProbeKeyIdx == keyIndex
 }
 
 // Value implements driver.Valuer interface

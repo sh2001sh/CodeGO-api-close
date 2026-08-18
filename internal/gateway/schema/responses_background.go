@@ -21,6 +21,7 @@ type ResponsesBackgroundJob struct {
 	Model                    string     `json:"model" gorm:"column:model;size:255;not null"`
 	Status                   string     `json:"status" gorm:"column:status;size:24;not null;index"`
 	Stream                   bool       `json:"-" gorm:"column:stream;not null;default:false"`
+	NativeBackground         bool       `json:"-" gorm:"column:native_background;not null;default:false"`
 	ChannelID                int        `json:"-" gorm:"column:channel_id;not null;index"`
 	KeyIndex                 int        `json:"-" gorm:"column:key_index;not null;default:0"`
 	RequestCiphertext        string     `json:"-" gorm:"column:request_ciphertext;type:text;not null"`
@@ -30,6 +31,7 @@ type ResponsesBackgroundJob struct {
 	FinalResponseCiphertext  string     `json:"-" gorm:"column:final_response_ciphertext;type:text"`
 	ErrorCiphertext          string     `json:"-" gorm:"column:error_ciphertext;type:text"`
 	UpstreamResponseID       string     `json:"-" gorm:"column:upstream_response_id;size:128;index"`
+	UpstreamSequence         int64      `json:"-" gorm:"column:upstream_sequence;not null;default:-1"`
 	LastSequence             int64      `json:"-" gorm:"column:last_sequence;not null;default:-1"`
 	CancelRequested          bool       `json:"-" gorm:"column:cancel_requested;not null;default:false;index"`
 	ClaimedAt                *time.Time `json:"-" gorm:"column:claimed_at;index"`

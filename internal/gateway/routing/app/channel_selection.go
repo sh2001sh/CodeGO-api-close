@@ -87,6 +87,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 		fallbackGroups := OrderAutoFallbackGroups(userGroup, param.ModelName, autoGroups)
 		candidateGroups := append(append([]string{}, autoGroups...), fallbackGroups...)
 		gatewayruntime.UpdateRouteDecisionCandidates(param.Ctx, len(candidateGroups))
+		gatewayruntime.MarkRemainingCrossGroupRoutes(param.Ctx, 0)
 		startGroupIndex := 0
 		crossGroupRetry := httpctx.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
 
@@ -122,6 +123,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 			}
 			httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, autoGroup)
 			selectGroup = autoGroup
+			markRemainingAutoGroupRoutes(param.Ctx, candidateGroups, i, param.ModelName)
 			gatewayruntime.SelectRouteDecisionCandidate(param.Ctx, autoGroup, channel.Id, false)
 			logger.LogDebug(param.Ctx, "Auto selected group: %s", autoGroup)
 
@@ -147,6 +149,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, 
 				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i)
 				httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, autoGroup)
 				selectGroup = autoGroup
+				markRemainingAutoGroupRoutes(param.Ctx, candidateGroups, i, param.ModelName)
 				gatewayruntime.SelectRouteDecisionCandidate(param.Ctx, autoGroup, channel.Id, false)
 				break
 			}

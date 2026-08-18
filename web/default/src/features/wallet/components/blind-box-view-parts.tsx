@@ -36,7 +36,10 @@ export function BlindBoxPropsList(props: {
           const pausable = monthlyPass || universalPointOne || zeroHour
           const canUse = available || (pausable && paused)
           const convertible =
-            available && prop.prop_type === 'subscription_discount_90'
+            available &&
+            ['topup_discount_90', 'subscription_discount_90'].includes(
+              prop.prop_type
+            )
 
           return (
             <div
@@ -84,7 +87,9 @@ export function BlindBoxPropsList(props: {
                       }
                       data-icon='inline-start'
                     />
-                    转为充值九折卡
+                    {prop.prop_type === 'subscription_discount_90'
+                      ? '转为充值九折卡'
+                      : '转为套餐九折卡'}
                   </Button>
                 ) : null}
                 {pausable && active ? (

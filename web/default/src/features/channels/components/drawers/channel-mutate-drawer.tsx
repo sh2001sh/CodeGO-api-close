@@ -2477,6 +2477,33 @@ export function ChannelMutateDrawer({
                           </FormItem>
                         )}
                       />
+
+                      <FormField
+                        control={form.control}
+                        name='sensitive_word_interception_enabled'
+                        render={({ field }) => (
+                          <FormItem className='flex items-center justify-between border-t pt-4'>
+                            <div className='space-y-0.5'>
+                              <FormLabel>{t('敏感词拦截')}</FormLabel>
+                              <FormDescription>
+                                {field.value
+                                  ? t(
+                                      '请求会接入平台敏感词检测，命中规则时按平台策略拦截。'
+                                    )
+                                  : t(
+                                      '请求不接入平台敏感词检测，由管理员自行承担内容治理责任。'
+                                    )}
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
                     </div>
 
                     <div className='space-y-4 border-t pt-4'>

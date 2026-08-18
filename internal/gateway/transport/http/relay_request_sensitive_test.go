@@ -48,6 +48,29 @@ func TestExternalChannelControlsPromptSensitiveInterception(t *testing.T) {
 
 	require.Nil(t, checkPromptSensitiveForChannel(ctx, types.RelayFormatOpenAI, disabled, meta))
 	require.NotNil(t, checkPromptSensitiveForChannel(ctx, types.RelayFormatOpenAI, enabled, meta))
+	require.Nil(t, checkPromptSensitiveForChannel(ctx, types.RelayFormatOpenAI, official, meta))
+}
+
+func TestOfficialChannelSensitiveInterceptionDefaultsToEnabled(t *testing.T) {
+	originalCheck := requestsettings.CheckSensitiveEnabled
+	originalPrompt := requestsettings.CheckSensitiveOnPromptEnabled
+	originalStop := requestsettings.StopOnSensitiveEnabled
+	originalWords := requestsettings.SensitiveWords
+	t.Cleanup(func() {
+		requestsettings.CheckSensitiveEnabled = originalCheck
+		requestsettings.CheckSensitiveOnPromptEnabled = originalPrompt
+		requestsettings.StopOnSensitiveEnabled = originalStop
+		requestsettings.SensitiveWords = originalWords
+	})
+	requestsettings.CheckSensitiveEnabled = true
+	requestsettings.CheckSensitiveOnPromptEnabled = true
+	requestsettings.StopOnSensitiveEnabled = true
+	requestsettings.SensitiveWords = []string{"contains:blocked phrase"}
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	meta := &types.TokenCountMeta{CombineText: "contains a blocked phrase"}
+	official := &gatewayschema.Channel{ChannelScope: gatewayschema.ChannelScopeOfficial}
+
 	require.NotNil(t, checkPromptSensitiveForChannel(ctx, types.RelayFormatOpenAI, official, meta))
 }
 

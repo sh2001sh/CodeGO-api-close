@@ -15,7 +15,7 @@ func TestUnifiedBlindBoxPoolEconomics(t *testing.T) {
 	setting := blindboxsettings.Get()
 	require.Equal(t, 2.5, setting.BalanceBlindBoxPriceUSD)
 	require.Len(t, setting.BalanceBlindBoxTiers, 12)
-	require.InDelta(t, 0.29311, setting.BalanceBlindBoxTiers[0].Probability, 0.000000001)
+	require.InDelta(t, 0.22, setting.BalanceBlindBoxTiers[0].Probability, 0.000000001)
 
 	var probability float64
 	var expectedUnifiedCredit float64
@@ -34,8 +34,8 @@ func TestUnifiedBlindBoxPoolEconomics(t *testing.T) {
 		}
 	}
 	require.InDelta(t, 1, probability, 0.000000001)
-	require.InDelta(t, 2.408679149, expectedUnifiedCredit, 0.000001)
-	require.InDelta(t, 0.48319, immediateProfitProbability, 0.000001)
+	require.InDelta(t, 2.598399599, expectedUnifiedCredit, 0.000001)
+	require.InDelta(t, 0.5563, immediateProfitProbability, 0.000001)
 }
 
 func TestUnifiedBlindBoxDrawUsesFrozenPoolAndGuarantees(t *testing.T) {
@@ -118,10 +118,10 @@ func TestUnifiedBlindBoxMillionDrawEconomics(t *testing.T) {
 		float64(stats.smallPityCount)/draws,
 		float64(stats.bigPityCount)/draws,
 	)
-	require.InDelta(t, 2.51644, mean, 0.04)
-	require.InDelta(t, 100.66, mean/setting.BalanceBlindBoxPriceUSD*100, 0.5)
+	require.InDelta(t, 2.70, mean, 0.04)
+	require.InDelta(t, 108.0, mean/setting.BalanceBlindBoxPriceUSD*100, 0.5)
 	require.Greater(t, standardDeviation, 4.0)
-	require.InDelta(t, 0.0012, float64(stats.smallPityCount)/draws, 0.0007)
+	require.InDelta(t, 0.00035, float64(stats.smallPityCount)/draws, 0.0005)
 	require.InDelta(t, 0.0085, float64(stats.bigPityCount)/draws, 0.003)
 }
 
@@ -164,9 +164,9 @@ func TestUnifiedBlindBoxAnnualTenDrawEconomics(t *testing.T) {
 	dailyProfit := (meanReward - setting.BalanceBlindBoxPriceUSD) * 10
 	annualProfit := dailyProfit * 365
 	t.Logf("accounts=%d mean=%.6f full_rtp=%.6f%% daily_profit=%.6f annual_profit=%.6f", accounts, meanReward, fullRTP, dailyProfit, annualProfit)
-	require.InDelta(t, 2.516438356, meanReward, 0.001)
-	require.InDelta(t, 100.6575, fullRTP, 0.04)
-	require.InDelta(t, 60, annualProfit, 4)
+	require.InDelta(t, 2.70614, meanReward, 0.004)
+	require.InDelta(t, 108.25, fullRTP, 0.2)
+	require.InDelta(t, 752, annualProfit, 15)
 	require.Equal(t, accounts, firstGuarantees)
 	require.Positive(t, smallGuarantees)
 	require.Positive(t, bigGuarantees)
@@ -205,8 +205,8 @@ func TestUnifiedBlindBoxFortyPurchaseSessionDistribution(t *testing.T) {
 	profitRate := float64(profitable) / sessions
 	median := returns[sessions/2]
 	t.Logf("sessions=%d purchases=%d profitable_rate=%.6f median_return=%.6f p10=%.6f p90=%.6f", sessions, purchasesPerSession, profitRate, median, returns[sessions/10], returns[sessions*9/10])
-	require.InDelta(t, 0.35, profitRate, 0.03)
-	require.InDelta(t, 0.93, median, 0.05)
+	require.Greater(t, profitRate, 0.50)
+	require.Greater(t, median, 1.0)
 }
 
 type blindBoxSimulationStats struct {

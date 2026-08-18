@@ -114,3 +114,26 @@ func TestSetupContextForSingleChannelReusesMultiKeyIndex(t *testing.T) {
 
 	require.Equal(t, firstIndex, secondIndex)
 }
+
+func TestSetupContextTreatsRemainingAutoGroupAsAlternativeRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	gatewayruntime.InitializeRequestProfile(context, "gpt-5.6-sol", context.Request.URL.Path, gatewayruntime.RequestProfileHint{IsStream: true})
+	gatewayruntime.MarkRemainingCrossGroupRoutes(context, 1)
+	httpctx.SetContextKey(context, constant.ContextKeyUsingGroup, "market-primary")
+
+	originalHasAlternative := hasAlternativeSelectableRoute
+	hasAlternativeSelectableRoute = func(int, string, string) (bool, error) {
+		return false, nil
+	}
+	t.Cleanup(func() { hasAlternativeSelectableRoute = originalHasAlternative })
+
+	baseURL := "https://primary.example/v1"
+	err := SetupContextForSelectedChannel(context, &gatewayschema.Channel{
+		Id: 33, Type: 1, Key: "primary-key", BaseURL: &baseURL,
+	}, "gpt-5.6-sol")
+
+	require.Nil(t, err, "%+v", err)
+	require.False(t, gatewayruntime.IsSingleChannelRoute(context))
+}

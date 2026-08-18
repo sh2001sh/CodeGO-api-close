@@ -521,3 +521,26 @@ func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *t
 	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
 	require.True(t, db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}))
 }
+
+func TestMigrateMultiplierPrecisionBackfillsNominalAndEffectiveValues(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&commerceschema.BlindBoxProp{}))
+	prop := commerceschema.BlindBoxProp{UserId: 9, PropType: commerceschema.BlindBoxPropTypeConsumeDiscount90, Multiplier: 0.9}
+	require.NoError(t, db.Create(&prop).Error)
+
+	legacyUsage := commerceschema.BlindBoxPropDiscountUsage{
+		RequestId: "legacy-multiplier", UserId: 9, PropId: prop.Id, PropTitle: "0.9 倍率卡",
+		ChannelId: 6, ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "gpt-5",
+		QuotaBeforeDiscount: 999, QuotaAfterDiscount: 899, DiscountQuota: 100,
+		DiscountRate: 0.1001, Multiplier: 0.8999, RemainingQuota: 0,
+	}
+	require.NoError(t, db.AutoMigrate(&commerceschema.BlindBoxPropDiscountUsage{}))
+	require.NoError(t, db.Create(&legacyUsage).Error)
+
+	require.NoError(t, migrateMultiplierPrecision(db))
+	require.NoError(t, db.First(&legacyUsage, legacyUsage.Id).Error)
+	require.Equal(t, 0.9, legacyUsage.Multiplier)
+	require.Equal(t, 0.8999, legacyUsage.EffectiveMultiplier)
+	require.Equal(t, 0.1001, legacyUsage.DiscountRate)
+}

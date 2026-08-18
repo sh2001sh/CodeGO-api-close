@@ -28,7 +28,8 @@ func bindResponsesWebsocketRoute(c *gin.Context) error {
 		return err
 	}
 	keyIndex := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
-	if err := session.BindRoute(channelID, keyIndex, channel.ChannelInfo.ResponsesCapabilities.SupportsWebSocket()); err != nil {
+	model := c.GetString("original_model")
+	if err := session.BindRoute(channelID, keyIndex, channel.ChannelInfo.ResponsesCapabilities.SupportsWebSocketFor(model, keyIndex)); err != nil {
 		return err
 	}
 	responsesws.ApplyRoutePin(c, session)

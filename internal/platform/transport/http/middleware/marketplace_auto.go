@@ -48,8 +48,10 @@ func selectMarketplaceAutoChannel(c *gin.Context, tokenGroup, modelName string) 
 		}
 		applyMarketplaceAutoBinding(c, binding)
 		httpctx.SetContextKey(c, constant.ContextKeyUnifiedAutoIndex, index)
+		gatewayruntime.MarkRemainingCrossGroupRoutes(c, len(bindings)-index-1)
 		return channel, binding.InternalGroup, true, nil
 	}
+	gatewayruntime.MarkRemainingCrossGroupRoutes(c, 0)
 	return nil, tokenGroup, true, errors.New("全局 Auto 路由池当前没有可用渠道")
 }
 

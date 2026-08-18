@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 
 	gatewaycapability "github.com/sh2001sh/new-api/internal/gateway/capability"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -12,6 +13,21 @@ import (
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMarketplaceCapabilitiesNeedProbeRetriesTransientWebSocketFailure(t *testing.T) {
+	now := time.Now()
+	capabilities := gatewayschema.ResponsesCapabilities{
+		WebSocket: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusError, CheckedAt: now.Unix(), ErrorClass: "close_1011",
+		},
+		NativeBackground: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusUnsupported, CheckedAt: now.Unix(), ErrorClass: "unsupported",
+		},
+	}
+	raw, err := platformencoding.Marshal(capabilities)
+	require.NoError(t, err)
+	require.True(t, marketplaceCapabilitiesNeedProbe(string(raw), now))
+}
 
 func TestMarketplaceProbePersistsAndSyncsInternalCapabilities(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)

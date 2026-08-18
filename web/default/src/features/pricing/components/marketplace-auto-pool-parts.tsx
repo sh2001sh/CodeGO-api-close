@@ -17,8 +17,19 @@ export function AutoPoolRow(props: {
 }) {
   const { t } = useTranslation()
   const item = props.item
+  const hasMetrics = item.metrics_available
+  const statusLabel =
+    item.latest_request_status === 'healthy'
+      ? t('稳定')
+      : item.latest_request_status === 'unstable'
+        ? t('波动')
+        : item.latest_request_status === 'failed'
+          ? t('失败')
+          : item.source_type === 'official'
+            ? t('官方可用')
+            : t('待观测')
   return (
-    <label className='hover:bg-muted/20 grid cursor-pointer gap-3 px-4 py-4 transition-colors lg:grid-cols-[28px_minmax(240px,1.5fr)_minmax(130px,0.7fr)_110px_110px] lg:items-center lg:px-5'>
+    <label className='hover:bg-muted/20 grid cursor-pointer gap-3 px-4 py-4 transition-colors lg:grid-cols-[28px_minmax(220px,1.4fr)_100px_110px_110px_110px_110px] lg:items-center lg:px-5'>
       <Checkbox checked={props.selected} onCheckedChange={props.onToggle} />
       <div className='min-w-0'>
         <div className='flex items-center gap-2'>
@@ -32,16 +43,30 @@ export function AutoPoolRow(props: {
           </span>
         </div>
         <div className='text-muted-foreground mt-1 truncate text-xs'>
-          {item.source_type === 'official' ? t('官方分组') : item.source_label || t('来源待审核')} ·{' '}
-          {item.models.slice(0, 3).join(' / ')}
+          {item.source_type === 'official'
+            ? t('官方分组')
+            : item.source_label || t('来源待审核')}{' '}
+          · {item.models.slice(0, 3).join(' / ')}
         </div>
       </div>
+      <Metric label={t('状态')} value={statusLabel} />
       <Metric
-        label={t('路由可用率')}
-        value={`${item.availability.toFixed(1)}%`}
+        label={t('成功率')}
+        value={hasMetrics ? `${item.success_rate.toFixed(1)}%` : '-'}
+      />
+      <Metric
+        label={t('缓存命中')}
+        value={hasMetrics ? `${item.cache_hit_rate.toFixed(1)}%` : '-'}
+      />
+      <Metric
+        label={t('延迟')}
+        value={hasMetrics ? `${Math.round(item.avg_latency_ms)} ms` : '-'}
       />
       <Metric label={t('倍率')} value={`${item.multiplier}x`} />
-      <Metric label={t('路由评分')} value={item.route_score.toFixed(2)} />
+      <Metric
+        label={t('保守可用率')}
+        value={`${item.availability.toFixed(1)}%`}
+      />
       {props.selected && (
         <div className='flex justify-end gap-1 lg:col-span-5'>
           <PriorityButton

@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -17,8 +18,14 @@ func CreateResponsesBackgroundJob(job *gatewayschema.ResponsesBackgroundJob) err
 }
 
 func ClaimResponsesBackgroundJob(jobID string, now time.Time) (bool, error) {
+	return ClaimResponsesBackgroundJobWithLease(jobID, now, 30*time.Second)
+}
+
+func ClaimResponsesBackgroundJobWithLease(jobID string, now time.Time, leaseDuration time.Duration) (bool, error) {
+	staleBefore := now.Add(-leaseDuration)
 	result := platformdb.DB.Model(&gatewayschema.ResponsesBackgroundJob{}).
-		Where("id = ? AND status = ?", jobID, gatewayschema.ResponsesBackgroundQueued).
+		Where("id = ? AND (status = ? OR (status = ? AND native_background = ? AND upstream_response_id <> '' AND (claimed_at IS NULL OR claimed_at < ?)))",
+			jobID, gatewayschema.ResponsesBackgroundQueued, gatewayschema.ResponsesBackgroundRunning, true, staleBefore).
 		Updates(map[string]any{
 			"status": gatewayschema.ResponsesBackgroundRunning, "claimed_at": now, "started_at": now,
 		})
@@ -41,6 +48,17 @@ func LoadOwnedResponsesBackgroundJob(jobID string, userID, tokenID int) (*gatewa
 	return &job, nil
 }
 
+func ListRecoverableResponsesBackgroundJobs(limit int, staleBefore time.Time) ([]gatewayschema.ResponsesBackgroundJob, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var jobs []gatewayschema.ResponsesBackgroundJob
+	err := platformdb.DB.Where("status = ? OR (status = ? AND native_background = ? AND upstream_response_id <> '' AND (claimed_at IS NULL OR claimed_at < ?))",
+		gatewayschema.ResponsesBackgroundQueued, gatewayschema.ResponsesBackgroundRunning, true, staleBefore).
+		Order("created_at asc").Limit(limit).Find(&jobs).Error
+	return jobs, err
+}
+
 func ListQueuedResponsesBackgroundJobs(limit int) ([]gatewayschema.ResponsesBackgroundJob, error) {
 	if limit <= 0 {
 		limit = 20
@@ -49,6 +67,21 @@ func ListQueuedResponsesBackgroundJobs(limit int) ([]gatewayschema.ResponsesBack
 	err := platformdb.DB.Where("status = ?", gatewayschema.ResponsesBackgroundQueued).
 		Order("created_at asc").Limit(limit).Find(&jobs).Error
 	return jobs, err
+}
+
+func RenewResponsesBackgroundLease(jobID string, claimedAt time.Time) error {
+	return platformdb.DB.Model(&gatewayschema.ResponsesBackgroundJob{}).
+		Where("id = ? AND status = ?", jobID, gatewayschema.ResponsesBackgroundRunning).
+		Update("claimed_at", claimedAt).Error
+}
+
+func UpdateResponsesBackgroundUpstreamCursor(jobID, upstreamID string, sequence int64) error {
+	if strings.TrimSpace(upstreamID) == "" {
+		return nil
+	}
+	return platformdb.DB.Model(&gatewayschema.ResponsesBackgroundJob{}).
+		Where("id = ? AND status = ? AND upstream_sequence < ?", jobID, gatewayschema.ResponsesBackgroundRunning, sequence).
+		Updates(map[string]any{"upstream_response_id": upstreamID, "upstream_sequence": sequence}).Error
 }
 
 func AppendResponsesBackgroundEvent(event *gatewayschema.ResponsesBackgroundEvent) error {

@@ -4,7 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
+
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 )
 
 const MaxMarketplaceMultiplierLimit = 1_000_000
@@ -35,5 +36,5 @@ func multiplierLimitExceededError(limit float64) error {
 }
 
 func formatLimitMultiplier(value float64) string {
-	return strconv.FormatFloat(value, 'f', -1, 64)
+	return marketplacedomain.FormatMultiplier(value)
 }

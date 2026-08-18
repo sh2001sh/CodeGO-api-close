@@ -19,6 +19,7 @@ const (
 	channelCapabilityMaxKeys      = 3
 	channelCapabilityMaxModels    = 4
 	channelCapabilityMaxAge       = 24 * time.Hour
+	channelCapabilityRetryDelay   = 15 * time.Minute
 )
 
 var (
@@ -73,8 +74,27 @@ func probeAndPersistChannelCapabilities(ctx context.Context, channelID int) erro
 	channel.ChannelInfo.ResponsesCapabilities = gatewayschema.ResponsesCapabilities{
 		WebSocket:        result.WebSocket,
 		NativeBackground: result.NativeBackground,
+		BackgroundCreate: result.BackgroundCreate,
+		BackgroundResume: result.BackgroundResume,
+		BackgroundCancel: result.BackgroundCancel,
 	}
-	return gatewaystore.SaveChannelInfo(channel)
+	if err := gatewaystore.SaveChannelInfo(channel); err != nil {
+		return err
+	}
+	if responsesCapabilitiesHaveTransientFailure(channel.ChannelInfo.ResponsesCapabilities) {
+		time.AfterFunc(channelCapabilityRetryDelay, func() {
+			scheduleChannelCapabilityProbe(channelID)
+		})
+	}
+	return nil
+}
+
+func responsesCapabilitiesHaveTransientFailure(capabilities gatewayschema.ResponsesCapabilities) bool {
+	return gatewaycapability.IsTransientProbeFailure(capabilities.WebSocket) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.NativeBackground) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCreate) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundResume) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCancel)
 }
 
 func markChannelCapabilitiesPending(channel *gatewayschema.Channel) {
@@ -159,9 +179,15 @@ func channelProbeKeyEnabled(channel *gatewayschema.Channel, index int) bool {
 }
 
 func responsesCapabilitiesNeedProbe(capabilities gatewayschema.ResponsesCapabilities, now time.Time) bool {
-	states := []gatewayschema.CapabilityProbeState{capabilities.WebSocket, capabilities.NativeBackground}
+	states := []gatewayschema.CapabilityProbeState{capabilities.WebSocket, capabilities.NativeBackground, capabilities.BackgroundCreate, capabilities.BackgroundResume, capabilities.BackgroundCancel}
+	if capabilities.BackgroundCreate.Status == "" && capabilities.BackgroundResume.Status == "" && capabilities.BackgroundCancel.Status == "" {
+		states = states[:2]
+	}
 	for _, state := range states {
 		if state.Status == "" || state.Status == gatewayschema.CapabilityStatusUnknown || state.Status == gatewayschema.CapabilityStatusPending {
+			return true
+		}
+		if gatewaycapability.IsTransientProbeFailure(state) {
 			return true
 		}
 		if state.CheckedAt <= 0 || now.Sub(time.Unix(state.CheckedAt, 0)) >= channelCapabilityMaxAge {

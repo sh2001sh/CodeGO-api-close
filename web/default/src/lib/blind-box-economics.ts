@@ -9,18 +9,14 @@ export interface BlindBoxEconomicsTier {
 export interface BlindBoxEconomics {
   probability: number
   expectedRewardUSD: number
-  payoutRate: number
   immediateProfitProbability: number
   maxRewardUSD: number
 }
 
-/** Calculates account return from the balance before and after a simulation. */
-export function calculateAccountReturnRate(
-  initialBalance: number,
-  currentBalance: number
-) {
-  if (initialBalance <= 0) return 0
-  return ((currentBalance - initialBalance) / initialBalance) * 100
+/** Calculates net yield against the amount spent in a simulation. */
+export function calculateAccountYieldRate(spent: number, reward: number) {
+  if (spent <= 0) return 0
+  return ((reward - spent) / spent) * 100
 }
 
 /** Calculates ordinary-pool economics, including chained free draws but excluding guarantees. */
@@ -57,7 +53,6 @@ export function calculateBlindBoxEconomics(
   return {
     probability,
     expectedRewardUSD,
-    payoutRate: priceUSD > 0 ? (expectedRewardUSD / priceUSD) * 100 : 0,
     immediateProfitProbability,
     maxRewardUSD,
   }

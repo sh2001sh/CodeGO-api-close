@@ -23,8 +23,9 @@ export function useApiKeyGroupOptions() {
   })
 
   return useMemo<ApiKeyGroupOption[]>(() => {
-    const officialGroups = Object.entries(groupsData?.data ?? {}).map(
-      ([key, info]) => ({
+    const officialGroups = Object.entries(groupsData?.data ?? {})
+      .filter(([key]) => key.trim().toLowerCase() !== 'auto')
+      .map(([key, info]) => ({
         value: key,
         label: key,
         desc: info.desc || key,
@@ -32,8 +33,7 @@ export function useApiKeyGroupOptions() {
         subscriptionEnabled: info.subscription_enabled,
         subscriptionRatio: info.subscription_ratio,
         category: 'official' as const,
-      })
-    )
+      }))
     const autoOption: ApiKeyGroupOption = {
       value: 'auto',
       label: 'Auto',

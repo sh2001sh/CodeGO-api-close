@@ -35,6 +35,18 @@ func probeGPT56MappingsWithProgress(
 			return results, err
 		}
 		results[index] = result
+		if result.Status == GPT56MappingStatusMismatch {
+			for skipped := index + 1; skipped < len(results); skipped++ {
+				results[skipped] = GPT56MappingResult{
+					RequestedModel: models[skipped],
+					Status:         GPT56MappingStatusInsufficientEvidence,
+					SampleCount:    policy.sampleCount(),
+					Error:          "前序模型已确认映射不一致，后续模型未继续检测",
+					TestedAt:       time.Now().UTC(),
+				}
+			}
+			break
+		}
 	}
 	return results, nil
 }
@@ -54,6 +66,8 @@ func probeGPT56MappingModelWithProgress(
 	}
 	reportedModels := make([]string, 0, sampleCount)
 	errorsSeen := make([]string, 0, sampleCount)
+	mismatchedSamples := 0
+stop:
 	for _, variant := range policy.Variants {
 		for repetition := 0; repetition < policy.Repetitions; repetition++ {
 			latencyMS, reported, probeErr := probeMarketplaceInferenceReportedModelWithVariant(
@@ -64,7 +78,7 @@ func probeGPT56MappingModelWithProgress(
 				len(result.Samples)+1, variant.Name, model, reported, latencyMS, probeErr,
 			)
 			result.Samples = append(result.Samples, sample)
-			if sample.Error != "" {
+			if sample.Status == GPT56MappingSampleStatusError && sample.Error != "" {
 				errorsSeen = append(errorsSeen, sample.Error)
 			}
 			if sample.ReportedModel != "" {
@@ -73,26 +87,32 @@ func probeGPT56MappingModelWithProgress(
 			if sample.Status == GPT56MappingStatusMatched {
 				result.MatchedSamples++
 			}
+			if sample.Status == GPT56MappingStatusMismatch {
+				mismatchedSamples++
+			}
 			if onProgress != nil {
 				if err := onProgress(result); err != nil {
 					return result, err
 				}
 			}
+			if mismatchedSamples*2 > result.SampleCount {
+				break stop
+			}
 		}
 	}
-	if result.SampleCount > 0 {
-		result.LatencyMS /= int64(result.SampleCount)
+	if len(result.Samples) > 0 {
+		result.LatencyMS /= int64(len(result.Samples))
 	}
 	result.ReportedModel = strings.Join(normalizeModels(reportedModels), ", ")
 	switch {
-	case hasMismatchedReportedModel(model, reportedModels):
+	case mismatchedSamples*2 > result.SampleCount:
 		result.Status = GPT56MappingStatusMismatch
-	case result.MatchedSamples == result.SampleCount:
-		result.Status = GPT56MappingStatusMatched
-	default:
+	case mismatchedSamples > 0 || len(errorsSeen) > 0:
 		result.Status = GPT56MappingStatusInsufficientEvidence
-		result.Error = strings.Join(normalizeModels(errorsSeen), "; ")
+	default:
+		result.Status = GPT56MappingStatusMatched
 	}
+	result.Error = strings.Join(normalizeModels(errorsSeen), "; ")
 	return result, nil
 }
 
@@ -122,13 +142,4 @@ func buildGPT56MappingSample(
 		sample.Status = GPT56MappingStatusMismatch
 	}
 	return sample
-}
-
-func hasMismatchedReportedModel(expected string, reported []string) bool {
-	for _, model := range reported {
-		if !sameModelID(expected, model) {
-			return true
-		}
-	}
-	return false
 }

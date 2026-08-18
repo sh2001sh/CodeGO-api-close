@@ -58,6 +58,7 @@ export interface ApiKeyGroupOptionData {
   category: 'official' | 'marketplace' | 'marketplace_auto'
   disabled?: boolean
   models?: string[]
+  mappingStatus?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
 }
 
 interface MarketplaceGroupListResponse {
@@ -70,6 +71,7 @@ interface MarketplaceGroupListResponse {
     multiplier: number
     subscription_enabled: boolean
     subscription_multiplier: number
+    gpt56_mapping_status?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
     models: string[]
   }>
 }
@@ -197,7 +199,8 @@ export async function getSelectableMarketplaceGroups(): Promise<
     .filter(
       (group) =>
         ['active', 'degraded'].includes(group.lifecycle_status) &&
-        group.verification_status === 'passed'
+        group.verification_status === 'passed' &&
+        group.gpt56_mapping_status !== 'mismatch'
     )
     .map((group) => ({
       value: `market:${group.id}`,
@@ -206,6 +209,7 @@ export async function getSelectableMarketplaceGroups(): Promise<
       ratio: group.multiplier,
       subscriptionEnabled: group.subscription_enabled,
       subscriptionRatio: group.subscription_multiplier,
+      mappingStatus: group.gpt56_mapping_status || '',
       category: 'marketplace' as const,
       models: group.models,
     }))

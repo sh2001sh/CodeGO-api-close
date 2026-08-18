@@ -21,7 +21,15 @@ type backgroundStreamEvent struct {
 	} `json:"response"`
 }
 
-func probeNativeBackground(ctx context.Context, client *http.Client, endpoint string, input ProbeInput, base gatewayschema.CapabilityProbeState) gatewayschema.CapabilityProbeState {
+type backgroundProbeResult struct {
+	Aggregate gatewayschema.CapabilityProbeState
+	Create    gatewayschema.CapabilityProbeState
+	Resume    gatewayschema.CapabilityProbeState
+	Cancel    gatewayschema.CapabilityProbeState
+}
+
+func probeNativeBackground(ctx context.Context, client *http.Client, endpoint string, input ProbeInput, base gatewayschema.CapabilityProbeState) backgroundProbeResult {
+	result := backgroundProbeResult{Aggregate: base, Create: base, Resume: base, Cancel: base}
 	state := base
 	create := map[string]any{
 		"model": input.Model, "input": "Reply with OK.",
@@ -30,46 +38,72 @@ func probeNativeBackground(ctx context.Context, client *http.Client, endpoint st
 	status, raw, err := requestJSON(ctx, client, http.MethodPost, endpoint, input.APIKey, create)
 	state.HTTPStatus = status
 	if err != nil || status < 200 || status >= 300 {
-		state.Status = gatewayschema.CapabilityStatusUnsupported
+		state.Status = classifyBackgroundCapabilityFailure(raw, status, err)
 		if err != nil {
 			state.ErrorClass = classifyTransportError(err)
 		} else {
 			state.ErrorClass = responseErrorClass(raw, status)
 		}
-		return state
+		result.Create = state
+		result.Aggregate = state
+		result.Resume = state
+		result.Cancel = state
+		return result
 	}
 	var created responseEnvelope
 	if platformencoding.Unmarshal(raw, &created) != nil || created.ID == "" {
 		state.Status = gatewayschema.CapabilityStatusUnsupported
 		state.ErrorClass = "background_create_invalid"
-		return state
+		result.Create, result.Aggregate = state, state
+		result.Resume, result.Cancel = state, state
+		return result
 	}
 	status, raw, err = requestJSON(ctx, client, http.MethodGet, endpoint+"/"+url.PathEscape(created.ID), input.APIKey, nil)
 	if err != nil || status < 200 || status >= 300 {
-		state.Status = gatewayschema.CapabilityStatusUnsupported
+		state.Status = classifyBackgroundCapabilityFailure(raw, status, err)
 		state.HTTPStatus = status
 		state.ErrorClass = "background_retrieve_failed"
-		return state
+		result.Create = state
+		result.Aggregate = state
+		return result
 	}
 	var retrieved responseEnvelope
 	if platformencoding.Unmarshal(raw, &retrieved) != nil || retrieved.ID != created.ID {
 		state.Status = gatewayschema.CapabilityStatusUnsupported
 		state.ErrorClass = "background_retrieve_invalid"
-		return state
-	}
-	if !probeBackgroundResume(ctx, client, endpoint, input) {
-		state.Status = gatewayschema.CapabilityStatusUnsupported
-		state.ErrorClass = "background_resume_failed"
-		return state
-	}
-	if !probeBackgroundCancel(ctx, client, endpoint, input) {
-		state.Status = gatewayschema.CapabilityStatusUnsupported
-		state.ErrorClass = "background_cancel_failed"
-		return state
+		result.Create, result.Aggregate = state, state
+		return result
 	}
 	state.Status = gatewayschema.CapabilityStatusSupported
 	state.ErrorClass = ""
-	return state
+	result.Create = state
+	result.Resume = state
+	result.Cancel = state
+	if !probeBackgroundResume(ctx, client, endpoint, input) {
+		result.Resume.Status = gatewayschema.CapabilityStatusError
+		result.Resume.ErrorClass = "background_resume_failed"
+	}
+	if !probeBackgroundCancel(ctx, client, endpoint, input) {
+		result.Cancel.Status = gatewayschema.CapabilityStatusError
+		result.Cancel.ErrorClass = "background_cancel_failed"
+	}
+	result.Aggregate = state
+	if result.Resume.Status != gatewayschema.CapabilityStatusSupported || result.Cancel.Status != gatewayschema.CapabilityStatusSupported {
+		result.Aggregate.Status = gatewayschema.CapabilityStatusError
+		result.Aggregate.ErrorClass = "background_lifecycle_incomplete"
+	}
+	return result
+}
+
+func classifyBackgroundCapabilityFailure(raw []byte, status int, err error) string {
+	if err != nil {
+		return gatewayschema.CapabilityStatusError
+	}
+	class := responseErrorClass(raw, status)
+	if status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status == http.StatusNotImplemented || strings.Contains(class, "unsupported") {
+		return gatewayschema.CapabilityStatusUnsupported
+	}
+	return gatewayschema.CapabilityStatusError
 }
 
 func probeBackgroundResume(ctx context.Context, client *http.Client, endpoint string, input ProbeInput) bool {

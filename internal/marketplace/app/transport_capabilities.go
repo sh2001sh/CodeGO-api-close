@@ -21,6 +21,7 @@ const (
 	marketplaceCapabilityProbeTimeout = 4 * time.Minute
 	marketplaceCapabilityMaxModels    = 4
 	marketplaceCapabilityMaxAge       = 24 * time.Hour
+	marketplaceCapabilityRetryDelay   = 15 * time.Minute
 )
 
 var (
@@ -79,6 +80,9 @@ func probeAndPersistMarketplaceCapabilities(ctx context.Context, channelID strin
 	capabilities := gatewayschema.ResponsesCapabilities{
 		WebSocket:        result.WebSocket,
 		NativeBackground: result.NativeBackground,
+		BackgroundCreate: result.BackgroundCreate,
+		BackgroundResume: result.BackgroundResume,
+		BackgroundCancel: result.BackgroundCancel,
 	}
 	raw, err := platformencoding.Marshal(capabilities)
 	if err != nil {
@@ -88,7 +92,23 @@ func probeAndPersistMarketplaceCapabilities(ctx context.Context, channelID strin
 	if err := platformdb.DB.Model(&channel).Update("transport_capabilities", channel.TransportCapabilities).Error; err != nil {
 		return err
 	}
-	return syncMarketplaceCapabilitiesToInternal(&channel, capabilities)
+	if err := syncMarketplaceCapabilitiesToInternal(&channel, capabilities); err != nil {
+		return err
+	}
+	if marketplaceCapabilitiesHaveTransientFailure(capabilities) {
+		time.AfterFunc(marketplaceCapabilityRetryDelay, func() {
+			scheduleMarketplaceCapabilityProbe(channelID)
+		})
+	}
+	return nil
+}
+
+func marketplaceCapabilitiesHaveTransientFailure(capabilities gatewayschema.ResponsesCapabilities) bool {
+	return gatewaycapability.IsTransientProbeFailure(capabilities.WebSocket) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.NativeBackground) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCreate) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundResume) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCancel)
 }
 
 func markMarketplaceCapabilitiesPending(channel *marketplaceschema.Channel) {
@@ -167,9 +187,15 @@ func marketplaceCapabilitiesNeedProbe(raw string, now time.Time) bool {
 		return true
 	}
 	capabilities := decodeMarketplaceCapabilities(raw)
-	states := []gatewayschema.CapabilityProbeState{capabilities.WebSocket, capabilities.NativeBackground}
+	states := []gatewayschema.CapabilityProbeState{capabilities.WebSocket, capabilities.NativeBackground, capabilities.BackgroundCreate, capabilities.BackgroundResume, capabilities.BackgroundCancel}
+	if capabilities.BackgroundCreate.Status == "" && capabilities.BackgroundResume.Status == "" && capabilities.BackgroundCancel.Status == "" {
+		states = states[:2]
+	}
 	for _, state := range states {
 		if state.Status == "" || state.Status == gatewayschema.CapabilityStatusUnknown || state.Status == gatewayschema.CapabilityStatusPending {
+			return true
+		}
+		if gatewaycapability.IsTransientProbeFailure(state) {
 			return true
 		}
 		if state.CheckedAt <= 0 || now.Sub(time.Unix(state.CheckedAt, 0)) >= marketplaceCapabilityMaxAge {

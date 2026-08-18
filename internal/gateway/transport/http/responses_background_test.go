@@ -70,6 +70,47 @@ func TestResponsesBackgroundCreatePersistsEncryptedPinnedJob(t *testing.T) {
 	require.EqualValues(t, 1, count)
 }
 
+func TestResponsesBackgroundCreateUsesNativeCapabilityForSelectedKey(t *testing.T) {
+	db := setupResponsesBackgroundTestDB(t)
+	baseURL := "https://upstream.example/v1"
+	supported := gatewayschema.CapabilityProbeState{
+		Status: gatewayschema.CapabilityStatusSupported, Model: "gpt-5", ProbeKeyIdx: 0,
+	}
+	channel := &gatewayschema.Channel{
+		Id: 44, Type: constant.ChannelTypeOpenAI, Key: "key", Models: "gpt-5", BaseURL: &baseURL,
+		ChannelInfo: gatewayschema.ChannelInfo{ResponsesCapabilities: gatewayschema.ResponsesCapabilities{
+			NativeBackground: supported, BackgroundCreate: supported, BackgroundResume: supported, BackgroundCancel: supported,
+		}},
+	}
+	require.NoError(t, db.Create(channel).Error)
+	originalEnqueue := enqueueResponsesBackgroundJob
+	queued := ""
+	enqueueResponsesBackgroundJob = func(jobID string) { queued = jobID }
+	t.Cleanup(func() { enqueueResponsesBackgroundJob = originalEnqueue })
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5","input":"hello","background":true}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("Authorization", "Bearer sk-test")
+	httpctx.SetContextKey(c, constant.ContextKeyUserId, 11)
+	httpctx.SetContextKey(c, constant.ContextKeyTokenId, 22)
+	httpctx.SetContextKey(c, constant.ContextKeyChannelId, 44)
+	httpctx.SetContextKey(c, constant.ContextKeyChannelMultiKeyIndex, 0)
+
+	ResponsesCreate(c)
+	defer platformhttpx.CleanupBodyStorage(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	job, err := gatewaystore.LoadResponsesBackgroundJob(queued)
+	require.NoError(t, err)
+	require.True(t, job.NativeBackground)
+	raw, err := platformsecurity.DecryptSecret(job.RequestCiphertext)
+	require.NoError(t, err)
+	var execution map[string]any
+	require.NoError(t, platformencoding.Unmarshal([]byte(raw), &execution))
+	require.Equal(t, true, execution["background"])
+}
+
 func TestResponsesBackgroundPreviousResponseUsesUpstreamIDAndPinnedRoute(t *testing.T) {
 	setupResponsesBackgroundTestDB(t)
 	previous := &gatewayschema.ResponsesBackgroundJob{
@@ -272,6 +313,6 @@ func setupResponsesBackgroundTestDB(t *testing.T) *gorm.DB {
 	platformdb.DB = db
 	platformdb.UsingSQLite = true
 	platformdb.UsingPostgreSQL = false
-	require.NoError(t, db.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{}))
+	require.NoError(t, db.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{}, &gatewayschema.Channel{}))
 	return db
 }

@@ -31,8 +31,9 @@ func loadOfficialAutoRouteItems(ownerUserID int, selected map[string]int) []Auto
 			SystemDisplayName: groupName, SourceLabel: description,
 			LifecycleStatus: marketplacedomain.LifecycleActive,
 			Multiplier:      multiplier, Availability: 100,
-			RouteScore: round2(math.Max(multiplier, 0.000001)),
-			Models:     models, Selected: isSelected, Priority: priority,
+			LatestRequestStatus: marketplacedomain.LifecycleActive,
+			RouteScore:          round2(math.Max(multiplier, 0.000001)),
+			Models:              models, Selected: isSelected, Priority: priority,
 		})
 	}
 	return items

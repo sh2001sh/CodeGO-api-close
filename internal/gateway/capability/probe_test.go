@@ -70,3 +70,11 @@ func TestProbeResponsesTransportsForCandidatesTriesNextModel(t *testing.T) {
 	require.Equal(t, gatewayschema.CapabilityStatusUnsupported, result.WebSocket.Status)
 	require.Equal(t, gatewayschema.CapabilityStatusUnsupported, result.NativeBackground.Status)
 }
+
+func TestBackgroundTransientFailureIsNotMarkedUnsupported(t *testing.T) {
+	state := gatewayschema.CapabilityProbeState{
+		Status: gatewayschema.CapabilityStatusError, HTTPStatus: http.StatusGatewayTimeout,
+		ErrorClass: "background_resume_failed",
+	}
+	require.True(t, IsTransientProbeFailure(state))
+}

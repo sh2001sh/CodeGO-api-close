@@ -60,7 +60,9 @@ func TestSessionReusesConnectionAndNormalizesRequests(t *testing.T) {
 	require.EqualValues(t, 1, connectionCount.Load())
 }
 
-func TestSessionDisablesNativeAfterUpstreamClose(t *testing.T) {
+func TestSessionDoesNotReplayAfterCreateFrameWasWritten(t *testing.T) {
+	var connectionCount atomic.Int32
+	var requestCount atomic.Int32
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		conn, err := upgrader.Upgrade(writer, request, nil)
@@ -68,7 +70,12 @@ func TestSessionDisablesNativeAfterUpstreamClose(t *testing.T) {
 			return
 		}
 		defer conn.Close()
-		_, _, _ = conn.ReadMessage()
+		connectionCount.Add(1)
+		_, _, readErr := conn.ReadMessage()
+		if readErr != nil {
+			return
+		}
+		requestCount.Add(1)
 		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1013, "try again later"), time.Now().Add(time.Second))
 	}))
 	defer server.Close()
@@ -78,6 +85,95 @@ func TestSessionDisablesNativeAfterUpstreamClose(t *testing.T) {
 	response, err := session.Do(context.Background(), server.URL+"/v1/responses", http.Header{}, strings.NewReader(`{"model":"gpt-5","stream":true}`))
 	require.NoError(t, err)
 	_, err = io.ReadAll(response.Body)
+	require.Error(t, err)
+	require.EqualValues(t, 1, connectionCount.Load())
+	require.EqualValues(t, 1, requestCount.Load())
+	require.True(t, session.NativeEnabled())
+}
+
+func TestSessionDoesNotReplayAfterFirstUpstreamEvent(t *testing.T) {
+	var connectionCount atomic.Int32
+	var requestCount atomic.Int32
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		conn, err := upgrader.Upgrade(writer, request, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		connectionCount.Add(1)
+		_, _, readErr := conn.ReadMessage()
+		if readErr != nil {
+			return
+		}
+		requestCount.Add(1)
+		_ = conn.WriteJSON(map[string]any{
+			"type": "response.created", "response": map[string]any{"id": "resp_partial"},
+		})
+		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1013, "try again later"), time.Now().Add(time.Second))
+	}))
+	defer server.Close()
+
+	session := NewSession()
+	require.NoError(t, session.BindRoute(10, 0, true))
+	response, err := session.Do(context.Background(), server.URL+"/v1/responses", http.Header{}, strings.NewReader(`{"model":"gpt-5","stream":true}`))
+	require.NoError(t, err)
+	body, err := io.ReadAll(response.Body)
+	require.Error(t, err)
+	require.Contains(t, string(body), "response.created")
+	require.EqualValues(t, 1, connectionCount.Load())
+	require.EqualValues(t, 1, requestCount.Load())
+	require.True(t, session.NativeEnabled())
+}
+
+func TestSessionRejectsReplayAfterPartialClose(t *testing.T) {
+	var connectionCount atomic.Int32
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		conn, err := upgrader.Upgrade(writer, request, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		connection := connectionCount.Add(1)
+		if _, _, err := conn.ReadMessage(); err != nil {
+			return
+		}
+		_ = conn.WriteJSON(map[string]any{
+			"type": "response.created", "response": map[string]any{"id": "resp_turn"},
+		})
+		if connection == 1 {
+			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1013, "try again later"), time.Now().Add(time.Second))
+			return
+		}
+		_ = conn.WriteJSON(map[string]any{
+			"type": "response.completed", "response": map[string]any{"id": "resp_turn", "output": []any{}},
+		})
+	}))
+	defer server.Close()
+
+	session := NewSession()
+	require.NoError(t, session.BindRoute(12, 0, true))
+	first, err := session.Do(context.Background(), server.URL+"/v1/responses", http.Header{}, strings.NewReader(`{"model":"gpt-5"}`))
+	require.NoError(t, err)
+	_, err = io.ReadAll(first.Body)
+	require.Error(t, err)
+	_, err = session.Do(context.Background(), server.URL+"/v1/responses", http.Header{}, strings.NewReader(`{"model":"gpt-5"}`))
+	require.ErrorIs(t, err, ErrResponseInFlight)
+	require.EqualValues(t, 1, connectionCount.Load())
+	require.True(t, session.ReplayForbidden())
+	require.True(t, session.NativeEnabled())
+}
+
+func TestSessionDisablesNativeAfterAuthenticationHandshakeFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	session := NewSession()
+	require.NoError(t, session.BindRoute(11, 0, true))
+	_, err := session.Do(context.Background(), server.URL+"/v1/responses", http.Header{}, strings.NewReader(`{"model":"gpt-5","stream":true}`))
 	require.Error(t, err)
 	require.False(t, session.NativeEnabled())
 }

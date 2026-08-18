@@ -19,20 +19,31 @@ const (
 // EnrichUsageLogMarketplaceIdentity adds public marketplace identifiers while
 // preserving the internal routing group stored on the audit log itself.
 func EnrichUsageLogMarketplaceIdentity(logs []*auditschema.Log) error {
-	groupIDs, parsed := collectUsageLogMarketplaceGroups(logs)
-	if len(groupIDs) == 0 {
+	groupIDs, internalNames, parsed := collectUsageLogMarketplaceGroups(logs)
+	if len(groupIDs) == 0 && len(internalNames) == 0 {
 		return nil
 	}
 
 	var groups []marketplaceschema.Group
-	if err := platformdb.DB.Select("id", "channel_id", "system_display_name", "public_slug", "multiplier").
-		Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+	query := platformdb.DB.Select("id", "internal_group_name", "channel_id", "system_display_name", "public_slug", "multiplier")
+	if len(groupIDs) > 0 && len(internalNames) > 0 {
+		query = query.Where("id IN ? OR internal_group_name IN ?", groupIDs, internalNames)
+	} else if len(groupIDs) > 0 {
+		query = query.Where("id IN ?", groupIDs)
+	} else {
+		query = query.Where("internal_group_name IN ?", internalNames)
+	}
+	if err := query.Find(&groups).Error; err != nil {
 		return err
 	}
 	channelIDs := make([]string, 0, len(groups))
 	groupByID := make(map[string]marketplaceschema.Group, len(groups))
+	groupByInternalName := make(map[string]marketplaceschema.Group, len(groups))
 	for _, group := range groups {
 		groupByID[group.ID] = group
+		if strings.TrimSpace(group.InternalGroupName) != "" {
+			groupByInternalName[group.InternalGroupName] = group
+		}
 		channelIDs = append(channelIDs, group.ChannelID)
 	}
 
@@ -55,8 +66,12 @@ func EnrichUsageLogMarketplaceIdentity(logs []*auditschema.Log) error {
 		groupID, _ := parsed[index][logMarketplaceGroupIDKey].(string)
 		group, exists := groupByID[strings.TrimSpace(groupID)]
 		if !exists {
+			group, exists = groupByInternalName[strings.TrimSpace(log.Group)]
+		}
+		if !exists {
 			continue
 		}
+		parsed[index][logMarketplaceGroupIDKey] = group.ID
 		displayName := group.SystemDisplayName
 		if channel, exists := channelByID[group.ChannelID]; exists {
 			displayName = marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID)
@@ -73,29 +88,40 @@ func EnrichUsageLogMarketplaceIdentity(logs []*auditschema.Log) error {
 	return nil
 }
 
-func collectUsageLogMarketplaceGroups(logs []*auditschema.Log) ([]string, []map[string]interface{}) {
+func collectUsageLogMarketplaceGroups(logs []*auditschema.Log) ([]string, []string, []map[string]interface{}) {
 	parsed := make([]map[string]interface{}, len(logs))
-	seen := make(map[string]struct{})
+	seenIDs := make(map[string]struct{})
+	seenInternalNames := make(map[string]struct{})
 	groupIDs := make([]string, 0)
+	internalNames := make([]string, 0)
 	for index, log := range logs {
-		if log == nil || strings.TrimSpace(log.Other) == "" {
+		if log == nil {
 			continue
 		}
 		var other map[string]interface{}
-		if json.Unmarshal([]byte(log.Other), &other) != nil {
-			continue
+		if strings.TrimSpace(log.Other) == "" {
+			other = make(map[string]interface{})
+		} else {
+			if json.Unmarshal([]byte(log.Other), &other) != nil {
+				continue
+			}
 		}
 		parsed[index] = other
 		groupID, _ := other[logMarketplaceGroupIDKey].(string)
 		groupID = strings.TrimSpace(groupID)
-		if groupID == "" {
-			continue
+		if groupID != "" {
+			if _, exists := seenIDs[groupID]; !exists {
+				seenIDs[groupID] = struct{}{}
+				groupIDs = append(groupIDs, groupID)
+			}
 		}
-		if _, exists := seen[groupID]; exists {
-			continue
+		internalName := strings.TrimSpace(log.Group)
+		if internalName != "" {
+			if _, exists := seenInternalNames[internalName]; !exists {
+				seenInternalNames[internalName] = struct{}{}
+				internalNames = append(internalNames, internalName)
+			}
 		}
-		seen[groupID] = struct{}{}
-		groupIDs = append(groupIDs, groupID)
 	}
-	return groupIDs, parsed
+	return groupIDs, internalNames, parsed
 }

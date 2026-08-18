@@ -56,7 +56,11 @@ const (
 	ContextKeyAutoGroupRetryIndex ContextKey = "auto_group_retry_index"
 	// ContextKeyRetryFallbackChannelID keeps the first failed channel available
 	// for one retry when its original group has no alternate healthy route.
-	ContextKeyRetryFallbackChannelID ContextKey = "retry_fallback_channel_id"
+	ContextKeyRetryFallbackChannelID   ContextKey = "retry_fallback_channel_id"
+	ContextKeyNativeBackground         ContextKey = "responses_native_background"
+	ContextKeyBackgroundResumeID       ContextKey = "responses_background_resume_id"
+	ContextKeyBackgroundResumeCursor   ContextKey = "responses_background_resume_cursor"
+	ContextKeyResponsesReplayForbidden ContextKey = "responses_replay_forbidden"
 
 	/* user related keys */
 	ContextKeyUserId      ContextKey = "id"

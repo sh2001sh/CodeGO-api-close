@@ -1,8 +1,9 @@
 package app
 
 import (
-	"strconv"
 	"strings"
+
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 )
 
 var marketplaceSourcePrefixes = map[string]string{
@@ -59,6 +60,6 @@ func marketplaceDisplayName(sourceLabel string, multiplier float64, channelID st
 	if !ok {
 		label = "来源待审核"
 	}
-	multiplierText := strconv.FormatFloat(multiplier, 'f', -1, 64)
+	multiplierText := marketplacedomain.FormatMultiplier(multiplier)
 	return label + "-" + multiplierText + "x-" + strings.TrimSpace(channelID)
 }

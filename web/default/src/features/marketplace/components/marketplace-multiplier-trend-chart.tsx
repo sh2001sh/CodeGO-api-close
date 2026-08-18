@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Activity, RefreshCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
@@ -34,10 +35,15 @@ export function MultiplierTrendChart(props: MultiplierTrendChartProps) {
 }
 
 function TrendLineChart(props: MultiplierTrendChartProps) {
+  const yDomain = useMemo(() => buildYAxisDomain(props.rows, props.visibleSources), [
+    props.rows,
+    props.visibleSources,
+  ])
+
   return (
     <ChartContainer
       config={props.config}
-      className='aspect-auto h-72 w-full sm:h-80'
+      className='aspect-auto h-[26rem] w-full sm:h-[32rem]'
     >
       <LineChart
         data={props.rows}
@@ -58,7 +64,8 @@ function TrendLineChart(props: MultiplierTrendChartProps) {
           tickLine={false}
           axisLine={false}
           width={54}
-          domain={['auto', 'auto']}
+          domain={yDomain}
+          allowDataOverflow={false}
         />
         <Tooltip
           content={(tooltipProps) => (
@@ -90,10 +97,32 @@ function TrendLineChart(props: MultiplierTrendChartProps) {
   )
 }
 
+function buildYAxisDomain(rows: TrendChartRow[], visibleSources: string[]) {
+  const values = rows.flatMap((row) =>
+    visibleSources.flatMap((source) => {
+      const value = row[source]
+      return typeof value === 'number' && Number.isFinite(value) ? [value] : []
+    })
+  )
+
+  if (values.length === 0) return ['auto', 'auto'] as const
+
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const span = max - min
+  const center = (min + max) / 2
+  // Keep a readable vertical scale even when sources differ by only a few hundredths.
+  const padding = Math.max(span * 0.18, Math.abs(center) * 0.04, 0.05)
+  const lower = Math.max(0, min - padding)
+  const upper = max + padding
+
+  return [lower, upper] as const
+}
+
 function TrendChartError(props: { onRetry: () => void }) {
   const { t } = useTranslation()
   return (
-    <div className='border-border bg-muted/20 flex h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed text-center'>
+    <div className='border-border bg-muted/20 flex h-[26rem] flex-col items-center justify-center gap-3 rounded-md border border-dashed text-center sm:h-[32rem]'>
       <Activity className='text-muted-foreground size-5' />
       <p className='text-muted-foreground text-sm'>{t('倍率走势加载失败')}</p>
       <Button size='sm' variant='outline' onClick={props.onRetry}>
@@ -107,7 +136,7 @@ function TrendChartError(props: { onRetry: () => void }) {
 function TrendChartEmpty() {
   const { t } = useTranslation()
   return (
-    <div className='border-border bg-muted/20 flex h-72 items-center justify-center rounded-md border border-dashed px-6 text-center'>
+    <div className='border-border bg-muted/20 flex h-[26rem] items-center justify-center rounded-md border border-dashed px-6 text-center sm:h-[32rem]'>
       <p className='text-muted-foreground max-w-lg text-sm leading-6'>
         {t('暂无倍率历史，市场刷新后将从当前时间开始记录。')}
       </p>

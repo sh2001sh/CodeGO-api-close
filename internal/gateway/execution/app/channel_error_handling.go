@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
+	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
@@ -30,11 +31,24 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	gatewayruntime.FinishRouteDecisionAttempt(c, false, err.StatusCode, string(failureClass), string(gatewaystream.AttemptStageFromContext(c)))
 	localMaxDuration := isLocalStreamMaxDuration(c)
 	clientGone := c.GetBool(string(constant.ContextKeyClientGone))
+	if session := responsesws.FromContext(c); session != nil && session.ReplayForbidden() {
+		c.Set(string(constant.ContextKeyResponsesReplayForbidden), true)
+	}
 	if err.StatusCode == http.StatusTooManyRequests && !clientGone {
 		c.Set(string(constant.ContextKeyRateLimitRetry), true)
 	}
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
 	credentialRejected := failureClass == upstreamFailureCredentialRejected
+	profile, hasProfile := gatewayruntime.RequestProfileFromContext(c)
+	upstreamStateBound := hasProfile && profile.MigrationCapability == gatewayruntime.MigrationUpstreamStateBound
+	cacheAffinity524 := isResponsesProxyTimeout(err) && hasProfile && profile.MigrationCapability == gatewayruntime.MigrationCacheAffinity
+	if cacheAffinity524 && !clientGone {
+		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+		allowMultiKeyMigrationAfterFailure(c)
+	}
+	if !clientGone && !upstreamStateBound && gatewayruntime.HasRemainingCrossGroupRoute(c) && isRetryableChannelFailure(err) {
+		gatewayruntime.AllowRetryAfterChannelAffinityFailure(c)
+	}
 	preserveOnlyRoute := shouldPreserveOnlyRoute(c, channelError.ChannelId, modelName, modelScopedFailure, credentialRejected, err)
 	retryFallbackChannel := shouldRetryCurrentChannelIfNoAlternative(c, err) ||
 		shouldRetryPreservedOnlyRoute(c, preserveOnlyRoute)
@@ -42,20 +56,23 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, channelError.ChannelId)
 		gatewayruntime.AllowRetryAfterChannelAffinityFailure(c)
 	}
-	if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected && !preserveOnlyRoute {
+	if !localMaxDuration && !clientGone && !upstreamStateBound && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected && !preserveOnlyRoute {
 		// A retry must leave the complete upstream fault domain. Channel IDs
 		// can represent different keys on the same provider host.
 		gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
-	if modelScopedFailure && modelName != "" && !clientGone {
+	if modelScopedFailure && !preserveOnlyRoute && modelName != "" && !clientGone {
 		group := selectedChannelGroup(c)
 		alternative, lookupErr := hasAlternativeSelectableRoute(channelError.ChannelId, group, modelName)
 		if lookupErr != nil {
 			platformobservability.SysError(fmt.Sprintf("检查通道「%s」（#%d）的模型 %s 备用路由失败：%v", channelError.ChannelName, channelError.ChannelId, modelName, lookupErr))
-		} else if alternative {
+		}
+		alternative = alternative || gatewayruntime.HasRemainingCrossGroupRoute(c)
+		if alternative {
 			cooling := coolModelScopedUpstreamFailure(channelError.ChannelId, modelName, c.GetString(constant.RequestIdKey), err, gatewayruntime.RequestTypeFromContext(c))
 			c.Set("model_unavailable_with_alternative", true)
+			gatewayruntime.AllowRetryAfterChannelAffinityFailure(c)
 			// A prompt-cache affinity is valuable only while its selected route is
 			// usable. Keeping it after a model-scoped rejection makes Codex return
 			// the same 503 without ever reaching its configured fallback routes.
@@ -65,7 +82,7 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			} else {
 				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 第 %d 次连续失败，保留试错空间", channelError.ChannelName, channelError.ChannelId, modelName, channelHealthFailureCount(c, channelError.ChannelId, modelName)))
 			}
-		} else {
+		} else if lookupErr == nil {
 			platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 是唯一可用路由，保留渠道与模型路由", channelError.ChannelName, channelError.ChannelId, modelName))
 		}
 	} else if !clientGone && !credentialRejected && !preserveOnlyRoute && ShouldDisableChannel(err) && channelError.AutoBan {
@@ -183,8 +200,17 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 }
 
 func shouldPreserveOnlyRoute(c *gin.Context, channelID int, modelName string, modelScopedFailure bool, credentialRejected bool, err *types.NewAPIError) bool {
-	if c == nil || err == nil || channelID <= 0 || modelName == "" || modelScopedFailure || credentialRejected ||
+	if c == nil || err == nil || channelID <= 0 || modelName == "" || credentialRejected ||
 		c.GetBool(string(constant.ContextKeyClientGone)) || !isRetryableChannelFailure(err) {
+		return false
+	}
+	if profile, found := gatewayruntime.RequestProfileFromContext(c); found && profile.MigrationCapability == gatewayruntime.MigrationUpstreamStateBound {
+		return true
+	}
+	if modelScopedFailure {
+		return false
+	}
+	if gatewayruntime.HasRemainingCrossGroupRoute(c) {
 		return false
 	}
 	alternative, lookupErr := hasAlternativeSelectableRoute(channelID, selectedChannelGroup(c), modelName)
@@ -202,6 +228,9 @@ const currentChannelRetryMaxElapsed = 3 * time.Second
 // one final retry by request policy; other transport failures must be fast.
 func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIError) bool {
 	if c == nil || err == nil || c.GetBool(string(constant.ContextKeyClientGone)) {
+		return false
+	}
+	if gatewayruntime.HasRemainingCrossGroupRoute(c) {
 		return false
 	}
 	// Responses lifecycle events are buffered until semantic output. An
@@ -270,6 +299,13 @@ func recordChannelTransientFailure(c *gin.Context, channelID int, modelName stri
 
 func isGatewayFailureStatus(statusCode int) bool {
 	return statusCode == http.StatusBadGateway || statusCode == http.StatusGatewayTimeout || statusCode == 524
+}
+
+func isResponsesProxyTimeout(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return err.StatusCode == 524 || (err.StatusCode == http.StatusGatewayTimeout && err.GetErrorCode() == types.ErrorCodeChannelResponseTimeExceeded)
 }
 
 func retryableFailureCooldown(c *gin.Context, err *types.NewAPIError) time.Duration {

@@ -6,6 +6,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -55,10 +56,12 @@ func TestHasAlternativeSelectableRouteHonorsRoutePoolMembership(t *testing.T) {
 	originalDB := platformdb.DB
 	originalSQLite := platformdb.UsingSQLite
 	originalPostgreSQL := platformdb.UsingPostgreSQL
+	originalMemoryCache := platformconfig.MemoryCacheEnabled
 	t.Cleanup(func() {
 		platformdb.DB = originalDB
 		platformdb.UsingSQLite = originalSQLite
 		platformdb.UsingPostgreSQL = originalPostgreSQL
+		platformconfig.MemoryCacheEnabled = originalMemoryCache
 		InvalidateRoutePoolCache()
 	})
 
@@ -73,6 +76,7 @@ func TestHasAlternativeSelectableRouteHonorsRoutePoolMembership(t *testing.T) {
 	platformdb.DB = db
 	platformdb.UsingSQLite = true
 	platformdb.UsingPostgreSQL = false
+	platformconfig.MemoryCacheEnabled = false
 	InvalidateRoutePoolCache()
 
 	priority := int64(1)
@@ -94,6 +98,8 @@ func TestHasAlternativeSelectableRouteHonorsRoutePoolMembership(t *testing.T) {
 	legacyAlternative, err := HasAlternativeSelectableRoute(1, "default", "gpt-test")
 	require.NoError(t, err)
 	require.True(t, legacyAlternative)
+	require.True(t, HasEnabledChannelForGroupModel("default", "gpt-test"))
+	require.False(t, HasEnabledChannelForGroupModel("default", "missing-model"))
 
 	pool := gatewayschema.RoutePool{Name: "default", Group: "default", Enabled: true}
 	require.NoError(t, db.Create(&pool).Error)

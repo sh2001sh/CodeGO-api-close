@@ -78,7 +78,7 @@ func TestGPT56MappingProbeReadsReportedModel(t *testing.T) {
 	require.Equal(t, "gpt-5.6-sol", reported)
 }
 
-func TestGPT56MappingProbeRequiresAllSamplesToMatch(t *testing.T) {
+func TestGPT56MappingProbeTreatsSingleMismatchAsInsufficientEvidence(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		requests++
@@ -97,13 +97,58 @@ func TestGPT56MappingProbeRequiresAllSamplesToMatch(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, policy.sampleCount(), requests)
-	require.Equal(t, GPT56MappingStatusMismatch, result.Status)
+	require.Equal(t, GPT56MappingStatusInsufficientEvidence, result.Status)
 	require.Equal(t, policy.sampleCount()-1, result.MatchedSamples)
 	require.Equal(t, policy.sampleCount(), result.SampleCount)
 	require.Len(t, result.Samples, policy.sampleCount())
 	require.Equal(t, GPT56MappingStatusMismatch, result.Samples[2].Status)
 	require.Equal(t, "gpt-5.6-luna", result.Samples[2].ReportedModel)
 	require.Equal(t, "exact_reply", result.Samples[2].Variant)
+}
+
+func TestGPT56MappingProbeRejectsMajorityMismatch(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		reported := "gpt-5.6-sol"
+		if requests <= 5 {
+			reported = "gpt-5.6-luna"
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"model":"` + reported + `","choices":[{"message":{"content":"OK"}}]}`))
+	}))
+	defer server.Close()
+
+	policy := gpt56Policy(GPT56MappingLevelDailyLight)
+	result, err := probeGPT56MappingModelWithProgress(
+		"openai_compatible", server.URL, "test-key", "gpt-5.6-sol", policy, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, GPT56MappingStatusMismatch, result.Status)
+	require.Equal(t, 5, requests)
+	require.Equal(t, 0, result.MatchedSamples)
+}
+
+func TestGPT56MappingProbeAllowsMissingModelWhenNoWrongModelIsReported(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		writer.Header().Set("Content-Type", "application/json")
+		if requests == 3 {
+			_, _ = writer.Write([]byte(`{"choices":[{"message":{"content":"OK"}}]}`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{"model":"gpt-5.6-sol","choices":[{"message":{"content":"OK"}}]}`))
+	}))
+	defer server.Close()
+
+	policy := gpt56Policy(GPT56MappingLevelDailyLight)
+	result, err := probeGPT56MappingModelWithProgress(
+		"openai_compatible", server.URL, "test-key", "gpt-5.6-sol", policy, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, GPT56MappingStatusMatched, result.Status)
+	require.Equal(t, policy.sampleCount()-1, result.MatchedSamples)
 }
 
 func TestGPT56MappingProbeReportsEachSampleProgress(t *testing.T) {

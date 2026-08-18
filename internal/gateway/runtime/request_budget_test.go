@@ -98,3 +98,14 @@ func TestSpecificChannelDoesNotUseFastResponsesRetryWindow(t *testing.T) {
 
 	require.Zero(t, RetryableResponsesAttemptTimeout(context))
 }
+
+func TestRemainingCrossGroupRouteState(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+	require.False(t, HasRemainingCrossGroupRoute(context))
+	MarkRemainingCrossGroupRoutes(context, 2)
+	require.True(t, HasRemainingCrossGroupRoute(context))
+	MarkRemainingCrossGroupRoutes(context, 0)
+	require.False(t, HasRemainingCrossGroupRoute(context))
+}

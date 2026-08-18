@@ -10,6 +10,7 @@ import (
 )
 
 const requestMultiKeyUsageContextKey = "request_multi_key_usage"
+const requestAllowMultiKeyMigrationContextKey = "request_allow_multi_key_migration"
 
 type requestMultiKeyUsage map[int]map[int]struct{}
 
@@ -18,7 +19,7 @@ func selectChannelKeyForRequest(c *gin.Context, channel *gatewayschema.Channel) 
 		key, apiErr := gatewaystore.GetEnabledChannelKeyByIndex(channel, pinnedIndex)
 		return key, pinnedIndex, apiErr
 	}
-	if c != nil && channel.ChannelInfo.IsMultiKey && gatewayruntime.IsSingleChannelRoute(c) {
+	if c != nil && channel.ChannelInfo.IsMultiKey && gatewayruntime.IsSingleChannelRoute(c) && !c.GetBool(requestAllowMultiKeyMigrationContextKey) {
 		if index, found := soleUsedKeyIndex(multiKeyUsageFromContext(c)[channel.Id]); found {
 			key, apiErr := gatewaystore.GetEnabledChannelKeyByIndex(channel, index)
 			return key, index, apiErr
@@ -44,6 +45,12 @@ func selectChannelKeyForRequest(c *gin.Context, channel *gatewayschema.Channel) 
 	}
 	usedIndexes[index] = struct{}{}
 	return key, index, nil
+}
+
+func allowMultiKeyMigrationAfterFailure(c *gin.Context) {
+	if c != nil {
+		c.Set(requestAllowMultiKeyMigrationContextKey, true)
+	}
 }
 
 func soleUsedKeyIndex(indexes map[int]struct{}) (int, bool) {

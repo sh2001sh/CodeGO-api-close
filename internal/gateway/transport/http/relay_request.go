@@ -13,6 +13,7 @@ import (
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
 	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
+	routepin "github.com/sh2001sh/new-api/internal/gateway/routepin"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -148,7 +149,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		relaycommon.ExpandRequestBudget(requestBudget, len(bindings))
 	}
-	if responsesws.FromContext(c) != nil {
+	if session := responsesws.FromContext(c); session != nil && session.NativeEnabled() {
 		retryTimes = 1
 		relaycommon.ExpandRequestBudget(requestBudget, 2)
 	}
@@ -362,6 +363,12 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, httpctx.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
 			newAPIError,
 		)
+		if c.GetBool("responses_ephemeral_websocket") {
+			if session := responsesws.FromContext(c); session != nil {
+				session.ResetRoute()
+			}
+			routepin.Clear(c)
+		}
 
 		if !shouldRetry(c, newAPIError, retryTimes-retryParam.GetRetry()) {
 			break

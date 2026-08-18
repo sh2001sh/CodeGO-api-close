@@ -4,14 +4,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	routepin "github.com/sh2001sh/new-api/internal/gateway/routepin"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
@@ -28,6 +32,8 @@ const (
 	responsesBackgroundScanInterval = 2 * time.Second
 	responsesBackgroundJobTimeout   = 2 * time.Hour
 	responsesBackgroundWorkerCount  = 4
+	responsesBackgroundLease        = 30 * time.Second
+	responsesBackgroundHeartbeat    = 10 * time.Second
 )
 
 var (
@@ -36,8 +42,8 @@ var (
 	enqueueResponsesBackgroundJob = queueResponsesBackgroundJob
 )
 
-// StartResponsesBackgroundWorker resumes only queued jobs. Jobs already
-// claimed as in_progress are deliberately not replayed after a process crash.
+// StartResponsesBackgroundWorker claims queued work and resumes native jobs
+// whose previous process stopped renewing its lease.
 func StartResponsesBackgroundWorker() {
 	responsesBackgroundWorkerOnce.Do(func() {
 		go func() {
@@ -57,7 +63,10 @@ func queueResponsesBackgroundJob(jobID string) {
 }
 
 func dispatchQueuedResponsesBackgroundJobs() {
-	jobs, err := gatewaystore.ListQueuedResponsesBackgroundJobs(responsesBackgroundWorkerCount * 2)
+	jobs, err := gatewaystore.ListRecoverableResponsesBackgroundJobs(
+		responsesBackgroundWorkerCount*2,
+		time.Now().UTC().Add(-responsesBackgroundLease),
+	)
 	if err != nil {
 		platformobservability.SysLog("failed to scan queued background responses: " + err.Error())
 		return
@@ -80,7 +89,7 @@ func dispatchResponsesBackgroundJob(jobID string) {
 
 func executeResponsesBackgroundJob(jobID string) {
 	now := time.Now().UTC()
-	claimed, err := gatewaystore.ClaimResponsesBackgroundJob(jobID, now)
+	claimed, err := gatewaystore.ClaimResponsesBackgroundJobWithLease(jobID, now, responsesBackgroundLease)
 	if err != nil || !claimed {
 		return
 	}
@@ -145,6 +154,13 @@ func buildResponsesBackgroundExecutionRouter(job *gatewayschema.ResponsesBackgro
 			}
 			c.Set(constant.RequestIdKey, job.ID)
 			c.Set(constant.TraceIdKey, job.ID)
+			if job.NativeBackground {
+				c.Set(string(constant.ContextKeyNativeBackground), true)
+				if job.UpstreamResponseID != "" {
+					c.Set(string(constant.ContextKeyBackgroundResumeID), job.UpstreamResponseID)
+					c.Set(string(constant.ContextKeyBackgroundResumeCursor), job.UpstreamSequence)
+				}
+			}
 			httpctx.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 			c.Next()
 		},
@@ -159,6 +175,8 @@ func buildResponsesBackgroundExecutionRouter(job *gatewayschema.ResponsesBackgro
 func monitorResponsesBackgroundCancel(ctx context.Context, jobID string, canceled *atomic.Bool, cancel context.CancelFunc, done <-chan struct{}) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	lastHeartbeat := time.Now()
+	var cancelRequestedAt time.Time
 	for {
 		select {
 		case <-done:
@@ -166,14 +184,100 @@ func monitorResponsesBackgroundCancel(ctx context.Context, jobID string, cancele
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if time.Since(lastHeartbeat) >= responsesBackgroundHeartbeat {
+				_ = gatewaystore.RenewResponsesBackgroundLease(jobID, time.Now().UTC())
+				lastHeartbeat = time.Now()
+			}
 			requested, err := gatewaystore.ResponsesBackgroundCancelRequested(jobID)
 			if err == nil && requested {
-				canceled.Store(true)
-				cancel()
-				return
+				if cancelRequestedAt.IsZero() {
+					cancelRequestedAt = time.Now()
+				}
+				job, loadErr := gatewaystore.LoadResponsesBackgroundJob(jobID)
+				if loadErr == nil && job.NativeBackground && job.UpstreamResponseID != "" {
+					if cancelErr := forwardNativeBackgroundCancel(ctx, job); cancelErr != nil {
+						platformobservability.SysLog(fmt.Sprintf("failed to cancel native background response: job_id=%s error=%v", jobID, cancelErr))
+					}
+					canceled.Store(true)
+					cancel()
+					return
+				}
+				if loadErr != nil || !job.NativeBackground || time.Since(cancelRequestedAt) >= 10*time.Second {
+					canceled.Store(true)
+					cancel()
+					return
+				}
 			}
 		}
 	}
+}
+
+func forwardNativeBackgroundCancel(parent context.Context, job *gatewayschema.ResponsesBackgroundJob) error {
+	if job == nil || job.ChannelID <= 0 || strings.TrimSpace(job.UpstreamResponseID) == "" {
+		return fmt.Errorf("background cancel route is incomplete")
+	}
+	channel, err := gatewaystore.LoadChannelByID(job.ChannelID, true)
+	if err != nil {
+		return err
+	}
+	key, apiErr := gatewaystore.GetEnabledChannelKeyByIndex(channel, job.KeyIndex)
+	if apiErr != nil {
+		return apiErr
+	}
+	endpoint, err := nativeBackgroundEndpoint(channel.GetBaseURL(), job.UpstreamResponseID)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"/cancel", strings.NewReader("{}"))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+key)
+	request.Header.Set("Content-Type", "application/json")
+	for name, value := range gatewaydomain.GetHeaderOverride(channel) {
+		request.Header.Set(name, fmt.Sprint(value))
+	}
+	setting := gatewaydomain.GetSettings(channel)
+	var client *http.Client
+	if setting.Proxy != "" {
+		client, err = platformhttpx.NewProxyHTTPClientWithResponseHeaderTimeout(setting.Proxy, 20*time.Second)
+	} else {
+		client = platformhttpx.GetHTTPClientWithResponseHeaderTimeout(20 * time.Second)
+	}
+	if err != nil {
+		return err
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("background cancel rejected with status %d", response.StatusCode)
+	}
+	return nil
+}
+
+func nativeBackgroundEndpoint(baseURL, responseID string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("invalid background channel base URL")
+	}
+	path := strings.TrimRight(parsed.Path, "/")
+	if !strings.HasSuffix(path, "/v1/responses") {
+		if strings.HasSuffix(path, "/v1") {
+			path += "/responses"
+		} else {
+			path += "/v1/responses"
+		}
+	}
+	parsed.Path = path + "/" + url.PathEscape(responseID)
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
 }
 
 func completeResponsesBackgroundFailure(job *gatewayschema.ResponsesBackgroundJob, executionErr error) {

@@ -11,7 +11,7 @@ func TestGetUsesUnifiedBlindBoxPoolForBothPaymentEntries(t *testing.T) {
 	require.Equal(t, 2.5, setting.UnitPrice)
 	require.Equal(t, 2.5, setting.BalanceBlindBoxPriceUSD)
 	require.Equal(t, setting.Tiers, setting.BalanceBlindBoxTiers)
-	require.InDelta(t, 0.29311, setting.Tiers[0].Probability, 0.000000001)
+	require.InDelta(t, 0.22, setting.Tiers[0].Probability, 0.000000001)
 	require.Equal(t, "500.00 统一额度", setting.Tiers[9].Name)
 	require.Equal(t, "再来一抽", setting.Tiers[10].Name)
 	require.Equal(t, "15 分钟 0.1 倍率卡", setting.Tiers[11].Name)
@@ -39,7 +39,7 @@ func TestGetMigratesKnownLegacyUnifiedPool(t *testing.T) {
 	Set(setting)
 
 	normalized := Get()
-	require.InDelta(t, 0.29311, normalized.BalanceBlindBoxTiers[0].Probability, 0.000000001)
+	require.InDelta(t, 0.22, normalized.BalanceBlindBoxTiers[0].Probability, 0.000000001)
 	require.InDelta(t, 0.000002272727, normalized.BalanceBlindBoxTiers[9].Probability, 0.000000001)
 }
 

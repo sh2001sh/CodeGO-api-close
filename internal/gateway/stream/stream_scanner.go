@@ -99,7 +99,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 		maxTimer = time.NewTimer(streamingMaxDuration)
 		defer maxTimer.Stop()
 	}
-	if adaptiveProgressTimeout > 0 {
+	if adaptiveProgressTimeout > 0 || adaptiveInitialTimeout > 0 {
 		progressNotify = make(chan struct{}, 1)
 		if adaptiveInitialTimeout > 0 {
 			progressTimer = time.NewTimer(adaptiveInitialTimeout)
@@ -310,6 +310,13 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 			monitoring = false
 		case <-progressNotify:
 			waitingForInitialProgress = false
+			if adaptiveProgressTimeout <= 0 {
+				if progressTimer != nil {
+					progressTimer.Stop()
+				}
+				progressTimerC = nil
+				continue
+			}
 			if progressTimer == nil {
 				progressTimer = time.NewTimer(adaptiveProgressTimeout)
 				progressTimerC = progressTimer.C

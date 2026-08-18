@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"math"
 	"strings"
 
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
@@ -10,6 +9,7 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -64,14 +64,17 @@ func ApplyBlindBoxConsumptionDiscount(request billingapp.BlindBoxConsumptionDisc
 			return errors.New("blind box prop discount was updated concurrently")
 		}
 
+		nominalMultiplier := normalizeDiscountMultiplier(prop.Multiplier)
+		effectiveMultiplier := normalizeDiscountMultiplier(float64(quotaAfter) / float64(quotaBefore))
 		usage := &commerceschema.BlindBoxPropDiscountUsage{
 			RequestId: request.RequestID, UserId: request.UserID, PropId: prop.Id, PropTitle: prop.Title,
 			ChannelId: request.ChannelID, ChannelScope: gatewayschema.ChannelScopeOfficial,
 			ModelName: request.ModelName, QuotaBeforeDiscount: int64(quotaBefore),
 			QuotaAfterDiscount: int64(quotaAfter), DiscountQuota: discountQuota,
-			DiscountRate:   float64(discountQuota) / float64(quotaBefore),
-			Multiplier:     float64(quotaAfter) / float64(quotaBefore),
-			RemainingQuota: 0, CreatedAt: now,
+			DiscountRate:        normalizeDiscountMultiplier(float64(discountQuota) / float64(quotaBefore)),
+			Multiplier:          nominalMultiplier,
+			EffectiveMultiplier: effectiveMultiplier,
+			RemainingQuota:      0, CreatedAt: now,
 		}
 		if err := tx.Create(usage).Error; err != nil {
 			return err
@@ -112,8 +115,13 @@ func calculatePropDiscountQuota(prop commerceschema.BlindBoxProp, chargedQuota i
 	if chargedQuota <= 0 || prop.Multiplier <= 0 || prop.Multiplier >= 1 {
 		return chargedQuota, chargedQuota
 	}
-	quotaAfter := int(math.Round(float64(chargedQuota) * prop.Multiplier))
+	quotaAfter := int(decimal.NewFromFloat(prop.Multiplier).
+		Mul(decimal.NewFromInt(int64(chargedQuota))).Round(0).IntPart())
 	return chargedQuota, quotaAfter
+}
+
+func normalizeDiscountMultiplier(value float64) float64 {
+	return decimal.NewFromFloat(value).Round(4).InexactFloat64()
 }
 
 func loadBlindBoxDiscountUsageTx(tx *gorm.DB, requestID string) (*commerceschema.BlindBoxPropDiscountUsage, error) {
@@ -126,14 +134,26 @@ func loadBlindBoxDiscountUsageTx(tx *gorm.DB, requestID string) (*commerceschema
 
 func blindBoxDiscountResultFromUsage(usage *commerceschema.BlindBoxPropDiscountUsage) billingapp.BlindBoxConsumptionDiscountResult {
 	if usage == nil {
-		return billingapp.BlindBoxConsumptionDiscountResult{Multiplier: 1}
+		return billingapp.BlindBoxConsumptionDiscountResult{Multiplier: 1, NominalMultiplier: 1, EffectiveMultiplier: 1}
 	}
 	return billingapp.BlindBoxConsumptionDiscountResult{
 		PropID: usage.PropId, Title: usage.PropTitle, QuotaBeforeDiscount: int(usage.QuotaBeforeDiscount),
 		QuotaAfterDiscount: int(usage.QuotaAfterDiscount), DiscountQuota: int(usage.DiscountQuota),
 		DiscountRate: usage.DiscountRate, Multiplier: usage.Multiplier,
+		NominalMultiplier: usage.Multiplier, EffectiveMultiplier: effectiveMultiplierFromUsage(usage),
 		RemainingDiscountQuota: usage.RemainingQuota,
 	}
+}
+
+func effectiveMultiplierFromUsage(usage *commerceschema.BlindBoxPropDiscountUsage) float64 {
+	if usage == nil {
+		return 1
+	}
+	if usage.EffectiveMultiplier > 0 {
+		return normalizeDiscountMultiplier(usage.EffectiveMultiplier)
+	}
+	// Compatibility for rows created before effective_multiplier existed.
+	return normalizeDiscountMultiplier(usage.Multiplier)
 }
 
 func undiscountedBlindBoxResult(quota int) billingapp.BlindBoxConsumptionDiscountResult {
@@ -141,5 +161,7 @@ func undiscountedBlindBoxResult(quota int) billingapp.BlindBoxConsumptionDiscoun
 		QuotaBeforeDiscount: quota,
 		QuotaAfterDiscount:  quota,
 		Multiplier:          1,
+		NominalMultiplier:   1,
+		EffectiveMultiplier: 1,
 	}
 }

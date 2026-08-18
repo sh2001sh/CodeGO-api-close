@@ -39,6 +39,8 @@ type BlindBoxConsumptionDiscountResult struct {
 	DiscountQuota          int
 	DiscountRate           float64
 	Multiplier             float64
+	NominalMultiplier      float64
+	EffectiveMultiplier    float64
 	RemainingDiscountQuota int64
 }
 
@@ -71,7 +73,10 @@ func postSubscriptionUsageDelta(subscriptionID int, modelName string, delta int6
 
 func applyBlindBoxConsumptionDiscount(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error) {
 	if request.UserID <= 0 || request.Quota <= 0 || subscriptionFundingHooks.ApplyBlindBoxConsumptionDiscount == nil {
-		return BlindBoxConsumptionDiscountResult{QuotaBeforeDiscount: request.Quota, QuotaAfterDiscount: request.Quota, Multiplier: 1}, nil
+		return BlindBoxConsumptionDiscountResult{
+			QuotaBeforeDiscount: request.Quota, QuotaAfterDiscount: request.Quota,
+			Multiplier: 1, NominalMultiplier: 1, EffectiveMultiplier: 1,
+		}, nil
 	}
 	return subscriptionFundingHooks.ApplyBlindBoxConsumptionDiscount(request)
 }

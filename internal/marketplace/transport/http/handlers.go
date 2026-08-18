@@ -162,7 +162,12 @@ func BindToken(c *gin.Context) {
 
 func ListAdminChannels(c *gin.Context) {
 	result, err := marketplaceapp.ListAdminChannels(marketplaceapp.AdminChannelQuery{
+		Search:         c.Query("search"),
 		Status:         c.Query("status"),
+		Source:         c.Query("source"),
+		Provider:       c.Query("provider"),
+		Verification:   c.Query("verification"),
+		MappingStatus:  c.Query("mapping_status"),
 		OwnerSearch:    c.Query("owner_search"),
 		StartTimestamp: queryInt64(c, "start_timestamp"),
 		EndTimestamp:   queryInt64(c, "end_timestamp"),

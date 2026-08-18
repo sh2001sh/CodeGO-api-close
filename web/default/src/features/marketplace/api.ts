@@ -217,7 +217,12 @@ export async function getAdminMarketplaceChannels(
   filters: AdminMarketplaceChannelFilters
 ) {
   const search = new URLSearchParams()
+  if (filters.search) search.set('search', filters.search)
   if (filters.status) search.set('status', filters.status)
+  if (filters.source) search.set('source', filters.source)
+  if (filters.provider) search.set('provider', filters.provider)
+  if (filters.verification) search.set('verification', filters.verification)
+  if (filters.mappingStatus) search.set('mapping_status', filters.mappingStatus)
   if (filters.ownerSearch) search.set('owner_search', filters.ownerSearch)
   if (filters.startTimestamp) {
     search.set('start_timestamp', String(filters.startTimestamp))

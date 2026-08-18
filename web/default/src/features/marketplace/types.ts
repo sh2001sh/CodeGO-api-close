@@ -245,7 +245,12 @@ export interface MarketplaceChannel {
 }
 
 export interface AdminMarketplaceChannelFilters {
+  search?: string
   status?: string
+  source?: string
+  provider?: string
+  verification?: string
+  mappingStatus?: string
   ownerSearch?: string
   startTimestamp?: number
   endTimestamp?: number

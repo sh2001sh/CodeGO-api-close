@@ -21,6 +21,12 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
 	}
 	query := platformdb.DB.Model(&marketplaceschema.Channel{})
+	if source := strings.TrimSpace(input.Source); source != "" {
+		query = query.Where("submitted_source_label = ? OR approved_source_label = ?", source, source)
+	}
+	if provider := strings.TrimSpace(input.Provider); provider != "" {
+		query = query.Where("provider_type = ?", provider)
+	}
 	if normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch); normalizedSearch != "" {
 		ownerUserIDs, err := ownerUserIDsByExternalID(normalizedSearch)
 		if err != nil {
@@ -57,6 +63,22 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 	result := make([]ChannelView, 0, len(channels))
 	for index := range channels {
 		if group := groups[channels[index].ID]; group != nil {
+			if search := strings.ToLower(strings.TrimSpace(input.Search)); search != "" {
+				searchable := strings.ToLower(strings.Join([]string{
+					channels[index].ID, group.SystemDisplayName, channels[index].ProviderType,
+					channels[index].SubmittedSourceLabel, channels[index].ApprovedSourceLabel,
+					channels[index].DeclaredModels,
+				}, " "))
+				if !strings.Contains(searchable, search) {
+					continue
+				}
+			}
+			if verification := strings.TrimSpace(input.Verification); verification != "" && group.VerificationStatus != verification {
+				continue
+			}
+			if mappingStatus := strings.TrimSpace(input.MappingStatus); mappingStatus != "" && channels[index].GPT56MappingStatus != mappingStatus {
+				continue
+			}
 			view := channelView(&channels[index], group)
 			view.OwnerExternalID = externalIDs[channels[index].OwnerUserID]
 			view.RequestCount = earnings[group.ID].RequestCount

@@ -24,6 +24,7 @@ import {
   Layers3,
   RefreshCcw,
   Rows3,
+  Search,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -35,6 +36,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionPageLayout } from '@/components/layout'
 import { GroupStatusMonitorCard } from './group-status-monitor-card'
@@ -51,11 +54,32 @@ export function SidebarGroupStatusPage() {
   const [source, setSource] = useState<'all' | 'official' | 'marketplace_user'>(
     'all'
   )
+  const [search, setSearch] = useState('')
+  const [modelFilter, setModelFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const allItems = sortItems(query.data?.data ?? [])
-  const items =
-    source === 'all'
-      ? allItems
-      : allItems.filter((item) => (item.source_type ?? 'official') === source)
+  const normalizedSearch = search.trim().toLowerCase()
+  const items = allItems.filter((item) => {
+    const sourceMatches =
+      source === 'all' || (item.source_type ?? 'official') === source
+    const modelMatches =
+      !modelFilter || item.models.some((model) => model.model === modelFilter)
+    const statusMatches = !statusFilter || item.status === statusFilter
+    const searchMatches =
+      !normalizedSearch ||
+      [
+        item.group,
+        item.display_name ?? '',
+        ...item.models.map((model) => model.model),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedSearch)
+    return sourceMatches && modelMatches && statusMatches && searchMatches
+  })
+  const modelOptions = Array.from(
+    new Set(allItems.flatMap((item) => item.models.map((model) => model.model)))
+  ).sort()
   const summary = summarizeGroups(allItems)
 
   return (
@@ -90,9 +114,9 @@ export function SidebarGroupStatusPage() {
         <div className='mx-auto flex w-full max-w-[1700px] flex-col gap-5'>
           <OverviewPanel summary={summary} loading={query.isLoading} />
 
-          <div className='border-border flex flex-wrap items-center justify-between gap-3 border-b pb-3'>
+          <div className='border-border flex flex-col gap-3 border-b pb-3'>
             <div
-              className='bg-muted flex rounded-md p-1'
+              className='bg-muted flex w-fit rounded-md p-1'
               aria-label='分组来源筛选'
             >
               {(
@@ -112,8 +136,45 @@ export function SidebarGroupStatusPage() {
                 </Button>
               ))}
             </div>
+            <div className='flex flex-col gap-2 xl:flex-row xl:items-center'>
+              <label className='relative min-w-0 flex-1 xl:max-w-xl'>
+                <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder='搜索分组名称、内部 ID 或模型'
+                  aria-label='搜索分组名称、内部 ID 或模型'
+                  className='bg-background pl-9'
+                />
+              </label>
+              <NativeSelect
+                value={modelFilter}
+                onChange={(event) => setModelFilter(event.target.value)}
+                aria-label='按模型筛选'
+                className='bg-background xl:w-52'
+              >
+                <option value=''>全部模型</option>
+                {modelOptions.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                aria-label='按状态筛选'
+                className='bg-background xl:w-40'
+              >
+                <option value=''>全部状态</option>
+                <option value='healthy'>正常</option>
+                <option value='slow'>缓慢</option>
+                <option value='degraded'>故障</option>
+                <option value='unknown'>观测中</option>
+              </NativeSelect>
+            </div>
             <span className='text-muted-foreground text-xs'>
-              官方与第三方分组均可按页面所示倍率使用套餐或对应余额。
+              官方与第三方分组均可按来源、名称、模型和当前状态快速定位。
             </span>
           </div>
 

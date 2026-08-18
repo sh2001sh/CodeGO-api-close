@@ -3,12 +3,15 @@ import { Activity, Pencil, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   useAdminMarketplaceChannels,
   useAdminOwnerIncome,
   useAdminMarketplaceVerification,
 } from '../hooks'
+import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
 import { hasGPT56Model } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
 import { AdminIncomeFilter, type AdminIncomeRange } from './admin-income-filter'
@@ -26,9 +29,22 @@ export function AdminGovernance() {
   const { t } = useTranslation()
   const [incomeRange, setIncomeRange] = useState<AdminIncomeRange>({})
   const [ownerSearch, setOwnerSearch] = useState('')
+  const [channelSearch, setChannelSearch] = useState('')
+  const [channelStatus, setChannelStatus] = useState('')
+  const [channelSource, setChannelSource] = useState('')
+  const [channelProvider, setChannelProvider] = useState('')
+  const [channelVerification, setChannelVerification] = useState('')
+  const [mappingStatus, setMappingStatus] = useState('')
   const deferredOwnerSearch = useDeferredValue(ownerSearch.trim())
+  const deferredChannelSearch = useDeferredValue(channelSearch.trim())
   const query = useAdminMarketplaceChannels(
     {
+      search: deferredChannelSearch,
+      status: channelStatus,
+      source: channelSource,
+      provider: channelProvider,
+      verification: channelVerification,
+      mappingStatus,
       ownerSearch: deferredOwnerSearch,
       startTimestamp: toTimestamp(incomeRange.start),
       endTimestamp: toTimestamp(incomeRange.end),
@@ -68,6 +84,79 @@ export function AdminGovernance() {
         isFetching={query.isFetching || ownerIncomeQuery.isFetching}
         isError={ownerIncomeQuery.isError}
       />
+      <div className='border-border bg-muted/10 flex flex-wrap items-center gap-2 rounded-md border p-3'>
+        <Input
+          value={channelSearch}
+          onChange={(event) => setChannelSearch(event.target.value)}
+          placeholder={t('搜索分组、渠道 ID、模型或来源')}
+          aria-label={t('搜索分组、渠道 ID、模型或来源')}
+          className='bg-background min-w-64 flex-1'
+        />
+        <NativeSelect
+          value={channelSource}
+          onChange={(event) => setChannelSource(event.target.value)}
+          aria-label={t('来源')}
+          className='bg-background'
+        >
+          <option value=''>{t('全部来源')}</option>
+          {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
+            <option key={source} value={source}>
+              {source}
+            </option>
+          ))}
+        </NativeSelect>
+        <NativeSelect
+          value={channelProvider}
+          onChange={(event) => setChannelProvider(event.target.value)}
+          aria-label={t('协议类型')}
+          className='bg-background'
+        >
+          <option value=''>{t('全部协议')}</option>
+          <option value='openai_compatible'>OpenAI Compatible</option>
+          <option value='codex'>Codex</option>
+          <option value='azure_openai'>Azure OpenAI</option>
+          <option value='anthropic'>Anthropic / Claude</option>
+          <option value='gemini'>Google Gemini</option>
+        </NativeSelect>
+        <NativeSelect
+          value={channelStatus}
+          onChange={(event) => setChannelStatus(event.target.value)}
+          aria-label={t('状态')}
+          className='bg-background'
+        >
+          <option value=''>{t('全部状态')}</option>
+          <option value='draft'>{t('草稿')}</option>
+          <option value='verifying'>{t('检测中')}</option>
+          <option value='pending_review'>{t('待审核')}</option>
+          <option value='active'>{t('可用')}</option>
+          <option value='degraded'>{t('质量下降')}</option>
+          <option value='suspended'>{t('已暂停')}</option>
+          <option value='disabled'>{t('已停用')}</option>
+        </NativeSelect>
+        <NativeSelect
+          value={channelVerification}
+          onChange={(event) => setChannelVerification(event.target.value)}
+          aria-label={t('检测状态')}
+          className='bg-background'
+        >
+          <option value=''>{t('全部检测状态')}</option>
+          <option value='passed'>{t('检测通过')}</option>
+          <option value='queued'>{t('等待检测')}</option>
+          <option value='running'>{t('检测中')}</option>
+          <option value='failed'>{t('检测未通过')}</option>
+        </NativeSelect>
+        <NativeSelect
+          value={mappingStatus}
+          onChange={(event) => setMappingStatus(event.target.value)}
+          aria-label={t('映射状态')}
+          className='bg-background'
+        >
+          <option value=''>{t('全部映射状态')}</option>
+          <option value='matched'>{t('映射通过')}</option>
+          <option value='insufficient_evidence'>{t('证据不足')}</option>
+          <option value='mismatch'>{t('映射不一致')}</option>
+        </NativeSelect>
+      </div>
       <section className='border-border overflow-hidden rounded-md border'>
         {query.isLoading ? (
           <div className='space-y-2 p-3'>

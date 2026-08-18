@@ -148,7 +148,12 @@ type ChannelView struct {
 }
 
 type AdminChannelQuery struct {
+	Search         string
 	Status         string
+	Source         string
+	Provider       string
+	Verification   string
+	MappingStatus  string
 	OwnerSearch    string
 	StartTimestamp int64
 	EndTimestamp   int64

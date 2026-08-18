@@ -39,7 +39,7 @@ export function ApiKeyBasicSection(props: {
     >
       <NameField form={props.form} />
       <GroupField form={props.form} groups={props.groups} />
-      {selectedGroup?.startsWith('market:') && (
+      {(selectedGroup?.startsWith('market:') || selectedGroup === 'auto') && (
         <MarketplaceMultiplierLimitField form={props.form} />
       )}
       {selectedGroup === 'auto' && <CrossGroupRetryField form={props.form} />}
@@ -57,7 +57,7 @@ function MarketplaceMultiplierLimitField(props: { form: ApiKeyForm }) {
       name='marketplace_multiplier_limit'
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{t('第三方倍率上限')}</FormLabel>
+          <FormLabel>{t('路由倍率上限')}</FormLabel>
           <FormControl>
             <div className='relative max-w-52'>
               <Input
@@ -82,7 +82,9 @@ function MarketplaceMultiplierLimitField(props: { form: ApiKeyForm }) {
             </div>
           </FormControl>
           <FormDescription>
-            {t('渠道倍率超过该值时停止请求；设置为 0 表示不限制。')}
+            {t(
+              '第三方分组或 Auto 路由池中的渠道倍率超过该值时跳过；设置为 0 表示不限制。'
+            )}
           </FormDescription>
           <FormMessage />
         </FormItem>

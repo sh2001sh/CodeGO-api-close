@@ -210,6 +210,32 @@ func TestPublicPendingReviewGroupIsLoadedForMarketplace(t *testing.T) {
 	require.Empty(t, publicSourceLabel(channels[channel.ID]))
 }
 
+func TestPublicDiscoveryExcludesSuspendedGroups(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
+
+	channel := marketplaceschema.Channel{
+		ID: "channel-suspended", OwnerUserID: 10, ProviderType: "openai",
+		BaseURLCiphertext: "encrypted-url", CredentialCiphertext: "encrypted-key",
+		Status: marketplacedomain.LifecycleSuspended,
+	}
+	group := marketplaceschema.Group{
+		ID: "group-suspended", ChannelID: channel.ID, OwnerUserID: 10,
+		PublicSlug: "mg_suspended", SystemDisplayName: "暂停渠道",
+		InternalGroupName: "market_suspended", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 1,
+		LifecycleStatus:    marketplacedomain.LifecycleSuspended,
+		VerificationStatus: marketplacedomain.VerificationPassed,
+		Visibility:         marketplacedomain.VisibilityPublic,
+	}
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+
+	groups, _, err := loadPublicGroups(GroupQuery{Status: marketplacedomain.LifecycleSuspended})
+	require.NoError(t, err)
+	require.Empty(t, groups)
+}
+
 func TestLatestRequestStatusUsesMostRecentNonEmptyBucket(t *testing.T) {
 	t.Parallel()
 

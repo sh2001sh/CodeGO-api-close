@@ -95,6 +95,12 @@ func GetMarketplaceGroup(slug string, windowHours, viewerUserID int) (*GroupList
 
 func loadPublicGroups(query GroupQuery) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
 	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{})
+	// Suspended and disabled channels are operationally unavailable and must
+	// not leak into public discovery, even when a status filter is supplied.
+	dbQuery = dbQuery.Where("lifecycle_status NOT IN ?", []string{
+		marketplacedomain.LifecycleSuspended,
+		marketplacedomain.LifecycleDisabled,
+	})
 	if query.ViewerUserID > 0 {
 		dbQuery = dbQuery.Where("visibility = ? OR owner_user_id = ?", marketplacedomain.VisibilityPublic, query.ViewerUserID)
 	} else {

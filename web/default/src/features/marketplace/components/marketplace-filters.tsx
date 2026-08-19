@@ -39,9 +39,10 @@ export function MarketplaceFilters(props: {
           <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
           <Input
             value={props.filters.search}
-            onChange={(event) =>
-              props.onChange({ search: event.target.value, page: 1 })
-            }
+            onChange={(event) => {
+              const search = event.target.value
+              props.onChange(searchFilterPatch(search))
+            }}
             placeholder={t('搜索分组、渠道 ID、模型或来源')}
             className='bg-background pl-9'
           />
@@ -199,4 +200,17 @@ function SortControls(props: {
 
 function defaultDirectionForSort(sort: string) {
   return sort === 'ttft' || sort === 'multiplier' ? 'asc' : 'desc'
+}
+
+function searchFilterPatch(search: string): Partial<GroupFilters> {
+  if (!/^\d+$/.test(search.trim())) return { search, page: 1 }
+  return {
+    search,
+    model: '',
+    source: '',
+    provider: '',
+    status: '',
+    verification: '',
+    page: 1,
+  }
 }

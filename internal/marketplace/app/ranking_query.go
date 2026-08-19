@@ -51,8 +51,11 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, query GroupQuery) bool {
 	search := strings.ToLower(strings.TrimSpace(query.Search))
 	if search != "" {
-		haystack := strings.ToLower(group.ID + " " + group.SystemDisplayName + " " + channel.ID + " " + marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID) + " " + group.PublicSlug + " " + channel.ProviderType + " " + publicSourceLabel(channel) + " " + strings.Join(models, " "))
-		if !strings.Contains(haystack, search) {
+		if isNumericChannelID(search) {
+			if channel.ID != search {
+				return false
+			}
+		} else if !matchesMarketplaceKeyword(group, channel, models, search) {
 			return false
 		}
 	}
@@ -66,6 +69,23 @@ func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.
 		return false
 	}
 	return channel.ID != ""
+}
+
+func isNumericChannelID(search string) bool {
+	if search == "" {
+		return false
+	}
+	for _, char := range search {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func matchesMarketplaceKeyword(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, search string) bool {
+	haystack := strings.ToLower(group.ID + " " + group.SystemDisplayName + " " + channel.ID + " " + marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID) + " " + group.PublicSlug + " " + channel.ProviderType + " " + publicSourceLabel(channel) + " " + strings.Join(models, " "))
+	return strings.Contains(haystack, search)
 }
 
 func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, snapshot marketplaceschema.RankingSnapshot, recentSeries []RecentRequestBucket) GroupListItem {

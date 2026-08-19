@@ -8,6 +8,7 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	gatewayproviders "github.com/sh2001sh/new-api/internal/gateway/execution/providers"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformcopy "github.com/sh2001sh/new-api/internal/platform/copyx"
@@ -77,6 +78,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 
 	var requestBody io.Reader
+	var outboundJSON []byte
 	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
 		body, size, err := buildRemoteCompactionV2Body(c, responsesReq.Model, request.Model)
 		if err != nil {
@@ -93,7 +95,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = bytes.NewBuffer(jsonData)
+		outboundJSON = jsonData
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
@@ -124,42 +126,37 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			}
 		}
 
-		logger.LogDebug(c, "requestBody: %s", jsonData)
-		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		outboundJSON = jsonData
+	}
+	if len(outboundJSON) > 0 {
+		normalized, changed, err := normalizeResponsesCompatibilityBody(outboundJSON)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
-		defer closer.Close()
-		info.UpstreamRequestBodySize = size
-		requestBody = body
+		if changed {
+			outboundJSON = normalized
+		}
+		logger.LogDebug(c, "requestBody: %s", outboundJSON)
+		requestBody = bytes.NewReader(outboundJSON)
 	}
 	if info.FirstByteTrace != nil {
 		info.FirstByteTrace.MarkRequestConversionDone()
 	}
 
-	resp, err := adaptor.DoRequest(c, info, requestBody)
-	if err != nil {
-		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
-	}
-
 	statusCodeMappingStr := c.GetString("status_code_mapping")
-	var httpResp *http.Response
-	if resp != nil {
-		httpResp = resp.(*http.Response)
-		if httpResp.StatusCode != http.StatusOK {
-			newAPIError = platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
-			if info.RelayMode == gatewaycontract.RelayModeResponses &&
-				shouldFallbackAfterStatus(info, bridgeResponsesToChat, newAPIError) {
-				bridgeError := executeResponsesToChatBridge(c, info, adaptor, request)
-				if bridgeError == nil {
-					rememberProtocolFallback(info, bridgeResponsesToChat)
-					return nil
-				}
-				return preferBridgeError(newAPIError, bridgeError)
+	httpResp, newAPIError := sendResponsesWithCompatibility(c, info, adaptor, requestBody, outboundJSON)
+	if newAPIError != nil {
+		if info.RelayMode == gatewaycontract.RelayModeResponses &&
+			shouldFallbackAfterStatus(info, bridgeResponsesToChat, newAPIError) {
+			bridgeError := executeResponsesToChatBridge(c, info, adaptor, request)
+			if bridgeError == nil {
+				rememberProtocolFallback(info, bridgeResponsesToChat)
+				return nil
 			}
-			platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
-			return newAPIError
+			return preferBridgeError(newAPIError, bridgeError)
 		}
+		platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
+		return newAPIError
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
@@ -192,6 +189,45 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		billingapp.PostTextConsumeQuota(c, info, usageDTO, nil)
 	}
 	return nil
+}
+
+func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, requestBody io.Reader, jsonBody []byte) (*http.Response, *types.NewAPIError) {
+	resp, err := doResponsesRequest(c, info, adaptor, requestBody, jsonBody)
+	if err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+	}
+	httpResp, _ := resp.(*http.Response)
+	if httpResp == nil || httpResp.StatusCode == http.StatusOK {
+		return httpResp, nil
+	}
+	apiErr := platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+	retryJSON, field, ok := normalizeRejectedResponsesField(jsonBody, apiErr)
+	if !ok {
+		return nil, apiErr
+	}
+	logger.LogInfo(c, fmt.Sprintf("retrying Responses request without rejected field %s", field))
+	resp, err = doResponsesRequest(c, info, adaptor, bytes.NewReader(retryJSON), retryJSON)
+	if err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+	}
+	httpResp, _ = resp.(*http.Response)
+	if httpResp == nil || httpResp.StatusCode == http.StatusOK {
+		return httpResp, nil
+	}
+	return nil, platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+}
+
+func doResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, requestBody io.Reader, jsonBody []byte) (any, error) {
+	if len(jsonBody) == 0 {
+		return adaptor.DoRequest(c, info, requestBody)
+	}
+	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonBody)
+	if err != nil {
+		return nil, err
+	}
+	defer closer.Close()
+	info.UpstreamRequestBodySize = size
+	return adaptor.DoRequest(c, info, body)
 }
 
 func forceResponsesStreamBody(storage platformhttpx.BodyStorage) ([]byte, error) {

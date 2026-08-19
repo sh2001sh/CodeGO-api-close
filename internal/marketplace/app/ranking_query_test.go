@@ -49,7 +49,8 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	}
 	models := []string{"gpt-5.2-codex", "gpt-4.1"}
 
-	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "123456"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "123456789012"}))
+	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "123456"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "group-filter"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "Codex Plus"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Model: "5.2"}))
@@ -67,6 +68,20 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), "owner_display_name")
 	require.NotContains(t, string(payload), "independent_consumers")
+}
+
+func TestMarketplaceNumericSearchMatchesExactChannelID(t *testing.T) {
+	group := marketplaceschema.Group{
+		ID: "group-with-16-in-id", ChannelID: "16",
+		SystemDisplayName: "16-Codex Plus-0.09x",
+	}
+	channel := marketplaceschema.Channel{ID: "16"}
+
+	require.True(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "16"}))
+
+	channel.ID = "25"
+	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "16"}))
+	require.True(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "group-with"}))
 }
 
 func TestFilterGroupsBySourceKeepsOnlyApprovedSource(t *testing.T) {

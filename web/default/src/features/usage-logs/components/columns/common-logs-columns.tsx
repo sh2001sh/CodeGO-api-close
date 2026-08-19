@@ -48,6 +48,7 @@ import {
   getUsageLogGroupDisplayName,
   isViolationFeeLog,
 } from '../../lib/format'
+import { getEffectiveTokenThroughput } from '../../lib/throughput'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -612,29 +613,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             : responseStartMs != null && responseStartMs > 0
               ? responseStartMs
               : frt
-        const recordedGenerationTime = other?.generation_time_ms
-        const streamOutputTokens = other?.stream_output_tokens
-        const streamOutputTime = other?.stream_output_time_ms
-        const generationTime =
-          streamOutputTime != null && streamOutputTime > 0
-            ? streamOutputTime / 1000
-            : recordedGenerationTime != null && recordedGenerationTime > 0
-              ? recordedGenerationTime / 1000
-              : log.is_stream && frt != null && frt > 0
-                ? Math.max(useTime - frt / 1000, 0)
-                : useTime
-        const throughputTokens =
-          log.is_stream && streamOutputTokens != null && streamOutputTokens > 0
-            ? streamOutputTokens
-            : log.completion_tokens
-        const tokensPerSecond =
-          generationTime > 0 &&
-          throughputTokens > 0 &&
-          (!log.is_stream ||
-            streamOutputTokens != null ||
-            !/^gpt/i.test(log.model_name))
-            ? throughputTokens / generationTime
-            : null
+        const tokensPerSecond = getEffectiveTokenThroughput({
+          completionTokens: log.completion_tokens,
+          totalDurationMs: other?.total_duration_ms,
+          useTimeSeconds: useTime,
+        })
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const streamStartVariant = displayedStreamStartMs
           ? getFirstResponseTimeColor(displayedStreamStartMs / 1000)
@@ -714,14 +697,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       {Math.round(tokensPerSecond)}
                     </span>
                     {' t/s'}
-                    {streamOutputTime != null && streamOutputTime > 0 && (
-                      <>
-                        {' · '}
-                        <span className='font-mono tabular-nums'>
-                          {formatUseTime(streamOutputTime / 1000)}
-                        </span>
-                      </>
-                    )}
                   </>
                 )}
               </span>

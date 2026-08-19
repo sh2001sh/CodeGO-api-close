@@ -30,6 +30,20 @@ type FirstByteTrace struct {
 	firstTextAt               time.Time
 	firstSemanticIsText       bool
 	semanticKindMarked        bool
+	outboundTraceMarked       bool
+	outboundDNSDuration       time.Duration
+	outboundConnectDuration   time.Duration
+	outboundTLSDuration       time.Duration
+	outboundGotConnAt         time.Time
+	outboundWroteRequestAt    time.Time
+	outboundFirstByteAt       time.Time
+	outboundConnReused        bool
+	outboundConnWasIdle       bool
+	outboundConnIdleDuration  time.Duration
+	outboundConnMarked        bool
+	outboundRequestBodyBytes  int64
+	outboundHTTPProtoMajor    int64
+	outboundHTTPProtoMinor    int64
 }
 
 func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
@@ -166,6 +180,34 @@ func (t *FirstByteTrace) snapshot(includeProgress bool, now time.Time) map[strin
 	if !t.upstreamResponseHeadersAt.IsZero() && !t.firstEventAt.IsZero() {
 		snapshot["headers_to_first_event_ms"] = durationMilliseconds(t.upstreamResponseHeadersAt, t.firstEventAt)
 	}
+	if t.outboundTraceMarked {
+		snapshot["outbound_dns_ms"] = t.outboundDNSDuration.Milliseconds()
+		snapshot["outbound_connect_ms"] = t.outboundConnectDuration.Milliseconds()
+		snapshot["outbound_tls_ms"] = t.outboundTLSDuration.Milliseconds()
+		snapshot["outbound_request_body_bytes"] = t.outboundRequestBodyBytes
+	}
+	if t.outboundConnMarked {
+		snapshot["outbound_conn_reused"] = boolToInt64(t.outboundConnReused)
+		snapshot["outbound_conn_was_idle"] = boolToInt64(t.outboundConnWasIdle)
+		snapshot["outbound_conn_idle_ms"] = t.outboundConnIdleDuration.Milliseconds()
+		snapshot["outbound_conn_wait_ms"] = durationMilliseconds(t.upstreamRequestReadyAt, t.outboundGotConnAt)
+	}
+	if !t.outboundGotConnAt.IsZero() && !t.outboundWroteRequestAt.IsZero() {
+		snapshot["outbound_request_write_ms"] = durationMilliseconds(t.outboundGotConnAt, t.outboundWroteRequestAt)
+	}
+	if !t.outboundWroteRequestAt.IsZero() && !t.outboundFirstByteAt.IsZero() {
+		snapshot["upstream_server_wait_ms"] = durationMilliseconds(t.outboundWroteRequestAt, t.outboundFirstByteAt)
+	}
+	if !t.upstreamRequestReadyAt.IsZero() && !t.outboundFirstByteAt.IsZero() {
+		snapshot["outbound_first_response_byte_ms"] = durationMilliseconds(t.upstreamRequestReadyAt, t.outboundFirstByteAt)
+	}
+	if !t.outboundFirstByteAt.IsZero() && !t.upstreamResponseHeadersAt.IsZero() {
+		snapshot["outbound_response_header_decode_ms"] = durationMilliseconds(t.outboundFirstByteAt, t.upstreamResponseHeadersAt)
+	}
+	if t.outboundHTTPProtoMajor > 0 {
+		snapshot["outbound_http_proto_major"] = t.outboundHTTPProtoMajor
+		snapshot["outbound_http_proto_minor"] = t.outboundHTTPProtoMinor
+	}
 	if t.semanticKindMarked {
 		if t.firstSemanticIsText {
 			snapshot["first_semantic_is_text"] = 1
@@ -195,4 +237,11 @@ func durationMilliseconds(start, end time.Time) int64 {
 		return 0
 	}
 	return end.Sub(start).Milliseconds()
+}
+
+func boolToInt64(value bool) int64 {
+	if value {
+		return 1
+	}
+	return 0
 }

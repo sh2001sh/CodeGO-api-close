@@ -161,6 +161,7 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 
 	if info != nil && info.FirstByteTrace != nil {
 		info.FirstByteTrace.MarkUpstreamRequestReady()
+		req = relaycommon.WithOutboundHTTPTrace(req, info.FirstByteTrace, info.UpstreamRequestBodySize)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -179,6 +180,7 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 		return nil, errors.New("resp is nil")
 	}
 	if info != nil && info.FirstByteTrace != nil {
+		info.FirstByteTrace.MarkOutboundHTTPVersion(resp.ProtoMajor, resp.ProtoMinor)
 		info.FirstByteTrace.MarkUpstreamResponseHeaders()
 	}
 

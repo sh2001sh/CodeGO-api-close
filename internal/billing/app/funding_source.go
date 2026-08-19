@@ -21,6 +21,14 @@ type SubscriptionFundingPlanInfo struct {
 	PlanTitle string
 }
 
+// MonthlyPassEntitlement identifies the exact package multiplier card bound
+// to one billing session.
+type MonthlyPassEntitlement struct {
+	PropID     int
+	Multiplier float64
+	ExpiresAt  int64
+}
+
 type BlindBoxConsumptionDiscountRequest struct {
 	RequestID    string
 	UserID       int
@@ -51,7 +59,8 @@ type SubscriptionFundingHooks struct {
 	PostConsumeDelta                 func(subscriptionID int, modelName string, delta int64) error
 	RefundPreConsume                 func(requestID string) error
 	SettleReservation                func(requestID string, subscriptionID int, modelName string, actualAmount int64) error
-	GetMonthlyPassMultiplier         func(userID int) float64
+	GetMonthlyPassEntitlement        func(userID int) (*MonthlyPassEntitlement, error)
+	ValidateMonthlyPassEntitlement   func(userID int, entitlement MonthlyPassEntitlement) (bool, error)
 	ApplyBlindBoxConsumptionDiscount func(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error)
 }
 
@@ -81,15 +90,18 @@ func applyBlindBoxConsumptionDiscount(request BlindBoxConsumptionDiscountRequest
 	return subscriptionFundingHooks.ApplyBlindBoxConsumptionDiscount(request)
 }
 
-func getMonthlyPassMultiplier(userID int) float64 {
-	if userID <= 0 || subscriptionFundingHooks.GetMonthlyPassMultiplier == nil {
-		return 1
+func getMonthlyPassEntitlement(userID int) (*MonthlyPassEntitlement, error) {
+	if userID <= 0 || subscriptionFundingHooks.GetMonthlyPassEntitlement == nil {
+		return nil, nil
 	}
-	multiplier := subscriptionFundingHooks.GetMonthlyPassMultiplier(userID)
-	if multiplier <= 0 || multiplier >= 1 {
-		return 1
+	entitlement, err := subscriptionFundingHooks.GetMonthlyPassEntitlement(userID)
+	if err != nil || entitlement == nil {
+		return entitlement, err
 	}
-	return multiplier
+	if entitlement.PropID <= 0 || entitlement.ExpiresAt <= 0 || entitlement.Multiplier <= 0 || entitlement.Multiplier >= 1 {
+		return nil, nil
+	}
+	return entitlement, nil
 }
 
 type FundingSource interface {

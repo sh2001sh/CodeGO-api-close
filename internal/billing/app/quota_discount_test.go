@@ -62,7 +62,8 @@ func TestPackageMultiplierDoesNotStackBlindBoxConsumptionDiscount(t *testing.T) 
 	previousHooks := subscriptionFundingHooks
 	discountCalled := false
 	RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
-		GetMonthlyPassMultiplier: func(int) float64 { return 0.1 },
+		GetMonthlyPassEntitlement:      testMonthlyPassEntitlement,
+		ValidateMonthlyPassEntitlement: testValidMonthlyPassEntitlement,
 		ApplyBlindBoxConsumptionDiscount: func(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error) {
 			discountCalled = true
 			return BlindBoxConsumptionDiscountResult{QuotaBeforeDiscount: request.Quota, QuotaAfterDiscount: request.Quota / 10}, nil

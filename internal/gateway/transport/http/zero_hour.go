@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -11,10 +12,11 @@ import (
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 )
 
-const zeroHourConcurrentRequests = 10
+const multiplierCardConcurrentRequests = 10
 
-func acquireZeroHourSlot(c *gin.Context) (func(), error) {
-	if !httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
+func acquireMultiplierCardSlot(c *gin.Context) (func(), error) {
+	keyPrefix, cardName, enabled := multiplierCardSlotPolicy(c)
+	if !enabled {
 		return func() {}, nil
 	}
 	if !platformcache.RedisReady() {
@@ -24,7 +26,7 @@ func acquireZeroHourSlot(c *gin.Context) (func(), error) {
 	if userID <= 0 {
 		return nil, errors.New("倍率卡分组用户状态无效")
 	}
-	key := fmt.Sprintf("codego:zero-hour:concurrency:%d", userID)
+	key := fmt.Sprintf("%s:%d", keyPrefix, userID)
 	ctx := c.Request.Context()
 	count, err := platformcache.RDB.Incr(ctx, key).Result()
 	if err != nil {
@@ -33,12 +35,22 @@ func acquireZeroHourSlot(c *gin.Context) (func(), error) {
 	if count == 1 {
 		_ = platformcache.RDB.Expire(ctx, key, 2*time.Hour).Err()
 	}
-	limit := int64(zeroHourConcurrentRequests)
+	limit := int64(multiplierCardConcurrentRequests)
 	if count > limit {
 		_ = platformcache.RDB.Decr(ctx, key).Err()
-		return nil, fmt.Errorf("倍率卡分组单用户并发已达 %d，请等待当前请求完成", limit)
+		return nil, fmt.Errorf("%s单用户并发已达 %d，请等待当前请求完成", cardName, limit)
 	}
 	return func() {
-		_ = platformcache.RDB.Decr(ctx, key).Err()
+		_ = platformcache.RDB.Decr(context.Background(), key).Err()
 	}, nil
+}
+
+func multiplierCardSlotPolicy(c *gin.Context) (keyPrefix string, cardName string, enabled bool) {
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
+		return "codego:zero-hour:concurrency", "0 倍率卡", true
+	}
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyMonthlyPassActive) {
+		return "codego:monthly-pass:concurrency", "0.1 倍率卡", true
+	}
+	return "", "", false
 }

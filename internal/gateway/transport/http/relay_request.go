@@ -98,12 +98,12 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 	firstByteTrace.MarkRelayInfoReady()
-	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) {
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyZeroHourActive) || httpctx.GetContextKeyBool(c, constant.ContextKeyMonthlyPassActive) {
 		if specialMultiplierUnsupportedRelay(relayFormat, relayInfo.OriginModelName) {
 			newAPIError = types.NewErrorWithStatusCode(errors.New("倍率卡分组仅支持文本和代码模型"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
 			return
 		}
-		releaseSlot, slotErr := acquireZeroHourSlot(c)
+		releaseSlot, slotErr := acquireMultiplierCardSlot(c)
 		if slotErr != nil {
 			newAPIError = types.NewErrorWithStatusCode(slotErr, types.ErrorCodeAccessDenied, http.StatusTooManyRequests, types.ErrOptionWithSkipRetry())
 			return

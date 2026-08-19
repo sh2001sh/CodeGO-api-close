@@ -44,7 +44,20 @@ func init() {
 		SettleReservation: func(requestID string, subscriptionID int, modelName string, actualAmount int64) error {
 			return SettleSubscriptionReservation(requestID, subscriptionID, modelName, actualAmount)
 		},
-		GetMonthlyPassMultiplier:         ActiveMonthlyPassMultiplier,
+		GetMonthlyPassEntitlement: func(userID int) (*billingapp.MonthlyPassEntitlement, error) {
+			entitlement, err := ActiveMonthlyPassEntitlement(userID)
+			if err != nil || entitlement == nil {
+				return nil, err
+			}
+			return &billingapp.MonthlyPassEntitlement{
+				PropID: entitlement.PropID, Multiplier: entitlement.Multiplier, ExpiresAt: entitlement.ExpiresAt,
+			}, nil
+		},
+		ValidateMonthlyPassEntitlement: func(userID int, entitlement billingapp.MonthlyPassEntitlement) (bool, error) {
+			return ValidateMonthlyPassEntitlement(userID, MonthlyPassEntitlement{
+				PropID: entitlement.PropID, Multiplier: entitlement.Multiplier, ExpiresAt: entitlement.ExpiresAt,
+			})
+		},
 		ApplyBlindBoxConsumptionDiscount: ApplyBlindBoxConsumptionDiscount,
 	})
 }

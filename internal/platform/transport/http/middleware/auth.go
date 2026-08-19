@@ -433,7 +433,9 @@ func TokenAuth() func(c *gin.Context) {
 		if legacyMonthlyPassGroup {
 			tokenGroup = commerceapp.MultiplierCardRouteGroup()
 		}
-		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, commerceapp.RequiresOfficialBlindBoxChannel(token.UserId))
+		requiresOfficialChannel, monthlyPassActive := commerceapp.ActiveMultiplierCardRoutePolicy(token.UserId)
+		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, requiresOfficialChannel)
+		httpctx.SetContextKey(c, constant.ContextKeyMonthlyPassActive, monthlyPassActive)
 		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelFallback, false)
 		zeroHourActive := tokenGroup == commerceapp.ZeroHourGroup
 		if zeroHourActive {

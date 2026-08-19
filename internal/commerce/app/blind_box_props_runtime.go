@@ -215,36 +215,6 @@ func GetUserBlindBoxConsumptionDiscountRate(userID int) float64 {
 	return bestRate
 }
 
-// RequiresOfficialBlindBoxChannel reports whether an active multiplier card
-// should constrain automatic routing to official channels.
-func RequiresOfficialBlindBoxChannel(userID int) bool {
-	if userID <= 0 {
-		return false
-	}
-	var active bool
-	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		now := platformruntime.GetTimestamp()
-		if err := expireUserBlindBoxPropsTx(tx, userID, now); err != nil {
-			return err
-		}
-		var count int64
-		if err := tx.Model(&commerceschema.BlindBoxProp{}).
-			Where("user_id = ? AND status = ? AND prop_type IN ? AND (expires_at = 0 OR expires_at > ?)", userID, commerceschema.BlindBoxPropStatusActive, []string{
-				commerceschema.BlindBoxPropTypeConsumeDiscount95,
-				commerceschema.BlindBoxPropTypeConsumeDiscount90,
-				commerceschema.BlindBoxPropTypeConsumeDiscount10,
-				commerceschema.BlindBoxPropTypeZeroHourMultiplier,
-				commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
-			}, now).
-			Count(&count).Error; err != nil {
-			return err
-		}
-		active = count > 0
-		return nil
-	})
-	return active
-}
-
 func GetUserBlindBoxTopupDiscountRate(userID int) float64 {
 	if userID <= 0 {
 		return 0

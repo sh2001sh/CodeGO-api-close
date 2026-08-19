@@ -18,17 +18,19 @@ import (
 )
 
 type BillingSession struct {
-	relayInfo        *relaycommon.RelayInfo
-	funding          FundingSource
-	preConsumedQuota int
-	tokenConsumed    int
-	extraReserved    int
-	trusted          bool
-	quotaScale       float64
-	fundingSettled   bool
-	settled          bool
-	refunded         bool
-	mu               sync.Mutex
+	relayInfo             *relaycommon.RelayInfo
+	funding               FundingSource
+	preConsumedQuota      int
+	tokenConsumed         int
+	extraReserved         int
+	trusted               bool
+	quotaScale            float64
+	reservationQuotaScale float64
+	monthlyPass           *MonthlyPassEntitlement
+	fundingSettled        bool
+	settled               bool
+	refunded              bool
+	mu                    sync.Mutex
 }
 
 func (s *BillingSession) Settle(actualQuota int) error {
@@ -38,7 +40,7 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	if actualQuota < 0 {
 		actualQuota = 0
 	}
-	actualQuota = s.scaleQuota(actualQuota)
+	actualQuota = s.scaleQuota(actualQuota, s.settlementQuotaScale())
 	if s.settled {
 		return nil
 	}
@@ -197,7 +199,7 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	if targetQuota < 0 {
 		targetQuota = 0
 	}
-	targetQuota = s.scaleQuota(targetQuota)
+	targetQuota = s.scaleQuota(targetQuota, s.reservationScale())
 	if s.settled || s.refunded || s.trusted || targetQuota <= s.preConsumedQuota {
 		return nil
 	}
@@ -223,7 +225,7 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 }
 
 func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIError {
-	effectiveQuota := s.scaleQuota(quota)
+	effectiveQuota := s.scaleQuota(quota, s.reservationScale())
 
 	if s.shouldTrust(c) {
 		s.trusted = true
@@ -293,11 +295,11 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	return nil
 }
 
-func (s *BillingSession) scaleQuota(quota int) int {
-	if quota <= 0 || s.quotaScale <= 0 || s.quotaScale == 1 {
+func (s *BillingSession) scaleQuota(quota int, scale float64) int {
+	if quota <= 0 || scale <= 0 || scale == 1 {
 		return quota
 	}
-	scaled := int(math.Round(float64(quota) * s.quotaScale))
+	scaled := int(math.Round(float64(quota) * scale))
 	if scaled < 1 {
 		return 1
 	}

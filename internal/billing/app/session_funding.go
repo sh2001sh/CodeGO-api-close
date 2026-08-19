@@ -147,15 +147,26 @@ func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayI
 	}
 
 	groupRatio := subscriptionBillingGroupRatio(relayInfo)
-	packageMultiplier := getMonthlyPassMultiplier(relayInfo.UserId)
-	quotaScale := subscriptionMultiplier * packageMultiplier
+	baseQuotaScale := subscriptionMultiplier
 	if groupRatio > 0 {
-		quotaScale /= groupRatio
+		baseQuotaScale /= groupRatio
+	}
+	entitlement, err := getMonthlyPassEntitlement(relayInfo.UserId)
+	if err != nil {
+		return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+	}
+	packageMultiplier := 1.0
+	quotaScale := baseQuotaScale
+	if entitlement != nil {
+		packageMultiplier = entitlement.Multiplier
+		quotaScale *= packageMultiplier
 	}
 
 	session := &BillingSession{
-		relayInfo:  relayInfo,
-		quotaScale: quotaScale,
+		relayInfo:             relayInfo,
+		quotaScale:            quotaScale,
+		reservationQuotaScale: baseQuotaScale,
+		monthlyPass:           entitlement,
 		funding: &SubscriptionFunding{
 			requestID: relayInfo.RequestId,
 			userID:    relayInfo.UserId,

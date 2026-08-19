@@ -44,7 +44,7 @@ func EnsureDefaultSubscriptionPlans() error {
 			return err
 		}
 	}
-	return BackfillActiveMonthlyPassBenefits()
+	return nil
 }
 
 func defaultSubscriptionPlans() []commerceschema.SubscriptionPlan {

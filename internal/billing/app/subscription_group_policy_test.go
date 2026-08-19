@@ -41,6 +41,14 @@ func setupMonthlyPassFundingTestDB(t *testing.T) {
 	))
 }
 
+func testMonthlyPassEntitlement(int) (*MonthlyPassEntitlement, error) {
+	return &MonthlyPassEntitlement{PropID: 77, Multiplier: 0.1, ExpiresAt: 4_102_444_800}, nil
+}
+
+func testValidMonthlyPassEntitlement(int, MonthlyPassEntitlement) (bool, error) {
+	return true, nil
+}
+
 func TestSubscriptionGroupPolicyAppliesToPreConsumeAndSettlement(t *testing.T) {
 	originalPolicy := gatewaystore.SubscriptionGroupPolicy2JSONString()
 	require.NoError(t, gatewaystore.UpdateSubscriptionGroupPolicyByJSONString("{\"official\":{\"enabled\":true,\"multiplier\":0.5}}"))
@@ -91,12 +99,18 @@ func TestMonthlyPassMultiplierAppliesToSubscriptionFunding(t *testing.T) {
 
 	previousHooks := subscriptionFundingHooks
 	var preConsumed int64
+	var settledDelta int64
 	RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
 		PreConsume: func(_ string, _ int, _ string, amount int64) (*SubscriptionFundingPreConsumeResult, error) {
 			preConsumed = amount
 			return &SubscriptionFundingPreConsumeResult{UserSubscriptionID: 199, PreConsumed: amount, AmountTotal: 10_000, AmountUsedAfter: amount}, nil
 		},
-		GetMonthlyPassMultiplier: func(int) float64 { return 0.1 },
+		PostConsumeDelta: func(_ int, _ string, delta int64) error {
+			settledDelta = delta
+			return nil
+		},
+		GetMonthlyPassEntitlement:      testMonthlyPassEntitlement,
+		ValidateMonthlyPassEntitlement: testValidMonthlyPassEntitlement,
 	})
 	t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
 
@@ -112,11 +126,83 @@ func TestMonthlyPassMultiplierAppliesToSubscriptionFunding(t *testing.T) {
 	session, apiErr := NewBillingSession(ctx, info, 1_000)
 	require.Nil(t, apiErr)
 	require.NotNil(t, session)
-	require.Equal(t, int64(100), preConsumed)
+	require.Equal(t, int64(1_000), preConsumed)
+	require.Equal(t, 1_000, session.GetPreConsumedQuota())
 	require.Equal(t, BillingSourceSubscription, info.BillingSource)
 	require.Equal(t, 1.0, info.SubscriptionGroupMultiplier)
 	require.Equal(t, 0.1, info.SubscriptionPackageMultiplier)
 	require.Equal(t, 0.1, info.SubscriptionQuotaScale)
+	require.NoError(t, session.Settle(1_000))
+	require.Equal(t, int64(-900), settledDelta)
+}
+
+func TestMonthlyPassExpirySettlesAtFullPrice(t *testing.T) {
+	previousHooks := subscriptionFundingHooks
+	var settledDelta int64
+	RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
+		PreConsume: func(_ string, _ int, _ string, amount int64) (*SubscriptionFundingPreConsumeResult, error) {
+			return &SubscriptionFundingPreConsumeResult{UserSubscriptionID: 200, PreConsumed: amount, AmountTotal: 10_000, AmountUsedAfter: amount}, nil
+		},
+		PostConsumeDelta: func(_ int, _ string, delta int64) error {
+			settledDelta = delta
+			return nil
+		},
+		GetMonthlyPassEntitlement:      testMonthlyPassEntitlement,
+		ValidateMonthlyPassEntitlement: func(int, MonthlyPassEntitlement) (bool, error) { return false, nil },
+	})
+	t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		UserId: 2, OriginModelName: "gpt-5", RequestId: "monthly-pass-expired-before-settlement",
+		UsingGroup: "default", ChannelMeta: &relaycommon.ChannelMeta{ChannelScope: gatewayschema.ChannelScopeOfficial},
+		IsPlayground: true, ForcePreConsume: true,
+		UserSetting: dto.UserSetting{FundingSourceOrder: []string{BillingSourceSubscription}},
+		PriceData:   types.PriceData{GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1}},
+	}
+
+	session, apiErr := NewBillingSession(ctx, info, 1_000)
+	require.Nil(t, apiErr)
+	require.NotNil(t, session)
+	require.NoError(t, session.Settle(1_000))
+	require.Zero(t, settledDelta)
+	require.Equal(t, 1.0, info.SubscriptionPackageMultiplier)
+	require.Equal(t, 1.0, info.SubscriptionQuotaScale)
+}
+
+func TestMonthlyPassValidationErrorSettlesAtFullPrice(t *testing.T) {
+	previousHooks := subscriptionFundingHooks
+	var settledDelta int64
+	RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
+		PreConsume: func(_ string, _ int, _ string, amount int64) (*SubscriptionFundingPreConsumeResult, error) {
+			return &SubscriptionFundingPreConsumeResult{UserSubscriptionID: 201, PreConsumed: amount, AmountTotal: 10_000, AmountUsedAfter: amount}, nil
+		},
+		PostConsumeDelta: func(_ int, _ string, delta int64) error {
+			settledDelta = delta
+			return nil
+		},
+		GetMonthlyPassEntitlement: testMonthlyPassEntitlement,
+		ValidateMonthlyPassEntitlement: func(int, MonthlyPassEntitlement) (bool, error) {
+			return false, errors.New("entitlement database unavailable")
+		},
+	})
+	t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		UserId: 2, OriginModelName: "gpt-5", RequestId: "monthly-pass-validation-error",
+		UsingGroup: "default", ChannelMeta: &relaycommon.ChannelMeta{ChannelScope: gatewayschema.ChannelScopeOfficial},
+		IsPlayground: true, ForcePreConsume: true,
+		UserSetting: dto.UserSetting{FundingSourceOrder: []string{BillingSourceSubscription}},
+		PriceData:   types.PriceData{GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1}},
+	}
+
+	session, apiErr := NewBillingSession(ctx, info, 1_000)
+	require.Nil(t, apiErr)
+	require.NotNil(t, session)
+	require.NoError(t, session.Settle(1_000))
+	require.Zero(t, settledDelta)
+	require.Equal(t, 1.0, info.SubscriptionPackageMultiplier)
 }
 
 func TestMarketplaceGroupUsesDerivedSubscriptionMultiplier(t *testing.T) {
@@ -161,7 +247,8 @@ func TestMonthlyPassMultiplierDoesNotApplyAfterWalletFallback(t *testing.T) {
 		PreConsume: func(string, int, string, int64) (*SubscriptionFundingPreConsumeResult, error) {
 			return nil, errors.New("subscription quota insufficient")
 		},
-		GetMonthlyPassMultiplier: func(int) float64 { return 0.1 },
+		GetMonthlyPassEntitlement:      testMonthlyPassEntitlement,
+		ValidateMonthlyPassEntitlement: testValidMonthlyPassEntitlement,
 	})
 	t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
 
@@ -193,7 +280,8 @@ func TestMonthlyPassMultiplierDoesNotOverrideWalletFirst(t *testing.T) {
 			t.Fatal("wallet-first funding must not query subscription quota")
 			return nil, nil
 		},
-		GetMonthlyPassMultiplier: func(int) float64 { return 0.1 },
+		GetMonthlyPassEntitlement:      testMonthlyPassEntitlement,
+		ValidateMonthlyPassEntitlement: testValidMonthlyPassEntitlement,
 	})
 	t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
 

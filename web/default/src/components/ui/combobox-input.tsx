@@ -32,6 +32,7 @@ interface ComboboxInputProps {
   options: ComboboxInputOption[]
   value?: string
   onValueChange: (value: string) => void
+  onValueCommit?: (value: string) => void
   placeholder?: string
   emptyText?: string
   className?: string
@@ -43,6 +44,7 @@ export function ComboboxInput({
   options,
   value = '',
   onValueChange,
+  onValueCommit,
   placeholder = '请选择或输入...',
   emptyText = '未找到选项。',
   className,
@@ -97,6 +99,7 @@ export function ComboboxInput({
 
   const handleSelect = (selectedValue: string) => {
     onValueChange(selectedValue)
+    onValueCommit?.(selectedValue)
     setOpen(false)
     setSearchValue('')
     inputRef.current?.focus()

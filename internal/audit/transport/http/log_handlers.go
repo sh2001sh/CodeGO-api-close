@@ -48,6 +48,24 @@ func GetUserLogs(c *gin.Context) {
 	httpapi.ApiSuccess(c, pageInfo)
 }
 
+func GetAllLogGroups(c *gin.Context) {
+	groups, err := auditapp.ListAdminLogGroups()
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, groups)
+}
+
+func GetUserLogGroups(c *gin.Context) {
+	groups, err := auditapp.ListUserLogGroups(c.GetInt("id"))
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, groups)
+}
+
 func SearchAllLogs(c *gin.Context) {
 	c.JSON(stdhttp.StatusOK, gin.H{
 		"success": false,
@@ -111,7 +129,7 @@ func GetLogsStat(c *gin.Context) {
 }
 
 func GetLogsSelfStat(c *gin.Context) {
-	stat, err := auditapp.GetUserLogStats(c.GetString("username"), readLogListQuery(c, 0, 0))
+	stat, err := auditapp.GetUserLogStats(c.GetInt("id"), readLogListQuery(c, 0, 0))
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return
@@ -203,11 +221,13 @@ func GetUserQuotaDates(c *gin.Context) {
 
 func readLogListQuery(c *gin.Context, startIdx int, pageSize int) auditapp.LogListQuery {
 	logType, _ := strconv.Atoi(c.Query("type"))
+	userID, _ := strconv.Atoi(c.Query("user_id"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	channel, _ := strconv.Atoi(c.Query("channel"))
 
 	return auditapp.LogListQuery{
+		UserID:            userID,
 		LogType:           logType,
 		StartTimestamp:    startTimestamp,
 		EndTimestamp:      endTimestamp,

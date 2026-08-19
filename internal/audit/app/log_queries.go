@@ -22,6 +22,14 @@ func ListUserLogs(userID int, query LogListQuery) ([]*auditschema.Log, int64, er
 	return projection.ListUserLogs(userID, query)
 }
 
+func ListAdminLogGroups() ([]string, error) {
+	return projection.ListUsedLogGroups(0)
+}
+
+func ListUserLogGroups(userID int) ([]string, error) {
+	return projection.ListUsedLogGroups(userID)
+}
+
 func GetLogsByTokenID(tokenID int) ([]*auditschema.Log, error) {
 	return projection.GetLogByTokenID(tokenID)
 }
@@ -30,8 +38,9 @@ func GetAdminLogStats(query LogListQuery) (auditschema.Stat, error) {
 	return projection.SumUsedQuota(query)
 }
 
-func GetUserLogStats(username string, query LogListQuery) (auditschema.Stat, error) {
-	query.Username = username
+func GetUserLogStats(userID int, query LogListQuery) (auditschema.Stat, error) {
+	query.UserID = userID
+	query.Username = ""
 	return projection.SumUsedQuota(query)
 }
 

@@ -41,6 +41,14 @@ func applyLogContainsFilter(tx *gorm.DB, column string, value string) *gorm.DB {
 	return tx.Where(column+" LIKE ? ESCAPE '!'", pattern)
 }
 
+func applyLogExactFilter(tx *gorm.DB, column string, value string) *gorm.DB {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return tx
+	}
+	return tx.Where(column+" = ?", value)
+}
+
 func logGroupColumn() string {
 	if os.Getenv("LOG_SQL_DSN") != "" {
 		switch platformdb.LogSQLType {

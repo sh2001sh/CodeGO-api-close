@@ -1,6 +1,7 @@
 package domain
 
 type LogListQuery struct {
+	UserID            int
 	LogType           int
 	StartTimestamp    int64
 	EndTimestamp      int64

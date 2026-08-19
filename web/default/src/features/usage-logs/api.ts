@@ -82,6 +82,17 @@ export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
 
+export async function getUsageLogGroups(isAdmin: boolean): Promise<string[]> {
+  const path = isAdmin ? '/api/log/groups' : '/api/log/self/groups'
+  const res = await api.get(path)
+  if (!res.data?.success || !Array.isArray(res.data.data)) {
+    throw new Error(res.data?.message || 'Unable to load usage log groups.')
+  }
+  return res.data.data.filter(
+    (group: unknown): group is string => typeof group === 'string'
+  )
+}
+
 export async function getUserInfo(
   userId: number
 ): Promise<{ success: boolean; message?: string; data?: UserInfo }> {

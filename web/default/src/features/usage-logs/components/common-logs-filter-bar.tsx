@@ -45,6 +45,7 @@ import { getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
+import { UsageLogGroupFilter } from './usage-log-group-filter'
 import { useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
@@ -119,20 +120,26 @@ export function CommonLogsFilterBar<TData>(
     []
   )
 
-  const handleApply = useCallback(() => {
-    const filterParams = buildSearchParams(filters, 'common')
-    navigate({
-      to: '/usage-logs/$section',
-      params: { section: 'common' },
-      search: {
-        ...filterParams,
-        ...(logType ? { type: [logType] } : {}),
-        page: 1,
-      },
-    })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-    queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [filters, logType, navigate, queryClient])
+  const handleApply = useCallback(
+    (overrides: Partial<CommonLogFilters> = {}) => {
+      const filterParams = buildSearchParams(
+        { ...filters, ...overrides },
+        'common'
+      )
+      navigate({
+        to: '/usage-logs/$section',
+        params: { section: 'common' },
+        search: {
+          ...filterParams,
+          ...(logType ? { type: [logType] } : {}),
+          page: 1,
+        },
+      })
+      queryClient.invalidateQueries({ queryKey: ['logs'] })
+      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+    },
+    [filters, logType, navigate, queryClient]
+  )
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
@@ -221,12 +228,13 @@ export function CommonLogsFilterBar<TData>(
             onKeyDown={handleKeyDown}
             className={inputClass}
           />
-          <Input
-            placeholder={t('Group')}
-            type={sensitiveType}
+          <UsageLogGroupFilter
             value={filters.group || ''}
-            onChange={(e) => handleChange('group', e.target.value)}
+            onValueChange={(value) => handleChange('group', value)}
+            onValueCommit={(value) => handleApply({ group: value })}
             onKeyDown={handleKeyDown}
+            sensitiveVisible={sensitiveVisible}
+            isAdmin={isAdmin}
             className={inputClass}
           />
           <Select
@@ -297,9 +305,7 @@ export function CommonLogsFilterBar<TData>(
           <Input
             placeholder={t('Upstream Request ID')}
             value={filters.upstreamRequestId || ''}
-            onChange={(e) =>
-              handleChange('upstreamRequestId', e.target.value)
-            }
+            onChange={(e) => handleChange('upstreamRequestId', e.target.value)}
             onKeyDown={handleKeyDown}
             className={inputClass}
           />

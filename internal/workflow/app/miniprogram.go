@@ -31,7 +31,7 @@ func BuildMiniProgramDashboard(userID int, days int) (map[string]any, error) {
 	}
 
 	startTimestamp := time.Now().AddDate(0, 0, -days).Unix()
-	usageStat, err := auditapp.GetUserLogStats(user.Username, auditapp.LogListQuery{
+	usageStat, err := auditapp.GetUserLogStats(userID, auditapp.LogListQuery{
 		LogType:        auditschema.LogTypeConsume,
 		StartTimestamp: startTimestamp,
 		EndTimestamp:   time.Now().Unix(),
@@ -101,7 +101,7 @@ func BuildMiniProgramDashboard(userID int, days int) (map[string]any, error) {
 
 // BuildMiniProgramStat returns aggregated recent usage stats and trend data.
 func BuildMiniProgramStat(userID int, days int) (map[string]any, error) {
-	user, err := getWorkflowUserByID(userID, false)
+	_, err := getWorkflowUserByID(userID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func BuildMiniProgramStat(userID int, days int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	stat, err := auditapp.GetUserLogStats(user.Username, auditapp.LogListQuery{
+	stat, err := auditapp.GetUserLogStats(userID, auditapp.LogListQuery{
 		LogType:        auditschema.LogTypeConsume,
 		StartTimestamp: startTimestamp,
 		EndTimestamp:   endTimestamp,

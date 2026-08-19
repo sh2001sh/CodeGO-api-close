@@ -12,6 +12,7 @@ import {
   getMyMarketplaceChannels,
   getMyMarketplaceUsageLogs,
   getTokenOptions,
+  pauseMarketplaceVerification,
   queueMarketplaceDetection,
   queueMarketplaceConnectivityTest,
   reviewMarketplaceChannel,
@@ -38,7 +39,7 @@ function verificationRefetchInterval(
     (channel) =>
       channel.lifecycle_status === 'verifying' ||
       ['queued', 'running'].includes(channel.verification_status) ||
-      channel.gpt56_mapping_status === 'running' ||
+      ['queued', 'running'].includes(channel.gpt56_mapping_status ?? '') ||
       ['queued', 'running'].includes(channel.connectivity_test_status ?? '')
   )
     ? 1000
@@ -152,6 +153,11 @@ export function useMarketplaceMutations() {
         queueMarketplaceConnectivityTest(channelId),
       onSuccess: invalidate,
     }),
+    pauseVerification: useMutation({
+      mutationFn: (channelId: string) =>
+        pauseMarketplaceVerification(channelId),
+      onSuccess: invalidate,
+    }),
     pause: useMutation({
       mutationFn: (input: { id: string; paused: boolean }) =>
         setMarketplaceChannelPaused(input.id, input.paused),
@@ -207,13 +213,22 @@ export function useAdminMarketplaceReview() {
   })
 }
 
-export function useAdminMarketplaceVerification(action: 'detect' | 'test') {
+export function useAdminMarketplaceVerification(
+  action: 'detect' | 'test' | 'pause'
+) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (channelId: string) =>
-      action === 'detect'
-        ? queueMarketplaceDetection(channelId, true)
-        : queueMarketplaceConnectivityTest(channelId, true),
+    mutationFn: async (channelId: string) => {
+      if (action === 'detect') {
+        await queueMarketplaceDetection(channelId, true)
+        return
+      }
+      if (action === 'test') {
+        await queueMarketplaceConnectivityTest(channelId, true)
+        return
+      }
+      await pauseMarketplaceVerification(channelId, true)
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ['marketplace-channels'],

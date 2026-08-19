@@ -183,6 +183,17 @@ export async function queueMarketplaceConnectivityTest(
   return queueMarketplaceChannelAction(channelId, 'test', admin)
 }
 
+export async function pauseMarketplaceVerification(
+  channelId: string,
+  admin = false
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.post<ApiResponse<{ paused: boolean }>>(
+    `${prefix}/channels/${channelId}/verification/pause`
+  )
+  return requireData(response.data)
+}
+
 async function queueMarketplaceChannelAction(
   channelId: string,
   action: 'detect' | 'test',

@@ -48,12 +48,20 @@ func runDueGPT56MappingChecks(ctx context.Context) {
 		return
 	}
 	for index := range channels {
-		_, err := runGPT56MappingCheckWithRequest(&channels[index], gpt56CheckRequest{
+		channel := &channels[index]
+		taskCtx, finish, started := marketplaceVerificationTasks.begin(
+			ctx, channel.ID, verificationTaskGPT56Mapping,
+		)
+		if !started {
+			continue
+		}
+		_, err := runGPT56MappingCheckWithRequest(taskCtx, channel, gpt56CheckRequest{
 			Level: GPT56MappingLevelDailyLight, Trigger: GPT56MappingTriggerScheduled,
 		})
+		finish()
 		if err != nil {
 			platformobservability.SysError(fmt.Sprintf(
-				"run GPT-5.6 mapping check channel=%s: %s", channels[index].ID, err.Error(),
+				"run GPT-5.6 mapping check channel=%s: %s", channel.ID, err.Error(),
 			))
 		}
 	}

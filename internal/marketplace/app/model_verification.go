@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ func applyModelConsistencyStatus(channel *marketplaceschema.Channel, status stri
 }
 
 func probeDeclaredModels(
+	ctx context.Context,
 	provider string,
 	baseURL string,
 	apiKey string,
@@ -39,8 +41,11 @@ func probeDeclaredModels(
 	results := make([]ModelVerificationResult, 0, len(declared))
 	failedModels := make([]string, 0)
 	for _, model := range declared {
+		if err := ctx.Err(); err != nil {
+			return results, err
+		}
 		_, listed := available[strings.ToLower(strings.TrimSpace(model))]
-		latencyMS, err := probeMarketplaceInferenceTimed(provider, baseURL, apiKey, model)
+		latencyMS, err := probeMarketplaceInferenceTimedContext(ctx, provider, baseURL, apiKey, model)
 		result := ModelVerificationResult{
 			Model: model, Status: marketplacedomain.ModelVerificationPassed,
 			Listed: listed, LatencyMS: latencyMS, TestedAt: time.Now().UTC(),

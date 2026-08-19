@@ -1,11 +1,24 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"time"
 )
 
 func probeGPT56MappingsWithProgress(
+	provider, baseURL, credential string,
+	models []string,
+	policy gpt56DetectionPolicy,
+	onProgress func([]GPT56MappingResult) error,
+) ([]GPT56MappingResult, error) {
+	return probeGPT56MappingsWithProgressContext(
+		context.Background(), provider, baseURL, credential, models, policy, onProgress,
+	)
+}
+
+func probeGPT56MappingsWithProgressContext(
+	ctx context.Context,
 	provider, baseURL, credential string,
 	models []string,
 	policy gpt56DetectionPolicy,
@@ -21,7 +34,8 @@ func probeGPT56MappingsWithProgress(
 		}
 	}
 	for index, model := range models {
-		result, err := probeGPT56MappingModelWithProgress(
+		result, err := probeGPT56MappingModelWithProgressContext(
+			ctx,
 			provider, baseURL, credential, model, policy,
 			func(progress GPT56MappingResult) error {
 				results[index] = progress
@@ -56,6 +70,17 @@ func probeGPT56MappingModelWithProgress(
 	policy gpt56DetectionPolicy,
 	onProgress func(GPT56MappingResult) error,
 ) (GPT56MappingResult, error) {
+	return probeGPT56MappingModelWithProgressContext(
+		context.Background(), provider, baseURL, credential, model, policy, onProgress,
+	)
+}
+
+func probeGPT56MappingModelWithProgressContext(
+	ctx context.Context,
+	provider, baseURL, credential, model string,
+	policy gpt56DetectionPolicy,
+	onProgress func(GPT56MappingResult) error,
+) (GPT56MappingResult, error) {
 	sampleCount := policy.sampleCount()
 	result := GPT56MappingResult{
 		RequestedModel: model,
@@ -70,7 +95,11 @@ func probeGPT56MappingModelWithProgress(
 stop:
 	for _, variant := range policy.Variants {
 		for repetition := 0; repetition < policy.Repetitions; repetition++ {
-			latencyMS, reported, probeErr := probeMarketplaceInferenceReportedModelWithVariant(
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
+			latencyMS, reported, probeErr := probeMarketplaceInferenceReportedModelWithVariantContext(
+				ctx,
 				provider, baseURL, credential, model, variant,
 			)
 			result.LatencyMS += latencyMS

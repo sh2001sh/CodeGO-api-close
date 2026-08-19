@@ -8,10 +8,12 @@ import (
 )
 
 const (
+	GPT56MappingStatusQueued               = "queued"
 	GPT56MappingStatusRunning              = "running"
 	GPT56MappingStatusMatched              = "matched"
 	GPT56MappingStatusMismatch             = "mismatch"
 	GPT56MappingStatusInsufficientEvidence = "insufficient_evidence"
+	GPT56MappingStatusPaused               = "paused"
 	GPT56MappingSampleStatusError          = "error"
 	GPT56MappingSampleStatusMissingModel   = "missing_model"
 

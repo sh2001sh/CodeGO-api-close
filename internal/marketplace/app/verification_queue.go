@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -33,25 +34,54 @@ func QueueGPT56MappingVerification(channelID string) error {
 	if !isGPT56MappingEligible(channel) {
 		return errors.New("该渠道未声明需要检测的 GPT-5.6 模型")
 	}
-	if err := setRequiredVerificationQueued(channelID); err != nil {
+	ctx, finish, started := marketplaceVerificationTasks.begin(
+		context.Background(), channelID, verificationTaskGPT56Mapping,
+	)
+	if !started {
+		return errors.New("GPT-5.6 检测正在进行")
+	}
+	if err := prepareGPT56MappingVerification(channelID); err != nil {
+		finish()
 		return err
 	}
 	trigger := GPT56MappingTriggerManual
 	if channel.InternalChannelID == nil {
 		trigger = GPT56MappingTriggerInitial
 	}
-	go executeGPT56MappingVerification(channelID, trigger)
+	go func() {
+		defer finish()
+		executeGPT56MappingVerification(ctx, channelID, trigger)
+	}()
 	return nil
 }
 
 // QueueConnectivityTest persists a run before testing each declared model.
 func QueueConnectivityTest(channelID string) error {
+	if _, _, err := loadChannelGroup(channelID); err != nil {
+		return err
+	}
+	ctx, finish, started := marketplaceVerificationTasks.begin(
+		context.Background(), channelID, verificationTaskConnectivity,
+	)
+	if !started {
+		return errors.New("模型连通性测试正在进行")
+	}
 	run := &marketplaceschema.VerificationRun{
 		ChannelID: channelID, Status: marketplacedomain.VerificationQueued,
 		Stage: "basic_security", DetectorName: "NativeCompatibilityDetector",
 		DetectorVersion: nativeDetectorVersion, RulesetVersion: "marketplace-v1",
 	}
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		now := time.Now().UTC()
+		if err := tx.Model(&marketplaceschema.VerificationRun{}).
+			Where("channel_id = ? AND status IN ?", channelID, []string{
+				marketplacedomain.VerificationQueued,
+				marketplacedomain.VerificationRunning,
+			}).Updates(map[string]any{
+			"status": marketplacedomain.VerificationPaused, "completed_at": now,
+		}).Error; err != nil {
+			return err
+		}
 		if err := tx.Create(run).Error; err != nil {
 			return err
 		}
@@ -72,10 +102,36 @@ func QueueConnectivityTest(channelID string) error {
 		}
 		return setRequiredVerificationQueuedWithDB(tx, channelID)
 	}); err != nil {
+		finish()
 		return err
 	}
-	go executeNativeVerification(run.ID)
+	go func() {
+		defer finish()
+		executeNativeVerification(ctx, run.ID)
+	}()
 	return nil
+}
+
+func prepareGPT56MappingVerification(channelID string) error {
+	now := time.Now().UTC()
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&marketplaceschema.GPT56MappingRun{}).
+			Where("channel_id = ? AND status IN ?", channelID, []string{
+				GPT56MappingStatusQueued, GPT56MappingStatusRunning,
+			}).Updates(map[string]any{
+			"status": GPT56MappingStatusPaused, "completed_at": now,
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).
+			Updates(map[string]any{
+				"gpt56_mapping_status":  GPT56MappingStatusQueued,
+				"gpt56_mapping_results": "[]",
+			}).Error; err != nil {
+			return err
+		}
+		return setRequiredVerificationQueuedWithDB(tx, channelID)
+	})
 }
 
 // QueueNativeVerification is kept for internal callers that used the old name.
@@ -101,34 +157,55 @@ func setRequiredVerificationQueuedWithDB(tx *gorm.DB, channelID string) error {
 	}).Error
 }
 
-func executeNativeVerification(runID string) {
+func executeNativeVerification(ctx context.Context, runID string) {
 	run, channel, group, err := loadVerificationContext(runID)
 	if err != nil {
 		return
 	}
 	now := time.Now().UTC()
-	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(run).Updates(map[string]any{"status": marketplacedomain.VerificationRunning, "started_at": now}).Error; err != nil {
-			return err
+	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(run).Where("status = ?", marketplacedomain.VerificationQueued).
+			Updates(map[string]any{"status": marketplacedomain.VerificationRunning, "started_at": now})
+		if result.Error != nil {
+			return result.Error
 		}
-		return tx.Model(channel).Update("connectivity_test_status", marketplacedomain.VerificationRunning).Error
-	})
-	results, err := probeMarketplaceChannel(channel, func(stage string) {
-		_ = platformdb.DB.Model(run).Update("stage", stage).Error
+		if result.RowsAffected == 0 {
+			return errVerificationNotRunning
+		}
+		result = tx.Model(channel).
+			Where("connectivity_test_status = ?", marketplacedomain.VerificationQueued).
+			Update("connectivity_test_status", marketplacedomain.VerificationRunning)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errVerificationNotRunning
+		}
+		return nil
+	}); err != nil {
+		return
+	}
+	results, err := probeMarketplaceChannel(ctx, channel, func(stage string) {
+		_ = platformdb.DB.Model(run).
+			Where("status = ?", marketplacedomain.VerificationRunning).
+			Update("stage", stage).Error
 	}, func(results []ModelVerificationResult) {
-		_ = platformdb.DB.Model(channel).Update(
-			"model_verification_results", encodeModelVerificationResults(results),
-		).Error
+		_ = platformdb.DB.Model(channel).
+			Where("connectivity_test_status = ?", marketplacedomain.VerificationRunning).
+			Update("model_verification_results", encodeModelVerificationResults(results)).Error
 	})
 	completeVerification(run, channel, group, results, err)
 }
 
-func executeGPT56MappingVerification(channelID, trigger string) {
+func executeGPT56MappingVerification(ctx context.Context, channelID, trigger string) {
+	if ctx.Err() != nil {
+		return
+	}
 	channel, group, err := loadChannelGroup(channelID)
 	if err != nil || !isGPT56MappingEligible(channel) {
 		return
 	}
-	_, err = runGPT56MappingCheckWithRequest(channel, gpt56CheckRequest{
+	_, err = runGPT56MappingCheckWithRequest(ctx, channel, gpt56CheckRequest{
 		Level: GPT56MappingLevelConfirmation, Trigger: trigger,
 	})
 	if err != nil {
@@ -141,6 +218,10 @@ func executeGPT56MappingVerification(channelID, trigger string) {
 }
 
 func completeGPT56MappingVerification(channel *marketplaceschema.Channel, group *marketplaceschema.Group) {
+	if channel == nil || channel.GPT56MappingStatus == GPT56MappingStatusPaused ||
+		mappingStatusInProgress(channel.GPT56MappingStatus) {
+		return
+	}
 	now := time.Now().UTC()
 	lifecycle := marketplacedomain.LifecycleDraft
 	verification := marketplacedomain.VerificationFailed
@@ -156,8 +237,14 @@ func completeGPT56MappingVerification(channel *marketplaceschema.Channel, group 
 		}
 	}
 	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(channel).Update("status", lifecycle).Error; err != nil {
-			return err
+		result := tx.Model(channel).
+			Where("gpt56_mapping_status <> ?", GPT56MappingStatusPaused).
+			Update("status", lifecycle)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errVerificationNotRunning
 		}
 		updates := map[string]any{"lifecycle_status": lifecycle, "verification_status": verification}
 		if verification == marketplacedomain.VerificationPassed {

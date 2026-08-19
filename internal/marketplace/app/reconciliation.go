@@ -14,6 +14,9 @@ func ReconcileMarketplaceChannels() error {
 	if platformdb.DB == nil || !platformdb.DB.Migrator().HasTable(&marketplaceschema.Channel{}) {
 		return nil
 	}
+	if err := reconcileInterruptedVerifications(); err != nil {
+		return err
+	}
 	var channels []marketplaceschema.Channel
 	if err := platformdb.DB.Find(&channels).Error; err != nil {
 		return err

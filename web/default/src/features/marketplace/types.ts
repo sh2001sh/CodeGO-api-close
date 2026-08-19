@@ -11,10 +11,12 @@ export type ModelConsistencyStatus = '' | 'passed' | 'failed' | 'questionable'
 
 export type GPT56MappingStatus =
   | ''
+  | 'queued'
   | 'running'
   | 'matched'
   | 'mismatch'
   | 'insufficient_evidence'
+  | 'paused'
 
 export type ConnectivityTestStatus =
   | ''
@@ -22,6 +24,7 @@ export type ConnectivityTestStatus =
   | 'running'
   | 'passed'
   | 'failed'
+  | 'paused'
 
 export interface ModelVerificationResult {
   model: string

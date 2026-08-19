@@ -19,10 +19,19 @@ func startGPT56MappingRun(channelID, level, trigger, parentRunID string) (*marke
 		if err := tx.Create(run).Error; err != nil {
 			return err
 		}
-		return tx.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).Updates(map[string]any{
-			"gpt56_mapping_results": "[]", "gpt56_mapping_status": GPT56MappingStatusRunning,
-			"gpt56_mapping_level": level, "gpt56_mapping_trigger": trigger,
-		}).Error
+		result := tx.Model(&marketplaceschema.Channel{}).
+			Where("id = ? AND COALESCE(gpt56_mapping_status, '') <> ?", channelID, GPT56MappingStatusPaused).
+			Updates(map[string]any{
+				"gpt56_mapping_results": "[]", "gpt56_mapping_status": GPT56MappingStatusRunning,
+				"gpt56_mapping_level": level, "gpt56_mapping_trigger": trigger,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errVerificationNotRunning
+		}
+		return nil
 	})
 	return run, err
 }
@@ -33,13 +42,20 @@ func saveGPT56MappingProgress(runID, channelID string, results []GPT56MappingRes
 		return err
 	}
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&marketplaceschema.GPT56MappingRun{}).Where("id = ?", runID).
-			Update("results", string(encoded)).Error; err != nil {
-			return err
+		result := tx.Model(&marketplaceschema.GPT56MappingRun{}).
+			Where("id = ? AND status = ?", runID, GPT56MappingStatusRunning).
+			Update("results", string(encoded))
+		if result.Error != nil {
+			return result.Error
 		}
-		return tx.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).Updates(map[string]any{
-			"gpt56_mapping_results": string(encoded), "gpt56_mapping_status": GPT56MappingStatusRunning,
-		}).Error
+		if result.RowsAffected == 0 {
+			return errVerificationNotRunning
+		}
+		return tx.Model(&marketplaceschema.Channel{}).
+			Where("id = ? AND gpt56_mapping_status = ?", channelID, GPT56MappingStatusRunning).
+			Updates(map[string]any{
+				"gpt56_mapping_results": string(encoded), "gpt56_mapping_status": GPT56MappingStatusRunning,
+			}).Error
 	})
 }
 
@@ -54,16 +70,22 @@ func finishGPT56MappingRun(
 	}
 	now := time.Now().UTC()
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(run).Updates(map[string]any{
+		result := tx.Model(run).Where("status = ?", GPT56MappingStatusRunning).Updates(map[string]any{
 			"results": string(encoded), "status": status, "completed_at": now,
-		}).Error; err != nil {
-			return err
+		})
+		if result.Error != nil {
+			return result.Error
 		}
-		return tx.Model(&marketplaceschema.Channel{}).Where("id = ?", run.ChannelID).Updates(map[string]any{
-			"gpt56_mapping_results": string(encoded), "gpt56_mapping_status": status,
-			"gpt56_mapping_checked_at": now, "gpt56_mapping_level": run.Level,
-			"gpt56_mapping_trigger": run.Trigger,
-		}).Error
+		if result.RowsAffected == 0 {
+			return errVerificationNotRunning
+		}
+		return tx.Model(&marketplaceschema.Channel{}).
+			Where("id = ? AND gpt56_mapping_status = ?", run.ChannelID, GPT56MappingStatusRunning).
+			Updates(map[string]any{
+				"gpt56_mapping_results": string(encoded), "gpt56_mapping_status": status,
+				"gpt56_mapping_checked_at": now, "gpt56_mapping_level": run.Level,
+				"gpt56_mapping_trigger": run.Trigger,
+			}).Error
 	})
 }
 

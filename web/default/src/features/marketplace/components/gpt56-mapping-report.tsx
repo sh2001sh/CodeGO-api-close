@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  CirclePause,
   CircleDashed,
   Loader2,
   XCircle,
@@ -22,10 +23,12 @@ import { mappingLevelLabel, mappingTriggerLabel } from './gpt56-mapping-labels'
 
 const statusLabels: Record<GPT56MappingStatus, string> = {
   '': '未检测',
+  queued: '等待检测',
   running: '检测中',
   matched: '映射正确',
   mismatch: '映射不一致',
   insufficient_evidence: '证据不足',
+  paused: '已暂停',
 }
 
 export function GPT56MappingStatusView(props: {
@@ -66,7 +69,7 @@ export function GPT56MappingStatusView(props: {
           {mappingExplanation(props.status, props.level, t)}
         </p>
         <div className='text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1 tabular-nums'>
-          {props.status === 'running' && total > 0
+          {['queued', 'running', 'paused'].includes(props.status) && total > 0
             ? t('已完成 {{completed}} / {{total}} 次请求', {
                 completed,
                 total,
@@ -79,7 +82,7 @@ export function GPT56MappingStatusView(props: {
             <span>{mappingTriggerLabel(props.trigger, t)}</span>
           )}
         </div>
-        {props.status === 'running' && total > 0 && (
+        {['queued', 'running'].includes(props.status) && total > 0 && (
           <div
             className='bg-muted mt-2 h-1.5 overflow-hidden rounded-full'
             role='progressbar'
@@ -120,11 +123,13 @@ function MappingStatus({ status }: { status: GPT56MappingStatus }) {
       ? CheckCircle2
       : status === 'mismatch'
         ? XCircle
-        : status === 'running'
-          ? Loader2
-          : status === 'insufficient_evidence'
-            ? AlertTriangle
-            : CircleDashed
+        : status === 'paused'
+          ? CirclePause
+          : status === 'running'
+            ? Loader2
+            : status === 'insufficient_evidence'
+              ? AlertTriangle
+              : CircleDashed
   return (
     <span
       className={cn(
@@ -132,6 +137,8 @@ function MappingStatus({ status }: { status: GPT56MappingStatus }) {
         status === 'matched' && 'text-success',
         status === 'mismatch' && 'text-destructive',
         status === 'running' && 'text-primary',
+        status === 'queued' && 'text-primary',
+        status === 'paused' && 'text-muted-foreground',
         status === 'insufficient_evidence' && 'text-warning-foreground',
         status === '' && 'text-muted-foreground'
       )}
@@ -248,6 +255,9 @@ function mappingExplanation(
     return level === 'daily_light'
       ? t('正在执行每日轻量检测；发现异常后会自动进入确认检测。')
       : t('正在执行确认检测，结果会随请求完成自动更新。')
+  if (status === 'queued') return t('检测已进入队列，即将开始。')
+  if (status === 'paused')
+    return t('检测已暂停，已完成的报告会保留；可重新开始检测。')
   return t('每日执行轻量检测；轻量异常会自动复检，只有确认异常才会下线。')
 }
 

@@ -1,6 +1,13 @@
 import { useDeferredValue, useState } from 'react'
-import { Activity, Pencil, ShieldCheck, Trash2 } from 'lucide-react'
+import {
+  Activity,
+  CirclePause,
+  Pencil,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,6 +65,7 @@ export function AdminGovernance() {
   })
   const detection = useAdminMarketplaceVerification('detect')
   const connectivityTest = useAdminMarketplaceVerification('test')
+  const verificationPause = useAdminMarketplaceVerification('pause')
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
   const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
 
@@ -143,6 +151,7 @@ export function AdminGovernance() {
           <option value='passed'>{t('检测通过')}</option>
           <option value='queued'>{t('等待检测')}</option>
           <option value='running'>{t('检测中')}</option>
+          <option value='paused'>{t('已暂停')}</option>
           <option value='failed'>{t('检测未通过')}</option>
         </NativeSelect>
         <NativeSelect
@@ -252,12 +261,16 @@ export function AdminGovernance() {
                       size='sm'
                       disabled={
                         detection.isPending ||
-                        channel.gpt56_mapping_status === 'running'
+                        ['queued', 'running'].includes(
+                          channel.gpt56_mapping_status
+                        )
                       }
                       onClick={() => detection.mutate(channel.id)}
                     >
                       <ShieldCheck />
-                      {channel.gpt56_mapping_status === 'running'
+                      {['queued', 'running'].includes(
+                        channel.gpt56_mapping_status
+                      )
                         ? t('检测中')
                         : t('检测 GPT-5.6')}
                     </Button>
@@ -280,6 +293,30 @@ export function AdminGovernance() {
                       ? t('测试中')
                       : t('测试连通性')}
                   </Button>
+                  {isVerificationRunning(channel) && (
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={verificationPause.isPending}
+                      onClick={() =>
+                        verificationPause.mutate(channel.id, {
+                          onSuccess: () =>
+                            toast.success(t('检测已暂停，可以重新开始')),
+                          onError: (error) =>
+                            toast.error(
+                              error instanceof Error
+                                ? error.message
+                                : t('暂停检测失败')
+                            ),
+                        })
+                      }
+                    >
+                      <CirclePause />
+                      {verificationPause.isPending
+                        ? t('正在暂停')
+                        : t('暂停检测')}
+                    </Button>
+                  )}
                   <Button
                     variant='outline'
                     size='sm'
@@ -325,4 +362,11 @@ export function AdminGovernance() {
 
 function toTimestamp(value?: Date) {
   return value ? Math.floor(value.getTime() / 1000) : undefined
+}
+
+function isVerificationRunning(channel: MarketplaceChannel) {
+  return (
+    ['queued', 'running'].includes(channel.gpt56_mapping_status) ||
+    ['queued', 'running'].includes(channel.connectivity_test_status)
+  )
 }

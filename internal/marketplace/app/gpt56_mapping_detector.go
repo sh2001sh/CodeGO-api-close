@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -21,9 +22,13 @@ type gpt56CheckRequest struct {
 }
 
 func runGPT56MappingCheckWithRequest(
+	ctx context.Context,
 	channel *marketplaceschema.Channel,
 	request gpt56CheckRequest,
 ) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return true, err
+	}
 	if !isGPT56MappingEligible(channel) {
 		return false, nil
 	}
@@ -31,6 +36,9 @@ func runGPT56MappingCheckWithRequest(
 	lock := lockValue.(*sync.Mutex)
 	lock.Lock()
 	defer lock.Unlock()
+	if err := ctx.Err(); err != nil {
+		return true, err
+	}
 
 	var current marketplaceschema.Channel
 	if err := platformdb.DB.First(&current, "id = ?", channel.ID).Error; err != nil {
@@ -39,13 +47,17 @@ func runGPT56MappingCheckWithRequest(
 	if current.GPT56MappingStatus == GPT56MappingStatusRunning {
 		return true, nil
 	}
-	return true, executeGPT56MappingCheck(&current, request)
+	return true, executeGPT56MappingCheck(ctx, &current, request)
 }
 
 func executeGPT56MappingCheck(
+	ctx context.Context,
 	channel *marketplaceschema.Channel,
 	request gpt56CheckRequest,
 ) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	policy := gpt56Policy(request.Level)
 	run, err := startGPT56MappingRun(
 		channel.ID, policy.Level, request.Trigger, request.ParentRunID,
@@ -59,7 +71,8 @@ func executeGPT56MappingCheck(
 		results := unavailableGPT56MappingResults(models, policy)
 		return finishGPT56MappingRun(run, results, GPT56MappingStatusInsufficientEvidence)
 	}
-	results, err := probeGPT56MappingsWithProgress(
+	results, err := probeGPT56MappingsWithProgressContext(
+		ctx,
 		channel.ProviderType, baseURL, credential, models, policy,
 		func(progress []GPT56MappingResult) error {
 			return saveGPT56MappingProgress(run.ID, channel.ID, progress)
@@ -76,7 +89,7 @@ func executeGPT56MappingCheck(
 		return err
 	}
 	if shouldConfirmGPT56Mapping(policy, status) {
-		return executeGPT56MappingCheck(channel, gpt56CheckRequest{
+		return executeGPT56MappingCheck(ctx, channel, gpt56CheckRequest{
 			Level: GPT56MappingLevelConfirmation, Trigger: GPT56MappingTriggerConfirmation,
 			ParentRunID: run.ID,
 		})

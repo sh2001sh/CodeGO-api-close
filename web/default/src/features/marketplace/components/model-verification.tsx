@@ -1,4 +1,11 @@
-import { CheckCircle2, CircleHelp, Loader2, Minus, XCircle } from 'lucide-react'
+import {
+  CheckCircle2,
+  CircleHelp,
+  CirclePause,
+  Loader2,
+  Minus,
+  XCircle,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +28,7 @@ const connectivityLabels: Record<ConnectivityTestStatus, string> = {
   running: '测试中',
   passed: '测试通过',
   failed: '测试失败',
+  paused: '已暂停',
 }
 
 export function ConnectivityTestStatusView(props: {
@@ -38,9 +46,11 @@ export function ConnectivityTestStatusView(props: {
       ? CheckCircle2
       : status === 'failed'
         ? XCircle
-        : running
-          ? Loader2
-          : Minus
+        : status === 'paused'
+          ? CirclePause
+          : running
+            ? Loader2
+            : Minus
   return (
     <div className='border-border bg-muted/20 mt-3 rounded-md border px-3 py-2.5 text-xs'>
       <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-1'>
@@ -53,6 +63,7 @@ export function ConnectivityTestStatusView(props: {
             status === 'passed' && 'text-success',
             status === 'failed' && 'text-destructive',
             running && 'text-primary',
+            status === 'paused' && 'text-muted-foreground',
             status === '' && 'text-muted-foreground'
           )}
         >

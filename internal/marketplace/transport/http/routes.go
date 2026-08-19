@@ -35,6 +35,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.POST("/channels/:id/verify", middleware.CriticalRateLimit(), VerifyChannel)
 		marketplaceRoute.POST("/channels/:id/detect", middleware.CriticalRateLimit(), DetectChannel)
 		marketplaceRoute.POST("/channels/:id/test", middleware.CriticalRateLimit(), TestChannelConnectivity)
+		marketplaceRoute.POST("/channels/:id/verification/pause", PauseChannelVerification)
 		marketplaceRoute.POST("/channels/:id/pause", PauseChannel)
 		marketplaceRoute.POST("/channels/:id/resume", ResumeChannel)
 	}
@@ -48,6 +49,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		adminRoute.POST("/channels/:id/verify", middleware.CriticalRateLimit(), VerifyAdminChannel)
 		adminRoute.POST("/channels/:id/detect", middleware.CriticalRateLimit(), DetectAdminChannel)
 		adminRoute.POST("/channels/:id/test", middleware.CriticalRateLimit(), TestAdminChannelConnectivity)
+		adminRoute.POST("/channels/:id/verification/pause", PauseAdminChannelVerification)
 		adminRoute.DELETE("/channels/:id", DeleteAdminChannel)
 		adminRoute.POST("/channels/:id/review", middleware.CriticalRateLimit(), ReviewChannel)
 	}

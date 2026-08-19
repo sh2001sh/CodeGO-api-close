@@ -129,6 +129,14 @@ func TestChannelConnectivity(c *gin.Context) {
 	queueOwnedChannelAction(c, marketplaceapp.QueueConnectivityTest)
 }
 
+func PauseChannelVerification(c *gin.Context) {
+	respond(
+		c,
+		gin.H{"paused": true},
+		marketplaceapp.PauseOwnerChannelVerification(c.GetInt("id"), c.Param("id")),
+	)
+}
+
 func queueOwnedChannelAction(c *gin.Context, queue func(string) error) {
 	channels, err := marketplaceapp.ListOwnerChannels(c.GetInt("id"))
 	if err != nil {
@@ -210,6 +218,10 @@ func DetectAdminChannel(c *gin.Context) {
 
 func TestAdminChannelConnectivity(c *gin.Context) {
 	queueAdminChannelAction(c, marketplaceapp.QueueConnectivityTest)
+}
+
+func PauseAdminChannelVerification(c *gin.Context) {
+	respond(c, gin.H{"paused": true}, marketplaceapp.PauseChannelVerification(c.Param("id")))
 }
 
 func queueAdminChannelAction(c *gin.Context, queue func(string) error) {

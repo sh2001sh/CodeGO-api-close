@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +77,7 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 		upstream, err := fetchUpstreamModels(channel.ProviderType, baseURL, credential)
 		if err == nil {
 			results, probeErr := probeDeclaredModels(
+				context.Background(),
 				channel.ProviderType,
 				baseURL,
 				credential,

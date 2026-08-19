@@ -19,6 +19,13 @@ func probeMarketplaceInference(provider, baseURL, apiKey, model string) error {
 }
 
 func probeMarketplaceInferenceTimed(provider, baseURL, apiKey, model string) (int64, error) {
+	return probeMarketplaceInferenceTimedContext(context.Background(), provider, baseURL, apiKey, model)
+}
+
+func probeMarketplaceInferenceTimedContext(
+	parent context.Context,
+	provider, baseURL, apiKey, model string,
+) (int64, error) {
 	endpoint, payload, err := inferenceProbeRequest(provider, baseURL, model)
 	if err != nil {
 		return 0, err
@@ -27,7 +34,7 @@ func probeMarketplaceInferenceTimed(provider, baseURL, apiKey, model string) (in
 	if err != nil {
 		return 0, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -66,6 +73,16 @@ func probeMarketplaceInferenceReportedModelWithVariant(
 	provider, baseURL, apiKey, model string,
 	variant gpt56ProbeVariant,
 ) (int64, string, error) {
+	return probeMarketplaceInferenceReportedModelWithVariantContext(
+		context.Background(), provider, baseURL, apiKey, model, variant,
+	)
+}
+
+func probeMarketplaceInferenceReportedModelWithVariantContext(
+	parent context.Context,
+	provider, baseURL, apiKey, model string,
+	variant gpt56ProbeVariant,
+) (int64, string, error) {
 	endpoint, payload, err := inferenceProbeRequestWithPrompt(
 		provider, baseURL, model, variant.Prompt, variant.MaxOutputTokens,
 	)
@@ -76,7 +93,7 @@ func probeMarketplaceInferenceReportedModelWithVariant(
 	if err != nil {
 		return 0, "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {

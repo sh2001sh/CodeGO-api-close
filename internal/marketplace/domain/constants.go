@@ -30,6 +30,7 @@ const (
 	VerificationPassed   = "passed"
 	VerificationFailed   = "failed"
 	VerificationExpired  = "expired"
+	VerificationPaused   = "paused"
 
 	VisibilityPrivate  = "private"
 	VisibilityUnlisted = "unlisted"

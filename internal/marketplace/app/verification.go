@@ -20,6 +20,7 @@ import (
 )
 
 func probeMarketplaceChannel(
+	ctx context.Context,
 	channel *marketplaceschema.Channel,
 	reportStage func(string),
 	reportResults func([]ModelVerificationResult),
@@ -37,7 +38,7 @@ func probeMarketplaceChannel(
 		return nil, err
 	}
 	reportStage("model_list")
-	models, err := fetchUpstreamModels(channel.ProviderType, baseURL, credential)
+	models, err := fetchUpstreamModelsContext(ctx, channel.ProviderType, baseURL, credential)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +47,7 @@ func probeMarketplaceChannel(
 	modelListErr := verifyDeclaredModels(declared, models)
 	reportStage("inference")
 	results, inferenceErr := probeDeclaredModels(
-		channel.ProviderType, baseURL, credential, declared, models, reportResults,
+		ctx, channel.ProviderType, baseURL, credential, declared, models, reportResults,
 	)
 	return results, errors.Join(modelListErr, inferenceErr)
 }
@@ -65,11 +66,18 @@ func FetchUpstreamModels(req FetchModelsRequest) ([]string, error) {
 }
 
 func fetchUpstreamModels(provider, baseURL, apiKey string) ([]string, error) {
+	return fetchUpstreamModelsContext(context.Background(), provider, baseURL, apiKey)
+}
+
+func fetchUpstreamModelsContext(
+	parent context.Context,
+	provider, baseURL, apiKey string,
+) ([]string, error) {
 	endpoint, err := modelsEndpoint(provider, baseURL)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -183,11 +191,15 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	}
 	hash := sha256.Sum256([]byte(run.ID + channel.ID + status + now.Format(time.RFC3339Nano)))
 	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(run).Updates(map[string]any{
+		runUpdate := tx.Model(run).Where("status = ?", marketplacedomain.VerificationRunning).Updates(map[string]any{
 			"status": connectivityStatus, "stage": "protocol", "summary": summary,
 			"evidence_hash": hex.EncodeToString(hash[:]), "completed_at": now, "expires_at": expires,
-		}).Error; err != nil {
-			return err
+		})
+		if runUpdate.Error != nil {
+			return runUpdate.Error
+		}
+		if runUpdate.RowsAffected == 0 {
+			return errVerificationNotRunning
 		}
 		updates := map[string]any{"verification_status": status, "lifecycle_status": lifecycle}
 		if status == marketplacedomain.VerificationPassed {
@@ -216,6 +228,8 @@ func requiredVerificationState(channel *marketplaceschema.Channel) (string, stri
 			return marketplacedomain.VerificationPassed, marketplacedomain.LifecycleActive
 		case GPT56MappingStatusRunning:
 			return marketplacedomain.VerificationRunning, marketplacedomain.LifecycleVerifying
+		case GPT56MappingStatusPaused:
+			return marketplacedomain.VerificationPaused, marketplacedomain.LifecycleDraft
 		case GPT56MappingStatusMismatch, GPT56MappingStatusInsufficientEvidence:
 			return marketplacedomain.VerificationFailed, marketplacedomain.LifecycleDraft
 		default:
@@ -227,6 +241,8 @@ func requiredVerificationState(channel *marketplaceschema.Channel) (string, stri
 		return marketplacedomain.VerificationPassed, marketplacedomain.LifecycleActive
 	case marketplacedomain.VerificationRunning:
 		return marketplacedomain.VerificationRunning, marketplacedomain.LifecycleVerifying
+	case marketplacedomain.VerificationPaused:
+		return marketplacedomain.VerificationPaused, marketplacedomain.LifecycleDraft
 	case marketplacedomain.VerificationFailed:
 		return marketplacedomain.VerificationFailed, marketplacedomain.LifecycleDraft
 	default:

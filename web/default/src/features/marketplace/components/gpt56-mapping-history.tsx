@@ -4,10 +4,12 @@ import type { GPT56MappingRun, GPT56MappingStatus } from '../types'
 import { mappingLevelLabel, mappingTriggerLabel } from './gpt56-mapping-labels'
 
 const historyStatusLabels: Record<Exclude<GPT56MappingStatus, ''>, string> = {
+  queued: '等待检测',
   running: '检测中',
   matched: '通过',
   mismatch: '不一致',
   insufficient_evidence: '证据不足',
+  paused: '已暂停',
 }
 
 export function GPT56MappingHistory({ runs }: { runs: GPT56MappingRun[] }) {

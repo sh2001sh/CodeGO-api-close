@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -60,6 +61,7 @@ func TestProbeDeclaredModelsTestsEveryModel(t *testing.T) {
 
 	var progressSnapshots int
 	results, err := probeDeclaredModels(
+		context.Background(),
 		"openai_compatible", server.URL, "test-key",
 		[]string{"good-model", "bad-model"}, []string{"good-model"},
 		func(results []ModelVerificationResult) { progressSnapshots = len(results) },

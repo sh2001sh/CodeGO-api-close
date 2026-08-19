@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react'
-import { BarChart3, Plus, ShieldCheck, Store, UploadCloud } from 'lucide-react'
+import {
+  BarChart3,
+  LineChart,
+  Plus,
+  ShieldCheck,
+  Store,
+  UploadCloud,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
@@ -8,6 +15,7 @@ import { SectionPageLayout } from '@/components/layout'
 import { AdminGovernance } from './components/admin-governance'
 import { ChannelWorkspace } from './components/channel-workspace'
 import { MarketSurface } from './components/market-surface'
+import { MarketplaceMultiplierTrend } from './components/marketplace-multiplier-trend'
 import { MarketplaceOverview } from './components/marketplace-overview'
 import { useMarketplaceGroups } from './hooks'
 import type { GroupFilters } from './types'
@@ -26,7 +34,7 @@ const defaultFilters: GroupFilters = {
   page_size: 20,
 }
 
-type MarketplaceTab = 'market' | 'ranking' | 'mine' | 'admin'
+type MarketplaceTab = 'market' | 'ranking' | 'trend' | 'mine' | 'admin'
 
 export function MarketplacePage() {
   const { t } = useTranslation()
@@ -48,11 +56,6 @@ export function MarketplacePage() {
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>{t('分组市场')}</SectionPageLayout.Title>
-      <SectionPageLayout.Description>
-        {t(
-          '比较真实调用质量、响应速度与倍率，为每个 Token 选择更合适的第三方渠道。'
-        )}
-      </SectionPageLayout.Description>
       <SectionPageLayout.Actions>
         {isAdmin && (
           <Button variant='outline' size='sm' onClick={() => setTab('admin')}>
@@ -66,11 +69,12 @@ export function MarketplacePage() {
         </Button>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='mx-auto w-full max-w-[1800px] space-y-5'>
+        <div className='mx-auto w-full max-w-[1800px] space-y-3'>
           <MarketplaceOverview
             total={groups.data?.total ?? 0}
             ranked={groups.data?.ranked_count ?? 0}
             multiplier={groups.data?.highlights.cheapest?.multiplier}
+            updating={groups.isFetching}
           />
           <Tabs
             value={tab}
@@ -80,21 +84,43 @@ export function MarketplacePage() {
               if (nextTab !== 'mine') setShowChannelForm(false)
             }}
           >
-            <TabsList className='bg-muted/70 w-full justify-start overflow-x-auto p-1 sm:w-fit'>
-              <TabsTrigger value='market' className='min-w-28 px-3'>
+            <TabsList
+              variant='line'
+              className='border-border h-10 w-full justify-start gap-1 overflow-x-auto border-b px-1 sm:gap-2'
+            >
+              <TabsTrigger
+                value='market'
+                className='min-w-20 px-2 sm:min-w-24 sm:px-3'
+              >
                 <Store />
-                {t('发现渠道')}
+                {t('市场分组')}
               </TabsTrigger>
-              <TabsTrigger value='ranking' className='min-w-28 px-3'>
+              <TabsTrigger
+                value='ranking'
+                className='min-w-20 px-2 sm:min-w-24 sm:px-3'
+              >
                 <BarChart3 />
                 {t('质量排行')}
               </TabsTrigger>
-              <TabsTrigger value='mine' className='min-w-28 px-3'>
+              <TabsTrigger
+                value='trend'
+                className='min-w-20 px-2 sm:min-w-24 sm:px-3'
+              >
+                <LineChart />
+                {t('价格走势')}
+              </TabsTrigger>
+              <TabsTrigger
+                value='mine'
+                className='min-w-20 px-2 sm:min-w-24 sm:px-3'
+              >
                 <UploadCloud />
                 {t('我的渠道')}
               </TabsTrigger>
               {isAdmin && (
-                <TabsTrigger value='admin' className='min-w-28 px-3'>
+                <TabsTrigger
+                  value='admin'
+                  className='min-w-20 px-2 sm:min-w-24 sm:px-3'
+                >
                   <ShieldCheck />
                   {t('渠道治理')}
                 </TabsTrigger>
@@ -115,6 +141,12 @@ export function MarketplacePage() {
                 updateFilters={updateFilters}
                 query={groups}
                 summary={t('用统一口径比较可靠性、响应性能、吞吐与调用成本。')}
+              />
+            </TabsContent>
+            <TabsContent value='trend'>
+              <MarketplaceMultiplierTrend
+                model={filters.model}
+                onModelChange={(model) => updateFilters({ model, page: 1 })}
               />
             </TabsContent>
             <TabsContent value='mine'>

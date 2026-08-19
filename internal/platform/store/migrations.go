@@ -49,6 +49,37 @@ type legacyMarketplaceModelFeedback struct {
 	Status    string `gorm:"column:status"`
 }
 
+type perfMetricsCacheMigration struct {
+	InputTokens      int64 `gorm:"column:input_tokens;default:0"`
+	CacheReadTokens  int64 `gorm:"column:cache_read_tokens;default:0"`
+	CacheWriteTokens int64 `gorm:"column:cache_write_tokens;default:0"`
+}
+
+func (perfMetricsCacheMigration) TableName() string { return "perf_metrics" }
+
+type channelPerfMetricsCacheMigration struct {
+	InputTokens      int64 `gorm:"column:input_tokens;default:0"`
+	CacheReadTokens  int64 `gorm:"column:cache_read_tokens;default:0"`
+	CacheWriteTokens int64 `gorm:"column:cache_write_tokens;default:0"`
+	AttemptTtftSumMs int64 `gorm:"column:attempt_ttft_sum_ms;default:0"`
+	AttemptTtftCount int64 `gorm:"column:attempt_ttft_count;default:0"`
+	E2eTtftSumMs     int64 `gorm:"column:e2e_ttft_sum_ms;default:0"`
+	E2eTtftCount     int64 `gorm:"column:e2e_ttft_count;default:0"`
+}
+
+func (channelPerfMetricsCacheMigration) TableName() string { return "channel_perf_metrics" }
+
+type channelLatencyHistogramMigration struct {
+	ID          int    `gorm:"primaryKey"`
+	ChannelID   int    `gorm:"column:channel_id;uniqueIndex:idx_channel_latency_histogram,priority:1;index"`
+	BucketTs    int64  `gorm:"column:bucket_ts;uniqueIndex:idx_channel_latency_histogram,priority:2;index:idx_channel_latency_histogram_ts"`
+	Kind        string `gorm:"column:kind;size:16;uniqueIndex:idx_channel_latency_histogram,priority:3"`
+	BucketIndex int    `gorm:"column:bucket_index;uniqueIndex:idx_channel_latency_histogram,priority:4"`
+	SampleCount int64  `gorm:"column:sample_count;default:0"`
+}
+
+func (channelLatencyHistogramMigration) TableName() string { return "channel_latency_histograms" }
+
 func (legacyMarketplaceModelFeedback) TableName() string {
 	if platformdb.UsingPostgreSQL {
 		return "marketplace.model_consistency_feedback"
@@ -122,6 +153,10 @@ func V2MigrationIDs() []string {
 		"20260818_multiplier_precision",
 		"20260819_group_status_log_index",
 		"20260819_redundant_write_indexes",
+		"20260819_perf_metrics_cache_columns",
+		"20260819_billing_outbox_published_cleanup",
+		"20260819_archive_retention_indexes",
+		"20260819_marketplace_latency_metrics",
 	}
 }
 
@@ -304,6 +339,27 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260818_commerce_invoice_request_items", Run: migrateCommerceInvoiceRequestItems},
 		{ID: "20260819_group_status_log_index", RunOutsideTx: migrateGroupStatusLogIndex},
 		{ID: "20260819_redundant_write_indexes", RunOutsideTx: migrateRedundantWriteIndexes},
+		{ID: "20260819_perf_metrics_cache_columns", Run: func(tx *gorm.DB) error {
+			if tx.Migrator().HasTable("perf_metrics") {
+				if err := tx.AutoMigrate(&perfMetricsCacheMigration{}); err != nil {
+					return err
+				}
+			}
+			if tx.Migrator().HasTable("channel_perf_metrics") {
+				return tx.AutoMigrate(&channelPerfMetricsCacheMigration{})
+			}
+			return nil
+		}},
+		{ID: "20260819_billing_outbox_published_cleanup", RunOutsideTx: migratePublishedOutboxCleanupIndex},
+		{ID: "20260819_archive_retention_indexes", RunOutsideTx: migrateArchiveRetentionIndexes},
+		{ID: "20260819_marketplace_latency_metrics", Run: func(tx *gorm.DB) error {
+			if tx.Migrator().HasTable("channel_perf_metrics") {
+				if err := tx.AutoMigrate(&channelPerfMetricsCacheMigration{}); err != nil {
+					return err
+				}
+			}
+			return tx.AutoMigrate(&channelLatencyHistogramMigration{}, &marketplaceschema.RankingSnapshot{})
+		}},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -612,6 +668,13 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			db.Migrator().HasTable(&gatewayschema.Channel{}) &&
 				(!db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency") ||
 					!db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceUserMaxConcurrency"))
+	case "20260819_marketplace_latency_metrics":
+		return !db.Migrator().HasTable(&channelLatencyHistogramMigration{}) ||
+			!db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AttemptTTFTP50Ms") ||
+			!db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AttemptTTFTP95Ms") ||
+			!db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "E2ETTFTP50Ms") ||
+			!db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "E2ETTFTP95Ms") ||
+			!db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "LatencySampleCount")
 	case "20260816_unified_credit_v1_channel_scope":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}) ||
 			db.Migrator().HasTable(&gatewayschema.Channel{}) &&
@@ -1132,6 +1195,91 @@ func migratePendingOutboxLookupIndex(db *gorm.DB) error {
 		CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_created
 		ON billing_outbox_events (status, created_at, event_id)
 	`).Error
+}
+
+// migratePublishedOutboxCleanupIndex bounds the index scanned by the 72-hour
+// published-event cleanup without adding pending events to the PostgreSQL index.
+func migratePublishedOutboxCleanupIndex(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&billingschema.BillingOutboxEvent{}) {
+		return nil
+	}
+	if db.Migrator().HasIndex(&billingschema.BillingOutboxEvent{}, "idx_billing_outbox_published_cleanup") {
+		return nil
+	}
+	return db.Exec(publishedOutboxCleanupIndexStatement(db.Dialector.Name())).Error
+}
+
+func publishedOutboxCleanupIndexStatement(dialect string) string {
+	if dialect == "postgres" {
+		return `
+			CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_published_cleanup
+			ON billing.outbox_events (published_at, event_id)
+			WHERE status = 'published'
+		`
+	}
+	if dialect == "mysql" {
+		return `
+			CREATE INDEX idx_billing_outbox_published_cleanup
+			ON billing_outbox_events (status, published_at, event_id)
+		`
+	}
+	return `
+		CREATE INDEX IF NOT EXISTS idx_billing_outbox_published_cleanup
+		ON billing_outbox_events (status, published_at, event_id)
+	`
+}
+
+func migrateArchiveRetentionIndexes(db *gorm.DB) error {
+	if db == nil {
+		return nil
+	}
+	if db.Migrator().HasTable(&gatewayschema.RequestExecution{}) &&
+		!db.Migrator().HasIndex(&gatewayschema.RequestExecution{}, "idx_gateway_executions_settled_archive") {
+		if err := db.Exec(gatewayArchiveIndexStatement(db.Dialector.Name())).Error; err != nil {
+			return err
+		}
+	}
+	logDB := platformdb.LogDB
+	if logDB == nil {
+		logDB = db
+	}
+	if !logDB.Migrator().HasTable("logs") || logDB.Migrator().HasIndex("logs", "idx_logs_archive_created_id") {
+		return nil
+	}
+	return logDB.Exec(logArchiveIndexStatement(logDB.Dialector.Name())).Error
+}
+
+func gatewayArchiveIndexStatement(dialect string) string {
+	if dialect == "postgres" {
+		return `
+			CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gateway_executions_settled_archive
+			ON gateway.request_executions (updated_at, execution_id)
+			WHERE status = 'settled'
+		`
+	}
+	if dialect == "mysql" {
+		return `
+			CREATE INDEX idx_gateway_executions_settled_archive
+			ON gateway_request_executions (status, updated_at, execution_id)
+		`
+	}
+	return `
+		CREATE INDEX IF NOT EXISTS idx_gateway_executions_settled_archive
+		ON gateway_request_executions (status, updated_at, execution_id)
+	`
+}
+
+func logArchiveIndexStatement(dialect string) string {
+	if dialect == "postgres" {
+		return `
+			CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_archive_created_id
+			ON logs (created_at, id)
+		`
+	}
+	if dialect == "mysql" {
+		return `CREATE INDEX idx_logs_archive_created_id ON logs (created_at, id)`
+	}
+	return `CREATE INDEX IF NOT EXISTS idx_logs_archive_created_id ON logs (created_at, id)`
 }
 
 func migrateFirstPurchaseDiscount(tx *gorm.DB) error {

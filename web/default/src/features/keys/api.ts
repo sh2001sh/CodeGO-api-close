@@ -55,6 +55,8 @@ export interface ApiKeyGroupOptionData {
   ratio?: number | string
   subscriptionEnabled?: boolean
   subscriptionRatio?: number
+  successRate?: number | null
+  requestCount?: number
   category: 'official' | 'marketplace' | 'marketplace_auto'
   disabled?: boolean
   models?: string[]
@@ -71,6 +73,8 @@ interface MarketplaceGroupListResponse {
     multiplier: number
     subscription_enabled: boolean
     subscription_multiplier: number
+    success_rate?: number
+    request_count?: number
     gpt56_mapping_status?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
     models: string[]
   }>
@@ -209,6 +213,8 @@ export async function getSelectableMarketplaceGroups(): Promise<
       ratio: group.multiplier,
       subscriptionEnabled: group.subscription_enabled,
       subscriptionRatio: group.subscription_multiplier,
+      successRate: group.success_rate,
+      requestCount: group.request_count,
       mappingStatus: group.gpt56_mapping_status || '',
       category: 'marketplace' as const,
       models: group.models,

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	fastjson "github.com/goccy/go-json"
 	"github.com/sh2001sh/new-api/constant"
 )
 
@@ -104,7 +105,7 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 		if _, err := storage.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		if err := json.NewDecoder(storage).Decode(v); err != nil {
+		if err := fastjson.NewDecoder(storage).Decode(v); err != nil {
 			return err
 		}
 		if _, err := storage.Seek(0, io.SeekStart); err != nil {
@@ -121,7 +122,7 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 
 	switch {
 	case strings.HasPrefix(contentType, "application/json"):
-		err = json.Unmarshal(requestBody, v)
+		err = fastjson.Unmarshal(requestBody, v)
 	case strings.Contains(contentType, gin.MIMEPOSTForm):
 		err = parseFormData(requestBody, v)
 	case strings.Contains(contentType, gin.MIMEMultipartPOSTForm):

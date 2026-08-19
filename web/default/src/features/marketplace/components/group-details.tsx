@@ -80,6 +80,41 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
           value={`${group.cache_hit_rate.toFixed(1)}%`}
         />
       </div>
+      <div className='border-border mt-4 border-t pt-4'>
+        <div className='flex flex-wrap items-baseline justify-between gap-2'>
+          <h5 className='text-sm font-semibold'>{t('首字延迟分布')}</h5>
+          <span className='text-muted-foreground text-xs tabular-nums'>
+            {group.latency_sample_count > 0
+              ? t('{{count}} 个新指标样本', {
+                  count: formatNumber(group.latency_sample_count),
+                })
+              : t('新版指标正在积累样本')}
+          </span>
+        </div>
+        <p className='text-muted-foreground mt-1 max-w-3xl text-xs leading-5'>
+          {t(
+            '尝试级只计算最终上游渠道，适合比较渠道性能；端到端包含网关处理、路由与重试，更接近用户实际等待。P50/P95 为固定延迟桶估算。'
+          )}
+        </p>
+        <div className='mt-3 grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4'>
+          <LatencyMetric
+            label={t('尝试级 P50')}
+            value={group.attempt_ttft_p50_ms}
+          />
+          <LatencyMetric
+            label={t('尝试级 P95')}
+            value={group.attempt_ttft_p95_ms}
+          />
+          <LatencyMetric
+            label={t('端到端 P50')}
+            value={group.e2e_ttft_p50_ms}
+          />
+          <LatencyMetric
+            label={t('端到端 P95')}
+            value={group.e2e_ttft_p95_ms}
+          />
+        </div>
+      </div>
       {group.observing && (
         <p className='text-muted-foreground mt-3 text-xs'>
           {t('当前仍处于样本观测期，已记录 {{requests}} 次请求。', {
@@ -89,6 +124,23 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
       )}
     </div>
   )
+}
+
+function LatencyMetric(props: { label: string; value: number }) {
+  return (
+    <div>
+      <div className='text-muted-foreground text-xs'>{props.label}</div>
+      <div className='mt-0.5 text-sm font-semibold tabular-nums'>
+        {formatLatency(props.value)}
+      </div>
+    </div>
+  )
+}
+
+function formatLatency(value: number) {
+  if (!value) return '--'
+  if (value < 1000) return `${Math.round(value)} ms`
+  return `${(value / 1000).toFixed(2)} s`
 }
 
 function SecondaryMetric(props: {

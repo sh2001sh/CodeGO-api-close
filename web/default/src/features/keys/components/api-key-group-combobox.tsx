@@ -43,6 +43,8 @@ export type ApiKeyGroupOption = {
   ratio?: number | string
   subscriptionEnabled?: boolean
   subscriptionRatio?: number
+  successRate?: number | null
+  requestCount?: number
   category?: 'official' | 'marketplace' | 'marketplace_auto'
   disabled?: boolean
   models?: string[]
@@ -111,6 +113,11 @@ function GroupRatioBadges({ option }: { option?: ApiKeyGroupOption }) {
       <GroupRatioBadge ratio={option.ratio} label='Balance' />
       {option.subscriptionEnabled && (
         <GroupRatioBadge ratio={option.subscriptionRatio} label='Plan' />
+      )}
+      {option.successRate != null && option.requestCount !== 0 && (
+        <Badge variant='outline' className='shrink-0 text-[10px] sm:text-xs'>
+          成功率 {option.successRate.toFixed(1)}%
+        </Badge>
       )}
       <MappingStatusBadge option={option} />
     </span>

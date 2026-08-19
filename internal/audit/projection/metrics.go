@@ -36,6 +36,8 @@ func RecordRelayUsageSample(info *relaycommon.RelayInfo, success bool, inputToke
 	if hasTtft {
 		ttftMs = info.FirstResponseTime.Sub(info.StartTime).Milliseconds()
 	}
+	attemptTtft, hasAttemptTtft := info.AttemptTTFT()
+	e2eTtft, hasE2eTtft := info.EndToEndTTFT()
 	latencyMs := now.Sub(info.StartTime).Milliseconds()
 	generationMs := latencyMs
 	if hasTtft {
@@ -57,6 +59,10 @@ func RecordRelayUsageSample(info *relaycommon.RelayInfo, success bool, inputToke
 		InputTokens:      inputTokens,
 		CacheReadTokens:  cacheReadTokens,
 		CacheWriteTokens: cacheWriteTokens,
+		AttemptTTFTMs:    attemptTtft.Milliseconds(),
+		HasAttemptTTFT:   info.IsStream && hasAttemptTtft,
+		E2ETTFTMs:        e2eTtft.Milliseconds(),
+		HasE2ETTFT:       info.IsStream && hasE2eTtft,
 	})
 }
 
@@ -156,6 +162,12 @@ func mergeCounters(merged map[bucketKey]counters, key bucketKey, value counters)
 	current.inputTokens += value.inputTokens
 	current.cacheReadTokens += value.cacheReadTokens
 	current.cacheWriteTokens += value.cacheWriteTokens
+	current.attemptTtftSumMs += value.attemptTtftSumMs
+	current.attemptTtftCount += value.attemptTtftCount
+	current.e2eTtftSumMs += value.e2eTtftSumMs
+	current.e2eTtftCount += value.e2eTtftCount
+	current.attemptTtftHistogram = mergeHistogram(current.attemptTtftHistogram, value.attemptTtftHistogram)
+	current.e2eTtftHistogram = mergeHistogram(current.e2eTtftHistogram, value.e2eTtftHistogram)
 	merged[key] = current
 }
 
@@ -299,6 +311,7 @@ func recordRedis(key bucketKey, sample Sample) {
 		pipe.HIncrBy(ctx, redisKey, "gen_ms", sample.GenerationMs)
 	}
 	writeCacheRedisCounters(ctx, pipe, redisKey, sample)
+	writeLatencyRedisCounters(ctx, pipe, redisKey, sample)
 	pipe.Expire(ctx, redisKey, time.Hour)
 	if sample.ChannelID > 0 {
 		channelKey := channelRedisBucketKey(sample.ChannelID, key.bucketTs)
@@ -318,9 +331,23 @@ func recordRedis(key bucketKey, sample Sample) {
 			pipe.HIncrBy(ctx, channelKey, "gen_ms", sample.GenerationMs)
 		}
 		writeCacheRedisCounters(ctx, pipe, channelKey, sample)
+		writeLatencyRedisCounters(ctx, pipe, channelKey, sample)
 		pipe.Expire(ctx, channelKey, 2*time.Hour)
 	}
 	_, _ = pipe.Exec(ctx)
+}
+
+func writeLatencyRedisCounters(ctx context.Context, pipe redis.Pipeliner, key string, sample Sample) {
+	if sample.HasAttemptTTFT && sample.AttemptTTFTMs >= 0 {
+		pipe.HIncrBy(ctx, key, "attempt_ttft_sum", sample.AttemptTTFTMs)
+		pipe.HIncrBy(ctx, key, "attempt_ttft_n", 1)
+		pipe.HIncrBy(ctx, key, fmt.Sprintf("attempt_ttft_h%d", metricHistogramIndex(sample.AttemptTTFTMs)), 1)
+	}
+	if sample.HasE2ETTFT && sample.E2ETTFTMs >= 0 {
+		pipe.HIncrBy(ctx, key, "e2e_ttft_sum", sample.E2ETTFTMs)
+		pipe.HIncrBy(ctx, key, "e2e_ttft_n", 1)
+		pipe.HIncrBy(ctx, key, fmt.Sprintf("e2e_ttft_h%d", metricHistogramIndex(sample.E2ETTFTMs)), 1)
+	}
 }
 
 func writeCacheRedisCounters(ctx context.Context, pipe redis.Pipeliner, key string, sample Sample) {

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getUserGroups } from '@/lib/api'
 import { getMarketplaceAutoRoutePool } from '@/features/marketplace/api'
 import { getSelectableMarketplaceGroups } from '../api'
+import { getSidebarGroupStatus } from '@/features/sidebar-group-status/api'
 import type { ApiKeyGroupOption } from './api-key-group-combobox'
 
 export function useApiKeyGroupOptions() {
@@ -21,6 +22,11 @@ export function useApiKeyGroupOptions() {
     queryFn: getMarketplaceAutoRoutePool,
     staleTime: 60 * 1000,
   })
+  const { data: groupStatus } = useQuery({
+    queryKey: ['sidebar-group-status'],
+    queryFn: getSidebarGroupStatus,
+    staleTime: 30 * 1000,
+  })
 
   return useMemo<ApiKeyGroupOption[]>(() => {
     const officialGroups = Object.entries(groupsData?.data ?? {})
@@ -33,6 +39,8 @@ export function useApiKeyGroupOptions() {
         subscriptionEnabled: info.subscription_enabled,
         subscriptionRatio: info.subscription_ratio,
         category: 'official' as const,
+        successRate: groupStatus?.data?.find((item) => item.group === key)?.success_rate,
+        requestCount: groupStatus?.data?.find((item) => item.group === key)?.request_count,
       }))
     const autoOption: ApiKeyGroupOption = {
       value: 'auto',
@@ -52,5 +60,5 @@ export function useApiKeyGroupOptions() {
       ).sort((left, right) => left.localeCompare(right)),
     }
     return [autoOption, ...officialGroups, ...marketplaceGroups]
-  }, [autoPool, groupsData?.data, marketplaceGroups])
+  }, [autoPool, groupStatus?.data, groupsData?.data, marketplaceGroups])
 }

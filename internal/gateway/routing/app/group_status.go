@@ -38,6 +38,7 @@ type UserGroupStatusItem struct {
 	SourceType   string                     `json:"source_type"`
 	Status       string                     `json:"status"`
 	RequestCount int64                      `json:"request_count"`
+	SuccessRate  *float64                   `json:"success_rate"`
 	CacheHitRate *float64                   `json:"cache_hit_rate"`
 	Models       []UserGroupModelStatusItem `json:"models"`
 }
@@ -103,12 +104,15 @@ func buildUserGroupStatusItem(groupName string, context groupStatusBuildContext)
 	modelItems := make([]UserGroupModelStatusItem, 0, len(modelSummaries))
 	groupStatus := "unknown"
 	groupRequestCount := int64(0)
+	weightedSuccess := float64(0)
+	weightedRequests := int64(0)
 	for _, summary := range modelSummaries {
 		item := buildUserGroupModelStatusItem(groupName, summary, context)
 		if groupStatus == "unknown" || modelStatusWeight(item.Status) < modelStatusWeight(groupStatus) {
 			groupStatus = item.Status
 		}
 		groupRequestCount += item.RequestCount
+		if item.SuccessRate != nil && item.RequestCount > 0 { weightedSuccess += *item.SuccessRate * float64(item.RequestCount); weightedRequests += item.RequestCount }
 		modelItems = append(modelItems, item)
 	}
 	sort.Slice(modelItems, func(i, j int) bool {
@@ -121,8 +125,10 @@ func buildUserGroupStatusItem(groupName string, context groupStatusBuildContext)
 		}
 		return modelItems[i].Model < modelItems[j].Model
 	})
+	var successRate *float64
+	if weightedRequests > 0 { rate := weightedSuccess / float64(weightedRequests); successRate = &rate }
 	return UserGroupStatusItem{Group: groupName, DisplayName: context.groupDisplayNames[groupName], SourceType: context.groupSources[groupName], Status: groupStatus,
-		RequestCount: groupRequestCount, CacheHitRate: context.groupCacheRates[groupName], Models: modelItems}
+		RequestCount: groupRequestCount, SuccessRate: successRate, CacheHitRate: context.groupCacheRates[groupName], Models: modelItems}
 }
 
 func buildUserGroupModelStatusItem(groupName string, summary *GroupModelStatusSummary, context groupStatusBuildContext) UserGroupModelStatusItem {

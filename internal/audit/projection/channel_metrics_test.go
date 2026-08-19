@@ -24,7 +24,7 @@ func TestChannelMetricsAggregateAcrossGroupsAndIsolateChannels(t *testing.T) {
 	require.NoError(t, err)
 	platformdb.DB = db
 	platformcache.RedisEnabled = false
-	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}))
+	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}, &channelLatencyHistogramRecord{}))
 	empty, err := QuerySummaryByChannels(24, []int{910503})
 	require.NoError(t, err)
 	require.Empty(t, empty)
@@ -52,7 +52,7 @@ func TestChannelMetricPersistenceUsesChannelAndBucketIdentity(t *testing.T) {
 	require.NoError(t, err)
 	platformdb.DB = db
 	platformcache.RedisEnabled = false
-	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}))
+	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}, &channelLatencyHistogramRecord{}))
 	bucketTs := bucketStart(time.Now().Unix())
 
 	require.NoError(t, upsertChannelMetric(&channelPerfMetricRecord{ChannelID: 920501, BucketTs: bucketTs, RequestCount: 1, SuccessCount: 1, TotalLatencyMs: 100}))
@@ -80,7 +80,7 @@ func TestChannelMetricsCalculateCacheHitRateAcrossTokenClasses(t *testing.T) {
 	require.NoError(t, err)
 	platformdb.DB = db
 	platformcache.RedisEnabled = false
-	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}))
+	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}, &channelLatencyHistogramRecord{}))
 
 	Record(Sample{
 		Model: "cache-model", Group: "cache-group", ChannelID: 930501,
@@ -97,6 +97,73 @@ func TestChannelMetricsCalculateCacheHitRateAcrossTokenClasses(t *testing.T) {
 	require.Len(t, series, 1)
 	require.Len(t, series[0].Series, 1)
 	require.Equal(t, 30.0, series[0].Series[0].CacheHitRate)
+}
+
+func TestChannelMetricsKeepAttemptAndEndToEndPercentilesSeparate(t *testing.T) {
+	originalDB := platformdb.DB
+	originalRedisEnabled := platformcache.RedisEnabled
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformcache.RedisEnabled = originalRedisEnabled
+		clearMetricBucketsForChannels(940501)
+	})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	platformdb.DB = db
+	platformcache.RedisEnabled = false
+	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}, &channelLatencyHistogramRecord{}))
+
+	for _, sample := range []Sample{
+		{Model: "latency-model", Group: "plus", ChannelID: 940501, Success: true, LatencyMs: 5000, HasAttemptTTFT: true, AttemptTTFTMs: 800, HasE2ETTFT: true, E2ETTFTMs: 4000},
+		{Model: "latency-model", Group: "plus", ChannelID: 940501, Success: true, LatencyMs: 9000, HasAttemptTTFT: true, AttemptTTFTMs: 2000, HasE2ETTFT: true, E2ETTFTMs: 8000},
+	} {
+		Record(sample)
+	}
+
+	summaries, err := QuerySummaryByChannels(24, []int{940501})
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	require.EqualValues(t, 1000, summaries[0].AttemptTtftP50Ms)
+	require.EqualValues(t, 2000, summaries[0].AttemptTtftP95Ms)
+	require.EqualValues(t, 5000, summaries[0].E2eTtftP50Ms)
+	require.EqualValues(t, 10000, summaries[0].E2eTtftP95Ms)
+	require.EqualValues(t, 2, summaries[0].AttemptTtftCount)
+	require.EqualValues(t, 2, summaries[0].E2eTtftCount)
+}
+
+func TestChannelMetricsMergePersistedAndCurrentHistograms(t *testing.T) {
+	originalDB := platformdb.DB
+	originalRedisEnabled := platformcache.RedisEnabled
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformcache.RedisEnabled = originalRedisEnabled
+		clearMetricBucketsForChannels(950501)
+	})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	platformdb.DB = db
+	platformcache.RedisEnabled = false
+	require.NoError(t, db.AutoMigrate(&channelPerfMetricRecord{}, &channelLatencyHistogramRecord{}))
+
+	attemptHistory := make([]int64, metricHistogramBuckets)
+	e2eHistory := make([]int64, metricHistogramBuckets)
+	attemptHistory[metricHistogramIndex(100)] = 1
+	e2eHistory[metricHistogramIndex(1000)] = 1
+	require.NoError(t, upsertChannelMetric(&channelPerfMetricRecord{
+		ChannelID: 950501, BucketTs: bucketStart(time.Now().Add(-time.Hour).Unix()),
+		RequestCount: 1, SuccessCount: 1, AttemptTtftCount: 1, E2eTtftCount: 1,
+	}, attemptHistory, e2eHistory))
+	Record(Sample{Model: "merge-model", Group: "plus", ChannelID: 950501, Success: true,
+		HasAttemptTTFT: true, AttemptTTFTMs: 4000, HasE2ETTFT: true, E2ETTFTMs: 8000})
+
+	summaries, err := QuerySummaryByChannels(24, []int{950501})
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	require.EqualValues(t, 100, summaries[0].AttemptTtftP50Ms)
+	require.EqualValues(t, 5000, summaries[0].AttemptTtftP95Ms)
+	require.EqualValues(t, 1000, summaries[0].E2eTtftP50Ms)
+	require.EqualValues(t, 10000, summaries[0].E2eTtftP95Ms)
+	require.EqualValues(t, 2, summaries[0].AttemptTtftCount)
 }
 
 func clearMetricBucketsForChannels(channelIDs ...int) {

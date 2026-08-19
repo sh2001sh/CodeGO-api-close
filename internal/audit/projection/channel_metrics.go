@@ -44,7 +44,9 @@ func flushCompletedChannelBuckets(currentBucket int64) {
 			GenerationMs: drained.generationMs,
 			InputTokens:  drained.inputTokens, CacheReadTokens: drained.cacheReadTokens,
 			CacheWriteTokens: drained.cacheWriteTokens,
-		})
+			AttemptTtftSumMs: drained.attemptTtftSumMs, AttemptTtftCount: drained.attemptTtftCount,
+			E2eTtftSumMs: drained.e2eTtftSumMs, E2eTtftCount: drained.e2eTtftCount,
+		}, drained.attemptTtftHistogram, drained.e2eTtftHistogram)
 		if err != nil {
 			bucket.addCounters(drained)
 			platformobservability.SysError(fmt.Sprintf("failed to flush channel perf metric channel=%d bucket=%d: %s", bucketKey.channelID, bucketKey.bucketTs, err.Error()))
@@ -88,7 +90,19 @@ func QuerySummaryByChannels(hours int, channelIDs []int) ([]ChannelSummary, erro
 			generationMs: row.GenerationMs,
 			inputTokens:  row.InputTokens, cacheReadTokens: row.CacheReadTokens,
 			cacheWriteTokens: row.CacheWriteTokens,
+			attemptTtftSumMs: row.AttemptTtftSumMs, attemptTtftCount: row.AttemptTtftCount,
+			e2eTtftSumMs: row.E2eTtftSumMs, e2eTtftCount: row.E2eTtftCount,
 		}
+	}
+	histograms, err := getChannelLatencyHistograms(startTs, endTs, channelIDs)
+	if err != nil {
+		return nil, err
+	}
+	for channelID, values := range histograms {
+		current := totals[channelID]
+		current.attemptTtftHistogram = mergeHistogram(current.attemptTtftHistogram, values["attempt"])
+		current.e2eTtftHistogram = mergeHistogram(current.e2eTtftHistogram, values["e2e"])
+		totals[channelID] = current
 	}
 	if platformcache.RedisEnabled && platformcache.RDB != nil {
 		mergeActiveChannelRedisBuckets(totals, channelIDs, bucketStart(endTs))
@@ -231,6 +245,12 @@ func mergeCounterValue(target *counters, value counters) {
 	target.inputTokens += value.inputTokens
 	target.cacheReadTokens += value.cacheReadTokens
 	target.cacheWriteTokens += value.cacheWriteTokens
+	target.attemptTtftSumMs += value.attemptTtftSumMs
+	target.attemptTtftCount += value.attemptTtftCount
+	target.e2eTtftSumMs += value.e2eTtftSumMs
+	target.e2eTtftCount += value.e2eTtftCount
+	target.attemptTtftHistogram = mergeHistogram(target.attemptTtftHistogram, value.attemptTtftHistogram)
+	target.e2eTtftHistogram = mergeHistogram(target.e2eTtftHistogram, value.e2eTtftHistogram)
 }
 
 func buildChannelSummaries(totals map[int]counters) []ChannelSummary {
@@ -244,7 +264,12 @@ func buildChannelSummaries(totals map[int]counters) []ChannelSummary {
 			AvgTtftMs:   avg(total.ttftSumMs, total.ttftCount),
 			SuccessRate: math.Round(successRate(total)*100) / 100,
 			AvgTps:      math.Round(avgTps(total)*100) / 100, RequestCount: total.requestCount,
-			CacheHitRate: roundMetric(cacheHitRate(total)),
+			CacheHitRate:     roundMetric(cacheHitRate(total)),
+			AttemptTtftP50Ms: histogramPercentile(total.attemptTtftHistogram, 0.50),
+			AttemptTtftP95Ms: histogramPercentile(total.attemptTtftHistogram, 0.95),
+			E2eTtftP50Ms:     histogramPercentile(total.e2eTtftHistogram, 0.50),
+			E2eTtftP95Ms:     histogramPercentile(total.e2eTtftHistogram, 0.95),
+			AttemptTtftCount: total.attemptTtftCount, E2eTtftCount: total.e2eTtftCount,
 		})
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].ChannelID < results[j].ChannelID })

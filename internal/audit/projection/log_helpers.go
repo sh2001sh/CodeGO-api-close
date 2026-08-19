@@ -16,6 +16,7 @@ func formatUserLogs(logs []*auditschema.Log, startIdx int) {
 		if otherMap != nil {
 			delete(otherMap, "admin_info")
 			delete(otherMap, "stream_status")
+			delete(otherMap, "owner_error")
 		}
 		logs[i].Other = platformtext.MapToJsonStr(otherMap)
 		logs[i].Id = startIdx + i + 1

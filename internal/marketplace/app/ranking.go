@@ -15,19 +15,22 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const rankingVersion = "marketplace-v1"
+const rankingVersion = "marketplace-v2-latency"
 
 type rankingTotals struct {
-	requestCount  int64
-	successWeight int64
-	successTotal  float64
-	latencyWeight int64
-	latencyTotal  float64
-	ttftWeight    int64
-	ttftTotal     float64
-	tpsWeight     int64
-	tpsTotal      float64
-	cacheHitRate  float64
+	requestCount   int64
+	successWeight  int64
+	successTotal   float64
+	latencyWeight  int64
+	latencyTotal   float64
+	attemptTtftP50 float64
+	attemptTtftP95 float64
+	e2eTtftP50     float64
+	e2eTtftP95     float64
+	latencySamples int64
+	tpsWeight      int64
+	tpsTotal       float64
+	cacheHitRate   float64
 }
 
 func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
@@ -183,6 +186,7 @@ func buildRanking(groups []marketplaceschema.Group, channels map[string]marketpl
 			Columns: []clause.Column{{Name: "group_id"}, {Name: "window_hours"}, {Name: "ranking_version"}},
 			DoUpdates: clause.AssignmentColumns([]string{
 				"rank", "score", "raw_success_rate", "wilson_success_rate", "avg_ttft_ms",
+				"attempt_ttft_p50_ms", "attempt_ttft_p95_ms", "e2e_ttft_p50_ms", "e2e_ttft_p95_ms", "latency_sample_count",
 				"avg_latency_ms", "avg_tps", "cache_hit_rate", "request_count", "independent_consumers", "observing", "calculated_at",
 			}),
 		}).Create(&snapshots[index]).Error
@@ -195,14 +199,17 @@ func aggregateChannelRankingRows(rows []auditprojection.ChannelSummary) map[int]
 	for _, row := range rows {
 		result[row.ChannelID] = rankingTotals{
 			requestCount: row.RequestCount, successWeight: row.RequestCount,
-			successTotal:  row.SuccessRate * float64(row.RequestCount),
-			latencyWeight: metricWeight(float64(row.AvgLatencyMs), row.RequestCount),
-			latencyTotal:  float64(row.AvgLatencyMs) * float64(row.RequestCount),
-			ttftWeight:    metricWeight(float64(row.AvgTtftMs), row.RequestCount),
-			ttftTotal:     float64(row.AvgTtftMs) * float64(row.RequestCount),
-			tpsWeight:     metricWeight(row.AvgTps, row.RequestCount),
-			tpsTotal:      row.AvgTps * float64(row.RequestCount),
-			cacheHitRate:  row.CacheHitRate,
+			successTotal:   row.SuccessRate * float64(row.RequestCount),
+			latencyWeight:  metricWeight(float64(row.AvgLatencyMs), row.RequestCount),
+			latencyTotal:   float64(row.AvgLatencyMs) * float64(row.RequestCount),
+			attemptTtftP50: float64(row.AttemptTtftP50Ms),
+			attemptTtftP95: float64(row.AttemptTtftP95Ms),
+			e2eTtftP50:     float64(row.E2eTtftP50Ms),
+			e2eTtftP95:     float64(row.E2eTtftP95Ms),
+			latencySamples: min(row.AttemptTtftCount, row.E2eTtftCount),
+			tpsWeight:      metricWeight(row.AvgTps, row.RequestCount),
+			tpsTotal:       row.AvgTps * float64(row.RequestCount),
+			cacheHitRate:   row.CacheHitRate,
 		}
 	}
 	return result
@@ -222,7 +229,7 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 	requestMin, consumerMin := rankingThresholds(hours)
 	observing := total.requestCount < requestMin || consumers < consumerMin || group.VerificationStatus != marketplacedomain.VerificationPassed
 	score := wilson * 0.35
-	score += inverseMetricScore(weighted(total.ttftTotal, total.ttftWeight), 3000) * 0.2
+	score += inverseMetricScore(total.attemptTtftP50, 3000) * 0.2
 	score += inverseMetricScore(weighted(total.latencyTotal, total.latencyWeight), 30000) * 0.1
 	score += cappedMetricScore(weighted(total.tpsTotal, total.tpsWeight), 100) * 0.1
 	score += cappedMetricScore(total.cacheHitRate, 100) * 0.05
@@ -230,8 +237,15 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 	return marketplaceschema.RankingSnapshot{
 		GroupID: group.ID, WindowHours: hours, RankingVersion: rankingVersion,
 		Score: round1(score), RawSuccessRate: round2(successRate), WilsonSuccessRate: round2(wilson),
-		AvgTTFTMs:    round2(weighted(total.ttftTotal, total.ttftWeight)),
-		AvgLatencyMs: round2(weighted(total.latencyTotal, total.latencyWeight)), AvgTPS: round2(weighted(total.tpsTotal, total.tpsWeight)),
+		// AvgTTFTMs remains a compatibility alias. New clients use the explicit
+		// attempt/e2e percentile fields below.
+		AvgTTFTMs:          round2(total.attemptTtftP50),
+		AttemptTTFTP50Ms:   round2(total.attemptTtftP50),
+		AttemptTTFTP95Ms:   round2(total.attemptTtftP95),
+		E2ETTFTP50Ms:       round2(total.e2eTtftP50),
+		E2ETTFTP95Ms:       round2(total.e2eTtftP95),
+		LatencySampleCount: total.latencySamples,
+		AvgLatencyMs:       round2(weighted(total.latencyTotal, total.latencyWeight)), AvgTPS: round2(weighted(total.tpsTotal, total.tpsWeight)),
 		CacheHitRate: round2(total.cacheHitRate),
 		RequestCount: total.requestCount, IndependentConsumers: consumers, Observing: observing, CalculatedAt: time.Now().UTC(),
 	}

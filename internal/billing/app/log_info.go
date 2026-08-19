@@ -44,8 +44,15 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	other["cache_ratio"] = cacheRatio
 	other["model_price"] = modelPrice
 	other["user_group_ratio"] = userGroupRatio
+	other["total_duration_ms"] = time.Since(relayInfo.StartTime).Milliseconds()
 	if relayInfo.HasSendResponse() {
 		other["frt"] = float64(relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds())
+		if attemptTTFT, ok := relayInfo.AttemptTTFT(); ok {
+			other["attempt_ttft_ms"] = attemptTTFT.Milliseconds()
+		}
+		if endToEndTTFT, ok := relayInfo.EndToEndTTFT(); ok {
+			other["e2e_ttft_ms"] = endToEndTTFT.Milliseconds()
+		}
 	}
 	if trace := relayInfo.FirstByteTrace.Snapshot(); trace != nil {
 		other["first_byte_trace"] = trace

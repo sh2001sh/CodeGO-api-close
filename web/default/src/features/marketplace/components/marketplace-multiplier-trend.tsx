@@ -44,8 +44,8 @@ export function MarketplaceMultiplierTrend(props: {
   const chartConfig = useMemo(() => buildChartConfig(sources), [sources])
 
   return (
-    <section className='border-border border-b'>
-      <div className='flex flex-col gap-4 px-4 py-5 sm:px-5'>
+    <section className='border-border bg-card overflow-hidden rounded-lg border'>
+      <div className='flex flex-col gap-4 px-4 py-4 sm:px-5'>
         <TrendHeader
           model={props.model}
           models={query.data?.models ?? []}
@@ -127,7 +127,7 @@ function ModelSelector(props: {
       }}
     >
       <SelectTrigger size='sm' className='max-w-52'>
-        <SelectValue placeholder={t('全部模型')} />
+        <SelectValue>{props.model || t('全部模型')}</SelectValue>
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false}>
         <SelectItem value='__all__'>{t('全部模型')}</SelectItem>

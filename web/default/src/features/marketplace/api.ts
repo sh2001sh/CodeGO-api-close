@@ -92,6 +92,16 @@ export async function getMyMarketplaceUsageLogs(
     page_size: String(params.pageSize),
   })
   if (params.channelId) search.set('channel_id', params.channelId)
+  if (params.status) search.set('status', params.status)
+  if (params.modelName) search.set('model_name', params.modelName)
+  if (params.requestId) search.set('request_id', params.requestId)
+  if (params.upstreamRequestId) {
+    search.set('upstream_request_id', params.upstreamRequestId)
+  }
+  if (params.externalUserId) {
+    search.set('external_user_id', params.externalUserId)
+  }
+  if (params.search) search.set('search', params.search)
   if (params.startTimestamp) {
     search.set('start_timestamp', String(params.startTimestamp))
   }

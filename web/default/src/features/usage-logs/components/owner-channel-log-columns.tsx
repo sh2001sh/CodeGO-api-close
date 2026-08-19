@@ -1,12 +1,15 @@
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Radio, UserRound } from 'lucide-react'
+import { Eye, Radio, UserRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota, formatUseTime } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { MarketplaceOwnerUsageLog } from '@/features/marketplace/types'
 
-export function useOwnerChannelLogColumns() {
+export function useOwnerChannelLogColumns(
+  onInspect: (item: MarketplaceOwnerUsageLog) => void
+) {
   const { t } = useTranslation()
   return useMemo<ColumnDef<MarketplaceOwnerUsageLog>[]>(
     () => [
@@ -65,14 +68,17 @@ export function useOwnerChannelLogColumns() {
         meta: { label: t('Tokens') },
       },
       {
-        accessorKey: 'use_time',
-        header: t('耗时'),
+        id: 'timing',
+        header: t('首字 / 总耗时'),
         cell: ({ row }) => (
-          <span className='text-xs tabular-nums'>
-            {formatUseTime(row.original.use_time)}
-          </span>
+          <div className='text-xs tabular-nums'>
+            <div>{formatMilliseconds(row.original.first_byte_ms)}</div>
+            <div className='text-muted-foreground mt-0.5'>
+              {formatMilliseconds(row.original.total_duration_ms)}
+            </div>
+          </div>
         ),
-        meta: { label: t('耗时') },
+        meta: { label: t('首字 / 总耗时') },
       },
       {
         accessorKey: 'consumer_amount',
@@ -100,9 +106,30 @@ export function useOwnerChannelLogColumns() {
         cell: ({ row }) => renderIncomeStatus(row.original, t),
         meta: { label: t('状态'), mobileBadge: true },
       },
+      {
+        id: 'details',
+        header: t('详情'),
+        cell: ({ row }) => (
+          <Button
+            variant='ghost'
+            size='icon'
+            className='size-8'
+            onClick={() => onInspect(row.original)}
+            aria-label={t('查看调用详情')}
+            title={t('查看调用详情')}
+          >
+            <Eye className='size-4' />
+          </Button>
+        ),
+        meta: { label: t('详情') },
+      },
     ],
-    [t]
+    [onInspect, t]
   )
+}
+
+function formatMilliseconds(value: number) {
+  return value > 0 ? formatUseTime(value / 1000) : '-'
 }
 
 function renderDateTime(timestamp: number) {

@@ -234,6 +234,11 @@ type GroupListItem struct {
 	SuccessRate                float64                   `json:"success_rate"`
 	WilsonSuccessRate          float64                   `json:"wilson_success_rate"`
 	AvgTTFTMs                  float64                   `json:"avg_ttft_ms"`
+	AttemptTTFTP50Ms           float64                   `json:"attempt_ttft_p50_ms"`
+	AttemptTTFTP95Ms           float64                   `json:"attempt_ttft_p95_ms"`
+	E2ETTFTP50Ms               float64                   `json:"e2e_ttft_p50_ms"`
+	E2ETTFTP95Ms               float64                   `json:"e2e_ttft_p95_ms"`
+	LatencySampleCount         int64                     `json:"latency_sample_count"`
 	AvgLatencyMs               float64                   `json:"avg_latency_ms"`
 	AvgTPS                     float64                   `json:"avg_tps"`
 	CacheHitRate               float64                   `json:"cache_hit_rate"`
@@ -273,6 +278,7 @@ type GroupHighlight struct {
 	Score             float64 `json:"score"`
 	Multiplier        float64 `json:"multiplier"`
 	AvgTTFTMs         float64 `json:"avg_ttft_ms"`
+	AttemptTTFTP50Ms  float64 `json:"attempt_ttft_p50_ms"`
 }
 
 type GroupHighlights struct {
@@ -375,51 +381,4 @@ type AutoRoutePoolView struct {
 	TokenGroup    string              `json:"token_group"`
 	SelectedCount int                 `json:"selected_count"`
 	Items         []AutoRoutePoolItem `json:"items"`
-}
-
-type OwnerUsageLogQuery struct {
-	ChannelID      string
-	StartTimestamp int64
-	EndTimestamp   int64
-	Page           int
-	PageSize       int
-}
-
-type OwnerUsageLogItem struct {
-	ID                 int        `json:"id"`
-	ChannelID          string     `json:"channel_id"`
-	ChannelName        string     `json:"channel_name"`
-	GroupID            string     `json:"group_id"`
-	UserID             string     `json:"user_id"`
-	CreatedAt          int64      `json:"created_at"`
-	Status             string     `json:"status"`
-	ModelName          string     `json:"model_name"`
-	PromptTokens       int        `json:"prompt_tokens"`
-	CompletionTokens   int        `json:"completion_tokens"`
-	UseTime            int        `json:"use_time"`
-	IsStream           bool       `json:"is_stream"`
-	RequestID          string     `json:"request_id"`
-	ConsumerAmount     int64      `json:"consumer_amount"`
-	OwnerIncome        int64      `json:"owner_income"`
-	PlatformCommission int64      `json:"platform_commission"`
-	Multiplier         float64    `json:"multiplier"`
-	IncomeStatus       string     `json:"income_status"`
-	AvailableAt        *time.Time `json:"available_at,omitempty"`
-	ReleasedAt         *time.Time `json:"released_at,omitempty"`
-}
-
-type OwnerUsageLogResult struct {
-	Items    []OwnerUsageLogItem  `json:"items"`
-	Summary  OwnerUsageLogSummary `json:"summary"`
-	Total    int64                `json:"total"`
-	Page     int                  `json:"page"`
-	PageSize int                  `json:"page_size"`
-}
-
-type OwnerUsageLogSummary struct {
-	RequestCount   int64 `json:"request_count"`
-	SuccessCount   int64 `json:"success_count"`
-	FailedCount    int64 `json:"failed_count"`
-	ConsumerAmount int64 `json:"consumer_amount"`
-	OwnerIncome    int64 `json:"owner_income"`
 }

@@ -254,11 +254,11 @@ func TestLatestRequestStatusUsesMostRecentNonEmptyBucket(t *testing.T) {
 
 func TestMarketplaceHighlightsUseAllFilteredItems(t *testing.T) {
 	items := []GroupListItem{
-		{ID: "page-one", SystemDisplayName: "Page One", Score: 80, Multiplier: 1, AvgTTFTMs: 500},
-		{ID: "global-best", SystemDisplayName: "Global Best", Score: 98, Multiplier: 1.2, AvgTTFTMs: 400},
-		{ID: "global-cheapest", SystemDisplayName: "Global Cheapest", Score: 75, Multiplier: 0.2, AvgTTFTMs: 300},
-		{ID: "global-fastest", SystemDisplayName: "Global Fastest", Score: 70, Multiplier: 0.8, AvgTTFTMs: 80},
-		{ID: "observing", SystemDisplayName: "Observing", Score: 100, Multiplier: 0.1, AvgTTFTMs: 50, Observing: true},
+		{ID: "page-one", SystemDisplayName: "Page One", Score: 80, Multiplier: 1, AttemptTTFTP50Ms: 500, LatencySampleCount: 10},
+		{ID: "global-best", SystemDisplayName: "Global Best", Score: 98, Multiplier: 1.2, AttemptTTFTP50Ms: 400, LatencySampleCount: 10},
+		{ID: "global-cheapest", SystemDisplayName: "Global Cheapest", Score: 75, Multiplier: 0.2, AttemptTTFTP50Ms: 300, LatencySampleCount: 10},
+		{ID: "global-fastest", SystemDisplayName: "Global Fastest", Score: 70, Multiplier: 0.8, AttemptTTFTP50Ms: 80, LatencySampleCount: 10},
+		{ID: "observing", SystemDisplayName: "Observing", Score: 100, Multiplier: 0.1, AttemptTTFTP50Ms: 50, LatencySampleCount: 10, Observing: true},
 	}
 
 	highlights := marketplaceHighlights(items)

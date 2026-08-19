@@ -1,20 +1,13 @@
-import {
-  BadgeDollarSign,
-  Eye,
-  Gauge,
-  Network,
-  ShieldCheck,
-  ShieldAlert,
-  Store,
-  WalletCards,
-} from 'lucide-react'
+import { BadgeDollarSign, Gauge, Info, RefreshCcw, Store } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import { formatMultiplier } from '../lib/format'
 
 export function MarketplaceOverview(props: {
   total: number
   ranked: number
   multiplier?: number
+  updating: boolean
 }) {
   const { t } = useTranslation()
   const metrics = [
@@ -22,13 +15,11 @@ export function MarketplaceOverview(props: {
       icon: Store,
       label: t('可见分组'),
       value: String(props.total),
-      hint: t('已通过公开条件'),
     },
     {
       icon: Gauge,
       label: t('正式排名'),
       value: String(props.ranked),
-      hint: t('样本达到门槛'),
     },
     {
       icon: BadgeDollarSign,
@@ -37,88 +28,40 @@ export function MarketplaceOverview(props: {
         props.multiplier == null
           ? '--'
           : `${formatMultiplier(props.multiplier)}x`,
-      hint: t('按当前列表统计'),
-    },
-    {
-      icon: Eye,
-      label: t('公开规则'),
-      value: t('审核前可见'),
-      hint: t('来源审核后展示'),
     },
   ]
 
   return (
-    <section className='border-border bg-card overflow-hidden rounded-xl border'>
-      <div className='grid lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]'>
-        <div className='px-5 py-6 sm:px-7 sm:py-7'>
-          <div className='flex items-center gap-3'>
-            <div className='bg-primary/10 text-primary flex size-10 items-center justify-center rounded-lg'>
-              <Network className='size-5' />
-            </div>
-            <div>
-              <h3 className='text-lg font-semibold text-balance sm:text-xl'>
-                {t('找到更适合业务的模型通道')}
-              </h3>
-              <p className='text-muted-foreground mt-1 max-w-2xl text-sm leading-6 text-pretty'>
-                {t(
-                  '根据真实调用质量、首字速度和消费倍率比较第三方渠道，再绑定到指定 Token。'
-                )}
-              </p>
-            </div>
-          </div>
-          <div className='mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs'>
-            <span className='flex items-center gap-1.5'>
-              <ShieldCheck className='text-success size-4' />
-              {t('检测与管理员双重审核')}
-            </span>
-            <span className='flex items-center gap-1.5'>
-              <Gauge className='text-info size-4' />
-              {t('基于真实请求持续排名')}
-            </span>
-          </div>
-        </div>
-        <div className='border-border bg-primary/[0.045] flex items-start gap-3 border-t px-5 py-6 lg:border-t-0 lg:border-l lg:px-6'>
-          <span className='bg-background text-primary flex size-10 shrink-0 items-center justify-center rounded-lg border'>
-            <WalletCards className='size-5' />
-          </span>
-          <div>
-            <div className='text-sm font-semibold'>
-              {t('支持套餐与通用余额')}
-            </div>
-            <p className='text-muted-foreground mt-2 text-xs leading-5'>
-              {t(
-                '第三方分组默认支持套餐和通用余额；套餐倍率按余额倍率的统一换算规则计算。'
-              )}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className='border-border grid border-t sm:grid-cols-2 xl:grid-cols-4'>
-        {metrics.map(({ icon: Icon, label, value, hint }) => (
+    <section className='border-border bg-card flex min-h-14 flex-col justify-between gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:px-4'>
+      <div className='grid min-w-0 grid-cols-3 gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-2'>
+        {metrics.map(({ icon: Icon, label, value }) => (
           <div
             key={label}
-            className='border-border flex min-h-24 items-center gap-3 border-b px-5 py-4 last:border-r-0 sm:border-r xl:border-b-0'
+            className='flex min-w-0 items-center gap-2 sm:min-w-28 sm:gap-2.5'
           >
-            <Icon className='text-primary size-5 shrink-0' />
+            <Icon className='text-primary size-4 shrink-0' />
             <div className='min-w-0'>
-              <div className='text-muted-foreground text-xs'>{label}</div>
-              <div className='mt-1 truncate font-semibold tabular-nums'>
+              <div className='text-muted-foreground text-[11px]'>{label}</div>
+              <div className='truncate text-sm font-semibold tabular-nums'>
                 {value}
-              </div>
-              <div className='text-muted-foreground mt-0.5 text-[11px]'>
-                {hint}
               </div>
             </div>
           </div>
         ))}
       </div>
-      <div className='border-border bg-warning/5 text-muted-foreground flex items-start gap-2 border-t px-5 py-3 text-xs leading-5'>
-        <ShieldAlert className='text-warning mt-0.5 size-4 shrink-0' />
-        <p>
-          {t(
-            '第三方渠道由用户独立提供，CodeGo 不对其真实性、可用性、安全性及上游数据处理行为作担保，请根据检测结果与用户反馈自行判断并控制敏感信息。'
-          )}
-        </p>
+      <div className='text-muted-foreground flex items-center justify-end gap-2 text-[11px] sm:text-xs'>
+        <RefreshCcw
+          className={cn('size-3.5', props.updating && 'animate-spin')}
+        />
+        <span>{props.updating ? t('更新中') : t('30 秒自动刷新')}</span>
+        <span className='bg-border h-3 w-px' />
+        <span
+          className='flex items-center gap-1'
+          title={t('第三方渠道由用户独立提供，请根据检测结果自行判断。')}
+        >
+          <Info className='size-3.5' />
+          {t('第三方渠道需自行判断')}
+        </span>
       </div>
     </section>
   )

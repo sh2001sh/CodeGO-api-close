@@ -8,7 +8,6 @@ import type { GroupFilters } from '../types'
 import { MarketplaceGroupList } from './group-list'
 import { MarketplaceFilters } from './marketplace-filters'
 import { MarketplaceHighlights } from './marketplace-highlights'
-import { MarketplaceMultiplierTrend } from './marketplace-multiplier-trend'
 
 export function MarketSurface(props: {
   filters: GroupFilters
@@ -27,30 +26,22 @@ export function MarketSurface(props: {
     : '--'
   return (
     <section className='border-border bg-card overflow-hidden rounded-lg border'>
-      <div className='flex flex-wrap items-start justify-between gap-3 px-4 py-4 sm:px-5'>
+      <div className='flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5'>
         <div>
-          <h3 className='font-semibold'>
+          <h3 className='text-sm font-semibold'>
             {props.ranking ? t('质量排行榜') : t('渠道目录')}
           </h3>
-          <p className='text-muted-foreground mt-1 text-xs leading-5'>
+          <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
             {props.summary}
           </p>
         </div>
         <div className='flex flex-wrap items-center justify-end gap-3'>
-          <div
-            className='text-muted-foreground flex items-center gap-2 text-xs'
+          <span
+            className='text-muted-foreground text-xs tabular-nums'
             aria-live='polite'
           >
-            <span className='bg-success size-1.5 rounded-full' />
-            <span>
-              {props.query.isFetching
-                ? t('正在更新市场数据')
-                : t('每 30 秒自动刷新')}
-            </span>
-            <span className='tabular-nums'>
-              {t('更新于 {{time}}', { time: updatedAt })}
-            </span>
-          </div>
+            {t('更新于 {{time}}', { time: updatedAt })}
+          </span>
           <Button
             variant='outline'
             size='sm'
@@ -71,7 +62,7 @@ export function MarketSurface(props: {
           )}
         </div>
       )}
-      <div className='border-border border-b px-4 pt-3 sm:px-5'>
+      <div className='border-border border-b px-4 sm:px-5'>
         <Tabs
           value={props.filters.source || 'all'}
           onValueChange={(value) =>
@@ -83,7 +74,7 @@ export function MarketSurface(props: {
         >
           <TabsList
             variant='line'
-            className='max-w-full justify-start overflow-x-auto'
+            className='h-9 max-w-full justify-start overflow-x-auto'
           >
             <TabsTrigger value='all' className='shrink-0 px-3'>
               {t('全部来源')}
@@ -104,12 +95,6 @@ export function MarketSurface(props: {
         filters={props.filters}
         onChange={props.updateFilters}
       />
-      {!props.ranking && (
-        <MarketplaceMultiplierTrend
-          model={props.filters.model}
-          onModelChange={(model) => props.updateFilters({ model, page: 1 })}
-        />
-      )}
       <MarketplaceHighlights highlights={props.query.data?.highlights} />
       <MarketplaceGroupList
         groups={props.query.data?.items ?? []}

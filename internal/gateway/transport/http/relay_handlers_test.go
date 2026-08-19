@@ -45,6 +45,8 @@ func TestRelayFailureSampleRequiresUpstreamAttempt(t *testing.T) {
 	require.False(t, shouldRecordRelayFailureSample(false, apiErr))
 	require.True(t, shouldRecordRelayFailureSample(true, apiErr))
 	require.False(t, shouldRecordRelayFailureSample(true, nil))
+	badRequest := types.NewErrorWithStatusCode(errors.New("invalid payload"), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest)
+	require.False(t, shouldRecordRelayFailureSample(true, badRequest))
 }
 
 func TestFinalRelayFailureLogRespectsNoRecordFlag(t *testing.T) {

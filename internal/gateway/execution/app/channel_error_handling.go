@@ -176,12 +176,14 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			adminInfo["responses_stream_lifecycle"] = lifecycle
 		}
 		other["admin_info"] = adminInfo
+		other["owner_error"] = err.OwnerVisibleErrorWithStatusCode()
 
 		startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
 		if startTime.IsZero() {
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
+		other["total_duration_ms"] = time.Since(startTime).Milliseconds()
 		auditapp.RecordErrorLog(
 			c,
 			userID,

@@ -1,6 +1,27 @@
 package textx
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestRedactCredentialsPreservesDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	input := "status=401 provider said invalid account; Authorization: Bearer live-token api_key=sk-1234567890abcdef password=hunter2"
+	result := RedactCredentials(input)
+
+	require.Contains(t, result, "status=401 provider said invalid account")
+	require.NotContains(t, result, "live-token")
+	require.NotContains(t, result, "1234567890abcdef")
+	require.NotContains(t, result, "hunter2")
+
+	jsonResult := RedactCredentials(`{"authorization":"Bearer json-secret-token","cookie":"session=private","error":"invalid account"}`)
+	require.Contains(t, jsonResult, "invalid account")
+	require.NotContains(t, jsonResult, "json-secret-token")
+	require.NotContains(t, jsonResult, "session=private")
+}
 
 func TestSanitizeUpstreamQuotaErrorMessage(t *testing.T) {
 	t.Parallel()

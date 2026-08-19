@@ -49,14 +49,28 @@ func TestAggregateChannelRankingRowsKeepsChannelsSeparate(t *testing.T) {
 	t.Parallel()
 
 	totals := aggregateChannelRankingRows([]auditprojection.ChannelSummary{
-		{ChannelID: 501, SuccessRate: 75, AvgLatencyMs: 1200, AvgTtftMs: 300, AvgTps: 40, RequestCount: 20},
-		{ChannelID: 502, SuccessRate: 100, AvgLatencyMs: 500, AvgTtftMs: 100, AvgTps: 80, RequestCount: 2},
+		{ChannelID: 501, SuccessRate: 75, AvgLatencyMs: 1200, AttemptTtftP50Ms: 300, AttemptTtftP95Ms: 2000, E2eTtftP50Ms: 500, E2eTtftP95Ms: 3000, AttemptTtftCount: 18, E2eTtftCount: 20, AvgTps: 40, RequestCount: 20},
+		{ChannelID: 502, SuccessRate: 100, AvgLatencyMs: 500, AttemptTtftP50Ms: 100, AttemptTtftP95Ms: 250, E2eTtftP50Ms: 250, E2eTtftP95Ms: 500, AttemptTtftCount: 2, E2eTtftCount: 2, AvgTps: 80, RequestCount: 2},
 	})
 
 	require.EqualValues(t, 20, totals[501].requestCount)
 	require.Equal(t, 1500.0, totals[501].successTotal)
+	require.Equal(t, 300.0, totals[501].attemptTtftP50)
+	require.EqualValues(t, 18, totals[501].latencySamples)
 	require.EqualValues(t, 2, totals[502].requestCount)
 	require.Equal(t, 200.0, totals[502].successTotal)
+}
+
+func TestScoreGroupDoesNotPromoteLegacyTTFTToPercentile(t *testing.T) {
+	t.Parallel()
+
+	snapshot := scoreGroup(marketplaceschema.Group{ID: "fresh", Multiplier: 1}, rankingTotals{
+		requestCount: 10, successWeight: 10, successTotal: 1000,
+	}, 2, 24)
+
+	require.Zero(t, snapshot.AvgTTFTMs)
+	require.Zero(t, snapshot.AttemptTTFTP50Ms)
+	require.Zero(t, snapshot.LatencySampleCount)
 }
 
 func TestAssignRanksUsesStableTieBreaker(t *testing.T) {
@@ -83,4 +97,18 @@ func TestSortGroupItemsKeepsEqualValuesDeterministic(t *testing.T) {
 	items := []GroupListItem{{ID: "b", Score: 10}, {ID: "a", Score: 10}}
 	sortGroupItems(items, "score", "desc")
 	require.Equal(t, []string{"a", "b"}, []string{items[0].ID, items[1].ID})
+}
+
+func TestSortGroupItemsPutsMissingTTFTSamplesLast(t *testing.T) {
+	t.Parallel()
+
+	for _, direction := range []string{"asc", "desc"} {
+		items := []GroupListItem{
+			{ID: "missing"},
+			{ID: "measured", AttemptTTFTP50Ms: 1000, LatencySampleCount: 10},
+		}
+		sortGroupItems(items, "ttft", direction)
+		require.Equal(t, "measured", items[0].ID)
+		require.Equal(t, "missing", items[1].ID)
+	}
 }

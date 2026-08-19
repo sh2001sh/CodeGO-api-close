@@ -5,11 +5,18 @@ import {
   type PaginationState,
   useReactTable,
 } from '@tanstack/react-table'
-import { Activity, RefreshCcw, RotateCcw, ShieldCheck } from 'lucide-react'
+import {
+  Activity,
+  RefreshCcw,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import dayjs from '@/lib/dayjs'
 import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -21,9 +28,13 @@ import {
 import { TableCell, TableRow } from '@/components/ui/table'
 import { DataTablePage } from '@/components/data-table'
 import { useMyMarketplaceUsageLogs } from '@/features/marketplace/hooks'
-import type { MarketplaceChannel } from '@/features/marketplace/types'
+import type {
+  MarketplaceChannel,
+  MarketplaceOwnerUsageLog,
+} from '@/features/marketplace/types'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import { useOwnerChannelLogColumns } from './owner-channel-log-columns'
+import { OwnerChannelLogDetailsDialog } from './owner-channel-log-details-dialog'
 
 interface DateRange {
   start?: Date
@@ -35,6 +46,11 @@ export function OwnerChannelUsageLogs(props: {
 }) {
   const { t } = useTranslation()
   const [channelId, setChannelId] = React.useState('all')
+  const [status, setStatus] = React.useState('all')
+  const [searchDraft, setSearchDraft] = React.useState('')
+  const [search, setSearch] = React.useState('')
+  const [selectedLog, setSelectedLog] =
+    React.useState<MarketplaceOwnerUsageLog | null>(null)
   const [range, setRange] = React.useState<DateRange>({})
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: 0,
@@ -42,12 +58,18 @@ export function OwnerChannelUsageLogs(props: {
   })
   const query = useMyMarketplaceUsageLogs({
     channelId: channelId === 'all' ? undefined : channelId,
+    status: status === 'success' || status === 'failed' ? status : undefined,
+    search: search || undefined,
     startTimestamp: toTimestamp(range.start),
     endTimestamp: toTimestamp(range.end),
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
   })
-  const columns = useOwnerChannelLogColumns()
+  const inspectLog = React.useCallback(
+    (item: MarketplaceOwnerUsageLog) => setSelectedLog(item),
+    []
+  )
+  const columns = useOwnerChannelLogColumns(inspectLog)
   const data = query.data
   const pageCount = Math.max(
     1,
@@ -82,48 +104,69 @@ export function OwnerChannelUsageLogs(props: {
     setRange(nextRange)
     resetPage(setPagination)
   }
+  const applySearch = () => {
+    setSearch(searchDraft.trim())
+    resetPage(setPagination)
+  }
 
   return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={query.isLoading}
-      isFetching={query.isFetching}
-      emptyTitle={t('暂无渠道调用日志')}
-      emptyDescription={t('渠道产生真实调用后，记录和逐笔收入会显示在这里。')}
-      skeletonKeyPrefix='owner-channel-log'
-      paginationInFooter={false}
-      tableClassName='max-h-[calc(100dvh-18rem)] overflow-auto'
-      tableHeaderClassName='bg-muted/30 sticky top-0 z-10'
-      toolbar={
-        <OwnerLogToolbar
-          channels={props.channels}
-          channelId={channelId}
-          range={range}
-          periodLabel={periodLabel}
-          summary={data?.summary}
-          fetching={query.isFetching}
-          onChannelChange={updateChannel}
-          onRangeChange={updateRange}
-          onRefresh={() => void query.refetch()}
-        />
-      }
-      renderRow={(row) => (
-        <TableRow key={row.id} className='transition-colors'>
-          {row.getVisibleCells().map((cell) => (
-            <TableCell key={cell.id} className='py-2.5'>
-              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-            </TableCell>
-          ))}
-        </TableRow>
-      )}
-    />
+    <>
+      <DataTablePage
+        table={table}
+        columns={columns}
+        isLoading={query.isLoading}
+        isFetching={query.isFetching}
+        emptyTitle={t('暂无渠道调用日志')}
+        emptyDescription={t('渠道产生真实调用后，记录和逐笔收入会显示在这里。')}
+        skeletonKeyPrefix='owner-channel-log'
+        paginationInFooter={false}
+        tableClassName='max-h-[calc(100dvh-18rem)] overflow-auto'
+        tableHeaderClassName='bg-muted/30 sticky top-0 z-10'
+        toolbar={
+          <OwnerLogToolbar
+            channels={props.channels}
+            channelId={channelId}
+            status={status}
+            search={searchDraft}
+            range={range}
+            periodLabel={periodLabel}
+            summary={data?.summary}
+            fetching={query.isFetching}
+            onChannelChange={updateChannel}
+            onStatusChange={(value) => {
+              if (!value) return
+              setStatus(value)
+              resetPage(setPagination)
+            }}
+            onSearchChange={setSearchDraft}
+            onSearch={applySearch}
+            onRangeChange={updateRange}
+            onRefresh={() => void query.refetch()}
+          />
+        }
+        renderRow={(row) => (
+          <TableRow key={row.id} className='transition-colors'>
+            {row.getVisibleCells().map((cell) => (
+              <TableCell key={cell.id} className='py-2.5'>
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </TableCell>
+            ))}
+          </TableRow>
+        )}
+      />
+      <OwnerChannelLogDetailsDialog
+        item={selectedLog}
+        onOpenChange={(open) => !open && setSelectedLog(null)}
+      />
+    </>
   )
 }
 
 function OwnerLogToolbar(props: {
   channels: MarketplaceChannel[]
   channelId: string
+  status: string
+  search: string
   range: DateRange
   periodLabel: string
   summary?: {
@@ -135,6 +178,9 @@ function OwnerLogToolbar(props: {
   }
   fetching: boolean
   onChannelChange: (value: string | null) => void
+  onStatusChange: (value: string | null) => void
+  onSearchChange: (value: string) => void
+  onSearch: () => void
   onRangeChange: (range: DateRange) => void
   onRefresh: () => void
 }) {
@@ -151,7 +197,31 @@ function OwnerLogToolbar(props: {
             {t('按渠道和时间范围核对调用、用户扣费与逐笔收入。')}
           </p>
         </div>
-        <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+        <div className='flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end'>
+          <form
+            className='flex min-w-0 sm:w-72'
+            onSubmit={(event) => {
+              event.preventDefault()
+              props.onSearch()
+            }}
+          >
+            <Input
+              value={props.search}
+              onChange={(event) => props.onSearchChange(event.target.value)}
+              placeholder={t('搜索模型、用户、请求 ID 或错误')}
+              className='rounded-r-none'
+              aria-label={t('搜索渠道调用日志')}
+            />
+            <Button
+              type='submit'
+              variant='outline'
+              size='icon'
+              className='rounded-l-none border-l-0'
+              aria-label={t('搜索')}
+            >
+              <Search />
+            </Button>
+          </form>
           <Select value={props.channelId} onValueChange={props.onChannelChange}>
             <SelectTrigger className='w-full sm:w-56'>
               <SelectValue />
@@ -164,6 +234,18 @@ function OwnerLogToolbar(props: {
                     {channel.system_display_name}
                   </SelectItem>
                 ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Select value={props.status} onValueChange={props.onStatusChange}>
+            <SelectTrigger className='w-full sm:w-32'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                <SelectItem value='all'>{t('全部状态')}</SelectItem>
+                <SelectItem value='success'>{t('调用成功')}</SelectItem>
+                <SelectItem value='failed'>{t('调用失败')}</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -199,9 +281,12 @@ function OwnerLogToolbar(props: {
       <div className='border-border bg-info/5 text-muted-foreground flex items-start gap-2 rounded-md border px-3 py-2.5 text-xs'>
         <ShieldCheck className='text-info mt-0.5 size-3.5 shrink-0' />
         <span>
-          {t('日志已脱敏，仅展示用户外部 ID；当前统计范围：{{period}}。', {
-            period: props.periodLabel,
-          })}
+          {t(
+            '仅隐藏凭据、请求正文和用户隐私；渠道主可查看真实上游错误。当前统计范围：{{period}}。',
+            {
+              period: props.periodLabel,
+            }
+          )}
         </span>
       </div>
       <SummaryBand summary={props.summary} />

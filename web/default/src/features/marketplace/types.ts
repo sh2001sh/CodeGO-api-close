@@ -114,6 +114,11 @@ export interface MarketplaceGroup {
   success_rate: number
   wilson_success_rate: number
   avg_ttft_ms: number
+  attempt_ttft_p50_ms: number
+  attempt_ttft_p95_ms: number
+  e2e_ttft_p50_ms: number
+  e2e_ttft_p95_ms: number
+  latency_sample_count: number
   avg_latency_ms: number
   avg_tps: number
   cache_hit_rate: number
@@ -180,6 +185,7 @@ export interface MarketplaceGroupHighlight {
   score: number
   multiplier: number
   avg_ttft_ms: number
+  attempt_ttft_p50_ms: number
 }
 
 export interface MarketplaceGroupHighlights {
@@ -349,6 +355,17 @@ export interface MarketplaceOwnerUsageLog {
   use_time: number
   is_stream: boolean
   request_id: string
+  upstream_request_id: string
+  first_byte_ms: number
+  attempt_ttft_ms: number
+  total_duration_ms: number
+  status_code: number
+  error_type: string
+  error_code: string
+  error_message: string
+  request_path: string
+  retry_count: number
+  first_byte_trace?: Record<string, unknown>
   consumer_amount: number
   owner_income: number
   platform_commission: number
@@ -374,6 +391,12 @@ export interface MarketplaceOwnerUsageLogResult {
 
 export interface MarketplaceOwnerUsageLogFilters {
   channelId?: string
+  status?: 'success' | 'failed'
+  modelName?: string
+  requestId?: string
+  upstreamRequestId?: string
+  externalUserId?: string
+  search?: string
   startTimestamp?: number
   endTimestamp?: number
   page: number

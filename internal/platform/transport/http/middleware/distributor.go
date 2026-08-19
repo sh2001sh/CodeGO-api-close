@@ -47,6 +47,9 @@ func DistributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer gatewayruntime.ReleaseAllCoolingFallbacks(c)
+		if httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime).IsZero() {
+			httpctx.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+		}
 		var channel *gatewayschema.Channel
 		channelId, ok := httpctx.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
@@ -55,9 +58,6 @@ func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 			return
 		}
 		gatewayruntime.InitializeRequestProfile(c, modelRequest.Model, c.Request.URL.Path, requestProfileHint(c))
-		if httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime).IsZero() {
-			httpctx.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
-		}
 		if ok {
 			id, err := strconv.Atoi(channelId.(string))
 			if err != nil {

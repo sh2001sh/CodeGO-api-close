@@ -104,3 +104,19 @@ func TestNewAPIErrorStatusStringsKeepLocalQuotaMessage(t *testing.T) {
 	require.Equal(t, "status_code=403, 用户额度不足, 剩余额度: ＄0.002290", apiErr.ErrorWithStatusCode())
 	require.Equal(t, "status_code=403, 用户额度不足, 剩余额度: ＄0.002290", apiErr.MaskSensitiveErrorWithStatusCode())
 }
+
+func TestOwnerVisibleErrorPreservesDiagnosticsAndRedactsCredentials(t *testing.T) {
+	t.Parallel()
+
+	apiErr := NewErrorWithStatusCode(
+		fmt.Errorf("upstream balance exhausted authorization: Bearer live-secret api_key=sk-1234567890abcdef"),
+		ErrorCodeBadResponseStatusCode,
+		http.StatusForbidden,
+	)
+
+	message := apiErr.OwnerVisibleErrorWithStatusCode()
+	require.Contains(t, message, "status_code=403")
+	require.Contains(t, message, "upstream balance exhausted")
+	require.NotContains(t, message, "live-secret")
+	require.NotContains(t, message, "1234567890abcdef")
+}

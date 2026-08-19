@@ -82,7 +82,7 @@ func cleanupExpiredMetrics(retentionDays int) {
 }
 
 func redisCounters(values map[string]string) counters {
-	return counters{
+	result := counters{
 		requestCount:     parseRedisInt(values["req"]),
 		successCount:     parseRedisInt(values["ok"]),
 		totalLatencyMs:   parseRedisInt(values["lat"]),
@@ -93,7 +93,18 @@ func redisCounters(values map[string]string) counters {
 		inputTokens:      parseRedisInt(values["input"]),
 		cacheReadTokens:  parseRedisInt(values["cache_read"]),
 		cacheWriteTokens: parseRedisInt(values["cache_write"]),
+		attemptTtftSumMs: parseRedisInt(values["attempt_ttft_sum"]),
+		attemptTtftCount: parseRedisInt(values["attempt_ttft_n"]),
+		e2eTtftSumMs:     parseRedisInt(values["e2e_ttft_sum"]),
+		e2eTtftCount:     parseRedisInt(values["e2e_ttft_n"]),
 	}
+	result.attemptTtftHistogram = make([]int64, metricHistogramBuckets)
+	result.e2eTtftHistogram = make([]int64, metricHistogramBuckets)
+	for index := 0; index < metricHistogramBuckets; index++ {
+		result.attemptTtftHistogram[index] = parseRedisInt(values[fmt.Sprintf("attempt_ttft_h%d", index)])
+		result.e2eTtftHistogram[index] = parseRedisInt(values[fmt.Sprintf("e2e_ttft_h%d", index)])
+	}
+	return result
 }
 
 func parseRedisInt(value string) int64 {

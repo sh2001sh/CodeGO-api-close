@@ -101,6 +101,7 @@ type RelayInfo struct {
 	UserGroup               string // 用户所在分组
 	TokenUnlimited          bool
 	StartTime               time.Time
+	AttemptStartTime        time.Time
 	FirstResponseTime       time.Time
 	FirstByteTrace          *FirstByteTrace
 	firstSemanticResponse   bool

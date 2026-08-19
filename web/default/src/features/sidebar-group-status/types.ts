@@ -46,6 +46,7 @@ export type SidebarGroupStatusItem = {
   source_type?: 'official' | 'marketplace_user'
   status: SidebarGroupAvailabilityStatus
   request_count?: number
+  success_rate?: number | null
   cache_hit_rate?: number | null
   models: SidebarGroupModelStatusItem[]
 }

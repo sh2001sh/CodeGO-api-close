@@ -119,6 +119,13 @@ services:
     environment:
       <<: *runtime-environment
       NODE_NAME: ${LEDGER_NODE_NAME:-ledger-worker-1}
+      DATA_ARCHIVE_DIR: /var/lib/new-api/archive
+      LOG_ARCHIVE_RETENTION_DAYS: ${LOG_ARCHIVE_RETENTION_DAYS:-90}
+      GATEWAY_EXECUTION_ARCHIVE_RETENTION_DAYS: ${GATEWAY_EXECUTION_ARCHIVE_RETENTION_DAYS:-90}
+      DATA_ARCHIVE_BATCH_SIZE: ${DATA_ARCHIVE_BATCH_SIZE:-2000}
+      DATA_ARCHIVE_INTERVAL_MINUTES: ${DATA_ARCHIVE_INTERVAL_MINUTES:-1}
+    volumes:
+      - ${DATA_ARCHIVE_HOST_PATH:-/mnt/codego-data/archive}:/var/lib/new-api/archive
     depends_on: *runtime-depends-on
     restart: unless-stopped
 

@@ -1,12 +1,15 @@
+import { useState } from 'react'
 import {
   Activity,
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   Gauge,
   Rabbit,
   Scale,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -20,6 +23,7 @@ export function MarketplaceFilters(props: {
   onChange: (patch: Partial<GroupFilters>) => void
 }) {
   const { t } = useTranslation()
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const sorts = [
     { value: 'score', label: t('综合'), icon: Gauge },
     { value: 'success_rate', label: t('成功率'), icon: ShieldCheck },
@@ -29,9 +33,9 @@ export function MarketplaceFilters(props: {
   ]
 
   return (
-    <div className='border-border bg-muted/10 border-y'>
-      <div className='flex flex-col gap-3 px-4 py-4 xl:flex-row xl:items-center'>
-        <label className='relative min-w-0 flex-1 xl:max-w-xl'>
+    <div className='border-border bg-muted/10 border-b'>
+      <div className='flex flex-col gap-2.5 px-4 py-3 sm:px-5 lg:flex-row lg:items-center'>
+        <label className='relative min-w-0 flex-1 lg:max-w-xl'>
           <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
           <Input
             value={props.filters.search}
@@ -42,7 +46,7 @@ export function MarketplaceFilters(props: {
             className='bg-background pl-9'
           />
         </label>
-        <div className='flex flex-wrap items-center gap-2'>
+        <div className='flex min-w-0 flex-1 items-center gap-2 lg:justify-end'>
           <Input
             value={props.filters.model}
             onChange={(event) =>
@@ -50,8 +54,35 @@ export function MarketplaceFilters(props: {
             }
             placeholder={t('指定模型')}
             aria-label={t('指定模型')}
-            className='bg-background w-36 sm:w-44'
+            className='bg-background min-w-0 flex-1 sm:max-w-44'
           />
+          <SortControls
+            sort={props.filters.sort}
+            direction={props.filters.direction}
+            sorts={sorts}
+            onChange={props.onChange}
+          />
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon-sm'
+            className='shrink-0 sm:w-auto sm:px-3'
+            onClick={() => setAdvancedOpen((current) => !current)}
+            aria-expanded={advancedOpen}
+          >
+            <SlidersHorizontal className='sm:hidden' />
+            <span className='sr-only sm:not-sr-only'>{t('高级筛选')}</span>
+            <ChevronDown
+              className={cn(
+                'hidden transition-transform sm:block',
+                advancedOpen && 'rotate-180'
+              )}
+            />
+          </Button>
+        </div>
+      </div>
+      {advancedOpen && (
+        <div className='border-border flex flex-wrap items-center gap-2 border-t px-4 py-3 sm:px-5'>
           <NativeSelect
             value={props.filters.provider}
             onChange={(event) =>
@@ -114,45 +145,58 @@ export function MarketplaceFilters(props: {
             <option value='720'>{t('近 30 天')}</option>
           </NativeSelect>
         </div>
-      </div>
-      <div className='border-border flex items-center gap-2 overflow-x-auto border-t px-4 py-2.5'>
-        <span className='text-muted-foreground mr-1 shrink-0 text-xs'>
-          {t('排序')}
-        </span>
-        {sorts.map(({ value, label, icon: Icon }) => {
-          const active = props.filters.sort === value
-          return (
-            <Button
-              key={value}
-              type='button'
-              variant={active ? 'secondary' : 'ghost'}
-              size='xs'
-              className={cn('shrink-0', active && 'text-primary')}
-              onClick={() => props.onChange({ sort: value, page: 1 })}
-            >
-              <Icon />
-              {label}
-            </Button>
-          )
-        })}
-        <div className='bg-border mx-1 h-4 w-px shrink-0' />
-        <Button
-          type='button'
-          variant='ghost'
-          size='xs'
-          className='shrink-0'
-          title={props.filters.direction === 'asc' ? t('升序') : t('降序')}
-          onClick={() =>
-            props.onChange({
-              direction: props.filters.direction === 'asc' ? 'desc' : 'asc',
-              page: 1,
-            })
-          }
-        >
-          {props.filters.direction === 'asc' ? <ArrowUp /> : <ArrowDown />}
-          {props.filters.direction === 'asc' ? t('升序') : t('降序')}
-        </Button>
-      </div>
+      )}
     </div>
   )
+}
+
+function SortControls(props: {
+  sort: string
+  direction: string
+  sorts: Array<{ value: string; label: string; icon: typeof Gauge }>
+  onChange: (patch: Partial<GroupFilters>) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className='flex shrink-0 items-center gap-1'>
+      <NativeSelect
+        value={props.sort}
+        onChange={(event) => {
+          const sort = event.target.value
+          props.onChange({
+            sort,
+            direction: defaultDirectionForSort(sort),
+            page: 1,
+          })
+        }}
+        aria-label={t('排序方式')}
+        className='bg-background w-28'
+      >
+        {props.sorts.map(({ value, label }) => (
+          <option key={value} value={value}>
+            {t('{{label}}优先', { label })}
+          </option>
+        ))}
+      </NativeSelect>
+      <Button
+        type='button'
+        variant='outline'
+        size='icon-sm'
+        className='shrink-0'
+        title={props.direction === 'asc' ? t('升序') : t('降序')}
+        onClick={() =>
+          props.onChange({
+            direction: props.direction === 'asc' ? 'desc' : 'asc',
+            page: 1,
+          })
+        }
+      >
+        {props.direction === 'asc' ? <ArrowUp /> : <ArrowDown />}
+      </Button>
+    </div>
+  )
+}
+
+function defaultDirectionForSort(sort: string) {
+  return sort === 'ttft' || sort === 'multiplier' ? 'asc' : 'desc'
 }

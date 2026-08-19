@@ -3,10 +3,13 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -68,6 +71,16 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	var migrationCount int64
 	require.NoError(t, db.Model(&schemaMigration{}).Count(&migrationCount).Error)
 	require.Equal(t, int64(len(V2MigrationIDs())), migrationCount)
+	require.True(t, db.Migrator().HasTable(&channelLatencyHistogramMigration{}))
+	for _, column := range []string{
+		"AttemptTTFTP50Ms", "AttemptTTFTP95Ms", "E2ETTFTP50Ms", "E2ETTFTP95Ms", "LatencySampleCount",
+	} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, column), column)
+	}
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.RankingSnapshot{}, "AttemptTTFTP95Ms"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260819_marketplace_latency_metrics"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AttemptTTFTP95Ms"))
 	for _, table := range []string{
 		"billing_outbox_events",
 		"billing_funding_source_policies",
@@ -127,6 +140,55 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	} {
 		require.False(t, db.Migrator().HasTable(tableName), tableName)
 	}
+}
+
+func TestPublishedOutboxCleanupIndexStatement(t *testing.T) {
+	postgres := publishedOutboxCleanupIndexStatement("postgres")
+	require.Contains(t, postgres, "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
+	require.Contains(t, postgres, "(published_at, event_id)")
+	require.Contains(t, postgres, "WHERE status = 'published'")
+	require.NotContains(t, postgres, "(status, published_at")
+
+	for _, dialect := range []string{"sqlite", "mysql"} {
+		statement := publishedOutboxCleanupIndexStatement(dialect)
+		require.Contains(t, statement, "(status, published_at, event_id)")
+		require.False(t, strings.Contains(statement, "WHERE status = 'published'"))
+	}
+}
+
+func TestMigratePublishedOutboxCleanupIndexSQLite(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingOutboxEvent{}))
+	require.NoError(t, migratePublishedOutboxCleanupIndex(db))
+	require.NoError(t, migratePublishedOutboxCleanupIndex(db))
+	require.True(t, db.Migrator().HasIndex(&billingschema.BillingOutboxEvent{}, "idx_billing_outbox_published_cleanup"))
+}
+
+func TestArchiveRetentionIndexStatements(t *testing.T) {
+	postgresGateway := gatewayArchiveIndexStatement("postgres")
+	require.Contains(t, postgresGateway, "CREATE INDEX CONCURRENTLY")
+	require.Contains(t, postgresGateway, "(updated_at, execution_id)")
+	require.Contains(t, postgresGateway, "WHERE status = 'settled'")
+	require.Contains(t, logArchiveIndexStatement("postgres"), "ON logs (created_at, id)")
+
+	require.Contains(t, gatewayArchiveIndexStatement("mysql"), "(status, updated_at, execution_id)")
+	require.NotContains(t, gatewayArchiveIndexStatement("mysql"), "IF NOT EXISTS")
+	require.NotContains(t, logArchiveIndexStatement("mysql"), "IF NOT EXISTS")
+	require.Contains(t, gatewayArchiveIndexStatement("sqlite"), "IF NOT EXISTS")
+}
+
+func TestMigrateArchiveRetentionIndexesSQLite(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	originalLogDB := platformdb.LogDB
+	t.Cleanup(func() { platformdb.LogDB = originalLogDB })
+	platformdb.LogDB = db
+	require.NoError(t, db.AutoMigrate(&gatewayschema.RequestExecution{}, &auditschema.Log{}))
+	require.NoError(t, migrateArchiveRetentionIndexes(db))
+	require.NoError(t, migrateArchiveRetentionIndexes(db))
+	require.True(t, db.Migrator().HasIndex(&gatewayschema.RequestExecution{}, "idx_gateway_executions_settled_archive"))
+	require.True(t, db.Migrator().HasIndex("logs", "idx_logs_archive_created_id"))
 }
 
 func TestMigrateMarketplaceAutoRoutePoolIsIdempotent(t *testing.T) {

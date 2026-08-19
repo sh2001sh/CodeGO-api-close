@@ -34,7 +34,7 @@ func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
 	now := time.Now().Unix()
 	require.NoError(t, logDB.Create([]auditschema.Log{
 		{UserId: 300, CreatedAt: now, Type: auditschema.LogTypeConsume, ChannelId: ownerInternalID, RequestId: "owner-success", ModelName: "gpt-5", Quota: 100, Username: "secret-user", TokenName: "secret-token", Ip: "127.0.0.1", Content: "secret-content", Other: "secret-other"},
-		{UserId: 301, CreatedAt: now - 1, Type: auditschema.LogTypeError, ChannelId: ownerInternalID, RequestId: "owner-error", ModelName: "claude-sonnet", Content: "sensitive error"},
+		{UserId: 301, CreatedAt: now - 1, Type: auditschema.LogTypeError, ChannelId: ownerInternalID, RequestId: "owner-error", UpstreamRequestId: "upstream-401", ModelName: "claude-sonnet", Content: "masked error", Other: `{"owner_error":"status_code=401, invalid upstream account","status_code":401,"error_type":"openai_error","error_code":"bad_response_status_code","retry_count":2,"request_path":"/v1/responses","total_duration_ms":12345,"e2e_ttft_ms":5300,"attempt_ttft_ms":3990}`},
 		{UserId: 999, CreatedAt: now - 2, Type: auditschema.LogTypeConsume, ChannelId: foreignInternalID, RequestId: "foreign-success", ModelName: "gpt-5"},
 	}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.Settlement{
@@ -64,6 +64,13 @@ func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
 	require.Equal(t, "D5E6F7", failed.UserID)
 	require.Zero(t, failed.OwnerIncome)
 	require.Equal(t, "failed", failed.Status)
+	require.Equal(t, "upstream-401", failed.UpstreamRequestID)
+	require.Equal(t, "status_code=401, invalid upstream account", failed.ErrorMessage)
+	require.EqualValues(t, 5300, failed.FirstByteMs)
+	require.EqualValues(t, 3990, failed.AttemptTTFTMs)
+	require.EqualValues(t, 12345, failed.TotalDurationMs)
+	require.Equal(t, 401, failed.StatusCode)
+	require.Equal(t, 2, failed.RetryCount)
 	payload, err := json.Marshal(result.Items)
 	require.NoError(t, err)
 	for _, sensitiveKey := range []string{
@@ -74,10 +81,31 @@ func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
 		`"ip":`,
 		`"content":`,
 		`"other":`,
-		`"upstream_request_id":`,
 	} {
 		require.NotContains(t, string(payload), sensitiveKey)
 	}
+}
+
+func TestListOwnerUsageLogsSearchesOwnedDetailsAndExternalUser(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	internalID := 101
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "owned", OwnerUserID: 10, InternalChannelID: &internalID, Status: "active", ProviderType: "openai"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "owned-group", ChannelID: "owned", OwnerUserID: 10, InternalGroupName: "owned", PublicSlug: "owned", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1}).Error)
+	require.NoError(t, db.Create(&identityschema.User{Id: 801, ExternalId: "CG8B6L", Username: "private", Password: "password"}).Error)
+	require.NoError(t, logDB.Create([]auditschema.Log{
+		{UserId: 801, Type: auditschema.LogTypeError, ChannelId: internalID, RequestId: "req-find-me", ModelName: "gpt-5.6", Content: "masked", Other: `{"owner_error":"upstream websocket rejected","status_code":401}`},
+		{UserId: 801, Type: auditschema.LogTypeConsume, ChannelId: internalID, RequestId: "req-other", ModelName: "gpt-4.1"},
+	}).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{Search: "CG8B6L", Status: "failed"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.Equal(t, "req-find-me", result.Items[0].RequestID)
+
+	result, err = ListOwnerUsageLogs(10, OwnerUsageLogQuery{Search: "websocket rejected"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.Equal(t, "upstream websocket rejected", result.Items[0].ErrorMessage)
 }
 
 func TestListOwnerUsageLogsFiltersSingleOwnedChannel(t *testing.T) {

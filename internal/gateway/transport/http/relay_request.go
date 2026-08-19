@@ -316,6 +316,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		relaycommon.UpdateRouteDecisionBudget(c, requestBudget)
 		relaycommon.StartRouteDecisionAttempt(c, relayInfo.RetryIndex, channel.Id, faultDomain)
+		relayInfo.BeginAttempt(time.Now())
 		relayInfo.FirstByteTrace.MarkUpstreamStart()
 		upstreamStarted = true
 		gatewayroutingapp.BeginAutoGroupAttempt(c, relayInfo.OriginModelName)

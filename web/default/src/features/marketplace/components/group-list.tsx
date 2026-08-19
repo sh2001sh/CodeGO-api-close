@@ -21,7 +21,7 @@ export function MarketplaceGroupList(props: {
     setExpanded((current) => (current === groupID ? '' : groupID))
 
   return (
-    <div className='bg-muted/35 space-y-2 p-2'>
+    <div className='bg-muted/25 space-y-1.5 p-2'>
       {props.groups.map((group) => (
         <GroupMarketItem
           key={group.id}
@@ -73,7 +73,7 @@ function GroupListSkeleton() {
   return (
     <div className='space-y-2 p-4'>
       {Array.from({ length: 6 }).map((_, index) => (
-        <Skeleton key={index} className='h-24 w-full rounded-lg' />
+        <Skeleton key={index} className='h-20 w-full rounded-md' />
       ))}
     </div>
   )

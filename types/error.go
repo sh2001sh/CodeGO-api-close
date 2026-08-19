@@ -153,6 +153,23 @@ func (e *NewAPIError) ErrorWithStatusCode() string {
 	return e.sanitizeUpstreamProviderErrorMessage(fmt.Sprintf("status_code=%d, %s", e.StatusCode, msg))
 }
 
+// OwnerVisibleErrorWithStatusCode keeps upstream diagnostics for the owner of
+// the selected channel while redacting credentials that may appear in them.
+func (e *NewAPIError) OwnerVisibleErrorWithStatusCode() string {
+	if e == nil {
+		return ""
+	}
+	message := e.Error()
+	if e.StatusCode != 0 {
+		if message == "" {
+			message = fmt.Sprintf("status_code=%d", e.StatusCode)
+		} else {
+			message = fmt.Sprintf("status_code=%d, %s", e.StatusCode, message)
+		}
+	}
+	return platformtext.RedactCredentials(message)
+}
+
 func (e *NewAPIError) MaskSensitiveError() string {
 	if e == nil {
 		return ""

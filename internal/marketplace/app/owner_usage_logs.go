@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
@@ -20,6 +21,10 @@ type ownerUsageChannel struct {
 
 func ListOwnerUsageLogs(ownerUserID int, query OwnerUsageLogQuery) (*OwnerUsageLogResult, error) {
 	query = normalizeOwnerUsageLogQuery(query)
+	query, err := resolveOwnerUsageLogUsers(query)
+	if err != nil {
+		return nil, err
+	}
 	channels, err := loadOwnerUsageChannels(ownerUserID, query.ChannelID)
 	if err != nil {
 		return nil, err
@@ -113,6 +118,37 @@ func ownerUsageLogDBQuery(channelIDs []int, query OwnerUsageLogQuery) *gorm.DB {
 	if query.EndTimestamp > 0 {
 		db = db.Where("created_at <= ?", query.EndTimestamp)
 	}
+	if query.Status == "success" {
+		db = db.Where("type = ?", auditschema.LogTypeConsume)
+	} else if query.Status == "failed" {
+		db = db.Where("type = ?", auditschema.LogTypeError)
+	}
+	if query.ModelName != "" {
+		db = db.Where("LOWER(model_name) LIKE ? ESCAPE '!'", ownerLogLike(query.ModelName))
+	}
+	if query.RequestID != "" {
+		db = db.Where("request_id = ?", query.RequestID)
+	}
+	if query.UpstreamRequestID != "" {
+		db = db.Where("upstream_request_id = ?", query.UpstreamRequestID)
+	}
+	if query.ExternalUserID != "" {
+		db = db.Where("user_id IN ?", query.userFilterIDs)
+	}
+	if query.Search != "" {
+		pattern := ownerLogLike(query.Search)
+		if len(query.searchUserIDs) > 0 {
+			db = db.Where(
+				"(LOWER(model_name) LIKE ? ESCAPE '!' OR LOWER(request_id) LIKE ? ESCAPE '!' OR LOWER(upstream_request_id) LIKE ? ESCAPE '!' OR LOWER(content) LIKE ? ESCAPE '!' OR LOWER(other) LIKE ? ESCAPE '!' OR user_id IN ?)",
+				pattern, pattern, pattern, pattern, pattern, query.searchUserIDs,
+			)
+		} else {
+			db = db.Where(
+				"(LOWER(model_name) LIKE ? ESCAPE '!' OR LOWER(request_id) LIKE ? ESCAPE '!' OR LOWER(upstream_request_id) LIKE ? ESCAPE '!' OR LOWER(content) LIKE ? ESCAPE '!' OR LOWER(other) LIKE ? ESCAPE '!')",
+				pattern, pattern, pattern, pattern, pattern,
+			)
+		}
+	}
 	return db
 }
 
@@ -129,22 +165,8 @@ func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string,
 	if len(groupIDs) == 0 {
 		return summary, nil
 	}
-	type settlementTotals struct {
-		ConsumerAmount int64 `gorm:"column:consumer_amount"`
-		OwnerIncome    int64 `gorm:"column:owner_income"`
-	}
-	var totals settlementTotals
-	settlementQuery := platformdb.DB.Model(&marketplaceschema.Settlement{}).
-		Where("owner_user_id = ? AND group_id IN ?", ownerUserID, groupIDs).
-		Select("COALESCE(SUM(consumer_amount), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income")
-	if query.StartTimestamp > 0 {
-		settlementQuery = settlementQuery.Where("created_at >= ?", time.Unix(query.StartTimestamp, 0))
-	}
-	if query.EndTimestamp > 0 {
-		settlementQuery = settlementQuery.Where("created_at < ?", time.Unix(query.EndTimestamp+1, 0))
-	}
-	if err := settlementQuery.
-		Scan(&totals).Error; err != nil {
+	totals, err := loadOwnerUsageSettlementSummary(ownerUserID, channelIDs, groupIDs, query)
+	if err != nil {
 		return summary, err
 	}
 	summary.ConsumerAmount = totals.ConsumerAmount
@@ -152,7 +174,48 @@ func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string,
 	return summary, nil
 }
 
+type ownerSettlementTotals struct {
+	ConsumerAmount int64 `gorm:"column:consumer_amount"`
+	OwnerIncome    int64 `gorm:"column:owner_income"`
+}
+
+func loadOwnerUsageSettlementSummary(ownerUserID int, channelIDs []int, groupIDs []string, query OwnerUsageLogQuery) (ownerSettlementTotals, error) {
+	var totals ownerSettlementTotals
+	settlementQuery := platformdb.DB.Model(&marketplaceschema.Settlement{}).
+		Where("owner_user_id = ? AND group_id IN ?", ownerUserID, groupIDs).
+		Select("COALESCE(SUM(consumer_amount), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income")
+	if hasOwnerUsageContentFilters(query) {
+		var requestIDs []string
+		if err := ownerUsageLogDBQuery(channelIDs, query).
+			Where("type = ? AND request_id <> ''", auditschema.LogTypeConsume).
+			Pluck("request_id", &requestIDs).Error; err != nil {
+			return totals, err
+		}
+		if len(requestIDs) == 0 {
+			return totals, nil
+		}
+		settlementQuery = settlementQuery.Where("request_id IN ?", requestIDs)
+	}
+	if query.StartTimestamp > 0 {
+		settlementQuery = settlementQuery.Where("created_at >= ?", time.Unix(query.StartTimestamp, 0))
+	}
+	if query.EndTimestamp > 0 {
+		settlementQuery = settlementQuery.Where("created_at < ?", time.Unix(query.EndTimestamp+1, 0))
+	}
+	return totals, settlementQuery.Scan(&totals).Error
+}
+
 func normalizeOwnerUsageLogQuery(query OwnerUsageLogQuery) OwnerUsageLogQuery {
+	query.ChannelID = strings.TrimSpace(query.ChannelID)
+	query.Status = strings.ToLower(strings.TrimSpace(query.Status))
+	query.ModelName = strings.TrimSpace(query.ModelName)
+	query.RequestID = strings.TrimSpace(query.RequestID)
+	query.UpstreamRequestID = strings.TrimSpace(query.UpstreamRequestID)
+	query.ExternalUserID = strings.TrimSpace(query.ExternalUserID)
+	query.Search = strings.TrimSpace(query.Search)
+	if query.Status != "success" && query.Status != "failed" {
+		query.Status = ""
+	}
 	if query.Page <= 0 {
 		query.Page = 1
 	}
@@ -165,6 +228,38 @@ func normalizeOwnerUsageLogQuery(query OwnerUsageLogQuery) OwnerUsageLogQuery {
 		query.StartTimestamp, query.EndTimestamp = query.EndTimestamp, query.StartTimestamp
 	}
 	return query
+}
+
+func resolveOwnerUsageLogUsers(query OwnerUsageLogQuery) (OwnerUsageLogQuery, error) {
+	load := func(value string) ([]int, error) {
+		if value == "" {
+			return nil, nil
+		}
+		var ids []int
+		err := platformdb.DB.Unscoped().Model(&identityschema.User{}).
+			Where("LOWER(external_id) LIKE ? ESCAPE '!'", ownerLogLike(value)).Limit(1000).Pluck("id", &ids).Error
+		return ids, err
+	}
+	var err error
+	query.userFilterIDs, err = load(query.ExternalUserID)
+	if err != nil {
+		return query, err
+	}
+	if query.ExternalUserID != "" && len(query.userFilterIDs) == 0 {
+		query.userFilterIDs = []int{-1}
+	}
+	query.searchUserIDs, err = load(query.Search)
+	return query, err
+}
+
+func ownerLogLike(value string) string {
+	replacer := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_")
+	return "%" + replacer.Replace(strings.ToLower(strings.TrimSpace(value))) + "%"
+}
+
+func hasOwnerUsageContentFilters(query OwnerUsageLogQuery) bool {
+	return query.Status != "" || query.ModelName != "" || query.RequestID != "" ||
+		query.UpstreamRequestID != "" || query.ExternalUserID != "" || query.Search != ""
 }
 
 func loadOwnerUsageChannels(ownerUserID int, selectedChannelID string) ([]ownerUsageChannel, error) {
@@ -245,6 +340,7 @@ func ownerUsageLogItem(log auditschema.Log, channel ownerUsageChannel, settlemen
 		IsStream: log.IsStream, RequestID: log.RequestId, ConsumerAmount: int64(log.Quota),
 		IncomeStatus: "none",
 	}
+	applyOwnerUsageLogDetails(&item, log)
 	if settlement.ID != "" {
 		item.ConsumerAmount = settlement.ConsumerAmount
 		item.OwnerIncome = settlement.OwnerNetAmount

@@ -95,7 +95,10 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		GPT56MappingTrigger:       channel.GPT56MappingTrigger,
 		Rank:                      snapshot.Rank, Score: snapshot.Score, SuccessRate: snapshot.RawSuccessRate,
 		WilsonSuccessRate: snapshot.WilsonSuccessRate, AvgTTFTMs: snapshot.AvgTTFTMs,
-		AvgLatencyMs: snapshot.AvgLatencyMs, AvgTPS: snapshot.AvgTPS,
+		AttemptTTFTP50Ms: snapshot.AttemptTTFTP50Ms, AttemptTTFTP95Ms: snapshot.AttemptTTFTP95Ms,
+		E2ETTFTP50Ms: snapshot.E2ETTFTP50Ms, E2ETTFTP95Ms: snapshot.E2ETTFTP95Ms,
+		LatencySampleCount: snapshot.LatencySampleCount,
+		AvgLatencyMs:       snapshot.AvgLatencyMs, AvgTPS: snapshot.AvgTPS,
 		CacheHitRate: snapshot.CacheHitRate, LatestRequestStatus: latestRequestStatus(channel, recentSeries),
 		RecentRequestSeries: recentSeries, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 		RequestCount: snapshot.RequestCount, MaxConcurrency: channel.MaxConcurrency,
@@ -184,6 +187,7 @@ func marketplaceHighlights(items []GroupListItem) GroupHighlights {
 		highlight := GroupHighlight{
 			GroupID: item.ID, SystemDisplayName: item.SystemDisplayName,
 			Score: item.Score, Multiplier: item.Multiplier, AvgTTFTMs: item.AvgTTFTMs,
+			AttemptTTFTP50Ms: item.AttemptTTFTP50Ms,
 		}
 		if !item.Observing && betterBest(result.Best, highlight) {
 			value := highlight
@@ -193,7 +197,7 @@ func marketplaceHighlights(items []GroupListItem) GroupHighlights {
 			value := highlight
 			result.Cheapest = &value
 		}
-		if item.AvgTTFTMs > 0 && betterFastest(result.Fastest, highlight) {
+		if item.LatencySampleCount > 0 && item.AttemptTTFTP50Ms > 0 && betterFastest(result.Fastest, highlight) {
 			value := highlight
 			result.Fastest = &value
 		}
@@ -212,8 +216,8 @@ func betterCheapest(current *GroupHighlight, candidate GroupHighlight) bool {
 }
 
 func betterFastest(current *GroupHighlight, candidate GroupHighlight) bool {
-	return current == nil || candidate.AvgTTFTMs < current.AvgTTFTMs ||
-		(candidate.AvgTTFTMs == current.AvgTTFTMs && candidate.GroupID < current.GroupID)
+	return current == nil || candidate.AttemptTTFTP50Ms < current.AttemptTTFTP50Ms ||
+		(candidate.AttemptTTFTP50Ms == current.AttemptTTFTP50Ms && candidate.GroupID < current.GroupID)
 }
 
 func publicSourceLabel(channel marketplaceschema.Channel) string {
@@ -231,7 +235,12 @@ func sortGroupItems(items []GroupListItem, field, direction string) {
 		case "success_rate":
 			left, right = items[i].SuccessRate, items[j].SuccessRate
 		case "ttft":
-			left, right = items[i].AvgTTFTMs, items[j].AvgTTFTMs
+			leftMissing := items[i].LatencySampleCount <= 0 || items[i].AttemptTTFTP50Ms <= 0
+			rightMissing := items[j].LatencySampleCount <= 0 || items[j].AttemptTTFTP50Ms <= 0
+			if leftMissing != rightMissing {
+				return !leftMissing
+			}
+			left, right = items[i].AttemptTTFTP50Ms, items[j].AttemptTTFTP50Ms
 		case "latency":
 			left, right = items[i].AvgLatencyMs, items[j].AvgLatencyMs
 		case "multiplier":

@@ -149,6 +149,11 @@ type RankingSnapshot struct {
 	RawSuccessRate       float64   `json:"raw_success_rate" gorm:"column:raw_success_rate"`
 	WilsonSuccessRate    float64   `json:"wilson_success_rate" gorm:"column:wilson_success_rate"`
 	AvgTTFTMs            float64   `json:"avg_ttft_ms" gorm:"column:avg_ttft_ms"`
+	AttemptTTFTP50Ms     float64   `json:"attempt_ttft_p50_ms" gorm:"column:attempt_ttft_p50_ms"`
+	AttemptTTFTP95Ms     float64   `json:"attempt_ttft_p95_ms" gorm:"column:attempt_ttft_p95_ms"`
+	E2ETTFTP50Ms         float64   `json:"e2e_ttft_p50_ms" gorm:"column:e2e_ttft_p50_ms"`
+	E2ETTFTP95Ms         float64   `json:"e2e_ttft_p95_ms" gorm:"column:e2e_ttft_p95_ms"`
+	LatencySampleCount   int64     `json:"latency_sample_count" gorm:"column:latency_sample_count"`
 	AvgLatencyMs         float64   `json:"avg_latency_ms" gorm:"column:avg_latency_ms"`
 	AvgTPS               float64   `json:"avg_tps" gorm:"column:avg_tps"`
 	CacheHitRate         float64   `json:"cache_hit_rate" gorm:"column:cache_hit_rate"`

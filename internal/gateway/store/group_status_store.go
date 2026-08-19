@@ -91,6 +91,7 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 		Select(selectExpr).
 		Where("created_at >= ? AND created_at < ?", startTime, endTime).
 		Where("type IN ?", []int{auditschema.LogTypeConsume, auditschema.LogTypeError}).
+		Where(successRateLogFilter()).
 		Where("model_name <> ''").
 		Where(groupColumn + " <> ''")
 
@@ -127,6 +128,32 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 	groupStatusCache.Unlock()
 	return rows, nil
 }
+
+func successRateLogFilter() string {
+	if os.Getenv("LOG_SQL_DSN") != "" {
+		switch platformdb.LogSQLType {
+		case platformdb.DatabaseTypePostgreSQL:
+			return postgresSuccessRateLogFilter
+		case platformdb.DatabaseTypeMySQL:
+			return mysqlSuccessRateLogFilter
+		default:
+			return sqliteSuccessRateLogFilter
+		}
+	}
+	if platformdb.UsingPostgreSQL {
+		return postgresSuccessRateLogFilter
+	}
+	if platformdb.UsingMySQL {
+		return mysqlSuccessRateLogFilter
+	}
+	return sqliteSuccessRateLogFilter
+}
+
+const (
+	postgresSuccessRateLogFilter = `COALESCE(substring(other from '"counted_in_success_rate"[[:space:]]*:[[:space:]]*(true|false)') <> 'false', true)`
+	mysqlSuccessRateLogFilter    = `CASE WHEN JSON_VALID(other) THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(other, '$.counted_in_success_rate')), 'true') <> 'false' ELSE true END`
+	sqliteSuccessRateLogFilter   = `CASE WHEN json_valid(other) THEN COALESCE(json_extract(other, '$.counted_in_success_rate'), 1) <> 0 ELSE 1 END`
+)
 
 func logGroupColumn() string {
 	if os.Getenv("LOG_SQL_DSN") != "" {

@@ -1,4 +1,4 @@
-import { Gauge, Rabbit, Scale } from 'lucide-react'
+import { Award, Gauge, Rabbit, Scale } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatDuration, formatMultiplier } from '../lib/format'
 import type {
@@ -37,21 +37,23 @@ export function MarketplaceHighlights(props: {
       label: t('全部结果首字最快'),
       group: highlights.fastest,
       value: highlights.fastest
-        ? formatDuration(highlights.fastest.avg_ttft_ms)
+        ? formatDuration(highlights.fastest.attempt_ttft_p50_ms)
         : '--',
-      hint: t('首字延迟 TTFT'),
+      hint: t('最终上游尝试首字 P50'),
     },
   ]
 
   return (
     <section
-      className='border-border bg-primary/[0.025] border-b'
+      className='border-border flex items-center gap-3 overflow-x-auto border-b px-4 py-2.5 sm:px-5'
       aria-label={t('全部筛选结果亮点')}
     >
-      <div className='text-muted-foreground border-border border-b px-4 py-2 text-xs sm:px-5'>
-        {t('以下统计基于全部筛选结果，不受当前分页影响。')}
-      </div>
-      <div className='grid lg:grid-cols-3'>
+      <span className='text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs'>
+        <Award className='text-primary size-3.5' />
+        {t('当前亮点')}
+      </span>
+      <div className='bg-border h-4 w-px shrink-0' />
+      <div className='flex min-w-0 items-center gap-2'>
         {items.map(({ icon: Icon, label, group, value, hint }) => (
           <HighlightItem
             key={label}
@@ -77,24 +79,18 @@ function HighlightItem(props: {
   const { t } = useTranslation()
   const Icon = props.icon
   return (
-    <div className='border-border flex min-h-24 items-center gap-3 border-b px-4 py-4 last:border-r-0 lg:border-r lg:border-b-0'>
-      <div className='bg-background text-primary flex size-9 shrink-0 items-center justify-center rounded-md border'>
-        <Icon className='size-4' />
-      </div>
-      <div className='min-w-0 flex-1'>
-        <div className='text-muted-foreground text-xs'>{props.label}</div>
-        <div className='mt-1 flex items-baseline justify-between gap-3'>
-          <span className='truncate text-sm font-medium'>
-            {props.group?.system_display_name || t('等待有效样本')}
-          </span>
-          <span className='shrink-0 font-semibold tabular-nums'>
-            {props.value}
-          </span>
-        </div>
-        <div className='text-muted-foreground mt-0.5 text-[11px]'>
-          {props.hint}
-        </div>
-      </div>
+    <div
+      className='bg-muted/50 flex h-8 max-w-72 shrink-0 items-center gap-2 rounded-md px-2.5 text-xs'
+      title={`${props.label} · ${props.hint}`}
+    >
+      <Icon className='text-primary size-3.5 shrink-0' />
+      <span className='text-muted-foreground shrink-0'>
+        {props.label.replace('全部结果', '')}
+      </span>
+      <span className='max-w-28 truncate font-medium'>
+        {props.group?.system_display_name || t('等待样本')}
+      </span>
+      <strong className='shrink-0 tabular-nums'>{props.value}</strong>
     </div>
   )
 }

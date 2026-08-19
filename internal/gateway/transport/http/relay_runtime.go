@@ -323,11 +323,16 @@ func recordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) {
 	}
 	channelID := c.GetInt("channel_id")
 	other := map[string]interface{}{
-		"status":      "failed",
-		"status_code": apiErr.StatusCode,
-		"error_type":  apiErr.GetErrorType(),
-		"error_code":  apiErr.GetErrorCode(),
-		"retry_count": max(len(c.GetStringSlice("use_channel"))-1, 0),
+		"status":                  "failed",
+		"status_code":             apiErr.StatusCode,
+		"error_type":              apiErr.GetErrorType(),
+		"error_code":              apiErr.GetErrorCode(),
+		"retry_count":             max(len(c.GetStringSlice("use_channel"))-1, 0),
+		"counted_in_success_rate": shouldCountRelayFailureInSuccessRate(apiErr),
+		"owner_error":             apiErr.OwnerVisibleErrorWithStatusCode(),
+	}
+	if !startTime.IsZero() {
+		other["total_duration_ms"] = time.Since(startTime).Milliseconds()
 	}
 	if c.Request != nil && c.Request.URL != nil {
 		other["request_path"] = c.Request.URL.Path
@@ -387,7 +392,18 @@ func recordRelayFailure(relayInfo *relaycommon.RelayInfo) {
 }
 
 func shouldRecordRelayFailureSample(upstreamStarted bool, apiErr *types.NewAPIError) bool {
-	return upstreamStarted && apiErr != nil
+	return upstreamStarted && shouldCountRelayFailureInSuccessRate(apiErr)
+}
+
+func shouldCountRelayFailureInSuccessRate(apiErr *types.NewAPIError) bool {
+	if apiErr == nil {
+		return false
+	}
+	status := apiErr.StatusCode
+	if status == http.StatusBadRequest || status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status == http.StatusUnprocessableEntity {
+		return false
+	}
+	return status == 0 || status == http.StatusRequestTimeout || status == http.StatusConflict || status == http.StatusTooEarly || status == http.StatusTooManyRequests || status == http.StatusUnauthorized || status == http.StatusForbidden || status >= http.StatusInternalServerError
 }
 
 func restoreRelayRequestBody(c *gin.Context) *types.NewAPIError {

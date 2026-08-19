@@ -88,11 +88,17 @@ func ListMyChannels(c *gin.Context) {
 
 func ListMyUsageLogs(c *gin.Context) {
 	result, err := marketplaceapp.ListOwnerUsageLogs(c.GetInt("id"), marketplaceapp.OwnerUsageLogQuery{
-		ChannelID:      c.Query("channel_id"),
-		StartTimestamp: queryInt64(c, "start_timestamp"),
-		EndTimestamp:   queryInt64(c, "end_timestamp"),
-		Page:           queryInt(c, "page", 1),
-		PageSize:       queryInt(c, "page_size", 20),
+		ChannelID:         c.Query("channel_id"),
+		Status:            c.Query("status"),
+		ModelName:         c.Query("model_name"),
+		RequestID:         c.Query("request_id"),
+		UpstreamRequestID: c.Query("upstream_request_id"),
+		ExternalUserID:    c.Query("external_user_id"),
+		Search:            c.Query("search"),
+		StartTimestamp:    queryInt64(c, "start_timestamp"),
+		EndTimestamp:      queryInt64(c, "end_timestamp"),
+		Page:              queryInt(c, "page", 1),
+		PageSize:          queryInt(c, "page_size", 20),
 	})
 	respond(c, result, err)
 }

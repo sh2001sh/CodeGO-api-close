@@ -35,16 +35,18 @@ func TestCountLedgerInconsistenciesUsesOneConsistentAggregate(t *testing.T) {
 		&billingschema.BillingSettlement{},
 	))
 
-	account := billingschema.BillingAccount{AccountID: "consistent-count", OwnerType: "user", OwnerID: 1, AccountType: "wallet", QuotaUnit: "quota"}
+	account := billingschema.BillingAccount{AccountID: "consistent-count", OwnerType: "token", OwnerID: 1, AccountType: "token", QuotaUnit: "quota"}
 	require.NoError(t, db.Create(&account).Error)
-	require.NoError(t, db.Create(&billingschema.BillingBalanceSnapshot{AccountID: account.AccountID, AvailableBalance: 1_000, GrantedTotal: 1_000}).Error)
+	require.NoError(t, db.Create(&billingschema.BillingBalanceSnapshot{AccountID: account.AccountID, AvailableBalance: 900, ConsumedTotal: 125, RefundedTotal: 25, GrantedTotal: 1_000}).Error)
 	require.NoError(t, db.Create(&billingschema.BillingLedgerEntry{AccountID: account.AccountID, EntryType: "grant_credit", Amount: 1_000, IdempotencyKey: "grant"}).Error)
+	require.NoError(t, db.Create(&billingschema.BillingLedgerEntry{AccountID: account.AccountID, EntryType: "settle_debit", ReferenceType: "token", Amount: 125, IdempotencyKey: "direct-consume"}).Error)
+	require.NoError(t, db.Create(&billingschema.BillingLedgerEntry{AccountID: account.AccountID, EntryType: "settle_credit", ReferenceType: "token", Amount: 25, IdempotencyKey: "direct-refund"}).Error)
 
 	count, err := CountLedgerInconsistencies(context.Background())
 	require.NoError(t, err)
 	require.Zero(t, count)
 
-	require.NoError(t, db.Model(&billingschema.BillingBalanceSnapshot{}).Where("account_id = ?", account.AccountID).Update("available_balance", 999).Error)
+	require.NoError(t, db.Model(&billingschema.BillingBalanceSnapshot{}).Where("account_id = ?", account.AccountID).Update("available_balance", 899).Error)
 	count, err = CountLedgerInconsistencies(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 1, count)

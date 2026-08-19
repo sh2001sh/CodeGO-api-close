@@ -63,7 +63,9 @@ func ledgerInconsistencyCountQuery() string {
 WITH entry_totals AS (
   SELECT account_id,
     COALESCE(SUM(CASE WHEN entry_type IN ('grant_credit', 'reserve_release', 'settle_credit') THEN amount WHEN entry_type IN ('reserve_hold', 'settle_debit') THEN -amount ELSE 0 END), 0) AS available_balance,
-    COALESCE(SUM(CASE WHEN entry_type = 'grant_credit' THEN amount ELSE 0 END), 0) AS granted_total
+    COALESCE(SUM(CASE WHEN entry_type = 'grant_credit' THEN amount ELSE 0 END), 0) AS granted_total,
+    COALESCE(SUM(CASE WHEN entry_type = 'settle_debit' AND COALESCE(reference_type, '') <> 'settlement' THEN amount ELSE 0 END), 0) AS direct_consumed_total,
+    COALESCE(SUM(CASE WHEN entry_type = 'settle_credit' AND COALESCE(reference_type, '') <> 'settlement' THEN amount ELSE 0 END), 0) AS direct_refunded_total
   FROM %s GROUP BY account_id
 ), settlement_totals AS (
   SELECT r.account_id, COALESCE(SUM(s.actual_amount), 0) AS consumed_total,
@@ -83,8 +85,8 @@ WHERE bs.account_id IS NULL
   OR bs.available_balance <> COALESCE(e.available_balance, 0)
   OR bs.reserved_balance <> COALESCE(r.reserved_balance, 0)
   OR bs.granted_total <> COALESCE(e.granted_total, 0)
-  OR bs.consumed_total <> COALESCE(s.consumed_total, 0)
-  OR bs.refunded_total <> COALESCE(s.refunded_total, 0)`,
+  OR bs.consumed_total <> COALESCE(s.consumed_total, 0) + COALESCE(e.direct_consumed_total, 0)
+  OR bs.refunded_total <> COALESCE(s.refunded_total, 0) + COALESCE(e.direct_refunded_total, 0)`,
 		entryTable, settlementTable, reservationTable, reservationTable, accountTable, snapshotTable)
 }
 

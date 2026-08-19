@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -164,7 +165,7 @@ func UpdateAdminChannel(channelID string, req AdminUpdateChannelRequest) (*Chann
 
 func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest, consistencyStatus *string) (*ChannelView, error) {
 	transportFingerprint := marketplaceTransportFingerprint(channel)
-	_, err := applyChannelUpdate(channel, group, req)
+	reverify, err := applyChannelUpdate(channel, group, req)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +178,15 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 	if transportChanged {
 		markMarketplaceCapabilitiesPending(channel)
 	}
+	if reverify {
+		marketplaceVerificationTasks.cancelChannel(channel.ID)
+	}
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if reverify {
+			if err := pauseActiveVerificationRunsWithDB(tx, channel.ID, time.Now().UTC()); err != nil {
+				return err
+			}
+		}
 		if err := tx.Save(channel).Error; err != nil {
 			return err
 		}

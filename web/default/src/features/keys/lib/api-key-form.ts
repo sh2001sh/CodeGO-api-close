@@ -62,9 +62,7 @@ export function getApiKeyFormSchema(t: TFunction) {
     })
 }
 
-export type ApiKeyFormValues = z.infer<
-  ReturnType<typeof getApiKeyFormSchema>
->
+export type ApiKeyFormValues = z.infer<ReturnType<typeof getApiKeyFormSchema>>
 
 // ============================================================================
 // Form Defaults
@@ -116,7 +114,7 @@ export function transformFormDataToPayload(
     model_limits: data.model_limits.join(','),
     allow_ips: data.allow_ips || '',
     group: data.group || '',
-    cross_group_retry: data.group === 'auto' ? !!data.cross_group_retry : false,
+    cross_group_retry: data.group === 'auto' ? true : false,
     marketplace_multiplier_limit: data.marketplace_multiplier_limit || 0,
   }
 }
@@ -142,7 +140,7 @@ export function transformApiKeyToFormDefaults(
       : [],
     allow_ips: apiKey.allow_ips || '',
     group: apiKey.group || DEFAULT_GROUP,
-    cross_group_retry: !!apiKey.cross_group_retry,
+    cross_group_retry: apiKey.group === 'auto' ? true : false,
     marketplace_multiplier_limit: apiKey.marketplace_multiplier_limit || 0,
     tokenCount: 1,
   }

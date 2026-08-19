@@ -55,6 +55,25 @@ func TestRouteDecisionRecordsAttemptLifecycle(t *testing.T) {
 	require.Equal(t, "bootstrap", decision.Attempts[0].Stage)
 }
 
+func TestRouteDecisionRecordsAutoCandidateLifecycle(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(constant.RequestIdKey, "candidate-test")
+	StartRouteDecision(context, "gpt-test", "auto")
+	RecordRouteDecisionCandidate(context, 1, "group-a", "selected", "preflight_ok", 42)
+	StartRouteDecisionAttempt(context, 0, 42, "provider:a")
+	FinishRouteDecisionAttempt(context, false, 502, "transient", "bootstrap")
+	RecordRouteDecisionCandidate(context, 2, "group-b", "skipped", "no_healthy_channel", 0)
+
+	decision, found := GetRouteDecision(context)
+	require.True(t, found)
+	require.Len(t, decision.Candidates, 2)
+	require.Equal(t, "attempted", decision.Candidates[0].Status)
+	require.Equal(t, "transient", decision.Candidates[0].Reason)
+	require.Equal(t, "skipped", decision.Candidates[1].Status)
+	require.Equal(t, "no_healthy_channel", decision.Candidates[1].Reason)
+}
+
 func TestFinishRouteDecisionAttemptWithoutStartedAttemptIsNoOp(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())

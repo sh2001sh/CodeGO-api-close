@@ -67,3 +67,13 @@ func channelModelPriceForModel(prices map[string]ChannelModelPrice, model string
 	}
 	return ChannelModelPrice{}, false
 }
+
+func retainChannelModelPrices(prices map[string]ChannelModelPrice, models []string) map[string]ChannelModelPrice {
+	retained := make(map[string]ChannelModelPrice)
+	for _, model := range normalizeModels(models) {
+		if price, ok := channelModelPriceForModel(prices, model); ok {
+			retained[model] = price
+		}
+	}
+	return retained
+}

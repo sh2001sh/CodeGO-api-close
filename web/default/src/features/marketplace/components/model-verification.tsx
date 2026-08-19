@@ -4,11 +4,24 @@ import {
   CirclePause,
   Loader2,
   Minus,
+  Trash2,
   XCircle,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type {
   ConnectivityTestStatus,
   ModelConsistencyStatus,
@@ -35,8 +48,11 @@ export function ConnectivityTestStatusView(props: {
   status: ConnectivityTestStatus
   results: ModelVerificationResult[]
   checkedAt?: string | null
+  summary?: string
   required: boolean
   showErrors?: boolean
+  onRemoveModel?: (model: string) => void
+  removingModel?: string
 }) {
   const { t } = useTranslation()
   const status = props.status || ''
@@ -78,9 +94,16 @@ export function ConnectivityTestStatusView(props: {
             ? t('等待首次测试')
             : t('GPT-5.6 检测通过后可跳过此项')}
       </div>
+      {status === 'failed' && props.summary && (
+        <p className='text-destructive mt-2 leading-5 break-words'>
+          {props.summary}
+        </p>
+      )}
       <ModelConnectivityResults
         results={props.results}
         showErrors={props.showErrors}
+        onRemoveModel={props.onRemoveModel}
+        removingModel={props.removingModel}
         embedded
       />
     </div>
@@ -184,6 +207,8 @@ export function ModelConnectivityResults(props: {
   results: ModelVerificationResult[]
   showErrors?: boolean
   embedded?: boolean
+  onRemoveModel?: (model: string) => void
+  removingModel?: string
 }) {
   const { t } = useTranslation()
   if (props.results.length === 0) return null
@@ -204,6 +229,8 @@ export function ModelConnectivityResults(props: {
             key={result.model}
             result={result}
             showError={props.showErrors === true}
+            onRemoveModel={props.onRemoveModel}
+            removing={props.removingModel === result.model}
           />
         ))}
       </div>
@@ -214,9 +241,11 @@ export function ModelConnectivityResults(props: {
 function ModelConnectivityRow(props: {
   result: ModelVerificationResult
   showError: boolean
+  onRemoveModel?: (model: string) => void
+  removing: boolean
 }) {
   const { t } = useTranslation()
-  const passed = props.result.status === 'passed'
+  const passed = props.result.listed && props.result.status === 'passed'
   const Icon = passed ? CheckCircle2 : XCircle
   return (
     <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5 text-xs'>
@@ -235,16 +264,62 @@ function ModelConnectivityRow(props: {
           )}
         </div>
       </div>
-      <div
-        className={cn(
-          'flex items-center gap-1 self-start font-medium tabular-nums',
-          passed ? 'text-success' : 'text-destructive'
-        )}
-      >
-        <Icon className='size-3.5' />
-        <span>{passed ? t('通过') : t('失败')}</span>
-        {props.result.latency_ms > 0 && (
-          <span>· {props.result.latency_ms}ms</span>
+      <div className='flex items-center gap-1.5 self-start'>
+        <div
+          className={cn(
+            'flex items-center gap-1 font-medium tabular-nums',
+            passed ? 'text-success' : 'text-destructive'
+          )}
+        >
+          <Icon className='size-3.5' />
+          <span>{passed ? t('通过') : t('失败')}</span>
+          {props.result.latency_ms > 0 && (
+            <span>· {props.result.latency_ms}ms</span>
+          )}
+        </div>
+        {!passed && props.onRemoveModel && (
+          <AlertDialog>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  variant='ghost'
+                  size='xs'
+                  className='text-destructive hover:text-destructive'
+                  disabled={props.removing}
+                  aria-label={t('剔除失败模型 {{model}}', {
+                    model: props.result.model,
+                  })}
+                />
+              }
+            >
+              {props.removing ? (
+                <Loader2 className='animate-spin' />
+              ) : (
+                <Trash2 />
+              )}
+              {t('剔除')}
+            </AlertDialogTrigger>
+            <AlertDialogContent size='sm'>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t('剔除这个模型？')}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t(
+                    '将从渠道模型列表和价格配置中移除 {{model}}，其他已通过模型无需重新测试。',
+                    { model: props.result.model }
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t('取消')}</AlertDialogCancel>
+                <AlertDialogAction
+                  variant='destructive'
+                  onClick={() => props.onRemoveModel?.(props.result.model)}
+                >
+                  {t('确认剔除')}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
     </div>

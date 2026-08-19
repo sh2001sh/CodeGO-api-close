@@ -183,6 +183,26 @@ export async function queueMarketplaceConnectivityTest(
   return queueMarketplaceChannelAction(channelId, 'test', admin)
 }
 
+export async function retryMarketplaceFailedConnectivity(
+  channelId: string,
+  admin = false
+) {
+  return queueMarketplaceChannelAction(channelId, 'test/failed', admin)
+}
+
+export async function removeMarketplaceFailedModel(input: {
+  channelId: string
+  model: string
+  admin?: boolean
+}) {
+  const prefix = input.admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.post<ApiResponse<MarketplaceChannel>>(
+    `${prefix}/channels/${input.channelId}/models/remove-failed`,
+    { model: input.model }
+  )
+  return requireData(response.data)
+}
+
 export async function pauseMarketplaceVerification(
   channelId: string,
   admin = false
@@ -196,7 +216,7 @@ export async function pauseMarketplaceVerification(
 
 async function queueMarketplaceChannelAction(
   channelId: string,
-  action: 'detect' | 'test',
+  action: 'detect' | 'test' | 'test/failed',
   admin: boolean
 ) {
   const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'

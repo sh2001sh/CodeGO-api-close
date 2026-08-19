@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -10,12 +11,25 @@ import (
 )
 
 func startGPT56MappingRun(channelID, level, trigger, parentRunID string) (*marketplaceschema.GPT56MappingRun, error) {
+	return startGPT56MappingRunContext(context.Background(), channelID, level, trigger, parentRunID)
+}
+
+func startGPT56MappingRunContext(
+	ctx context.Context,
+	channelID, level, trigger, parentRunID string,
+) (*marketplaceschema.GPT56MappingRun, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	run := &marketplaceschema.GPT56MappingRun{
 		ChannelID: channelID, ParentRunID: parentRunID, Level: level, Trigger: trigger,
 		Status: GPT56MappingStatusRunning, Results: "[]", StartedAt: now,
 	}
-	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := tx.Create(run).Error; err != nil {
 			return err
 		}
@@ -51,11 +65,18 @@ func saveGPT56MappingProgress(runID, channelID string, results []GPT56MappingRes
 		if result.RowsAffected == 0 {
 			return errVerificationNotRunning
 		}
-		return tx.Model(&marketplaceschema.Channel{}).
+		channelResult := tx.Model(&marketplaceschema.Channel{}).
 			Where("id = ? AND gpt56_mapping_status = ?", channelID, GPT56MappingStatusRunning).
 			Updates(map[string]any{
 				"gpt56_mapping_results": string(encoded), "gpt56_mapping_status": GPT56MappingStatusRunning,
-			}).Error
+			})
+		if channelResult.Error != nil {
+			return channelResult.Error
+		}
+		if channelResult.RowsAffected == 0 {
+			return errVerificationNotRunning
+		}
+		return nil
 	})
 }
 
@@ -79,13 +100,20 @@ func finishGPT56MappingRun(
 		if result.RowsAffected == 0 {
 			return errVerificationNotRunning
 		}
-		return tx.Model(&marketplaceschema.Channel{}).
+		channelResult := tx.Model(&marketplaceschema.Channel{}).
 			Where("id = ? AND gpt56_mapping_status = ?", run.ChannelID, GPT56MappingStatusRunning).
 			Updates(map[string]any{
 				"gpt56_mapping_results": string(encoded), "gpt56_mapping_status": status,
 				"gpt56_mapping_checked_at": now, "gpt56_mapping_level": run.Level,
 				"gpt56_mapping_trigger": run.Trigger,
-			}).Error
+			})
+		if channelResult.Error != nil {
+			return channelResult.Error
+		}
+		if channelResult.RowsAffected == 0 {
+			return errVerificationNotRunning
+		}
+		return nil
 	})
 }
 

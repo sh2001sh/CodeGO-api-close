@@ -82,6 +82,57 @@ func decodeModelVerificationResults(raw string) []ModelVerificationResult {
 	return results
 }
 
+func failedModelVerificationModels(declared []string, results []ModelVerificationResult) []string {
+	byModel := modelVerificationResultsByModel(results)
+	failed := make([]string, 0)
+	for _, model := range normalizeModels(declared) {
+		result, ok := byModel[strings.ToLower(model)]
+		if ok && (!result.Listed || result.Status != marketplacedomain.ModelVerificationPassed) {
+			failed = append(failed, model)
+		}
+	}
+	return failed
+}
+
+func retainModelVerificationResults(declared []string, results []ModelVerificationResult, retried []string) []ModelVerificationResult {
+	retriedModels := make(map[string]struct{}, len(retried))
+	for _, model := range retried {
+		retriedModels[strings.ToLower(strings.TrimSpace(model))] = struct{}{}
+	}
+	retained := make([]ModelVerificationResult, 0, len(results))
+	for _, result := range mergeModelVerificationResults(declared, results, nil) {
+		if _, retrying := retriedModels[strings.ToLower(strings.TrimSpace(result.Model))]; !retrying {
+			retained = append(retained, result)
+		}
+	}
+	return retained
+}
+
+func mergeModelVerificationResults(declared []string, previous, updates []ModelVerificationResult) []ModelVerificationResult {
+	byModel := modelVerificationResultsByModel(previous)
+	for _, result := range updates {
+		byModel[strings.ToLower(strings.TrimSpace(result.Model))] = result
+	}
+	merged := make([]ModelVerificationResult, 0, len(byModel))
+	for _, model := range normalizeModels(declared) {
+		if result, ok := byModel[strings.ToLower(model)]; ok {
+			result.Model = model
+			merged = append(merged, result)
+		}
+	}
+	return merged
+}
+
+func modelVerificationResultsByModel(results []ModelVerificationResult) map[string]ModelVerificationResult {
+	byModel := make(map[string]ModelVerificationResult, len(results))
+	for _, result := range results {
+		if model := strings.ToLower(strings.TrimSpace(result.Model)); model != "" {
+			byModel[model] = result
+		}
+	}
+	return byModel
+}
+
 func publicModelVerificationResults(raw string) []ModelVerificationResult {
 	results := decodeModelVerificationResults(raw)
 	for index := range results {
@@ -110,22 +161,6 @@ func selectVerifiedModels(results []ModelVerificationResult) ([]string, []string
 		rejected = append(rejected, result.Model)
 	}
 	return normalizeModels(passed), normalizeModels(rejected)
-}
-
-func partialVerificationSummary(passed []string, results []ModelVerificationResult, rejected []string) string {
-	const maxDisplayedRejected = 5
-	displayed := rejected
-	if len(displayed) > maxDisplayedRejected {
-		displayed = displayed[:maxDisplayedRejected]
-	}
-	suffix := ""
-	if len(rejected) > len(displayed) {
-		suffix = fmt.Sprintf(" 等 %d 个", len(rejected))
-	}
-	return fmt.Sprintf(
-		"%d/%d 个模型检测通过并上架；已自动剔除未通过模型: %s%s",
-		len(passed), len(results), strings.Join(displayed, ", "), suffix,
-	)
 }
 
 func truncateVerificationError(message string) string {

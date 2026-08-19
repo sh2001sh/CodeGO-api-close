@@ -112,9 +112,7 @@ export function ApiKeysMutateDrawer({
         groups[0]?.value ??
         ''
       form.setValue('group', fallback)
-      if (currentGroup === 'auto') {
-        form.setValue('cross_group_retry', false)
-      }
+      form.setValue('cross_group_retry', fallback === 'auto')
     }
   }, [groups, form])
 

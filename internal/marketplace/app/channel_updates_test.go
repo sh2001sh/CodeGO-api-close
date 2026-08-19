@@ -15,7 +15,10 @@ func TestInternalGroupNameUsesReadableChannelIdentity(t *testing.T) {
 
 func TestAdminCanUpdateMarketplaceChannelContent(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
-	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{}, &marketplaceschema.GPT56MappingRun{},
+	))
 
 	channel := marketplaceschema.Channel{
 		ID: "channel-admin-edit", OwnerUserID: 42, ProviderType: "anthropic",
@@ -112,6 +115,35 @@ func TestEditingChannelInformationInvalidatesVerificationState(t *testing.T) {
 	require.Empty(t, channel.ConnectivityTestStatus)
 	require.Equal(t, "[]", channel.GPT56MappingResults)
 	require.Empty(t, channel.GPT56MappingStatus)
+}
+
+func TestReplacingChannelModelsDropsStalePricesAndReassignsProbe(t *testing.T) {
+	channel := &marketplaceschema.Channel{
+		ID: "replace-models", ProviderType: "openai_compatible",
+		DeclaredModels:   `["old-model","gpt-5"]`,
+		ModelPrices:      `{"old-model":{"input_price_per_million":1,"output_price_per_million":2},"gpt-5":{"input_price_per_million":3,"output_price_per_million":9}}`,
+		AutoProbeEnabled: true, AutoProbeIntervalMinutes: 10, AutoProbeModel: "old-model",
+	}
+	group := &marketplaceschema.Group{ID: "replace-models-group", Multiplier: 1}
+	models := []string{"gpt-5", "gpt-5-mini"}
+	probeModel := "old-model"
+	prices := map[string]ChannelModelPrice{
+		"old-model":  {InputPricePerMillion: 1, OutputPricePerMillion: 2},
+		"gpt-5":      {InputPricePerMillion: 3, OutputPricePerMillion: 9},
+		"gpt-5-mini": {InputPricePerMillion: 0.5, OutputPricePerMillion: 1.5},
+	}
+
+	_, err := applyChannelUpdate(channel, group, UpdateChannelRequest{
+		DeclaredModels: &models, ModelPrices: &prices, AutoProbeModel: &probeModel,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, models, decodeModels(channel.DeclaredModels))
+	require.Equal(t, "gpt-5", channel.AutoProbeModel)
+	require.Equal(t, map[string]ChannelModelPrice{
+		"gpt-5":      {InputPricePerMillion: 3, OutputPricePerMillion: 9},
+		"gpt-5-mini": {InputPricePerMillion: 0.5, OutputPricePerMillion: 1.5},
+	}, decodeChannelModelPrices(channel.ModelPrices))
 }
 
 func TestEditingCapacityDoesNotInvalidateVerificationState(t *testing.T) {

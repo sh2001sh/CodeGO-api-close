@@ -35,20 +35,27 @@ func selectMarketplaceAutoChannel(c *gin.Context, tokenGroup, modelName string) 
 	httpctx.SetContextKey(c, constant.ContextKeyUnifiedAutoIndex, -1)
 	gatewayruntime.UpdateRouteDecisionCandidates(c, len(bindings))
 	for index, binding := range bindings {
+		candidateOrder := index + 1
 		retry := 0
 		channel, _, selectErr := gatewayroutingapp.CacheGetRandomSatisfiedChannel(&gatewayroutingapp.RetryParam{
 			Ctx: c, TokenGroup: binding.InternalGroup, ModelName: modelName, Retry: &retry,
 		})
 		if selectErr != nil {
+			gatewayruntime.RecordRouteDecisionCandidate(c, candidateOrder, binding.InternalGroup, "skipped", "selection_error", 0)
 			gatewayruntime.ExcludeRouteDecisionCandidate(c, "unified_auto_select_error")
 			continue
 		}
 		if channel == nil {
+			gatewayruntime.RecordRouteDecisionCandidate(c, candidateOrder, binding.InternalGroup, "skipped", "no_healthy_channel", 0)
 			gatewayruntime.ExcludeRouteDecisionCandidate(c, "marketplace_auto_unavailable")
 			continue
 		}
+		gatewayruntime.RecordRouteDecisionCandidate(c, candidateOrder, binding.InternalGroup, "selected", "preflight_ok", channel.Id)
 		applyMarketplaceAutoBinding(c, binding)
 		httpctx.SetContextKey(c, constant.ContextKeyUnifiedAutoIndex, index)
+		for remaining := index + 1; remaining < len(bindings); remaining++ {
+			gatewayruntime.RecordRouteDecisionCandidate(c, remaining+1, bindings[remaining].InternalGroup, "not_attempted", "lower_priority_fallback", 0)
+		}
 		gatewayruntime.MarkRemainingCrossGroupRoutes(c, len(bindings)-index-1)
 		return channel, binding.InternalGroup, true, nil
 	}

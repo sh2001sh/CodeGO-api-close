@@ -30,6 +30,75 @@ func TestInferenceProbeRequestUsesProviderProtocol(t *testing.T) {
 	}
 }
 
+func TestImageProbeUsesGenerationEndpointAndLongTimeout(t *testing.T) {
+	endpoint, payload, err := inferenceProbeRequest(
+		"openai_compatible", "https://api.example.com", "gpt-image-1",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "https://api.example.com/v1/images/generations", endpoint)
+	require.Equal(t, "gpt-image-1", payload["model"])
+	require.GreaterOrEqual(t, marketplaceProbeTimeout("gpt-image-1"), marketplaceMinimumImageTimeout)
+	require.Equal(t, marketplaceTextProbeTimeout, marketplaceProbeTimeout("gpt-5.6-sol"))
+}
+
+func TestProbeResponseRejectsEmbeddedFailureAndMissingImage(t *testing.T) {
+	require.EqualError(
+		t,
+		validateMarketplaceProbeResponse("openai_compatible", "gpt-5.6-sol", []byte(`{"success":false,"message":"quota exceeded"}`)),
+		"上游返回失败内容: quota exceeded",
+	)
+	require.EqualError(
+		t,
+		validateMarketplaceProbeResponse("openai_compatible", "gpt-image-1", []byte(`{"created":123,"data":[]}`)),
+		"生图请求未返回图片 URL 或图片数据，不能判定为成功",
+	)
+	require.NoError(t, validateMarketplaceProbeResponse(
+		"openai_compatible", "gpt-image-1", []byte(`{"data":[{"b64_json":"aW1hZ2U="}]}`),
+	))
+}
+
+func TestTextProbeRequiresProtocolOutputAndRejectsFailureReply(t *testing.T) {
+	require.EqualError(t, validateMarketplaceProbeResponse(
+		"openai_compatible", "gpt-5.6-sol", []byte(`{"choices":[]}`),
+	), "上游推理响应缺少有效的模型输出")
+	require.EqualError(t, validateMarketplaceProbeResponse(
+		"openai_compatible", "gpt-5.6-sol",
+		[]byte(`{"choices":[{"message":{"content":"请求失败，请稍后重试"}}]}`),
+	), "探针模型返回失败内容: 请求失败，请稍后重试")
+	require.NoError(t, validateMarketplaceProbeResponse(
+		"openai_compatible", "gpt-5.6-sol",
+		[]byte(`{"choices":[{"message":{"content":"OK"}}]}`),
+	))
+}
+
+func TestInferenceProbeRejectsHTTP200ErrorPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"error":{"message":"model unavailable"}}`))
+	}))
+	defer server.Close()
+
+	_, err := probeMarketplaceInferenceTimedContext(
+		context.Background(), "openai_compatible", server.URL, "test-key", "gpt-5.6-sol",
+	)
+	require.EqualError(t, err, "上游返回失败内容: model unavailable")
+}
+
+func TestReportedModelProbeRejectsHTTP200ErrorPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"gpt-5.6-sol","status":"failed","message":"probe rejected"}`))
+	}))
+	defer server.Close()
+
+	_, reported, err := probeMarketplaceInferenceReportedModelWithVariantContext(
+		context.Background(), "openai_compatible", server.URL, "test-key", "gpt-5.6-sol",
+		gpt56ProbeVariant{Name: "error-payload", Prompt: "Reply with OK.", MaxOutputTokens: 8},
+	)
+	require.Empty(t, reported)
+	require.EqualError(t, err, "上游返回失败内容: probe rejected")
+}
+
 func TestVerifyDeclaredModelsRejectsUnadvertisedModels(t *testing.T) {
 	require.NoError(t, verifyDeclaredModels([]string{"gpt-5.2"}, []string{"gpt-5.2", "gpt-4.1"}))
 	require.EqualError(t,
@@ -87,11 +156,6 @@ func TestSelectVerifiedModelsRejectsUnlistedAndFailedModels(t *testing.T) {
 	passed, rejected := selectVerifiedModels(results)
 	require.Equal(t, []string{"good-model"}, passed)
 	require.Equal(t, []string{"failed-model", "unlisted-model"}, rejected)
-	require.Equal(
-		t,
-		"1/3 个模型检测通过并上架；已自动剔除未通过模型: failed-model, unlisted-model",
-		partialVerificationSummary(passed, results, rejected),
-	)
 }
 
 func TestSelectVerifiedModelsRejectsAllFailedModels(t *testing.T) {

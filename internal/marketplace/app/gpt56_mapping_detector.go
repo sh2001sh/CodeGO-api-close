@@ -59,8 +59,8 @@ func executeGPT56MappingCheck(
 		return err
 	}
 	policy := gpt56Policy(request.Level)
-	run, err := startGPT56MappingRun(
-		channel.ID, policy.Level, request.Trigger, request.ParentRunID,
+	run, err := startGPT56MappingRunContext(
+		ctx, channel.ID, policy.Level, request.Trigger, request.ParentRunID,
 	)
 	if err != nil {
 		return err

@@ -57,24 +57,56 @@ func QueueGPT56MappingVerification(channelID string) error {
 
 // QueueConnectivityTest persists a run before testing each declared model.
 func QueueConnectivityTest(channelID string) error {
-	if _, _, err := loadChannelGroup(channelID); err != nil {
+	channel, _, err := loadChannelGroup(channelID)
+	if err != nil {
 		return err
 	}
+	return queueConnectivityTest(channel, nil, nil)
+}
+
+// QueueFailedConnectivityTests retries only models that failed the latest run.
+func QueueFailedConnectivityTests(channelID string) error {
+	channel, _, err := loadChannelGroup(channelID)
+	if err != nil {
+		return err
+	}
+	previous := decodeModelVerificationResults(channel.ModelVerificationResults)
+	failed := failedModelVerificationModels(decodeModels(channel.DeclaredModels), previous)
+	if len(failed) == 0 {
+		return errors.New("没有可重试的失败模型")
+	}
+	retained := retainModelVerificationResults(decodeModels(channel.DeclaredModels), previous, failed)
+	return queueConnectivityTest(channel, failed, retained)
+}
+
+func queueConnectivityTest(channel *marketplaceschema.Channel, models []string, retained []ModelVerificationResult) error {
 	ctx, finish, started := marketplaceVerificationTasks.begin(
-		context.Background(), channelID, verificationTaskConnectivity,
+		context.Background(), channel.ID, verificationTaskConnectivity,
 	)
 	if !started {
 		return errors.New("模型连通性测试正在进行")
 	}
 	run := &marketplaceschema.VerificationRun{
-		ChannelID: channelID, Status: marketplacedomain.VerificationQueued,
+		ChannelID: channel.ID, Status: marketplacedomain.VerificationQueued,
 		Stage: "basic_security", DetectorName: "NativeCompatibilityDetector",
 		DetectorVersion: nativeDetectorVersion, RulesetVersion: "marketplace-v1",
 	}
-	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	if err := prepareConnectivityTest(run, retained); err != nil {
+		finish()
+		return err
+	}
+	go func() {
+		defer finish()
+		executeNativeVerification(ctx, run.ID, models, retained)
+	}()
+	return nil
+}
+
+func prepareConnectivityTest(run *marketplaceschema.VerificationRun, retained []ModelVerificationResult) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now().UTC()
 		if err := tx.Model(&marketplaceschema.VerificationRun{}).
-			Where("channel_id = ? AND status IN ?", channelID, []string{
+			Where("channel_id = ? AND status IN ?", run.ChannelID, []string{
 				marketplacedomain.VerificationQueued,
 				marketplacedomain.VerificationRunning,
 			}).Updates(map[string]any{
@@ -85,31 +117,23 @@ func QueueConnectivityTest(channelID string) error {
 		if err := tx.Create(run).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).
+		if err := tx.Model(&marketplaceschema.Channel{}).Where("id = ?", run.ChannelID).
 			Updates(map[string]any{
 				"connectivity_test_status":     marketplacedomain.VerificationQueued,
 				"connectivity_test_checked_at": nil,
-				"model_verification_results":   "[]",
+				"model_verification_results":   encodeModelVerificationResults(retained),
 			}).Error; err != nil {
 			return err
 		}
-		channel, _, err := loadChannelGroupWithDB(tx, channelID)
+		channel, _, err := loadChannelGroupWithDB(tx, run.ChannelID)
 		if err != nil {
 			return err
 		}
 		if isGPT56MappingEligible(channel) {
 			return nil
 		}
-		return setRequiredVerificationQueuedWithDB(tx, channelID)
-	}); err != nil {
-		finish()
-		return err
-	}
-	go func() {
-		defer finish()
-		executeNativeVerification(ctx, run.ID)
-	}()
-	return nil
+		return setRequiredVerificationQueuedWithDB(tx, run.ChannelID)
+	})
 }
 
 func prepareGPT56MappingVerification(channelID string) error {
@@ -157,7 +181,7 @@ func setRequiredVerificationQueuedWithDB(tx *gorm.DB, channelID string) error {
 	}).Error
 }
 
-func executeNativeVerification(ctx context.Context, runID string) {
+func executeNativeVerification(ctx context.Context, runID string, models []string, retained []ModelVerificationResult) {
 	run, channel, group, err := loadVerificationContext(runID)
 	if err != nil {
 		return
@@ -185,16 +209,18 @@ func executeNativeVerification(ctx context.Context, runID string) {
 	}); err != nil {
 		return
 	}
-	results, err := probeMarketplaceChannel(ctx, channel, func(stage string) {
+	results, err := probeMarketplaceChannelModels(ctx, channel, models, func(stage string) {
 		_ = platformdb.DB.Model(run).
 			Where("status = ?", marketplacedomain.VerificationRunning).
 			Update("stage", stage).Error
 	}, func(results []ModelVerificationResult) {
+		merged := mergeModelVerificationResults(decodeModels(channel.DeclaredModels), retained, results)
 		_ = platformdb.DB.Model(channel).
 			Where("connectivity_test_status = ?", marketplacedomain.VerificationRunning).
-			Update("model_verification_results", encodeModelVerificationResults(results)).Error
+			Update("model_verification_results", encodeModelVerificationResults(merged)).Error
 	})
-	completeVerification(run, channel, group, results, err)
+	merged := mergeModelVerificationResults(decodeModels(channel.DeclaredModels), retained, results)
+	completeVerification(run, channel, group, merged, err)
 }
 
 func executeGPT56MappingVerification(ctx context.Context, channelID, trigger string) {

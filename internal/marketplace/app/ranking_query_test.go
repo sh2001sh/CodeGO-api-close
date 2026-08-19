@@ -8,6 +8,7 @@ import (
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	"github.com/stretchr/testify/require"
 )
 
@@ -132,6 +133,10 @@ func TestGroupListItemUsesLatestModelVerificationTime(t *testing.T) {
 }
 
 func TestFilterAndSortGroupsMapsCurrentConcurrencyByInternalChannel(t *testing.T) {
+	originalRedisEnabled := platformcache.RedisEnabled
+	platformcache.RedisEnabled = false
+	t.Cleanup(func() { platformcache.RedisEnabled = originalRedisEnabled })
+
 	group := marketplaceschema.Group{ID: "group-concurrency", ChannelID: "channel-concurrency"}
 	internalChannelID := 808
 	channel := marketplaceschema.Channel{
@@ -156,6 +161,32 @@ func TestFilterAndSortGroupsMapsCurrentConcurrencyByInternalChannel(t *testing.T
 	require.Equal(t, 12, items[0].MaxConcurrency)
 	require.Equal(t, 3, items[0].UserMaxConcurrency)
 	require.Equal(t, 1, items[0].CurrentConcurrency)
+}
+
+func TestFilterAndSortGroupsUsesAdmissionLeasesForLimitedChannels(t *testing.T) {
+	originalLoader := loadActiveChannelRequestLeases
+	loadActiveChannelRequestLeases = func(channelIDs []int) (map[int]int, bool) {
+		require.Equal(t, []int{818}, channelIDs)
+		return map[int]int{818: 7}, true
+	}
+	t.Cleanup(func() { loadActiveChannelRequestLeases = originalLoader })
+
+	internalChannelID := 818
+	channel := marketplaceschema.Channel{
+		ID:                "channel-leases",
+		InternalChannelID: &internalChannelID,
+		MaxConcurrency:    10,
+	}
+	items := filterAndSortGroups(
+		[]marketplaceschema.Group{{ID: "group-leases", ChannelID: channel.ID}},
+		map[string]marketplaceschema.Channel{channel.ID: channel},
+		map[string]marketplaceschema.RankingSnapshot{},
+		nil,
+		GroupQuery{},
+	)
+
+	require.Len(t, items, 1)
+	require.Equal(t, 7, items[0].CurrentConcurrency)
 }
 
 func TestGroupListItemReturnsSanitizedGPT56MappingReport(t *testing.T) {

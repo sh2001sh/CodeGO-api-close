@@ -1,9 +1,42 @@
 package store
 
 import (
+	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
+
+// LoadEnabledChannelsForGroup returns enabled channels with an enabled ability
+// in the given group.
+func LoadEnabledChannelsForGroup(group string) ([]*gatewayschema.Channel, error) {
+	if group == "" {
+		return nil, nil
+	}
+	groupColumn := "`group`"
+	if platformdb.UsingPostgreSQL {
+		groupColumn = `"group"`
+	}
+	var ids []int
+	if err := platformdb.DB.Model(&gatewayschema.Ability{}).
+		Where(groupColumn+" = ? AND enabled = ?", group, true).
+		Distinct("channel_id").Pluck("channel_id", &ids).Error; err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	channels, err := LoadChannelsByIDs(ids)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*gatewayschema.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if channel != nil && channel.Status == constant.ChannelStatusEnabled {
+			result = append(result, channel)
+		}
+	}
+	return result, nil
+}
 
 func LoadAllEnabledAbilitiesWithChannels() ([]gatewayschema.AbilityWithChannel, error) {
 	var abilities []gatewayschema.AbilityWithChannel

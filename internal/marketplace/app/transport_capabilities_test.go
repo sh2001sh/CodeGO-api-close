@@ -113,7 +113,10 @@ func TestCreateMarketplaceChannelQueuesTransportCapabilityDetection(t *testing.T
 
 func TestUpdateMarketplaceTransportInputsQueuesCapabilityRedetection(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
-	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{}, &marketplaceschema.GPT56MappingRun{},
+	))
 
 	baseURL, err := platformsecurity.EncryptSecret("https://api.example.com")
 	require.NoError(t, err)

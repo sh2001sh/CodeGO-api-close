@@ -12,6 +12,7 @@ var channelConcurrency = struct {
 }
 
 var loadSharedChannelConcurrency = sharedActiveChannelRequestsForChannels
+var reserveSharedChannelConcurrency = reserveRedisChannelConcurrency
 
 // BeginChannelRequest tracks one process-local in-flight upstream request.
 func BeginChannelRequest(channelID int) func() {
@@ -27,18 +28,28 @@ func TryBeginChannelRequest(channelID, limit int) (func(), bool) {
 }
 
 // TryBeginChannelRequestForUser atomically enforces both the channel-wide and
-// per-user Marketplace limits. Zero disables the corresponding limit.
+// per-user Marketplace limits across Gateway instances. Zero disables the
+// corresponding limit.
 func TryBeginChannelRequestForUser(channelID, userID, totalLimit, userLimit int) (func(), bool) {
 	if channelID <= 0 {
 		return func() {}, true
 	}
+	sharedRelease, sharedEnforced, sharedAdmitted := reserveSharedChannelConcurrency(
+		channelID,
+		userID,
+		totalLimit,
+		userLimit,
+	)
+	if !sharedAdmitted {
+		return func() {}, false
+	}
 	channelConcurrency.Lock()
-	if totalLimit > 0 && channelConcurrency.active[channelID] >= totalLimit {
+	if !sharedEnforced && totalLimit > 0 && channelConcurrency.active[channelID] >= totalLimit {
 		channelConcurrency.Unlock()
 		return func() {}, false
 	}
 	userActive := channelConcurrency.users[channelID]
-	if userLimit > 0 && userActive[userID] >= userLimit {
+	if !sharedEnforced && userLimit > 0 && userActive[userID] >= userLimit {
 		channelConcurrency.Unlock()
 		return func() {}, false
 	}
@@ -71,6 +82,7 @@ func TryBeginChannelRequestForUser(channelID, userID, totalLimit, userLimit int)
 			}
 			channelConcurrency.Unlock()
 			notifyChannelConcurrencyChanged()
+			sharedRelease()
 		})
 	}, true
 }

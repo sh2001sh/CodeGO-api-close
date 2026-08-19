@@ -108,6 +108,50 @@ func TestPrepareGPT56VerificationRecoversOrphanedRun(t *testing.T) {
 	require.NotNil(t, run.CompletedAt)
 }
 
+func TestEditingChannelCancelsAndReleasesRunningVerification(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{}, &marketplaceschema.GPT56MappingRun{},
+	))
+	channel, _ := createRunningVerificationFixture(t)
+	nativeRun := marketplaceschema.VerificationRun{
+		ID: "edit-native-running", ChannelID: channel.ID,
+		Status: marketplacedomain.VerificationRunning,
+	}
+	mappingRun := marketplaceschema.GPT56MappingRun{
+		ID: "edit-mapping-running", ChannelID: channel.ID,
+		Status: GPT56MappingStatusRunning, Level: GPT56MappingLevelConfirmation,
+		Trigger: GPT56MappingTriggerManual, Results: "[]", StartedAt: time.Now().UTC(),
+	}
+	require.NoError(t, db.Create(&nativeRun).Error)
+	require.NoError(t, db.Create(&mappingRun).Error)
+	ctx, finish, started := marketplaceVerificationTasks.begin(
+		context.Background(), channel.ID, verificationTaskGPT56Mapping,
+	)
+	require.True(t, started)
+	t.Cleanup(finish)
+
+	originalQueue := queueMarketplaceCapabilityProbe
+	queueMarketplaceCapabilityProbe = func(string) {}
+	t.Cleanup(func() { queueMarketplaceCapabilityProbe = originalQueue })
+	models := []string{"gpt-5.6-sol", "gpt-5.6-pro"}
+	_, err := UpdateOwnerChannel(channel.OwnerUserID, channel.ID, UpdateChannelRequest{DeclaredModels: &models})
+	require.NoError(t, err)
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+	require.False(t, marketplaceVerificationTasks.active(channel.ID, verificationTaskGPT56Mapping))
+
+	_, secondFinish, started := marketplaceVerificationTasks.begin(
+		context.Background(), channel.ID, verificationTaskGPT56Mapping,
+	)
+	require.True(t, started)
+	secondFinish()
+	require.NoError(t, db.First(&nativeRun, "id = ?", nativeRun.ID).Error)
+	require.NoError(t, db.First(&mappingRun, "id = ?", mappingRun.ID).Error)
+	require.Equal(t, marketplacedomain.VerificationPaused, nativeRun.Status)
+	require.Equal(t, GPT56MappingStatusPaused, mappingRun.Status)
+}
+
 func createRunningVerificationFixture(
 	t *testing.T,
 ) (marketplaceschema.Channel, marketplaceschema.Group) {

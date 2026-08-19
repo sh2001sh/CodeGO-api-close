@@ -10,6 +10,8 @@ import (
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 )
 
+var loadActiveChannelRequestLeases = gatewayruntime.ActiveChannelRequestLeasesForChannels
+
 func normalizeGroupQuery(query GroupQuery) GroupQuery {
 	if query.WindowHours != 24 && query.WindowHours != 24*7 && query.WindowHours != 24*30 {
 		query.WindowHours = 24
@@ -129,13 +131,28 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 }
 
 func activeMarketplaceChannelRequests(channels map[string]marketplaceschema.Channel) map[int]int {
-	channelIDs := make([]int, 0, len(channels))
+	limitedIDs := make([]int, 0, len(channels))
+	unlimitedIDs := make([]int, 0, len(channels))
 	for _, channel := range channels {
 		if channel.InternalChannelID != nil && *channel.InternalChannelID > 0 {
-			channelIDs = append(channelIDs, *channel.InternalChannelID)
+			if channel.MaxConcurrency > 0 || channel.UserMaxConcurrency > 0 {
+				limitedIDs = append(limitedIDs, *channel.InternalChannelID)
+			} else {
+				unlimitedIDs = append(unlimitedIDs, *channel.InternalChannelID)
+			}
 		}
 	}
-	return gatewayruntime.ActiveChannelRequestsForChannels(channelIDs)
+	result := gatewayruntime.ActiveChannelRequestsForChannels(unlimitedIDs)
+	if limited, ok := loadActiveChannelRequestLeases(limitedIDs); ok {
+		for channelID, active := range limited {
+			result[channelID] = active
+		}
+		return result
+	}
+	for channelID, active := range gatewayruntime.ActiveChannelRequestsForChannels(limitedIDs) {
+		result[channelID] = active
+	}
+	return result
 }
 
 func latestModelVerificationAt(raw string) *time.Time {

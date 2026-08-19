@@ -336,6 +336,11 @@ func UpdateToken(c *gin.Context) {
 
 func normalizeTokenGroupSelection(userID int, group string, crossGroupRetry bool) (string, bool, error) {
 	group = gatewayroutingapp.NormalizeTokenGroup(group)
+	if group == gatewayroutingapp.AutoGroupName {
+		// Auto is inherently a cross-group route pool. Keep the legacy field
+		// enabled for compatibility, but do not expose it as a user choice.
+		return group, true, nil
+	}
 	if marketplaceapp.IsMarketplaceAutoTokenGroup(group) {
 		return group, false, nil
 	}

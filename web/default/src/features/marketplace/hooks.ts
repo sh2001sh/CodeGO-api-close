@@ -15,7 +15,9 @@ import {
   pauseMarketplaceVerification,
   queueMarketplaceDetection,
   queueMarketplaceConnectivityTest,
+  removeMarketplaceFailedModel,
   reviewMarketplaceChannel,
+  retryMarketplaceFailedConnectivity,
   setMarketplaceChannelPaused,
   submitMarketplaceChannelFeedback,
   updateMarketplaceChannel,
@@ -153,6 +155,11 @@ export function useMarketplaceMutations() {
         queueMarketplaceConnectivityTest(channelId),
       onSuccess: invalidate,
     }),
+    retryConnectivity: useMutation({
+      mutationFn: (channelId: string) =>
+        retryMarketplaceFailedConnectivity(channelId),
+      onSuccess: invalidate,
+    }),
     pauseVerification: useMutation({
       mutationFn: (channelId: string) =>
         pauseMarketplaceVerification(channelId),
@@ -172,6 +179,23 @@ export function useMarketplaceMutations() {
         }),
     }),
   }
+}
+
+export function useMarketplaceFailedModelRemoval(admin = false) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { channelId: string; model: string }) =>
+      removeMarketplaceFailedModel({ ...input, admin }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] }),
+        queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['marketplace-multiplier-trends'],
+        }),
+      ])
+    },
+  })
 }
 
 export function useAdminMarketplaceChannels(
@@ -214,7 +238,7 @@ export function useAdminMarketplaceReview() {
 }
 
 export function useAdminMarketplaceVerification(
-  action: 'detect' | 'test' | 'pause'
+  action: 'detect' | 'test' | 'retry-test' | 'pause'
 ) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -225,6 +249,10 @@ export function useAdminMarketplaceVerification(
       }
       if (action === 'test') {
         await queueMarketplaceConnectivityTest(channelId, true)
+        return
+      }
+      if (action === 'retry-test') {
+        await retryMarketplaceFailedConnectivity(channelId, true)
         return
       }
       await pauseMarketplaceVerification(channelId, true)

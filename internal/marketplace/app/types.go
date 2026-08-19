@@ -328,6 +328,10 @@ type TokenBindingRequest struct {
 	TokenID int `json:"token_id"`
 }
 
+type RemoveFailedModelRequest struct {
+	Model string `json:"model"`
+}
+
 type FetchModelsRequest struct {
 	ProviderType string `json:"provider_type"`
 	BaseURL      string `json:"base_url"`

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,6 +23,16 @@ import (
 func probeMarketplaceChannel(
 	ctx context.Context,
 	channel *marketplaceschema.Channel,
+	reportStage func(string),
+	reportResults func([]ModelVerificationResult),
+) ([]ModelVerificationResult, error) {
+	return probeMarketplaceChannelModels(ctx, channel, nil, reportStage, reportResults)
+}
+
+func probeMarketplaceChannelModels(
+	ctx context.Context,
+	channel *marketplaceschema.Channel,
+	targetModels []string,
 	reportStage func(string),
 	reportResults func([]ModelVerificationResult),
 ) ([]ModelVerificationResult, error) {
@@ -42,7 +53,10 @@ func probeMarketplaceChannel(
 	if err != nil {
 		return nil, err
 	}
-	declared := decodeModels(channel.DeclaredModels)
+	declared := normalizeModels(targetModels)
+	if len(declared) == 0 {
+		declared = decodeModels(channel.DeclaredModels)
+	}
 	reportStage("model_match")
 	modelListErr := verifyDeclaredModels(declared, models)
 	reportStage("inference")
@@ -90,8 +104,12 @@ func fetchUpstreamModelsContext(
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-		return nil, errors.New("获取模型列表失败")
+		detail, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+		message := strings.TrimSpace(string(detail))
+		if message == "" {
+			message = response.Status
+		}
+		return nil, fmt.Errorf("获取模型列表失败（HTTP %d）: %s", response.StatusCode, message)
 	}
 	var payload struct {
 		Data []struct {
@@ -157,15 +175,9 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	expires := now.Add(7 * 24 * time.Hour)
 	status := marketplacedomain.VerificationPassed
 	lifecycle := marketplacedomain.LifecycleDraft
-	originalModels := channel.DeclaredModels
-	passedModels, rejectedModels := selectVerifiedModels(results)
+	passedModels, _ := selectVerifiedModels(results)
 	if len(passedModels) == 0 && probeErr == nil {
 		probeErr = errors.New("没有模型通过连通性检测")
-	}
-	if !isGPT56MappingEligible(channel) && len(passedModels) > 0 && len(rejectedModels) > 0 {
-		encoded, _ := json.Marshal(passedModels)
-		channel.DeclaredModels = string(encoded)
-		probeErr = nil
 	}
 	if probeErr == nil && !isGPT56MappingEligible(channel) {
 		if channel.InternalChannelID == nil {
@@ -175,11 +187,7 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 		}
 	}
 	summary := verificationSummary(results, probeErr)
-	if probeErr == nil && len(rejectedModels) > 0 {
-		summary = partialVerificationSummary(passedModels, results, rejectedModels)
-	}
 	if probeErr != nil {
-		channel.DeclaredModels = originalModels
 		status = marketplacedomain.VerificationFailed
 		summary = verificationSummary(results, probeErr)
 	}
@@ -213,9 +221,6 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 			"status":                       lifecycle,
 			"connectivity_test_status":     connectivityStatus,
 			"connectivity_test_checked_at": now,
-		}
-		if probeErr == nil && channel.DeclaredModels != originalModels {
-			channelUpdates["declared_models"] = channel.DeclaredModels
 		}
 		return tx.Model(channel).Updates(channelUpdates).Error
 	})

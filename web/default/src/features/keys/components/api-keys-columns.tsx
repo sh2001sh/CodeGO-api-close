@@ -210,7 +210,6 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         <DataTableColumnHeader column={column} title={t('Group')} />
       ),
       cell: ({ row }) => {
-        const apiKey = row.original
         const group = row.getValue('group') as string
         const marketplaceGroup = marketplaceGroupInfo[group]
         const ratio =
@@ -226,14 +225,6 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
                 }
               >
                 <GroupBadge group='auto' />
-                {apiKey.cross_group_retry && (
-                  <>
-                    <span className='text-muted-foreground/30'>·</span>
-                    <span className='text-muted-foreground/60'>
-                      {t('Cross-group')}
-                    </span>
-                  </>
-                )}
               </TooltipTrigger>
               <TooltipContent>
                 <span className='text-xs'>

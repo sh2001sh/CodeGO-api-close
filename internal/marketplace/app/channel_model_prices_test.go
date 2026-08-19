@@ -23,3 +23,14 @@ func TestNormalizeChannelModelPricesScopesAndCanonicalizesModels(t *testing.T) {
 	}, []string{"gpt-5"})
 	require.ErrorContains(t, err, "大于 0")
 }
+
+func TestRetainChannelModelPricesDropsModelsMissingFromReplacement(t *testing.T) {
+	prices := retainChannelModelPrices(map[string]ChannelModelPrice{
+		"OLD-MODEL": {InputPricePerMillion: 1, OutputPricePerMillion: 2},
+		"gpt-5":     {InputPricePerMillion: 3, OutputPricePerMillion: 9},
+	}, []string{"GPT-5", "gpt-5-mini"})
+
+	require.Equal(t, map[string]ChannelModelPrice{
+		"GPT-5": {InputPricePerMillion: 3, OutputPricePerMillion: 9},
+	}, prices)
+}

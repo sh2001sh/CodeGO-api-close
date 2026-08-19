@@ -43,6 +43,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 	httpctx.SetContextKey(c, constant.ContextKeyChannelAutoBan, channel.GetAutoBan())
 	httpctx.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
 	httpctx.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
+	httpctx.SetContextKey(c, constant.ContextKeyChannelSensitiveWords, channel.ShouldInterceptSensitiveWords())
 
 	key, index, newAPIError := selectChannelKeyForRequest(c, channel)
 	if newAPIError != nil {

@@ -55,20 +55,7 @@ func mappingStatusInProgress(status string) bool {
 func pauseChannelVerificationState(channel *marketplaceschema.Channel) error {
 	now := time.Now().UTC()
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&marketplaceschema.VerificationRun{}).
-			Where("channel_id = ? AND status IN ?", channel.ID, []string{
-				marketplacedomain.VerificationQueued, marketplacedomain.VerificationRunning,
-			}).Updates(map[string]any{
-			"status": marketplacedomain.VerificationPaused, "completed_at": now,
-		}).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&marketplaceschema.GPT56MappingRun{}).
-			Where("channel_id = ? AND status IN ?", channel.ID, []string{
-				GPT56MappingStatusQueued, GPT56MappingStatusRunning,
-			}).Updates(map[string]any{
-			"status": GPT56MappingStatusPaused, "completed_at": now,
-		}).Error; err != nil {
+		if err := pauseActiveVerificationRunsWithDB(tx, channel.ID, now); err != nil {
 			return err
 		}
 		channelUpdates := map[string]any{"status": marketplacedomain.LifecycleDraft}
@@ -88,6 +75,23 @@ func pauseChannelVerificationState(channel *marketplaceschema.Channel) error {
 				"verification_due_at": nil,
 			}).Error
 	})
+}
+
+func pauseActiveVerificationRunsWithDB(tx *gorm.DB, channelID string, now time.Time) error {
+	if err := tx.Model(&marketplaceschema.VerificationRun{}).
+		Where("channel_id = ? AND status IN ?", channelID, []string{
+			marketplacedomain.VerificationQueued, marketplacedomain.VerificationRunning,
+		}).Updates(map[string]any{
+		"status": marketplacedomain.VerificationPaused, "completed_at": now,
+	}).Error; err != nil {
+		return err
+	}
+	return tx.Model(&marketplaceschema.GPT56MappingRun{}).
+		Where("channel_id = ? AND status IN ?", channelID, []string{
+			GPT56MappingStatusQueued, GPT56MappingStatusRunning,
+		}).Updates(map[string]any{
+		"status": GPT56MappingStatusPaused, "completed_at": now,
+	}).Error
 }
 
 func reconcileInterruptedVerifications() error {

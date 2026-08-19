@@ -522,7 +522,10 @@ func SetupContextForToken(c *gin.Context, token *identityschema.Token, parts ...
 		c.Set("token_model_limit_enabled", false)
 	}
 	httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, gatewayroutingapp.NormalizeTokenGroup(token.Group))
-	httpctx.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
+	// Auto always traverses its configured group pool. The persisted legacy
+	// switch is ignored so older keys cannot disable Auto failover.
+	httpctx.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry,
+		token.Group == gatewayroutingapp.AutoGroupName || token.CrossGroupRetry)
 	httpctx.SetContextKey(c, constant.ContextKeyTokenMarketplaceMultiplierLimit, token.MarketplaceMultiplierLimit)
 	if len(parts) > 1 {
 		if identityapp.IsUserAdmin(token.UserId) {

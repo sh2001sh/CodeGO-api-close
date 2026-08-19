@@ -11,7 +11,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
 import { DateTimePicker } from '@/components/datetime-picker'
 import type { ApiKeyFormValues } from '../lib'
 import { ApiKeyAutoRoutePoolDialog } from './api-key-auto-route-pool-dialog'
@@ -42,7 +41,6 @@ export function ApiKeyBasicSection(props: {
       {(selectedGroup?.startsWith('market:') || selectedGroup === 'auto') && (
         <MarketplaceMultiplierLimitField form={props.form} />
       )}
-      {selectedGroup === 'auto' && <CrossGroupRetryField form={props.form} />}
       <ExpirationField form={props.form} />
       {!props.isUpdate && <QuantityField form={props.form} />}
     </ApiKeyFormSection>
@@ -146,31 +144,6 @@ function GroupField(props: { form: ApiKeyForm; groups: ApiKeyGroupOption[] }) {
           </FormItem>
         )
       }}
-    />
-  )
-}
-
-function CrossGroupRetryField(props: { form: ApiKeyForm }) {
-  const { t } = useTranslation()
-  return (
-    <FormField
-      control={props.form.control}
-      name='cross_group_retry'
-      render={({ field }) => (
-        <FormItem className='flex min-h-16 flex-row items-center justify-between gap-3 rounded-lg border px-3 py-2.5 sm:min-h-20 sm:gap-4 sm:px-4 sm:py-3'>
-          <div className='space-y-0.5'>
-            <FormLabel className='text-sm'>{t('Cross-group retry')}</FormLabel>
-            <FormDescription className='line-clamp-2 text-xs sm:line-clamp-none'>
-              {t(
-                'When enabled, if channels in the current group fail, it will try channels in the next group in order.'
-              )}
-            </FormDescription>
-          </div>
-          <FormControl>
-            <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-          </FormControl>
-        </FormItem>
-      )}
     />
   )
 }

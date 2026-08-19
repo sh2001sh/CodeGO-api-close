@@ -50,9 +50,14 @@ func selectedDistributorChannel(c *gin.Context) *gatewayschema.Channel {
 	if c.GetBool("auto_ban") {
 		autoBanInt = 1
 	}
+	interceptSensitiveWords := true
+	if configured, found := httpctx.GetContextKeyType[bool](c, constant.ContextKeyChannelSensitiveWords); found {
+		interceptSensitiveWords = configured
+	}
 	return &gatewayschema.Channel{
 		Id: c.GetInt("channel_id"), Type: c.GetInt("channel_type"),
 		Name: c.GetString("channel_name"), AutoBan: &autoBanInt,
+		SensitiveWordInterceptionEnabled: &interceptSensitiveWords,
 	}
 }
 

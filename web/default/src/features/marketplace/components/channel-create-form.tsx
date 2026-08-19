@@ -13,13 +13,22 @@ import {
   channelFormSchema,
   type ChannelFormInput,
 } from '../lib/channel-form'
+import {
+  buildChannelModelSyncDiff,
+  mergeChannelModels,
+  modelKey,
+  normalizeChannelModels,
+  reconcileAutoProbeModel,
+  reconcileChannelModelPrices,
+  type ChannelModelSyncDiff,
+} from '../lib/channel-model-sync'
 import type { MarketplaceChannel } from '../types'
 import { ChannelConsistencySection } from './channel-consistency-section'
 import {
   ChannelConnectionSection,
-  ChannelModelsSection,
   ChannelStrategySection,
 } from './channel-form-sections'
+import { ChannelModelsSection } from './channel-models-section'
 
 export function ChannelCreateForm(props: { onCreated: () => void }) {
   return <ChannelEditorForm onSaved={props.onCreated} />
@@ -41,6 +50,8 @@ export function ChannelEditorForm(props: {
     initialValues.declared_models
   )
   const [manualModel, setManualModel] = useState('')
+  const [modelSyncDiff, setModelSyncDiff] =
+    useState<ChannelModelSyncDiff | null>(null)
   const form = useForm<ChannelFormInput>({
     resolver: zodResolver(editing ? channelEditFormSchema : channelFormSchema),
     defaultValues: initialValues,
@@ -53,43 +64,81 @@ export function ChannelEditorForm(props: {
       : channelFormDefaults
     form.reset(values)
     setAvailableModels(values.declared_models)
+    setModelSyncDiff(null)
   }, [form, props.channel])
+
+  const applySelectedModels = (models: string[]) => {
+    const next = normalizeChannelModels(models)
+    form.setValue('declared_models', next, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+    form.setValue(
+      'model_prices',
+      reconcileChannelModelPrices(form.getValues('model_prices'), next),
+      { shouldDirty: true, shouldValidate: true }
+    )
+    form.setValue(
+      'auto_probe_model',
+      reconcileAutoProbeModel(
+        form.getValues('auto_probe_model'),
+        next,
+        form.getValues('auto_probe_enabled')
+      ),
+      { shouldDirty: true, shouldValidate: true }
+    )
+  }
 
   const fetchModels = async () => {
     const valid = await form.trigger(['provider_type', 'base_url', 'api_key'])
     if (!valid) return
     try {
       const models = await mutations.fetchModels.mutateAsync(form.getValues())
-      setAvailableModels(models)
-      form.setValue('declared_models', models, { shouldValidate: true })
-      toast.success(t('已获取 {{count}} 个模型', { count: models.length }))
+      const diff = buildChannelModelSyncDiff(
+        form.getValues('declared_models'),
+        models
+      )
+      setModelSyncDiff(diff)
+      setAvailableModels(
+        mergeChannelModels(diff.upstreamModels, diff.removedModels)
+      )
+      applySelectedModels(diff.upstreamModels)
+      toast.success(
+        t('已同步 {{count}} 个模型，并按上游列表完成覆盖', {
+          count: diff.upstreamModels.length,
+        })
+      )
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('获取模型失败'))
     }
   }
 
   const toggleModel = (model: string, checked: boolean) => {
+    const targetKey = modelKey(model)
     const next = checked
-      ? Array.from(new Set([...selectedModels, model]))
-      : selectedModels.filter((item) => item !== model)
-    form.setValue('declared_models', next, { shouldValidate: true })
-    if (!checked) {
-      const prices = { ...form.getValues('model_prices') }
-      delete prices[model]
-      form.setValue('model_prices', prices, { shouldValidate: true })
-    }
+      ? normalizeChannelModels([...selectedModels, model])
+      : selectedModels.filter((item) => modelKey(item) !== targetKey)
+    applySelectedModels(next)
   }
 
   const addManualModel = () => {
     const model = manualModel.trim()
     if (!model) return
-    setAvailableModels((current) => Array.from(new Set([...current, model])))
-    form.setValue(
-      'declared_models',
-      Array.from(new Set([...selectedModels, model])),
-      { shouldValidate: true }
-    )
+    setAvailableModels((current) => normalizeChannelModels([...current, model]))
+    applySelectedModels([...selectedModels, model])
     setManualModel('')
+  }
+
+  const applySyncMode = (mode: 'replace' | 'merge') => {
+    if (!modelSyncDiff) return
+    applySelectedModels(
+      mode === 'replace'
+        ? modelSyncDiff.upstreamModels
+        : mergeChannelModels(
+            modelSyncDiff.upstreamModels,
+            modelSyncDiff.removedModels
+          )
+    )
   }
 
   const submit = form.handleSubmit(async (values) => {
@@ -131,6 +180,7 @@ export function ChannelEditorForm(props: {
         toast.success(t('渠道已提交，必做检测或测试通过后将自动上架'))
         form.reset(channelFormDefaults)
         setAvailableModels([])
+        setModelSyncDiff(null)
       }
       props.onSaved()
     } catch (error) {
@@ -147,11 +197,13 @@ export function ChannelEditorForm(props: {
         availableModels={availableModels}
         selectedModels={selectedModels}
         manualModel={manualModel}
+        syncDiff={modelSyncDiff}
         fetching={mutations.fetchModels.isPending}
         onManualModelChange={setManualModel}
         onFetch={() => void fetchModels()}
         onAddManual={addManualModel}
         onToggle={toggleModel}
+        onApplySync={applySyncMode}
       />
       <ChannelStrategySection form={form} />
       {props.admin && <ChannelConsistencySection form={form} />}

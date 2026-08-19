@@ -129,6 +129,20 @@ func TestChannelConnectivity(c *gin.Context) {
 	queueOwnedChannelAction(c, marketplaceapp.QueueConnectivityTest)
 }
 
+func RetryFailedChannelConnectivity(c *gin.Context) {
+	queueOwnedChannelAction(c, marketplaceapp.QueueFailedConnectivityTests)
+}
+
+func RemoveFailedChannelModel(c *gin.Context) {
+	var req marketplaceapp.RemoveFailedModelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.RemoveOwnerFailedChannelModel(c.GetInt("id"), c.Param("id"), req.Model)
+	respond(c, result, err)
+}
+
 func PauseChannelVerification(c *gin.Context) {
 	respond(
 		c,
@@ -218,6 +232,20 @@ func DetectAdminChannel(c *gin.Context) {
 
 func TestAdminChannelConnectivity(c *gin.Context) {
 	queueAdminChannelAction(c, marketplaceapp.QueueConnectivityTest)
+}
+
+func RetryFailedAdminChannelConnectivity(c *gin.Context) {
+	queueAdminChannelAction(c, marketplaceapp.QueueFailedConnectivityTests)
+}
+
+func RemoveFailedAdminChannelModel(c *gin.Context) {
+	var req marketplaceapp.RemoveFailedModelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.RemoveAdminFailedChannelModel(c.Param("id"), req.Model)
+	respond(c, result, err)
 }
 
 func PauseAdminChannelVerification(c *gin.Context) {

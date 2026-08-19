@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompleteVerificationPublishesOnlyPassedModels(t *testing.T) {
+func TestCompleteVerificationKeepsFailedModelsUntilExplicitRemoval(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(
 		&gatewayschema.Channel{},
@@ -53,17 +53,17 @@ func TestCompleteVerificationPublishesOnlyPassedModels(t *testing.T) {
 	completeVerification(&run, &channel, &group, results, errors.New("模型连通性检测失败: bad-model"))
 
 	require.NoError(t, db.First(&channel, "id = ?", channel.ID).Error)
-	require.Equal(t, []string{"good-model"}, decodeModels(channel.DeclaredModels))
-	require.Equal(t, marketplacedomain.LifecycleActive, channel.Status)
+	require.Equal(t, []string{"good-model", "bad-model"}, decodeModels(channel.DeclaredModels))
+	require.Equal(t, marketplacedomain.LifecycleDraft, channel.Status)
 
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, marketplacedomain.LifecycleActive, group.LifecycleStatus)
-	require.Equal(t, marketplacedomain.VerificationPassed, group.VerificationStatus)
+	require.Equal(t, marketplacedomain.LifecycleDraft, group.LifecycleStatus)
+	require.Equal(t, marketplacedomain.VerificationFailed, group.VerificationStatus)
 
 	require.NoError(t, db.First(&run, "id = ?", run.ID).Error)
-	require.Equal(t, marketplacedomain.VerificationPassed, run.Status)
-	require.Contains(t, run.Summary, "已自动剔除未通过模型: bad-model")
+	require.Equal(t, marketplacedomain.VerificationFailed, run.Status)
+	require.Contains(t, run.Summary, "模型连通性检测失败: bad-model")
 
 	require.NoError(t, db.First(&internal, internal.Id).Error)
-	require.Equal(t, "good-model", internal.Models)
+	require.Equal(t, "good-model,bad-model", internal.Models)
 }

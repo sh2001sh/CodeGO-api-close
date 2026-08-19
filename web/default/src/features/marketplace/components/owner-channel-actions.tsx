@@ -13,7 +13,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useMarketplaceMutations } from '../hooks'
-import { hasGPT56Model } from '../lib/verification'
+import { failedConnectivityModels, hasGPT56Model } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
 
 export function OwnerChannelActions(props: {
@@ -26,6 +26,9 @@ export function OwnerChannelActions(props: {
   const channel = props.channel
 
   const needsDetection = hasGPT56Model(channel.declared_models)
+  const failedConnectivityCount = failedConnectivityModels(
+    channel.model_verification_results
+  ).length
   const verificationRunning =
     ['queued', 'running'].includes(channel.gpt56_mapping_status) ||
     ['queued', 'running'].includes(channel.connectivity_test_status)
@@ -33,6 +36,7 @@ export function OwnerChannelActions(props: {
     action:
       | 'detect'
       | 'test-connectivity'
+      | 'retry-connectivity'
       | 'pause-verification'
       | 'pause'
       | 'resume'
@@ -46,6 +50,15 @@ export function OwnerChannelActions(props: {
       if (action === 'test-connectivity') {
         await mutations.testConnectivity.mutateAsync(channel.id)
         toast.info(t('模型连通性测试已开始，页面会自动更新结果'))
+        return
+      }
+      if (action === 'retry-connectivity') {
+        await mutations.retryConnectivity.mutateAsync(channel.id)
+        toast.info(
+          t('正在重新测试 {{count}} 个失败模型', {
+            count: failedConnectivityCount,
+          })
+        )
         return
       }
       if (action === 'pause-verification') {
@@ -93,9 +106,16 @@ export function OwnerChannelActions(props: {
       <Button
         variant='outline'
         size='sm'
-        onClick={() => void act('test-connectivity')}
+        onClick={() =>
+          void act(
+            failedConnectivityCount > 0
+              ? 'retry-connectivity'
+              : 'test-connectivity'
+          )
+        }
         disabled={
           mutations.testConnectivity.isPending ||
+          mutations.retryConnectivity.isPending ||
           ['queued', 'running'].includes(channel.connectivity_test_status)
         }
       >
@@ -107,7 +127,11 @@ export function OwnerChannelActions(props: {
         />
         {['queued', 'running'].includes(channel.connectivity_test_status)
           ? t('测试中')
-          : t('测试连通性')}
+          : failedConnectivityCount > 0
+            ? t('重试失败模型（{{count}}）', {
+                count: failedConnectivityCount,
+              })
+            : t('测试连通性')}
       </Button>
       {verificationRunning && (
         <Button
@@ -153,6 +177,7 @@ export function OwnerChannelActions(props: {
       {(mutations.pause.isPending ||
         mutations.detect.isPending ||
         mutations.testConnectivity.isPending ||
+        mutations.retryConnectivity.isPending ||
         mutations.pauseVerification.isPending) && (
         <Loader2 className='text-muted-foreground size-4 animate-spin' />
       )}

@@ -21,25 +21,36 @@ const (
 // RouteDecision is an internal-only record attached to the existing request audit log.
 // It contains identifiers, not provider credentials or channel names.
 type RouteDecision struct {
-	RequestID       string         `json:"request_id"`
-	Model           string         `json:"model"`
-	RequestedGroup  string         `json:"requested_group"`
-	SelectedGroup   string         `json:"selected_group,omitempty"`
-	Mode            string         `json:"mode,omitempty"`
-	ChannelID       int            `json:"channel_id,omitempty"`
-	CandidateGroups int            `json:"candidate_groups"`
-	Excluded        []string       `json:"excluded,omitempty"`
-	RetryCount      int            `json:"retry_count"`
-	AffinityHit     bool           `json:"affinity_hit"`
-	Fallback        bool           `json:"fallback"`
-	HealthState     string         `json:"health_state,omitempty"`
-	ProbeMode       string         `json:"probe_mode,omitempty"`
-	RequestType     RequestType    `json:"request_type,omitempty"`
-	Protocol        string         `json:"protocol,omitempty"`
-	AttemptsUsed    int            `json:"attempts_used,omitempty"`
-	MaxAttempts     int            `json:"max_attempts,omitempty"`
-	BudgetRemaining int64          `json:"budget_remaining_ms,omitempty"`
-	Attempts        []RouteAttempt `json:"attempts,omitempty"`
+	RequestID       string           `json:"request_id"`
+	Model           string           `json:"model"`
+	RequestedGroup  string           `json:"requested_group"`
+	SelectedGroup   string           `json:"selected_group,omitempty"`
+	Mode            string           `json:"mode,omitempty"`
+	ChannelID       int              `json:"channel_id,omitempty"`
+	CandidateGroups int              `json:"candidate_groups"`
+	Excluded        []string         `json:"excluded,omitempty"`
+	RetryCount      int              `json:"retry_count"`
+	AffinityHit     bool             `json:"affinity_hit"`
+	Fallback        bool             `json:"fallback"`
+	HealthState     string           `json:"health_state,omitempty"`
+	ProbeMode       string           `json:"probe_mode,omitempty"`
+	RequestType     RequestType      `json:"request_type,omitempty"`
+	Protocol        string           `json:"protocol,omitempty"`
+	AttemptsUsed    int              `json:"attempts_used,omitempty"`
+	MaxAttempts     int              `json:"max_attempts,omitempty"`
+	BudgetRemaining int64            `json:"budget_remaining_ms,omitempty"`
+	Attempts        []RouteAttempt   `json:"attempts,omitempty"`
+	Candidates      []RouteCandidate `json:"candidates,omitempty"`
+}
+
+// RouteCandidate records the request-local Auto candidate preflight result.
+// It is emitted only inside administrator route metadata.
+type RouteCandidate struct {
+	Order     int    `json:"order"`
+	Group     string `json:"group"`
+	Status    string `json:"status"`
+	Reason    string `json:"reason,omitempty"`
+	ChannelID int    `json:"channel_id,omitempty"`
 }
 
 type RouteAttempt struct {
@@ -109,6 +120,15 @@ func StartRouteDecisionAttempt(c *gin.Context, retryIndex, channelID int, faultD
 			RequestType: RequestTypeFromContext(c),
 			StartedAt:   time.Now().UTC(),
 		})
+		for index := range decision.Candidates {
+			if decision.Candidates[index].ChannelID == channelID && decision.Candidates[index].Status == "selected" {
+				decision.Candidates[index].Status = "attempted"
+				if decision.Candidates[index].Reason == "preflight_ok" {
+					decision.Candidates[index].Reason = "upstream_attempt"
+				}
+				break
+			}
+		}
 	})
 }
 
@@ -123,6 +143,18 @@ func FinishRouteDecisionAttempt(c *gin.Context, success bool, statusCode int, fa
 		attempt.FailureClass = strings.TrimSpace(failureClass)
 		attempt.Stage = strings.TrimSpace(stage)
 		attempt.DurationMS = time.Since(attempt.StartedAt).Milliseconds()
+		for index := range decision.Candidates {
+			if decision.Candidates[index].ChannelID != attempt.ChannelID || decision.Candidates[index].Status != "attempted" {
+				continue
+			}
+			if success {
+				decision.Candidates[index].Status = "succeeded"
+				decision.Candidates[index].Reason = "upstream_success"
+			} else {
+				decision.Candidates[index].Reason = strings.TrimSpace(failureClass)
+			}
+			break
+		}
 	})
 }
 
@@ -169,6 +201,29 @@ func RecordRouteDecisionRetry(c *gin.Context) {
 	updateRouteDecision(c, func(decision *RouteDecision) {
 		decision.RetryCount++
 		decision.Fallback = true
+	})
+}
+
+// RecordRouteDecisionCandidate records one Auto candidate's preflight state.
+func RecordRouteDecisionCandidate(c *gin.Context, order int, group, status, reason string, channelID int) {
+	if order <= 0 || strings.TrimSpace(group) == "" || strings.TrimSpace(status) == "" {
+		return
+	}
+	updateRouteDecision(c, func(decision *RouteDecision) {
+		for index := range decision.Candidates {
+			if decision.Candidates[index].Order == order && decision.Candidates[index].Group == group {
+				decision.Candidates[index].Status = strings.TrimSpace(status)
+				decision.Candidates[index].Reason = strings.TrimSpace(reason)
+				if channelID > 0 {
+					decision.Candidates[index].ChannelID = channelID
+				}
+				return
+			}
+		}
+		decision.Candidates = append(decision.Candidates, RouteCandidate{
+			Order: order, Group: strings.TrimSpace(group), Status: strings.TrimSpace(status),
+			Reason: strings.TrimSpace(reason), ChannelID: channelID,
+		})
 	})
 }
 

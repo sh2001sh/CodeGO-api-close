@@ -11,6 +11,37 @@ import (
 )
 
 func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest) (bool, error) {
+	reverify, err := applyChannelModelUpdate(channel, req)
+	if err != nil {
+		return false, err
+	}
+	presentationChanged, err := applyChannelPresentationUpdate(channel, group, req)
+	if err != nil {
+		return false, err
+	}
+	reverify = reverify || presentationChanged
+	if err := applyCapacityUpdate(channel, req); err != nil {
+		return false, err
+	}
+	if err := applyAutoProbeUpdate(channel, req); err != nil {
+		return false, err
+	}
+	if req.SensitiveWordInterceptionEnabled != nil {
+		channel.SensitiveWordInterceptionEnabled = req.SensitiveWordInterceptionEnabled
+	}
+	changed, err := applyCredentialUpdate(channel, req)
+	if err != nil {
+		return false, err
+	}
+	if reverify || changed {
+		reverify = true
+		invalidateChannelVerification(channel, group)
+	}
+	normalizeInternalGroupName(group, channel.ID, channel.SubmittedSourceLabel)
+	return reverify, nil
+}
+
+func applyChannelModelUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) (bool, error) {
 	reverify := false
 	if req.ProviderType != nil {
 		if err := validateProvider(*req.ProviderType); err != nil {
@@ -23,25 +54,23 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 		}
 	}
 	if req.DeclaredModels != nil {
-		if err := validateModels(*req.DeclaredModels); err != nil {
+		models := normalizeModels(*req.DeclaredModels)
+		if err := validateModels(models); err != nil {
 			return false, err
 		}
-		models, _ := json.Marshal(normalizeModels(*req.DeclaredModels))
-		modelsChanged := channel.DeclaredModels != string(models)
-		channel.DeclaredModels = string(models)
-		retainedPrices := make(map[string]ChannelModelPrice)
-		currentPrices := decodeChannelModelPrices(channel.ModelPrices)
-		for _, model := range normalizeModels(*req.DeclaredModels) {
-			if price, ok := channelModelPriceForModel(currentPrices, model); ok {
-				retainedPrices[model] = price
-			}
+		encodedModels, _ := json.Marshal(models)
+		reverify = reverify || channel.DeclaredModels != string(encodedModels)
+		channel.DeclaredModels = string(encodedModels)
+		prices := decodeChannelModelPrices(channel.ModelPrices)
+		if req.ModelPrices != nil {
+			prices = *req.ModelPrices
 		}
-		prices, err := encodeChannelModelPrices(retainedPrices, *req.DeclaredModels)
+		encodedPrices, err := encodeChannelModelPrices(retainChannelModelPrices(prices, models), models)
 		if err != nil {
 			return false, err
 		}
-		channel.ModelPrices = prices
-		reverify = reverify || modelsChanged
+		channel.ModelPrices = encodedPrices
+		return reverify, nil
 	}
 	if req.ModelPrices != nil {
 		prices, err := encodeChannelModelPrices(*req.ModelPrices, decodeModels(channel.DeclaredModels))
@@ -50,6 +79,11 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 		}
 		channel.ModelPrices = prices
 	}
+	return reverify, nil
+}
+
+func applyChannelPresentationUpdate(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest) (bool, error) {
+	reverify := false
 	if req.Multiplier != nil {
 		if err := applyMultiplierChange(group, channel.ID, channel.SubmittedSourceLabel, *req.Multiplier); err != nil {
 			return false, err
@@ -75,26 +109,6 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 			reverify = true
 		}
 	}
-	if err := applyCapacityUpdate(channel, req); err != nil {
-		return false, err
-	}
-	if err := applyAutoProbeUpdate(channel, req); err != nil {
-		return false, err
-	}
-	if req.SensitiveWordInterceptionEnabled != nil {
-		channel.SensitiveWordInterceptionEnabled = req.SensitiveWordInterceptionEnabled
-	}
-	changed, err := applyCredentialUpdate(channel, req)
-	if err != nil {
-		return false, err
-	}
-	if changed {
-		reverify = true
-	}
-	if reverify {
-		invalidateChannelVerification(channel, group)
-	}
-	normalizeInternalGroupName(group, channel.ID, channel.SubmittedSourceLabel)
 	return reverify, nil
 }
 
@@ -114,7 +128,11 @@ func applyAutoProbeUpdate(channel *marketplaceschema.Channel, req UpdateChannelR
 	if interval == 0 {
 		interval = 10
 	}
-	if err := validateAutoProbe(enabled, interval, model, decodeModels(channel.DeclaredModels)); err != nil {
+	models := decodeModels(channel.DeclaredModels)
+	if req.DeclaredModels != nil && enabled && !containsFold(models, model) {
+		model = models[0]
+	}
+	if err := validateAutoProbe(enabled, interval, model, models); err != nil {
 		return err
 	}
 	channel.AutoProbeEnabled = enabled

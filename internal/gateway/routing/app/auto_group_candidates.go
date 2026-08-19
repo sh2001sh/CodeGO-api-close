@@ -29,17 +29,21 @@ func selectAutoGroupChannel(param *RetryParam, userGroup string) (*gatewayschema
 	gatewayruntime.MarkRemainingCrossGroupRoutes(param.Ctx, 0)
 
 	for index, group := range candidateGroups {
+		candidateOrder := index + 1
 		if autoGroupWasAttempted(param.Ctx, group) {
+			gatewayruntime.RecordRouteDecisionCandidate(param.Ctx, candidateOrder, group, "not_attempted", "already_attempted", 0)
 			continue
 		}
 		logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: 0", group)
 		channel, _ := getHealthySatisfiedChannelWithMode(param.Ctx, group, param.ModelName, 0, false)
 		if channel == nil {
+			gatewayruntime.RecordRouteDecisionCandidate(param.Ctx, candidateOrder, group, "skipped", "no_healthy_channel", 0)
 			gatewayruntime.ExcludeRouteDecisionCandidate(param.Ctx, "no_healthy_channel")
 			httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, index+1)
 			httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupRetryIndex, 0)
 			continue
 		}
+		gatewayruntime.RecordRouteDecisionCandidate(param.Ctx, candidateOrder, group, "selected", "preflight_ok", channel.Id)
 		bindAutoGroupSelection(param, candidateGroups, index, group, channel)
 		if httpctx.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry) && platformconfig.RetryTimes <= 0 {
 			httpctx.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, index+1)
@@ -55,8 +59,10 @@ func selectAutoGroupLastResort(param *RetryParam, candidateGroups []string) (*ga
 	for index, group := range candidateGroups {
 		channel, _ := getHealthySatisfiedChannelWithMode(param.Ctx, group, param.ModelName, 0, true)
 		if channel == nil {
+			gatewayruntime.RecordRouteDecisionCandidate(param.Ctx, index+1, group, "skipped", "last_resort_unavailable", 0)
 			continue
 		}
+		gatewayruntime.RecordRouteDecisionCandidate(param.Ctx, index+1, group, "selected", "last_resort_probe", channel.Id)
 		bindAutoGroupSelection(param, candidateGroups, index, group, channel)
 		return channel, group, nil
 	}
@@ -87,8 +93,10 @@ func selectableAutoGroupRoute(group, modelName string) (bool, error) {
 func markRemainingAutoGroupRoutes(c *gin.Context, groups []string, current int, modelName string) {
 	for index := current + 1; index < len(groups); index++ {
 		if autoGroupWasAttempted(c, groups[index]) {
+			gatewayruntime.RecordRouteDecisionCandidate(c, index+1, groups[index], "not_attempted", "already_attempted", 0)
 			continue
 		}
+		gatewayruntime.RecordRouteDecisionCandidate(c, index+1, groups[index], "not_attempted", "lower_priority_fallback", 0)
 		selectable, err := hasSelectableAutoGroupRoute(groups[index], modelName)
 		if err != nil {
 			logger.LogError(c, "check remaining auto group route failed: "+err.Error())

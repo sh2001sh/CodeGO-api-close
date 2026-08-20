@@ -95,6 +95,7 @@ func fillGroupModelPerfHealth(
 	}
 
 	applyPerfSeriesRows(seriesByModel, seriesRows, windowStart, windowEnd, actualBucketSeconds)
+	overlayLiveGroupModelLogHealth(seriesByModel, windowStart, windowEnd, actualBucketSeconds, groupNames)
 	return actualBucketSeconds, len(requestCounts) > 0 || len(seriesByModel) > 0
 }
 

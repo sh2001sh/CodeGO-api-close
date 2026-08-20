@@ -50,7 +50,7 @@ const STATUS_META: Record<SidebarGroupAvailabilityStatus, StatusMeta> = {
     badgeBg: 'bg-warning/10',
   },
   unknown: {
-    label: '观测中',
+    label: '暂无近期请求',
     accent: 'bg-muted-foreground',
     accentText: 'text-muted-foreground',
     dot: 'bg-muted-foreground shadow-[0_0_0_4px_color-mix(in_oklch,var(--muted-foreground)_16%,transparent)]',
@@ -150,6 +150,11 @@ export function formatSampleWindowLabel(hours: number | null) {
   if (minutes < 60) return `最近 ${minutes} 分钟`
   if (minutes % 60 === 0) return `最近 ${minutes / 60} 小时`
   return `最近 ${minutes} 分钟`
+}
+
+export function formatRequestCount(value?: number) {
+  if (value == null) return '--'
+  return value.toLocaleString('zh-CN')
 }
 
 function buildFallbackSegments(item: SidebarGroupModelStatusItem) {

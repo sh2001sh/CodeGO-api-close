@@ -19,7 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { HealthStrip } from './health-strip'
-import { formatSampleWindowLabel, getStatusMeta } from './presentation'
+import {
+  formatRequestCount,
+  formatSampleWindowLabel,
+  getStatusMeta,
+} from './presentation'
 import type { SidebarGroupModelStatusItem } from './types'
 
 export function GroupStatusMonitorCard(props: {
@@ -29,6 +33,7 @@ export function GroupStatusMonitorCard(props: {
   const seriesWindowLabel = formatSampleWindowLabel(
     props.item.series_window ?? props.item.sample_window
   )
+  const sampleWindowLabel = formatSampleWindowLabel(props.item.sample_window)
 
   return (
     <Card
@@ -62,9 +67,13 @@ export function GroupStatusMonitorCard(props: {
             </div>
           </div>
 
-          <div className='bg-muted/40 grid grid-cols-2 divide-x rounded-md py-2'>
+          <div className='bg-muted/40 grid grid-cols-3 divide-x rounded-md py-2'>
             <Metric label='成功率' value={props.item.success_rate} />
             <Metric label='缓存命中率' value={props.item.cache_hit_rate} />
+            <RequestMetric
+              label={`${sampleWindowLabel}请求`}
+              value={props.item.request_count}
+            />
           </div>
 
           {/* Time range label */}
@@ -88,6 +97,22 @@ function Metric(props: { label: string; value?: number | null }) {
       <div className='text-muted-foreground text-[11px]'>{props.label}</div>
       <div className='mt-0.5 text-lg font-semibold tabular-nums'>
         {props.value == null ? '--' : `${props.value.toFixed(1)}%`}
+      </div>
+    </div>
+  )
+}
+
+function RequestMetric(props: { label: string; value?: number }) {
+  return (
+    <div className='px-2 text-center'>
+      <div
+        className='text-muted-foreground truncate text-[11px]'
+        title={props.label}
+      >
+        {props.label}
+      </div>
+      <div className='mt-0.5 text-lg font-semibold tabular-nums'>
+        {formatRequestCount(props.value)}
       </div>
     </div>
   )

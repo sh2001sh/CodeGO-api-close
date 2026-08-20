@@ -170,7 +170,7 @@ export function SidebarGroupStatusPage() {
                 <option value='healthy'>正常</option>
                 <option value='slow'>缓慢</option>
                 <option value='degraded'>故障</option>
-                <option value='unknown'>观测中</option>
+                <option value='unknown'>暂无近期请求</option>
               </NativeSelect>
             </div>
             <span className='text-muted-foreground text-xs'>
@@ -277,9 +277,9 @@ function OverviewPanel(props: {
       tone: 'text-destructive',
     },
     {
-      label: '观测中模型',
+      label: '暂无近期请求模型',
       value: String(props.summary.unknownModels),
-      hint: '暂无足够请求样本',
+      hint: '最近 30 分钟无健康统计样本',
       icon: Rows3,
       tone: 'text-muted-foreground',
     },

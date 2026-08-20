@@ -17,13 +17,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
+import { useAuthStore } from '@/stores/auth-store'
 import { getSidebarGroupStatus } from './api'
 
 export function useSidebarGroupStatus() {
+  const userId = useAuthStore((state) => state.auth.user?.id ?? 0)
+
   return useQuery({
-    queryKey: ['sidebar-group-status'],
+    queryKey: ['sidebar-group-status', userId],
     queryFn: getSidebarGroupStatus,
+    enabled: userId > 0,
     staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     retry: false,
   })
 }

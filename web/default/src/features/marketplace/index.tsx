@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useDebounce } from '@/hooks'
 import {
   BarChart3,
   LineChart,
@@ -43,7 +44,16 @@ export function MarketplacePage() {
   const [tab, setTab] = useState<MarketplaceTab>('market')
   const [showChannelForm, setShowChannelForm] = useState(false)
   const [filters, setFilters] = useState<GroupFilters>(defaultFilters)
-  const effectiveFilters = useMemo(() => ({ ...filters }), [filters])
+  const debouncedSearch = useDebounce(filters.search, 300)
+  const debouncedModel = useDebounce(filters.model, 300)
+  const effectiveFilters = useMemo(
+    () => ({
+      ...filters,
+      search: debouncedSearch,
+      model: debouncedModel,
+    }),
+    [debouncedModel, debouncedSearch, filters]
+  )
   const groups = useMarketplaceGroups(effectiveFilters)
   const updateFilters = (patch: Partial<GroupFilters>) =>
     setFilters((current) => ({ ...current, ...patch }))

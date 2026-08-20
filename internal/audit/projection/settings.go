@@ -37,6 +37,11 @@ func getPerfMetricsBucketSeconds() int64 {
 	}
 }
 
+// PerfMetricsBucketSeconds returns the configured persisted metric bucket width.
+func PerfMetricsBucketSeconds() int64 {
+	return getPerfMetricsBucketSeconds()
+}
+
 func getPerfMetricsFlushIntervalMinutes() int {
 	if projectionPerfMetricsSetting.FlushInterval < 1 {
 		return 1

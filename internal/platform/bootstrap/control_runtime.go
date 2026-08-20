@@ -23,6 +23,7 @@ func startControlBackgroundTasks() {
 
 	gatewayexecutionapp.StartAutomaticChannelTestTask()
 	marketplaceapp.StartMarketplaceAutoProbeTask()
+	marketplaceapp.StartMarketplaceRankingTask()
 	marketplaceapp.StartMarketplaceTransportCapabilityBackfill()
 	gatewayexecutionapp.StartCodexCredentialAutoRefreshTask()
 	gatewayroutingapp.StartChannelUpstreamModelUpdateTask()

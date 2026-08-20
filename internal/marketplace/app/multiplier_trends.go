@@ -21,14 +21,7 @@ func ListMultiplierTrends(query MultiplierTrendQuery) (*MultiplierTrendResult, e
 		return nil, err
 	}
 	groups, channels = activeMarketplaceGroups(groups, channels)
-	rankings, err := buildRanking(groups, channels, 24)
-	if err != nil {
-		return nil, err
-	}
 	now := time.Now().UTC()
-	if err := captureMultiplierTrendSnapshots(groups, channels, rankings, now); err != nil {
-		return nil, err
-	}
 	start := now.Add(-time.Duration(rangeHours) * time.Hour).Truncate(bucketDuration)
 	rows, err := loadMultiplierTrendSnapshots(start, now)
 	if err != nil {
@@ -71,21 +64,19 @@ func activeMarketplaceGroups(groups []marketplaceschema.Group, channels map[stri
 
 func captureMultiplierTrendSnapshots(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, rankings map[string]marketplaceschema.RankingSnapshot, now time.Time) error {
 	bucket := now.Truncate(multiplierSnapshotInterval)
+	rows := make([]marketplaceschema.MultiplierTrendSnapshot, 0, len(groups))
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
 		models, _ := json.Marshal(decodeModels(channel.DeclaredModels))
 		ranking := rankings[group.ID]
-		row := marketplaceschema.MultiplierTrendSnapshot{
+		rows = append(rows, marketplaceschema.MultiplierTrendSnapshot{
 			GroupID: group.ID, ChannelID: channel.ID, SourceLabel: publicSourceLabel(channel), Models: string(models),
 			Multiplier: group.Multiplier, Reliable: multiplierSnapshotReliable(ranking),
 			RequestCount: ranking.RequestCount, WilsonSuccessRate: ranking.WilsonSuccessRate,
 			BucketStartedAt: bucket, CapturedAt: now,
-		}
-		if err := upsertMultiplierTrendSnapshot(row); err != nil {
-			return err
-		}
+		})
 	}
-	return nil
+	return upsertMultiplierTrendSnapshots(rows)
 }
 
 func multiplierSnapshotReliable(ranking marketplaceschema.RankingSnapshot) bool {
@@ -93,13 +84,20 @@ func multiplierSnapshotReliable(ranking marketplaceschema.RankingSnapshot) bool 
 }
 
 func upsertMultiplierTrendSnapshot(row marketplaceschema.MultiplierTrendSnapshot) error {
+	return upsertMultiplierTrendSnapshots([]marketplaceschema.MultiplierTrendSnapshot{row})
+}
+
+func upsertMultiplierTrendSnapshots(rows []marketplaceschema.MultiplierTrendSnapshot) error {
+	if len(rows) == 0 {
+		return nil
+	}
 	return platformdb.DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "group_id"}, {Name: "bucket_started_at"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"channel_id", "source_label", "models", "multiplier", "reliable",
 			"request_count", "wilson_success_rate", "captured_at",
 		}),
-	}).Create(&row).Error
+	}).CreateInBatches(&rows, 100).Error
 }
 
 func loadMultiplierTrendSnapshots(start, end time.Time) ([]marketplaceschema.MultiplierTrendSnapshot, error) {

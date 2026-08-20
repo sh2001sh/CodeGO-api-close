@@ -62,9 +62,11 @@ export function useMarketplaceGroups(filters: GroupFilters) {
   return useQuery({
     queryKey: ['marketplace-groups', filters],
     queryFn: () => getMarketplaceGroups(filters),
-    refetchInterval: 30_000,
+    placeholderData: (previousData) => previousData,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   })
 }
 

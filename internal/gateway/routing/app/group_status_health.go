@@ -34,7 +34,7 @@ func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segment
 	now := time.Now().Unix()
 	windowStart, windowEnd, alignedSegments := buildAlignedStatusWindow(now, windowSeconds, requestedBucketSeconds)
 
-	if shouldPreferLogHealth(requestedBucketSeconds) &&
+	if shouldPreferLogHealth(windowSeconds, requestedBucketSeconds) &&
 		fillGroupModelLogHealth(rates, seriesByModel, requestCounts, windowStart, windowEnd, requestedBucketSeconds, alignedSegments, groupNames) {
 		return rates, seriesByModel, requestCounts, sampleWindowHours, requestedBucketSeconds
 	}
@@ -56,8 +56,8 @@ func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segment
 	return rates, seriesByModel, requestCounts, sampleWindowHours, requestedBucketSeconds
 }
 
-func shouldPreferLogHealth(bucketSeconds int64) bool {
-	return bucketSeconds < 3600
+func shouldPreferLogHealth(windowSeconds, bucketSeconds int64) bool {
+	return windowSeconds <= 3600 && bucketSeconds < 3600
 }
 
 func fillGroupModelPerfHealth(
@@ -89,7 +89,7 @@ func fillGroupModelPerfHealth(
 
 	applyPerfSummaryRows(rates, requestCounts, summaryRows)
 
-	actualBucketSeconds := detectBucketSecondsFromSeries(seriesRows)
+	actualBucketSeconds := auditprojection.PerfMetricsBucketSeconds()
 	if actualBucketSeconds <= 0 {
 		actualBucketSeconds = bucketSeconds
 	}
@@ -234,18 +234,6 @@ func buildAlignedStatusWindow(now int64, windowSeconds int64, bucketSeconds int6
 	windowEnd := currentBucketStart + bucketSeconds
 	windowStart := windowEnd - int64(segmentCount)*bucketSeconds
 	return windowStart, windowEnd, segmentCount
-}
-
-func detectBucketSecondsFromSeries(rows []auditprojection.GroupModelSeries) int64 {
-	for _, row := range rows {
-		for index := 1; index < len(row.Series); index++ {
-			diff := row.Series[index].Ts - row.Series[index-1].Ts
-			if diff > 0 {
-				return diff
-			}
-		}
-	}
-	return 0
 }
 
 func emptyStatusSeries(sampleMinutes int, segmentCount int, bucketSeconds int64) []UserGroupStatusBucket {

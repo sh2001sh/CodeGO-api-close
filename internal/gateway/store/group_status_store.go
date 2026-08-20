@@ -2,26 +2,40 @@ package store
 
 import (
 	"fmt"
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
-	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
-	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
-	"os"
-	"strings"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	"golang.org/x/sync/singleflight"
 )
 
 type groupStatusCacheEntry struct {
+	refreshAt time.Time
 	expiresAt time.Time
 	rows      []GroupModelRequestBucket
 }
+
+type groupStatusCacheState uint8
+
+const (
+	groupStatusCacheMiss groupStatusCacheState = iota
+	groupStatusCacheFresh
+	groupStatusCacheStale
+)
 
 var groupStatusCache = struct {
 	sync.Mutex
 	items map[string]groupStatusCacheEntry
 }{items: make(map[string]groupStatusCacheEntry)}
+
+var groupStatusLoads singleflight.Group
+var loadGroupModelRequestBuckets = queryGroupModelRequestBuckets
 
 func ListGroupStatusGroups() ([]string, error) {
 	groupColumn := abilityGroupColumn()
@@ -55,29 +69,93 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 		bucketSize = 60
 	}
 
-	filteredGroups := make([]string, 0, len(groups))
-	for _, groupName := range groups {
-		groupName = strings.TrimSpace(groupName)
-		if groupName == "" || groupName == "auto" {
-			continue
-		}
-		filteredGroups = append(filteredGroups, groupName)
-	}
-	sort.Strings(filteredGroups)
+	filteredGroups := normalizeGroupStatusGroups(groups)
 	cacheTTL := time.Duration(platformconfig.GroupStatusCacheSeconds) * time.Second
 	if cacheTTL <= 0 {
-		cacheTTL = 10 * time.Second
+		cacheTTL = time.Minute
 	}
 	cacheKey := fmt.Sprintf("%d:%d:%d:%s", startTime, endTime, bucketSize, strings.Join(filteredGroups, "\x00"))
-	now := time.Now()
-	groupStatusCache.Lock()
-	if cached, ok := groupStatusCache.items[cacheKey]; ok && now.Before(cached.expiresAt) {
-		rows := append([]GroupModelRequestBucket(nil), cached.rows...)
-		groupStatusCache.Unlock()
+	if rows, state := loadGroupStatusCache(cacheKey, time.Now()); state == groupStatusCacheFresh {
+		return rows, nil
+	} else if state == groupStatusCacheStale {
+		refreshGroupStatusCacheAsync(cacheKey, startTime, endTime, bucketSize, filteredGroups, cacheTTL)
 		return rows, nil
 	}
-	groupStatusCache.Unlock()
+	value, err, _ := groupStatusLoads.Do(cacheKey, func() (any, error) {
+		now := time.Now()
+		if rows, state := loadGroupStatusCache(cacheKey, now); state != groupStatusCacheMiss {
+			return rows, nil
+		}
+		return refreshGroupStatusCache(cacheKey, startTime, endTime, bucketSize, filteredGroups, cacheTTL)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return append([]GroupModelRequestBucket(nil), value.([]GroupModelRequestBucket)...), nil
+}
 
+func refreshGroupStatusCacheAsync(cacheKey string, startTime, endTime, bucketSize int64, groups []string, cacheTTL time.Duration) {
+	go func() {
+		_, err, _ := groupStatusLoads.Do(cacheKey, func() (any, error) {
+			return refreshGroupStatusCache(cacheKey, startTime, endTime, bucketSize, groups, cacheTTL)
+		})
+		if err != nil {
+			platformobservability.SysError("refresh group status cache: " + err.Error())
+		}
+	}()
+}
+
+func refreshGroupStatusCache(cacheKey string, startTime, endTime, bucketSize int64, groups []string, cacheTTL time.Duration) ([]GroupModelRequestBucket, error) {
+	rows, err := loadGroupModelRequestBuckets(startTime, endTime, bucketSize, groups)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	storeGroupStatusCache(cacheKey, rows, now.Add(cacheTTL), now.Add(groupStatusCacheMaxAge(cacheTTL)), now)
+	return rows, nil
+}
+
+func groupStatusCacheMaxAge(cacheTTL time.Duration) time.Duration {
+	maxAge := cacheTTL * 5
+	if maxAge < 5*time.Minute {
+		return 5 * time.Minute
+	}
+	if maxAge > 30*time.Minute {
+		return 30 * time.Minute
+	}
+	return maxAge
+}
+
+func normalizeGroupStatusGroups(groups []string) []string {
+	filtered := make([]string, 0, len(groups))
+	for _, groupName := range groups {
+		groupName = strings.TrimSpace(groupName)
+		if groupName != "" && groupName != "auto" {
+			filtered = append(filtered, groupName)
+		}
+	}
+	sort.Strings(filtered)
+	return filtered
+}
+
+func loadGroupStatusCache(cacheKey string, now time.Time) ([]GroupModelRequestBucket, groupStatusCacheState) {
+	groupStatusCache.Lock()
+	defer groupStatusCache.Unlock()
+	cached, ok := groupStatusCache.items[cacheKey]
+	if !ok || !now.Before(cached.expiresAt) {
+		if ok {
+			delete(groupStatusCache.items, cacheKey)
+		}
+		return nil, groupStatusCacheMiss
+	}
+	rows := append([]GroupModelRequestBucket(nil), cached.rows...)
+	if now.Before(cached.refreshAt) {
+		return rows, groupStatusCacheFresh
+	}
+	return rows, groupStatusCacheStale
+}
+
+func queryGroupModelRequestBuckets(startTime, endTime, bucketSize int64, groups []string) ([]GroupModelRequestBucket, error) {
 	groupColumn := logGroupColumn()
 	bucketExpr := logBucketIndexExpr(startTime, bucketSize)
 	selectExpr := fmt.Sprintf(
@@ -95,8 +173,8 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 		Where("model_name <> ''").
 		Where(groupColumn + " <> ''")
 
-	if len(filteredGroups) > 0 {
-		query = query.Where(groupColumn+" IN ?", filteredGroups)
+	if len(groups) > 0 {
+		query = query.Where(groupColumn+" IN ?", groups)
 	}
 
 	var rows []GroupModelRequestBucket
@@ -104,10 +182,12 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 		Group(fmt.Sprintf("%s, model_name, %s", groupColumn, bucketExpr)).
 		Order("group_name ASC, model_name ASC, bucket_index ASC").
 		Find(&rows).Error
-	if err != nil {
-		return nil, err
-	}
+	return rows, err
+}
+
+func storeGroupStatusCache(cacheKey string, rows []GroupModelRequestBucket, refreshAt, expiresAt, now time.Time) {
 	groupStatusCache.Lock()
+	defer groupStatusCache.Unlock()
 	if len(groupStatusCache.items) >= 128 {
 		for key, item := range groupStatusCache.items {
 			if now.After(item.expiresAt) {
@@ -122,11 +202,10 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 		}
 	}
 	groupStatusCache.items[cacheKey] = groupStatusCacheEntry{
-		expiresAt: now.Add(cacheTTL),
+		refreshAt: refreshAt,
+		expiresAt: expiresAt,
 		rows:      append([]GroupModelRequestBucket(nil), rows...),
 	}
-	groupStatusCache.Unlock()
-	return rows, nil
 }
 
 func successRateLogFilter() string {

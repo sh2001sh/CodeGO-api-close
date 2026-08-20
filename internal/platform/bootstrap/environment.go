@@ -98,7 +98,7 @@ func initEnvironment() {
 	platformconfig.RelayMaxConnsPerHost = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONNS_PER_HOST", 0)
 	platformconfig.RelayIdleConnTimeoutSeconds = platformconfig.GetEnvOrDefaultInt("RELAY_IDLE_CONN_TIMEOUT_SECONDS", 90)
 	platformconfig.RelayTLSHandshakeTimeoutSeconds = platformconfig.GetEnvOrDefaultInt("RELAY_TLS_HANDSHAKE_TIMEOUT_SECONDS", 10)
-	platformconfig.GroupStatusCacheSeconds = platformconfig.GetEnvOrDefaultInt("GROUP_STATUS_CACHE_SECONDS", 10)
+	platformconfig.GroupStatusCacheSeconds = platformconfig.GetEnvOrDefaultInt("GROUP_STATUS_CACHE_SECONDS", 60)
 	platformconfig.RelayMaxConcurrentRequests = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONCURRENT_REQUESTS", 400)
 	platformconfig.GeminiSafetySetting = platformconfig.GetEnvOrDefaultString("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 	platformconfig.CohereSafetySetting = platformconfig.GetEnvOrDefaultString("COHERE_SAFETY_SETTING", "NONE")

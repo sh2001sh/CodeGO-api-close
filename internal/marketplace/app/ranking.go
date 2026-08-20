@@ -7,12 +7,10 @@ import (
 	"time"
 
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const rankingVersion = "marketplace-v2-latency"
@@ -40,7 +38,7 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		return nil, err
 	}
 	groups, channels = filterGroupsBySource(groups, channels, query.Source)
-	snapshots, err := buildRanking(groups, channels, query.WindowHours)
+	snapshots, err := rankingSnapshotsForRequest(groups, channels, query.WindowHours)
 	if err != nil {
 		return nil, err
 	}
@@ -148,52 +146,6 @@ func channelMap(groups []marketplaceschema.Group) (map[string]marketplaceschema.
 	return result, nil
 }
 
-func buildRanking(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) (map[string]marketplaceschema.RankingSnapshot, error) {
-	internalChannelIDs := make([]int, 0, len(groups))
-	seenChannelIDs := make(map[int]struct{}, len(groups))
-	for _, group := range groups {
-		channel := channels[group.ChannelID]
-		if channel.InternalChannelID == nil || *channel.InternalChannelID <= 0 {
-			continue
-		}
-		channelID := *channel.InternalChannelID
-		if _, exists := seenChannelIDs[channelID]; exists {
-			continue
-		}
-		seenChannelIDs[channelID] = struct{}{}
-		internalChannelIDs = append(internalChannelIDs, channelID)
-	}
-	rows, err := auditprojection.QuerySummaryByChannels(hours, internalChannelIDs)
-	if err != nil {
-		return nil, err
-	}
-	totals := aggregateChannelRankingRows(rows)
-	consumers := independentConsumerCountsByChannel(internalChannelIDs, hours)
-	snapshots := make([]marketplaceschema.RankingSnapshot, 0, len(groups))
-	for _, group := range groups {
-		channel := channels[group.ChannelID]
-		channelID := 0
-		if channel.InternalChannelID != nil {
-			channelID = *channel.InternalChannelID
-		}
-		snapshots = append(snapshots, scoreGroup(group, totals[channelID], consumers[channelID], hours))
-	}
-	assignRanks(snapshots)
-	result := make(map[string]marketplaceschema.RankingSnapshot, len(snapshots))
-	for index := range snapshots {
-		result[snapshots[index].GroupID] = snapshots[index]
-		_ = platformdb.DB.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "group_id"}, {Name: "window_hours"}, {Name: "ranking_version"}},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"rank", "score", "raw_success_rate", "wilson_success_rate", "avg_ttft_ms",
-				"attempt_ttft_p50_ms", "attempt_ttft_p95_ms", "e2e_ttft_p50_ms", "e2e_ttft_p95_ms", "latency_sample_count",
-				"avg_latency_ms", "avg_tps", "cache_hit_rate", "request_count", "independent_consumers", "observing", "calculated_at",
-			}),
-		}).Create(&snapshots[index]).Error
-	}
-	return result, nil
-}
-
 func aggregateChannelRankingRows(rows []auditprojection.ChannelSummary) map[int]rankingTotals {
 	result := make(map[int]rankingTotals, len(rows))
 	for _, row := range rows {
@@ -249,27 +201,6 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 		CacheHitRate: round2(total.cacheHitRate),
 		RequestCount: total.requestCount, IndependentConsumers: consumers, Observing: observing, CalculatedAt: time.Now().UTC(),
 	}
-}
-
-func independentConsumerCountsByChannel(channelIDs []int, hours int) map[int]int64 {
-	result := make(map[int]int64)
-	if len(channelIDs) == 0 || platformdb.LogDB == nil {
-		return result
-	}
-	type row struct {
-		ChannelID int `gorm:"column:channel_id"`
-		Count     int64
-	}
-	var rows []row
-	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
-	_ = platformdb.LogDB.Model(&auditschema.Log{}).
-		Select("channel_id, COUNT(DISTINCT user_id) AS count").
-		Where("type = ? AND created_at >= ? AND channel_id IN ?", auditschema.LogTypeConsume, cutoff, channelIDs).
-		Group("channel_id").Scan(&rows).Error
-	for _, item := range rows {
-		result[item.ChannelID] = item.Count
-	}
-	return result
 }
 
 func assignRanks(snapshots []marketplaceschema.RankingSnapshot) {

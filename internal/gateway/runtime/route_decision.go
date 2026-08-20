@@ -183,12 +183,32 @@ func ExcludeRouteDecisionCandidate(c *gin.Context, reason string) {
 
 func SelectRouteDecisionCandidate(c *gin.Context, group string, channelID int, affinityHit bool) {
 	updateRouteDecision(c, func(decision *RouteDecision) {
+		group = strings.TrimSpace(group)
 		if decision.SelectedGroup != "" && decision.SelectedGroup != group {
 			decision.Fallback = true
 		}
-		decision.SelectedGroup = strings.TrimSpace(group)
+		decision.SelectedGroup = group
 		decision.ChannelID = channelID
 		decision.AffinityHit = affinityHit
+		// A retry can select a candidate that was preflighted earlier but was
+		// still recorded as not_attempted. Promote it here so StartRouteDecisionAttempt
+		// can transition it to attempted and the audit trail matches use_channel.
+		for index := range decision.Candidates {
+			candidate := &decision.Candidates[index]
+			if candidate.Group != group || (channelID > 0 && candidate.ChannelID > 0 && candidate.ChannelID != channelID) {
+				continue
+			}
+			if candidate.Status == "not_attempted" || candidate.Status == "selected" {
+				candidate.Status = "selected"
+				if candidate.Reason == "lower_priority_fallback" || candidate.Reason == "" {
+					candidate.Reason = "preflight_ok"
+				}
+				if channelID > 0 {
+					candidate.ChannelID = channelID
+				}
+			}
+			break
+		}
 		if health, found := GetChannelHealth(channelID, decision.Model, RequestTypeFromContext(c)); found {
 			decision.HealthState = health.State
 		} else {

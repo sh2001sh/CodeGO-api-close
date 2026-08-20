@@ -372,6 +372,9 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, httpctx.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
 			newAPIError,
 		)
+		if shouldRecordAutoGroupFailure(c, newAPIError) {
+			gatewayroutingapp.RecordAutoGroupFailure(c, relayInfo.OriginModelName)
+		}
 		if c.GetBool("responses_ephemeral_websocket") {
 			if session := responsesws.FromContext(c); session != nil {
 				session.ResetRoute()
@@ -383,7 +386,6 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		relaycommon.RecordRouteDecisionRetry(c)
-		gatewayroutingapp.RecordAutoGroupFailure(c, relayInfo.OriginModelName)
 	}
 
 	useChannel := c.GetStringSlice("use_channel")

@@ -2,6 +2,7 @@ package app
 
 import (
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -142,6 +143,10 @@ func CollectOpenAIModelsForNames(userID int, modelNames []string) []dto.OpenAIMo
 
 	seen := make(map[string]struct{}, len(modelNames))
 	for _, modelName := range modelNames {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			continue
+		}
 		if _, ok := seen[modelName]; ok {
 			continue
 		}

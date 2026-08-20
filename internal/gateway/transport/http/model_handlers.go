@@ -24,11 +24,20 @@ func ListModels(c *gin.Context, modelType int) {
 		}
 	}
 	tokenGroup := httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+	if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) && !marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
+		// TokenAuth resolves market:<id> to the actual internal routing group.
+		// Model-list routes do not run the distributor that normally performs
+		// this replacement for relay requests.
+		if resolvedGroup := httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup); resolvedGroup != "" {
+			tokenGroup = resolvedGroup
+		}
+	}
 
 	var userOpenAIModels []dto.OpenAIModels
 	var err error
 	normalizedTokenGroup := gatewayroutingapp.NormalizeTokenGroup(tokenGroup)
-	if !tokenModelLimitEnabled && normalizedTokenGroup == gatewayroutingapp.AutoGroupName && marketplaceapp.HasConfiguredAutoRoutePool(userID) {
+	marketplaceAutoToken := marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup)
+	if !tokenModelLimitEnabled && (normalizedTokenGroup == gatewayroutingapp.AutoGroupName || marketplaceAutoToken) && marketplaceapp.HasConfiguredAutoRoutePool(userID) {
 		var poolModels []string
 		poolModels, _, err = marketplaceapp.ListSelectedAutoRouteModels(userID)
 		if err == nil {

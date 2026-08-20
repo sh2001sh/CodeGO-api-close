@@ -52,6 +52,48 @@ func TestChannelHasExclusiveEnabledAbility(t *testing.T) {
 	require.False(t, alternative)
 }
 
+func TestLoadGroupEnabledModelsNormalizesLegacyWhitespace(t *testing.T) {
+	originalDB := platformdb.DB
+	originalSQLite := platformdb.UsingSQLite
+	originalPostgreSQL := platformdb.UsingPostgreSQL
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformdb.UsingSQLite = originalSQLite
+		platformdb.UsingPostgreSQL = originalPostgreSQL
+	})
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.Ability{}))
+	platformdb.DB = db
+	platformdb.UsingSQLite = true
+	platformdb.UsingPostgreSQL = false
+
+	require.NoError(t, db.Create(&[]gatewayschema.Ability{
+		{Group: " official ", Model: " model-a ", ChannelId: 1, Enabled: true},
+		{Group: "official", Model: "model-a", ChannelId: 2, Enabled: true},
+		{Group: " official ", Model: "", ChannelId: 3, Enabled: true},
+	}).Error)
+
+	require.Equal(t, []string{"model-a"}, LoadGroupEnabledModels(" official "))
+}
+
+func TestBuildChannelAbilitiesNormalizesConfiguredNames(t *testing.T) {
+	channel := &gatewayschema.Channel{
+		Id: 1, Models: " model-a, ,model-b ", Group: " official, backup ",
+		Status: constant.ChannelStatusEnabled,
+	}
+
+	abilities := buildChannelAbilities(channel)
+	require.Len(t, abilities, 4)
+	for _, ability := range abilities {
+		require.NotEmpty(t, ability.Group)
+		require.NotEmpty(t, ability.Model)
+		require.NotContains(t, ability.Group, " ")
+		require.NotContains(t, ability.Model, " ")
+	}
+}
+
 func TestHasAlternativeSelectableRouteHonorsRoutePoolMembership(t *testing.T) {
 	originalDB := platformdb.DB
 	originalSQLite := platformdb.UsingSQLite

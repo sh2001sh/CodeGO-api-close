@@ -176,9 +176,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if gatewayruntime.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
-	if profile, found := gatewayruntime.RequestProfileFromContext(c); found && profile.HasTools {
-		// Hosted tools may have produced external side effects before the stream
-		// became visible. Do not replay an ambiguous attempt automatically.
+	if c != nil && c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+		// A model delta or tool call may already be visible to the client. Replaying
+		// after this point can duplicate output or client-side tool side effects.
 		return false
 	}
 	if retryTimes <= 0 {

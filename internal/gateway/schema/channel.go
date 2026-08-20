@@ -159,16 +159,26 @@ func (channel *Channel) GetModels() []string {
 	if channel.Models == "" {
 		return []string{}
 	}
-	return strings.Split(strings.Trim(channel.Models, ","), ",")
+	rawModels := strings.Split(strings.Trim(channel.Models, ","), ",")
+	models := make([]string, 0, len(rawModels))
+	for _, model := range rawModels {
+		if model = strings.TrimSpace(model); model != "" {
+			models = append(models, model)
+		}
+	}
+	return models
 }
 
 func (channel *Channel) GetGroups() []string {
 	if channel.Group == "" {
 		return []string{}
 	}
-	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
-	for i, group := range groups {
-		groups[i] = strings.TrimSpace(group)
+	rawGroups := strings.Split(strings.Trim(channel.Group, ","), ",")
+	groups := make([]string, 0, len(rawGroups))
+	for _, group := range rawGroups {
+		if group = strings.TrimSpace(group); group != "" {
+			groups = append(groups, group)
+		}
 	}
 	return groups
 }

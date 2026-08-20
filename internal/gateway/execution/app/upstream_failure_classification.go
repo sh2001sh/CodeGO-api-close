@@ -143,3 +143,9 @@ func isRetryableChannelFailure(err *types.NewAPIError) bool {
 	}
 	return types.IsChannelError(err) || err.StatusCode == http.StatusTooManyRequests || err.StatusCode >= http.StatusInternalServerError
 }
+
+// IsRetryableChannelFailure reports whether an upstream attempt should affect
+// route health, independent of whether the current request can be replayed.
+func IsRetryableChannelFailure(err *types.NewAPIError) bool {
+	return isRetryableChannelFailure(err)
+}

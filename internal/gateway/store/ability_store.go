@@ -1,6 +1,8 @@
 package store
 
 import (
+	"strings"
+
 	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -49,8 +51,35 @@ func LoadAllEnabledAbilitiesWithChannels() ([]gatewayschema.AbilityWithChannel, 
 }
 
 func LoadGroupEnabledModels(group string) []string {
-	var models []string
-	platformdb.DB.Model(&gatewayschema.Ability{}).Where(&gatewayschema.Ability{Group: group, Enabled: true}).Distinct("model").Pluck("model", &models)
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return nil
+	}
+	groupColumn := "`group`"
+	if platformdb.UsingPostgreSQL {
+		groupColumn = `"group"`
+	}
+	var rawModels []string
+	query := platformdb.DB.Model(&gatewayschema.Ability{}).
+		Where("enabled = ?", true).
+		Where("("+groupColumn+" = ? OR TRIM("+groupColumn+") = ?)", group, group).
+		Distinct("model").Pluck("model", &rawModels)
+	if query.Error != nil {
+		return nil
+	}
+	models := make([]string, 0, len(rawModels))
+	seen := make(map[string]struct{}, len(rawModels))
+	for _, model := range rawModels {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		models = append(models, model)
+	}
 	return models
 }
 

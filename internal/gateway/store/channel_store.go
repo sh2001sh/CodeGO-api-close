@@ -341,8 +341,11 @@ func InitChannelCache() {
 		if channel.Status != constant.ChannelStatusEnabled {
 			continue
 		}
-		for _, group := range strings.Split(channel.Group, ",") {
-			for _, modelName := range strings.Split(channel.Models, ",") {
+		for _, group := range channel.GetGroups() {
+			if _, ok := newGroupToModelChannels[group]; !ok {
+				newGroupToModelChannels[group] = make(map[string][]int)
+			}
+			for _, modelName := range channel.GetModels() {
 				newGroupToModelChannels[group][modelName] = append(newGroupToModelChannels[group][modelName], channel.Id)
 			}
 		}
@@ -832,11 +835,11 @@ func cacheUpdateChannelStatus(channelID int, status int) {
 	}
 	channel.Status = status
 	if status == constant.ChannelStatusEnabled {
-		for _, group := range strings.Split(channel.Group, ",") {
+		for _, group := range channel.GetGroups() {
 			if _, ok := group2model2channels[group]; !ok {
 				group2model2channels[group] = make(map[string][]int)
 			}
-			for _, modelName := range strings.Split(channel.Models, ",") {
+			for _, modelName := range channel.GetModels() {
 				channelIDs := group2model2channels[group][modelName]
 				if isChannelIDInList(channelIDs, channelID) {
 					continue

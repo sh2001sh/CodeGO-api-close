@@ -126,6 +126,30 @@ func TestShouldRetryCapacityBeforeResponseDelivery(t *testing.T) {
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldRetryToolRequestOnlyBeforeSemanticOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set("original_model", "gpt-5.6-sol")
+	relaycommon.InitializeRequestProfile(ctx, "gpt-5.6-sol", ctx.Request.URL.Path, relaycommon.RequestProfileHint{
+		IsStream: true,
+		HasTools: true,
+	})
+	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	gatewaystream.BeginRelayAttempt(ctx)
+	gatewaystream.MarkAttemptBootstrap(ctx)
+	err := types.NewOpenAIError(
+		errors.New("upstream temporarily unavailable"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusGatewayTimeout,
+	)
+
+	require.True(t, shouldRetry(ctx, err, 1))
+
+	gatewaystream.MarkSemanticCommitted(ctx)
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
 func TestShouldRetryGPTFailureOnlyWithinInitialWindow(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	err := types.NewOpenAIError(errors.New("upstream timeout"), types.ErrorCodeBadResponseStatusCode, http.StatusGatewayTimeout)

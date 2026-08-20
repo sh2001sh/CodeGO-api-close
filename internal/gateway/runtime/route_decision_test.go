@@ -134,3 +134,21 @@ func TestAttachRouteLogInfoCountsExhaustedCandidates(t *testing.T) {
 	require.Zero(t, summary.SelectedOrder)
 	require.Equal(t, 2, summary.SkippedCount)
 }
+
+func TestSelectRouteDecisionCandidatePromotesRetryCandidate(t *testing.T) {
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(constant.RequestIdKey, "request-retry-candidate")
+	StartRouteDecision(context, "gpt-5.6-sol", "auto")
+	RecordRouteDecisionCandidate(context, 1, "group-a", "attempted", "transient", 6)
+	RecordRouteDecisionCandidate(context, 2, "group-b", "not_attempted", "lower_priority_fallback", 45)
+
+	SelectRouteDecisionCandidate(context, "group-b", 45, false)
+	StartRouteDecisionAttempt(context, 1, 45, "provider:b")
+	FinishRouteDecisionAttempt(context, true, 0, "", "stream")
+
+	decision, ok := GetRouteDecision(context)
+	require.True(t, ok)
+	require.Len(t, decision.Candidates, 2)
+	require.Equal(t, "succeeded", decision.Candidates[1].Status)
+	require.Equal(t, "upstream_success", decision.Candidates[1].Reason)
+}

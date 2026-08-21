@@ -40,12 +40,13 @@ export function usePricingData() {
     [status?.usd_exchange_rate, priceRate]
   )
 
-  const models = useMemo(() => {
-    if (!data?.data || !data?.vendors) return []
+  const pricingModels = useMemo(() => {
+    if (!data?.data || !data?.vendors) {
+      return { models: [], pricedModelDetails: [] }
+    }
 
     const vendorMap = new Map(data.vendors.map((v) => [v.id, v]))
-
-    return data.data.map((model) => {
+    const enrich = (model: (typeof data.data)[number]) => {
       const vendor = model.vendor_id
         ? vendorMap.get(model.vendor_id)
         : undefined
@@ -57,12 +58,19 @@ export function usePricingData() {
         vendor_description: vendor?.description,
         group_ratio: data.group_ratio,
       }
-    })
+    }
+    return {
+      models: data.data.map(enrich),
+      pricedModelDetails: (data.priced_model_details ?? []).map(enrich),
+    }
   }, [data])
+  const models = pricingModels.models
+  const pricedModelDetails = pricingModels.pricedModelDetails
 
   return {
     models,
     pricedModels: data?.priced_models ?? [],
+    pricedModelDetails,
     vendors: data?.vendors ?? [],
     groupRatio: data?.group_ratio ?? {},
     usableGroup: data?.usable_group ?? {},

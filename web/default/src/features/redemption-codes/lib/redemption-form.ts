@@ -41,9 +41,9 @@ export function getRedemptionFormSchema(t: TFunction) {
         REDEMPTION_TYPES.SUBSCRIPTION,
         REDEMPTION_TYPES.BLIND_BOX,
       ]),
-      quota_dollars: z.number().min(0),
-      plan_id: z.number().int().min(0).optional(),
-      blind_box_quantity: z.number().int().min(0).optional(),
+      quota_dollars: z.number().min(0).default(0),
+      plan_id: z.number().int().min(0).default(0),
+      blind_box_quantity: z.number().int().min(0).default(1),
       expired_time: z.date().optional(),
       count: z
         .number()
@@ -61,7 +61,7 @@ export function getRedemptionFormSchema(t: TFunction) {
             max: REDEMPTION_VALIDATION.COUNT_MAX,
           })
         )
-        .optional(),
+        .default(1),
     })
     .superRefine((data, ctx) => {
       if (
@@ -100,7 +100,7 @@ export function getRedemptionFormSchema(t: TFunction) {
 export type RedemptionFormValues = {
   name: string
   redeem_type: RedemptionType
-  quota_dollars: number
+  quota_dollars?: number
   plan_id?: number
   blind_box_quantity?: number
   expired_time?: Date
@@ -111,7 +111,7 @@ export const REDEMPTION_FORM_DEFAULT_VALUES: RedemptionFormValues = {
   name: '',
   redeem_type: REDEMPTION_TYPES.QUOTA,
   quota_dollars: 10,
-  plan_id: undefined,
+  plan_id: 0,
   blind_box_quantity: 1,
   expired_time: undefined,
   count: 1,
@@ -128,7 +128,7 @@ export function transformFormDataToPayload(
     quota:
       isSubscription || isBlindBox
         ? 0
-        : parseQuotaFromDollars(data.quota_dollars),
+        : parseQuotaFromDollars(data.quota_dollars ?? 0),
     plan_id: isSubscription ? Number(data.plan_id || 0) : 0,
     blind_box_quantity: isBlindBox ? Number(data.blind_box_quantity || 0) : 0,
     expired_time: data.expired_time
@@ -154,7 +154,7 @@ export function transformRedemptionToFormDefaults(
       redemption.redeem_type === REDEMPTION_TYPES.BLIND_BOX
         ? 0
         : quotaUnitsToDollars(redemption.quota),
-    plan_id: redemption.plan_id > 0 ? redemption.plan_id : undefined,
+    plan_id: redemption.plan_id > 0 ? redemption.plan_id : 0,
     blind_box_quantity:
       redemption.blind_box_quantity > 0 ? redemption.blind_box_quantity : 1,
     expired_time:

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { MarketplaceGroup } from '../types'
+import { AddToRoutePoolButton } from './add-to-route-pool-button'
 import {
   ChannelFeedbackButton,
   ChannelFeedbackSummary,
@@ -14,6 +15,7 @@ import {
   GroupModelResults,
   GroupModelVerificationReport,
 } from './group-model-verification'
+import { RecentRequestStrip } from './recent-request-strip'
 import { MarketplaceStatusBadge } from './status-badge'
 import { TokenBindPanel } from './token-bind-panel'
 
@@ -21,6 +23,11 @@ export function GroupMarketItem(props: {
   group: MarketplaceGroup
   open: boolean
   onToggle: () => void
+  routePoolSelected: boolean
+  routePoolBusy: boolean
+  routePoolAdding: boolean
+  onAddToRoutePool: () => void
+  showRoutePoolAction: boolean
 }) {
   const { t } = useTranslation()
   const group = props.group
@@ -60,6 +67,15 @@ export function GroupMarketItem(props: {
             <GroupMetrics group={group} />
           </div>
           <div className='col-start-2 row-start-1 flex items-center justify-end gap-2 xl:col-start-3'>
+            {props.showRoutePoolAction && (
+              <AddToRoutePoolButton
+                groupName={group.system_display_name}
+                selected={props.routePoolSelected}
+                busy={props.routePoolBusy}
+                adding={props.routePoolAdding}
+                onAdd={props.onAddToRoutePool}
+              />
+            )}
             <Button
               variant='ghost'
               size='sm'
@@ -75,6 +91,7 @@ export function GroupMarketItem(props: {
             </Button>
           </div>
         </header>
+        <RecentRequestStrip group={group} />
       </div>
       {props.open && (
         <div className='border-border bg-muted/15 border-t'>

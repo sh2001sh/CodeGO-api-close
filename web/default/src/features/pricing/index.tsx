@@ -79,8 +79,13 @@ export function Pricing() {
     [marketplaceQuery.data?.items]
   )
   const thirdPartyModels = useMemo(
-    () => buildThirdPartyPricingModels(thirdPartyGroups, pricing.models || []),
-    [pricing.models, thirdPartyGroups]
+    () =>
+      buildThirdPartyPricingModels(
+        thirdPartyGroups,
+        pricing.models || [],
+        pricing.pricedModelDetails || []
+      ),
+    [pricing.models, pricing.pricedModelDetails, thirdPartyGroups]
   )
   const thirdPartyVendors = useMemo(
     () => buildThirdPartyVendors(thirdPartyModels, pricing.vendors || []),

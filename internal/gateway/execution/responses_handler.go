@@ -70,6 +70,16 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 	adaptor.Init(info)
 	passThroughGlobal := gatewaystore.GetGlobalSettings().PassThroughRequestEnabled
+	originalBodyFastPath := false
+	var originalBody []byte
+	if info.RelayMode == gatewaycontract.RelayModeResponses && !passThroughGlobal && !info.ChannelSetting.PassThroughBodyEnabled {
+		if body, ok, err := tryResponsesOriginalBodyFastPath(c, info); err != nil {
+			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+		} else if ok {
+			originalBodyFastPath = true
+			originalBody = body
+		}
+	}
 	if info.RelayMode == gatewaycontract.RelayModeResponses &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
@@ -86,16 +96,24 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		}
 		info.UpstreamRequestBodySize = size
 		requestBody = body
+	} else if originalBodyFastPath {
+		outboundJSON = originalBody
+		if info.FirstByteTrace != nil {
+			info.FirstByteTrace.MarkRequestBodyFastPath()
+		}
 	} else if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled {
 		storage, err := platformhttpx.GetBodyStorage(c)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
-		jsonData, err := forceResponsesStreamBody(storage)
+		jsonData, fastPath, err := forceResponsesStreamBody(storage)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		outboundJSON = jsonData
+		if fastPath && info.FirstByteTrace != nil {
+			info.FirstByteTrace.MarkRequestBodyFastPath()
+		}
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
@@ -129,12 +147,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		outboundJSON = jsonData
 	}
 	if len(outboundJSON) > 0 {
-		normalized, changed, err := normalizeResponsesCompatibilityBody(outboundJSON)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-		if changed {
-			outboundJSON = normalized
+		if shouldNormalizeResponsesCompatibilityBody(outboundJSON) {
+			normalized, changed, err := normalizeResponsesCompatibilityBody(outboundJSON)
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			if changed {
+				outboundJSON = normalized
+			}
 		}
 		logger.LogDebug(c, "requestBody: %s", outboundJSON)
 		requestBody = bytes.NewReader(outboundJSON)
@@ -191,6 +211,67 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	return nil
 }
 
+// tryResponsesOriginalBodyFastPath returns the already-decoded request body
+// when the native Responses request can be sent byte-for-byte unchanged.
+// Every condition here is intentionally conservative: if a model, protocol,
+// field, or compatibility rewrite may be required, the normal conversion path
+// remains in use.
+func tryResponsesOriginalBodyFastPath(c *gin.Context, info *relaycommon.RelayInfo) ([]byte, bool, error) {
+	if c == nil || c.Request == nil || info == nil || info.ChannelMeta == nil || info.RelayMode != gatewaycontract.RelayModeResponses || info.IsModelMapped || len(info.ParamOverride) > 0 {
+		return nil, false, nil
+	}
+	if shouldBridgeBeforeNative(info, bridgeResponsesToChat) || gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
+		return nil, false, nil
+	}
+	if info.OriginModelName == "" || (info.UpstreamModelName != "" && info.UpstreamModelName != info.OriginModelName) {
+		return nil, false, nil
+	}
+	snapshot, err := platformhttpx.GetRequestBodySnapshot(c)
+	if err != nil {
+		return nil, false, err
+	}
+	if snapshot == nil || snapshot.Stream == nil || !*snapshot.Stream || snapshot.Model == "" {
+		return nil, false, nil
+	}
+	if snapshot.Model != info.OriginModelName && (info.UpstreamModelName == "" || snapshot.Model != info.UpstreamModelName) {
+		return nil, false, nil
+	}
+	body := snapshot.Raw
+	if len(body) == 0 {
+		storage, err := platformhttpx.GetBodyStorage(c)
+		if err != nil {
+			return nil, false, err
+		}
+		body, err = storage.Bytes()
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	if shouldNormalizeResponsesCompatibilityBody(body) || responsesBodyContainsDisabledFields(body, info.ChannelOtherSettings) {
+		return nil, false, nil
+	}
+	return body, true, nil
+}
+
+func responsesBodyContainsDisabledFields(body []byte, settings dto.ChannelOtherSettings) bool {
+	if !settings.AllowServiceTier && bytes.Contains(body, []byte(`"service_tier"`)) {
+		return true
+	}
+	if !settings.AllowInferenceGeo && bytes.Contains(body, []byte(`"inference_geo"`)) {
+		return true
+	}
+	if !settings.AllowSpeed && bytes.Contains(body, []byte(`"speed"`)) {
+		return true
+	}
+	if settings.DisableStore && bytes.Contains(body, []byte(`"store"`)) {
+		return true
+	}
+	if !settings.AllowSafetyIdentifier && bytes.Contains(body, []byte(`"safety_identifier"`)) {
+		return true
+	}
+	return !settings.AllowIncludeObfuscation && bytes.Contains(body, []byte(`"include_obfuscation"`))
+}
+
 func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, requestBody io.Reader, jsonBody []byte) (*http.Response, *types.NewAPIError) {
 	resp, err := doResponsesRequest(c, info, adaptor, requestBody, jsonBody)
 	if err != nil {
@@ -221,24 +302,32 @@ func doResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, adaptor gat
 	if len(jsonBody) == 0 {
 		return adaptor.DoRequest(c, info, requestBody)
 	}
-	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonBody)
-	if err != nil {
-		return nil, err
-	}
-	defer closer.Close()
-	info.UpstreamRequestBodySize = size
-	return adaptor.DoRequest(c, info, body)
+	// bytes.Reader gives net/http a replayable GetBody and ContentLength. Avoid
+	// wrapping an already-materialized JSON body in a second BodyStorage, which
+	// otherwise adds an extra allocation and file/memory lifecycle per attempt.
+	info.UpstreamRequestBodySize = int64(len(jsonBody))
+	return adaptor.DoRequest(c, info, bytes.NewReader(jsonBody))
 }
 
-func forceResponsesStreamBody(storage platformhttpx.BodyStorage) ([]byte, error) {
+func forceResponsesStreamBody(storage platformhttpx.BodyStorage) ([]byte, bool, error) {
 	requestBody, err := storage.Bytes()
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	var envelope struct {
+		Stream *bool `json:"stream"`
+	}
+	if err := platformencoding.Unmarshal(requestBody, &envelope); err != nil {
+		return nil, false, err
+	}
+	if envelope.Stream != nil && *envelope.Stream {
+		return requestBody, true, nil
 	}
 	var body map[string]interface{}
 	if err := platformencoding.Unmarshal(requestBody, &body); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	body["stream"] = true
-	return platformencoding.Marshal(body)
+	encoded, err := platformencoding.Marshal(body)
+	return encoded, false, err
 }

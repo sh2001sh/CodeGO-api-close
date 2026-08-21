@@ -32,7 +32,7 @@ import (
 
 func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	requestID := c.GetString(constant.RequestIdKey)
-	firstByteTrace := relaycommon.NewFirstByteTrace(httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime))
+	firstByteTrace := traceFromContext(c)
 
 	var (
 		newAPIError     *types.NewAPIError
@@ -393,6 +393,18 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		retryLogStr := fmt.Sprintf("retry channels: %s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
 	}
+}
+
+func traceFromContext(c *gin.Context) *relaycommon.FirstByteTrace {
+	if value, exists := c.Get(relaycommon.FirstByteTraceContextKey); exists {
+		if trace, ok := value.(*relaycommon.FirstByteTrace); ok && trace != nil {
+			return trace
+		}
+	}
+	trace := relaycommon.NewFirstByteTrace(httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime))
+	c.Set(relaycommon.FirstByteTraceContextKey, trace)
+	c.Set(platformhttpx.KeyBodyTiming, trace)
+	return trace
 }
 
 func specialMultiplierUnsupportedRelay(relayFormat types.RelayFormat, modelName string) bool {

@@ -94,10 +94,8 @@ export function useMarketplaceAutoRoutePoolUpdate() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: updateMarketplaceAutoRoutePool,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ['marketplace-auto-route-pool'],
-      })
+    onSuccess: async (data) => {
+      queryClient.setQueryData(['marketplace-auto-route-pool'], data)
       await queryClient.invalidateQueries({
         queryKey: ['api-key-marketplace-auto-pool'],
       })

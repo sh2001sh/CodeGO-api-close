@@ -1,8 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ShieldCheck, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  useMarketplaceAutoRoutePool,
+  useMarketplaceAutoRoutePoolUpdate,
+} from '../hooks'
+import {
+  appendAutoRoutePoolGroup,
+  selectedAutoRoutePoolGroupIDs,
+} from '../lib/auto-route-pool'
 import type { MarketplaceGroup } from '../types'
 import { GroupMarketItem } from './group-rows'
 
@@ -10,15 +19,51 @@ export function MarketplaceGroupList(props: {
   groups: MarketplaceGroup[]
   loading: boolean
   error: boolean
+  routePoolEnabled?: boolean
   onRetry: () => void
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState('')
+  const [addingGroupID, setAddingGroupID] = useState('')
+  const autoPool = useMarketplaceAutoRoutePool(props.routePoolEnabled)
+  const autoPoolUpdate = useMarketplaceAutoRoutePoolUpdate()
+  const selectedGroupIDs = useMemo(
+    () => selectedAutoRoutePoolGroupIDs(autoPool.data?.items ?? []),
+    [autoPool.data?.items]
+  )
+  const selectedGroups = useMemo(
+    () => new Set(selectedGroupIDs),
+    [selectedGroupIDs]
+  )
+
   if (props.loading) return <GroupListSkeleton />
   if (props.error) return <GroupListError onRetry={props.onRetry} />
   if (props.groups.length === 0) return <GroupListEmpty />
 
   const toggle = (groupID: string) =>
     setExpanded((current) => (current === groupID ? '' : groupID))
+  const addToRoutePool = async (groupID: string) => {
+    if (addingGroupID || selectedGroups.has(groupID)) return
+    setAddingGroupID(groupID)
+    try {
+      const pool = autoPool.data ?? (await autoPool.refetch()).data
+      if (!pool) throw new Error(t('无法读取 Auto 路由池'))
+      if (
+        pool.items.some((item) => item.group_id === groupID && item.selected)
+      ) {
+        return
+      }
+      const nextGroupIDs = appendAutoRoutePoolGroup(pool.items, groupID)
+      await autoPoolUpdate.mutateAsync(nextGroupIDs)
+      toast.success(t('已添加到 Auto 路由池'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('添加到路由池失败')
+      )
+    } finally {
+      setAddingGroupID('')
+    }
+  }
 
   return (
     <div className='bg-muted/25 space-y-1.5 p-2'>
@@ -28,6 +73,11 @@ export function MarketplaceGroupList(props: {
           group={group}
           open={expanded === group.id}
           onToggle={() => toggle(group.id)}
+          routePoolSelected={selectedGroups.has(group.id)}
+          routePoolBusy={Boolean(addingGroupID) || autoPool.isLoading}
+          routePoolAdding={addingGroupID === group.id}
+          onAddToRoutePool={() => void addToRoutePool(group.id)}
+          showRoutePoolAction={props.routePoolEnabled !== false}
         />
       ))}
     </div>

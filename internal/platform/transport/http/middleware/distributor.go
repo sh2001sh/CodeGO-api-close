@@ -50,6 +50,7 @@ func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 		if httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime).IsZero() {
 			httpctx.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		}
+		initializeFirstByteTrace(c)
 		var channel *gatewayschema.Channel
 		channelId, ok := httpctx.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
@@ -215,6 +216,15 @@ func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 	}
 }
 
+func initializeFirstByteTrace(c *gin.Context) {
+	if _, exists := c.Get(gatewayruntime.FirstByteTraceContextKey); exists {
+		return
+	}
+	trace := gatewayruntime.NewFirstByteTrace(httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime))
+	c.Set(gatewayruntime.FirstByteTraceContextKey, trace)
+	c.Set(platformhttpx.KeyBodyTiming, trace)
+}
+
 // getModelFromRequest 浠庤姹備腑璇诲彇妯″瀷淇℃伅
 // 鏍规嵁 Content-Type 鑷姩澶勭悊锛?// - application/json
 // - application/x-www-form-urlencoded
@@ -229,6 +239,14 @@ type routingProfilePayload struct {
 }
 
 func requestProfileHint(c *gin.Context) gatewayruntime.RequestProfileHint {
+	if snapshot, err := platformhttpx.GetRequestBodySnapshot(c); err == nil && snapshot.Model != "" {
+		return gatewayruntime.RequestProfileHint{
+			IsStream:         snapshot.Stream != nil && *snapshot.Stream,
+			HasTools:         hasRoutingProfileJSON(snapshot.Tools) || hasRoutingProfileJSON(snapshot.Functions),
+			HasCacheAffinity: hasRoutingProfileJSON(snapshot.PromptCacheKey),
+			HasUpstreamState: strings.TrimSpace(snapshot.PreviousResponseID) != "" || hasRoutingProfileJSON(snapshot.Conversation),
+		}
+	}
 	var payload routingProfilePayload
 	if err := platformhttpx.UnmarshalBodyReusable(c, &payload); err != nil {
 		return gatewayruntime.RequestProfileHint{}
@@ -247,6 +265,9 @@ func hasRoutingProfileJSON(value json.RawMessage) bool {
 }
 
 func getModelFromRequest(c *gin.Context) (*ModelRequest, error) {
+	if snapshot, err := platformhttpx.GetRequestBodySnapshot(c); err == nil && snapshot.Model != "" {
+		return &ModelRequest{Model: snapshot.Model}, nil
+	}
 	var modelRequest ModelRequest
 	err := platformhttpx.UnmarshalBodyReusable(c, &modelRequest)
 	if err != nil {

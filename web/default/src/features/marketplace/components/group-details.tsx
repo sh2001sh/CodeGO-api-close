@@ -93,7 +93,7 @@ export function GroupDetails(props: { group: MarketplaceGroup }) {
         </div>
         <p className='text-muted-foreground mt-1 max-w-3xl text-xs leading-5'>
           {t(
-            '尝试级只计算最终上游渠道，适合比较渠道性能；端到端包含网关处理、路由与重试，更接近用户实际等待。P50/P95 为固定延迟桶估算。'
+            '尝试级只计算最终上游渠道，适合比较渠道性能；端到端包含网关处理、路由与重试，更接近用户实际等待。P50/P95 优先使用原始请求日志精确计算，历史无日志时回退为固定延迟桶估算。'
           )}
         </p>
         <div className='mt-3 grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4'>

@@ -10,6 +10,10 @@ import (
 type FirstByteTrace struct {
 	mu                        sync.RWMutex
 	startedAt                 time.Time
+	bodyReadStartAt           time.Time
+	bodyReadDoneAt            time.Time
+	jsonDecodeStartAt         time.Time
+	jsonDecodeDoneAt          time.Time
 	requestValidAt            time.Time
 	admittedAt                time.Time
 	relayInfoReadyAt          time.Time
@@ -28,6 +32,8 @@ type FirstByteTrace struct {
 	firstSemanticAt           time.Time
 	firstTextReadAt           time.Time
 	firstTextAt               time.Time
+	firstHeadersFlushAt       time.Time
+	firstFlushAt              time.Time
 	firstSemanticIsText       bool
 	semanticKindMarked        bool
 	outboundTraceMarked       bool
@@ -44,7 +50,13 @@ type FirstByteTrace struct {
 	outboundRequestBodyBytes  int64
 	outboundHTTPProtoMajor    int64
 	outboundHTTPProtoMinor    int64
+	requestBodyFastPath       bool
 }
+
+// FirstByteTraceContextKey stores the request trace in the Gin context so
+// lower-level HTTP and streaming packages can add timing marks without
+// importing the relay handler package.
+const FirstByteTraceContextKey = "gateway_first_byte_trace"
 
 func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
 	if startedAt.IsZero() {
@@ -52,6 +64,13 @@ func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
 	}
 	return &FirstByteTrace{startedAt: startedAt}
 }
+
+func (t *FirstByteTrace) MarkBodyReadStarted()   { t.mark(&t.bodyReadStartAt) }
+func (t *FirstByteTrace) MarkBodyReadDone()      { t.mark(&t.bodyReadDoneAt) }
+func (t *FirstByteTrace) MarkJSONDecodeStarted() { t.mark(&t.jsonDecodeStartAt) }
+func (t *FirstByteTrace) MarkJSONDecodeDone()    { t.mark(&t.jsonDecodeDoneAt) }
+func (t *FirstByteTrace) MarkHeadersFlush()      { t.mark(&t.firstHeadersFlushAt) }
+func (t *FirstByteTrace) MarkFirstFlush()        { t.mark(&t.firstFlushAt) }
 
 func (t *FirstByteTrace) MarkRequestValidated() { t.mark(&t.requestValidAt) }
 func (t *FirstByteTrace) MarkAdmitted()         { t.mark(&t.admittedAt) }
@@ -111,6 +130,17 @@ func (t *FirstByteTrace) MarkFirstTextEvent() {
 	t.mark(&t.firstTextAt)
 }
 
+// MarkRequestBodyFastPath records that the validated request body was reused
+// without protocol conversion or JSON re-marshalling.
+func (t *FirstByteTrace) MarkRequestBodyFastPath() {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	t.requestBodyFastPath = true
+	t.mu.Unlock()
+}
+
 func (t *FirstByteTrace) mark(target *time.Time) {
 	if t == nil {
 		return
@@ -162,6 +192,22 @@ func (t *FirstByteTrace) snapshot(includeProgress bool, now time.Time) map[strin
 		"total_raw_event_ms":               durationMilliseconds(t.startedAt, t.firstEventAt),
 		"total_ms":                         durationMilliseconds(t.startedAt, t.firstSemanticAt),
 	}
+	if !t.bodyReadStartAt.IsZero() && !t.bodyReadDoneAt.IsZero() {
+		snapshot["body_receive_ms"] = durationMilliseconds(t.bodyReadStartAt, t.bodyReadDoneAt)
+		snapshot["body_receive_from_request_start_ms"] = durationMilliseconds(t.startedAt, t.bodyReadDoneAt)
+	}
+	if !t.jsonDecodeStartAt.IsZero() && !t.jsonDecodeDoneAt.IsZero() {
+		snapshot["json_decode_ms"] = durationMilliseconds(t.jsonDecodeStartAt, t.jsonDecodeDoneAt)
+	}
+	if !t.firstFlushAt.IsZero() {
+		snapshot["first_flush_ms"] = durationMilliseconds(t.startedAt, t.firstFlushAt)
+		if !t.firstSemanticAt.IsZero() {
+			snapshot["semantic_to_first_flush_ms"] = durationMilliseconds(t.firstSemanticAt, t.firstFlushAt)
+		}
+	}
+	if !t.firstHeadersFlushAt.IsZero() {
+		snapshot["headers_flush_ms"] = durationMilliseconds(t.startedAt, t.firstHeadersFlushAt)
+	}
 	if !t.requestBodyRestoreStartAt.IsZero() && !t.requestBodyRestoreDoneAt.IsZero() {
 		snapshot["request_body_restore_ms"] = durationMilliseconds(t.requestBodyRestoreStartAt, t.requestBodyRestoreDoneAt)
 	}
@@ -207,6 +253,9 @@ func (t *FirstByteTrace) snapshot(includeProgress bool, now time.Time) map[strin
 	if t.outboundHTTPProtoMajor > 0 {
 		snapshot["outbound_http_proto_major"] = t.outboundHTTPProtoMajor
 		snapshot["outbound_http_proto_minor"] = t.outboundHTTPProtoMinor
+	}
+	if t.requestBodyFastPath {
+		snapshot["request_body_fast_path"] = 1
 	}
 	if t.semanticKindMarked {
 		if t.firstSemanticIsText {

@@ -11,6 +11,10 @@ import (
 func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 	startedAt := time.Unix(1_700_000_000, 0)
 	trace := NewFirstByteTrace(startedAt)
+	trace.bodyReadStartAt = startedAt.Add(1 * time.Millisecond)
+	trace.bodyReadDoneAt = startedAt.Add(8 * time.Millisecond)
+	trace.jsonDecodeStartAt = startedAt.Add(8 * time.Millisecond)
+	trace.jsonDecodeDoneAt = startedAt.Add(9 * time.Millisecond)
 	trace.requestValidAt = startedAt.Add(10 * time.Millisecond)
 	trace.admittedAt = startedAt.Add(15 * time.Millisecond)
 	trace.relayInfoReadyAt = startedAt.Add(20 * time.Millisecond)
@@ -29,33 +33,39 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 	trace.firstSemanticAt = startedAt.Add(950 * time.Millisecond)
 	trace.firstTextReadAt = startedAt.Add(945 * time.Millisecond)
 	trace.firstTextAt = startedAt.Add(951 * time.Millisecond)
+	trace.firstFlushAt = startedAt.Add(960 * time.Millisecond)
 	trace.firstSemanticIsText = true
 	trace.semanticKindMarked = true
 
 	require.Equal(t, map[string]int64{
-		"ingress_ms":                       20,
-		"request_validation_ms":            10,
-		"admission_ms":                     5,
-		"relay_info_ms":                    5,
-		"preflight_ms":                     20,
-		"route_selection_ms":               25,
-		"dispatch_ms":                      15,
-		"request_body_restore_ms":          2,
-		"billing_reservation_ms":           7,
-		"request_conversion_ms":            5,
-		"upstream_request_setup_ms":        5,
-		"upstream_response_headers_ms":     790,
-		"headers_to_first_event_ms":        20,
-		"upstream_first_event_ms":          820,
-		"event_to_semantic_ms":             50,
-		"upstream_first_semantic_read_ms":  860,
-		"semantic_read_to_handler_ms":      10,
-		"first_semantic_is_text":           1,
-		"upstream_first_text_read_ms":      865,
-		"text_read_to_handler_ms":          6,
-		"upstream_first_semantic_event_ms": 870,
-		"total_raw_event_ms":               900,
-		"total_ms":                         950,
+		"ingress_ms":                         20,
+		"body_receive_ms":                    7,
+		"body_receive_from_request_start_ms": 8,
+		"json_decode_ms":                     1,
+		"request_validation_ms":              10,
+		"admission_ms":                       5,
+		"relay_info_ms":                      5,
+		"preflight_ms":                       20,
+		"route_selection_ms":                 25,
+		"dispatch_ms":                        15,
+		"request_body_restore_ms":            2,
+		"billing_reservation_ms":             7,
+		"request_conversion_ms":              5,
+		"upstream_request_setup_ms":          5,
+		"upstream_response_headers_ms":       790,
+		"headers_to_first_event_ms":          20,
+		"upstream_first_event_ms":            820,
+		"event_to_semantic_ms":               50,
+		"upstream_first_semantic_read_ms":    860,
+		"semantic_read_to_handler_ms":        10,
+		"first_semantic_is_text":             1,
+		"upstream_first_text_read_ms":        865,
+		"text_read_to_handler_ms":            6,
+		"upstream_first_semantic_event_ms":   870,
+		"total_raw_event_ms":                 900,
+		"total_ms":                           950,
+		"first_flush_ms":                     960,
+		"semantic_to_first_flush_ms":         10,
 	}, trace.Snapshot())
 }
 

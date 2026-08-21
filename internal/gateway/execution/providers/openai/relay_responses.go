@@ -16,6 +16,8 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -96,6 +98,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	// A disconnect in that phase can be retried without duplicating output.
 	c.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
 	helper.MarkAttemptBootstrap(c)
+	if earlyHeadersFlushEnabled() {
+		helper.SetEventStreamHeaders(c)
+		c.Writer.WriteHeaderNow()
+		if err := helper.FlushHeaders(c); err != nil && c.Request.Context().Err() == nil {
+			logger.LogWarn(c, "early response headers flush failed: "+err.Error())
+		}
+	}
 
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
@@ -338,6 +347,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	helper.MarkAttemptCompleted(c)
 
 	return usage, nil
+}
+
+func earlyHeadersFlushEnabled() bool {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("GATEWAY_EARLY_HEADERS_FLUSH")))
+	return err == nil && enabled
 }
 
 func responsesRequestUsesImageGeneration(info *relaycommon.RelayInfo) bool {

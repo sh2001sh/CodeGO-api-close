@@ -165,6 +165,7 @@ func buildRanking(groups []marketplaceschema.Group, channels map[string]marketpl
 		return nil, err
 	}
 	totals := aggregateChannelRankingRows(rows)
+	applyExactChannelLatency(totals, queryExactChannelLatency(hours, channelIDs))
 	consumers := independentConsumerCountsByChannel(channelIDs, hours)
 	snapshots := scoreMarketplaceGroups(groups, channels, totals, consumers, hours)
 	if err := persistRankingSnapshots(snapshots); err != nil {

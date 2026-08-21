@@ -17,10 +17,14 @@ function availability(group: MarketplaceGroup): number {
 
 export function buildThirdPartyPricingModels(
   groups: MarketplaceGroup[],
-  officialModels: PricingModel[]
+  officialModels: PricingModel[],
+  pricedModelDetails: PricingModel[]
 ): PricingModel[] {
   const officialByName = new Map(
-    officialModels.map((model) => [model.model_name, model])
+    officialModels.map((model) => [modelKey(model.model_name), model])
+  )
+  const pricingByName = new Map(
+    pricedModelDetails.map((model) => [modelKey(model.model_name), model])
   )
   const groupsByModel = new Map<string, MarketplaceGroup[]>()
 
@@ -33,10 +37,9 @@ export function buildThirdPartyPricingModels(
   }
 
   return Array.from(groupsByModel.entries()).map(([modelName, modelGroups]) => {
-    const official = officialByName.get(modelName)
-    const displayGroups = modelGroups.map(
-      (group) => group.system_display_name
-    )
+    const official = officialByName.get(modelKey(modelName))
+    const pricing = official ?? pricingByName.get(modelKey(modelName))
+    const displayGroups = modelGroups.map((group) => group.system_display_name)
     const groupRatio = Object.fromEntries(
       modelGroups.map((group) => [group.system_display_name, group.multiplier])
     )
@@ -50,7 +53,7 @@ export function buildThirdPartyPricingModels(
     const summary = `${modelGroups.length} 个第三方分组可用 · 最低 ${minimumMultiplier}x · 最佳可用率 ${bestAvailability.toFixed(1)}%`
 
     return {
-      ...(official ?? {
+      ...(pricing ?? {
         id: stableModelID(modelName),
         model_name: modelName,
         quota_type: 0,
@@ -59,21 +62,28 @@ export function buildThirdPartyPricingModels(
         vendor_name: '第三方渠道',
         supported_endpoint_types: [],
       }),
-      id: official?.id ?? stableModelID(modelName),
+      id: pricing?.id ?? stableModelID(modelName),
+      model_name: modelName,
       description: summary,
       enable_groups: displayGroups,
       group_ratio: groupRatio,
       tags: ['第三方', ...sourceLabels].join(','),
-      pricing_available: Boolean(official),
+      pricing_available: Boolean(pricing),
     }
   })
+}
+
+function modelKey(modelName: string): string {
+  return modelName.trim().toLowerCase()
 }
 
 export function buildThirdPartyVendors(
   models: PricingModel[],
   officialVendors: PricingVendor[]
 ): PricingVendor[] {
-  const names = new Set(models.map((model) => model.vendor_name).filter(Boolean))
+  const names = new Set(
+    models.map((model) => model.vendor_name).filter(Boolean)
+  )
   const vendors = officialVendors.filter((vendor) => names.has(vendor.name))
   if (names.has('第三方渠道')) {
     vendors.push({ id: -1, name: '第三方渠道' })

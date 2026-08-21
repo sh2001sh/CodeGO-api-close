@@ -25,10 +25,10 @@ export function GroupMetrics({ group }: { group: MarketplaceGroup }) {
       />
       <PrimaryMetric
         icon={Timer}
-        label={t('上游首字 P50')}
+        label={t('上游首字 P50（精确）')}
         value={formatDuration(group.attempt_ttft_p50_ms)}
         title={t(
-          '最终上游尝试从发起到首个语义输出的中位数；不包含前序失败重试。P95 与端到端耗时可在详情中查看。'
+          '从近窗口原始请求日志中的首字延迟样本按最近邻秩计算，不包含前序失败重试；没有可用日志时才回退到指标桶估算。P95 与端到端耗时可在详情中查看。'
         )}
       />
       <PrimaryMetric

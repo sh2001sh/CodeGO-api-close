@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +10,38 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/klauspost/compress/zstd"
+	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDecompressRequestMiddlewareGzipSnapshotMatchesPlainJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	payload := []byte(`{"model":"gpt-5","input":[{"role":"user","content":"hello"}],"stream":true}`)
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	_, err := writer.Write(payload)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	router := gin.New()
+	router.Use(DecompressRequestMiddleware())
+	router.POST("/v1/responses", func(c *gin.Context) {
+		snapshot, snapshotErr := platformhttpx.GetRequestBodySnapshot(c)
+		require.NoError(t, snapshotErr)
+		require.Equal(t, payload, snapshot.Raw)
+		require.Equal(t, "gpt-5", snapshot.Model)
+		require.NotNil(t, snapshot.Stream)
+		require.True(t, *snapshot.Stream)
+		c.Status(http.StatusNoContent)
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(compressed.Bytes()))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Encoding", "gzip")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNoContent, recorder.Code)
+}
 
 func TestDecompressRequestMiddlewareSupportsZstd(t *testing.T) {
 	gin.SetMode(gin.TestMode)

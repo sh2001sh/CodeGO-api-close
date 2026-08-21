@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -12,6 +13,15 @@ import (
 )
 
 var rejectedResponsesFieldPattern = regexp.MustCompile(`(?i)(?:unknown|unsupported)\s+(?:parameter|field)\s*(?::|=|is)?\s*["']?([a-zA-Z0-9_.\[\]-]+)`)
+
+func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {
+	return bytes.Contains(body, []byte(`"transformer_metadata"`)) ||
+		bytes.Contains(body, []byte(`"include"`)) ||
+		bytes.Contains(body, []byte(`"namespace"`)) ||
+		bytes.Contains(body, []byte(`"function_call_output"`)) ||
+		bytes.Contains(body, []byte(`"custom_tool_call_output"`)) ||
+		bytes.Contains(body, []byte(`"tool_search_output"`))
+}
 
 // normalizeResponsesCompatibilityBody repairs deterministic compatibility
 // issues without changing message content or valid provider-specific fields.

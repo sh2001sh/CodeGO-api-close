@@ -50,6 +50,26 @@ func TestUnmarshalBodyReusableFastJSONRejectsTrailingData(t *testing.T) {
 	require.Error(t, UnmarshalBodyReusable(context, &payload))
 }
 
+func TestGetRequestBodySnapshotCachesRoutingMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	raw := []byte(`{"model":"gpt-5","stream":true,"prompt_cache_key":"conversation-1","tools":[{"type":"function"}]}`)
+	request := httptest.NewRequest("POST", "/v1/responses", bytes.NewReader(raw))
+	request.Header.Set("Content-Type", "application/json")
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = request
+	t.Cleanup(func() { CleanupBodyStorage(context) })
+
+	first, err := GetRequestBodySnapshot(context)
+	require.NoError(t, err)
+	second, err := GetRequestBodySnapshot(context)
+	require.NoError(t, err)
+	require.Same(t, first, second)
+	require.Equal(t, "gpt-5", first.Model)
+	require.NotNil(t, first.Stream)
+	require.True(t, *first.Stream)
+	require.NotEmpty(t, first.Tools)
+}
+
 func BenchmarkUnmarshalBodyReusableLargeJSON(b *testing.B) {
 	gin.SetMode(gin.TestMode)
 	raw := []byte(`{"model":"gpt-5.6-sol","input":"` + strings.Repeat("long prompt content ", 55_000) + `"}`)

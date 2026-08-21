@@ -6,22 +6,38 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  normalizeRecentRequestSeries,
+  resolveRecentRequestStatus,
+} from '../lib/recent-request-series'
 import type { MarketplaceGroup } from '../types'
 
 export function RecentRequestStrip(props: { group: MarketplaceGroup }) {
   const { t, i18n } = useTranslation()
   const bucketSeconds = props.group.recent_request_bucket_seconds || 1800
+  const series = normalizeRecentRequestSeries(
+    props.group.recent_request_series,
+    bucketSeconds
+  )
+  const latestStatus = resolveRecentRequestStatus(
+    props.group.latest_request_status,
+    series
+  )
   const threshold = t(
     '每个色块代表 30 分钟：90%（含）以上稳定，85%（含）至 90%（不含）波动，低于 85% 异常，灰色表示无请求'
   )
 
   return (
     <div className='mt-1.5 min-w-0'>
+      <div className='mb-1 flex items-center justify-between gap-2 text-[11px]'>
+        <span className='text-muted-foreground'>{t('最近请求状态')}</span>
+        <RequestStatus status={latestStatus} t={t} />
+      </div>
       <div
         className='flex w-full gap-0.5'
         aria-label={`${t('近 6 小时请求状态')}。${threshold}`}
       >
-        {props.group.recent_request_series.map((bucket, index) => {
+        {series.map((bucket, index) => {
           const range = formatBucketRange(
             bucket.ts,
             bucketSeconds,
@@ -36,7 +52,7 @@ export function RecentRequestStrip(props: { group: MarketplaceGroup }) {
                     type='button'
                     aria-label={`${range}，${summary}`}
                     className={cn(
-                      'focus-visible:ring-ring h-2.5 min-w-0 flex-1 rounded-sm transition-[filter,box-shadow] hover:brightness-90 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none',
+                      'focus-visible:ring-ring h-3 min-w-0 flex-1 rounded-sm transition-[filter,box-shadow] hover:brightness-90 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none',
                       bucketTone(bucket)
                     )}
                   />
@@ -53,6 +69,32 @@ export function RecentRequestStrip(props: { group: MarketplaceGroup }) {
         })}
       </div>
     </div>
+  )
+}
+
+function RequestStatus(props: { status: string; t: TFunction }) {
+  let label = props.t('暂无数据')
+  let tone = 'bg-muted text-muted-foreground'
+  if (props.status === 'healthy') {
+    label = props.t('稳定')
+    tone = 'bg-success/12 text-success'
+  } else if (props.status === 'unstable') {
+    label = props.t('波动')
+    tone = 'bg-warning/15 text-warning-foreground'
+  } else if (props.status === 'failed') {
+    label = props.t('异常')
+    tone = 'bg-destructive/12 text-destructive'
+  }
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium',
+        tone
+      )}
+    >
+      <span className='size-1.5 rounded-full bg-current' aria-hidden='true' />
+      {label}
+    </span>
   )
 }
 

@@ -34,6 +34,11 @@ func TestNormalizeResponsesCompatibilityBodyRepairsToolHistory(t *testing.T) {
     }`, string(normalized))
 }
 
+func TestShouldNormalizeResponsesCompatibilityBodyFastRejectsOrdinaryBody(t *testing.T) {
+	require.False(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","stream":true,"input":"hello"}`)))
+	require.True(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","include":["usage"]}`)))
+}
+
 func TestNormalizeResponsesCompatibilityBodyPreservesContinuationOutput(t *testing.T) {
 	body := []byte(`{
       "model":"gpt-5.6-sol",

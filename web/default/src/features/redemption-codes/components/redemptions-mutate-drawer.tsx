@@ -55,10 +55,7 @@ import { DateTimePicker } from '@/components/datetime-picker'
 import { getAdminPlans } from '@/features/subscriptions/api'
 import type { PlanRecord } from '@/features/subscriptions/types'
 import { createRedemption, getRedemption, updateRedemption } from '../api'
-import {
-  REDEMPTION_TYPES,
-  SUCCESS_MESSAGES,
-} from '../constants'
+import { REDEMPTION_TYPES, SUCCESS_MESSAGES } from '../constants'
 import {
   REDEMPTION_FORM_DEFAULT_VALUES,
   downloadRedemptionTextFile,
@@ -95,7 +92,10 @@ function formatCompactAmount(value: number) {
     return value.toFixed(Number.isInteger(value) ? 0 : 2).replace(/\.00$/, '')
   }
   if (abs >= 1) {
-    return value.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+    return value
+      .toFixed(2)
+      .replace(/\.00$/, '')
+      .replace(/(\.\d)0$/, '$1')
   }
   if (abs >= 0.01) {
     return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
@@ -343,13 +343,13 @@ export function RedemptionsMutateDrawer({
                       if (value === null) return
                       field.onChange(value)
                       if (value === REDEMPTION_TYPES.QUOTA) {
-                        form.setValue('plan_id', undefined)
+                        form.setValue('plan_id', 0)
                         form.setValue('blind_box_quantity', 1)
                       } else if (value === REDEMPTION_TYPES.SUBSCRIPTION) {
                         form.setValue('blind_box_quantity', 1)
                         form.setValue('quota_dollars', 0)
                       } else {
-                        form.setValue('plan_id', undefined)
+                        form.setValue('plan_id', 0)
                         form.setValue('quota_dollars', 0)
                       }
                     }}
@@ -403,7 +403,9 @@ export function RedemptionsMutateDrawer({
                     </FormControl>
                     <FormDescription>
                       {tokensOnly
-                        ? t('Redeeming this code adds the entered tokens to universal credit')
+                        ? t(
+                            'Redeeming this code adds the entered tokens to universal credit'
+                          )
                         : t(
                             'Redeeming this code adds the entered {{currency}} amount to universal credit',
                             { currency: currencyLabel }
@@ -424,7 +426,7 @@ export function RedemptionsMutateDrawer({
                       items={planOptions}
                       value={field.value ? String(field.value) : ''}
                       onValueChange={(value) =>
-                        field.onChange(value ? Number(value) : undefined)
+                        field.onChange(value ? Number(value) : 0)
                       }
                     >
                       <FormControl>
@@ -445,7 +447,9 @@ export function RedemptionsMutateDrawer({
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      {t('The redeemed user will receive this subscription immediately')}
+                      {t(
+                        'The redeemed user will receive this subscription immediately'
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -471,7 +475,9 @@ export function RedemptionsMutateDrawer({
                       />
                     </FormControl>
                     <FormDescription>
-                      {t('The redeemed user will receive this many blind box chances immediately')}
+                      {t(
+                        'The redeemed user will receive this many blind box chances immediately'
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

@@ -41,11 +41,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionPageLayout } from '@/components/layout'
 import { GroupStatusMonitorCard } from './group-status-monitor-card'
-import {
-  formatSampleWindowLabel,
-  sortItems,
-  summarizeGroups,
-} from './presentation'
+import { sortItems, summarizeGroups } from './presentation'
 import { useSidebarGroupStatus } from './use-sidebar-group-status'
 
 export function SidebarGroupStatusPage() {
@@ -167,9 +163,9 @@ export function SidebarGroupStatusPage() {
                 className='bg-background xl:w-40'
               >
                 <option value=''>全部状态</option>
-                <option value='healthy'>正常</option>
-                <option value='slow'>缓慢</option>
-                <option value='degraded'>故障</option>
+                <option value='healthy'>稳定</option>
+                <option value='unstable'>波动</option>
+                <option value='failed'>异常</option>
                 <option value='unknown'>暂无近期请求</option>
               </NativeSelect>
             </div>
@@ -250,36 +246,30 @@ function OverviewPanel(props: {
       tone: 'text-muted-foreground',
     },
     {
-      label: '正常模型',
+      label: '稳定模型',
       value: String(props.summary.healthyModels),
-      hint: `共 ${props.summary.models} 个模型`,
+      hint: '最新非空 30 分钟请求桶成功率 ≥ 90%',
       icon: CheckCircle2,
       tone: 'text-success',
     },
     {
-      label: '缓慢模型',
-      value: String(props.summary.slowModels),
-      hint:
-        props.summary.sampleWindow == null
-          ? '暂无采样窗口'
-          : `${formatSampleWindowLabel(props.summary.sampleWindow)} 成功率窗口`,
+      label: '波动模型',
+      value: String(props.summary.unstableModels),
+      hint: '最新非空 30 分钟请求桶成功率 85%–90%',
       icon: AlertTriangle,
       tone: 'text-warning',
     },
     {
-      label: '故障模型',
-      value: String(props.summary.degradedModels),
-      hint:
-        props.summary.sampleWindow == null
-          ? '暂无采样窗口'
-          : `${formatSampleWindowLabel(props.summary.sampleWindow)} 成功率窗口`,
+      label: '异常模型',
+      value: String(props.summary.failedModels),
+      hint: '最新非空 30 分钟请求桶成功率低于 85%',
       icon: AlertTriangle,
       tone: 'text-destructive',
     },
     {
       label: '暂无近期请求模型',
       value: String(props.summary.unknownModels),
-      hint: '最近 30 分钟无健康统计样本',
+      hint: '近 6 小时没有请求样本',
       icon: Rows3,
       tone: 'text-muted-foreground',
     },
@@ -293,7 +283,8 @@ function OverviewPanel(props: {
           分组模型状态
         </CardTitle>
         <CardDescription className='max-w-[72ch] leading-6'>
-          快速查看哪些模型稳定可用，哪些模型最近出现波动，并定位问题出现的大致时间段。
+          三处状态统一取近 6 小时内最新非空的 30 分钟请求桶；绿色表示成功率至少
+          90%，不代表每次请求都成功。
         </CardDescription>
       </CardHeader>
       <CardContent className='grid gap-3 pt-4 md:grid-cols-2 xl:grid-cols-5'>

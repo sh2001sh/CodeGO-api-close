@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -95,4 +96,58 @@ func buildMarketplaceRecentRequestSeries(windowStart int64, groupChannelIDs map[
 		}
 	}
 	return result
+}
+
+func loadOfficialGroupRecentRequestStatuses(groupNames []string) map[string]string {
+	statuses := buildRecentRequestStatusesByGroup(groupNames, nil)
+	if len(groupNames) == 0 || platformdb.LogDB == nil {
+		return statuses
+	}
+
+	windowStart, windowEnd := marketplaceRecentWindow(time.Now().Unix())
+	rows, err := gatewaystore.LoadGroupModelRequestBuckets(
+		windowStart,
+		windowEnd,
+		marketplaceRecentBucketSeconds,
+		groupNames,
+	)
+	if err != nil {
+		return statuses
+	}
+	return buildRecentRequestStatusesByGroup(groupNames, rows)
+}
+
+func buildRecentRequestStatusesByGroup(groupNames []string, rows []gatewaystore.GroupModelRequestBucket) map[string]string {
+	statuses := make(map[string]string, len(groupNames))
+	for _, groupName := range groupNames {
+		statuses[groupName] = gatewaydomain.RequestHealthUnknown
+	}
+	type bucketCounts struct {
+		requests int64
+		success  int64
+	}
+	counts := make(map[string][]bucketCounts, len(groupNames))
+	for _, row := range rows {
+		if row.BucketIndex < 0 || row.BucketIndex >= marketplaceRecentWindowSegments {
+			continue
+		}
+		if _, ok := counts[row.GroupName]; !ok {
+			counts[row.GroupName] = make([]bucketCounts, marketplaceRecentWindowSegments)
+		}
+		bucket := &counts[row.GroupName][row.BucketIndex]
+		bucket.requests += row.RequestCount
+		bucket.success += row.SuccessCount
+	}
+	for groupName, buckets := range counts {
+		for index := len(buckets) - 1; index >= 0; index-- {
+			bucket := buckets[index]
+			if bucket.requests <= 0 {
+				continue
+			}
+			successRate := float64(bucket.success) / float64(bucket.requests) * 100
+			statuses[groupName] = gatewaydomain.ClassifyRequestHealth(successRate, bucket.requests)
+			break
+		}
+	}
+	return statuses
 }

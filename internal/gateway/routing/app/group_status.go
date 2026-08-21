@@ -47,8 +47,6 @@ type groupStatusBuildContext struct {
 	groupSources      map[string]string
 	groupDisplayNames map[string]string
 	groupSummaries    map[string][]*GroupModelStatusSummary
-	successRates      map[string]*float64
-	requestCounts     map[string]int64
 	seriesByModel     map[string][]UserGroupStatusBucket
 	groupCacheRates   map[string]*float64
 	modelCacheRates   map[string]*float64
@@ -58,10 +56,8 @@ type groupStatusBuildContext struct {
 }
 
 func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, error) {
-	const successSampleMinutes = 30
-	const successSegmentCount = 1
-	const timelineSampleMinutes = 24 * 60
-	const timelineSegmentCount = 48
+	const requestHealthWindowMinutes = 6 * 60
+	const requestHealthSegmentCount = 12
 
 	pricing := loadGatewayPricing()
 	groupNames, err := resolveVisibleGroupStatusGroups(userID, hasUser, pricing)
@@ -73,15 +69,17 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 
 	groupSummaries := buildPricingGroupModelSummaries(pricing, groupNames)
 	mergeMarketplaceGroupModels(groupSummaries, groupNames)
-	successRates, _, requestCounts, sampleWindowHours, _ := queryGroupModelRecentHealth(groupNames, successSampleMinutes, successSegmentCount)
-	_, seriesByModel, _, seriesWindowHours, bucketSeconds := queryGroupModelRecentHealth(groupNames, timelineSampleMinutes, timelineSegmentCount)
+	_, seriesByModel, _, seriesWindowHours, bucketSeconds := queryGroupModelRecentHealth(
+		groupNames,
+		requestHealthWindowMinutes,
+		requestHealthSegmentCount,
+	)
 	groupCacheRates, modelCacheRates := queryGroupCacheHitRates(groupNames, 24)
 
 	context := groupStatusBuildContext{
 		groupSources: groupSources, groupDisplayNames: groupDisplayNames, groupSummaries: groupSummaries,
-		successRates: successRates, requestCounts: requestCounts,
 		seriesByModel: seriesByModel, groupCacheRates: groupCacheRates,
-		modelCacheRates: modelCacheRates, sampleWindowHours: sampleWindowHours,
+		modelCacheRates: modelCacheRates, sampleWindowHours: float64(bucketSeconds) / 3600,
 		seriesWindowHours: seriesWindowHours, bucketSeconds: bucketSeconds,
 	}
 	result := make([]UserGroupStatusItem, 0, len(groupNames))
@@ -102,17 +100,8 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 func buildUserGroupStatusItem(groupName string, context groupStatusBuildContext) UserGroupStatusItem {
 	modelSummaries := context.groupSummaries[groupName]
 	modelItems := make([]UserGroupModelStatusItem, 0, len(modelSummaries))
-	groupStatus := "unknown"
-	groupRequestCount := int64(0)
-	weightedSuccess := float64(0)
-	weightedRequests := int64(0)
 	for _, summary := range modelSummaries {
 		item := buildUserGroupModelStatusItem(groupName, summary, context)
-		if groupStatus == "unknown" || modelStatusWeight(item.Status) < modelStatusWeight(groupStatus) {
-			groupStatus = item.Status
-		}
-		groupRequestCount += item.RequestCount
-		if item.SuccessRate != nil && item.RequestCount > 0 { weightedSuccess += *item.SuccessRate * float64(item.RequestCount); weightedRequests += item.RequestCount }
 		modelItems = append(modelItems, item)
 	}
 	sort.Slice(modelItems, func(i, j int) bool {
@@ -125,22 +114,20 @@ func buildUserGroupStatusItem(groupName string, context groupStatusBuildContext)
 		}
 		return modelItems[i].Model < modelItems[j].Model
 	})
-	var successRate *float64
-	if weightedRequests > 0 { rate := weightedSuccess / float64(weightedRequests); successRate = &rate }
+	groupStatus, groupRequestCount, successRate := summarizeGroupModelRequestHealth(modelItems)
 	return UserGroupStatusItem{Group: groupName, DisplayName: context.groupDisplayNames[groupName], SourceType: context.groupSources[groupName], Status: groupStatus,
 		RequestCount: groupRequestCount, SuccessRate: successRate, CacheHitRate: context.groupCacheRates[groupName], Models: modelItems}
 }
 
 func buildUserGroupModelStatusItem(groupName string, summary *GroupModelStatusSummary, context groupStatusBuildContext) UserGroupModelStatusItem {
 	key := groupName + "::" + summary.Model
-	requestCount := context.requestCounts[key]
-	rate := context.successRates[key]
 	series := context.seriesByModel[key]
 	if len(series) == 0 {
-		series = emptyStatusSeries(24*60, 48, context.bucketSeconds)
+		series = emptyStatusSeries(6*60, 12, context.bucketSeconds)
 	}
+	rate, requestCount := latestNonEmptyGroupStatusBucket(series)
 	return UserGroupModelStatusItem{
-		Model: summary.Model, Status: resolveGroupModelStatus(summary.Status, rate, requestCount),
+		Model: summary.Model, Status: classifyGroupModelRequestHealth(rate, requestCount),
 		SuccessRate: rate, SampleHours: context.sampleWindowHours, SeriesWindow: context.seriesWindowHours,
 		BucketSeconds: context.bucketSeconds, RequestCount: requestCount, CacheHitRate: context.modelCacheRates[key], Series: series,
 	}

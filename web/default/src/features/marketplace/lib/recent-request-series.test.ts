@@ -25,7 +25,7 @@ describe('recent request series', () => {
   })
 
   test('derives the latest status when the API only provides bucket data', () => {
-    const status = resolveRecentRequestStatus('unknown', [
+    const status = resolveRecentRequestStatus([
       { ts: 1, success_rate: 100, request_count: 3 },
       { ts: 2, success_rate: 87, request_count: 5 },
       { ts: 3, success_rate: 0, request_count: 0 },

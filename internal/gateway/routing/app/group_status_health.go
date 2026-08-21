@@ -7,6 +7,7 @@ import (
 	"time"
 
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
+	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 )
 
@@ -57,7 +58,7 @@ func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segment
 }
 
 func shouldPreferLogHealth(windowSeconds, bucketSeconds int64) bool {
-	return windowSeconds <= 3600 && bucketSeconds < 3600
+	return windowSeconds <= 6*3600 && bucketSeconds <= 30*60
 }
 
 func fillGroupModelPerfHealth(
@@ -181,31 +182,57 @@ func applyGroupModelRates(rates map[string]*float64, requestCounts map[string]in
 
 func modelStatusWeight(status string) int {
 	switch status {
-	case "degraded":
+	case gatewaydomain.RequestHealthFailed:
 		return 0
-	case "slow":
+	case gatewaydomain.RequestHealthUnstable:
 		return 1
-	case "unknown":
+	case gatewaydomain.RequestHealthUnknown:
 		return 2
 	default:
 		return 3
 	}
 }
 
-func resolveGroupModelStatus(baseStatus string, successRate *float64, requestCount int64) string {
-	if baseStatus == "degraded" {
-		return "degraded"
-	}
+func classifyGroupModelRequestHealth(successRate *float64, requestCount int64) string {
 	if requestCount <= 0 || successRate == nil {
-		return "unknown"
+		return gatewaydomain.RequestHealthUnknown
 	}
-	if *successRate >= 85 {
-		return "healthy"
+	return gatewaydomain.ClassifyRequestHealth(*successRate, requestCount)
+}
+
+func summarizeGroupModelRequestHealth(items []UserGroupModelStatusItem) (string, int64, *float64) {
+	status := gatewaydomain.RequestHealthUnknown
+	requestCount := int64(0)
+	weightedSuccess := float64(0)
+	weightedRequests := int64(0)
+	for _, item := range items {
+		requestCount += item.RequestCount
+		if item.RequestCount <= 0 || item.SuccessRate == nil {
+			continue
+		}
+		if status == gatewaydomain.RequestHealthUnknown || modelStatusWeight(item.Status) < modelStatusWeight(status) {
+			status = item.Status
+		}
+		weightedSuccess += *item.SuccessRate * float64(item.RequestCount)
+		weightedRequests += item.RequestCount
 	}
-	if *successRate >= 30 {
-		return "slow"
+	if weightedRequests == 0 {
+		return status, requestCount, nil
 	}
-	return "degraded"
+	rate := weightedSuccess / float64(weightedRequests)
+	return status, requestCount, &rate
+}
+
+func latestNonEmptyGroupStatusBucket(series []UserGroupStatusBucket) (*float64, int64) {
+	for index := len(series) - 1; index >= 0; index-- {
+		bucket := series[index]
+		if bucket.RequestCount <= 0 || bucket.SuccessRate == nil {
+			continue
+		}
+		rate := *bucket.SuccessRate
+		return &rate, bucket.RequestCount
+	}
+	return nil, 0
 }
 
 func buildStatusSeries(windowStart int64, segmentCount int, bucketSeconds int64) []UserGroupStatusBucket {

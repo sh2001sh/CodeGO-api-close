@@ -16,6 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  classifyRequestHealth,
+  getRequestHealthLabel,
+} from '@/lib/request-health'
 import type {
   SidebarGroupAvailabilityStatus,
   SidebarGroupStatusBucket,
@@ -33,16 +37,16 @@ type StatusMeta = {
 }
 
 const STATUS_META: Record<SidebarGroupAvailabilityStatus, StatusMeta> = {
-  degraded: {
-    label: '故障',
+  failed: {
+    label: getRequestHealthLabel('failed'),
     accent: 'bg-destructive',
     accentText: 'text-destructive',
     dot: 'bg-destructive shadow-[0_0_0_4px_color-mix(in_oklch,var(--destructive)_14%,transparent)]',
     border: 'border-destructive/30',
     badgeBg: 'bg-destructive/10',
   },
-  slow: {
-    label: '缓慢',
+  unstable: {
+    label: getRequestHealthLabel('unstable'),
     accent: 'bg-warning',
     accentText: 'text-warning',
     dot: 'bg-warning shadow-[0_0_0_4px_color-mix(in_oklch,var(--warning)_16%,transparent)]',
@@ -50,7 +54,7 @@ const STATUS_META: Record<SidebarGroupAvailabilityStatus, StatusMeta> = {
     badgeBg: 'bg-warning/10',
   },
   unknown: {
-    label: '暂无近期请求',
+    label: getRequestHealthLabel('unknown'),
     accent: 'bg-muted-foreground',
     accentText: 'text-muted-foreground',
     dot: 'bg-muted-foreground shadow-[0_0_0_4px_color-mix(in_oklch,var(--muted-foreground)_16%,transparent)]',
@@ -58,7 +62,7 @@ const STATUS_META: Record<SidebarGroupAvailabilityStatus, StatusMeta> = {
     badgeBg: 'bg-muted',
   },
   healthy: {
-    label: '正常',
+    label: getRequestHealthLabel('healthy'),
     accent: 'bg-success',
     accentText: 'text-success',
     dot: 'bg-success shadow-[0_0_0_4px_color-mix(in_oklch,var(--success)_14%,transparent)]',
@@ -97,8 +101,8 @@ export function sortItems(items: SidebarGroupStatusItem[]) {
 
 function sortModels(models: SidebarGroupModelStatusItem[]) {
   const weight: Record<SidebarGroupAvailabilityStatus, number> = {
-    degraded: 0,
-    slow: 1,
+    failed: 0,
+    unstable: 1,
     unknown: 2,
     healthy: 3,
   }
@@ -130,8 +134,8 @@ export function summarizeGroups(items: SidebarGroupStatusItem[]) {
     groups: items.length,
     models: models.length,
     healthyModels: models.filter((item) => item.status === 'healthy').length,
-    slowModels: models.filter((item) => item.status === 'slow').length,
-    degradedModels: models.filter((item) => item.status === 'degraded').length,
+    unstableModels: models.filter((item) => item.status === 'unstable').length,
+    failedModels: models.filter((item) => item.status === 'failed').length,
     unknownModels: models.filter((item) => item.status === 'unknown').length,
     sampleWindow: models[0]?.sample_window ?? null,
   }
@@ -190,11 +194,5 @@ function sumModelRequests(models: SidebarGroupModelStatusItem[]) {
 }
 
 function successRateTone(successRate: number) {
-  if (successRate >= 85) {
-    return 'healthy' as const
-  }
-  if (successRate >= 30) {
-    return 'slow' as const
-  }
-  return 'critical' as const
+  return classifyRequestHealth(successRate, 1)
 }

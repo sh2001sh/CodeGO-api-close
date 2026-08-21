@@ -45,11 +45,11 @@ const groups: SidebarGroupStatusItem[] = [
   },
   {
     group: 'standard',
-    status: 'slow',
+    status: 'unstable',
     models: [
       {
         model: 'claude-active',
-        status: 'slow',
+        status: 'unstable',
         success_rate: 72,
         sample_window: 0.5,
         request_count: 40,

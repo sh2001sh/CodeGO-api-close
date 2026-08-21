@@ -21,10 +21,7 @@ import { Link } from '@tanstack/react-router'
 import { Activity, ArrowUpRight, HeartPulse } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  formatSampleWindowLabel,
-  getStatusMeta,
-} from '@/features/sidebar-group-status/presentation'
+import { getStatusMeta } from '@/features/sidebar-group-status/presentation'
 import { useSidebarGroupStatus } from '@/features/sidebar-group-status/use-sidebar-group-status'
 import {
   buildOverviewModelStatus,
@@ -111,11 +108,10 @@ function ModelRow(props: { row: OverviewModelStatusRow }) {
 
 function getHealthSummaryText(status: OverviewModelStatus) {
   if (status.activeModelCount === 0) return '暂无活跃请求样本'
-  return `${status.healthyModelCount}/${status.activeModelCount} 个活跃模型正常`
+  return `${status.healthyModelCount}/${status.activeModelCount} 个活跃模型稳定`
 }
 
 function HealthPanelHeader(props: { status: OverviewModelStatus }) {
-  const windowLabel = formatSampleWindowLabel(props.status.sampleWindow)
   return (
     <div className='flex flex-wrap items-start justify-between gap-3'>
       <div>
@@ -126,7 +122,7 @@ function HealthPanelHeader(props: { status: OverviewModelStatus }) {
           今天的主要状态
         </div>
         <div className='text-muted-foreground mt-1 text-xs'>
-          {windowLabel}成功率，按请求量展示主要模型
+          近 6 小时最新非空 30 分钟请求桶，按请求量展示主要模型
         </div>
       </div>
       <div className='flex flex-col items-end gap-2 text-xs'>

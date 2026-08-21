@@ -1,3 +1,4 @@
+import { classifyRequestHealth } from '@/lib/request-health'
 import type { MarketplaceGroup } from '../types'
 
 const RECENT_REQUEST_SEGMENTS = 12
@@ -28,16 +29,12 @@ export function normalizeRecentRequestSeries(
 
 /** Resolves the latest visible health state when an older API omits it. */
 export function resolveRecentRequestStatus(
-  status: MarketplaceGroup['latest_request_status'] | undefined,
   series: RecentRequestBucket[]
 ): MarketplaceGroup['latest_request_status'] {
-  if (status && status !== 'unknown') return status
   for (let index = series.length - 1; index >= 0; index--) {
     const bucket = series[index]
     if (bucket.request_count <= 0) continue
-    if (bucket.success_rate >= 90) return 'healthy'
-    if (bucket.success_rate >= 85) return 'unstable'
-    return 'failed'
+    return classifyRequestHealth(bucket.success_rate, bucket.request_count)
   }
   return 'unknown'
 }

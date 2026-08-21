@@ -27,6 +27,10 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 	if err != nil {
 		return nil, err
 	}
+	recentSeries, err := marketplaceRecentRequestSeries(groups, channels)
+	if err != nil {
+		return nil, err
+	}
 	selected, err := loadAutoRoutePoolSelection(ownerUserID)
 	if err != nil {
 		return nil, err
@@ -42,6 +46,10 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 		}
 		availability, score := autoRouteMetrics(group, snapshots[group.ID])
 		snapshot := snapshots[group.ID]
+		channelID := 0
+		if channel.InternalChannelID != nil {
+			channelID = *channel.InternalChannelID
+		}
 		items = append(items, AutoRoutePoolItem{
 			GroupID: group.ID, SourceType: marketplacedomain.SourceTypeMarketplaceUser, PublicSlug: group.PublicSlug,
 			SystemDisplayName:   marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID),
@@ -52,7 +60,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 			SuccessRate:         round2(snapshot.RawSuccessRate),
 			CacheHitRate:        round2(snapshot.CacheHitRate),
 			AvgLatencyMS:        round2(snapshot.AvgLatencyMs),
-			LatestRequestStatus: autoRouteRequestStatus(snapshot, group.LifecycleStatus),
+			LatestRequestStatus: latestRequestStatus(recentSeries[channelID]),
 			MetricsAvailable:    snapshot.RequestCount > 0,
 			RouteScore:          round2(score),
 			Observing:           snapshots[group.ID].Observing,
@@ -382,17 +390,4 @@ func autoRouteMetrics(group marketplaceschema.Group, snapshot marketplaceschema.
 	availability = math.Max(0.2, math.Min(availability, 1))
 	multiplier := math.Max(group.Multiplier, 0.000001)
 	return availability, multiplier / (availability * availability)
-}
-
-func autoRouteRequestStatus(snapshot marketplaceschema.RankingSnapshot, lifecycle string) string {
-	if snapshot.RequestCount == 0 {
-		return lifecycle
-	}
-	if snapshot.WilsonSuccessRate >= 95 {
-		return "healthy"
-	}
-	if snapshot.WilsonSuccessRate >= 80 {
-		return "unstable"
-	}
-	return "failed"
 }

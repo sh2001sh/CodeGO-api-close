@@ -36,8 +36,8 @@ export type OverviewModelStatus = {
 }
 
 const STATUS_WEIGHT: Record<SidebarGroupAvailabilityStatus, number> = {
-  degraded: 0,
-  slow: 1,
+  failed: 0,
+  unstable: 1,
   unknown: 2,
   healthy: 3,
 }

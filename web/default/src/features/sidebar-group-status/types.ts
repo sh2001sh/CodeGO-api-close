@@ -18,8 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 export type SidebarGroupAvailabilityStatus =
   | 'healthy'
-  | 'slow'
-  | 'degraded'
+  | 'unstable'
+  | 'failed'
   | 'unknown'
 
 export type SidebarGroupModelStatusItem = {

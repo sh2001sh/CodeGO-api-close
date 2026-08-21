@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -121,7 +122,7 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		E2ETTFTP50Ms: snapshot.E2ETTFTP50Ms, E2ETTFTP95Ms: snapshot.E2ETTFTP95Ms,
 		LatencySampleCount: snapshot.LatencySampleCount,
 		AvgLatencyMs:       snapshot.AvgLatencyMs, AvgTPS: snapshot.AvgTPS,
-		CacheHitRate: snapshot.CacheHitRate, LatestRequestStatus: latestRequestStatus(channel, recentSeries),
+		CacheHitRate: snapshot.CacheHitRate, LatestRequestStatus: latestRequestStatus(recentSeries),
 		RecentRequestSeries: recentSeries, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 		RequestCount: snapshot.RequestCount, MaxConcurrency: channel.MaxConcurrency,
 		UserMaxConcurrency:   channel.UserMaxConcurrency,
@@ -169,52 +170,15 @@ func latestModelVerificationAt(raw string) *time.Time {
 	return &latest
 }
 
-func latestRequestStatus(channel marketplaceschema.Channel, series []RecentRequestBucket) string {
-	latestBucketAt := time.Time{}
+func latestRequestStatus(series []RecentRequestBucket) string {
 	for index := len(series) - 1; index >= 0; index-- {
 		point := series[index]
 		if point.RequestCount <= 0 {
 			continue
 		}
-		latestBucketAt = time.Unix(point.Ts, 0)
-		if status, ok := newerChannelHealthStatus(channel, latestBucketAt); ok {
-			return status
-		}
-		if point.SuccessRate >= 90 {
-			return "healthy"
-		}
-		if point.SuccessRate >= 85 {
-			return "unstable"
-		}
-		return "failed"
+		return gatewaydomain.ClassifyRequestHealth(point.SuccessRate, point.RequestCount)
 	}
-	if status, ok := newerChannelHealthStatus(channel, latestBucketAt); ok {
-		return status
-	}
-	return "unknown"
-}
-
-func newerChannelHealthStatus(channel marketplaceschema.Channel, after time.Time) (string, bool) {
-	status := ""
-	checkedAt := time.Time{}
-	if channel.ConnectivityTestCheckedAt != nil && channel.ConnectivityTestCheckedAt.After(checkedAt) {
-		checkedAt = *channel.ConnectivityTestCheckedAt
-		status = channel.ConnectivityTestStatus
-	}
-	if channel.AutoProbeLastAt != nil && channel.AutoProbeLastAt.After(checkedAt) {
-		checkedAt = *channel.AutoProbeLastAt
-		status = channel.AutoProbeLastStatus
-	}
-	if checkedAt.IsZero() || !checkedAt.After(after) {
-		return "", false
-	}
-	if status == marketplacedomain.VerificationPassed {
-		return "healthy", true
-	}
-	if status == marketplacedomain.VerificationFailed {
-		return "failed", true
-	}
-	return "", false
+	return gatewaydomain.RequestHealthUnknown
 }
 
 func marketplaceHighlights(items []GroupListItem) GroupHighlights {

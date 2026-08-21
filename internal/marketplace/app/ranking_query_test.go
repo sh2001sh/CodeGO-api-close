@@ -285,17 +285,25 @@ func TestPublicDiscoveryExcludesSuspendedGroups(t *testing.T) {
 func TestLatestRequestStatusUsesMostRecentNonEmptyBucket(t *testing.T) {
 	t.Parallel()
 
-	channel := marketplaceschema.Channel{}
-	require.Equal(t, "unknown", latestRequestStatus(channel, nil))
-	require.Equal(t, "healthy", latestRequestStatus(channel, []RecentRequestBucket{{SuccessRate: 90, RequestCount: 3}}))
-	require.Equal(t, "unstable", latestRequestStatus(channel, []RecentRequestBucket{{SuccessRate: 89.99, RequestCount: 8}}))
-	require.Equal(t, "unstable", latestRequestStatus(channel, []RecentRequestBucket{{SuccessRate: 85, RequestCount: 8}}))
-	require.Equal(t, "failed", latestRequestStatus(channel, []RecentRequestBucket{{SuccessRate: 84.99, RequestCount: 8}}))
-	require.Equal(t, "failed", latestRequestStatus(channel, []RecentRequestBucket{
+	require.Equal(t, "unknown", latestRequestStatus(nil))
+	require.Equal(t, "healthy", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 90, RequestCount: 3}}))
+	require.Equal(t, "unstable", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 89.99, RequestCount: 8}}))
+	require.Equal(t, "unstable", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 85, RequestCount: 8}}))
+	require.Equal(t, "failed", latestRequestStatus([]RecentRequestBucket{{SuccessRate: 84.99, RequestCount: 8}}))
+	require.Equal(t, "failed", latestRequestStatus([]RecentRequestBucket{
 		{SuccessRate: 100, RequestCount: 4},
 		{SuccessRate: 70, RequestCount: 2},
 		{SuccessRate: 0, RequestCount: 0},
 	}))
+}
+
+func TestLatestRequestStatusIgnoresNewerProbeState(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "healthy", latestRequestStatus([]RecentRequestBucket{{
+		SuccessRate:  100,
+		RequestCount: 20,
+	}}))
 }
 
 func TestMarketplaceHighlightsUseAllFilteredItems(t *testing.T) {

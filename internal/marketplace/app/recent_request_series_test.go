@@ -66,6 +66,30 @@ func TestMarketplaceRecentRequestSeriesAggregatesAuditLogsIntoFixedWindow(t *tes
 	require.Len(t, filterNonEmptyRecentRequestBuckets(series), 2)
 }
 
+func TestBuildRecentRequestStatusesByGroupUsesLatestNonEmptyBucket(t *testing.T) {
+	t.Parallel()
+
+	statuses := buildRecentRequestStatusesByGroup([]string{"stable", "idle"}, []gatewaystore.GroupModelRequestBucket{
+		{GroupName: "stable", BucketIndex: 8, RequestCount: 5, SuccessCount: 2},
+		{GroupName: "stable", BucketIndex: 10, RequestCount: 5, SuccessCount: 5},
+	})
+
+	require.Equal(t, "healthy", statuses["stable"])
+	require.Equal(t, "unknown", statuses["idle"])
+}
+
+func TestBuildRecentRequestStatusesByGroupUsesSharedThresholds(t *testing.T) {
+	t.Parallel()
+
+	statuses := buildRecentRequestStatusesByGroup([]string{"unstable", "failed"}, []gatewaystore.GroupModelRequestBucket{
+		{GroupName: "unstable", BucketIndex: 11, RequestCount: 20, SuccessCount: 17},
+		{GroupName: "failed", BucketIndex: 11, RequestCount: 20, SuccessCount: 16},
+	})
+
+	require.Equal(t, "unstable", statuses["unstable"])
+	require.Equal(t, "failed", statuses["failed"])
+}
+
 func recentRequestBucketAt(t *testing.T, series []RecentRequestBucket, ts int64) RecentRequestBucket {
 	t.Helper()
 	for _, bucket := range series {

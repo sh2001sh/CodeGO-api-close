@@ -1,5 +1,10 @@
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
+import {
+  classifyRequestHealth,
+  getRequestHealthLabel,
+  type RequestHealthStatus,
+} from '@/lib/request-health'
 import { cn } from '@/lib/utils'
 import {
   Tooltip,
@@ -19,10 +24,7 @@ export function RecentRequestStrip(props: { group: MarketplaceGroup }) {
     props.group.recent_request_series,
     bucketSeconds
   )
-  const latestStatus = resolveRecentRequestStatus(
-    props.group.latest_request_status,
-    series
-  )
+  const latestStatus = resolveRecentRequestStatus(series)
   const threshold = t(
     '每个色块代表 30 分钟：90%（含）以上稳定，85%（含）至 90%（不含）波动，低于 85% 异常，灰色表示无请求'
   )
@@ -72,17 +74,14 @@ export function RecentRequestStrip(props: { group: MarketplaceGroup }) {
   )
 }
 
-function RequestStatus(props: { status: string; t: TFunction }) {
-  let label = props.t('暂无数据')
+function RequestStatus(props: { status: RequestHealthStatus; t: TFunction }) {
+  const label = props.t(getRequestHealthLabel(props.status))
   let tone = 'bg-muted text-muted-foreground'
   if (props.status === 'healthy') {
-    label = props.t('稳定')
     tone = 'bg-success/12 text-success'
   } else if (props.status === 'unstable') {
-    label = props.t('波动')
     tone = 'bg-warning/15 text-warning-foreground'
   } else if (props.status === 'failed') {
-    label = props.t('异常')
     tone = 'bg-destructive/12 text-destructive'
   }
   return (
@@ -99,10 +98,14 @@ function RequestStatus(props: { status: string; t: TFunction }) {
 }
 
 function bucketTone(bucket: MarketplaceGroup['recent_request_series'][number]) {
-  if (bucket.request_count <= 0) return 'bg-muted'
-  if (bucket.success_rate >= 90) return 'bg-success'
-  if (bucket.success_rate >= 85) return 'bg-warning'
-  return 'bg-destructive'
+  const status = classifyRequestHealth(
+    bucket.success_rate,
+    bucket.request_count
+  )
+  if (status === 'healthy') return 'bg-success'
+  if (status === 'unstable') return 'bg-warning'
+  if (status === 'failed') return 'bg-destructive'
+  return 'bg-muted'
 }
 
 function buildBucketSummary(

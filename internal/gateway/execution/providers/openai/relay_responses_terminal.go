@@ -13,14 +13,42 @@ import (
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 )
 
+func responsesTurnStateFromEvent(headers map[string]any) string {
+	for name, value := range headers {
+		if strings.EqualFold(strings.TrimSpace(name), "x-codex-turn-state") {
+			if text, ok := value.(string); ok {
+				return strings.TrimSpace(text)
+			}
+			return strings.TrimSpace(fmt.Sprint(value))
+		}
+	}
+	return ""
+}
+
 func hasResponsesStreamContent(streamResponse dto.ResponsesStreamResponse) bool {
 	if streamResponse.Delta != "" && strings.HasSuffix(streamResponse.Type, ".delta") {
 		return true
 	}
-	if streamResponse.Type != dto.ResponsesOutputTypeItemAdded || streamResponse.Item == nil {
+	if streamResponse.Item == nil {
+		return false
+	}
+	if streamResponse.Type != dto.ResponsesOutputTypeItemAdded &&
+		!(streamResponse.Type == dto.ResponsesOutputTypeItemDone && isResponsesCompactionItem(streamResponse.Item)) {
 		return false
 	}
 	return strings.TrimSpace(streamResponse.Item.Type) != ""
+}
+
+func isResponsesCompactionItem(item *dto.ResponsesOutput) bool {
+	if item == nil {
+		return false
+	}
+	switch strings.TrimSpace(item.Type) {
+	case "compaction", "compaction_summary":
+		return true
+	default:
+		return false
+	}
 }
 
 func hasResponsesCompletedContent(streamResponse dto.ResponsesStreamResponse) bool {

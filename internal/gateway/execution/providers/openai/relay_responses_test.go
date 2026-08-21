@@ -259,6 +259,51 @@ func TestOaiResponsesStreamHandlerFlushesRemoteCompactionOutput(t *testing.T) {
 	require.True(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
 }
 
+func TestOaiResponsesStreamHandlerForwardsCodexTurnState(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","delta":"ok"}`,
+		``,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "X-Codex-Turn-State": []string{"opaque-turn-state"}},
+	}
+
+	_, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{IsStream: true}, resp)
+	require.Nil(t, err)
+	require.Equal(t, "opaque-turn-state", recorder.Result().Header.Get("x-codex-turn-state"))
+}
+
+func TestOaiResponsesStreamHandlerAcceptsCompactionDoneWithoutCompletedOutput(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := strings.Join([]string{
+		`data: {"type":"response.output_item.done","item":{"id":"ctc_123","type":"compaction","status":"completed"}}`,
+		``,
+		`data: {"type":"response.completed","response":{"status":"completed"}}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+	require.Nil(t, err)
+	require.NotNil(t, usage)
+	require.Contains(t, recorder.Body.String(), `response.output_item.done`)
+}
+
 func TestOaiResponsesStreamHandlerDoesNotFailWhenLifecycleBufferOverflows(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	constant.StreamingTimeout = 30
@@ -415,7 +460,7 @@ func TestHasResponsesStreamContentRecognizesRemoteCompactionOutput(t *testing.T)
 		Type: dto.ResponsesOutputTypeItemAdded,
 		Item: &dto.ResponsesOutput{Type: "compaction"},
 	}))
-	require.False(t, hasResponsesStreamContent(dto.ResponsesStreamResponse{
+	require.True(t, hasResponsesStreamContent(dto.ResponsesStreamResponse{
 		Type: dto.ResponsesOutputTypeItemDone,
 		Item: &dto.ResponsesOutput{Type: "compaction"},
 	}))

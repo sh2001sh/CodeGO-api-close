@@ -46,6 +46,12 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			Model:              req.Model,
 			Input:              req.Input,
 			Instructions:       req.Instructions,
+			Tools:              req.Tools,
+			ParallelToolCalls:  normalizedCompactionParallelToolCalls(req.ParallelToolCalls),
+			Reasoning:          req.Reasoning,
+			ServiceTier:        req.ServiceTier,
+			PromptCacheKey:     req.PromptCacheKey,
+			Text:               req.Text,
 			PreviousResponseID: req.PreviousResponseID,
 		}
 	default:
@@ -232,6 +238,17 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		billingapp.PostTextConsumeQuota(c, info, usageDTO, nil)
 	}
 	return nil
+}
+
+func normalizedCompactionParallelToolCalls(raw json.RawMessage) json.RawMessage {
+	// Codex's canonical CompactionInput serializes this required boolean even
+	// when the client omits it. Supplying explicit false keeps v1 compaction
+	// requests schema-complete and avoids provider-specific defaults changing
+	// compaction semantics.
+	if len(raw) == 0 || string(raw) == "null" {
+		return json.RawMessage("false")
+	}
+	return raw
 }
 
 // tryResponsesOriginalBodyFastPath returns the already-decoded request body

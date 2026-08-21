@@ -23,6 +23,7 @@ func TestConvertOpenAIResponsesRequestPreservesRemoteCompactionV2Fields(t *testi
 	request := dto.OpenAIResponsesRequest{
 		Model:           "gpt-5",
 		Input:           json.RawMessage(`[{"type":"compaction_trigger"}]`),
+		ClientMetadata:  json.RawMessage(`{"turn_id":"turn-1","source":"codex"}`),
 		Store:           json.RawMessage("true"),
 		PromptCacheKey:  json.RawMessage(`"cache-1"`),
 		MaxOutputTokens: &maxOutputTokens,
@@ -36,6 +37,7 @@ func TestConvertOpenAIResponsesRequestPreservesRemoteCompactionV2Fields(t *testi
 	result, ok := converted.(dto.OpenAIResponsesRequest)
 	require.True(t, ok)
 	require.JSONEq(t, "true", string(result.Store))
+	require.JSONEq(t, `{"turn_id":"turn-1","source":"codex"}`, string(result.ClientMetadata))
 	require.JSONEq(t, `"cache-1"`, string(result.PromptCacheKey))
 	require.Equal(t, &maxOutputTokens, result.MaxOutputTokens)
 	require.Equal(t, &temperature, result.Temperature)

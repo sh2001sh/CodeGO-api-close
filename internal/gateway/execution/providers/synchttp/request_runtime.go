@@ -42,6 +42,13 @@ func SetupAPIRequestHeader(info *relaycommon.RelayInfo, c *gin.Context, req *htt
 	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
 		req.Set("X-Codex-Beta-Features", c.Request.Header.Get("X-Codex-Beta-Features"))
 	}
+	// Codex mints an opaque turn-state blob on a response and expects the
+	// client to echo it on subsequent requests in the same turn. Preserve it
+	// independently of generic header overrides so compaction/continuations
+	// keep the upstream conversation state.
+	if turnState := strings.TrimSpace(c.Request.Header.Get("x-codex-turn-state")); turnState != "" {
+		req.Set("x-codex-turn-state", turnState)
+	}
 	if info.IsStream && c.Request.Header.Get("Accept") == "" {
 		req.Set("Accept", "text/event-stream")
 	}
@@ -266,7 +273,7 @@ func DoAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 	if platformconfig.DebugEnabled {
 		println("fullRequestURL:", fullRequestURL)
 	}
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
+	req, err := http.NewRequestWithContext(requestContext(c), c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
@@ -322,7 +329,7 @@ func DoFormAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayI
 	if platformconfig.DebugEnabled {
 		println("fullRequestURL:", fullRequestURL)
 	}
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
+	req, err := http.NewRequestWithContext(requestContext(c), c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
@@ -368,9 +375,21 @@ func DoWSSRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 	}
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 
-	targetConn, _, err := websocket.DefaultDialer.Dial(fullRequestURL, targetHeader)
+	targetConn, _, err := websocket.DefaultDialer.DialContext(requestContext(c), fullRequestURL, targetHeader)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed to %s: %w", fullRequestURL, err)
 	}
 	return targetConn, nil
+}
+
+// requestContext binds a synchronous upstream attempt to the incoming
+// request.  Without this, net/http continues writing/reading an upstream
+// request after the client has cancelled, leaving a charged reservation and a
+// busy route slot alive until the upstream timeout.  Background Responses
+// workers use their own request context and do not pass through this helper.
+func requestContext(c *gin.Context) context.Context {
+	if c != nil && c.Request != nil {
+		return c.Request.Context()
+	}
+	return context.Background()
 }

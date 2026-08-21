@@ -351,6 +351,11 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 		case <-c.Request.Context().Done():
 			MarkClientGone(c)
 			info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
+			// The request context is also bound to synchronous upstream attempts.
+			// Close the response body explicitly so a scanner blocked in Read exits
+			// immediately on client cancellation instead of waiting for the upstream
+			// idle/header timeout.
+			closeTimedOutStream(resp)
 			stop(true)
 			monitoring = false
 		}

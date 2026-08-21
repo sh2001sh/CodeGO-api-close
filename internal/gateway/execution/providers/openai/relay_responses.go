@@ -93,6 +93,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	defer platformhttpx.CloseResponseBodyGracefully(resp)
+	if turnState := strings.TrimSpace(resp.Header.Get("x-codex-turn-state")); turnState != "" {
+		c.Writer.Header().Set("x-codex-turn-state", turnState)
+	}
 	helper.MarkAttemptConnected(c)
 	// Responses streams often begin with lifecycle events before model content.
 	// A disconnect in that phase can be retried without duplicating output.
@@ -109,6 +112,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
 	var sawSemanticOutput atomic.Bool
+	var sawCompactionOutput atomic.Bool
 	var sawResponseCompleted atomic.Bool
 	var firstOutputTimedOut atomic.Bool
 	var terminalFailure error
@@ -146,7 +150,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sr.Error(err)
 			return
 		}
+		if turnState := responsesTurnStateFromEvent(streamResponse.Headers); turnState != "" {
+			c.Writer.Header().Set("x-codex-turn-state", turnState)
+		}
 		semanticOutput := hasResponsesStreamContent(streamResponse)
+		if streamResponse.Type == dto.ResponsesOutputTypeItemDone && isResponsesCompactionItem(streamResponse.Item) {
+			sawCompactionOutput.Store(true)
+		}
 		textOutput := isResponsesTextDelta(streamResponse)
 		if isResponsesFailureEvent(streamResponse) {
 			terminalFailure = responsesFailureError(streamResponse)
@@ -188,7 +198,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				return
 			}
 		} else if streamResponse.Type == "response.completed" {
-			if !sawSemanticOutput.Load() && !hasResponsesCompletedContent(streamResponse) {
+			if !sawSemanticOutput.Load() && !sawCompactionOutput.Load() && !hasResponsesCompletedContent(streamResponse) {
 				terminalFailure = errors.New("upstream returned an empty response.completed event")
 				sr.Stop(terminalFailure)
 				return

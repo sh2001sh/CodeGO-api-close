@@ -95,3 +95,37 @@ func TestRemoteCompactionCapabilityKeepsAuthenticationAndTransientFailuresRetrya
 	capabilities.RemoteCompactionV1.Status = gatewayschema.CapabilityStatusUnsupported
 	require.False(t, capabilities.AllowsRemoteCompactionV1For("", 0))
 }
+
+func TestParseRemoteCompactionV2ProbeRequiresCompactionAndCompleted(t *testing.T) {
+	valid := []byte("data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"compaction\"}}\n\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"output\":[]}}\n\n")
+	hasCompaction, hasCompleted := parseRemoteCompactionV2Probe(valid)
+	require.True(t, hasCompaction)
+	require.True(t, hasCompleted)
+
+	missingItem := []byte("data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"output\":[]}}\n\n")
+	hasCompaction, hasCompleted = parseRemoteCompactionV2Probe(missingItem)
+	require.False(t, hasCompaction)
+	require.True(t, hasCompleted)
+
+	missingCompleted := []byte("data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"compaction\"}}\n\n")
+	hasCompaction, hasCompleted = parseRemoteCompactionV2Probe(missingCompleted)
+	require.True(t, hasCompaction)
+	require.False(t, hasCompleted)
+}
+
+func TestParseRemoteCompactionV2ProbeAcceptsCompactionInCompletedOutput(t *testing.T) {
+	raw := []byte("data: {\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"compaction\"}]}}\n\n")
+	hasCompaction, hasCompleted := parseRemoteCompactionV2Probe(raw)
+	require.True(t, hasCompaction)
+	require.True(t, hasCompleted)
+}
+
+func TestParseRemoteCompactionV2ProbeDoesNotTreatAddedOnlyAsComplete(t *testing.T) {
+	raw := []byte("data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"compaction\"}}\n\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"output\":[]}}\n\n")
+	hasCompaction, hasCompleted := parseRemoteCompactionV2Probe(raw)
+	require.False(t, hasCompaction)
+	require.True(t, hasCompleted)
+}

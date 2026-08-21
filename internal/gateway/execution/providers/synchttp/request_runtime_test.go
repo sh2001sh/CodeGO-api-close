@@ -1,12 +1,14 @@
 package synchttp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +20,44 @@ import (
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/stretchr/testify/require"
 )
+
+type contextAwareRequestAdaptor struct {
+	url string
+}
+
+func (a contextAwareRequestAdaptor) GetRequestURL(_ *relaycommon.RelayInfo) (string, error) {
+	return a.url, nil
+}
+
+func (contextAwareRequestAdaptor) SetupRequestHeader(_ *gin.Context, _ *http.Header, _ *relaycommon.RelayInfo) error {
+	return nil
+}
+
+func TestDoAPIRequestPropagatesClientCancellationToUpstream(t *testing.T) {
+	started := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		started <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	requestCtx, cancel := context.WithCancel(context.Background())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(requestCtx)
+	cancel()
+
+	_, err := DoAPIRequest(contextAwareRequestAdaptor{url: server.URL}, ctx,
+		&relaycommon.RelayInfo{RelayMode: gatewaycontract.RelayModeResponses, ChannelMeta: &relaycommon.ChannelMeta{}},
+		strings.NewReader(`{"model":"gpt-5","input":"hello"}`),
+	)
+	require.Error(t, err)
+	select {
+	case <-started:
+		t.Fatal("cancelled request reached upstream")
+	default:
+	}
+}
 
 func TestApplyReplayableRequestBodySetsIndependentGetBody(t *testing.T) {
 	storage, err := platformhttpx.CreateBodyStorage([]byte("request-body"))
@@ -142,4 +182,16 @@ func TestSetupAPIRequestHeaderForwardsRemoteCompactionFeature(t *testing.T) {
 	SetupAPIRequestHeader(&relaycommon.RelayInfo{RelayMode: gatewaycontract.RelayModeResponses}, ctx, &headers)
 
 	require.Equal(t, "foo, remote_compaction_v2", headers.Get("X-Codex-Beta-Features"))
+}
+
+func TestSetupAPIRequestHeaderForwardsCodexTurnState(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Request.Header.Set("x-codex-turn-state", "opaque-turn-state")
+
+	headers := http.Header{}
+	SetupAPIRequestHeader(&relaycommon.RelayInfo{RelayMode: gatewaycontract.RelayModeResponses}, ctx, &headers)
+
+	require.Equal(t, "opaque-turn-state", headers.Get("x-codex-turn-state"))
 }

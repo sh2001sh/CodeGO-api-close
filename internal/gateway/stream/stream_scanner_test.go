@@ -99,6 +99,45 @@ func TestScanResponseMarksMaximumDurationSeparatelyFromIdleTimeout(t *testing.T)
 	require.True(t, relaycommon.IsLocalStreamMaxDurationExceeded(context))
 }
 
+func TestScanResponseClosesUpstreamOnClientCancellation(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldFirstByteTimeout := constant.StreamingFirstByteTimeout
+	oldMaxDuration := constant.StreamingMaxDuration
+	constant.StreamingTimeout = 30
+	constant.StreamingFirstByteTimeout = 0
+	constant.StreamingMaxDuration = 0
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingFirstByteTimeout = oldFirstByteTimeout
+		constant.StreamingMaxDuration = oldMaxDuration
+	})
+
+	gin.SetMode(gin.TestMode)
+	ginContext, _ := gin.CreateTestContext(httptest.NewRecorder())
+	requestContext, cancel := contextWithCancel(context.Background())
+	ginContext.Request = httptest.NewRequest(http.MethodPost, "http://example.test/v1/responses", nil).WithContext(requestContext)
+	body := &blockingReader{closed: make(chan struct{})}
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+	done := make(chan struct{})
+	go func() {
+		ScanResponse(ginContext, &http.Response{Body: body}, info, func(string, *Result) {})
+		close(done)
+	}()
+
+	cancel()
+	select {
+	case <-body.closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("upstream response body was not closed after client cancellation")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream scanner did not stop after client cancellation")
+	}
+	require.Equal(t, gatewaycontract.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+}
+
 func TestScanResponseEndsAdaptiveLongContextWhenSemanticProgressStops(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	oldFirstByteTimeout := constant.StreamingFirstByteTimeout

@@ -153,3 +153,9 @@ func TestHasRemoteCompactionTrigger(t *testing.T) {
 	require.True(t, hasRemoteCompactionTrigger(json.RawMessage(`[{"type":"message"},{"type":"compaction_trigger"}]`)))
 	require.False(t, hasRemoteCompactionTrigger(json.RawMessage(`[{"type":"message"}]`)))
 }
+
+func TestNormalizedCompactionParallelToolCallsDefaultsRequiredBoolean(t *testing.T) {
+	require.JSONEq(t, "false", string(normalizedCompactionParallelToolCalls(nil)))
+	require.JSONEq(t, "false", string(normalizedCompactionParallelToolCalls(json.RawMessage("null"))))
+	require.JSONEq(t, "true", string(normalizedCompactionParallelToolCalls(json.RawMessage("true"))))
+}

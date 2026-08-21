@@ -26,18 +26,22 @@ const (
 	routePoolAffinityTTL        = 3 * time.Minute
 	routePoolSwitchImprovement  = 0.15
 	routePoolLatencyCostPremium = 0.15
+	// Unknown compaction capabilities remain usable during backfill, but a
+	// confirmed-capable route must win whenever one is available.
+	routePoolUnknownCompactionPenalty = 1_000_000
 )
 
 type scoredRoutePoolCandidate struct {
-	channel         *gatewayschema.Channel
-	score           float64
-	probe           bool
-	cost            float64
-	health          gatewayruntime.ChannelHealth
-	faultDomain     string
-	channelProbe    bool
-	credentialProbe bool
-	domainProbe     bool
+	channel                  *gatewayschema.Channel
+	score                    float64
+	compactionCapabilityRank int
+	probe                    bool
+	cost                     float64
+	health                   gatewayruntime.ChannelHealth
+	faultDomain              string
+	channelProbe             bool
+	credentialProbe          bool
+	domainProbe              bool
 }
 
 // RoutePoolSelection is request-local and consumed only by settlement code.
@@ -64,6 +68,7 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 	now := time.Now()
 	requestType := gatewayruntime.RequestTypeFromContext(c)
 	healthy, probes, lastResortProbes := buildRoutePoolCandidateSets(c, candidates, modelName, requestType, now)
+	healthy, probes, lastResortProbes = preferRemoteCompactionCandidates(healthy, probes, lastResortProbes)
 
 	applyRoutePoolTTFTPenalty(healthy, modelName, requestType)
 	applyRoutePoolTTFTPenalty(probes, modelName, requestType)

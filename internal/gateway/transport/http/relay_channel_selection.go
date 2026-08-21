@@ -21,6 +21,7 @@ import (
 var selectUnifiedAutoRetryChannel = gatewayroutingapp.CacheGetRandomSatisfiedChannel
 
 func getChannel(c *gin.Context, info *gatewayruntime.RelayInfo, retryParam *gatewayroutingapp.RetryParam) (*gatewayschema.Channel, *types.NewAPIError) {
+	gatewayroutingapp.SetRemoteCompactionRouteRequirement(c, info)
 	if pin, pinned := routepin.FromContext(c); pinned {
 		return loadPinnedChannel(c, info, pin.ChannelID)
 	}

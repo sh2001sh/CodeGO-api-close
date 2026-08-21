@@ -113,6 +113,8 @@ func getHealthySatisfiedChannelWithMode(c *gin.Context, group string, modelName 
 		return channel, err
 	}
 	var degradedCandidate *gatewayschema.Channel
+	var unknownHealthyCandidate *gatewayschema.Channel
+	var unknownDegradedCandidate *gatewayschema.Channel
 	seenPriorities := make(map[int64]struct{})
 	for priorityRetry := retry; priorityRetry < retry+16; priorityRetry++ {
 		healthy, degraded, priority, found, err := getHealthySatisfiedChannelAtPriority(c, group, modelName, priorityRetry)
@@ -127,11 +129,27 @@ func getHealthySatisfiedChannelWithMode(c *gin.Context, group string, modelName 
 		}
 		seenPriorities[priority] = struct{}{}
 		if healthy != nil {
-			return healthy, nil
+			if remoteCompactionCapabilityRank(c, healthy, modelName) == 0 {
+				return healthy, nil
+			}
+			if unknownHealthyCandidate == nil {
+				unknownHealthyCandidate = healthy
+			}
+			continue
 		}
-		if degradedCandidate == nil && degraded != nil {
-			degradedCandidate = degraded
+		if degraded != nil {
+			if remoteCompactionCapabilityRank(c, degraded, modelName) == 0 && degradedCandidate == nil {
+				degradedCandidate = degraded
+			} else if unknownDegradedCandidate == nil {
+				unknownDegradedCandidate = degraded
+			}
 		}
+	}
+	if unknownHealthyCandidate != nil {
+		return unknownHealthyCandidate, nil
+	}
+	if degradedCandidate == nil {
+		degradedCandidate = unknownDegradedCandidate
 	}
 	if degradedCandidate != nil {
 		if reserveLegacyCandidateProbe(c, degradedCandidate, modelName, routePoolProbeRecovery) {
@@ -154,6 +172,10 @@ func selectLegacyLastResortChannel(c *gin.Context, group, modelName string, retr
 	for priorityRetry := retry; priorityRetry < retry+16; priorityRetry++ {
 		channel, err := selectRandomSatisfiedChannel(group, modelName, priorityRetry)
 		if err != nil || channel == nil || channelAlreadyUsed(c, channel.Id) || channelExcludedByScope(c, channel) {
+			continue
+		}
+		if remoteCompactionCapabilityRank(c, channel, modelName) < 0 {
+			gatewayruntime.ExcludeRouteDecisionCandidate(c, "remote_compaction_unsupported")
 			continue
 		}
 		now := time.Now()
@@ -180,6 +202,8 @@ func selectLegacyLastResortChannel(c *gin.Context, group, modelName string, retr
 func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelName string, retry int) (healthy *gatewayschema.Channel, degraded *gatewayschema.Channel, priority int64, found bool, err error) {
 	const maxSelectionAttempts = 16
 	requestType := gatewayruntime.RequestTypeFromContext(c)
+	var unknownHealthy *gatewayschema.Channel
+	var unknownDegraded *gatewayschema.Channel
 	for attempt := 0; attempt < maxSelectionAttempts; attempt++ {
 		channel, err := selectRandomSatisfiedChannel(group, modelName, retry)
 		if err != nil || channel == nil {
@@ -189,6 +213,11 @@ func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelNam
 			continue
 		}
 		if channelExcludedByScope(c, channel) {
+			continue
+		}
+		capabilityRank := remoteCompactionCapabilityRank(c, channel, modelName)
+		if capabilityRank < 0 {
+			gatewayruntime.ExcludeRouteDecisionCandidate(c, "remote_compaction_unsupported")
 			continue
 		}
 		faultDomain := gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL())
@@ -207,21 +236,36 @@ func getHealthySatisfiedChannelAtPriority(c *gin.Context, group string, modelNam
 		}
 		if healthFound && (health.State == gatewayruntime.ChannelHealthCooling || health.State == gatewayruntime.ChannelHealthHalfOpen) ||
 			domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen) {
-			if degraded == nil {
+			if capabilityRank == 0 && degraded == nil {
 				// When legacy routing is still in use, an expired circuit may be
 				// selected only after all healthy candidates are exhausted. Its
 				// next successes are counted as recovery probes by channel health.
 				degraded = channel
+			} else if capabilityRank > 0 && unknownDegraded == nil {
+				unknownDegraded = channel
 			}
 			continue
 		}
 		if healthFound && health.State == gatewayruntime.ChannelHealthDegraded {
-			if degraded == nil {
+			if capabilityRank == 0 && degraded == nil {
 				degraded = channel
+			} else if capabilityRank > 0 && unknownDegraded == nil {
+				unknownDegraded = channel
 			}
 			continue
 		}
-		return channel, degraded, priority, true, nil
+		if capabilityRank == 0 {
+			return channel, degraded, priority, true, nil
+		}
+		if unknownHealthy == nil {
+			unknownHealthy = channel
+		}
+	}
+	if unknownHealthy != nil {
+		return unknownHealthy, degraded, priority, found, nil
+	}
+	if degraded == nil {
+		degraded = unknownDegraded
 	}
 	return nil, degraded, priority, found, nil
 }

@@ -41,6 +41,35 @@ func buildRoutePoolCandidateSets(
 	return healthy, probes, lastResort
 }
 
+func preferRemoteCompactionCandidates(
+	healthy, probes, lastResort []scoredRoutePoolCandidate,
+) ([]scoredRoutePoolCandidate, []scoredRoutePoolCandidate, []scoredRoutePoolCandidate) {
+	if len(healthy)+len(probes)+len(lastResort) == 0 {
+		return healthy, probes, lastResort
+	}
+	hasSupported := func(candidates []scoredRoutePoolCandidate) bool {
+		for _, candidate := range candidates {
+			if candidate.compactionCapabilityRank == 0 {
+				return true
+			}
+		}
+		return false
+	}
+	if hasSupported(healthy) || hasSupported(probes) || hasSupported(lastResort) {
+		filter := func(candidates []scoredRoutePoolCandidate) []scoredRoutePoolCandidate {
+			filtered := make([]scoredRoutePoolCandidate, 0, len(candidates))
+			for _, candidate := range candidates {
+				if candidate.compactionCapabilityRank == 0 {
+					filtered = append(filtered, candidate)
+				}
+			}
+			return filtered
+		}
+		return filter(healthy), filter(probes), filter(lastResort)
+	}
+	return healthy, probes, lastResort
+}
+
 func classifyRoutePoolCandidate(
 	c *gin.Context,
 	candidate gatewaystore.RoutePoolCandidate,
@@ -53,6 +82,11 @@ func classifyRoutePoolCandidate(
 		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
 	}
 	if channelAlreadyUsed(c, candidate.Channel.Id) {
+		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
+	}
+	compactionRank := remoteCompactionCapabilityRank(c, candidate.Channel, modelName)
+	if compactionRank < 0 {
+		gatewayruntime.ExcludeRouteDecisionCandidate(c, "remote_compaction_unsupported")
 		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
 	}
 	faultDomain := routePoolFaultDomain(candidate.Member, candidate.Channel)
@@ -69,8 +103,12 @@ func classifyRoutePoolCandidate(
 	domainHealth, domainFound := routePoolFaultDomainHealth(c, faultDomain, modelName, requestType)
 	channelCooling := activeRoutePoolCircuit(health, found, now)
 	domainCooling := activeRoutePoolCircuit(domainHealth, domainFound, now)
+	score := effectiveRoutePoolCost(candidate.Member, modelName, health)
+	if compactionRank > 0 {
+		score += routePoolUnknownCompactionPenalty
+	}
 	scored := scoredRoutePoolCandidate{
-		channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health),
+		channel: candidate.Channel, score: score, compactionCapabilityRank: compactionRank,
 		cost: routePoolModelCost(candidate.Member, modelName), health: health, faultDomain: faultDomain,
 	}
 	if channelCooling || domainCooling {

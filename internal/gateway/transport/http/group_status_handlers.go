@@ -13,7 +13,11 @@ func GetUserGroupStatus(c *gin.Context) {
 
 	data, err := gatewayroutingapp.BuildUserGroupStatus(userID, hasUser)
 	if err != nil {
-		c.JSON(stdhttp.StatusInternalServerError, gin.H{
+		// Group status is a read-only dashboard. A transient database/control
+		// service outage should be retried by the client instead of being
+		// reported as a permanent application failure.
+		c.Header("Retry-After", "1")
+		c.JSON(stdhttp.StatusServiceUnavailable, gin.H{
 			"success": false,
 			"message": err.Error(),
 		})

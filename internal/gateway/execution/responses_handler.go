@@ -2,6 +2,7 @@ package execution
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	appconstant "github.com/sh2001sh/new-api/constant"
@@ -63,6 +64,12 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	if err := relaycommon.ModelMappedHelper(c, info, request); err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
+	if info.ChannelMeta != nil && info.RelayMode == gatewaycontract.RelayModeResponsesCompact && !info.ResponsesCapabilities.AllowsRemoteCompactionV1For(request.Model, info.ChannelMultiKeyIndex) {
+		return types.NewErrorWithStatusCode(fmt.Errorf("remote Responses compaction v1 is unsupported by channel %d", info.ChannelId), types.ErrorCodeDoRequestFailed, http.StatusServiceUnavailable)
+	}
+	if info.ChannelMeta != nil && info.RelayMode == gatewaycontract.RelayModeResponses && gatewaycontract.HasRemoteCompactionV2(c.Request.Header) && hasRemoteCompactionTrigger(responsesReq.Input) && !info.ResponsesCapabilities.AllowsRemoteCompactionV2For(request.Model, info.ChannelMultiKeyIndex) {
+		return types.NewErrorWithStatusCode(fmt.Errorf("remote Responses compaction v2 is unsupported by channel %d", info.ChannelId), types.ErrorCodeDoRequestFailed, http.StatusServiceUnavailable)
+	}
 
 	adaptor := NewSyncAdaptor(info.ApiType)
 	if adaptor == nil {
@@ -89,13 +96,20 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 
 	var requestBody io.Reader
 	var outboundJSON []byte
-	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
+	preserveRemoteCompactionV2Body := false
+	nativeRemoteCompactionV2 := info.RelayMode == gatewaycontract.RelayModeResponses && gatewaycontract.HasRemoteCompactionV2(c.Request.Header) && hasRemoteCompactionTrigger(responsesReq.Input)
+	if nativeRemoteCompactionV2 {
 		body, size, err := buildRemoteCompactionV2Body(c, responsesReq.Model, request.Model)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		info.UpstreamRequestBodySize = size
-		requestBody = body
+		outboundJSON, err = io.ReadAll(body)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+		}
+		requestBody = bytes.NewReader(outboundJSON)
+		preserveRemoteCompactionV2Body = true
 	} else if originalBodyFastPath {
 		outboundJSON = originalBody
 		if info.FirstByteTrace != nil {
@@ -147,7 +161,16 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		outboundJSON = jsonData
 	}
 	if len(outboundJSON) > 0 {
-		if shouldNormalizeResponsesCompatibilityBody(outboundJSON) {
+		if info.RelayMode == gatewaycontract.RelayModeResponsesCompact {
+			normalized, changed, err := normalizeRemoteCompactionV1Body(outboundJSON)
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			if changed {
+				outboundJSON = normalized
+			}
+		}
+		if !preserveRemoteCompactionV2Body && shouldNormalizeResponsesCompatibilityBody(outboundJSON) {
 			normalized, changed, err := normalizeResponsesCompatibilityBody(outboundJSON)
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
@@ -220,7 +243,7 @@ func tryResponsesOriginalBodyFastPath(c *gin.Context, info *relaycommon.RelayInf
 	if c == nil || c.Request == nil || info == nil || info.ChannelMeta == nil || info.RelayMode != gatewaycontract.RelayModeResponses || info.IsModelMapped || len(info.ParamOverride) > 0 {
 		return nil, false, nil
 	}
-	if shouldBridgeBeforeNative(info, bridgeResponsesToChat) || gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
+	if shouldBridgeBeforeNative(info, bridgeResponsesToChat) {
 		return nil, false, nil
 	}
 	if info.OriginModelName == "" || (info.UpstreamModelName != "" && info.UpstreamModelName != info.OriginModelName) {
@@ -246,6 +269,9 @@ func tryResponsesOriginalBodyFastPath(c *gin.Context, info *relaycommon.RelayInf
 		if err != nil {
 			return nil, false, err
 		}
+	}
+	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) && hasRemoteCompactionTrigger(json.RawMessage(body)) {
+		return nil, false, nil
 	}
 	if shouldNormalizeResponsesCompatibilityBody(body) || responsesBodyContainsDisabledFields(body, info.ChannelOtherSettings) {
 		return nil, false, nil
@@ -282,6 +308,18 @@ func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo,
 		return httpResp, nil
 	}
 	apiErr := platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+	if retryJSON, ok := normalizePreviousResponseIDRetry(jsonBody, apiErr); ok {
+		logger.LogInfo(c, "retrying Responses request without stale previous_response_id")
+		resp, err = doResponsesRequest(c, info, adaptor, bytes.NewReader(retryJSON), retryJSON)
+		if err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+		}
+		httpResp, _ = resp.(*http.Response)
+		if httpResp == nil || httpResp.StatusCode == http.StatusOK {
+			return httpResp, nil
+		}
+		return nil, platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+	}
 	retryJSON, field, ok := normalizeRejectedResponsesField(jsonBody, apiErr)
 	if !ok {
 		return nil, apiErr
@@ -296,6 +334,40 @@ func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo,
 		return httpResp, nil
 	}
 	return nil, platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+}
+
+func normalizePreviousResponseIDRetry(jsonBody []byte, apiErr *types.NewAPIError) ([]byte, bool) {
+	if apiErr == nil || len(jsonBody) == 0 {
+		return nil, false
+	}
+	oai := apiErr.ToOpenAIError()
+	values := []string{fmt.Sprint(oai.Code), oai.Type, oai.Message}
+	matched := false
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if strings.Contains(value, "previous_response_not_found") || strings.Contains(value, "previous response not found") || strings.Contains(value, "previous response is not available") {
+			matched = true
+			break
+		}
+	}
+	if !matched || !bytes.Contains(jsonBody, []byte(`"previous_response_id"`)) {
+		return nil, false
+	}
+	var payload map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(jsonBody))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
+		return nil, false
+	}
+	if _, exists := payload["previous_response_id"]; !exists {
+		return nil, false
+	}
+	delete(payload, "previous_response_id")
+	retry, err := json.Marshal(payload)
+	if err != nil {
+		return nil, false
+	}
+	return retry, true
 }
 
 func doResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, requestBody io.Reader, jsonBody []byte) (any, error) {

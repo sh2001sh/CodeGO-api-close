@@ -2,6 +2,7 @@ package execution
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
+	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,4 +126,30 @@ func TestBuildRemoteCompactionV2BodyMapsOnlyModel(t *testing.T) {
 	actual, err := io.ReadAll(body)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"model":"gpt-5-upstream","stream":true,"store":true,"prompt_cache_key":"cache-1"}`, string(actual))
+}
+
+func TestNormalizeRemoteCompactionV2BodyMovesTriggerToEndAndForcesStream(t *testing.T) {
+	body, changed, err := normalizeRemoteCompactionV2Body([]byte(`{"model":"gpt-5","stream":false,"input":[{"type":"compaction_trigger"},{"type":"message","role":"user","content":"tail"},{"type":"compaction_trigger"}]}`), "gpt-5", "gpt-5")
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{"model":"gpt-5","stream":true,"input":[{"type":"message","role":"user","content":"tail"},{"type":"compaction_trigger"}]}`, string(body))
+}
+
+func TestNormalizeRemoteCompactionV1BodyRemovesStreamOnly(t *testing.T) {
+	body, changed, err := normalizeRemoteCompactionV1Body([]byte(`{"model":"gpt-5","stream":true,"input":"history","previous_response_id":"resp_1"}`))
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{"model":"gpt-5","input":"history","previous_response_id":"resp_1"}`, string(body))
+}
+
+func TestNormalizePreviousResponseIDRetryRemovesStaleAnchor(t *testing.T) {
+	err := types.WithOpenAIError(types.OpenAIError{Code: "previous_response_not_found", Type: "invalid_request_error", Message: "Previous response is not available"}, 400)
+	retry, ok := normalizePreviousResponseIDRetry([]byte(`{"model":"gpt-5","previous_response_id":"resp_old","input":[{"type":"message","role":"user","content":"continue"}]}`), err)
+	require.True(t, ok)
+	require.JSONEq(t, `{"model":"gpt-5","input":[{"type":"message","role":"user","content":"continue"}]}`, string(retry))
+}
+
+func TestHasRemoteCompactionTrigger(t *testing.T) {
+	require.True(t, hasRemoteCompactionTrigger(json.RawMessage(`[{"type":"message"},{"type":"compaction_trigger"}]`)))
+	require.False(t, hasRemoteCompactionTrigger(json.RawMessage(`[{"type":"message"}]`)))
 }

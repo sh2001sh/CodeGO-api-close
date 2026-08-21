@@ -24,6 +24,12 @@ func TestResponsesCapabilitiesNeedProbeRetriesTransientWebSocketFailure(t *testi
 		NativeBackground: gatewayschema.CapabilityProbeState{
 			Status: gatewayschema.CapabilityStatusUnsupported, CheckedAt: now.Unix(), ErrorClass: "unsupported",
 		},
+		RemoteCompactionV1: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusUnsupported, CheckedAt: now.Unix(), ErrorClass: "http_404",
+		},
+		RemoteCompactionV2: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusUnsupported, CheckedAt: now.Unix(), ErrorClass: "http_404",
+		},
 	}
 	require.True(t, responsesCapabilitiesNeedProbe(capabilities, now))
 

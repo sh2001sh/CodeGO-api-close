@@ -65,7 +65,7 @@ func TestProbeResponsesTransportsForCandidatesTriesNextModel(t *testing.T) {
 		{BaseURL: server.URL + "/v1", APIKey: "key", Model: "good-model", KeyIndex: 0},
 	})
 
-	require.Equal(t, []string{"bad-model", "good-model"}, plainModels)
+	require.Equal(t, []string{"bad-model", "good-model", "good-model", "good-model"}, plainModels)
 	require.Equal(t, "good-model", result.WebSocket.Model)
 	require.Equal(t, gatewayschema.CapabilityStatusUnsupported, result.WebSocket.Status)
 	require.Equal(t, gatewayschema.CapabilityStatusUnsupported, result.NativeBackground.Status)
@@ -77,4 +77,21 @@ func TestBackgroundTransientFailureIsNotMarkedUnsupported(t *testing.T) {
 		ErrorClass: "background_resume_failed",
 	}
 	require.True(t, IsTransientProbeFailure(state))
+}
+
+func TestRemoteCompactionCapabilityKeepsAuthenticationAndTransientFailuresRetryable(t *testing.T) {
+	capabilities := gatewayschema.ResponsesCapabilities{
+		RemoteCompactionV1: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusError, HTTPStatus: http.StatusUnauthorized, ErrorClass: "http_401",
+		},
+		RemoteCompactionV2: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusError, HTTPStatus: http.StatusServiceUnavailable, ErrorClass: "http_503",
+		},
+	}
+	require.True(t, capabilities.AllowsRemoteCompactionV1For("", 0))
+	require.True(t, capabilities.AllowsRemoteCompactionV2For("", 0))
+	require.True(t, IsTransientProbeFailure(capabilities.RemoteCompactionV2))
+
+	capabilities.RemoteCompactionV1.Status = gatewayschema.CapabilityStatusUnsupported
+	require.False(t, capabilities.AllowsRemoteCompactionV1For("", 0))
 }

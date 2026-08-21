@@ -10,6 +10,7 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -62,24 +63,25 @@ type ResponsesUsageInfo struct {
 }
 
 type ChannelMeta struct {
-	ChannelType          int
-	ChannelId            int
-	ChannelScope         string
-	ChannelIsMultiKey    bool
-	ChannelMultiKeyIndex int
-	ChannelBaseUrl       string
-	ApiType              int
-	ApiVersion           string
-	ApiKey               string
-	Organization         string
-	ChannelCreateTime    int64
-	ParamOverride        map[string]interface{}
-	HeadersOverride      map[string]interface{}
-	ChannelSetting       dto.ChannelSettings
-	ChannelOtherSettings dto.ChannelOtherSettings
-	UpstreamModelName    string
-	IsModelMapped        bool
-	SupportStreamOptions bool // 是否支持流式选项
+	ChannelType           int
+	ChannelId             int
+	ChannelScope          string
+	ChannelIsMultiKey     bool
+	ChannelMultiKeyIndex  int
+	ChannelBaseUrl        string
+	ApiType               int
+	ApiVersion            string
+	ApiKey                string
+	Organization          string
+	ChannelCreateTime     int64
+	ParamOverride         map[string]interface{}
+	HeadersOverride       map[string]interface{}
+	ChannelSetting        dto.ChannelSettings
+	ChannelOtherSettings  dto.ChannelOtherSettings
+	UpstreamModelName     string
+	IsModelMapped         bool
+	SupportStreamOptions  bool // 是否支持流式选项
+	ResponsesCapabilities gatewayschema.ResponsesCapabilities
 }
 
 type TokenCountMeta struct {
@@ -234,6 +236,9 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 		UpstreamModelName:    httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel),
 		IsModelMapped:        false,
 		SupportStreamOptions: false,
+	}
+	if capabilities, ok := httpctx.GetContextKeyType[gatewayschema.ResponsesCapabilities](c, constant.ContextKeyChannelResponsesCapabilities); ok {
+		channelMeta.ResponsesCapabilities = capabilities
 	}
 
 	if channelType == constant.ChannelTypeAzure {

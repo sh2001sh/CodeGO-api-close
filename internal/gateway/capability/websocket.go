@@ -116,7 +116,7 @@ func IsTransientProbeFailure(state gatewayschema.CapabilityProbeState) bool {
 	for _, marker := range []string{
 		"close_1001", "close_1006", "close_1011", "close_1012", "close_1013",
 		"timeout", "transport", "unexpected_eof", "connection_reset", "handshake",
-		"rate_limit", "overloaded", "upstream", "background_",
+		"rate_limit", "overloaded", "upstream", "background_", "compaction_",
 	} {
 		if strings.Contains(class, marker) {
 			return true

@@ -94,11 +94,13 @@ type CapabilityProbeState struct {
 }
 
 type ResponsesCapabilities struct {
-	WebSocket        CapabilityProbeState `json:"websocket,omitempty"`
-	NativeBackground CapabilityProbeState `json:"native_background,omitempty"`
-	BackgroundCreate CapabilityProbeState `json:"background_create,omitempty"`
-	BackgroundResume CapabilityProbeState `json:"background_resume,omitempty"`
-	BackgroundCancel CapabilityProbeState `json:"background_cancel,omitempty"`
+	WebSocket          CapabilityProbeState `json:"websocket,omitempty"`
+	NativeBackground   CapabilityProbeState `json:"native_background,omitempty"`
+	BackgroundCreate   CapabilityProbeState `json:"background_create,omitempty"`
+	BackgroundResume   CapabilityProbeState `json:"background_resume,omitempty"`
+	BackgroundCancel   CapabilityProbeState `json:"background_cancel,omitempty"`
+	RemoteCompactionV1 CapabilityProbeState `json:"remote_compaction_v1,omitempty"`
+	RemoteCompactionV2 CapabilityProbeState `json:"remote_compaction_v2,omitempty"`
 }
 
 func (capabilities ResponsesCapabilities) SupportsWebSocket() bool {
@@ -128,6 +130,39 @@ func (capabilities ResponsesCapabilities) SupportsNativeBackgroundFor(model stri
 		capabilityStateSupports(capabilities.BackgroundCreate, model, keyIndex) &&
 		capabilityStateSupports(capabilities.BackgroundResume, model, keyIndex) &&
 		capabilityStateSupports(capabilities.BackgroundCancel, model, keyIndex)
+}
+
+func (capabilities ResponsesCapabilities) SupportsRemoteCompactionV1For(model string, keyIndex int) bool {
+	return capabilityStateSupports(capabilities.RemoteCompactionV1, model, keyIndex)
+}
+
+func (capabilities ResponsesCapabilities) SupportsRemoteCompactionV2For(model string, keyIndex int) bool {
+	return capabilityStateSupports(capabilities.RemoteCompactionV2, model, keyIndex)
+}
+
+// AllowsRemoteCompactionV2For preserves compatibility with channels created
+// before compaction probing was introduced. Pending/unknown/error states are
+// allowed; only a definitive unsupported result suppresses the v2 header.
+func (capabilities ResponsesCapabilities) AllowsRemoteCompactionV2For(model string, keyIndex int) bool {
+	state := capabilities.RemoteCompactionV2
+	if state.Status == CapabilityStatusUnsupported {
+		return false
+	}
+	if state.Status == CapabilityStatusSupported {
+		return capabilityStateSupports(state, model, keyIndex)
+	}
+	return true
+}
+
+func (capabilities ResponsesCapabilities) AllowsRemoteCompactionV1For(model string, keyIndex int) bool {
+	state := capabilities.RemoteCompactionV1
+	if state.Status == CapabilityStatusUnsupported {
+		return false
+	}
+	if state.Status == CapabilityStatusSupported {
+		return capabilityStateSupports(state, model, keyIndex)
+	}
+	return true
 }
 
 func capabilityStateSupports(state CapabilityProbeState, model string, keyIndex int) bool {

@@ -48,6 +48,10 @@ func requestJSON(ctx context.Context, client *http.Client, method, target, key s
 }
 
 func request(ctx context.Context, client *http.Client, method, target, key string, body any, accept string) (*http.Response, error) {
+	return requestWithHeaders(ctx, client, method, target, key, body, accept, nil)
+}
+
+func requestWithHeaders(ctx context.Context, client *http.Client, method, target, key string, body any, accept string, headers http.Header) (*http.Response, error) {
 	var reader io.Reader
 	if body != nil {
 		raw, err := platformencoding.Marshal(body)
@@ -64,7 +68,20 @@ func request(ctx context.Context, client *http.Client, method, target, key strin
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", "new-api-capability-probe/1")
+	for name, values := range headers {
+		req.Header.Del(name)
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
 	return client.Do(req)
+}
+
+func readProbeBody(response *http.Response) ([]byte, error) {
+	if response == nil || response.Body == nil {
+		return nil, nil
+	}
+	return io.ReadAll(io.LimitReader(response.Body, 2<<20))
 }
 
 func responseErrorClass(body []byte, status int) string {

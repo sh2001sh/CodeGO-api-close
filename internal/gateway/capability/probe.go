@@ -15,18 +15,22 @@ const responsesWebSocketBeta = "responses_websockets=2026-02-06"
 var probeSlots = make(chan struct{}, 2)
 
 type ProbeInput struct {
-	BaseURL  string
-	APIKey   string
-	Model    string
-	KeyIndex int
+	BaseURL       string
+	APIKey        string
+	Model         string
+	KeyIndex      int
+	ResponsesPath string
+	CompactPath   string
 }
 
 type ProbeResult struct {
-	WebSocket        gatewayschema.CapabilityProbeState
-	NativeBackground gatewayschema.CapabilityProbeState
-	BackgroundCreate gatewayschema.CapabilityProbeState
-	BackgroundResume gatewayschema.CapabilityProbeState
-	BackgroundCancel gatewayschema.CapabilityProbeState
+	WebSocket          gatewayschema.CapabilityProbeState
+	NativeBackground   gatewayschema.CapabilityProbeState
+	BackgroundCreate   gatewayschema.CapabilityProbeState
+	BackgroundResume   gatewayschema.CapabilityProbeState
+	BackgroundCancel   gatewayschema.CapabilityProbeState
+	RemoteCompactionV1 gatewayschema.CapabilityProbeState
+	RemoteCompactionV2 gatewayschema.CapabilityProbeState
 }
 
 func ProbeResponsesTransports(ctx context.Context, input ProbeInput) ProbeResult {
@@ -43,8 +47,8 @@ func ProbeResponsesTransports(ctx context.Context, input ProbeInput) ProbeResult
 		Model:       strings.TrimSpace(input.Model),
 		ProbeKeyIdx: input.KeyIndex,
 	}
-	result := ProbeResult{WebSocket: base, NativeBackground: base, BackgroundCreate: base, BackgroundResume: base, BackgroundCancel: base}
-	endpoint, err := responsesEndpoint(input.BaseURL)
+	result := ProbeResult{WebSocket: base, NativeBackground: base, BackgroundCreate: base, BackgroundResume: base, BackgroundCancel: base, RemoteCompactionV1: base, RemoteCompactionV2: base}
+	endpoint, compactEndpoint, err := probeEndpoints(input)
 	if err != nil || strings.TrimSpace(input.APIKey) == "" || base.Model == "" {
 		result.WebSocket.Status = gatewayschema.CapabilityStatusError
 		result.WebSocket.ErrorClass = "invalid_probe_input"
@@ -53,6 +57,8 @@ func ProbeResponsesTransports(ctx context.Context, input ProbeInput) ProbeResult
 		result.BackgroundCreate = result.NativeBackground
 		result.BackgroundResume = result.NativeBackground
 		result.BackgroundCancel = result.NativeBackground
+		result.RemoteCompactionV1 = result.NativeBackground
+		result.RemoteCompactionV2 = result.NativeBackground
 		return result
 	}
 
@@ -67,10 +73,14 @@ func ProbeResponsesTransports(ctx context.Context, input ProbeInput) ProbeResult
 		result.BackgroundCreate = result.NativeBackground
 		result.BackgroundResume = result.NativeBackground
 		result.BackgroundCancel = result.NativeBackground
+		result.RemoteCompactionV1 = result.NativeBackground
+		result.RemoteCompactionV2 = result.NativeBackground
 		return result
 	}
 
 	result.WebSocket = probeWebSocket(ctx, endpoint, input, base)
+	result.RemoteCompactionV1 = probeRemoteCompactionV1(ctx, client, compactEndpoint, input, base)
+	result.RemoteCompactionV2 = probeRemoteCompactionV2(ctx, client, endpoint, input, base)
 	background := probeNativeBackground(ctx, client, endpoint, input, base)
 	result.NativeBackground = background.Aggregate
 	result.BackgroundCreate = background.Create
@@ -105,7 +115,27 @@ func PendingResponsesCapabilities(model string) gatewayschema.ResponsesCapabilit
 		CheckedAt: now,
 		Model:     strings.TrimSpace(model),
 	}
-	return gatewayschema.ResponsesCapabilities{WebSocket: state, NativeBackground: state, BackgroundCreate: state, BackgroundResume: state, BackgroundCancel: state}
+	return gatewayschema.ResponsesCapabilities{WebSocket: state, NativeBackground: state, BackgroundCreate: state, BackgroundResume: state, BackgroundCancel: state, RemoteCompactionV1: state, RemoteCompactionV2: state}
+}
+
+func probeEndpoints(input ProbeInput) (string, string, error) {
+	responsesPath := strings.TrimSpace(input.ResponsesPath)
+	if responsesPath == "" {
+		responsesPath = "/v1/responses"
+	}
+	compactPath := strings.TrimSpace(input.CompactPath)
+	if compactPath == "" {
+		compactPath = strings.TrimSuffix(responsesPath, "/responses") + "/responses/compact"
+	}
+	responses, err := endpointWithPath(input.BaseURL, responsesPath)
+	if err != nil {
+		return "", "", err
+	}
+	compact, err := endpointWithPath(input.BaseURL, compactPath)
+	if err != nil {
+		return "", "", err
+	}
+	return responses, compact, nil
 }
 
 func responsesEndpoint(baseURL string) (string, error) {
@@ -127,6 +157,22 @@ func responsesEndpoint(baseURL string) (string, error) {
 	return parsed.String(), nil
 }
 
+func endpointWithPath(baseURL, requestPath string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", errInvalidBaseURL
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	basePath := strings.TrimRight(parsed.Path, "/")
+	relative := "/" + strings.TrimLeft(strings.TrimSpace(requestPath), "/")
+	if strings.HasSuffix(basePath, "/v1") && strings.HasPrefix(relative, "/v1/") {
+		relative = strings.TrimPrefix(relative, "/v1")
+	}
+	parsed.Path = strings.TrimRight(basePath, "/") + relative
+	return parsed.String(), nil
+}
+
 func plainResponsesProbeFailed(result ProbeResult) bool {
 	return result.WebSocket.Status == gatewayschema.CapabilityStatusError &&
 		result.NativeBackground.Status == gatewayschema.CapabilityStatusError
@@ -140,5 +186,5 @@ func probeInputError(input ProbeInput, class string) ProbeResult {
 		ErrorClass:  class,
 		ProbeKeyIdx: input.KeyIndex,
 	}
-	return ProbeResult{WebSocket: state, NativeBackground: state, BackgroundCreate: state, BackgroundResume: state, BackgroundCancel: state}
+	return ProbeResult{WebSocket: state, NativeBackground: state, BackgroundCreate: state, BackgroundResume: state, BackgroundCancel: state, RemoteCompactionV1: state, RemoteCompactionV2: state}
 }

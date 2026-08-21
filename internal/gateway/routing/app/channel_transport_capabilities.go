@@ -72,11 +72,13 @@ func probeAndPersistChannelCapabilities(ctx context.Context, channelID int) erro
 	candidates := channelProbeCandidates(channel)
 	result := probeChannelCandidates(ctx, candidates)
 	channel.ChannelInfo.ResponsesCapabilities = gatewayschema.ResponsesCapabilities{
-		WebSocket:        result.WebSocket,
-		NativeBackground: result.NativeBackground,
-		BackgroundCreate: result.BackgroundCreate,
-		BackgroundResume: result.BackgroundResume,
-		BackgroundCancel: result.BackgroundCancel,
+		WebSocket:          result.WebSocket,
+		NativeBackground:   result.NativeBackground,
+		BackgroundCreate:   result.BackgroundCreate,
+		BackgroundResume:   result.BackgroundResume,
+		BackgroundCancel:   result.BackgroundCancel,
+		RemoteCompactionV1: result.RemoteCompactionV1,
+		RemoteCompactionV2: result.RemoteCompactionV2,
 	}
 	if err := gatewaystore.SaveChannelInfo(channel); err != nil {
 		return err
@@ -94,7 +96,9 @@ func responsesCapabilitiesHaveTransientFailure(capabilities gatewayschema.Respon
 		gatewaycapability.IsTransientProbeFailure(capabilities.NativeBackground) ||
 		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCreate) ||
 		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundResume) ||
-		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCancel)
+		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCancel) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.RemoteCompactionV1) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.RemoteCompactionV2)
 }
 
 func markChannelCapabilitiesPending(channel *gatewayschema.Channel) {
@@ -125,13 +129,22 @@ func channelProbeCandidates(channel *gatewayschema.Channel) []gatewaycapability.
 			continue
 		}
 		usedKeys++
+		responsesPath, compactPath := channelProbePaths(channel)
 		for _, model := range models {
 			candidates = append(candidates, gatewaycapability.ProbeInput{
 				BaseURL: channel.GetBaseURL(), APIKey: key, Model: model, KeyIndex: keyIndex,
+				ResponsesPath: responsesPath, CompactPath: compactPath,
 			})
 		}
 	}
 	return candidates
+}
+
+func channelProbePaths(channel *gatewayschema.Channel) (string, string) {
+	if channel != nil && channel.Type == constant.ChannelTypeCodex {
+		return "/backend-api/codex/responses", "/backend-api/codex/responses/compact"
+	}
+	return "/v1/responses", "/v1/responses/compact"
 }
 
 func channelProbeModels(channel *gatewayschema.Channel) []string {
@@ -179,10 +192,11 @@ func channelProbeKeyEnabled(channel *gatewayschema.Channel, index int) bool {
 }
 
 func responsesCapabilitiesNeedProbe(capabilities gatewayschema.ResponsesCapabilities, now time.Time) bool {
-	states := []gatewayschema.CapabilityProbeState{capabilities.WebSocket, capabilities.NativeBackground, capabilities.BackgroundCreate, capabilities.BackgroundResume, capabilities.BackgroundCancel}
-	if capabilities.BackgroundCreate.Status == "" && capabilities.BackgroundResume.Status == "" && capabilities.BackgroundCancel.Status == "" {
-		states = states[:2]
+	states := []gatewayschema.CapabilityProbeState{capabilities.WebSocket, capabilities.NativeBackground}
+	if capabilities.BackgroundCreate.Status != "" || capabilities.BackgroundResume.Status != "" || capabilities.BackgroundCancel.Status != "" {
+		states = append(states, capabilities.BackgroundCreate, capabilities.BackgroundResume, capabilities.BackgroundCancel)
 	}
+	states = append(states, capabilities.RemoteCompactionV1, capabilities.RemoteCompactionV2)
 	for _, state := range states {
 		if state.Status == "" || state.Status == gatewayschema.CapabilityStatusUnknown || state.Status == gatewayschema.CapabilityStatusPending {
 			return true

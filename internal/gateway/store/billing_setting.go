@@ -2,6 +2,8 @@ package store
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/samber/lo"
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
@@ -102,6 +104,54 @@ func GetBillingModeCopy() map[string]string {
 
 func GetBillingExprCopy() map[string]string {
 	return lo.Assign(billingSetting.BillingExpr)
+}
+
+// HasModelBillingConfig reports whether a model has any site-level fixed,
+// ratio, or tiered-expression billing rule.
+func HasModelBillingConfig(model string) bool {
+	if _, ok := GetModelPrice(model, false); ok {
+		return true
+	}
+	if _, ok, _ := GetModelRatio(model); ok {
+		return true
+	}
+	if GetBillingMode(model) != BillingModeTieredExpr {
+		return false
+	}
+	expr, ok := GetBillingExpr(model)
+	return ok && strings.TrimSpace(expr) != ""
+}
+
+// GetConfiguredModelBillingNames returns models explicitly covered by a
+// site-level fixed, ratio, or valid tiered-expression billing rule.
+func GetConfiguredModelBillingNames() []string {
+	models := make(map[string]struct{})
+	for model := range GetModelPriceCopy() {
+		if strings.TrimSpace(model) != "" {
+			models[model] = struct{}{}
+		}
+	}
+	for model := range GetModelRatioCopy() {
+		if strings.TrimSpace(model) != "" {
+			models[model] = struct{}{}
+		}
+	}
+	for model, mode := range GetBillingModeCopy() {
+		if mode != BillingModeTieredExpr {
+			continue
+		}
+		expr, ok := GetBillingExpr(model)
+		if ok && strings.TrimSpace(expr) != "" {
+			models[model] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(models))
+	for model := range models {
+		result = append(result, model)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func GetPricingSyncData(base map[string]any) map[string]any {

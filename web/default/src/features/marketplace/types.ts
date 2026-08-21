@@ -320,8 +320,12 @@ export interface ChannelUpdateValues {
 }
 
 export interface ChannelModelPrice {
-  input_price_per_million: number
-  output_price_per_million: number
+  billing_mode?: 'token' | 'per_call'
+  price_per_call?: number
+  input_price_per_million?: number
+  output_price_per_million?: number
+  cache_read_price_per_million?: number
+  cache_write_price_per_million?: number
 }
 
 export interface GroupFilters {

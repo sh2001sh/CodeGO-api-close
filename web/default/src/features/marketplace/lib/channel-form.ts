@@ -10,6 +10,48 @@ export const MARKETPLACE_SOURCE_OPTIONS = [
   '国产模型',
 ] as const
 
+const optionalChannelPrice = z.number().finite().nonnegative().max(1_000_000)
+
+export const channelModelPriceSchema = z
+  .object({
+    billing_mode: z.enum(['token', 'per_call']).optional(),
+    price_per_call: optionalChannelPrice.optional(),
+    input_price_per_million: optionalChannelPrice.optional(),
+    output_price_per_million: optionalChannelPrice.optional(),
+    cache_read_price_per_million: optionalChannelPrice.optional(),
+    cache_write_price_per_million: optionalChannelPrice.optional(),
+  })
+  .superRefine((price, context) => {
+    const mode = price.billing_mode ?? 'token'
+    if (mode === 'per_call') {
+      if (!price.price_per_call || price.price_per_call <= 0) {
+        context.addIssue({
+          code: 'custom',
+          path: ['price_per_call'],
+          message: '每次请求价格必须大于 0',
+        })
+      }
+      return
+    }
+    if (!price.input_price_per_million || price.input_price_per_million <= 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['input_price_per_million'],
+        message: '输入价格必须大于 0',
+      })
+    }
+    if (
+      !price.output_price_per_million ||
+      price.output_price_per_million <= 0
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['output_price_per_million'],
+        message: '输出价格必须大于 0',
+      })
+    }
+  })
+
 export const channelFormSchema = z.object({
   provider_type: z.enum([
     'openai_compatible',
@@ -22,13 +64,7 @@ export const channelFormSchema = z.object({
   base_url: z.string().url().startsWith('https://'),
   api_key: z.string().min(1),
   declared_models: z.array(z.string()).min(1),
-  model_prices: z.record(
-    z.string(),
-    z.object({
-      input_price_per_million: z.number().finite().positive().max(1_000_000),
-      output_price_per_million: z.number().finite().positive().max(1_000_000),
-    })
-  ),
+  model_prices: z.record(z.string(), channelModelPriceSchema),
   multiplier: z
     .number()
     .finite()

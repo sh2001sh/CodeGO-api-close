@@ -141,8 +141,8 @@ func TestReplacingChannelModelsDropsStalePricesAndReassignsProbe(t *testing.T) {
 	require.Equal(t, models, decodeModels(channel.DeclaredModels))
 	require.Equal(t, "gpt-5", channel.AutoProbeModel)
 	require.Equal(t, map[string]ChannelModelPrice{
-		"gpt-5":      {InputPricePerMillion: 3, OutputPricePerMillion: 9},
-		"gpt-5-mini": {InputPricePerMillion: 0.5, OutputPricePerMillion: 1.5},
+		"gpt-5":      {BillingMode: ChannelBillingModeToken, InputPricePerMillion: 3, OutputPricePerMillion: 9},
+		"gpt-5-mini": {BillingMode: ChannelBillingModeToken, InputPricePerMillion: 0.5, OutputPricePerMillion: 1.5},
 	}, decodeChannelModelPrices(channel.ModelPrices))
 }
 

@@ -41,20 +41,62 @@ func normalizeChannelModelPrices(prices map[string]ChannelModelPrice, models []s
 		if err := validateChannelModelPrice(price); err != nil {
 			return nil, fmt.Errorf("模型 %s 的渠道价格无效: %w", model, err)
 		}
+		price.BillingMode = price.EffectiveBillingMode()
+		if price.BillingMode == ChannelBillingModePerCall {
+			price.InputPricePerMillion = 0
+			price.OutputPricePerMillion = 0
+			price.CacheReadPricePerMillion = nil
+			price.CacheWritePricePerMillion = nil
+		} else {
+			price.PricePerCall = 0
+		}
 		result[model] = price
 	}
 	return result, nil
 }
 
 func validateChannelModelPrice(price ChannelModelPrice) error {
+	if price.BillingMode != "" &&
+		price.BillingMode != ChannelBillingModeToken &&
+		price.BillingMode != ChannelBillingModePerCall {
+		return errors.New("计费模式必须是按量或按次")
+	}
+	if price.EffectiveBillingMode() == ChannelBillingModePerCall {
+		return validatePositiveChannelPrice(price.PricePerCall, "每次请求价格")
+	}
+
 	values := []float64{price.InputPricePerMillion, price.OutputPricePerMillion}
 	for _, value := range values {
-		if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
-			return errors.New("输入和输出价格必须是大于 0 的有效数字")
+		if err := validatePositiveChannelPrice(value, "输入和输出价格"); err != nil {
+			return err
 		}
-		if value > maxChannelModelPricePerMillion {
-			return fmt.Errorf("每百万 Token 价格不能超过 %d", maxChannelModelPricePerMillion)
+	}
+	for _, optional := range []struct {
+		name  string
+		value *float64
+	}{
+		{name: "缓存读取价格", value: price.CacheReadPricePerMillion},
+		{name: "缓存写入价格", value: price.CacheWritePricePerMillion},
+	} {
+		if optional.value == nil {
+			continue
 		}
+		if math.IsNaN(*optional.value) || math.IsInf(*optional.value, 0) || *optional.value < 0 {
+			return fmt.Errorf("%s必须是大于或等于 0 的有效数字", optional.name)
+		}
+		if *optional.value > maxChannelModelPricePerMillion {
+			return fmt.Errorf("%s不能超过 %d", optional.name, maxChannelModelPricePerMillion)
+		}
+	}
+	return nil
+}
+
+func validatePositiveChannelPrice(value float64, name string) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
+		return fmt.Errorf("%s必须是大于 0 的有效数字", name)
+	}
+	if value > maxChannelModelPricePerMillion {
+		return fmt.Errorf("%s不能超过 %d", name, maxChannelModelPricePerMillion)
 	}
 	return nil
 }

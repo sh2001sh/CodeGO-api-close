@@ -62,6 +62,7 @@ export function usePricingData() {
 
   return {
     models,
+    pricedModels: data?.priced_models ?? [],
     vendors: data?.vendors ?? [],
     groupRatio: data?.group_ratio ?? {},
     usableGroup: data?.usable_group ?? {},

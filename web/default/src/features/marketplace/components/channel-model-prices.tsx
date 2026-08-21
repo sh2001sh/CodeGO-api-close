@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { UseFormReturn } from 'react-hook-form'
-import { AlertTriangle, Check, CircleDollarSign, Save, X } from 'lucide-react'
+import { AlertTriangle, Check, CircleDollarSign } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import type { ChannelFormInput } from '../lib/channel-form'
 import { modelKey } from '../lib/channel-model-sync'
 import type { ChannelModelPrice } from '../types'
-import { FormField } from './channel-form-layout'
+import { ChannelPriceEditor } from './channel-model-price-editor'
 
 type ChannelForm = UseFormReturn<ChannelFormInput>
 
@@ -19,23 +17,38 @@ export function ChannelModelPrices(props: {
   const { t } = useTranslation()
   const pricing = usePricingData()
   const prices = props.form.watch('model_prices')
+  const channelPrices = useMemo(
+    () =>
+      new Map(
+        Object.entries(prices).map(([model, price]) => [modelKey(model), price])
+      ),
+    [prices]
+  )
   const sitePricedModels = useMemo(
-    () => buildSitePricedModelSet(pricing.models),
-    [pricing.models]
+    () => buildSitePricedModelSet(pricing.models, pricing.pricedModels),
+    [pricing.models, pricing.pricedModels]
   )
   if (props.selectedModels.length === 0) return null
 
-  const customModels = props.selectedModels.filter((model) => prices[model])
+  const customModels = props.selectedModels.filter((model) =>
+    channelPrices.has(modelKey(model))
+  )
   const missingModels = pricing.isLoading
     ? []
     : props.selectedModels.filter(
-        (model) => !sitePricedModels.has(modelKey(model)) && !prices[model]
+        (model) =>
+          !sitePricedModels.has(modelKey(model)) &&
+          !channelPrices.has(modelKey(model))
       )
   const editableModels = props.selectedModels.filter(
-    (model) => prices[model] || !sitePricedModels.has(modelKey(model))
+    (model) =>
+      channelPrices.has(modelKey(model)) ||
+      !sitePricedModels.has(modelKey(model))
   )
   const siteCoveredModels = props.selectedModels.filter(
-    (model) => sitePricedModels.has(modelKey(model)) && !prices[model]
+    (model) =>
+      sitePricedModels.has(modelKey(model)) &&
+      !channelPrices.has(modelKey(model))
   )
 
   return (
@@ -56,7 +69,7 @@ export function ChannelModelPrices(props: {
             <ModelPriceRow
               key={model}
               model={model}
-              price={prices[model]}
+              price={channelPrices.get(modelKey(model))}
               sitePriced={sitePricedModels.has(modelKey(model))}
               onSave={(price) => setChannelPrice(props.form, model, price)}
               onRemove={() => removeChannelPrice(props.form, model)}
@@ -143,111 +156,12 @@ function ModelPriceRow(props: {
         </p>
       </div>
       <ChannelPriceEditor
+        key={`${props.model}:${JSON.stringify(props.price ?? null)}`}
         price={props.price}
         onSave={props.onSave}
         onRemove={props.onRemove}
       />
     </div>
-  )
-}
-
-function ChannelPriceEditor(props: {
-  price?: ChannelModelPrice
-  onSave: (price: ChannelModelPrice) => void
-  onRemove: () => void
-}) {
-  const { t } = useTranslation()
-  const [editing, setEditing] = useState(Boolean(props.price))
-  const [inputPrice, setInputPrice] = useState('')
-  const [outputPrice, setOutputPrice] = useState('')
-  useEffect(() => {
-    setEditing(Boolean(props.price))
-    setInputPrice(
-      props.price ? String(props.price.input_price_per_million) : ''
-    )
-    setOutputPrice(
-      props.price ? String(props.price.output_price_per_million) : ''
-    )
-  }, [props.price])
-
-  if (!editing) {
-    return (
-      <Button
-        type='button'
-        variant='outline'
-        size='sm'
-        className='justify-self-start'
-        onClick={() => setEditing(true)}
-      >
-        <CircleDollarSign />
-        {t('手动配置价格')}
-      </Button>
-    )
-  }
-  const error = validatePriceDraft(inputPrice, outputPrice, t)
-  return (
-    <div>
-      <div className='grid gap-2 sm:grid-cols-2'>
-        <PriceInput
-          label={t('输入 / 百万 Token')}
-          value={inputPrice}
-          onChange={setInputPrice}
-        />
-        <PriceInput
-          label={t('输出 / 百万 Token')}
-          value={outputPrice}
-          onChange={setOutputPrice}
-        />
-      </div>
-      {error && (
-        <p className='text-destructive mt-1.5 text-xs' role='alert'>
-          {error}
-        </p>
-      )}
-      <div className='mt-2 flex gap-2'>
-        <Button
-          type='button'
-          size='sm'
-          disabled={Boolean(error)}
-          onClick={() => props.onSave(toModelPrice(inputPrice, outputPrice))}
-        >
-          <Save />
-          {t('保存价格')}
-        </Button>
-        <Button
-          type='button'
-          size='sm'
-          variant='ghost'
-          onClick={() => {
-            if (props.price) props.onRemove()
-            else setEditing(false)
-          }}
-        >
-          <X />
-          {props.price ? t('移除') : t('取消')}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function PriceInput(props: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <FormField label={props.label}>
-      <Input
-        type='number'
-        min='0.000001'
-        max='1000000'
-        step='any'
-        inputMode='decimal'
-        value={props.value}
-        onChange={(event) => props.onChange(event.target.value)}
-      />
-    </FormField>
   )
 }
 
@@ -265,27 +179,6 @@ function SiteCoveredModels(props: { models: string[] }) {
       </div>
     </details>
   )
-}
-
-function validatePriceDraft(
-  input: string,
-  output: string,
-  t: (value: string) => string
-): string {
-  const values = [Number(input), Number(output)]
-  if (!input || !output) return t('请输入输入和输出价格')
-  if (values.some((value) => !Number.isFinite(value) || value <= 0))
-    return t('价格必须大于 0')
-  if (values.some((value) => value > 1_000_000))
-    return t('价格不能超过 1000000')
-  return ''
-}
-
-function toModelPrice(input: string, output: string): ChannelModelPrice {
-  return {
-    input_price_per_million: Number(input),
-    output_price_per_million: Number(output),
-  }
 }
 
 function setChannelPrice(
@@ -310,11 +203,14 @@ function removeChannelPrice(form: ChannelForm, model: string) {
 }
 
 function buildSitePricedModelSet(
-  models: Array<{ model_name: string; pricing_available?: boolean }>
+  models: Array<{ model_name: string; pricing_available?: boolean }>,
+  pricedModels: string[]
 ): Set<string> {
-  return new Set(
+  const result = new Set(
     models
       .filter((model) => model.pricing_available !== false)
       .map((model) => modelKey(model.model_name))
   )
+  for (const model of pricedModels) result.add(modelKey(model))
+  return result
 }

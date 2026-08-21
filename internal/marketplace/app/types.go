@@ -6,6 +6,11 @@ import marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domai
 
 type ChannelModelPrice = marketplacedomain.ChannelModelPrice
 
+const (
+	ChannelBillingModeToken   = marketplacedomain.ChannelBillingModeToken
+	ChannelBillingModePerCall = marketplacedomain.ChannelBillingModePerCall
+)
+
 type CreateChannelRequest struct {
 	ProviderType                     string                       `json:"provider_type"`
 	SourceLabel                      string                       `json:"source_label"`

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"sort"
+	"strings"
+
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
@@ -10,16 +13,51 @@ import (
 	platformstore "github.com/sh2001sh/new-api/internal/platform/store"
 )
 
-const pricingVersion = "a42d372ccf0b5dd13ecf71203521f9d2"
+const pricingVersion = "7bf24d8d5c1145f29f74e0783fcf3f21"
 
 type PricingPayload struct {
 	Data              []gatewaydomain.Pricing                 `json:"data"`
+	PricedModels      []string                                `json:"priced_models"`
 	Vendors           []gatewaydomain.PricingVendor           `json:"vendors"`
 	GroupRatio        map[string]float64                      `json:"group_ratio"`
 	UsableGroup       map[string]string                       `json:"usable_group"`
 	SupportedEndpoint map[string]gatewaycontract.EndpointInfo `json:"supported_endpoint"`
 	AutoGroups        []string                                `json:"auto_groups"`
 	PricingVersion    string                                  `json:"pricing_version"`
+}
+
+// loadPricedModelNames returns every model that has a site-level price or is
+// already present in the pricing projection. Marketplace-only models can be
+// absent from the projection because they are not backed by an official
+// channel, but their global model price still makes them priced models for
+// channel configuration purposes.
+func loadPricedModelNames(pricing []gatewaydomain.Pricing) []string {
+	seen := make(map[string]struct{}, len(pricing))
+	result := make([]string, 0, len(pricing))
+	for _, item := range pricing {
+		if item.ModelName == "" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(item.ModelName))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, item.ModelName)
+	}
+	for _, modelName := range gatewaystore.GetConfiguredModelBillingNames() {
+		if modelName == "" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(modelName))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, modelName)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func loadGatewayPricing() []gatewaydomain.Pricing {
@@ -97,13 +135,15 @@ func filterPricingByUsableGroups(pricing []gatewaydomain.Pricing, usableGroup ma
 }
 
 func BuildPricingPayload(userID int, hasUser bool) PricingPayload {
-	pricing := filterPricingByUsableGroups(loadGatewayPricing(), resolveUsableGroups(userID, hasUser))
+	allPricing := loadGatewayPricing()
+	pricing := filterPricingByUsableGroups(allPricing, resolveUsableGroups(userID, hasUser))
 	userGroup := resolveUserGroup(userID, hasUser)
 	usableGroup := GetUserUsableGroups(userGroup)
 	groupRatio := visibleGroupRatios(userGroup, usableGroup)
 
 	return PricingPayload{
 		Data:              pricing,
+		PricedModels:      loadPricedModelNames(allPricing),
 		Vendors:           loadGatewayVendors(),
 		GroupRatio:        groupRatio,
 		UsableGroup:       usableGroup,

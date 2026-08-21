@@ -139,6 +139,100 @@ func TestMarketplaceChannelPriceAppliesOnlyFromCurrentRequestContext(t *testing.
 	require.ErrorContains(t, err, "价格")
 }
 
+func TestMarketplaceChannelTokenPriceSupportsCacheOverrides(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cacheRead := 0.25
+	cacheWrite := 5.0
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, "market-cache-price-group")
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, 1.0)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceModelPrices, map[string]marketplacedomain.ChannelModelPrice{
+		"channel-cache-model": {
+			BillingMode:               marketplacedomain.ChannelBillingModeToken,
+			InputPricePerMillion:      2,
+			OutputPricePerMillion:     8,
+			CacheReadPricePerMillion:  &cacheRead,
+			CacheWritePricePerMillion: &cacheWrite,
+		},
+	})
+	info := &RelayInfo{OriginModelName: "channel-cache-model", UsingGroup: "market_dynamic", UserGroup: "default"}
+
+	price, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 1000})
+
+	require.NoError(t, err)
+	require.False(t, price.UsePrice)
+	require.InDelta(t, 0.125, price.CacheRatio, 0.000001)
+	require.InDelta(t, 2.5, price.CacheCreationRatio, 0.000001)
+	require.InDelta(t, 2.5, price.CacheCreation5mRatio, 0.000001)
+	require.InDelta(t, 4.0, price.CacheCreation1hRatio, 0.000001)
+}
+
+func TestMarketplaceChannelPerCallPriceUsesFixedRequestBilling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, "market-per-call-group")
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, 1.0)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceModelPrices, map[string]marketplacedomain.ChannelModelPrice{
+		"channel-per-call-model": {
+			BillingMode:  marketplacedomain.ChannelBillingModePerCall,
+			PricePerCall: 0.03,
+		},
+	})
+	info := &RelayInfo{OriginModelName: "channel-per-call-model", UsingGroup: "market_dynamic", UserGroup: "default"}
+
+	price, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 1000})
+
+	require.NoError(t, err)
+	require.True(t, price.UsePrice)
+	require.InDelta(t, 0.03, price.ModelPrice, 0.000001)
+	require.Positive(t, price.QuotaToPreConsume)
+}
+
+func TestMarketplaceChannelPerCallPriceSupportsPerCallEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, "market-per-call-endpoint-group")
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, 1.0)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceModelPrices, map[string]marketplacedomain.ChannelModelPrice{
+		"channel-image-model": {
+			BillingMode:  marketplacedomain.ChannelBillingModePerCall,
+			PricePerCall: 0.08,
+		},
+	})
+	info := &RelayInfo{OriginModelName: "channel-image-model", UsingGroup: "market_dynamic", UserGroup: "default"}
+
+	price, err := ModelPriceHelperPerCall(ctx, info)
+
+	require.NoError(t, err)
+	require.True(t, price.UsePrice)
+	require.InDelta(t, 0.08, price.ModelPrice, 0.000001)
+	require.Positive(t, price.Quota)
+}
+
+func TestTieredSitePriceTakesPriorityOverMarketplacePerCallPrice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, "market-luna-group")
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, 1.0)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceModelPrices, map[string]marketplacedomain.ChannelModelPrice{
+		"gpt-5.6-luna": {
+			BillingMode:  marketplacedomain.ChannelBillingModePerCall,
+			PricePerCall: 999,
+		},
+	})
+	info := &RelayInfo{OriginModelName: "gpt-5.6-luna", UsingGroup: "market_dynamic", UserGroup: "default"}
+
+	price, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 1000})
+
+	require.NoError(t, err)
+	require.False(t, price.UsePrice)
+	require.NotNil(t, info.TieredBillingSnapshot)
+}
+
 func TestGlobalModelPriceTakesPriorityOverMarketplaceChannelPrice(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	originalRatios := gatewaystore.ModelRatio2JSONString()

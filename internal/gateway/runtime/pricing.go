@@ -91,21 +91,24 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 	var audioCompletionRatio float64
 	var freeModel bool
 	if !usePrice {
-		preConsumedTokens := platformmath.MaxInt(promptTokens, platformconfig.PreConsumedQuota)
-		if meta.MaxTokens != 0 {
-			preConsumedTokens += meta.MaxTokens
-		}
 		var success bool
 		var matchName string
+		var marketplaceTokenPrice *marketplacedomain.ChannelModelPrice
 		modelRatio, success, matchName = gatewaystore.GetModelRatio(info.OriginModelName)
 		if !success {
 			if channelPrice, ok := marketplaceChannelModelPrice(c, info.OriginModelName); ok {
-				modelRatio = channelPrice.InputPricePerMillion / 2
-				completionRatio = channelPrice.OutputPricePerMillion / channelPrice.InputPricePerMillion
-				success = true
+				if channelPrice.EffectiveBillingMode() == marketplacedomain.ChannelBillingModePerCall {
+					modelPrice = channelPrice.PricePerCall
+					usePrice = true
+				} else {
+					modelRatio = channelPrice.InputPricePerMillion / 2
+					completionRatio = channelPrice.OutputPricePerMillion / channelPrice.InputPricePerMillion
+					marketplaceTokenPrice = &channelPrice
+					success = true
+				}
 			}
 		}
-		if !success {
+		if !success && !usePrice {
 			acceptUnsetRatio := false
 			if info.UserSetting.AcceptUnsetRatioModel {
 				acceptUnsetRatio = true
@@ -114,20 +117,35 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 				return types.PriceData{}, modelPriceNotConfiguredError(matchName, info.UserId)
 			}
 		}
-		if completionRatio == 0 {
-			completionRatio = gatewaystore.GetCompletionRatio(info.OriginModelName)
+		if !usePrice {
+			preConsumedTokens := platformmath.MaxInt(promptTokens, platformconfig.PreConsumedQuota)
+			if meta.MaxTokens != 0 {
+				preConsumedTokens += meta.MaxTokens
+			}
+			if completionRatio == 0 {
+				completionRatio = gatewaystore.GetCompletionRatio(info.OriginModelName)
+			}
+			cacheRatio, _ = gatewaystore.GetCacheRatio(info.OriginModelName)
+			cacheCreationRatio, _ = gatewaystore.GetCreateCacheRatio(info.OriginModelName)
+			if marketplaceTokenPrice != nil {
+				if marketplaceTokenPrice.CacheReadPricePerMillion != nil {
+					cacheRatio = *marketplaceTokenPrice.CacheReadPricePerMillion / marketplaceTokenPrice.InputPricePerMillion
+				}
+				if marketplaceTokenPrice.CacheWritePricePerMillion != nil {
+					cacheCreationRatio = *marketplaceTokenPrice.CacheWritePricePerMillion / marketplaceTokenPrice.InputPricePerMillion
+				}
+			}
+			cacheCreationRatio5m = cacheCreationRatio
+			cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
+			imageRatio, _ = gatewaystore.GetImageRatio(info.OriginModelName)
+			audioRatio = gatewaystore.GetAudioRatio(info.OriginModelName)
+			audioCompletionRatio = gatewaystore.GetAudioCompletionRatio(info.OriginModelName)
+			preConsumedQuota = platformmath.SaturatingMulToInt(
+				float64(preConsumedTokens), modelRatio, groupRatioInfo.GroupRatio,
+			)
 		}
-		cacheRatio, _ = gatewaystore.GetCacheRatio(info.OriginModelName)
-		cacheCreationRatio, _ = gatewaystore.GetCreateCacheRatio(info.OriginModelName)
-		cacheCreationRatio5m = cacheCreationRatio
-		cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
-		imageRatio, _ = gatewaystore.GetImageRatio(info.OriginModelName)
-		audioRatio = gatewaystore.GetAudioRatio(info.OriginModelName)
-		audioCompletionRatio = gatewaystore.GetAudioCompletionRatio(info.OriginModelName)
-		preConsumedQuota = platformmath.SaturatingMulToInt(
-			float64(preConsumedTokens), modelRatio, groupRatioInfo.GroupRatio,
-		)
-	} else {
+	}
+	if usePrice {
 		if meta.ImagePriceRatio != 0 {
 			modelPrice = modelPrice * meta.ImagePriceRatio
 		}
@@ -206,11 +224,22 @@ func ModelPriceHelperPerCall(c *gin.Context, info *RelayInfo) (types.PriceData, 
 			var ratioSuccess bool
 			var matchName string
 			modelRatio, ratioSuccess, matchName = gatewaystore.GetModelRatio(info.OriginModelName)
+			if !ratioSuccess {
+				if channelPrice, ok := marketplaceChannelModelPrice(c, info.OriginModelName); ok {
+					if channelPrice.EffectiveBillingMode() == marketplacedomain.ChannelBillingModePerCall {
+						modelPrice = channelPrice.PricePerCall
+						usePrice = true
+					} else {
+						modelRatio = channelPrice.InputPricePerMillion / 2
+						ratioSuccess = true
+					}
+				}
+			}
 			acceptUnsetRatio := false
 			if info.UserSetting.AcceptUnsetRatioModel {
 				acceptUnsetRatio = true
 			}
-			if !ratioSuccess && !acceptUnsetRatio {
+			if !ratioSuccess && !usePrice && !acceptUnsetRatio {
 				return types.PriceData{}, modelPriceNotConfiguredError(matchName, info.UserId)
 			}
 		}
@@ -249,17 +278,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *RelayInfo) (types.PriceData, 
 }
 
 func HasModelBillingConfig(modelName string) bool {
-	if _, ok := gatewaystore.GetModelPrice(modelName, false); ok {
-		return true
-	}
-	if _, ok, _ := gatewaystore.GetModelRatio(modelName); ok {
-		return true
-	}
-	if gatewaystore.GetBillingMode(modelName) != gatewaystore.BillingModeTieredExpr {
-		return false
-	}
-	expr, ok := gatewaystore.GetBillingExpr(modelName)
-	return ok && strings.TrimSpace(expr) != ""
+	return gatewaystore.HasModelBillingConfig(modelName)
 }
 
 func modelPriceHelperTiered(c *gin.Context, info *RelayInfo, promptTokens int, meta *types.TokenCountMeta, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {

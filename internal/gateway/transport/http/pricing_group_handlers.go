@@ -16,6 +16,7 @@ func GetPricing(c *gin.Context) {
 	c.JSON(stdhttp.StatusOK, gin.H{
 		"success":            true,
 		"data":               payload.Data,
+		"priced_models":      payload.PricedModels,
 		"vendors":            payload.Vendors,
 		"group_ratio":        payload.GroupRatio,
 		"usable_group":       payload.UsableGroup,

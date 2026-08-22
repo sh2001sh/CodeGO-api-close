@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -103,7 +104,11 @@ func loadPublicGroups(query GroupQuery) ([]marketplaceschema.Group, map[string]m
 		marketplacedomain.LifecycleDisabled,
 	})
 	if query.ViewerUserID > 0 {
-		dbQuery = dbQuery.Where("visibility = ? OR owner_user_id = ?", marketplacedomain.VisibilityPublic, query.ViewerUserID)
+		if query.IncludeAccess && platformdb.DB.Migrator().HasTable(&marketplaceschema.GroupAccess{}) {
+			dbQuery = dbQuery.Where(fmt.Sprintf("visibility = ? OR owner_user_id = ? OR EXISTS (SELECT 1 FROM %s ga WHERE ga.group_id = %s.id AND ga.user_id = ?)", marketplaceschema.GroupAccess{}.TableName(), marketplaceschema.Group{}.TableName()), marketplacedomain.VisibilityPublic, query.ViewerUserID, query.ViewerUserID)
+		} else {
+			dbQuery = dbQuery.Where("visibility = ? OR owner_user_id = ?", marketplacedomain.VisibilityPublic, query.ViewerUserID)
+		}
 	} else {
 		dbQuery = dbQuery.Where("visibility = ?", marketplacedomain.VisibilityPublic)
 	}

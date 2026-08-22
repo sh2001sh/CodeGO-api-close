@@ -43,6 +43,8 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 		"GET /api/marketplace/auto-route-pool":            false,
 		"PUT /api/marketplace/auto-route-pool":            false,
 		"POST /api/marketplace/groups/:id/bind-token":     false,
+		"POST /api/marketplace/groups/:id/invite":         false,
+		"POST /api/marketplace/invites/accept":             false,
 		"POST /api/marketplace/channels":                  false,
 		"POST /api/marketplace/channels/fetch-models":     false,
 		"POST /api/marketplace/channels/:id/detect":       false,

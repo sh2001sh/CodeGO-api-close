@@ -9,6 +9,7 @@ import (
 var marketplaceSourcePrefixes = map[string]string{
 	"Codex Plus": "Codex-Plus",
 	"Codex Pro":  "Codex-Pro",
+	"Codex 混合号池": "Codex-Mixed",
 	"CC-Max":     "CC-Max",
 	"CC-Kiro":    "CC-Kiro",
 	"CC其它":       "CC-Other",
@@ -27,6 +28,8 @@ func canonicalSourceLabel(value string) (string, bool) {
 		return "Codex Plus", true
 	case "pro", "codex-pro":
 		return "Codex Pro", true
+	case "codex mixed", "codex-mixed", "mixed", "codex 混合号池":
+		return "Codex 混合号池", true
 	case "claude max", "claudemax", "cc max":
 		return "CC-Max", true
 	case "kiro", "cc kiro":

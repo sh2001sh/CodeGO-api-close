@@ -91,6 +91,30 @@ type Group struct {
 
 func (Group) TableName() string { return tableName("groups") }
 
+// GroupInvite is a revocable, hashed invitation for a non-public marketplace group.
+type GroupInvite struct {
+	ID        uint64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	GroupID   string     `json:"group_id" gorm:"column:group_id;size:64;index;not null"`
+	CreatedBy int        `json:"created_by" gorm:"column:created_by;index;not null"`
+	TokenHash string     `json:"-" gorm:"column:token_hash;size:64;uniqueIndex;not null"`
+	ExpiresAt *time.Time `json:"expires_at" gorm:"column:expires_at;index"`
+	RevokedAt *time.Time `json:"revoked_at" gorm:"column:revoked_at;index"`
+	CreatedAt time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (GroupInvite) TableName() string { return tableName("group_invites") }
+
+// GroupAccess records users who accepted a private/unlisted group invitation.
+type GroupAccess struct {
+	ID              uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	GroupID         string    `json:"group_id" gorm:"column:group_id;size:64;uniqueIndex:uq_marketplace_group_access,priority:1;not null"`
+	UserID          int       `json:"user_id" gorm:"column:user_id;uniqueIndex:uq_marketplace_group_access,priority:2;index;not null"`
+	GrantedByInvite uint64    `json:"granted_by_invite" gorm:"column:granted_by_invite;index;not null"`
+	CreatedAt       time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (GroupAccess) TableName() string { return tableName("group_access") }
+
 type VerificationRun struct {
 	ID              string     `json:"id" gorm:"column:id;primaryKey;size:64"`
 	ChannelID       string     `json:"channel_id" gorm:"column:channel_id;size:64;index;not null"`

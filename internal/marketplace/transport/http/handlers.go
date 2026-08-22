@@ -14,7 +14,8 @@ func ListGroups(c *gin.Context) {
 		ViewerUserID: c.GetInt("id"),
 		Search:       c.Query("search"), Model: c.Query("model"), Source: c.Query("source"),
 		Provider: c.Query("provider"), Status: c.Query("status"),
-		Verification: c.Query("verification"), Sort: c.Query("sort"), Direction: c.Query("direction"),
+		IncludeAccess: c.Query("include_access") == "true",
+		Verification:  c.Query("verification"), Sort: c.Query("sort"), Direction: c.Query("direction"),
 		WindowHours: queryInt(c, "window_hours", 24), Page: queryInt(c, "page", 1),
 		PageSize: queryInt(c, "page_size", 20), MinMultiplier: queryFloat(c, "min_multiplier"),
 		MaxMultiplier: queryFloat(c, "max_multiplier"),
@@ -186,6 +187,21 @@ func BindToken(c *gin.Context) {
 	}
 	err := marketplaceapp.BindTokenToMarketplaceGroup(c.GetInt("id"), req.TokenID, c.Param("id"))
 	respond(c, gin.H{"token_id": req.TokenID, "group_id": c.Param("id")}, err)
+}
+
+func CreateGroupInvite(c *gin.Context) {
+	result, err := marketplaceapp.CreateMarketplaceGroupInvite(c.GetInt("id"), c.Param("id"))
+	respond(c, result, err)
+}
+
+func AcceptGroupInvite(c *gin.Context) {
+	var req marketplaceapp.GroupInviteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.AcceptMarketplaceGroupInvite(c.GetInt("id"), req.Token)
+	respond(c, result, err)
 }
 
 func ListAdminChannels(c *gin.Context) {

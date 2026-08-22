@@ -196,7 +196,7 @@ export async function getSelectableMarketplaceGroups(): Promise<
   ApiKeyGroupOptionData[]
 > {
   const res = await api.get<ApiResponse<MarketplaceGroupListResponse>>(
-    '/api/marketplace/groups?page=1&page_size=50&sort=score&direction=desc&window_hours=24'
+    '/api/marketplace/groups?page=1&page_size=50&include_access=true&sort=score&direction=desc&window_hours=24'
   )
   if (!res.data.success || !res.data.data) return []
   return res.data.data.items

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useDebounce } from '@/hooks'
 import {
   BarChart3,
@@ -9,15 +9,18 @@ import {
   UploadCloud,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
+import { acceptMarketplaceGroupInvite } from './api'
 import { AdminGovernance } from './components/admin-governance'
 import { ChannelWorkspace } from './components/channel-workspace'
 import { MarketSurface } from './components/market-surface'
 import { MarketplaceMultiplierTrend } from './components/marketplace-multiplier-trend'
 import { MarketplaceOverview } from './components/marketplace-overview'
+import { TokenBindPanel } from './components/token-bind-panel'
 import { useMarketplaceGroups } from './hooks'
 import type { GroupFilters } from './types'
 
@@ -44,6 +47,11 @@ export function MarketplacePage() {
   const [tab, setTab] = useState<MarketplaceTab>('market')
   const [showChannelForm, setShowChannelForm] = useState(false)
   const [filters, setFilters] = useState<GroupFilters>(defaultFilters)
+  const [inviteHandled, setInviteHandled] = useState(false)
+  const [acceptedInvite, setAcceptedInvite] = useState<{
+    groupId: string
+    groupName: string
+  } | null>(null)
   const debouncedSearch = useDebounce(filters.search, 300)
   const debouncedModel = useDebounce(filters.model, 300)
   const effectiveFilters = useMemo(
@@ -55,6 +63,35 @@ export function MarketplacePage() {
     [debouncedModel, debouncedSearch, filters]
   )
   const groups = useMarketplaceGroups(effectiveFilters)
+  useEffect(() => {
+    if (inviteHandled) return
+    const token = new URLSearchParams(window.location.search).get('invite')
+    if (!token) {
+      setInviteHandled(true)
+      return
+    }
+    const currentUrl = new URL(window.location.href)
+    currentUrl.searchParams.delete('invite')
+    window.history.replaceState(
+      {},
+      '',
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`
+    )
+    setInviteHandled(true)
+    void acceptMarketplaceGroupInvite(token)
+      .then((result) => {
+        setAcceptedInvite({
+          groupId: result.group_id,
+          groupName: result.group_name,
+        })
+        toast.success(
+          t('已获得分组访问权限：{{name}}', { name: result.group_name })
+        )
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : t('邀请链接无效'))
+      })
+  }, [inviteHandled, t])
   const updateFilters = (patch: Partial<GroupFilters>) =>
     setFilters((current) => ({ ...current, ...patch }))
 
@@ -80,6 +117,20 @@ export function MarketplacePage() {
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='mx-auto w-full max-w-[1800px] space-y-3'>
+          {acceptedInvite && (
+            <section className='border-border bg-card space-y-3 rounded-lg border p-4'>
+              <div>
+                <h3 className='text-sm font-semibold'>{t('邀请分组已加入')}</h3>
+                <p className='text-muted-foreground mt-1 text-xs'>
+                  {acceptedInvite.groupName} ·{' '}
+                  {t(
+                    '该分组不会出现在公开市场，可直接绑定 Key 或加入 Auto 路由池。'
+                  )}
+                </p>
+              </div>
+              <TokenBindPanel groupId={acceptedInvite.groupId} compact />
+            </section>
+          )}
           <MarketplaceOverview
             total={groups.data?.total ?? 0}
             ranked={groups.data?.ranked_count ?? 0}

@@ -247,6 +247,29 @@ export async function bindMarketplaceToken(groupId: string, tokenId: number) {
     throw new Error(response.data.message || '绑定失败')
 }
 
+export async function createMarketplaceGroupInvite(groupId: string) {
+  const response = await api.post<
+    ApiResponse<{
+      token: string
+      group_id: string
+      group_name: string
+      expires_at?: string
+    }>
+  >(`/api/marketplace/groups/${groupId}/invite`)
+  return requireData(response.data)
+}
+
+export async function acceptMarketplaceGroupInvite(token: string) {
+  const response = await api.post<
+    ApiResponse<{
+      group_id: string
+      group_name: string
+      expires_at?: string
+    }>
+  >('/api/marketplace/invites/accept', { token })
+  return requireData(response.data)
+}
+
 export async function getTokenOptions(): Promise<TokenOption[]> {
   const response = await api.get<ApiResponse<{ items: TokenOption[] }>>(
     '/api/token/?p=1&size=50'

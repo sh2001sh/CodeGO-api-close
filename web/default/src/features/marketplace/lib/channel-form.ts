@@ -4,6 +4,7 @@ import type { MarketplaceChannel } from '../types'
 export const MARKETPLACE_SOURCE_OPTIONS = [
   'Codex Plus',
   'Codex Pro',
+  'Codex 混合号池',
   'CC-Max',
   'CC-Kiro',
   'CC其它',

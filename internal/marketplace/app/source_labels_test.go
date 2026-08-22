@@ -13,3 +13,10 @@ func TestMarketplaceDisplayNameUsesSourceMultiplierAndNumericChannelID(t *testin
 		marketplaceDisplayName("Codex Plus", 0.02, "123456789012"),
 	)
 }
+
+func TestCanonicalSourceLabelSupportsCodexMixedPool(t *testing.T) {
+	label, ok := canonicalSourceLabel("codex-mixed")
+	require.True(t, ok)
+	require.Equal(t, "Codex 混合号池", label)
+	require.Equal(t, "Codex-Mixed-abc123", marketplaceInternalGroupName(label, "abc123"))
+}

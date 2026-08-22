@@ -1,5 +1,6 @@
 import {
   Activity,
+  Link2,
   CirclePause,
   Loader2,
   Pause,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useMarketplaceMutations } from '../hooks'
@@ -40,8 +42,19 @@ export function OwnerChannelActions(props: {
       | 'pause-verification'
       | 'pause'
       | 'resume'
+      | 'invite'
   ) => {
     try {
+      if (action === 'invite') {
+        const invite = await mutations.createInvite.mutateAsync(
+          channel.group_id
+        )
+        const url = `${window.location.origin}/marketplace?invite=${encodeURIComponent(invite.token)}`
+        const copied = await copyToClipboard(url)
+        if (!copied) throw new Error(t('复制邀请链接失败，请手动复制'))
+        toast.success(t('邀请链接已复制；有效期 30 天'))
+        return
+      }
       if (action === 'detect') {
         await mutations.detect.mutateAsync(channel.id)
         toast.info(t('GPT-5.6 检测已开始，页面会自动更新结果'))
@@ -81,6 +94,15 @@ export function OwnerChannelActions(props: {
       <Button variant='outline' size='sm' onClick={props.onEdit}>
         <Pencil />
         {t('编辑')}
+      </Button>
+      <Button
+        variant='outline'
+        size='sm'
+        onClick={() => void act('invite')}
+        disabled={mutations.createInvite.isPending}
+      >
+        <Link2 />
+        {mutations.createInvite.isPending ? t('生成中') : t('邀请链接')}
       </Button>
       {needsDetection && (
         <Button

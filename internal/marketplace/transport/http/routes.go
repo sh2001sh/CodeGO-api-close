@@ -23,6 +23,8 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 	marketplaceRoute.Use(middleware.UserAuth())
 	{
 		marketplaceRoute.POST("/groups/:id/bind-token", middleware.CriticalRateLimit(), BindToken)
+		marketplaceRoute.POST("/groups/:id/invite", middleware.CriticalRateLimit(), CreateGroupInvite)
+		marketplaceRoute.POST("/invites/accept", middleware.CriticalRateLimit(), AcceptGroupInvite)
 		marketplaceRoute.POST("/groups/:id/feedback", middleware.CriticalRateLimit(), SubmitChannelFeedback)
 		marketplaceRoute.GET("/auto-route-pool", GetAutoRoutePool)
 		marketplaceRoute.PUT("/auto-route-pool", middleware.CriticalRateLimit(), UpdateAutoRoutePool)

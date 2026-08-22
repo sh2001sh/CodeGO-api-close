@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -299,14 +300,13 @@ func ListSelectedAutoRouteModels(ownerUserID int) ([]string, bool, error) {
 
 func loadAutoRouteGroups(ownerUserID int) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
 	var groups []marketplaceschema.Group
-	err := platformdb.DB.Where(
-		"source_type = ? AND verification_status = ? AND lifecycle_status IN ? AND (visibility = ? OR owner_user_id = ?)",
-		marketplacedomain.SourceTypeMarketplaceUser,
-		marketplacedomain.VerificationPassed,
-		[]string{marketplacedomain.LifecycleActive, marketplacedomain.LifecycleDegraded},
-		marketplacedomain.VisibilityPublic,
-		ownerUserID,
-	).Limit(1000).Find(&groups).Error
+	query := platformdb.DB.Where("source_type = ? AND verification_status = ? AND lifecycle_status IN ?", marketplacedomain.SourceTypeMarketplaceUser, marketplacedomain.VerificationPassed, []string{marketplacedomain.LifecycleActive, marketplacedomain.LifecycleDegraded})
+	if platformdb.DB.Migrator().HasTable(&marketplaceschema.GroupAccess{}) {
+		query = query.Where(fmt.Sprintf("visibility = ? OR owner_user_id = ? OR EXISTS (SELECT 1 FROM %s ga WHERE ga.group_id = %s.id AND ga.user_id = ?)", marketplaceschema.GroupAccess{}.TableName(), marketplaceschema.Group{}.TableName()), marketplacedomain.VisibilityPublic, ownerUserID, ownerUserID)
+	} else {
+		query = query.Where("visibility = ? OR owner_user_id = ?", marketplacedomain.VisibilityPublic, ownerUserID)
+	}
+	err := query.Limit(1000).Find(&groups).Error
 	if err != nil {
 		return nil, nil, err
 	}

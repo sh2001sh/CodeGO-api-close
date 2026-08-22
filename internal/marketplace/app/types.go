@@ -190,6 +190,7 @@ type AdminOwnerIncomeResult struct {
 
 type GroupQuery struct {
 	ViewerUserID  int
+	IncludeAccess bool
 	Search        string
 	Model         string
 	Source        string
@@ -332,6 +333,10 @@ type MultiplierTrendResult struct {
 
 type TokenBindingRequest struct {
 	TokenID int `json:"token_id"`
+}
+
+type GroupInviteRequest struct {
+	Token string `json:"token"`
 }
 
 type RemoveFailedModelRequest struct {

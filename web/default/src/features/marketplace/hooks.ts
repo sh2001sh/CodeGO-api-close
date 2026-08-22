@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   bindMarketplaceToken,
+  createMarketplaceGroupInvite,
   createMarketplaceChannel,
   deleteMarketplaceChannel,
   fetchMarketplaceModels,
@@ -177,6 +178,9 @@ export function useMarketplaceMutations() {
         queryClient.invalidateQueries({
           queryKey: ['marketplace-token-options'],
         }),
+    }),
+    createInvite: useMutation({
+      mutationFn: (groupId: string) => createMarketplaceGroupInvite(groupId),
     }),
   }
 }

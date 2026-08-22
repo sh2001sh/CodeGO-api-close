@@ -148,6 +148,7 @@ func V2MigrationIDs() []string {
 		"20260816_marketplace_channel_feedback_and_prices",
 		"20260817_marketplace_multiplier_trends",
 		"20260817_marketplace_subscription_billing",
+		"20260821_marketplace_group_invites",
 		"20260817_marketplace_transport_capabilities",
 		"20260817_responses_background",
 		"20260818_multiplier_precision",
@@ -331,6 +332,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&marketplaceschema.MultiplierTrendSnapshot{})
 		}},
 		{ID: "20260817_marketplace_subscription_billing", Run: migrateMarketplaceSubscriptionBilling},
+		{ID: "20260821_marketplace_group_invites", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.GroupInvite{}, &marketplaceschema.GroupAccess{})
+		}},
 		{ID: "20260817_marketplace_transport_capabilities", Run: migrateMarketplaceTransportCapabilities},
 		{ID: "20260817_responses_background", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{})
@@ -695,6 +699,9 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 		return !db.Migrator().HasTable(&marketplaceschema.MultiplierTrendSnapshot{})
 	case "20260817_marketplace_subscription_billing":
 		return marketplaceSubscriptionBillingNeedsRepair(db)
+	case "20260821_marketplace_group_invites":
+		return !db.Migrator().HasTable(&marketplaceschema.GroupInvite{}) ||
+			!db.Migrator().HasTable(&marketplaceschema.GroupAccess{})
 	case "20260817_marketplace_transport_capabilities":
 		return db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "TransportCapabilities")

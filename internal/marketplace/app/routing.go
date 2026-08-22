@@ -37,7 +37,7 @@ func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBi
 	if !marketplacedomain.AcceptsTraffic(group.LifecycleStatus) || group.VerificationStatus != marketplacedomain.VerificationPassed {
 		return nil, errors.New("市场分组当前不可用")
 	}
-	if group.OwnerUserID != consumerUserID && group.Visibility != marketplacedomain.VisibilityPublic {
+	if !hasMarketplaceGroupAccessForGroup(&group, consumerUserID) {
 		return nil, errors.New("市场分组未公开或无权访问")
 	}
 	var channel marketplaceschema.Channel

@@ -115,6 +115,11 @@ func initEnvironment() {
 	platformconfig.CriticalRateLimitNum = platformconfig.GetEnvOrDefaultInt("CRITICAL_RATE_LIMIT", 20)
 	platformconfig.CriticalRateLimitDuration = int64(platformconfig.GetEnvOrDefaultInt("CRITICAL_RATE_LIMIT_DURATION", 20*60))
 
+	platformconfig.LoginRateLimitEnable = platformconfig.GetEnvOrDefaultBool("LOGIN_RATE_LIMIT_ENABLE", true)
+	platformconfig.LoginIPRateLimitNum = platformconfig.GetEnvOrDefaultInt("LOGIN_IP_RATE_LIMIT", 120)
+	platformconfig.LoginAccountRateLimitNum = platformconfig.GetEnvOrDefaultInt("LOGIN_ACCOUNT_RATE_LIMIT", 20)
+	platformconfig.LoginRateLimitDuration = int64(platformconfig.GetEnvOrDefaultInt("LOGIN_RATE_LIMIT_DURATION", 10*60))
+
 	platformconfig.SearchRateLimitEnable = platformconfig.GetEnvOrDefaultBool("SEARCH_RATE_LIMIT_ENABLE", true)
 	platformconfig.SearchRateLimitNum = platformconfig.GetEnvOrDefaultInt("SEARCH_RATE_LIMIT", 10)
 	platformconfig.SearchRateLimitDuration = int64(platformconfig.GetEnvOrDefaultInt("SEARCH_RATE_LIMIT_DURATION", 60))

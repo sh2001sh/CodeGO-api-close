@@ -172,10 +172,19 @@ func globalAuthenticatedRateLimitKey(c *gin.Context) string {
 }
 
 func CriticalRateLimit() func(c *gin.Context) {
-	if platformconfig.CriticalRateLimitEnable {
-		return rateLimitFactory(platformconfig.CriticalRateLimitNum, platformconfig.CriticalRateLimitDuration, "CT")
+	if !platformconfig.CriticalRateLimitEnable {
+		return defNext
 	}
-	return defNext
+
+	ipLimiter := rateLimitFactory(platformconfig.CriticalRateLimitNum, platformconfig.CriticalRateLimitDuration, "CT")
+	userLimiter := userRateLimitFactory(platformconfig.CriticalRateLimitNum, platformconfig.CriticalRateLimitDuration, "CTU")
+	return func(c *gin.Context) {
+		if c.GetInt("id") > 0 {
+			userLimiter(c)
+			return
+		}
+		ipLimiter(c)
+	}
 }
 
 // BlindBoxOpenRateLimit limits opening by authenticated user rather than the

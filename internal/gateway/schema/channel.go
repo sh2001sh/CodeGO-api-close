@@ -85,12 +85,14 @@ const (
 )
 
 type CapabilityProbeState struct {
-	Status      string `json:"status,omitempty"`
-	CheckedAt   int64  `json:"checked_at,omitempty"`
-	Model       string `json:"model,omitempty"`
-	ErrorClass  string `json:"error_class,omitempty"`
-	HTTPStatus  int    `json:"http_status,omitempty"`
-	ProbeKeyIdx int    `json:"probe_key_index,omitempty"`
+	Status          string `json:"status,omitempty"`
+	CheckedAt       int64  `json:"checked_at,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ErrorClass      string `json:"error_class,omitempty"`
+	HTTPStatus      int    `json:"http_status,omitempty"`
+	ProbeKeyIdx     int    `json:"probe_key_index,omitempty"`
+	HandshakeStatus string `json:"handshake_status,omitempty"`
+	RequestStatus   string `json:"request_status,omitempty"`
 }
 
 type ResponsesCapabilities struct {

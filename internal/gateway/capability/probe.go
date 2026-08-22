@@ -12,7 +12,10 @@ import (
 
 const responsesWebSocketBeta = "responses_websockets=2026-02-06"
 
-const responsesCapabilityProbeTimeout = 4 * time.Minute
+const (
+	responsesCapabilityProbeTimeout = 12 * time.Minute
+	capabilityProbeSpacing          = 250 * time.Millisecond
+)
 
 type ProbeProtocol string
 
@@ -74,50 +77,33 @@ func ProbeResponsesTransportsForCandidates(ctx context.Context, candidates []Pro
 		return unsupportedProbeResult(candidates[0], reason)
 	}
 
+	// Probe capabilities sequentially. Running all four protocols at once with
+	// the same credential caused rate-limited channels to be misclassified as
+	// transport-incompatible.
 	client := &http.Client{Timeout: 25 * time.Second}
-	stateResults := make(chan struct {
-		name  string
-		state gatewayschema.CapabilityProbeState
-	}, 3)
-	go func() {
-		stateResults <- struct {
-			name  string
-			state gatewayschema.CapabilityProbeState
-		}{"v1", probeStateCandidates(probeCtx, client, candidates, true, probeRemoteCompactionV1)}
-	}()
-	go func() {
-		stateResults <- struct {
-			name  string
-			state gatewayschema.CapabilityProbeState
-		}{"v2", probeStateCandidates(probeCtx, client, candidates, false, probeRemoteCompactionV2)}
-	}()
-	go func() {
-		stateResults <- struct {
-			name  string
-			state gatewayschema.CapabilityProbeState
-		}{"websocket", probeStateCandidates(probeCtx, client, candidates, false, probeWebSocketCandidate)}
-	}()
-	backgroundResults := make(chan backgroundProbeResult, 1)
-	go func() { backgroundResults <- probeBackgroundCandidates(probeCtx, client, candidates) }()
-
-	result := ProbeResult{}
-	for range 3 {
-		probeResult := <-stateResults
-		switch probeResult.name {
-		case "v1":
-			result.RemoteCompactionV1 = probeResult.state
-		case "v2":
-			result.RemoteCompactionV2 = probeResult.state
-		case "websocket":
-			result.WebSocket = probeResult.state
-		}
+	result := ProbeResult{
+		WebSocket: probeStateCandidates(probeCtx, client, candidates, false, probeWebSocketCandidate),
 	}
-	background := <-backgroundResults
+	waitBetweenCapabilityProbes(probeCtx)
+	result.RemoteCompactionV1 = probeStateCandidates(probeCtx, client, candidates, true, probeRemoteCompactionV1)
+	waitBetweenCapabilityProbes(probeCtx)
+	result.RemoteCompactionV2 = probeStateCandidates(probeCtx, client, candidates, false, probeRemoteCompactionV2)
+	waitBetweenCapabilityProbes(probeCtx)
+	background := probeBackgroundCandidates(probeCtx, client, candidates)
 	result.NativeBackground = background.Aggregate
 	result.BackgroundCreate = background.Create
 	result.BackgroundResume = background.Resume
 	result.BackgroundCancel = background.Cancel
 	return result
+}
+
+func waitBetweenCapabilityProbes(ctx context.Context) {
+	timer := time.NewTimer(capabilityProbeSpacing)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
 }
 
 func PendingResponsesCapabilities(model string) gatewayschema.ResponsesCapabilities {

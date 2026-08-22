@@ -2,6 +2,7 @@ package capability
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -55,6 +56,50 @@ func TestProbeWebSocketRecordsCloseAfterSuccessfulUpgrade(t *testing.T) {
 	require.Equal(t, gatewayschema.CapabilityStatusError, state.Status)
 	require.Equal(t, http.StatusSwitchingProtocols, state.HTTPStatus)
 	require.Equal(t, "close_1013", state.ErrorClass)
+}
+
+func TestProbeWebSocketUsesStandardResponsesCreatePayload(t *testing.T) {
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Sec-WebSocket-Extensions") != "" {
+			t.Errorf("probe must not negotiate permessage-deflate: %q", request.Header.Get("Sec-WebSocket-Extensions"))
+		}
+		conn, err := upgrader.Upgrade(writer, request, nil)
+		if err != nil {
+			t.Errorf("upgrade websocket: %v", err)
+			return
+		}
+		defer conn.Close()
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			t.Errorf("read probe message: %v", err)
+			return
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Errorf("decode probe message: %v", err)
+			return
+		}
+		if payload["stream_id"] != "capability-probe" || payload["store"] != false || payload["input"] == nil {
+			t.Errorf("non-standard probe payload: %s", raw)
+			return
+		}
+		_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.completed"}`))
+	}))
+	defer server.Close()
+
+	state := probeWebSocket(context.Background(), server.URL, ProbeInput{APIKey: "key", Model: "gpt-5"}, gatewayschema.CapabilityProbeState{})
+	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.Status)
+	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.HandshakeStatus)
+	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.RequestStatus)
+}
+
+func TestWebSocket426IsTransientError(t *testing.T) {
+	state := gatewayschema.CapabilityProbeState{
+		Status: gatewayschema.CapabilityStatusError, HTTPStatus: http.StatusUpgradeRequired, ErrorClass: "http_426",
+	}
+	require.Equal(t, gatewayschema.CapabilityStatusError, websocketFailureStatus(state.ErrorClass))
+	require.True(t, IsTransientProbeFailure(state))
 }
 
 func TestWebSocketEventErrorClassReadsNestedResponseError(t *testing.T) {

@@ -3,6 +3,7 @@ package capability
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,6 +38,8 @@ func probeWebSocketCandidate(ctx context.Context, _ *http.Client, endpoint strin
 	probeCtx, cancel := context.WithTimeout(ctx, websocketProbeTimeout)
 	defer cancel()
 	state := base
+	state.HandshakeStatus = gatewayschema.CapabilityStatusPending
+	state.RequestStatus = gatewayschema.CapabilityStatusPending
 	wsURL := strings.Replace(endpoint, "https://", "wss://", 1)
 	wsURL = strings.Replace(wsURL, "http://", "ws://", 1)
 	headers := probeHeaders(input, nil)
@@ -47,25 +50,34 @@ func probeWebSocketCandidate(ctx context.Context, _ *http.Client, endpoint strin
 	}
 	headers.Set("OpenAI-Beta", webSocketBeta)
 	headers.Set("User-Agent", "new-api-capability-probe/1")
-	dialer := websocket.Dialer{HandshakeTimeout: 20 * time.Second, EnableCompression: true, Proxy: http.ProxyFromEnvironment}
+	// Do not negotiate permessage-deflate during probing. Several compatible
+	// gateways advertise it but fail while reading a compressed first frame.
+	dialer := websocket.Dialer{HandshakeTimeout: 20 * time.Second, EnableCompression: false, Proxy: http.ProxyFromEnvironment}
 	conn, response, err := dialer.DialContext(probeCtx, wsURL, headers)
 	if response != nil {
 		state.HTTPStatus = response.StatusCode
 	}
 	if err != nil {
+		state.HandshakeStatus = gatewayschema.CapabilityStatusError
+		state.RequestStatus = gatewayschema.CapabilityStatusUnknown
 		state.ErrorClass = websocketDialErrorClass(err, response)
+		if class := websocketHandshakeResponseClass(response); class != "" {
+			state.ErrorClass = class
+		}
 		state.Status = websocketFailureStatus(state.ErrorClass)
+		if state.Status == gatewayschema.CapabilityStatusUnsupported {
+			state.HandshakeStatus = gatewayschema.CapabilityStatusUnsupported
+		}
 		return state
 	}
 	defer conn.Close()
 	state.HTTPStatus = http.StatusSwitchingProtocols
-	payload, _ := platformencoding.Marshal(map[string]any{
-		"type": "response.create", "model": input.Model,
-		"input": "Reply with OK.", "max_output_tokens": 16,
-	})
+	state.HandshakeStatus = gatewayschema.CapabilityStatusSupported
+	payload, _ := platformencoding.Marshal(websocketProbeRequest(input.Model))
 	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 		state.ErrorClass = websocketErrorClass(err)
 		state.Status = websocketFailureStatus(state.ErrorClass)
+		state.RequestStatus = state.Status
 		return state
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(websocketProbeTimeout))
@@ -74,6 +86,7 @@ func probeWebSocketCandidate(ctx context.Context, _ *http.Client, endpoint strin
 		if readErr != nil {
 			state.ErrorClass = websocketErrorClass(readErr)
 			state.Status = websocketFailureStatus(state.ErrorClass)
+			state.RequestStatus = state.Status
 			return state
 		}
 		var event websocketEvent
@@ -81,15 +94,35 @@ func probeWebSocketCandidate(ctx context.Context, _ *http.Client, endpoint strin
 			continue
 		}
 		switch event.Type {
-		case "response.completed":
+		case "response.completed", "response.done":
 			state.Status = gatewayschema.CapabilityStatusSupported
+			state.RequestStatus = gatewayschema.CapabilityStatusSupported
 			state.ErrorClass = ""
 			return state
 		case "error", "response.failed", "response.incomplete":
 			state.ErrorClass = websocketEventErrorClass(event)
 			state.Status = websocketFailureStatus(state.ErrorClass)
+			state.RequestStatus = state.Status
 			return state
 		}
+	}
+}
+
+func websocketProbeRequest(model string) map[string]any {
+	return map[string]any{
+		"type":      "response.create",
+		"stream_id": "capability-probe",
+		"model":     strings.TrimSpace(model),
+		"store":     false,
+		"input": []any{map[string]any{
+			"type": "message",
+			"role": "user",
+			"content": []any{map[string]any{
+				"type": "input_text",
+				"text": "Reply with OK.",
+			}},
+		}},
+		"tools": []any{},
 	}
 }
 
@@ -99,7 +132,7 @@ func websocketFailureStatus(errorClass string) string {
 		status, err := strconv.Atoi(strings.TrimPrefix(class, "http_"))
 		if err == nil {
 			switch status {
-			case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusUpgradeRequired, http.StatusNotImplemented:
+			case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
 				return gatewayschema.CapabilityStatusUnsupported
 			}
 		}
@@ -118,11 +151,11 @@ func IsTransientProbeFailure(state gatewayschema.CapabilityProbeState) bool {
 	if state.Status != gatewayschema.CapabilityStatusError {
 		return false
 	}
-	if state.HTTPStatus == http.StatusTooManyRequests || state.HTTPStatus >= http.StatusInternalServerError {
+	if state.HTTPStatus == http.StatusUpgradeRequired || state.HTTPStatus == http.StatusTooManyRequests || state.HTTPStatus >= http.StatusInternalServerError {
 		return true
 	}
 	class := strings.ToLower(strings.TrimSpace(state.ErrorClass))
-	if strings.HasPrefix(class, "http_5") || strings.HasPrefix(class, "http_429") {
+	if strings.HasPrefix(class, "http_5") || strings.HasPrefix(class, "http_426") || strings.HasPrefix(class, "http_429") {
 		return true
 	}
 	for _, marker := range []string{
@@ -135,6 +168,21 @@ func IsTransientProbeFailure(state gatewayschema.CapabilityProbeState) bool {
 		}
 	}
 	return false
+}
+
+func websocketHandshakeResponseClass(response *http.Response) string {
+	if response == nil || response.Body == nil {
+		return ""
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+	if err != nil || len(raw) == 0 {
+		return ""
+	}
+	class := responseErrorClass(raw, response.StatusCode)
+	if strings.HasPrefix(class, "http_") {
+		return ""
+	}
+	return class
 }
 
 func websocketErrorClass(err error) string {

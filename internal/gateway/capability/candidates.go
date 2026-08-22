@@ -51,7 +51,9 @@ func probeStateCandidates(ctx context.Context, client *http.Client, candidates [
 			continue
 		}
 		hadError = true
-		lastError = last
+		if preferCapabilityError(last, lastError) {
+			lastError = last
+		}
 	}
 	if unsupported != nil && !hadError {
 		return *unsupported
@@ -60,6 +62,19 @@ func probeStateCandidates(ctx context.Context, client *http.Client, candidates [
 		return lastError
 	}
 	return last
+}
+
+func preferCapabilityError(candidate, current gatewayschema.CapabilityProbeState) bool {
+	if current.ErrorClass == "no_probe_candidates" {
+		return true
+	}
+	if candidate.HandshakeStatus == gatewayschema.CapabilityStatusSupported && current.HandshakeStatus != gatewayschema.CapabilityStatusSupported {
+		return true
+	}
+	if candidate.HandshakeStatus != gatewayschema.CapabilityStatusSupported && current.HandshakeStatus == gatewayschema.CapabilityStatusSupported {
+		return false
+	}
+	return candidate.CheckedAt >= current.CheckedAt
 }
 
 func probeBackgroundCandidates(ctx context.Context, client *http.Client, candidates []ProbeInput) backgroundProbeResult {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 )
 
 const maxMarketplaceMultiplier = 1_000_000
@@ -34,6 +35,9 @@ func validateCreateRequest(req CreateChannelRequest) error {
 	if _, err := normalizeChannelModelPrices(req.ModelPrices, req.DeclaredModels); err != nil {
 		return err
 	}
+	if err := validateImageModelPrices(req.ModelPrices, req.DeclaredModels); err != nil {
+		return err
+	}
 	if err := validateMultiplier(req.Multiplier); err != nil {
 		return err
 	}
@@ -51,6 +55,22 @@ func validateCreateRequest(req CreateChannelRequest) error {
 	}
 	if err := validateAutoProbe(req.AutoProbeEnabled, req.AutoProbeIntervalMinutes, req.AutoProbeModel, req.DeclaredModels); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateImageModelPrices makes image generation costs explicit. Their output
+// cannot be priced reliably from text tokens, so marketplace owners must set a
+// fixed successful-request price for every declared image model.
+func validateImageModelPrices(prices map[string]ChannelModelPrice, models []string) error {
+	for _, model := range normalizeModels(models) {
+		if !gatewaycontract.IsImageGenerationModel(model) {
+			continue
+		}
+		price, ok := channelModelPriceForModel(prices, model)
+		if !ok || price.EffectiveBillingMode() != ChannelBillingModePerCall || price.PricePerCall <= 0 {
+			return fmt.Errorf("生图模型 %s 必须配置按次收费的渠道价格", model)
+		}
 	}
 	return nil
 }

@@ -43,7 +43,8 @@ export function ChannelModelPrices(props: {
   const editableModels = props.selectedModels.filter(
     (model) =>
       channelPrices.has(modelKey(model)) ||
-      !sitePricedModels.has(modelKey(model))
+      !sitePricedModels.has(modelKey(model)) ||
+      isImageGenerationModel(model)
   )
   const siteCoveredModels = props.selectedModels.filter(
     (model) =>
@@ -71,6 +72,7 @@ export function ChannelModelPrices(props: {
               model={model}
               price={channelPrices.get(modelKey(model))}
               sitePriced={sitePricedModels.has(modelKey(model))}
+              imageModel={isImageGenerationModel(model)}
               onSave={(price) => setChannelPrice(props.form, model, price)}
               onRemove={() => removeChannelPrice(props.form, model)}
             />
@@ -126,6 +128,7 @@ function ModelPriceRow(props: {
   model: string
   price?: ChannelModelPrice
   sitePriced: boolean
+  imageModel: boolean
   onSave: (price: ChannelModelPrice) => void
   onRemove: () => void
 }) {
@@ -153,15 +156,29 @@ function ModelPriceRow(props: {
               {t('站点尚未配置价格')}
             </>
           )}
+          {props.imageModel && (
+            <span className='text-muted-foreground mt-1 block'>
+              {t('生图模型按次收费，无需连通性检测')}
+            </span>
+          )}
         </p>
       </div>
       <ChannelPriceEditor
         key={`${props.model}:${JSON.stringify(props.price ?? null)}`}
         price={props.price}
+        forcePerCall={props.imageModel}
         onSave={props.onSave}
         onRemove={props.onRemove}
       />
     </div>
+  )
+}
+
+function isImageGenerationModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase()
+  return (
+    normalized.startsWith('gpt-image-') ||
+    normalized.includes('image-generation')
   )
 }
 

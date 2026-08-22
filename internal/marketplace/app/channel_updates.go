@@ -69,12 +69,18 @@ func applyChannelModelUpdate(channel *marketplaceschema.Channel, req UpdateChann
 		if err != nil {
 			return false, err
 		}
+		if err := validateImageModelPrices(prices, models); err != nil {
+			return false, err
+		}
 		channel.ModelPrices = encodedPrices
 		return reverify, nil
 	}
 	if req.ModelPrices != nil {
 		prices, err := encodeChannelModelPrices(*req.ModelPrices, decodeModels(channel.DeclaredModels))
 		if err != nil {
+			return false, err
+		}
+		if err := validateImageModelPrices(*req.ModelPrices, decodeModels(channel.DeclaredModels)); err != nil {
 			return false, err
 		}
 		channel.ModelPrices = prices

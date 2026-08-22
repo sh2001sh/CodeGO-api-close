@@ -110,6 +110,7 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		ModelVerificationResults:  publicModelVerificationResults(channel.ModelVerificationResults),
 		ConnectivityTestStatus:    channel.ConnectivityTestStatus,
 		ConnectivityTestCheckedAt: channel.ConnectivityTestCheckedAt,
+		RemoteCompactionSupport:   remoteCompactionSupport(channel.TransportCapabilities),
 		ModelConsistencyStatus:    channel.ModelConsistencyStatus,
 		GPT56MappingResults:       publicGPT56MappingResults(channel.GPT56MappingResults),
 		GPT56MappingStatus:        channel.GPT56MappingStatus,
@@ -128,6 +129,26 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		UserMaxConcurrency:   channel.UserMaxConcurrency,
 		IndependentConsumers: snapshot.IndependentConsumers,
 		Observing:            snapshot.Observing, UpdatedAt: group.UpdatedAt,
+	}
+}
+
+// remoteCompactionSupport reduces the persisted capability evidence to the
+// versions that are actually supported. Unknown, pending, transient-error and
+// protocol-not-applicable states are deliberately omitted from public market
+// cards so they cannot be mistaken for a usable feature.
+func remoteCompactionSupport(raw string) string {
+	capabilities := decodeMarketplaceCapabilities(raw)
+	v1 := capabilities.RemoteCompactionV1.Status == "supported"
+	v2 := capabilities.RemoteCompactionV2.Status == "supported"
+	switch {
+	case v1 && v2:
+		return "v1_v2"
+	case v1:
+		return "v1"
+	case v2:
+		return "v2"
+	default:
+		return ""
 	}
 }
 

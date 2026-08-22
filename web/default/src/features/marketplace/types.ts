@@ -100,6 +100,7 @@ export interface MarketplaceGroup {
   model_verification_results: ModelVerificationResult[]
   connectivity_test_status: ConnectivityTestStatus
   connectivity_test_checked_at?: string | null
+  remote_compaction_support?: 'v1' | 'v1_v2' | 'v2' | ''
   model_consistency_status: ModelConsistencyStatus
   gpt56_mapping_results: GPT56MappingResult[]
   gpt56_mapping_status: GPT56MappingStatus

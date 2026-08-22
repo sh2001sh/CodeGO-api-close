@@ -17,13 +17,16 @@ import { FormField } from './channel-form-layout'
 
 export function ChannelPriceEditor(props: {
   price?: ChannelModelPrice
+  forcePerCall?: boolean
   onSave: (price: ChannelModelPrice) => void
   onRemove: () => void
 }) {
   const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<ChannelPriceDraft>(() =>
-    channelPriceToDraft(props.price)
+    props.forcePerCall
+      ? { ...channelPriceToDraft(props.price), mode: 'per_call' }
+      : channelPriceToDraft(props.price)
   )
 
   const isEditing = Boolean(props.price) || editing
@@ -46,10 +49,16 @@ export function ChannelPriceEditor(props: {
   const error = validateChannelPriceDraft(draft, t)
   return (
     <div className='space-y-3'>
-      <BillingModePicker
-        mode={draft.mode}
-        onChange={(mode) => setDraft((current) => ({ ...current, mode }))}
-      />
+      {props.forcePerCall ? (
+        <p className='text-muted-foreground text-xs'>
+          {t('生图模型固定按次计费')}
+        </p>
+      ) : (
+        <BillingModePicker
+          mode={draft.mode}
+          onChange={(mode) => setDraft((current) => ({ ...current, mode }))}
+        />
+      )}
       {draft.mode === 'per_call' ? (
         <PriceInput
           label={t('每次请求价格')}

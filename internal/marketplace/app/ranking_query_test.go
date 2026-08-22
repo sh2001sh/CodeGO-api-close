@@ -24,6 +24,35 @@ func TestPublicSourceLabelRequiresApproval(t *testing.T) {
 	require.Equal(t, "Claude Max", publicSourceLabel(channel))
 }
 
+func TestRemoteCompactionSupportSummarizesOnlySupportedVersions(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "v1 only", raw: `{"remote_compaction_v1":{"status":"supported"}}`, want: "v1"},
+		{name: "both", raw: `{"remote_compaction_v1":{"status":"supported"},"remote_compaction_v2":{"status":"supported"}}`, want: "v1_v2"},
+		{name: "v2 only", raw: `{"remote_compaction_v2":{"status":"supported"}}`, want: "v2"},
+		{name: "not ready", raw: `{"remote_compaction_v1":{"status":"error"},"remote_compaction_v2":{"status":"pending"}}`, want: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, remoteCompactionSupport(test.raw))
+		})
+	}
+}
+
+func TestGroupListItemIncludesRemoteCompactionSupport(t *testing.T) {
+	channel := marketplaceschema.Channel{
+		ID:                    "channel-compaction",
+		TransportCapabilities: `{"remote_compaction_v1":{"status":"supported"},"remote_compaction_v2":{"status":"supported"}}`,
+	}
+	item := groupListItem(
+		marketplaceschema.Group{ID: "group-compaction", ChannelID: channel.ID},
+		channel, nil, marketplaceschema.RankingSnapshot{}, nil,
+	)
+	require.Equal(t, "v1_v2", item.RemoteCompactionSupport)
+}
+
 func TestPendingSourceLabelIsNotSearchableOrReturned(t *testing.T) {
 	group := marketplaceschema.Group{
 		ID: "group-1", ChannelID: "channel-1", SystemDisplayName: "用户分组",

@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, FileText, Radio } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Radio,
+  Shrink,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -49,6 +55,9 @@ export function GroupMarketItem(props: {
                   {group.system_display_name}
                 </h4>
                 <MarketplaceStatusBadge status={group.lifecycle_status} />
+                <RemoteCompactionBadge
+                  support={group.remote_compaction_support}
+                />
               </div>
               <div className='text-muted-foreground mt-1 flex min-w-0 items-center gap-2 text-xs'>
                 {group.source_label && (
@@ -132,6 +141,28 @@ export function GroupMarketItem(props: {
         </div>
       )}
     </article>
+  )
+}
+
+function RemoteCompactionBadge(props: {
+  support: MarketplaceGroup['remote_compaction_support']
+}) {
+  const { t } = useTranslation()
+  if (!props.support) return null
+  const label =
+    props.support === 'v1'
+      ? t('远程压缩 · 仅 v1')
+      : props.support === 'v1_v2'
+        ? t('远程压缩 · v1 + v2')
+        : t('远程压缩 · 仅 v2')
+  return (
+    <span
+      className='border-info/35 bg-info/10 text-info inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium'
+      title={t('该分组已通过对应远程压缩协议探测')}
+    >
+      <Shrink className='size-3' aria-hidden='true' />
+      <span>{label}</span>
+    </span>
   )
 }
 

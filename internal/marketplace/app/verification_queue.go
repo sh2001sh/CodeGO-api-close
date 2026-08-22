@@ -6,6 +6,7 @@ import (
 	"time"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
@@ -22,7 +23,52 @@ func QueueRequiredVerification(channelID string) error {
 	if isGPT56MappingEligible(channel) {
 		return QueueGPT56MappingVerification(channelID)
 	}
+	if len(verifiableMarketplaceModels(decodeModels(channel.DeclaredModels))) == 0 {
+		return publishImageOnlyChannel(channel)
+	}
 	return QueueConnectivityTest(channelID)
+}
+
+func verifiableMarketplaceModels(models []string) []string {
+	result := make([]string, 0, len(models))
+	for _, model := range normalizeModels(models) {
+		if !gatewaycontract.IsImageGenerationModel(model) {
+			result = append(result, model)
+		}
+	}
+	return result
+}
+
+func publishImageOnlyChannel(channel *marketplaceschema.Channel) error {
+	_, group, err := loadChannelGroup(channel.ID)
+	if err != nil {
+		return err
+	}
+	if channel.InternalChannelID == nil {
+		err = createInternalChannel(channel, group)
+	} else {
+		err = syncInternalChannel(channel, group)
+	}
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(channel).Updates(map[string]any{
+			"status": marketplacedomain.LifecycleActive,
+			"connectivity_test_status": marketplacedomain.VerificationPassed,
+			"connectivity_test_checked_at": now,
+		}).Error; err != nil {
+			return err
+		}
+		return tx.Model(group).Updates(map[string]any{
+			"lifecycle_status": marketplacedomain.LifecycleActive,
+			"verification_status": marketplacedomain.VerificationPassed,
+			"verification_summary": "仅包含生图模型，按次计费，免连通性检测",
+			"verification_due_at": now.Add(7 * 24 * time.Hour),
+			"published_at": now,
+		}).Error
+	})
 }
 
 // QueueGPT56MappingVerification collects independent mapping evidence for GPT-5.6 models.
@@ -61,7 +107,7 @@ func QueueConnectivityTest(channelID string) error {
 	if err != nil {
 		return err
 	}
-	return queueConnectivityTest(channel, nil, nil)
+	return queueConnectivityTest(channel, verifiableMarketplaceModels(decodeModels(channel.DeclaredModels)), nil)
 }
 
 // QueueFailedConnectivityTests retries only models that failed the latest run.
@@ -71,7 +117,7 @@ func QueueFailedConnectivityTests(channelID string) error {
 		return err
 	}
 	previous := decodeModelVerificationResults(channel.ModelVerificationResults)
-	failed := failedModelVerificationModels(decodeModels(channel.DeclaredModels), previous)
+	failed := failedModelVerificationModels(verifiableMarketplaceModels(decodeModels(channel.DeclaredModels)), previous)
 	if len(failed) == 0 {
 		return errors.New("没有可重试的失败模型")
 	}

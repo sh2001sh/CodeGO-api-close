@@ -231,6 +231,7 @@ type GroupListItem struct {
 	GPT56MappingTrigger        string                    `json:"gpt56_mapping_trigger"`
 	ConnectivityTestStatus     string                    `json:"connectivity_test_status"`
 	ConnectivityTestCheckedAt  *time.Time                `json:"connectivity_test_checked_at"`
+	RemoteCompactionSupport    string                    `json:"remote_compaction_support,omitempty"`
 	ChannelFeedback            ChannelFeedbackSummary    `json:"channel_feedback"`
 	CanSubmitChannelFeedback   bool                      `json:"can_submit_channel_feedback"`
 	ChannelFeedbackPermission  string                    `json:"channel_feedback_permission"`

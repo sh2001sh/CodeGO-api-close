@@ -25,20 +25,8 @@ type responseEnvelope struct {
 	} `json:"error"`
 }
 
-func probePlainResponses(ctx context.Context, client *http.Client, endpoint, key, model string) (int, string) {
-	body := map[string]any{"model": model, "input": "Reply with OK.", "max_output_tokens": 16}
-	status, raw, err := requestJSON(ctx, client, http.MethodPost, endpoint, key, body)
-	if err != nil {
-		return status, classifyTransportError(err)
-	}
-	if status < 200 || status >= 300 {
-		return status, responseErrorClass(raw, status)
-	}
-	return status, ""
-}
-
-func requestJSON(ctx context.Context, client *http.Client, method, target, key string, body any) (int, []byte, error) {
-	response, err := request(ctx, client, method, target, key, body, "application/json, text/event-stream")
+func requestJSONWithHeaders(ctx context.Context, client *http.Client, method, target, key string, body any, headers http.Header) (int, []byte, error) {
+	response, err := requestWithHeaders(ctx, client, method, target, key, body, "application/json, text/event-stream", headers)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -47,8 +35,15 @@ func requestJSON(ctx context.Context, client *http.Client, method, target, key s
 	return response.StatusCode, raw, err
 }
 
-func request(ctx context.Context, client *http.Client, method, target, key string, body any, accept string) (*http.Response, error) {
-	return requestWithHeaders(ctx, client, method, target, key, body, accept, nil)
+func probeHeaders(input ProbeInput, extras http.Header) http.Header {
+	headers := make(http.Header, len(input.Headers)+len(extras))
+	for name, values := range input.Headers {
+		headers[name] = append([]string(nil), values...)
+	}
+	for name, values := range extras {
+		headers[name] = append([]string(nil), values...)
+	}
+	return headers
 }
 
 func requestWithHeaders(ctx context.Context, client *http.Client, method, target, key string, body any, accept string, headers http.Header) (*http.Response, error) {

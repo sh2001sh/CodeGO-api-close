@@ -55,6 +55,22 @@ func TestProbeResponsesTransportsForCandidatesTriesNextModel(t *testing.T) {
 			_, _ = writer.Write([]byte(`{"error":{"type":"invalid_model"}}`))
 			return
 		}
+		if strings.HasSuffix(request.URL.Path, "/responses/compact") {
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"id":"cmp_test","object":"response.compaction","output":[{"type":"compaction"}]}`))
+			return
+		}
+		if input, ok := body["input"].([]any); ok {
+			for _, item := range input {
+				object, _ := item.(map[string]any)
+				if object["type"] == "compaction_trigger" {
+					writer.Header().Set("Content-Type", "text/event-stream")
+					_, _ = writer.Write([]byte("data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"compaction\"}}\n\n" +
+						"data: {\"type\":\"response.completed\",\"response\":{\"output\":[]}}\n\n"))
+					return
+				}
+			}
+		}
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"id":"resp_test","status":"completed"}`))
 	}))
@@ -65,10 +81,47 @@ func TestProbeResponsesTransportsForCandidatesTriesNextModel(t *testing.T) {
 		{BaseURL: server.URL + "/v1", APIKey: "key", Model: "good-model", KeyIndex: 0},
 	})
 
-	require.Equal(t, []string{"bad-model", "good-model", "good-model", "good-model"}, plainModels)
+	require.Contains(t, plainModels, "bad-model")
+	require.Contains(t, plainModels, "good-model")
 	require.Equal(t, "good-model", result.WebSocket.Model)
 	require.Equal(t, gatewayschema.CapabilityStatusUnsupported, result.WebSocket.Status)
 	require.Equal(t, gatewayschema.CapabilityStatusUnsupported, result.NativeBackground.Status)
+	require.Equal(t, gatewayschema.CapabilityStatusSupported, result.RemoteCompactionV1.Status)
+	require.Equal(t, gatewayschema.CapabilityStatusSupported, result.RemoteCompactionV2.Status)
+}
+
+func TestNotApplicableProtocolDoesNotSendRequests(t *testing.T) {
+	result := ProbeResponsesTransportsForCandidates(context.Background(), []ProbeInput{{
+		Protocol: ProbeProtocolNotApplicable, Model: "claude-opus-4-6", KeyIndex: -1,
+		SkipReason: "protocol_not_applicable",
+	}})
+	require.Equal(t, gatewayschema.CapabilityStatusUnsupported, result.RemoteCompactionV1.Status)
+	require.Equal(t, "protocol_not_applicable", result.RemoteCompactionV1.ErrorClass)
+}
+
+func TestParseRemoteCompactionV1ProbeRequiresCompactionEnvelope(t *testing.T) {
+	require.True(t, parseRemoteCompactionV1Probe([]byte(`{"id":"cmp","object":"response.compaction"}`)))
+	require.True(t, parseRemoteCompactionV1Probe([]byte(`{"output":[{"type":"compaction_summary"}]}`)))
+	require.False(t, parseRemoteCompactionV1Probe([]byte(`{"id":"resp","object":"response"}`)))
+}
+
+func TestRemoteCompactionV1RejectsPlainSuccessfulResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"resp","object":"response","status":"completed"}`))
+	}))
+	defer server.Close()
+	result := ProbeResponsesTransportsForCandidates(context.Background(), []ProbeInput{{
+		BaseURL: server.URL, APIKey: "key", Model: "gpt-5", Protocol: ProbeProtocolOpenAIResponses,
+	}})
+	require.Equal(t, gatewayschema.CapabilityStatusUnsupported, result.RemoteCompactionV1.Status)
+	require.Equal(t, "missing_compaction_output", result.RemoteCompactionV1.ErrorClass)
+}
+
+func TestParseRemoteCompactionV2ProbeAcceptsJSONCompactionEnvelope(t *testing.T) {
+	hasCompaction, hasCompleted := parseRemoteCompactionV2Probe([]byte(`{"id":"cmp","object":"response.compaction"}`))
+	require.True(t, hasCompaction)
+	require.True(t, hasCompleted)
 }
 
 func TestBackgroundTransientFailureIsNotMarkedUnsupported(t *testing.T) {

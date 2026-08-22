@@ -29,6 +29,23 @@ func TestMarketplaceCapabilitiesNeedProbeRetriesTransientWebSocketFailure(t *tes
 	require.True(t, marketplaceCapabilitiesNeedProbe(string(raw), now))
 }
 
+func TestMarketplaceCapabilitiesNeedProbeWhenRemoteCompactionIsMissing(t *testing.T) {
+	now := time.Now()
+	stable := gatewayschema.CapabilityProbeState{
+		Status: gatewayschema.CapabilityStatusUnsupported, CheckedAt: now.Unix(), ErrorClass: "http_404",
+	}
+	capabilities := gatewayschema.ResponsesCapabilities{WebSocket: stable, NativeBackground: stable}
+	raw, err := platformencoding.Marshal(capabilities)
+	require.NoError(t, err)
+	require.True(t, marketplaceCapabilitiesNeedProbe(string(raw), now))
+
+	capabilities.RemoteCompactionV1 = stable
+	capabilities.RemoteCompactionV2 = stable
+	raw, err = platformencoding.Marshal(capabilities)
+	require.NoError(t, err)
+	require.False(t, marketplaceCapabilitiesNeedProbe(string(raw), now))
+}
+
 func TestMarketplaceProbePersistsAndSyncsInternalCapabilities(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &gatewayschema.Channel{}))
@@ -51,7 +68,10 @@ func TestMarketplaceProbePersistsAndSyncsInternalCapabilities(t *testing.T) {
 		require.Len(t, candidates, 1)
 		require.Equal(t, "marketplace-key", candidates[0].APIKey)
 		state := gatewayschema.CapabilityProbeState{Status: gatewayschema.CapabilityStatusSupported, Model: candidates[0].Model}
-		return gatewaycapability.ProbeResult{WebSocket: state, NativeBackground: state}
+		return gatewaycapability.ProbeResult{
+			WebSocket: state, NativeBackground: state,
+			RemoteCompactionV1: state, RemoteCompactionV2: state,
+		}
 	}
 	t.Cleanup(func() { probeMarketplaceCandidates = originalProbe })
 
@@ -60,9 +80,20 @@ func TestMarketplaceProbePersistsAndSyncsInternalCapabilities(t *testing.T) {
 	var persisted gatewayschema.ResponsesCapabilities
 	require.NoError(t, platformencoding.Unmarshal([]byte(channel.TransportCapabilities), &persisted))
 	require.True(t, persisted.SupportsWebSocket())
+	require.True(t, persisted.SupportsRemoteCompactionV1For("gpt-5", 0))
+	require.True(t, persisted.SupportsRemoteCompactionV2For("gpt-5", 0))
 
 	require.NoError(t, db.First(&internal, internal.Id).Error)
 	require.True(t, internal.ChannelInfo.ResponsesCapabilities.SupportsWebSocket())
+	require.True(t, internal.ChannelInfo.ResponsesCapabilities.SupportsRemoteCompactionV1For("gpt-5", 0))
+}
+
+func TestMarketplaceNativeProviderCapabilitiesAreNotApplicable(t *testing.T) {
+	channel := &marketplaceschema.Channel{ProviderType: "anthropic", DeclaredModels: `["claude-opus-4-6"]`}
+	candidates := marketplaceProbeCandidates(channel)
+	require.Len(t, candidates, 1)
+	require.Equal(t, gatewaycapability.ProbeProtocolNotApplicable, candidates[0].Protocol)
+	require.Equal(t, "protocol_not_applicable", candidates[0].SkipReason)
 }
 
 func TestMarketplaceNewChannelCapabilitiesStartPending(t *testing.T) {

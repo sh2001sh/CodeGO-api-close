@@ -11,7 +11,7 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 )
 
-const remoteCompactionProbeTimeout = 30 * time.Second
+const remoteCompactionProbeTimeout = 20 * time.Second
 
 func probeRemoteCompactionV1(ctx context.Context, client *http.Client, endpoint string, input ProbeInput, base gatewayschema.CapabilityProbeState) gatewayschema.CapabilityProbeState {
 	probeCtx, cancel := context.WithTimeout(ctx, remoteCompactionProbeTimeout)
@@ -25,8 +25,13 @@ func probeRemoteCompactionV1(ctx context.Context, client *http.Client, endpoint 
 		"parallel_tool_calls": false,
 		"text":                map[string]any{"format": map[string]any{"type": "text"}},
 	}
-	status, raw, err := requestJSON(probeCtx, client, http.MethodPost, endpoint, input.APIKey, body)
-	return compactionProbeState(base, status, raw, err)
+	status, raw, err := requestJSONWithHeaders(probeCtx, client, http.MethodPost, endpoint, input.APIKey, body, probeHeaders(input, nil))
+	state := compactionProbeState(base, status, raw, err)
+	if state.Status == gatewayschema.CapabilityStatusSupported && !parseRemoteCompactionV1Probe(raw) {
+		state.Status = gatewayschema.CapabilityStatusUnsupported
+		state.ErrorClass = "missing_compaction_output"
+	}
+	return state
 }
 
 func probeRemoteCompactionV2(ctx context.Context, client *http.Client, endpoint string, input ProbeInput, base gatewayschema.CapabilityProbeState) gatewayschema.CapabilityProbeState {
@@ -44,9 +49,9 @@ func probeRemoteCompactionV2(ctx context.Context, client *http.Client, endpoint 
 		"parallel_tool_calls": false,
 		"text":                map[string]any{"format": map[string]any{"type": "text"}},
 	}
-	response, err := requestWithHeaders(probeCtx, client, http.MethodPost, endpoint, input.APIKey, body, "application/json, text/event-stream", http.Header{
+	response, err := requestWithHeaders(probeCtx, client, http.MethodPost, endpoint, input.APIKey, body, "application/json, text/event-stream", probeHeaders(input, http.Header{
 		"X-Codex-Beta-Features": []string{"remote_compaction_v2"},
-	})
+	}))
 	if err != nil {
 		return compactionProbeState(base, 0, nil, err)
 	}
@@ -66,10 +71,35 @@ func probeRemoteCompactionV2(ctx context.Context, client *http.Client, endpoint 
 	return state
 }
 
+func parseRemoteCompactionV1Probe(raw []byte) bool {
+	var payload struct {
+		Object string `json:"object"`
+		Type   string `json:"type"`
+		Output []struct {
+			Type string `json:"type"`
+		} `json:"output"`
+	}
+	if json.Unmarshal(raw, &payload) != nil {
+		return false
+	}
+	if payload.Object == "response.compaction" || payload.Type == "response.compaction" {
+		return true
+	}
+	for _, item := range payload.Output {
+		if item.Type == "compaction" || item.Type == "compaction_summary" {
+			return true
+		}
+	}
+	return false
+}
+
 // parseRemoteCompactionV2Probe validates the protocol-level success signal.
 // A 2xx response alone is insufficient: Codex requires a compaction output
 // item and a response.completed terminal event in the streamed response.
 func parseRemoteCompactionV2Probe(raw []byte) (hasCompaction, hasCompleted bool) {
+	if parseRemoteCompactionV1Probe(raw) {
+		return true, true
+	}
 	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
 	scanner.Buffer(make([]byte, 1024), 2<<20)
 	var data strings.Builder

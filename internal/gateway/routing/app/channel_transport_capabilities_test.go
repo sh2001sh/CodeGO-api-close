@@ -51,7 +51,7 @@ func TestCreateChannelsForInsertMarksCapabilitiesPending(t *testing.T) {
 func TestChannelProbeCandidatesSkipDisabledKeysAndPreferTestModel(t *testing.T) {
 	preferred := "gpt-5.2"
 	channel := &gatewayschema.Channel{
-		Key: "disabled-key\nenabled-key", Models: "gpt-5,gpt-5.2", TestModel: &preferred,
+		Type: constant.ChannelTypeOpenAI, Key: "disabled-key\nenabled-key", Models: "gpt-5,gpt-5.2", TestModel: &preferred,
 		ChannelInfo: gatewayschema.ChannelInfo{
 			IsMultiKey: true, MultiKeySize: 2,
 			MultiKeyStatusList: map[int]int{0: constant.ChannelStatusManuallyDisabled},
@@ -66,6 +66,36 @@ func TestChannelProbeCandidatesSkipDisabledKeysAndPreferTestModel(t *testing.T) 
 	require.Equal(t, 1, candidates[0].KeyIndex)
 	require.Equal(t, "gpt-5.2", candidates[0].Model)
 	require.Equal(t, "gpt-5", candidates[1].Model)
+}
+
+func TestChannelProbeCandidatesMarkNativeProtocolsNotApplicable(t *testing.T) {
+	channel := &gatewayschema.Channel{Type: constant.ChannelTypeAnthropic, Key: "key", Models: "claude-opus-4-6"}
+	candidates := channelProbeCandidates(channel)
+	require.Len(t, candidates, 1)
+	require.Equal(t, gatewaycapability.ProbeProtocolNotApplicable, candidates[0].Protocol)
+	require.Equal(t, "protocol_not_applicable", candidates[0].SkipReason)
+}
+
+func TestChannelProbeCandidatesSkipImageOnlyChannel(t *testing.T) {
+	channel := &gatewayschema.Channel{Type: constant.ChannelTypeOpenAI, Key: "key", Models: "gpt-image-2"}
+	candidates := channelProbeCandidates(channel)
+	require.Len(t, candidates, 1)
+	require.Equal(t, gatewaycapability.ProbeProtocolNotApplicable, candidates[0].Protocol)
+	require.Equal(t, "no_responses_model", candidates[0].SkipReason)
+}
+
+func TestChannelProbeCandidatesUseCodexOAuthHeaders(t *testing.T) {
+	baseURL := "https://chatgpt.com"
+	channel := &gatewayschema.Channel{
+		Type: constant.ChannelTypeCodex, BaseURL: &baseURL, Models: "gpt-5.4",
+		Key: `{"access_token":"access","account_id":"acct"}`,
+	}
+	candidates := channelProbeCandidates(channel)
+	require.Len(t, candidates, 1)
+	require.Equal(t, gatewaycapability.ProbeProtocolCodexResponses, candidates[0].Protocol)
+	require.Equal(t, "access", candidates[0].APIKey)
+	require.Equal(t, "acct", candidates[0].Headers.Get("chatgpt-account-id"))
+	require.Equal(t, "/backend-api/codex/responses", candidates[0].ResponsesPath)
 }
 
 func TestProbeAndPersistChannelCapabilities(t *testing.T) {

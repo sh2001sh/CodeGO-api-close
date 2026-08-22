@@ -18,10 +18,9 @@ import (
 )
 
 const (
-	marketplaceCapabilityProbeTimeout = 4 * time.Minute
-	marketplaceCapabilityMaxModels    = 4
-	marketplaceCapabilityMaxAge       = 24 * time.Hour
-	marketplaceCapabilityRetryDelay   = 15 * time.Minute
+	marketplaceCapabilityMaxModels  = 4
+	marketplaceCapabilityMaxAge     = 24 * time.Hour
+	marketplaceCapabilityRetryDelay = 15 * time.Minute
 )
 
 var (
@@ -63,9 +62,7 @@ func scheduleMarketplaceCapabilityProbe(channelID string) {
 	}
 	go func() {
 		defer marketplaceCapabilityProbeInFlight.Delete(channelID)
-		ctx, cancel := context.WithTimeout(context.Background(), marketplaceCapabilityProbeTimeout)
-		defer cancel()
-		if err := probeAndPersistMarketplaceCapabilities(ctx, channelID); err != nil {
+		if err := probeAndPersistMarketplaceCapabilities(context.Background(), channelID); err != nil {
 			platformobservability.SysLog(fmt.Sprintf("marketplace transport capability probe failed: channel_id=%s error=%v", channelID, err))
 		}
 	}()
@@ -78,11 +75,13 @@ func probeAndPersistMarketplaceCapabilities(ctx context.Context, channelID strin
 	}
 	result := probeMarketplaceCandidates(ctx, marketplaceProbeCandidates(&channel))
 	capabilities := gatewayschema.ResponsesCapabilities{
-		WebSocket:        result.WebSocket,
-		NativeBackground: result.NativeBackground,
-		BackgroundCreate: result.BackgroundCreate,
-		BackgroundResume: result.BackgroundResume,
-		BackgroundCancel: result.BackgroundCancel,
+		WebSocket:          result.WebSocket,
+		NativeBackground:   result.NativeBackground,
+		BackgroundCreate:   result.BackgroundCreate,
+		BackgroundResume:   result.BackgroundResume,
+		BackgroundCancel:   result.BackgroundCancel,
+		RemoteCompactionV1: result.RemoteCompactionV1,
+		RemoteCompactionV2: result.RemoteCompactionV2,
 	}
 	raw, err := platformencoding.Marshal(capabilities)
 	if err != nil {
@@ -108,7 +107,9 @@ func marketplaceCapabilitiesHaveTransientFailure(capabilities gatewayschema.Resp
 		gatewaycapability.IsTransientProbeFailure(capabilities.NativeBackground) ||
 		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCreate) ||
 		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundResume) ||
-		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCancel)
+		gatewaycapability.IsTransientProbeFailure(capabilities.BackgroundCancel) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.RemoteCompactionV1) ||
+		gatewaycapability.IsTransientProbeFailure(capabilities.RemoteCompactionV2)
 }
 
 func markMarketplaceCapabilitiesPending(channel *marketplaceschema.Channel) {
@@ -126,6 +127,18 @@ func marketplaceProbeCandidates(channel *marketplaceschema.Channel) []gatewaycap
 	if channel == nil {
 		return nil
 	}
+	models := marketplaceProbeModels(channel)
+	protocol := marketplaceProbeProtocol(channel.ProviderType)
+	if protocol == gatewaycapability.ProbeProtocolNotApplicable || len(models) == 0 {
+		reason := "protocol_not_applicable"
+		if len(models) == 0 {
+			reason = "no_responses_model"
+		}
+		return []gatewaycapability.ProbeInput{{
+			Model: firstMarketplaceDeclaredModel(channel), KeyIndex: -1,
+			Protocol: gatewaycapability.ProbeProtocolNotApplicable, SkipReason: reason,
+		}}
+	}
 	baseURL, err := platformsecurity.DecryptSecret(channel.BaseURLCiphertext)
 	if err != nil {
 		return nil
@@ -134,14 +147,22 @@ func marketplaceProbeCandidates(channel *marketplaceschema.Channel) []gatewaycap
 	if err != nil || strings.TrimSpace(key) == "" {
 		return nil
 	}
-	models := marketplaceProbeModels(channel)
 	candidates := make([]gatewaycapability.ProbeInput, 0, len(models))
 	for _, model := range models {
 		candidates = append(candidates, gatewaycapability.ProbeInput{
-			BaseURL: baseURL, APIKey: key, Model: model, KeyIndex: 0,
+			BaseURL: baseURL, APIKey: key, Model: model, KeyIndex: 0, Protocol: protocol,
 		})
 	}
 	return candidates
+}
+
+func marketplaceProbeProtocol(provider string) gatewaycapability.ProbeProtocol {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "openai_compatible", "codex":
+		return gatewaycapability.ProbeProtocolOpenAIResponses
+	default:
+		return gatewaycapability.ProbeProtocolNotApplicable
+	}
 }
 
 func marketplaceProbeModels(channel *marketplaceschema.Channel) []string {
@@ -153,7 +174,7 @@ func marketplaceProbeModels(channel *marketplaceschema.Channel) []string {
 	models := make([]string, 0, len(values))
 	for _, value := range values {
 		model := strings.TrimSpace(value)
-		if model == "" {
+		if model == "" || !gatewaycapability.IsResponsesProbeModel(model) {
 			continue
 		}
 		if _, exists := seen[model]; exists {
@@ -166,6 +187,20 @@ func marketplaceProbeModels(channel *marketplaceschema.Channel) []string {
 		}
 	}
 	return models
+}
+
+func firstMarketplaceDeclaredModel(channel *marketplaceschema.Channel) string {
+	if channel == nil {
+		return ""
+	}
+	if model := strings.TrimSpace(channel.AutoProbeModel); model != "" {
+		return model
+	}
+	models := decodeModels(channel.DeclaredModels)
+	if len(models) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(models[0])
 }
 
 func firstMarketplaceProbeModel(channel *marketplaceschema.Channel) string {
@@ -187,9 +222,12 @@ func marketplaceCapabilitiesNeedProbe(raw string, now time.Time) bool {
 		return true
 	}
 	capabilities := decodeMarketplaceCapabilities(raw)
-	states := []gatewayschema.CapabilityProbeState{capabilities.WebSocket, capabilities.NativeBackground, capabilities.BackgroundCreate, capabilities.BackgroundResume, capabilities.BackgroundCancel}
-	if capabilities.BackgroundCreate.Status == "" && capabilities.BackgroundResume.Status == "" && capabilities.BackgroundCancel.Status == "" {
-		states = states[:2]
+	states := []gatewayschema.CapabilityProbeState{
+		capabilities.WebSocket, capabilities.NativeBackground,
+		capabilities.RemoteCompactionV1, capabilities.RemoteCompactionV2,
+	}
+	if capabilities.BackgroundCreate.Status != "" || capabilities.BackgroundResume.Status != "" || capabilities.BackgroundCancel.Status != "" {
+		states = append(states, capabilities.BackgroundCreate, capabilities.BackgroundResume, capabilities.BackgroundCancel)
 	}
 	for _, state := range states {
 		if state.Status == "" || state.Status == gatewayschema.CapabilityStatusUnknown || state.Status == gatewayschema.CapabilityStatusPending {

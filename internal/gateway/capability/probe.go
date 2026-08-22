@@ -12,7 +12,17 @@ import (
 
 const responsesWebSocketBeta = "responses_websockets=2026-02-06"
 
-var probeSlots = make(chan struct{}, 2)
+const responsesCapabilityProbeTimeout = 4 * time.Minute
+
+type ProbeProtocol string
+
+const (
+	ProbeProtocolOpenAIResponses ProbeProtocol = "openai_responses"
+	ProbeProtocolCodexResponses  ProbeProtocol = "codex_responses"
+	ProbeProtocolNotApplicable   ProbeProtocol = "not_applicable"
+)
+
+var probeSlots = make(chan struct{}, 6)
 
 type ProbeInput struct {
 	BaseURL       string
@@ -21,6 +31,9 @@ type ProbeInput struct {
 	KeyIndex      int
 	ResponsesPath string
 	CompactPath   string
+	Protocol      ProbeProtocol
+	Headers       http.Header
+	SkipReason    string
 }
 
 type ProbeResult struct {
@@ -34,78 +47,77 @@ type ProbeResult struct {
 }
 
 func ProbeResponsesTransports(ctx context.Context, input ProbeInput) ProbeResult {
+	return ProbeResponsesTransportsForCandidates(ctx, []ProbeInput{input})
+}
+
+// ProbeResponsesTransportsForCandidates probes every capability independently.
+// A broken ordinary Responses request, model, or key therefore cannot suppress
+// transport and compaction evidence from the remaining candidates.
+func ProbeResponsesTransportsForCandidates(ctx context.Context, candidates []ProbeInput) ProbeResult {
 	select {
 	case probeSlots <- struct{}{}:
 		defer func() { <-probeSlots }()
 	case <-ctx.Done():
-		return probeInputError(input, "probe_canceled")
+		return probeInputError(firstProbeInput(candidates), "probe_canceled")
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, responsesCapabilityProbeTimeout)
+	defer cancel()
+
+	if len(candidates) == 0 {
+		return probeInputError(ProbeInput{}, "no_probe_candidates")
+	}
+	if candidates[0].Protocol == ProbeProtocolNotApplicable {
+		reason := strings.TrimSpace(candidates[0].SkipReason)
+		if reason == "" {
+			reason = "protocol_not_applicable"
+		}
+		return unsupportedProbeResult(candidates[0], reason)
 	}
 
-	checkedAt := time.Now().Unix()
-	base := gatewayschema.CapabilityProbeState{
-		CheckedAt:   checkedAt,
-		Model:       strings.TrimSpace(input.Model),
-		ProbeKeyIdx: input.KeyIndex,
-	}
-	result := ProbeResult{WebSocket: base, NativeBackground: base, BackgroundCreate: base, BackgroundResume: base, BackgroundCancel: base, RemoteCompactionV1: base, RemoteCompactionV2: base}
-	endpoint, compactEndpoint, err := probeEndpoints(input)
-	if err != nil || strings.TrimSpace(input.APIKey) == "" || base.Model == "" {
-		result.WebSocket.Status = gatewayschema.CapabilityStatusError
-		result.WebSocket.ErrorClass = "invalid_probe_input"
-		result.NativeBackground.Status = gatewayschema.CapabilityStatusError
-		result.NativeBackground.ErrorClass = "invalid_probe_input"
-		result.BackgroundCreate = result.NativeBackground
-		result.BackgroundResume = result.NativeBackground
-		result.BackgroundCancel = result.NativeBackground
-		result.RemoteCompactionV1 = result.NativeBackground
-		result.RemoteCompactionV2 = result.NativeBackground
-		return result
-	}
+	client := &http.Client{Timeout: 25 * time.Second}
+	stateResults := make(chan struct {
+		name  string
+		state gatewayschema.CapabilityProbeState
+	}, 3)
+	go func() {
+		stateResults <- struct {
+			name  string
+			state gatewayschema.CapabilityProbeState
+		}{"v1", probeStateCandidates(probeCtx, client, candidates, true, probeRemoteCompactionV1)}
+	}()
+	go func() {
+		stateResults <- struct {
+			name  string
+			state gatewayschema.CapabilityProbeState
+		}{"v2", probeStateCandidates(probeCtx, client, candidates, false, probeRemoteCompactionV2)}
+	}()
+	go func() {
+		stateResults <- struct {
+			name  string
+			state gatewayschema.CapabilityProbeState
+		}{"websocket", probeStateCandidates(probeCtx, client, candidates, false, probeWebSocketCandidate)}
+	}()
+	backgroundResults := make(chan backgroundProbeResult, 1)
+	go func() { backgroundResults <- probeBackgroundCandidates(probeCtx, client, candidates) }()
 
-	client := &http.Client{Timeout: 75 * time.Second}
-	if status, errorClass := probePlainResponses(ctx, client, endpoint, input.APIKey, base.Model); status < 200 || status >= 300 {
-		result.WebSocket.Status = gatewayschema.CapabilityStatusError
-		result.WebSocket.HTTPStatus = status
-		result.WebSocket.ErrorClass = errorClass
-		result.NativeBackground.Status = gatewayschema.CapabilityStatusError
-		result.NativeBackground.HTTPStatus = status
-		result.NativeBackground.ErrorClass = errorClass
-		result.BackgroundCreate = result.NativeBackground
-		result.BackgroundResume = result.NativeBackground
-		result.BackgroundCancel = result.NativeBackground
-		result.RemoteCompactionV1 = result.NativeBackground
-		result.RemoteCompactionV2 = result.NativeBackground
-		return result
+	result := ProbeResult{}
+	for range 3 {
+		probeResult := <-stateResults
+		switch probeResult.name {
+		case "v1":
+			result.RemoteCompactionV1 = probeResult.state
+		case "v2":
+			result.RemoteCompactionV2 = probeResult.state
+		case "websocket":
+			result.WebSocket = probeResult.state
+		}
 	}
-
-	result.WebSocket = probeWebSocket(ctx, endpoint, input, base)
-	result.RemoteCompactionV1 = probeRemoteCompactionV1(ctx, client, compactEndpoint, input, base)
-	result.RemoteCompactionV2 = probeRemoteCompactionV2(ctx, client, endpoint, input, base)
-	background := probeNativeBackground(ctx, client, endpoint, input, base)
+	background := <-backgroundResults
 	result.NativeBackground = background.Aggregate
 	result.BackgroundCreate = background.Create
 	result.BackgroundResume = background.Resume
 	result.BackgroundCancel = background.Cancel
 	return result
-}
-
-// ProbeResponsesTransportsForCandidates tries key/model pairings until the
-// upstream proves that its ordinary Responses endpoint is callable.
-func ProbeResponsesTransportsForCandidates(ctx context.Context, candidates []ProbeInput) ProbeResult {
-	var last ProbeResult
-	for _, candidate := range candidates {
-		if ctx.Err() != nil {
-			return probeInputError(candidate, "probe_canceled")
-		}
-		last = ProbeResponsesTransports(ctx, candidate)
-		if !plainResponsesProbeFailed(last) {
-			return last
-		}
-	}
-	if len(candidates) == 0 {
-		return probeInputError(ProbeInput{}, "no_probe_candidates")
-	}
-	return last
 }
 
 func PendingResponsesCapabilities(model string) gatewayschema.ResponsesCapabilities {
@@ -173,11 +185,6 @@ func endpointWithPath(baseURL, requestPath string) (string, error) {
 	return parsed.String(), nil
 }
 
-func plainResponsesProbeFailed(result ProbeResult) bool {
-	return result.WebSocket.Status == gatewayschema.CapabilityStatusError &&
-		result.NativeBackground.Status == gatewayschema.CapabilityStatusError
-}
-
 func probeInputError(input ProbeInput, class string) ProbeResult {
 	state := gatewayschema.CapabilityProbeState{
 		Status:      gatewayschema.CapabilityStatusError,
@@ -187,4 +194,19 @@ func probeInputError(input ProbeInput, class string) ProbeResult {
 		ProbeKeyIdx: input.KeyIndex,
 	}
 	return ProbeResult{WebSocket: state, NativeBackground: state, BackgroundCreate: state, BackgroundResume: state, BackgroundCancel: state, RemoteCompactionV1: state, RemoteCompactionV2: state}
+}
+
+func unsupportedProbeResult(input ProbeInput, class string) ProbeResult {
+	state := gatewayschema.CapabilityProbeState{
+		Status: gatewayschema.CapabilityStatusUnsupported, CheckedAt: time.Now().Unix(),
+		Model: strings.TrimSpace(input.Model), ErrorClass: class, ProbeKeyIdx: input.KeyIndex,
+	}
+	return ProbeResult{WebSocket: state, NativeBackground: state, BackgroundCreate: state, BackgroundResume: state, BackgroundCancel: state, RemoteCompactionV1: state, RemoteCompactionV2: state}
+}
+
+func firstProbeInput(candidates []ProbeInput) ProbeInput {
+	if len(candidates) == 0 {
+		return ProbeInput{}
+	}
+	return candidates[0]
 }

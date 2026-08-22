@@ -27,16 +27,28 @@ type websocketEventError struct {
 	Message string `json:"message"`
 }
 
+const websocketProbeTimeout = 20 * time.Second
+
 func probeWebSocket(ctx context.Context, endpoint string, input ProbeInput, base gatewayschema.CapabilityProbeState) gatewayschema.CapabilityProbeState {
+	return probeWebSocketCandidate(ctx, nil, endpoint, input, base)
+}
+
+func probeWebSocketCandidate(ctx context.Context, _ *http.Client, endpoint string, input ProbeInput, base gatewayschema.CapabilityProbeState) gatewayschema.CapabilityProbeState {
+	probeCtx, cancel := context.WithTimeout(ctx, websocketProbeTimeout)
+	defer cancel()
 	state := base
 	wsURL := strings.Replace(endpoint, "https://", "wss://", 1)
 	wsURL = strings.Replace(wsURL, "http://", "ws://", 1)
-	headers := http.Header{}
+	headers := probeHeaders(input, nil)
 	headers.Set("Authorization", "Bearer "+input.APIKey)
-	headers.Set("OpenAI-Beta", responsesWebSocketBeta)
+	webSocketBeta := responsesWebSocketBeta
+	if existing := strings.TrimSpace(headers.Get("OpenAI-Beta")); existing != "" {
+		webSocketBeta = existing + "," + responsesWebSocketBeta
+	}
+	headers.Set("OpenAI-Beta", webSocketBeta)
 	headers.Set("User-Agent", "new-api-capability-probe/1")
 	dialer := websocket.Dialer{HandshakeTimeout: 20 * time.Second, EnableCompression: true, Proxy: http.ProxyFromEnvironment}
-	conn, response, err := dialer.DialContext(ctx, wsURL, headers)
+	conn, response, err := dialer.DialContext(probeCtx, wsURL, headers)
 	if response != nil {
 		state.HTTPStatus = response.StatusCode
 	}
@@ -56,7 +68,7 @@ func probeWebSocket(ctx context.Context, endpoint string, input ProbeInput, base
 		state.Status = websocketFailureStatus(state.ErrorClass)
 		return state
 	}
-	_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(websocketProbeTimeout))
 	for {
 		_, raw, readErr := conn.ReadMessage()
 		if readErr != nil {

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -11,15 +12,15 @@ import (
 	gatewaycapability "github.com/sh2001sh/new-api/internal/gateway/capability"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 )
 
 const (
-	channelCapabilityProbeTimeout = 4 * time.Minute
-	channelCapabilityMaxKeys      = 3
-	channelCapabilityMaxModels    = 4
-	channelCapabilityMaxAge       = 24 * time.Hour
-	channelCapabilityRetryDelay   = 15 * time.Minute
+	channelCapabilityMaxKeys    = 3
+	channelCapabilityMaxModels  = 4
+	channelCapabilityMaxAge     = 24 * time.Hour
+	channelCapabilityRetryDelay = 15 * time.Minute
 )
 
 var (
@@ -56,9 +57,7 @@ func scheduleChannelCapabilityProbe(channelID int) {
 	}
 	go func() {
 		defer channelCapabilityProbeInFlight.Delete(channelID)
-		ctx, cancel := context.WithTimeout(context.Background(), channelCapabilityProbeTimeout)
-		defer cancel()
-		if err := probeAndPersistChannelCapabilities(ctx, channelID); err != nil {
+		if err := probeAndPersistChannelCapabilities(context.Background(), channelID); err != nil {
 			platformobservability.SysLog(fmt.Sprintf("channel transport capability probe failed: channel_id=%d error=%v", channelID, err))
 		}
 	}()
@@ -118,6 +117,17 @@ func channelProbeCandidates(channel *gatewayschema.Channel) []gatewaycapability.
 		return nil
 	}
 	models := channelProbeModels(channel)
+	protocol := channelProbeProtocol(channel)
+	if protocol == gatewaycapability.ProbeProtocolNotApplicable || len(models) == 0 {
+		reason := "protocol_not_applicable"
+		if len(models) == 0 {
+			reason = "no_responses_model"
+		}
+		return []gatewaycapability.ProbeInput{{
+			Model: firstChannelModel(channel), KeyIndex: -1,
+			Protocol: gatewaycapability.ProbeProtocolNotApplicable, SkipReason: reason,
+		}}
+	}
 	keys := channel.GetKeys()
 	candidates := make([]gatewaycapability.ProbeInput, 0, len(models)*len(keys))
 	usedKeys := 0
@@ -130,14 +140,50 @@ func channelProbeCandidates(channel *gatewayschema.Channel) []gatewaycapability.
 		}
 		usedKeys++
 		responsesPath, compactPath := channelProbePaths(channel)
+		probeKey, headers, ok := channelProbeCredentials(channel, key)
+		if !ok {
+			continue
+		}
 		for _, model := range models {
 			candidates = append(candidates, gatewaycapability.ProbeInput{
-				BaseURL: channel.GetBaseURL(), APIKey: key, Model: model, KeyIndex: keyIndex,
-				ResponsesPath: responsesPath, CompactPath: compactPath,
+				BaseURL: channel.GetBaseURL(), APIKey: probeKey, Model: model, KeyIndex: keyIndex,
+				ResponsesPath: responsesPath, CompactPath: compactPath, Protocol: protocol, Headers: headers,
 			})
 		}
 	}
 	return candidates
+}
+
+func channelProbeProtocol(channel *gatewayschema.Channel) gatewaycapability.ProbeProtocol {
+	if channel == nil {
+		return gatewaycapability.ProbeProtocolNotApplicable
+	}
+	switch channel.Type {
+	case constant.ChannelTypeOpenAI:
+		return gatewaycapability.ProbeProtocolOpenAIResponses
+	case constant.ChannelTypeCodex:
+		return gatewaycapability.ProbeProtocolCodexResponses
+	default:
+		return gatewaycapability.ProbeProtocolNotApplicable
+	}
+}
+
+func channelProbeCredentials(channel *gatewayschema.Channel, key string) (string, http.Header, bool) {
+	if channel == nil || channel.Type != constant.ChannelTypeCodex {
+		return strings.TrimSpace(key), nil, strings.TrimSpace(key) != ""
+	}
+	var credential struct {
+		AccessToken string `json:"access_token"`
+		AccountID   string `json:"account_id"`
+	}
+	if platformencoding.Unmarshal([]byte(key), &credential) != nil || strings.TrimSpace(credential.AccessToken) == "" || strings.TrimSpace(credential.AccountID) == "" {
+		return "", nil, false
+	}
+	headers := make(http.Header)
+	headers.Set("chatgpt-account-id", strings.TrimSpace(credential.AccountID))
+	headers.Set("OpenAI-Beta", "responses=experimental")
+	headers.Set("originator", "codex_cli_rs")
+	return strings.TrimSpace(credential.AccessToken), headers, true
 }
 
 func channelProbePaths(channel *gatewayschema.Channel) (string, string) {
@@ -160,7 +206,7 @@ func channelProbeModels(channel *gatewayschema.Channel) []string {
 	models := make([]string, 0, len(values))
 	for _, value := range values {
 		model := strings.TrimSpace(value)
-		if model == "" {
+		if model == "" || !gatewaycapability.IsResponsesProbeModel(model) {
 			continue
 		}
 		if _, exists := seen[model]; exists {
@@ -173,6 +219,20 @@ func channelProbeModels(channel *gatewayschema.Channel) []string {
 		}
 	}
 	return models
+}
+
+func firstChannelModel(channel *gatewayschema.Channel) string {
+	if channel == nil {
+		return ""
+	}
+	if channel.TestModel != nil && strings.TrimSpace(*channel.TestModel) != "" {
+		return strings.TrimSpace(*channel.TestModel)
+	}
+	models := channel.GetModels()
+	if len(models) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(models[0])
 }
 
 func firstChannelProbeModel(channel *gatewayschema.Channel) string {

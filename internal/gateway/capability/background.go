@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -28,14 +29,18 @@ type backgroundProbeResult struct {
 	Cancel    gatewayschema.CapabilityProbeState
 }
 
+const backgroundProbeTimeout = 30 * time.Second
+
 func probeNativeBackground(ctx context.Context, client *http.Client, endpoint string, input ProbeInput, base gatewayschema.CapabilityProbeState) backgroundProbeResult {
+	probeCtx, cancel := context.WithTimeout(ctx, backgroundProbeTimeout)
+	defer cancel()
 	result := backgroundProbeResult{Aggregate: base, Create: base, Resume: base, Cancel: base}
 	state := base
 	create := map[string]any{
 		"model": input.Model, "input": "Reply with OK.",
 		"max_output_tokens": 16, "background": true, "store": true,
 	}
-	status, raw, err := requestJSON(ctx, client, http.MethodPost, endpoint, input.APIKey, create)
+	status, raw, err := requestJSONWithHeaders(probeCtx, client, http.MethodPost, endpoint, input.APIKey, create, probeHeaders(input, nil))
 	state.HTTPStatus = status
 	if err != nil || status < 200 || status >= 300 {
 		state.Status = classifyBackgroundCapabilityFailure(raw, status, err)
@@ -58,32 +63,38 @@ func probeNativeBackground(ctx context.Context, client *http.Client, endpoint st
 		result.Resume, result.Cancel = state, state
 		return result
 	}
-	status, raw, err = requestJSON(ctx, client, http.MethodGet, endpoint+"/"+url.PathEscape(created.ID), input.APIKey, nil)
+	createState := state
+	createState.Status = gatewayschema.CapabilityStatusSupported
+	createState.ErrorClass = ""
+	result.Create = createState
+	status, raw, err = requestJSONWithHeaders(probeCtx, client, http.MethodGet, endpoint+"/"+url.PathEscape(created.ID), input.APIKey, nil, probeHeaders(input, nil))
 	if err != nil || status < 200 || status >= 300 {
 		state.Status = classifyBackgroundCapabilityFailure(raw, status, err)
 		state.HTTPStatus = status
 		state.ErrorClass = "background_retrieve_failed"
-		result.Create = state
 		result.Aggregate = state
+		result.Resume = state
+		result.Cancel = state
 		return result
 	}
 	var retrieved responseEnvelope
 	if platformencoding.Unmarshal(raw, &retrieved) != nil || retrieved.ID != created.ID {
 		state.Status = gatewayschema.CapabilityStatusUnsupported
 		state.ErrorClass = "background_retrieve_invalid"
-		result.Create, result.Aggregate = state, state
+		result.Aggregate = state
+		result.Resume, result.Cancel = state, state
 		return result
 	}
 	state.Status = gatewayschema.CapabilityStatusSupported
 	state.ErrorClass = ""
-	result.Create = state
+	result.Create = createState
 	result.Resume = state
 	result.Cancel = state
-	if !probeBackgroundResume(ctx, client, endpoint, input) {
+	if !probeBackgroundResume(probeCtx, client, endpoint, input) {
 		result.Resume.Status = gatewayschema.CapabilityStatusError
 		result.Resume.ErrorClass = "background_resume_failed"
 	}
-	if !probeBackgroundCancel(ctx, client, endpoint, input) {
+	if !probeBackgroundCancel(probeCtx, client, endpoint, input) {
 		result.Cancel.Status = gatewayschema.CapabilityStatusError
 		result.Cancel.ErrorClass = "background_cancel_failed"
 	}
@@ -111,7 +122,7 @@ func probeBackgroundResume(ctx context.Context, client *http.Client, endpoint st
 		"model": input.Model, "input": "Write three short numbered lines.",
 		"max_output_tokens": 64, "background": true, "stream": true, "store": true,
 	}
-	response, err := request(ctx, client, http.MethodPost, endpoint, input.APIKey, body, "text/event-stream")
+	response, err := requestWithHeaders(ctx, client, http.MethodPost, endpoint, input.APIKey, body, "text/event-stream", probeHeaders(input, nil))
 	if err != nil {
 		return false
 	}
@@ -125,7 +136,7 @@ func probeBackgroundResume(ctx context.Context, client *http.Client, endpoint st
 		return false
 	}
 	resumeURL := endpoint + "/" + url.PathEscape(event.Response.ID) + "?stream=true&starting_after=" + strconv.FormatInt(event.SequenceNumber, 10)
-	resumed, err := request(ctx, client, http.MethodGet, resumeURL, input.APIKey, nil, "text/event-stream")
+	resumed, err := requestWithHeaders(ctx, client, http.MethodGet, resumeURL, input.APIKey, nil, "text/event-stream", probeHeaders(input, nil))
 	if err != nil {
 		return false
 	}
@@ -139,7 +150,7 @@ func probeBackgroundCancel(ctx context.Context, client *http.Client, endpoint st
 		"input":             "Write a detailed technical essay about distributed systems.",
 		"max_output_tokens": 512, "background": true, "store": true,
 	}
-	status, raw, err := requestJSON(ctx, client, http.MethodPost, endpoint, input.APIKey, body)
+	status, raw, err := requestJSONWithHeaders(ctx, client, http.MethodPost, endpoint, input.APIKey, body, probeHeaders(input, nil))
 	if err != nil || status < 200 || status >= 300 {
 		return false
 	}
@@ -147,7 +158,7 @@ func probeBackgroundCancel(ctx context.Context, client *http.Client, endpoint st
 	if platformencoding.Unmarshal(raw, &created) != nil || created.ID == "" {
 		return false
 	}
-	status, raw, err = requestJSON(ctx, client, http.MethodPost, endpoint+"/"+url.PathEscape(created.ID)+"/cancel", input.APIKey, map[string]any{})
+	status, raw, err = requestJSONWithHeaders(ctx, client, http.MethodPost, endpoint+"/"+url.PathEscape(created.ID)+"/cancel", input.APIKey, map[string]any{}, probeHeaders(input, nil))
 	if err != nil || status < 200 || status >= 300 {
 		return false
 	}

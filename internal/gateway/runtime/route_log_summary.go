@@ -97,6 +97,8 @@ func publicRouteSkipReason(reason string) string {
 		return "unavailable"
 	case "channel_capacity", "fault_domain_capacity":
 		return "capacity_limit"
+	case "channel_concurrency_dependency":
+		return "dependency_unavailable"
 	case "channel_credential_cooling":
 		return "credential_cooling"
 	case "failed_fault_domain":

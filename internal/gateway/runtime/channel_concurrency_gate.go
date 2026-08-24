@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 )
@@ -18,7 +19,9 @@ import (
 const (
 	channelConcurrencyLeaseTTL          = 90 * time.Second
 	channelConcurrencyRenewInterval     = 20 * time.Second
-	channelConcurrencyGateRedisTimeout  = 750 * time.Millisecond
+	channelConcurrencyGateRedisTimeout  = 2 * time.Second
+	channelConcurrencyReserveAttempts   = 2
+	channelConcurrencyRetryDelay        = 50 * time.Millisecond
 	channelConcurrencyGateErrorInterval = time.Minute
 	channelConcurrencyLeaseKeyPrefix    = "gateway:channel-concurrency:v2:"
 )
@@ -36,6 +39,19 @@ redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now_ms)
 if user_limit > 0 then
   redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', now_ms)
 end
+
+-- A timed-out client may retry after this script committed. Treat the same
+-- token as the same lease so the retry never consumes a second slot.
+if redis.call('ZSCORE', KEYS[1], ARGV[1]) then
+  redis.call('ZADD', KEYS[1], expires_at, ARGV[1])
+  redis.call('PEXPIRE', KEYS[1], ARGV[2])
+  if user_limit > 0 then
+    redis.call('ZADD', KEYS[2], expires_at, ARGV[1])
+    redis.call('PEXPIRE', KEYS[2], ARGV[2])
+  end
+  return 1
+end
+
 if total_limit > 0 and redis.call('ZCARD', KEYS[1]) >= total_limit then
   return 0
 end
@@ -81,25 +97,13 @@ return removed
 `)
 )
 
-// reserveRedisChannelConcurrency acquires one cross-Gateway lease. Redis being
-// disabled means the process-local gate remains authoritative. An enabled but
-// unavailable Redis fails closed so a cache outage cannot bypass global limits.
-func reserveRedisChannelConcurrency(channelID, userID, totalLimit, userLimit int) (func(), bool, bool) {
-	if totalLimit <= 0 && userLimit <= 0 {
-		return func() {}, false, true
-	}
-	if !platformcache.RedisEnabled {
-		return func() {}, false, true
-	}
-	if platformcache.RDB == nil {
-		reportChannelConcurrencyGateError(errors.New("redis is enabled but the client is unavailable"))
-		return func() {}, true, false
-	}
-
-	token := channelConcurrencyLeaseToken()
-	keys := channelConcurrencyLeaseKeys(channelID, userID)
-	ctx, cancel := context.WithTimeout(context.Background(), channelConcurrencyGateRedisTimeout)
-	admitted, err := channelConcurrencyReserveScript.Run(
+var runChannelConcurrencyReserve = func(
+	ctx context.Context,
+	keys []string,
+	token string,
+	totalLimit, userLimit int,
+) (int, error) {
+	return channelConcurrencyReserveScript.Run(
 		ctx,
 		platformcache.RDB,
 		keys,
@@ -108,13 +112,34 @@ func reserveRedisChannelConcurrency(channelID, userID, totalLimit, userLimit int
 		totalLimit,
 		userLimit,
 	).Int()
-	cancel()
+}
+
+// reserveRedisChannelConcurrency acquires one cross-Gateway lease. Redis being
+// disabled means the process-local gate remains authoritative. An enabled but
+// unavailable Redis fails closed so a cache outage cannot bypass global limits.
+func reserveRedisChannelConcurrency(
+	channelID, userID, totalLimit, userLimit int,
+) (func(), bool, ChannelConcurrencyAdmission) {
+	if totalLimit <= 0 && userLimit <= 0 {
+		return func() {}, false, ChannelConcurrencyAdmitted
+	}
+	if !platformcache.RedisEnabled {
+		return func() {}, false, ChannelConcurrencyAdmitted
+	}
+	if platformcache.RDB == nil {
+		reportChannelConcurrencyGateError(errors.New("redis is enabled but the client is unavailable"))
+		return func() {}, true, ChannelConcurrencyDependencyUnavailable
+	}
+
+	token := channelConcurrencyLeaseToken()
+	keys := channelConcurrencyLeaseKeys(channelID, userID)
+	admitted, err := reserveChannelConcurrencyWithRetry(keys, token, totalLimit, userLimit)
 	if err != nil {
 		reportChannelConcurrencyGateError(fmt.Errorf("reserve channel %d lease: %w", channelID, err))
-		return func() {}, true, false
+		return func() {}, true, ChannelConcurrencyDependencyUnavailable
 	}
 	if admitted != 1 {
-		return func() {}, true, false
+		return func() {}, true, ChannelConcurrencyCapacityReached
 	}
 
 	stopRenewal := make(chan struct{})
@@ -125,7 +150,50 @@ func reserveRedisChannelConcurrency(channelID, userID, totalLimit, userLimit int
 			close(stopRenewal)
 			releaseRedisChannelConcurrencyLease(keys, token, channelID, userLimit)
 		})
-	}, true, true
+	}, true, ChannelConcurrencyAdmitted
+}
+
+func reserveChannelConcurrencyWithRetry(
+	keys []string,
+	token string,
+	totalLimit, userLimit int,
+) (int, error) {
+	attempts := platformconfig.GetEnvOrDefaultInt(
+		"CHANNEL_CONCURRENCY_REDIS_RESERVE_ATTEMPTS",
+		channelConcurrencyReserveAttempts,
+	)
+	if attempts < 1 {
+		attempts = 1
+	} else if attempts > 3 {
+		attempts = 3
+	}
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), channelConcurrencyGateOperationTimeout())
+		admitted, err := runChannelConcurrencyReserve(ctx, keys, token, totalLimit, userLimit)
+		cancel()
+		if err == nil {
+			return admitted, nil
+		}
+		lastErr = err
+		if attempt+1 < attempts {
+			time.Sleep(channelConcurrencyRetryDelay)
+		}
+	}
+	return 0, lastErr
+}
+
+func channelConcurrencyGateOperationTimeout() time.Duration {
+	timeoutMS := platformconfig.GetEnvOrDefaultInt(
+		"CHANNEL_CONCURRENCY_REDIS_TIMEOUT_MS",
+		int(channelConcurrencyGateRedisTimeout/time.Millisecond),
+	)
+	if timeoutMS < 100 {
+		timeoutMS = 100
+	} else if timeoutMS > 10000 {
+		timeoutMS = 10000
+	}
+	return time.Duration(timeoutMS) * time.Millisecond
 }
 
 func renewChannelConcurrencyLease(stop <-chan struct{}, keys []string, token string, channelID, totalLimit, userLimit int) {
@@ -141,7 +209,7 @@ func renewChannelConcurrencyLease(stop <-chan struct{}, keys []string, token str
 			return
 		case <-ticker.C:
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), channelConcurrencyGateRedisTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), channelConcurrencyGateOperationTimeout())
 		renewed, err := channelConcurrencyRenewScript.Run(
 			ctx,
 			platformcache.RDB,
@@ -164,7 +232,7 @@ func renewChannelConcurrencyLease(stop <-chan struct{}, keys []string, token str
 }
 
 func releaseRedisChannelConcurrencyLease(keys []string, token string, channelID, userLimit int) {
-	ctx, cancel := context.WithTimeout(context.Background(), channelConcurrencyGateRedisTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), channelConcurrencyGateOperationTimeout())
 	defer cancel()
 	if _, err := channelConcurrencyReleaseScript.Run(
 		ctx,
@@ -210,7 +278,7 @@ func ActiveChannelRequestLeasesForChannels(channelIDs []int) (map[int]int, bool)
 		return result, true
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), channelConcurrencyGateRedisTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), channelConcurrencyGateOperationTimeout())
 	defer cancel()
 	redisNow, err := platformcache.RDB.Time(ctx).Result()
 	if err != nil {

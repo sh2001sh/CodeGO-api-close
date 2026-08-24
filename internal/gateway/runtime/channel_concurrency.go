@@ -14,6 +14,17 @@ var channelConcurrency = struct {
 var loadSharedChannelConcurrency = sharedActiveChannelRequestsForChannels
 var reserveSharedChannelConcurrency = reserveRedisChannelConcurrency
 
+// ChannelConcurrencyAdmission describes why a channel slot was accepted or
+// rejected. Callers must not treat a Redis dependency failure as real channel
+// capacity exhaustion because it must not affect channel health or cooldowns.
+type ChannelConcurrencyAdmission uint8
+
+const (
+	ChannelConcurrencyAdmitted ChannelConcurrencyAdmission = iota
+	ChannelConcurrencyCapacityReached
+	ChannelConcurrencyDependencyUnavailable
+)
+
 // BeginChannelRequest tracks one process-local in-flight upstream request.
 func BeginChannelRequest(channelID int) func() {
 	release, _ := TryBeginChannelRequest(channelID, 0)
@@ -24,34 +35,37 @@ func BeginChannelRequest(channelID int) func() {
 // limit is enforced atomically; zero disables the per-channel gate for legacy
 // and official channels.
 func TryBeginChannelRequest(channelID, limit int) (func(), bool) {
-	return TryBeginChannelRequestForUser(channelID, 0, limit, 0)
+	release, admission := TryBeginChannelRequestForUser(channelID, 0, limit, 0)
+	return release, admission == ChannelConcurrencyAdmitted
 }
 
 // TryBeginChannelRequestForUser atomically enforces both the channel-wide and
 // per-user Marketplace limits across Gateway instances. Zero disables the
 // corresponding limit.
-func TryBeginChannelRequestForUser(channelID, userID, totalLimit, userLimit int) (func(), bool) {
+func TryBeginChannelRequestForUser(
+	channelID, userID, totalLimit, userLimit int,
+) (func(), ChannelConcurrencyAdmission) {
 	if channelID <= 0 {
-		return func() {}, true
+		return func() {}, ChannelConcurrencyAdmitted
 	}
-	sharedRelease, sharedEnforced, sharedAdmitted := reserveSharedChannelConcurrency(
+	sharedRelease, sharedEnforced, sharedAdmission := reserveSharedChannelConcurrency(
 		channelID,
 		userID,
 		totalLimit,
 		userLimit,
 	)
-	if !sharedAdmitted {
-		return func() {}, false
+	if sharedAdmission != ChannelConcurrencyAdmitted {
+		return func() {}, sharedAdmission
 	}
 	channelConcurrency.Lock()
 	if !sharedEnforced && totalLimit > 0 && channelConcurrency.active[channelID] >= totalLimit {
 		channelConcurrency.Unlock()
-		return func() {}, false
+		return func() {}, ChannelConcurrencyCapacityReached
 	}
 	userActive := channelConcurrency.users[channelID]
 	if !sharedEnforced && userLimit > 0 && userActive[userID] >= userLimit {
 		channelConcurrency.Unlock()
-		return func() {}, false
+		return func() {}, ChannelConcurrencyCapacityReached
 	}
 	if userActive == nil {
 		userActive = make(map[int]int)
@@ -84,7 +98,7 @@ func TryBeginChannelRequestForUser(channelID, userID, totalLimit, userLimit int)
 			notifyChannelConcurrencyChanged()
 			sharedRelease()
 		})
-	}, true
+	}, ChannelConcurrencyAdmitted
 }
 
 // ActiveChannelUserRequests returns this process's in-flight count for one

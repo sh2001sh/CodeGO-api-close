@@ -1,9 +1,12 @@
 package runtime
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"testing"
 
+	"github.com/go-redis/redis/v8"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	"github.com/stretchr/testify/require"
 )
@@ -15,8 +18,8 @@ func resetChannelConcurrencyForTest(t *testing.T) {
 	loadSharedChannelConcurrency = func(_ []int, _ map[int]int) (map[int]int, bool) {
 		return nil, false
 	}
-	reserveSharedChannelConcurrency = func(_, _, _, _ int) (func(), bool, bool) {
-		return func() {}, false, true
+	reserveSharedChannelConcurrency = func(_, _, _, _ int) (func(), bool, ChannelConcurrencyAdmission) {
+		return func() {}, false, ChannelConcurrencyAdmitted
 	}
 	channelConcurrency.Lock()
 	channelConcurrency.active = make(map[int]int)
@@ -44,15 +47,17 @@ func newFakeSharedChannelConcurrency() *fakeSharedChannelConcurrency {
 	}
 }
 
-func (gate *fakeSharedChannelConcurrency) reserve(channelID, userID, totalLimit, userLimit int) (func(), bool, bool) {
+func (gate *fakeSharedChannelConcurrency) reserve(
+	channelID, userID, totalLimit, userLimit int,
+) (func(), bool, ChannelConcurrencyAdmission) {
 	if totalLimit > 0 && gate.active[channelID] >= totalLimit {
-		return func() {}, true, false
+		return func() {}, true, ChannelConcurrencyCapacityReached
 	}
 	if gate.users[channelID] == nil {
 		gate.users[channelID] = make(map[int]int)
 	}
 	if userLimit > 0 && gate.users[channelID][userID] >= userLimit {
-		return func() {}, true, false
+		return func() {}, true, ChannelConcurrencyCapacityReached
 	}
 	gate.active[channelID]++
 	gate.users[channelID][userID]++
@@ -62,7 +67,7 @@ func (gate *fakeSharedChannelConcurrency) reserve(channelID, userID, totalLimit,
 			gate.active[channelID]--
 			gate.users[channelID][userID]--
 		})
-	}, true, true
+	}, true, ChannelConcurrencyAdmitted
 }
 
 func clearLocalChannelConcurrencyForTest() {
@@ -105,13 +110,13 @@ func TestChannelConcurrencyZeroLimitRemainsUnbounded(t *testing.T) {
 func TestChannelConcurrencyEnforcesPerUserLimitIndependently(t *testing.T) {
 	resetChannelConcurrencyForTest(t)
 
-	releaseFirst, admitted := TryBeginChannelRequestForUser(211, 7, 0, 1)
-	require.True(t, admitted)
-	_, admitted = TryBeginChannelRequestForUser(211, 7, 0, 1)
-	require.False(t, admitted)
+	releaseFirst, admission := TryBeginChannelRequestForUser(211, 7, 0, 1)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
+	_, admission = TryBeginChannelRequestForUser(211, 7, 0, 1)
+	require.Equal(t, ChannelConcurrencyCapacityReached, admission)
 
-	releaseOther, admitted := TryBeginChannelRequestForUser(211, 8, 0, 1)
-	require.True(t, admitted)
+	releaseOther, admission := TryBeginChannelRequestForUser(211, 8, 0, 1)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
 	require.Equal(t, 2, ActiveChannelRequests(211))
 	require.Equal(t, 1, ActiveChannelUserRequests(211, 7))
 	require.Equal(t, 1, ActiveChannelUserRequests(211, 8))
@@ -123,12 +128,12 @@ func TestChannelConcurrencyEnforcesPerUserLimitIndependently(t *testing.T) {
 func TestChannelConcurrencyRequiresBothTotalAndUserCapacity(t *testing.T) {
 	resetChannelConcurrencyForTest(t)
 
-	releaseFirst, admitted := TryBeginChannelRequestForUser(221, 7, 2, 2)
-	require.True(t, admitted)
-	releaseSecond, admitted := TryBeginChannelRequestForUser(221, 8, 2, 2)
-	require.True(t, admitted)
-	_, admitted = TryBeginChannelRequestForUser(221, 9, 2, 2)
-	require.False(t, admitted)
+	releaseFirst, admission := TryBeginChannelRequestForUser(221, 7, 2, 2)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
+	releaseSecond, admission := TryBeginChannelRequestForUser(221, 8, 2, 2)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
+	_, admission = TryBeginChannelRequestForUser(221, 9, 2, 2)
+	require.Equal(t, ChannelConcurrencyCapacityReached, admission)
 
 	releaseFirst()
 	releaseSecond()
@@ -138,8 +143,8 @@ func TestChannelConcurrencyZeroLimitsRemainUnboundedPerUser(t *testing.T) {
 	resetChannelConcurrencyForTest(t)
 
 	for range 3 {
-		_, admitted := TryBeginChannelRequestForUser(231, 7, 0, 0)
-		require.True(t, admitted)
+		_, admission := TryBeginChannelRequestForUser(231, 7, 0, 0)
+		require.Equal(t, ChannelConcurrencyAdmitted, admission)
 	}
 	require.Equal(t, 3, ActiveChannelUserRequests(231, 7))
 }
@@ -177,19 +182,19 @@ func TestChannelConcurrencyEnforcesSharedLimitAcrossGatewayInstances(t *testing.
 	gate := newFakeSharedChannelConcurrency()
 	reserveSharedChannelConcurrency = gate.reserve
 
-	release, admitted := TryBeginChannelRequestForUser(501, 7, 1, 0)
-	require.True(t, admitted)
+	release, admission := TryBeginChannelRequestForUser(501, 7, 1, 0)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
 	clearLocalChannelConcurrencyForTest() // Simulate admission in another Gateway process.
 
-	_, admitted = TryBeginChannelRequestForUser(501, 8, 1, 0)
-	require.False(t, admitted)
+	_, admission = TryBeginChannelRequestForUser(501, 8, 1, 0)
+	require.Equal(t, ChannelConcurrencyCapacityReached, admission)
 	require.Equal(t, 1, gate.active[501])
 
 	release()
 	release()
 	clearLocalChannelConcurrencyForTest()
-	secondRelease, admitted := TryBeginChannelRequestForUser(501, 8, 1, 0)
-	require.True(t, admitted)
+	secondRelease, admission := TryBeginChannelRequestForUser(501, 8, 1, 0)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
 	secondRelease()
 	require.Zero(t, gate.active[501])
 }
@@ -199,14 +204,14 @@ func TestChannelConcurrencyEnforcesSharedPerUserLimitAcrossGatewayInstances(t *t
 	gate := newFakeSharedChannelConcurrency()
 	reserveSharedChannelConcurrency = gate.reserve
 
-	release, admitted := TryBeginChannelRequestForUser(511, 7, 10, 1)
-	require.True(t, admitted)
+	release, admission := TryBeginChannelRequestForUser(511, 7, 10, 1)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
 	clearLocalChannelConcurrencyForTest()
 
-	_, admitted = TryBeginChannelRequestForUser(511, 7, 10, 1)
-	require.False(t, admitted)
-	otherRelease, admitted := TryBeginChannelRequestForUser(511, 8, 10, 1)
-	require.True(t, admitted)
+	_, admission = TryBeginChannelRequestForUser(511, 7, 10, 1)
+	require.Equal(t, ChannelConcurrencyCapacityReached, admission)
+	otherRelease, admission := TryBeginChannelRequestForUser(511, 8, 10, 1)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
 
 	release()
 	otherRelease()
@@ -223,14 +228,86 @@ func TestRedisChannelConcurrencyGateFallsBackOnlyWhenRedisIsDisabled(t *testing.
 
 	platformcache.RedisEnabled = false
 	platformcache.RDB = nil
-	_, enforced, admitted := reserveRedisChannelConcurrency(521, 7, 1, 1)
+	_, enforced, admission := reserveRedisChannelConcurrency(521, 7, 1, 1)
 	require.False(t, enforced)
-	require.True(t, admitted)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
 
 	platformcache.RedisEnabled = true
-	_, enforced, admitted = reserveRedisChannelConcurrency(521, 7, 1, 1)
+	_, enforced, admission = reserveRedisChannelConcurrency(521, 7, 1, 1)
 	require.True(t, enforced)
-	require.False(t, admitted)
+	require.Equal(t, ChannelConcurrencyDependencyUnavailable, admission)
+}
+
+func TestChannelConcurrencyPropagatesRedisDependencyFailure(t *testing.T) {
+	resetChannelConcurrencyForTest(t)
+	reserveSharedChannelConcurrency = func(_, _, _, _ int) (func(), bool, ChannelConcurrencyAdmission) {
+		return func() {}, true, ChannelConcurrencyDependencyUnavailable
+	}
+
+	_, admission := TryBeginChannelRequestForUser(525, 7, 10, 1)
+	require.Equal(t, ChannelConcurrencyDependencyUnavailable, admission)
+	require.Zero(t, ActiveChannelRequests(525))
+}
+
+func TestChannelConcurrencyReserveRetriesWithSameToken(t *testing.T) {
+	originalRunner := runChannelConcurrencyReserve
+	t.Cleanup(func() { runChannelConcurrencyReserve = originalRunner })
+	t.Setenv("CHANNEL_CONCURRENCY_REDIS_RESERVE_ATTEMPTS", "2")
+
+	var tokens []string
+	committedTokens := make(map[string]struct{})
+	runChannelConcurrencyReserve = func(
+		_ context.Context,
+		_ []string,
+		token string,
+		_, _ int,
+	) (int, error) {
+		tokens = append(tokens, token)
+		committedTokens[token] = struct{}{}
+		if len(tokens) == 1 {
+			return 0, errors.New("simulated response timeout after commit")
+		}
+		return 1, nil
+	}
+
+	admitted, err := reserveChannelConcurrencyWithRetry(
+		channelConcurrencyLeaseKeys(527, 7),
+		"stable-token",
+		1,
+		1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, admitted)
+	require.Equal(t, []string{"stable-token", "stable-token"}, tokens)
+	require.Len(t, committedTokens, 1)
+}
+
+func TestRedisChannelConcurrencyTimeoutIsDependencyUnavailable(t *testing.T) {
+	originalEnabled := platformcache.RedisEnabled
+	originalClient := platformcache.RDB
+	originalRunner := runChannelConcurrencyReserve
+	t.Cleanup(func() {
+		platformcache.RedisEnabled = originalEnabled
+		platformcache.RDB = originalClient
+		runChannelConcurrencyReserve = originalRunner
+	})
+	t.Setenv("CHANNEL_CONCURRENCY_REDIS_RESERVE_ATTEMPTS", "1")
+
+	platformcache.RedisEnabled = true
+	platformcache.RDB = &redis.Client{}
+	runChannelConcurrencyReserve = func(
+		context.Context,
+		[]string,
+		string,
+		int,
+		int,
+	) (int, error) {
+		return 0, context.DeadlineExceeded
+	}
+
+	_, enforced, admission := reserveRedisChannelConcurrency(529, 7, 10, 1)
+	require.True(t, enforced)
+	require.Equal(t, ChannelConcurrencyDependencyUnavailable, admission)
 }
 
 func TestChannelConcurrencyLeaseKeysShareRedisClusterSlot(t *testing.T) {

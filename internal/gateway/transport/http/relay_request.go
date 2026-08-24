@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
-	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
 	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
 	routepin "github.com/sh2001sh/new-api/internal/gateway/routepin"
@@ -18,12 +17,10 @@ import (
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
-	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformconcurrency "github.com/sh2001sh/new-api/internal/platform/concurrency"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
-	requestsettings "github.com/sh2001sh/new-api/internal/platform/requestsettings"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/sh2001sh/new-api/internal/platform/tokenx"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
@@ -226,23 +223,18 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 
-		releaseChannelConcurrency, channelAdmitted := relaycommon.TryBeginChannelRequestForUser(
+		releaseChannelConcurrency, channelAdmission := relaycommon.TryBeginChannelRequestForUser(
 			channel.Id,
 			relayInfo.UserId,
 			channel.MarketplaceMaxConcurrency,
 			channel.MarketplaceUserMaxConcurrency,
 		)
-		if !channelAdmitted {
+		if channelAdmission != relaycommon.ChannelConcurrencyAdmitted {
 			addUsedChannel(c, channel.Id)
-			relaycommon.ExcludeRouteDecisionCandidate(c, "channel_capacity")
-			// This is local backpressure, not an upstream failure. Do not feed it
-			// into channel health or the auto-group circuit.
-			newAPIError = types.NewErrorWithStatusCode(
-				errors.New("channel concurrency limit reached"),
-				types.ErrorCodeGetChannelFailed,
-				http.StatusServiceUnavailable,
-			)
-			if retryTimes-retryParam.GetRetry() > 0 {
+			reason, rejection, retryOtherChannel := channelConcurrencyRejection(channelAdmission)
+			relaycommon.ExcludeRouteDecisionCandidate(c, reason)
+			newAPIError = rejection
+			if retryOtherChannel && retryTimes-retryParam.GetRetry() > 0 {
 				relaycommon.RecordRouteDecisionRetry(c)
 				continue
 			}
@@ -393,57 +385,4 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		retryLogStr := fmt.Sprintf("retry channels: %s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
 	}
-}
-
-func traceFromContext(c *gin.Context) *relaycommon.FirstByteTrace {
-	if value, exists := c.Get(relaycommon.FirstByteTraceContextKey); exists {
-		if trace, ok := value.(*relaycommon.FirstByteTrace); ok && trace != nil {
-			return trace
-		}
-	}
-	trace := relaycommon.NewFirstByteTrace(httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime))
-	c.Set(relaycommon.FirstByteTraceContextKey, trace)
-	c.Set(platformhttpx.KeyBodyTiming, trace)
-	return trace
-}
-
-func specialMultiplierUnsupportedRelay(relayFormat types.RelayFormat, modelName string) bool {
-	if gatewaycontract.IsImageGenerationModel(modelName) {
-		return true
-	}
-	switch relayFormat {
-	case types.RelayFormatOpenAIImage, types.RelayFormatOpenAIAudio, types.RelayFormatOpenAIRealtime:
-		return true
-	default:
-		return false
-	}
-}
-
-func shouldBlockSensitiveWords() bool {
-	return requestsettings.StopOnSensitiveEnabled
-}
-
-func shouldCheckPromptSensitiveForRelay(relayFormat types.RelayFormat) bool {
-	// Claude requests commonly include provider safety/system/tool text. Do
-	// not apply the site's prompt interception to that protocol, otherwise
-	// harmless user prompts can match vocabulary embedded in metadata.
-	return requestsettings.ShouldCheckPromptSensitive() && relayFormat != types.RelayFormatClaude
-}
-
-func checkPromptSensitiveForChannel(c *gin.Context, relayFormat types.RelayFormat, channel *gatewayschema.Channel, meta *types.TokenCountMeta) *types.NewAPIError {
-	if !shouldCheckPromptSensitiveForRelay(relayFormat) || meta == nil {
-		return nil
-	}
-	if !channel.ShouldInterceptSensitiveWords() {
-		return nil
-	}
-	contains, words := identityapp.CheckSensitiveText(meta.CombineText)
-	if !contains {
-		return nil
-	}
-	logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
-	if shouldBlockSensitiveWords() {
-		return types.NewError(errors.New("sensitive words detected"), types.ErrorCodeSensitiveWordsDetected)
-	}
-	return nil
 }

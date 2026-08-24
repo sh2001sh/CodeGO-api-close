@@ -60,7 +60,7 @@ export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
     },
     {
       icon: CircleDollarSign,
-      label: t('已结算收益'),
+      label: t('已到账收益'),
       value: formatQuota(query.data?.summary.released_income ?? 0),
     },
     {

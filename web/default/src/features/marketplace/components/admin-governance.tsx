@@ -251,7 +251,7 @@ export function AdminGovernance() {
                       {t('待结算')}: {formatQuota(channel.pending_income)}
                     </span>
                     <span>
-                      {t('已结算收益')}:{' '}
+                      {t('已到账收益')}:{' '}
                       {formatQuota(channel.released_income)}
                     </span>
                     <span>

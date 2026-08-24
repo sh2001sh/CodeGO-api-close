@@ -43,7 +43,7 @@ export function AdminIncomeFilter(props: {
             value={formatQuota(report?.pending_income ?? 0)}
           />
           <IncomeValue
-            label={t('已结算收益')}
+            label={t('已到账收益')}
             value={formatQuota(report?.released_income ?? 0)}
           />
         </div>
@@ -125,7 +125,7 @@ export function AdminIncomeFilter(props: {
                 value={formatQuota(item.pending_income)}
               />
               <ReportValue
-                label={t('已结算收益')}
+                label={t('已到账收益')}
                 value={formatQuota(item.released_income)}
               />
               <ReportValue

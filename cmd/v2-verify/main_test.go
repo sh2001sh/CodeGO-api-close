@@ -26,10 +26,10 @@ func TestVerifyReportsMissingBackfillAccounts(t *testing.T) {
 	report, err := verify(context.Background())
 	require.NoError(t, err)
 	require.Empty(t, report.MissingMigrations)
-	require.Equal(t, 1, report.MissingWalletAccounts)
-	require.Equal(t, 1, report.MissingClaudeAccounts)
-	require.Equal(t, 1, report.MissingTokenAccounts)
-	require.Equal(t, 1, report.MissingSubscriptionFunds)
+	require.Equal(t, 1, report.UnmaterializedWalletAccounts)
+	require.Equal(t, 1, report.UnmaterializedClaudeWalletAccounts)
+	require.Equal(t, 1, report.UnmaterializedTokenAccounts)
+	require.Equal(t, 1, report.UnmaterializedSubscriptionAccounts)
 	require.EqualValues(t, 1, report.LegacyBlindBoxCredits)
 	require.True(t, report.hasFailures(true))
 }
@@ -48,10 +48,10 @@ func TestVerifyAllowsUnfundedAccountsToBeCreatedLazily(t *testing.T) {
 
 	report, err := verify(context.Background())
 	require.NoError(t, err)
-	require.Zero(t, report.MissingWalletAccounts)
-	require.Zero(t, report.MissingClaudeAccounts)
-	require.Zero(t, report.MissingTokenAccounts)
-	require.Zero(t, report.MissingSubscriptionFunds)
+	require.Zero(t, report.UnmaterializedWalletAccounts)
+	require.Zero(t, report.UnmaterializedClaudeWalletAccounts)
+	require.Zero(t, report.UnmaterializedTokenAccounts)
+	require.Zero(t, report.UnmaterializedSubscriptionAccounts)
 }
 
 func verifyTestDatabase(t *testing.T) *gorm.DB {

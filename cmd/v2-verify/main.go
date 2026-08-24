@@ -105,8 +105,8 @@ func migrationTableName() string {
 	return "platform_schema_migrations"
 }
 
-func countMissingUserAccounts(ctx context.Context, accountType string) (int, error) {
-	return countMissingAccounts(ctx, &identityschema.User{}, func(record *identityschema.User) billingOwner {
+func countUnmaterializedUserAccounts(ctx context.Context, accountType string) (int, error) {
+	return countUnmaterializedAccounts(ctx, &identityschema.User{}, func(record *identityschema.User) billingOwner {
 		if !userAccountRequiresVerification(record, accountType) {
 			return billingOwner{}
 		}
@@ -114,8 +114,8 @@ func countMissingUserAccounts(ctx context.Context, accountType string) (int, err
 	})
 }
 
-func countMissingTokenAccounts(ctx context.Context) (int, error) {
-	return countMissingAccounts(ctx, &identityschema.Token{}, func(record *identityschema.Token) billingOwner {
+func countUnmaterializedTokenAccounts(ctx context.Context) (int, error) {
+	return countUnmaterializedAccounts(ctx, &identityschema.Token{}, func(record *identityschema.Token) billingOwner {
 		if record.UnlimitedQuota || (record.RemainQuota == 0 && record.UsedQuota == 0) {
 			return billingOwner{}
 		}
@@ -123,8 +123,8 @@ func countMissingTokenAccounts(ctx context.Context) (int, error) {
 	})
 }
 
-func countMissingSubscriptionAccounts(ctx context.Context) (int, error) {
-	return countMissingAccounts(ctx, &commerceschema.UserSubscription{}, func(record *commerceschema.UserSubscription) billingOwner {
+func countUnmaterializedSubscriptionAccounts(ctx context.Context) (int, error) {
+	return countUnmaterializedAccounts(ctx, &commerceschema.UserSubscription{}, func(record *commerceschema.UserSubscription) billingOwner {
 		if record.AmountTotal == 0 && record.AmountUsed == 0 && record.PeriodAmount == 0 && record.PeriodUsed == 0 {
 			return billingOwner{}
 		}

@@ -42,14 +42,8 @@ func creditTopUpQuotaTx(tx *gorm.DB, topUp *commerceschema.TopUp, quotaToAdd int
 	}
 
 	updateFields := map[string]interface{}{}
-	if topUp.NormalizedWalletType() == commerceschema.WalletTypeClaude {
-		if err := billingapp.CreditClaudeWalletQuotaTx(tx, topUp.UserId, quotaToAdd, fmt.Sprintf("topup:%s:claude", topUp.TradeNo), "topup_credit"); err != nil {
-			return err
-		}
-	} else {
-		if err := billingapp.CreditWalletQuotaTx(tx, topUp.UserId, quotaToAdd, fmt.Sprintf("topup:%s:wallet", topUp.TradeNo), "topup_credit"); err != nil {
-			return err
-		}
+	if err := billingapp.CreditClaudeWalletQuotaTx(tx, topUp.UserId, quotaToAdd, fmt.Sprintf("topup:%s:unified", topUp.TradeNo), "topup_credit"); err != nil {
+		return err
 	}
 	if topUp.PaymentProvider == commerceschema.PaymentProviderStripe && customerID != "" {
 		updateFields["stripe_customer"] = customerID
@@ -77,10 +71,7 @@ func invalidateTopUpUserCache(userID int) {
 }
 
 func topUpWalletLogLabel(topUp *commerceschema.TopUp) string {
-	if topUp != nil && topUp.NormalizedWalletType() == commerceschema.WalletTypeClaude {
-		return "Claude额度"
-	}
-	return "额度"
+	return "通用额度"
 }
 
 // CompleteTopUpByTradeNo completes a pending top-up order and credits quota to the user.

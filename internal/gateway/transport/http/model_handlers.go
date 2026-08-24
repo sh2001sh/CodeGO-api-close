@@ -2,7 +2,6 @@ package http
 
 import (
 	"fmt"
-	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	stdhttp "net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +9,8 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -23,8 +24,28 @@ func ListModels(c *gin.Context, modelType int) {
 		}
 	}
 	tokenGroup := httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+	if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) && !marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
+		// TokenAuth resolves market:<id> to the actual internal routing group.
+		// Model-list routes do not run the distributor that normally performs
+		// this replacement for relay requests.
+		if resolvedGroup := httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup); resolvedGroup != "" {
+			tokenGroup = resolvedGroup
+		}
+	}
 
-	userOpenAIModels, err := gatewayroutingapp.CollectUserOpenAIModels(userID, tokenModelLimitEnabled, tokenModelLimit, tokenGroup)
+	var userOpenAIModels []dto.OpenAIModels
+	var err error
+	normalizedTokenGroup := gatewayroutingapp.NormalizeTokenGroup(tokenGroup)
+	marketplaceAutoToken := marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup)
+	if !tokenModelLimitEnabled && (normalizedTokenGroup == gatewayroutingapp.AutoGroupName || marketplaceAutoToken) && marketplaceapp.HasConfiguredAutoRoutePool(userID) {
+		var poolModels []string
+		poolModels, _, err = marketplaceapp.ListSelectedAutoRouteModels(userID)
+		if err == nil {
+			userOpenAIModels = gatewayroutingapp.CollectOpenAIModelsForNames(userID, poolModels)
+		}
+	} else {
+		userOpenAIModels, err = gatewayroutingapp.CollectUserOpenAIModels(userID, tokenModelLimitEnabled, tokenModelLimit, normalizedTokenGroup)
+	}
 	if err != nil {
 		c.JSON(stdhttp.StatusOK, gin.H{
 			"success": false,

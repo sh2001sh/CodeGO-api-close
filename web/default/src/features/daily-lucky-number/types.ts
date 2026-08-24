@@ -16,7 +16,16 @@ export interface LuckyNumberSubscription {
   number?: SubscriptionLuckyNumber
 }
 
+export interface BlindBoxLuckyNumber {
+  blind_box_open_record_id: number
+  lucky_suffix: string
+  draw_date: string
+  expires_at: number
+  created_at: number
+}
+
 export interface LuckyNumberRules {
+	quota_unit: 'unified_credit' | string
   base_reward_1_usd: number
   base_reward_2_usd: number
   base_reward_3_usd: number
@@ -46,6 +55,8 @@ export interface LuckyRewardRecord {
   id: number
   draw_id: number
   user_subscription_id: number
+  blind_box_open_record_id?: number
+  participation_type?: 'subscription' | 'blind_box' | string
   lucky_number: string
   membership_tier: MembershipTier | string
   matched_digits: number
@@ -75,6 +86,7 @@ export interface LuckyPublicWin {
 
 export interface LuckyNumberSelfPayload {
   enabled: boolean
+  quota_unit: 'unified_credit' | string
   timezone: string
   draw_hour: number
   draw_minute: number
@@ -85,6 +97,7 @@ export interface LuckyNumberSelfPayload {
   jackpot_cap_usd: number
   rules?: LuckyNumberRules
   subscriptions: LuckyNumberSubscription[]
+  today_blind_box_numbers: BlindBoxLuckyNumber[]
   recent_rewards: LuckyRewardView[]
 }
 
@@ -93,6 +106,18 @@ export interface LuckyRewardPage {
   page_size: number
   total: number
   records: LuckyRewardView[]
+}
+
+export interface LuckyRewardNotification {
+  id: number
+  reward: LuckyRewardView
+  read_at: number
+  created_at: number
+}
+
+export interface LuckyRewardNotificationPage {
+  unread_count: number
+  items: LuckyRewardNotification[]
 }
 
 export interface LuckyPublicWinPage {
@@ -104,6 +129,7 @@ export interface LuckyPublicWinPage {
 
 export interface DailyLuckyConfig {
   enabled: boolean
+  quota_unit?: 'unified_credit' | string
   timezone: string
   draw_hour: number
   draw_minute: number
@@ -184,6 +210,8 @@ export interface LuckyBackfillResult {
 
 export type DailyLuckySelfResponse = ApiResponse<LuckyNumberSelfPayload>
 export type DailyLuckyHistoryResponse = ApiResponse<LuckyRewardPage>
+export type DailyLuckyRewardNotificationResponse =
+  ApiResponse<LuckyRewardNotificationPage>
 export type DailyLuckyPublicWinsResponse = ApiResponse<LuckyPublicWinPage>
 export type DailyLuckyAdminResponse = ApiResponse<LuckyDrawAdminPayload>
 export type DailyLuckyConfigResponse = ApiResponse<DailyLuckyConfig>

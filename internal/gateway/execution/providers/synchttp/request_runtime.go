@@ -42,6 +42,13 @@ func SetupAPIRequestHeader(info *relaycommon.RelayInfo, c *gin.Context, req *htt
 	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
 		req.Set("X-Codex-Beta-Features", c.Request.Header.Get("X-Codex-Beta-Features"))
 	}
+	// Codex mints an opaque turn-state blob on a response and expects the
+	// client to echo it on subsequent requests in the same turn. Preserve it
+	// independently of generic header overrides so compaction/continuations
+	// keep the upstream conversation state.
+	if turnState := strings.TrimSpace(c.Request.Header.Get("x-codex-turn-state")); turnState != "" {
+		req.Set("x-codex-turn-state", turnState)
+	}
 	if info.IsStream && c.Request.Header.Get("Accept") == "" {
 		req.Set("Accept", "text/event-stream")
 	}
@@ -54,6 +61,19 @@ func applyUpstreamContentLength(req *http.Request, info *relaycommon.RelayInfo) 
 	if info.UpstreamRequestBodySize > 0 && req.ContentLength <= 0 {
 		req.ContentLength = info.UpstreamRequestBodySize
 	}
+}
+
+func applyReplayableRequestBody(req *http.Request, body io.Reader) {
+	if req == nil || req.GetBody != nil || body == nil {
+		return
+	}
+	replayable, ok := body.(interface {
+		NewReader() (io.ReadCloser, error)
+	})
+	if !ok {
+		return
+	}
+	req.GetBody = replayable.NewReader
 }
 
 func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) context.CancelFunc {
@@ -120,7 +140,8 @@ func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
 func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (*http.Response, error) {
 	var client *http.Client
 	var err error
-	responseHeaderTimeout := responseHeaderTimeoutForRequest(info)
+	markResponsesStreamRetrySafeBeforeConnect(c, info)
+	responseHeaderTimeout := responseHeaderTimeoutForRequest(c, info)
 	if info.ChannelSetting.Proxy != "" {
 		client, err = platformhttpx.NewProxyHTTPClientWithResponseHeaderTimeout(info.ChannelSetting.Proxy, responseHeaderTimeout)
 		if err != nil {
@@ -145,6 +166,10 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 		}
 	}
 
+	if info != nil && info.FirstByteTrace != nil {
+		info.FirstByteTrace.MarkUpstreamRequestReady()
+		req = relaycommon.WithOutboundHTTPTrace(req, info.FirstByteTrace, info.UpstreamRequestBodySize)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
@@ -161,25 +186,64 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	if resp == nil {
 		return nil, errors.New("resp is nil")
 	}
+	if info != nil && info.FirstByteTrace != nil {
+		info.FirstByteTrace.MarkOutboundHTTPVersion(resp.ProtoMajor, resp.ProtoMinor)
+		info.FirstByteTrace.MarkUpstreamResponseHeaders()
+	}
 
 	if upID := resp.Header.Get(constant.RequestIdKey); upID != "" {
 		c.Set(constant.UpstreamRequestIdKey, upID)
 	}
 
-	_ = req.Body.Close()
-	_ = c.Request.Body.Close()
+	if req.Body != nil {
+		_ = req.Body.Close()
+	}
+	if c != nil && c.Request != nil && c.Request.Body != nil {
+		_ = c.Request.Body.Close()
+	}
 	return resp, nil
 }
 
-func responseHeaderTimeoutForRequest(info *relaycommon.RelayInfo) time.Duration {
+func responseHeaderTimeoutForRequest(c *gin.Context, info *relaycommon.RelayInfo) time.Duration {
 	baseTimeout := time.Duration(platformconfig.RelayResponseHeaderTimeout) * time.Second
-	if baseTimeout <= 0 || info == nil || !relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
+	if info == nil {
+		return baseTimeout
+	}
+	if info.RelayMode == gatewaycontract.RelayModeImagesGenerations ||
+		info.RelayMode == gatewaycontract.RelayModeImagesEdits {
+		imageTimeout := time.Duration(platformconfig.ImageResponseHeaderTimeout) * time.Second
+		if imageTimeout <= 0 {
+			return baseTimeout
+		}
+		return maxDuration(baseTimeout, imageTimeout)
+	}
+	if retryTimeout := relaycommon.RetryableResponsesAttemptTimeout(c); retryTimeout > 0 {
+		return minPositiveDuration(baseTimeout, retryTimeout)
+	}
+	if baseTimeout <= 0 {
+		return 0
+	}
+	if !relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
 		return baseTimeout
 	}
 	if info.GetEstimatePromptTokens() >= relaycommon.VeryLongContextPromptTokens {
 		return maxDuration(baseTimeout, 90*time.Second)
 	}
 	return maxDuration(baseTimeout, 75*time.Second)
+}
+
+func minPositiveDuration(configured, fallback time.Duration) time.Duration {
+	if configured <= 0 || fallback < configured {
+		return fallback
+	}
+	return configured
+}
+
+func markResponsesStreamRetrySafeBeforeConnect(c *gin.Context, info *relaycommon.RelayInfo) {
+	if c == nil || info == nil || !info.IsStream || info.RelayMode != gatewaycontract.RelayModeResponses || relaycommon.IsImageGenerationRequest(c) {
+		return
+	}
+	c.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
 }
 
 func maxDuration(left, right time.Duration) time.Duration {
@@ -209,11 +273,12 @@ func DoAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 	if platformconfig.DebugEnabled {
 		println("fullRequestURL:", fullRequestURL)
 	}
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
+	req, err := http.NewRequestWithContext(requestContext(c), c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
 	applyUpstreamContentLength(req, info)
+	applyReplayableRequestBody(req, requestBody)
 
 	headers := req.Header
 	if err := a.SetupRequestHeader(c, &headers, info); err != nil {
@@ -233,6 +298,29 @@ func DoAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 	return resp, nil
 }
 
+// DoAPIRequestAt sends a follow-up request to an already resolved upstream URL
+// while preserving the selected channel's authentication, proxy and overrides.
+func DoAPIRequestAt(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo, method, target string, requestBody io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(c.Request.Context(), method, target, requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("new follow-up request failed: %w", err)
+	}
+	headers := req.Header
+	if err := a.SetupRequestHeader(c, &headers, info); err != nil {
+		return nil, fmt.Errorf("setup follow-up request header failed: %w", err)
+	}
+	headerOverride, err := resolveHeaderOverride(info, c)
+	if err != nil {
+		return nil, err
+	}
+	applyHeaderOverrideToRequest(req, headerOverride)
+	resp, err := DoRequest(c, req, info)
+	if err != nil {
+		return nil, fmt.Errorf("do follow-up request failed: %w", err)
+	}
+	return resp, nil
+}
+
 func DoFormAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (*http.Response, error) {
 	fullRequestURL, err := a.GetRequestURL(info)
 	if err != nil {
@@ -241,11 +329,12 @@ func DoFormAPIRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayI
 	if platformconfig.DebugEnabled {
 		println("fullRequestURL:", fullRequestURL)
 	}
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
+	req, err := http.NewRequestWithContext(requestContext(c), c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
 	applyUpstreamContentLength(req, info)
+	applyReplayableRequestBody(req, requestBody)
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 
 	headers := req.Header
@@ -286,9 +375,21 @@ func DoWSSRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 	}
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 
-	targetConn, _, err := websocket.DefaultDialer.Dial(fullRequestURL, targetHeader)
+	targetConn, _, err := websocket.DefaultDialer.DialContext(requestContext(c), fullRequestURL, targetHeader)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed to %s: %w", fullRequestURL, err)
 	}
 	return targetConn, nil
+}
+
+// requestContext binds a synchronous upstream attempt to the incoming
+// request.  Without this, net/http continues writing/reading an upstream
+// request after the client has cancelled, leaving a charged reservation and a
+// busy route slot alive until the upstream timeout.  Background Responses
+// workers use their own request context and do not pass through this helper.
+func requestContext(c *gin.Context) context.Context {
+	if c != nil && c.Request != nil {
+		return c.Request.Context()
+	}
+	return context.Background()
 }

@@ -9,6 +9,8 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -373,6 +375,106 @@ func TestTokenFullKeyAddsOpenAIPrefix(t *testing.T) {
 	prefixed := &identityschema.Token{Key: "sk-existing"}
 	if prefixed.GetFullKey() != "sk-existing" {
 		t.Fatalf("expected existing prefix to be preserved, got %q", prefixed.GetFullKey())
+	}
+}
+
+func TestAddTokenLeavesAccessedTimeUnset(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	ctx, recorder := newAuthenticatedContext(t, stdhttp.MethodPost, "/api/token/", map[string]any{
+		"name":            "unused-token",
+		"expired_time":    -1,
+		"remain_quota":    100,
+		"unlimited_quota": false,
+	}, 7)
+
+	AddToken(ctx)
+
+	if recorder.Code != stdhttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected token creation to succeed, got %s", response.Message)
+	}
+
+	var token identityschema.Token
+	if err := db.Where("user_id = ? AND name = ?", 7, "unused-token").First(&token).Error; err != nil {
+		t.Fatalf("failed to load created token: %v", err)
+	}
+	if token.CreatedTime == 0 {
+		t.Fatal("expected created_time to be set")
+	}
+	if token.AccessedTime != 0 {
+		t.Fatalf("expected accessed_time to remain unset, got %d", token.AccessedTime)
+	}
+}
+
+func TestAddTokenSelectsMarketplaceGroupDirectly(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	if err := db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}); err != nil {
+		t.Fatalf("failed to migrate marketplace channel and group: %v", err)
+	}
+	group := marketplaceschema.Group{
+		ID: "selectable-market-group", ChannelID: "channel-1", OwnerUserID: 42,
+		PublicSlug: "selectable-market-group", SystemDisplayName: "Claude Max 0.5x",
+		InternalGroupName: "market_u42_claude-max_0p5x_select_v1", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 0.5,
+		LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed,
+		Visibility: marketplacedomain.VisibilityPublic,
+	}
+	if err := db.Create(&group).Error; err != nil {
+		t.Fatalf("failed to seed marketplace group: %v", err)
+	}
+	channel := marketplaceschema.Channel{
+		ID:                   group.ChannelID,
+		OwnerUserID:          group.OwnerUserID,
+		ProviderType:         "openai_compatible",
+		BaseURLCiphertext:    "url",
+		CredentialCiphertext: "key",
+	}
+	if err := db.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to seed marketplace channel: %v", err)
+	}
+	ctx, recorder := newAuthenticatedContext(t, stdhttp.MethodPost, "/api/token/", map[string]any{
+		"name":                         "market-token",
+		"expired_time":                 -1,
+		"unlimited_quota":              true,
+		"group":                        "market:" + group.ID,
+		"cross_group_retry":            true,
+		"marketplace_multiplier_limit": 0.75,
+	}, 7)
+
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected token creation to succeed, got %s", response.Message)
+	}
+	var token identityschema.Token
+	if err := db.Where("user_id = ? AND name = ?", 7, "market-token").First(&token).Error; err != nil {
+		t.Fatalf("failed to load created token: %v", err)
+	}
+	if token.Group != "market:"+group.ID {
+		t.Fatalf("expected marketplace group to be stored, got %q", token.Group)
+	}
+	if token.CrossGroupRetry {
+		t.Fatal("expected marketplace token to disable cross-group retry")
+	}
+	if token.MarketplaceMultiplierLimit != 0.75 {
+		t.Fatalf("expected marketplace multiplier limit 0.75, got %v", token.MarketplaceMultiplierLimit)
+	}
+}
+
+func TestNormalizeTokenGroupSelectionAcceptsMarketplaceAuto(t *testing.T) {
+	group, crossGroupRetry, err := normalizeTokenGroupSelection(7, "market:auto", true)
+	if err != nil {
+		t.Fatalf("expected marketplace auto group to be accepted: %v", err)
+	}
+	if group != "market:auto" {
+		t.Fatalf("expected market:auto, got %q", group)
+	}
+	if crossGroupRetry {
+		t.Fatal("expected marketplace auto to manage fallback internally")
 	}
 }
 

@@ -1,10 +1,10 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/sh2001sh/new-api/constant"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	"net/http"
@@ -71,7 +71,7 @@ func TestDoUserCheckinAwardsQuotaAndCreatesRecord(t *testing.T) {
 	setting.MinQuota = 120
 	setting.MaxQuota = 120
 
-	user := &identityschema.User{Id: 1, Username: "checkin-award-user", Password: "password123", DisplayName: "Checkin Award User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", Quota: 500}
+	user := &identityschema.User{Id: 1, Username: "checkin-award-user", Password: "password123", DisplayName: "Checkin Award User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", ClaudeQuota: 500}
 	if err := db.Create(user).Error; err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
@@ -99,8 +99,8 @@ func TestDoUserCheckinAwardsQuotaAndCreatesRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload user: %v", err)
 	}
-	if reloaded.Quota != 620 {
-		t.Fatalf("expected quota to increase to 620, got %d", reloaded.Quota)
+	if reloaded.ClaudeQuota != 620 {
+		t.Fatalf("expected quota to increase to 620, got %d", reloaded.ClaudeQuota)
 	}
 
 	status, err := identityapp.LoadCheckinStatus(user.Id, time.Now().Format("2006-01"))

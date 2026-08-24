@@ -61,6 +61,10 @@ type textQuotaSummary struct {
 	ToolCallSurchargeQuota   decimal.Decimal
 }
 
+func (s textQuotaSummary) hasBillableUsage() bool {
+	return s.TotalTokens > 0 || !s.ToolCallSurchargeQuota.IsZero()
+}
+
 func cacheWriteTokensTotal(summary textQuotaSummary) int {
 	if summary.CacheCreationTokens5m > 0 || summary.CacheCreationTokens1h > 0 {
 		splitCacheWriteTokens := summary.CacheCreationTokens5m + summary.CacheCreationTokens1h
@@ -70,6 +74,17 @@ func cacheWriteTokensTotal(summary textQuotaSummary) int {
 		return splitCacheWriteTokens
 	}
 	return summary.CacheCreationTokens
+}
+
+func performanceInputTokens(promptTokens, cacheReadTokens, cacheWriteTokens int, cacheSeparated bool) int64 {
+	inputTokens := promptTokens
+	if !cacheSeparated {
+		inputTokens -= cacheReadTokens + cacheWriteTokens
+	}
+	if inputTokens < 0 {
+		inputTokens = 0
+	}
+	return int64(inputTokens)
 }
 
 func isLegacyClaudeDerivedOpenAIUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
@@ -326,7 +341,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		summary.Quota = platformmath.SaturatingInt64ToInt(quotaCalculateDecimal.Round(0).IntPart())
 	}
 
-	if summary.TotalTokens == 0 {
+	if !summary.hasBillableUsage() {
 		summary.Quota = 0
 	} else if !ratio.IsZero() && summary.Quota == 0 {
 		summary.Quota = 1
@@ -354,6 +369,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 	if originUsage != nil {
 		gatewayruntime.ObserveChannelAffinityUsageCacheByRelayFormatFromContext(ctx, usage, relayInfo.GetFinalRequestRelayFormat())
+		gatewayruntime.ObserveConversationPromptHighWaterFromContext(ctx, relayInfo.OriginModelName, usage)
 	}
 
 	adminRejectReason := httpctx.GetContextKeyString(ctx, constant.ContextKeyAdminRejectReason)
@@ -373,9 +389,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 			summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredRes)
 		}
 	}
-	if summary.Quota > 0 {
-		summary.Quota = applyUsageConsumptionDiscount(relayInfo.UserId, summary.Quota)
-	}
+	discountDetail := calculateUsageConsumptionDiscount(relayInfo, summary.Quota)
+	summary.Quota = discountDetail.QuotaAfterDiscount
 
 	if summary.WebSearchCallCount > 0 {
 		extraContent = append(extraContent, fmt.Sprintf("Web Search 调用 %d 次，调用花费 %s", summary.WebSearchCallCount, decimal.NewFromFloat(summary.WebSearchPrice).Mul(decimal.NewFromInt(int64(summary.WebSearchCallCount))).Div(decimal.NewFromInt(1000)).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(platformruntime.QuotaPerUnit)).String()))
@@ -393,20 +408,14 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		extraContent = append(extraContent, fmt.Sprintf("Image Generation Call 花费 %s", decimal.NewFromFloat(summary.ImageGenerationCallPrice).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(platformruntime.QuotaPerUnit)).String()))
 	}
 
-	if summary.TotalTokens == 0 {
+	if !summary.hasBillableUsage() {
 		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
-	} else {
-		RecordUsageStats(relayInfo.UserId, relayInfo.ChannelId, summary.Quota)
 	}
 
 	if err := SettleRelayBilling(ctx, relayInfo, summary.Quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
-	if summary.Quota > 0 {
-		recordBlindBoxUsage(relayInfo.UserId, summary.Quota)
-	}
-
 	logModel := summary.ModelName
 	if strings.HasPrefix(logModel, "gpt-4-gizmo") {
 		logModel = "gpt-4-gizmo-*"
@@ -484,14 +493,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	if tieredBillingApplied {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
-	if decision, ok := gatewayruntime.GetRouteDecision(ctx); ok {
-		adminInfo, _ := other["admin_info"].(map[string]interface{})
-		if adminInfo == nil {
-			adminInfo = make(map[string]interface{})
-		}
-		adminInfo["route_decision"] = decision
-		other["admin_info"] = adminInfo
-	}
+	appendUsageConsumptionDiscountInfo(other, discountDetail)
+	gatewayruntime.AttachRouteLogInfo(ctx, other)
 
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
@@ -499,7 +502,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		CompletionTokens: summary.CompletionTokens,
 		ModelName:        logModel,
 		TokenName:        summary.TokenName,
-		Quota:            summary.Quota,
+		Quota:            BillingQuotaForLog(relayInfo, summary.Quota),
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(summary.UseTimeSeconds),
@@ -508,6 +511,14 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Other:            other,
 	})
 	gopool.Go(func() {
-		auditprojection.RecordRelaySample(relayInfo, true, int64(summary.CompletionTokens))
+		cacheWriteTokens := cacheWriteTokensTotal(summary)
+		auditprojection.RecordRelayUsageSample(
+			relayInfo,
+			true,
+			performanceInputTokens(summary.PromptTokens, summary.CacheTokens, cacheWriteTokens, summary.IsClaudeUsageSemantic),
+			int64(summary.CacheTokens),
+			int64(cacheWriteTokens),
+			int64(summary.CompletionTokens),
+		)
 	})
 }

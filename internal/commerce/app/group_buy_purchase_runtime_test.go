@@ -35,6 +35,44 @@ func TestValidateGroupBuyPurchaseRejectsDayPass(t *testing.T) {
 	assert.ErrorIs(t, err, ErrGroupBuyPlanNotEnabled)
 }
 
+func TestNormalizeSubscriptionPurchaseAutomaticallyJoinsEligibleGroupBuy(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	plan := &commerceschema.SubscriptionPlan{
+		Id:              9798,
+		Title:           "集享月卡",
+		DurationUnit:    commerceschema.SubscriptionDurationMonth,
+		DurationValue:   1,
+		PlanType:        commerceschema.SubscriptionPlanTypeMonthly,
+		Enabled:         true,
+		GroupBuyEnabled: true,
+	}
+	require.NoError(t, db.Create(plan).Error)
+
+	purchaseType, groupBuyID, err := NormalizeSubscriptionPurchaseFields(97990, SubscriptionPurchaseFields{PlanID: plan.Id})
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseTypeGroupBuy, purchaseType)
+	assert.Zero(t, groupBuyID)
+}
+
+func TestNormalizeSubscriptionPurchaseKeepsDayPassOutsideGroupBuy(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	plan := &commerceschema.SubscriptionPlan{
+		Id:              9797,
+		Title:           "日卡",
+		DurationUnit:    commerceschema.SubscriptionDurationDay,
+		DurationValue:   1,
+		PlanType:        commerceschema.SubscriptionPlanTypeDaily,
+		Enabled:         true,
+		GroupBuyEnabled: true,
+	}
+	require.NoError(t, db.Create(plan).Error)
+
+	purchaseType, groupBuyID, err := NormalizeSubscriptionPurchaseFields(97989, SubscriptionPurchaseFields{PlanID: plan.Id})
+	require.NoError(t, err)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseTypeNormal, purchaseType)
+	assert.Zero(t, groupBuyID)
+}
+
 func TestSettleGroupBuyOrderAddsBonusToSubscriptionInsteadOfWallet(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
@@ -166,7 +204,7 @@ func TestSettleGroupBuyOrderAddsBonusToSubscriptionInsteadOfWallet(t *testing.T)
 	assert.NotZero(t, refreshedOrder.SettledAt)
 }
 
-func TestSettleGroupBuyOrder_OnlyOneRealMember_MarkedExpired(t *testing.T) {
+func TestSettleGroupBuyOrder_OnlyOneRealMemberAndGhost_MarkedCompletedAtTwoMemberTier(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	plan := &commerceschema.SubscriptionPlan{
@@ -246,11 +284,11 @@ func TestSettleGroupBuyOrder_OnlyOneRealMember_MarkedExpired(t *testing.T) {
 
 	var settled commerceschema.GroupBuyOrder
 	require.NoError(t, db.Where("id = ?", order.Id).First(&settled).Error)
-	assert.Equal(t, commerceschema.GroupBuyStatusExpired, settled.Status)
+	assert.Equal(t, commerceschema.GroupBuyStatusCompleted, settled.Status)
 
 	var updatedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", sub.Id).First(&updatedSub).Error)
-	assert.Equal(t, initialTotal, updatedSub.AmountTotal)
+	assert.Equal(t, initialTotal+int64(platformruntime.QuotaPerUnit*20), updatedSub.AmountTotal)
 }
 
 func TestSettleGroupBuyOrder_TwoRealMembers_MarkedCompleted(t *testing.T) {
@@ -340,7 +378,9 @@ func TestSettleGroupBuyOrder_TwoRealMembers_MarkedCompleted(t *testing.T) {
 	require.NoError(t, db.Where("id = ?", order.Id).First(&settled).Error)
 	assert.Equal(t, commerceschema.GroupBuyStatusCompleted, settled.Status)
 
-	expectedBonus := int64(platformruntime.QuotaPerUnit * 20)
+	// The ghost member counts toward the tier, while only real paid members
+	// receive the corresponding tier reward.
+	expectedBonus := int64(platformruntime.QuotaPerUnit * 35)
 	for _, sub := range subs {
 		var updated commerceschema.UserSubscription
 		require.NoError(t, db.Where("id = ?", sub.Id).First(&updated).Error)

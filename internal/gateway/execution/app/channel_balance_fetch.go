@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/sh2001sh/new-api/constant"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -189,7 +190,7 @@ func updateChannelMoonshotBalance(channel *gatewayschema.Channel) (float64, erro
 }
 
 func updateDefaultOpenAIBalance(channel *gatewayschema.Channel, baseURL string) (float64, error) {
-	subscriptionURL := fmt.Sprintf("%s/v1/dashboard/billing/subscription", baseURL)
+	subscriptionURL := gatewayruntime.JoinBaseURLPath(baseURL, "/v1/dashboard/billing/subscription")
 	body, err := getResponseBody(http.MethodGet, subscriptionURL, channel, getAuthHeader(channel.Key))
 	if err != nil {
 		return 0, err
@@ -207,7 +208,7 @@ func updateDefaultOpenAIBalance(channel *gatewayschema.Channel, baseURL string) 
 		startDate = now.AddDate(0, 0, -100).Format("2006-01-02")
 	}
 
-	usageURL := fmt.Sprintf("%s/v1/dashboard/billing/usage?start_date=%s&end_date=%s", baseURL, startDate, endDate)
+	usageURL := gatewayruntime.JoinBaseURLPath(baseURL, "/v1/dashboard/billing/usage") + fmt.Sprintf("?start_date=%s&end_date=%s", startDate, endDate)
 	body, err = getResponseBody(http.MethodGet, usageURL, channel, getAuthHeader(channel.Key))
 	if err != nil {
 		return 0, err

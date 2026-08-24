@@ -2,6 +2,7 @@ import {
   getConfiguredServerAddress,
   normalizePublicServerAddress,
 } from '@/lib/server-url'
+import { downloadTextFile, sanitizeLabel } from './codex-config-helpers'
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.6-luna'
 const PLACEHOLDER_SERVER_URL = 'https://your-codexforall.example.com'
@@ -28,33 +29,23 @@ function normalizeServerAddress(value?: string): string {
   )
 }
 
-function sanitizeLabel(value?: string): string {
-  if (!value) return 'template'
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-  return normalized || 'template'
-}
-
-function buildCodexProviderBlock(serverAddress: string): string {
+export function buildCodexProviderBlock(serverAddress: string): string {
   return `# BEGIN CODEGO MANAGED PROVIDER
 [model_providers.${CODEX_PROVIDER}]
 name = "${CODEX_PROVIDER}"
 base_url = "${serverAddress}/v1"
 wire_api = "responses"
+supports_websockets = true
 # END CODEGO MANAGED PROVIDER`
 }
 
-function buildWindowsScript(
+export function buildWindowsScript(
   serverAddress: string,
   apiKey: string,
   model: string
 ) {
   const apiBase = `${serverAddress}/v1`
-  return `@echo off
+  const script = `@echo off
 setlocal enabledelayedexpansion
 
 :: Code Go Codex config script (ASCII only)
@@ -182,9 +173,13 @@ echo Press any key to exit...
 pause >nul
 exit /b 1
 `
+  return script.replace(
+    "'# END CODEXFORALL MANAGED PROVIDER'",
+    "'supports_websockets = true','# END CODEXFORALL MANAGED PROVIDER'"
+  )
 }
 
-function buildLinuxScript(
+export function buildLinuxScript(
   serverAddress: string,
   apiKey: string,
   model: string
@@ -363,18 +358,6 @@ while true; do
   esac
 done
 `
-}
-
-function downloadTextFile(filename: string, content: string) {
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  document.body.appendChild(anchor)
-  anchor.click()
-  document.body.removeChild(anchor)
-  URL.revokeObjectURL(url)
 }
 
 export function downloadCodexSetupScript(

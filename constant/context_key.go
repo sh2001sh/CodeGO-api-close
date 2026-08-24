@@ -11,37 +11,60 @@ const (
 	ContextKeyRequestStartTime ContextKey = "request_start_time"
 
 	/* token related keys */
-	ContextKeyTokenUnlimited         ContextKey = "token_unlimited_quota"
-	ContextKeyTokenKey               ContextKey = "token_key"
-	ContextKeyTokenId                ContextKey = "token_id"
-	ContextKeyTokenGroup             ContextKey = "token_group"
-	ContextKeyTokenSpecificChannelId ContextKey = "specific_channel_id"
-	ContextKeyTokenModelLimitEnabled ContextKey = "token_model_limit_enabled"
-	ContextKeyTokenModelLimit        ContextKey = "token_model_limit"
-	ContextKeyTokenCrossGroupRetry   ContextKey = "token_cross_group_retry"
-	ContextKeyZeroHourActive         ContextKey = "zero_hour_active"
+	ContextKeyTokenUnlimited                  ContextKey = "token_unlimited_quota"
+	ContextKeyTokenKey                        ContextKey = "token_key"
+	ContextKeyTokenId                         ContextKey = "token_id"
+	ContextKeyTokenGroup                      ContextKey = "token_group"
+	ContextKeyTokenSpecificChannelId          ContextKey = "specific_channel_id"
+	ContextKeyTokenModelLimitEnabled          ContextKey = "token_model_limit_enabled"
+	ContextKeyTokenModelLimit                 ContextKey = "token_model_limit"
+	ContextKeyTokenCrossGroupRetry            ContextKey = "token_cross_group_retry"
+	ContextKeyTokenMarketplaceMultiplierLimit ContextKey = "token_marketplace_multiplier_limit"
+	ContextKeyZeroHourActive                  ContextKey = "zero_hour_active"
+	ContextKeyMonthlyPassActive               ContextKey = "monthly_pass_active"
+	ContextKeyMarketplaceGroupID              ContextKey = "marketplace_group_id"
+	ContextKeyMarketplaceOwnerID              ContextKey = "marketplace_owner_id"
+	ContextKeyMarketplaceSourceType           ContextKey = "marketplace_source_type"
+	ContextKeyMarketplaceCreditPolicy         ContextKey = "marketplace_credit_policy"
+	ContextKeyMarketplaceMultiplier           ContextKey = "marketplace_multiplier"
+	ContextKeyMarketplaceModelPrices          ContextKey = "marketplace_model_prices"
+	ContextKeyUnifiedAutoBindings             ContextKey = "unified_auto_bindings"
+	ContextKeyUnifiedAutoIndex                ContextKey = "unified_auto_index"
 
 	/* channel related keys */
-	ContextKeyChannelId                ContextKey = "channel_id"
-	ContextKeyChannelName              ContextKey = "channel_name"
-	ContextKeyChannelCreateTime        ContextKey = "channel_create_time"
-	ContextKeyChannelBaseUrl           ContextKey = "base_url"
-	ContextKeyChannelType              ContextKey = "channel_type"
-	ContextKeyChannelSetting           ContextKey = "channel_setting"
-	ContextKeyChannelOtherSetting      ContextKey = "channel_other_setting"
-	ContextKeyChannelParamOverride     ContextKey = "param_override"
-	ContextKeyChannelHeaderOverride    ContextKey = "header_override"
-	ContextKeyChannelOrganization      ContextKey = "channel_organization"
-	ContextKeyChannelAutoBan           ContextKey = "auto_ban"
-	ContextKeyChannelModelMapping      ContextKey = "model_mapping"
-	ContextKeyChannelStatusCodeMapping ContextKey = "status_code_mapping"
-	ContextKeyChannelIsMultiKey        ContextKey = "channel_is_multi_key"
-	ContextKeyChannelMultiKeyIndex     ContextKey = "channel_multi_key_index"
-	ContextKeyChannelKey               ContextKey = "channel_key"
+	ContextKeyChannelId                      ContextKey = "channel_id"
+	ContextKeyChannelScope                   ContextKey = "channel_scope"
+	ContextKeyOfficialChannelOnly            ContextKey = "official_channel_only"
+	ContextKeyOfficialChannelFallback        ContextKey = "official_channel_fallback"
+	ContextKeyChannelName                    ContextKey = "channel_name"
+	ContextKeyChannelCreateTime              ContextKey = "channel_create_time"
+	ContextKeyChannelBaseUrl                 ContextKey = "base_url"
+	ContextKeyChannelType                    ContextKey = "channel_type"
+	ContextKeyChannelSetting                 ContextKey = "channel_setting"
+	ContextKeyChannelOtherSetting            ContextKey = "channel_other_setting"
+	ContextKeyChannelParamOverride           ContextKey = "param_override"
+	ContextKeyChannelHeaderOverride          ContextKey = "header_override"
+	ContextKeyChannelOrganization            ContextKey = "channel_organization"
+	ContextKeyChannelAutoBan                 ContextKey = "auto_ban"
+	ContextKeyChannelModelMapping            ContextKey = "model_mapping"
+	ContextKeyChannelStatusCodeMapping       ContextKey = "status_code_mapping"
+	ContextKeyChannelSensitiveWords          ContextKey = "channel_sensitive_word_interception_enabled"
+	ContextKeyChannelIsMultiKey              ContextKey = "channel_is_multi_key"
+	ContextKeyChannelMultiKeyIndex           ContextKey = "channel_multi_key_index"
+	ContextKeyChannelKey                     ContextKey = "channel_key"
+	ContextKeyChannelResponsesCapabilities   ContextKey = "channel_responses_capabilities"
+	ContextKeyResponsesCompactionRequirement ContextKey = "responses_compaction_requirement"
 
 	ContextKeyAutoGroup           ContextKey = "auto_group"
 	ContextKeyAutoGroupIndex      ContextKey = "auto_group_index"
 	ContextKeyAutoGroupRetryIndex ContextKey = "auto_group_retry_index"
+	// ContextKeyRetryFallbackChannelID keeps the first failed channel available
+	// for one retry when its original group has no alternate healthy route.
+	ContextKeyRetryFallbackChannelID   ContextKey = "retry_fallback_channel_id"
+	ContextKeyNativeBackground         ContextKey = "responses_native_background"
+	ContextKeyBackgroundResumeID       ContextKey = "responses_background_resume_id"
+	ContextKeyBackgroundResumeCursor   ContextKey = "responses_background_resume_cursor"
+	ContextKeyResponsesReplayForbidden ContextKey = "responses_replay_forbidden"
 
 	/* user related keys */
 	ContextKeyUserId      ContextKey = "id"
@@ -70,9 +93,25 @@ const (
 	// ContextKeyResponsesStreamRetrySafe marks a Responses API stream whose
 	// protocol events may have started before any meaningful model output.
 	ContextKeyResponsesStreamRetrySafe ContextKey = "responses_stream_retry_safe"
+	// ContextKeyResponsesTerminalSent prevents the generic finalizer from
+	// appending a second terminal event after response.failed was emitted.
+	ContextKeyResponsesTerminalSent ContextKey = "responses_terminal_sent"
 	// ContextKeyStreamContentDelivered is set once retrying would duplicate text
 	// or tool arguments already delivered to the client.
 	ContextKeyStreamContentDelivered ContextKey = "stream_content_delivered"
+	// ContextKeyRelayAttemptStage is the authoritative downstream commitment
+	// stage for a single upstream attempt. It prevents retry decisions from
+	// inferring replay safety from unrelated response-writer details.
+	ContextKeyRelayAttemptStage ContextKey = "relay_attempt_stage"
+	// ContextKeyStreamWorkerContext is an internal cancellation context used to
+	// interrupt pacing and downstream writes when an upstream attempt aborts.
+	ContextKeyStreamWorkerContext ContextKey = "stream_worker_context"
+	// ContextKeyClientGone marks a downstream connection that was cancelled or
+	// closed. Such a disconnect must not be attributed to an upstream channel.
+	ContextKeyClientGone ContextKey = "client_gone"
+	// ContextKeyRateLimitRetry marks a retry following an upstream 429. Automatic
+	// pools may use the bounded cross-fault-domain emergency probe in this case.
+	ContextKeyRateLimitRetry ContextKey = "rate_limit_retry"
 
 	// ContextKeyImageWorkspaceCaptureResponse indicates the current request should
 	// capture the JSON response body for image workspace persistence.

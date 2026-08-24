@@ -37,7 +37,7 @@ func GrantBonusWalletQuotaTx(tx *gorm.DB, userID int, amount int64, sourceType s
 	if err := tx.Create(&credit).Error; err != nil {
 		return false, err
 	}
-	if err := CreditWalletQuotaTx(tx, userID, int(amount), key, "bonus_quota_credit"); err != nil {
+	if err := CreditClaudeWalletQuotaTx(tx, userID, int(amount), key, "bonus_quota_credit"); err != nil {
 		return false, err
 	}
 	_ = identitystore.InvalidateUserCache(userID)

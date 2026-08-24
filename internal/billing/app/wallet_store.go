@@ -35,16 +35,42 @@ type mirroredWalletTxStore struct {
 	applyDelta  func(tx *gorm.DB, userID int, amount int) error
 }
 
-func GetUserWalletQuota(userID int) (int, error) {
-	return getLedgerBackedWalletBalance(userID, billingAccountTypeWallet, func() (int, error) {
-		return identitystore.LoadUserQuota(userID, false)
-	})
-}
-
 func GetUserClaudeWalletQuota(userID int) (int, error) {
 	return getLedgerBackedWalletBalance(userID, billingAccountTypeClaudeWallet, func() (int, error) {
 		return identitystore.LoadUserClaudeQuota(userID, false)
 	})
+}
+
+// GetUnifiedCreditBalanceTx returns the canonical unified balance inside a transaction.
+func GetUnifiedCreditBalanceTx(tx *gorm.DB, userID int) (int, error) {
+	if tx == nil || userID <= 0 {
+		return 0, errors.New("invalid unified credit lookup")
+	}
+	legacyBalance, err := getUserClaudeWalletQuotaTx(tx, userID)
+	if err != nil {
+		return 0, err
+	}
+	return canonicalWalletBalanceTx(tx, userID, billingAccountTypeClaudeWallet, legacyBalance)
+}
+
+func canonicalWalletBalanceTx(tx *gorm.DB, userID int, accountType string, legacyBalance int) (int, error) {
+	var account billingschema.BillingAccount
+	err := tx.Where("owner_type = ? AND owner_id = ? AND account_type = ? AND quota_unit = ?", billingOwnerTypeUser, userID, accountType, billingQuotaUnitQuota).First(&account).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return legacyBalance, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	var snapshot billingschema.BillingBalanceSnapshot
+	err = tx.Where("account_id = ?", account.AccountID).First(&snapshot).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return legacyBalance, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return int(snapshot.AvailableBalance), nil
 }
 
 // getLedgerBackedWalletBalance treats the ledger snapshot as canonical after the
@@ -70,6 +96,9 @@ func getLedgerBackedWalletBalance(userID int, accountType string, legacyRead fun
 
 	var snapshot billingschema.BillingBalanceSnapshot
 	if err := platformdb.DB.Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || isMissingBillingSchema(err) {
+			return legacyRead()
+		}
 		return 0, err
 	}
 	return int(snapshot.AvailableBalance), nil
@@ -81,19 +110,6 @@ func isMissingBillingSchema(err error) bool {
 	}
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "no such table") || strings.Contains(message, "does not exist")
-}
-
-func AdjustWalletQuota(userID int, delta int) error {
-	return adjustUserWalletQuota(userID, delta, mirroredWalletStore{
-		accountType: billingAccountTypeWallet,
-		readBalance: GetUserWalletQuota,
-		applyDelta: func(targetUserID int, targetDelta int) error {
-			if targetDelta > 0 {
-				return identitystore.DecreaseUserQuota(targetUserID, targetDelta)
-			}
-			return identitystore.IncreaseUserQuota(targetUserID, -targetDelta)
-		},
-	})
 }
 
 func AdjustClaudeWalletQuota(userID int, delta int) error {
@@ -109,20 +125,8 @@ func AdjustClaudeWalletQuota(userID int, delta int) error {
 	})
 }
 
-func SetWalletQuota(userID int, targetBalance int) error {
-	return setUserWalletQuota(userID, targetBalance, GetUserWalletQuota, AdjustWalletQuota)
-}
-
 func SetClaudeWalletQuota(userID int, targetBalance int) error {
 	return setUserWalletQuota(userID, targetBalance, GetUserClaudeWalletQuota, AdjustClaudeWalletQuota)
-}
-
-func CreditWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
-	return creditUserWalletQuotaTx(tx, userID, amount, idempotencyKey, reasonCode, mirroredWalletTxStore{
-		accountType: billingAccountTypeWallet,
-		readBalance: getUserWalletQuotaTx,
-		applyDelta:  increaseUserWalletQuotaTx,
-	})
 }
 
 func CreditClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
@@ -131,6 +135,64 @@ func CreditClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyK
 		readBalance: getUserClaudeWalletQuotaTx,
 		applyDelta:  increaseUserClaudeWalletQuotaTx,
 	})
+}
+
+// CreditMarketplaceOwnerEarningsTx credits the canonical unified wallet without
+// reconciling it downward to a stale legacy claude_quota projection. Marketplace
+// settlements are already held in a dedicated pending account, so releasing one
+// must transfer that amount to the owner's available balance and never consume
+// an unrelated existing wallet balance.
+func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
+	if tx == nil {
+		return errors.New("transaction is required")
+	}
+	if userID <= 0 || amount <= 0 || idempotencyKey == "" {
+		return errors.New("invalid marketplace owner credit")
+	}
+
+	legacyBalance, err := getUserClaudeWalletQuotaTx(tx, userID)
+	if err != nil {
+		return err
+	}
+	account, err := ensureMirroredUserAccountTx(tx, userID, billingAccountTypeClaudeWallet, legacyBalance)
+	if err != nil {
+		return err
+	}
+	entry, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+		AccountID:      account.AccountID,
+		Amount:         int64(amount),
+		IdempotencyKey: idempotencyKey,
+		ReasonCode:     defaultReasonCode(reasonCode, "marketplace_owner_release"),
+		ReferenceType:  "user",
+		ReferenceID:    fmt.Sprintf("%d", userID),
+		OperatorType:   "marketplace_settlement",
+		OperatorID:     idempotencyKey,
+	})
+	if err != nil {
+		return err
+	}
+	if err := recordFundingLotTx(tx, account.AccountID, int64(amount), idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
+		return err
+	}
+
+	// Keep the legacy projection aligned with the canonical snapshot after the
+	// transfer, so later wallet operations do not try to reconcile this credit
+	// back out of the ledger.
+	snapshot, err := loadBalanceSnapshotTx(tx, account.AccountID)
+	if err != nil {
+		return err
+	}
+	return tx.Model(&identityschema.User{}).Where("id = ?", userID).
+		Update("claude_quota", snapshot.AvailableBalance).Error
+}
+
+// CreditUnifiedWalletQuotaTx credits the canonical unified-credit wallet.
+//
+// The historical Claude wallet function remains available for migrations and
+// old callers, but new business features should use this name so the unit is
+// explicit and cannot be mistaken for a model-specific balance.
+func CreditUnifiedWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
+	return CreditClaudeWalletQuotaTx(tx, userID, amount, idempotencyKey, reasonCode)
 }
 
 func setUserWalletQuota(userID int, targetBalance int, readBalance func(int) (int, error), applyDelta func(int, int) error) error {
@@ -178,7 +240,7 @@ func adjustUserWalletQuota(userID int, delta int, mirrored mirroredWalletStore) 
 		}
 		return err
 	}
-	if mirrored.accountType == billingAccountTypeWallet && delta > 0 {
+	if mirrored.accountType == billingAccountTypeClaudeWallet && delta > 0 {
 		ConsumeBonusWalletQuotaCredits(userID, int64(delta))
 	}
 	return nil

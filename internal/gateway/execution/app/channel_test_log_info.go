@@ -31,6 +31,9 @@ func buildGatewayTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = relayInfo.UpstreamModelName
 	}
+	if trace := relayInfo.FirstByteTrace.Snapshot(); trace != nil {
+		other["first_byte_trace"] = trace
+	}
 	if httpctx.GetContextKeyBool(ctx, constant.ContextKeySystemPromptOverride) {
 		other["is_system_prompt_overwritten"] = true
 	}
@@ -120,13 +123,11 @@ func appendGatewayBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string
 		other["billing_source"] = relayInfo.BillingSource
 	}
 	switch relayInfo.BillingSource {
-	case billingapp.BillingSourceClaudeWallet:
+	case billingapp.BillingSourceWallet:
 		other["billing_quota_field"] = "claude_quota"
 		if relayInfo.FinalPreConsumedQuota > 0 {
 			other["claude_quota_pre_consumed"] = relayInfo.FinalPreConsumedQuota
 		}
-	case billingapp.BillingSourceWallet:
-		other["billing_quota_field"] = "quota"
 	}
 }
 

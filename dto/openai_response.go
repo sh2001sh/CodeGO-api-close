@@ -290,18 +290,22 @@ type OpenAIResponsesResponse struct {
 	ID                 string             `json:"id"`
 	Object             string             `json:"object"`
 	CreatedAt          int                `json:"created_at"`
+	Background         bool               `json:"background"`
 	Status             json.RawMessage    `json:"status"`
 	Error              any                `json:"error,omitempty"`
 	IncompleteDetails  *IncompleteDetails `json:"incomplete_details,omitempty"`
 	Instructions       json.RawMessage    `json:"instructions"`
 	MaxOutputTokens    int                `json:"max_output_tokens"`
+	MaxToolCalls       *uint              `json:"max_tool_calls,omitempty"`
 	Model              string             `json:"model"`
 	Output             []ResponsesOutput  `json:"output"`
 	ParallelToolCalls  bool               `json:"parallel_tool_calls"`
 	PreviousResponseID json.RawMessage    `json:"previous_response_id"`
 	Reasoning          *Reasoning         `json:"reasoning"`
+	ServiceTier        string             `json:"service_tier,omitempty"`
 	Store              bool               `json:"store"`
 	Temperature        float64            `json:"temperature"`
+	Text               json.RawMessage    `json:"text,omitempty"`
 	ToolChoice         json.RawMessage    `json:"tool_choice"`
 	Tools              []map[string]any   `json:"tools"`
 	TopP               float64            `json:"top_p"`
@@ -309,6 +313,8 @@ type OpenAIResponsesResponse struct {
 	Usage              *Usage             `json:"usage"`
 	User               json.RawMessage    `json:"user"`
 	Metadata           json.RawMessage    `json:"metadata"`
+	PromptCacheKey     json.RawMessage    `json:"prompt_cache_key,omitempty"`
+	SafetyIdentifier   json.RawMessage    `json:"safety_identifier,omitempty"`
 }
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构
@@ -357,16 +363,20 @@ type IncompleteDetails struct {
 }
 
 type ResponsesOutput struct {
-	Type      string                   `json:"type"`
-	ID        string                   `json:"id"`
-	Status    string                   `json:"status"`
-	Role      string                   `json:"role"`
-	Content   []ResponsesOutputContent `json:"content"`
-	Quality   string                   `json:"quality"`
-	Size      string                   `json:"size"`
-	CallId    string                   `json:"call_id,omitempty"`
-	Name      string                   `json:"name,omitempty"`
-	Arguments json.RawMessage          `json:"arguments,omitempty"`
+	Type             string                          `json:"type"`
+	ID               string                          `json:"id"`
+	Status           string                          `json:"status"`
+	Role             string                          `json:"role"`
+	Content          []ResponsesOutputContent        `json:"content"`
+	Summary          []ResponsesReasoningSummaryPart `json:"summary,omitempty"`
+	EncryptedContent string                          `json:"encrypted_content,omitempty"`
+	Quality          string                          `json:"quality"`
+	Size             string                          `json:"size"`
+	CallId           string                          `json:"call_id,omitempty"`
+	Name             string                          `json:"name,omitempty"`
+	Namespace        string                          `json:"namespace,omitempty"`
+	Input            string                          `json:"input,omitempty"`
+	Arguments        json.RawMessage                 `json:"arguments,omitempty"`
 }
 
 // ArgumentsString returns function call arguments in the string form expected by Chat Completions.
@@ -411,6 +421,8 @@ const (
 type ResponsesStreamResponse struct {
 	Type     string                   `json:"type"`
 	Response *OpenAIResponsesResponse `json:"response,omitempty"`
+	Error    any                      `json:"error,omitempty"`
+	Headers  map[string]any           `json:"headers,omitempty"`
 	Delta    string                   `json:"delta,omitempty"`
 	Item     *ResponsesOutput         `json:"item,omitempty"`
 	// - response.function_call_arguments.delta

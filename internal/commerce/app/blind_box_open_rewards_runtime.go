@@ -1,11 +1,12 @@
 package app
 
 import (
+	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"math"
-	"math/rand"
+	"math/big"
 
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
@@ -16,14 +17,14 @@ import (
 )
 
 func formatFirstPurchaseBlindBoxRewardTitle(amount float64) string {
-	return fmt.Sprintf("首购专属奖励：%.2f 美元", amount)
+	return fmt.Sprintf("首购专属奖励：%.2f 统一额度", amount)
 }
 
 func blindBoxWalletLogLabel(walletType commerceschema.BlindBoxRewardWalletType) string {
 	if walletType == commerceschema.BlindBoxRewardWalletTypeClaude {
-		return "Claude额度"
+		return "统一额度"
 	}
-	return "额度"
+	return "统一额度"
 }
 
 func recordBlindBoxRewardLogTx(tx *gorm.DB, userID int, amount int64, walletType commerceschema.BlindBoxRewardWalletType, record *commerceschema.BlindBoxOpenRecord) error {
@@ -64,12 +65,20 @@ func creditBlindBoxRewardByWalletTx(tx *gorm.DB, userID int, amount int64, walle
 	if idempotencyKey == "" {
 		return errors.New("blind box reward idempotency key is required")
 	}
+	var err error
 	switch walletType {
 	case commerceschema.BlindBoxRewardWalletTypeClaude:
-		return billingapp.CreditClaudeWalletQuotaTx(tx, userID, int(amount), idempotencyKey, reasonCode)
+		err = billingapp.CreditClaudeWalletQuotaTx(tx, userID, int(amount), idempotencyKey, reasonCode)
 	default:
-		return billingapp.CreditWalletQuotaTx(tx, userID, int(amount), idempotencyKey, reasonCode)
+		err = billingapp.CreditClaudeWalletQuotaTx(tx, userID, int(amount), idempotencyKey, reasonCode)
 	}
+	if err != nil {
+		return err
+	}
+	if reasonCode == "blind_box_reward" {
+		return billingapp.CreateWalletRewardHoldTx(tx, userID, amount, idempotencyKey)
+	}
+	return nil
 }
 
 func applyBlindBoxWalletRewardTx(tx *gorm.DB, userID int, openRecordID int, amount int64, walletType commerceschema.BlindBoxRewardWalletType) error {
@@ -102,7 +111,7 @@ func applyFirstPurchaseMinimumGuarantee(isFirstPurchaseOpen bool, ordinaryMinimu
 }
 
 func pickBlindBoxTier(tiers []blindboxsettings.TierSetting) blindboxsettings.TierSetting {
-	return pickBlindBoxTierForRoll(tiers, rand.Float64())
+	return pickBlindBoxTierForRoll(tiers, secureBlindBoxRandomFloat64())
 }
 
 func pickBlindBoxTierForRoll(tiers []blindboxsettings.TierSetting, roll float64) blindboxsettings.TierSetting {
@@ -145,8 +154,17 @@ func randomTierRewardUSD(tier blindboxsettings.TierSetting) float64 {
 	if tier.MaxUSD <= tier.MinUSD {
 		return math.Round(tier.MinUSD*100) / 100
 	}
-	value := tier.MinUSD + rand.Float64()*(tier.MaxUSD-tier.MinUSD)
+	value := tier.MinUSD + secureBlindBoxRandomFloat64()*(tier.MaxUSD-tier.MinUSD)
 	return math.Round(value*100) / 100
+}
+
+func secureBlindBoxRandomFloat64() float64 {
+	const precision = int64(1 << 53)
+	value, err := cryptorand.Int(cryptorand.Reader, big.NewInt(precision))
+	if err != nil {
+		panic(fmt.Sprintf("secure blind-box random source failed: %v", err))
+	}
+	return float64(value.Int64()) / float64(precision)
 }
 
 func isBlindBoxHighValueReward(rewardType string, rewardUSD float64, thresholdUSD float64) bool {

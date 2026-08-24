@@ -5,29 +5,39 @@ import (
 	"encoding/json"
 	"github.com/sh2001sh/new-api/constant"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
+	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	"strings"
 )
 
+const (
+	ChannelScopeOfficial = "official"
+	ChannelScopeExternal = "external"
+)
+
 type Channel struct {
-	Id                 int     `json:"id"`
-	Type               int     `json:"type" gorm:"default:0"`
-	Key                string  `json:"key" gorm:"not null"`
-	OpenAIOrganization *string `json:"openai_organization"`
-	TestModel          *string `json:"test_model"`
-	Status             int     `json:"status" gorm:"default:1"`
-	Name               string  `json:"name" gorm:"index"`
-	Weight             *uint   `json:"weight" gorm:"default:0"`
-	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
-	TestTime           int64   `json:"test_time" gorm:"bigint"`
-	ResponseTime       int     `json:"response_time"` // in milliseconds
-	BaseURL            *string `json:"base_url" gorm:"column:base_url;default:''"`
-	Other              string  `json:"other"`
-	Balance            float64 `json:"balance"` // in USD
-	BalanceUpdatedTime int64   `json:"balance_updated_time" gorm:"bigint"`
-	Models             string  `json:"models"`
-	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
-	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
-	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
+	Id                               int     `json:"id"`
+	Type                             int     `json:"type" gorm:"default:0"`
+	Key                              string  `json:"key" gorm:"not null"`
+	OpenAIOrganization               *string `json:"openai_organization"`
+	TestModel                        *string `json:"test_model"`
+	Status                           int     `json:"status" gorm:"default:1"`
+	Name                             string  `json:"name" gorm:"index"`
+	ChannelScope                     string  `json:"channel_scope" gorm:"column:channel_scope;type:varchar(16);not null;default:'official';index"`
+	MarketplaceMaxConcurrency        int     `json:"marketplace_max_concurrency" gorm:"column:marketplace_max_concurrency;not null;default:0"`
+	MarketplaceUserMaxConcurrency    int     `json:"marketplace_user_max_concurrency" gorm:"column:marketplace_user_max_concurrency;not null;default:0"`
+	SensitiveWordInterceptionEnabled *bool   `json:"sensitive_word_interception_enabled" gorm:"column:sensitive_word_interception_enabled;default:true"`
+	Weight                           *uint   `json:"weight" gorm:"default:0"`
+	CreatedTime                      int64   `json:"created_time" gorm:"bigint"`
+	TestTime                         int64   `json:"test_time" gorm:"bigint"`
+	ResponseTime                     int     `json:"response_time"` // in milliseconds
+	BaseURL                          *string `json:"base_url" gorm:"column:base_url;default:''"`
+	Other                            string  `json:"other"`
+	Balance                          float64 `json:"balance"` // in USD
+	BalanceUpdatedTime               int64   `json:"balance_updated_time" gorm:"bigint"`
+	Models                           string  `json:"models"`
+	Group                            string  `json:"group" gorm:"type:varchar(64);default:'default'"`
+	UsedQuota                        int64   `json:"used_quota" gorm:"bigint;default:0"`
+	ModelMapping                     *string `json:"model_mapping" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
 	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
@@ -47,6 +57,14 @@ type Channel struct {
 	Keys []string `json:"-" gorm:"-"`
 }
 
+func (channel *Channel) IsOfficial() bool {
+	return strings.ToLower(strings.TrimSpace(channel.ChannelScope)) != ChannelScopeExternal
+}
+
+func (channel *Channel) ShouldInterceptSensitiveWords() bool {
+	return channel == nil || channel.SensitiveWordInterceptionEnabled == nil || *channel.SensitiveWordInterceptionEnabled
+}
+
 type ChannelInfo struct {
 	IsMultiKey             bool                  `json:"is_multi_key"`                        // 是否多Key模式
 	MultiKeySize           int                   `json:"multi_key_size"`                      // 多Key模式下的Key数量
@@ -55,6 +73,103 @@ type ChannelInfo struct {
 	MultiKeyDisabledTime   map[int]int64         `json:"multi_key_disabled_time,omitempty"`   // key禁用时间列表，key index -> time
 	MultiKeyPollingIndex   int                   `json:"multi_key_polling_index"`             // 多Key模式下轮询的key索引
 	MultiKeyMode           constant.MultiKeyMode `json:"multi_key_mode"`
+	ResponsesCapabilities  ResponsesCapabilities `json:"responses_capabilities,omitempty"`
+}
+
+const (
+	CapabilityStatusUnknown     = "unknown"
+	CapabilityStatusPending     = "pending"
+	CapabilityStatusSupported   = "supported"
+	CapabilityStatusUnsupported = "unsupported"
+	CapabilityStatusError       = "error"
+)
+
+type CapabilityProbeState struct {
+	Status          string `json:"status,omitempty"`
+	CheckedAt       int64  `json:"checked_at,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ErrorClass      string `json:"error_class,omitempty"`
+	HTTPStatus      int    `json:"http_status,omitempty"`
+	ProbeKeyIdx     int    `json:"probe_key_index,omitempty"`
+	HandshakeStatus string `json:"handshake_status,omitempty"`
+	RequestStatus   string `json:"request_status,omitempty"`
+}
+
+type ResponsesCapabilities struct {
+	WebSocket          CapabilityProbeState `json:"websocket,omitempty"`
+	NativeBackground   CapabilityProbeState `json:"native_background,omitempty"`
+	BackgroundCreate   CapabilityProbeState `json:"background_create,omitempty"`
+	BackgroundResume   CapabilityProbeState `json:"background_resume,omitempty"`
+	BackgroundCancel   CapabilityProbeState `json:"background_cancel,omitempty"`
+	RemoteCompactionV1 CapabilityProbeState `json:"remote_compaction_v1,omitempty"`
+	RemoteCompactionV2 CapabilityProbeState `json:"remote_compaction_v2,omitempty"`
+}
+
+func (capabilities ResponsesCapabilities) SupportsWebSocket() bool {
+	return capabilities.WebSocket.Status == CapabilityStatusSupported
+}
+
+func (capabilities ResponsesCapabilities) SupportsNativeBackground() bool {
+	if capabilities.BackgroundCreate.Status == "" && capabilities.BackgroundResume.Status == "" && capabilities.BackgroundCancel.Status == "" {
+		return capabilities.NativeBackground.Status == CapabilityStatusSupported
+	}
+	return capabilities.SupportsNativeBackgroundFor("", -1)
+}
+
+func (capabilities ResponsesCapabilities) SupportsWebSocketFor(model string, keyIndex int) bool {
+	return capabilityStateSupports(capabilities.WebSocket, model, keyIndex)
+}
+
+func (capabilities ResponsesCapabilities) SupportsNativeBackgroundFor(model string, keyIndex int) bool {
+	if capabilities.BackgroundCreate.Status == "" && capabilities.BackgroundResume.Status == "" && capabilities.BackgroundCancel.Status == "" {
+		return capabilityStateSupports(capabilities.NativeBackground, model, keyIndex)
+	}
+	state := capabilities.NativeBackground
+	if state.Status == "" {
+		state = capabilities.BackgroundCreate
+	}
+	return capabilityStateSupports(state, model, keyIndex) &&
+		capabilityStateSupports(capabilities.BackgroundCreate, model, keyIndex) &&
+		capabilityStateSupports(capabilities.BackgroundResume, model, keyIndex) &&
+		capabilityStateSupports(capabilities.BackgroundCancel, model, keyIndex)
+}
+
+func (capabilities ResponsesCapabilities) SupportsRemoteCompactionV1For(model string, keyIndex int) bool {
+	return capabilityStateSupports(capabilities.RemoteCompactionV1, model, keyIndex)
+}
+
+func (capabilities ResponsesCapabilities) SupportsRemoteCompactionV2For(model string, keyIndex int) bool {
+	return capabilityStateSupports(capabilities.RemoteCompactionV2, model, keyIndex)
+}
+
+// AllowsRemoteCompactionV2For preserves compatibility with channels created
+// before compaction probing was introduced. A supported result for another
+// model or key is positive channel-level evidence, but not a definitive result
+// for this request. Only an explicit unsupported result suppresses v2.
+func (capabilities ResponsesCapabilities) AllowsRemoteCompactionV2For(model string, keyIndex int) bool {
+	state := capabilities.RemoteCompactionV2
+	if state.Status == CapabilityStatusUnsupported {
+		return false
+	}
+	return true
+}
+
+func (capabilities ResponsesCapabilities) AllowsRemoteCompactionV1For(model string, keyIndex int) bool {
+	state := capabilities.RemoteCompactionV1
+	if state.Status == CapabilityStatusUnsupported {
+		return false
+	}
+	return true
+}
+
+func capabilityStateSupports(state CapabilityProbeState, model string, keyIndex int) bool {
+	if state.Status != CapabilityStatusSupported {
+		return false
+	}
+	if strings.TrimSpace(model) != "" && strings.TrimSpace(state.Model) != "" && !strings.EqualFold(strings.TrimSpace(model), strings.TrimSpace(state.Model)) {
+		return false
+	}
+	return keyIndex < 0 || state.ProbeKeyIdx < 0 || state.ProbeKeyIdx == keyIndex
 }
 
 // Value implements driver.Valuer interface
@@ -76,16 +191,26 @@ func (channel *Channel) GetModels() []string {
 	if channel.Models == "" {
 		return []string{}
 	}
-	return strings.Split(strings.Trim(channel.Models, ","), ",")
+	rawModels := strings.Split(strings.Trim(channel.Models, ","), ",")
+	models := make([]string, 0, len(rawModels))
+	for _, model := range rawModels {
+		if model = strings.TrimSpace(model); model != "" {
+			models = append(models, model)
+		}
+	}
+	return models
 }
 
 func (channel *Channel) GetGroups() []string {
 	if channel.Group == "" {
 		return []string{}
 	}
-	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
-	for i, group := range groups {
-		groups[i] = strings.TrimSpace(group)
+	rawGroups := strings.Split(strings.Trim(channel.Group, ","), ",")
+	groups := make([]string, 0, len(rawGroups))
+	for _, group := range rawGroups {
+		if group = strings.TrimSpace(group); group != "" {
+			groups = append(groups, group)
+		}
 	}
 	return groups
 }
@@ -126,7 +251,10 @@ func (channel *Channel) GetBaseURL() string {
 	if channel.BaseURL == nil {
 		return ""
 	}
-	url := *channel.BaseURL
+	url, err := platformsecurity.DecryptSecret(*channel.BaseURL)
+	if err != nil {
+		return ""
+	}
 	if url == "" {
 		url = constant.ChannelBaseURLs[channel.Type]
 	}
@@ -151,7 +279,11 @@ func (channel *Channel) keySource() string {
 	if len(channel.Keys) > 0 {
 		return strings.Join(channel.Keys, "\n")
 	}
-	return channel.Key
+	key, err := platformsecurity.DecryptSecret(channel.Key)
+	if err != nil {
+		return ""
+	}
+	return key
 }
 
 func channelKeysFromRaw(raw string) []string {

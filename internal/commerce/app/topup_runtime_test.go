@@ -1,9 +1,9 @@
 package app
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -33,7 +33,7 @@ func TestCompleteTopUpByTradeNo_ConsumesReservedBlindBoxProp(t *testing.T) {
 	topUp := &commerceschema.TopUp{
 		UserId:     user.Id,
 		Amount:     2,
-		Money:      100,
+		Money:      1,
 		TradeNo:    "blind-box-topup-discount-order",
 		Status:     constant.TopUpStatusPending,
 		CreateTime: time.Now().Unix(),
@@ -41,7 +41,7 @@ func TestCompleteTopUpByTradeNo_ConsumesReservedBlindBoxProp(t *testing.T) {
 	appliedRate, err := CreatePendingTopUpOrderWithBlindBoxDiscount(topUp)
 	require.NoError(t, err)
 	assert.InDelta(t, 0.10, appliedRate, 0.0001)
-	assert.Equal(t, 90.0, topUp.Money)
+	assert.Equal(t, 0.9, topUp.Money)
 
 	var reserved commerceschema.BlindBoxProp
 	require.NoError(t, db.Where("id = ?", prop.Id).First(&reserved).Error)
@@ -64,7 +64,7 @@ func TestCompleteTopUpByTradeNo_ConsumesReservedBlindBoxProp(t *testing.T) {
 
 	var savedUser identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-	assert.Greater(t, savedUser.Quota, 0)
+	assert.Greater(t, savedUser.ClaudeQuota, 0)
 }
 
 func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
@@ -156,4 +156,49 @@ func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T)
 			assert.Equal(t, constant.TopUpStatusPending, savedTopUp.Status)
 		})
 	}
+}
+
+func TestExpireDueTopUps_ReleasesReservedBlindBoxProp(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	t.Setenv("TOPUP_PENDING_EXPIRY_MINUTES", "3")
+
+	user := &identityschema.User{
+		Id:       9010,
+		Username: "stale_topup_user",
+		Status:   constant.UserStatusEnabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	var prop *commerceschema.BlindBoxProp
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		prop, err = createBlindBoxPropTx(tx, user.Id, 2, "充值九折卡")
+		return err
+	}))
+
+	topUp := &commerceschema.TopUp{
+		UserId:     user.Id,
+		Amount:     2,
+		Money:      100,
+		TradeNo:    "stale-topup-discount-order",
+		Status:     constant.TopUpStatusPending,
+		CreateTime: time.Now().Add(-4 * time.Minute).Unix(),
+	}
+	_, err := CreatePendingTopUpOrderWithBlindBoxDiscount(topUp)
+	require.NoError(t, err)
+
+	expired, err := ExpireDueTopUps(10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, expired)
+
+	var savedTopUp commerceschema.TopUp
+	require.NoError(t, db.Where("trade_no = ?", topUp.TradeNo).First(&savedTopUp).Error)
+	assert.Equal(t, constant.TopUpStatusExpired, savedTopUp.Status)
+
+	var released commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("id = ?", prop.Id).First(&released).Error)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusAvailable, released.Status)
+	assert.Zero(t, released.ReservedAt)
+	assert.Empty(t, released.ReservedOrderType)
+	assert.Empty(t, released.ReservedOrderTradeNo)
 }

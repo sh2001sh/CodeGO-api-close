@@ -249,3 +249,99 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-tiered-missing-expr-model")
 	require.NotContains(t, ids, "zz-token-unpriced-model")
 }
+
+func TestListModelsNormalizesLegacyAbilityWhitespace(t *testing.T) {
+	withSelfUseModeDisabled(t)
+	withTieredBillingConfig(t, map[string]string{
+		"zz-spaced-model": "tiered_expr",
+	}, map[string]string{
+		"zz-spaced-model": `tier("base", p * 1 + c * 2)`,
+	})
+
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&identityschema.User{
+		Id:       1002,
+		Username: "model-list-spaced-user",
+		Password: "password",
+		Group:    "default",
+		Status:   constant.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&gatewayschema.Ability{
+		Group: " default ", Model: " zz-spaced-model ", ChannelId: 1, Enabled: true,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", 1002)
+
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+
+	ids := decodeListModelsResponse(t, recorder)
+	require.Contains(t, ids, "zz-spaced-model")
+}
+
+func TestListModelsUsesResolvedMarketplaceGroup(t *testing.T) {
+	withSelfUseModeDisabled(t)
+	withTieredBillingConfig(t, map[string]string{
+		"zz-market-model": "tiered_expr",
+	}, map[string]string{
+		"zz-market-model": `tier("base", p * 1 + c * 2)`,
+	})
+
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&identityschema.User{
+		Id:       1003,
+		Username: "model-list-market-user",
+		Password: "password",
+		Group:    "default",
+		Status:   constant.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&gatewayschema.Ability{
+		Group: "market_internal_42", Model: "zz-market-model", ChannelId: 1, Enabled: true,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", 1003)
+	httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, "market:42")
+	httpctx.SetContextKey(ctx, constant.ContextKeyUsingGroup, "market_internal_42")
+
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+
+	ids := decodeListModelsResponse(t, recorder)
+	require.Contains(t, ids, "zz-market-model")
+}
+
+func TestListModelsKeepsMarketplaceGroupWithoutResolvedContext(t *testing.T) {
+	withSelfUseModeDisabled(t)
+	withTieredBillingConfig(t, map[string]string{
+		"zz-market-direct-model": "tiered_expr",
+	}, map[string]string{
+		"zz-market-direct-model": `tier("base", p * 1 + c * 2)`,
+	})
+
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&identityschema.User{
+		Id:       1004,
+		Username: "model-list-market-direct-user",
+		Password: "password",
+		Group:    "default",
+		Status:   constant.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&gatewayschema.Ability{
+		Group: "market:direct", Model: "zz-market-direct-model", ChannelId: 1, Enabled: true,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", 1004)
+	httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, "market:direct")
+
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+
+	ids := decodeListModelsResponse(t, recorder)
+	require.Contains(t, ids, "zz-market-direct-model")
+}

@@ -38,10 +38,10 @@ func (a *Adaptor) Init(*relaycommon.RelayInfo) {}
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.RelayMode == gatewaycontract.RelayModeRerank {
-		return fmt.Sprintf("%s/v1/rerank", info.ChannelBaseUrl), nil
+		return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/rerank"), nil
 	}
 	if info.RelayMode == gatewaycontract.RelayModeEmbeddings {
-		return fmt.Sprintf("%s/v1/embeddings", info.ChannelBaseUrl), nil
+		return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/embeddings"), nil
 	}
 	return "", errors.New("invalid relay mode")
 }

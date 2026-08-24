@@ -10,7 +10,6 @@ import (
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
-	gatewaytranslation "github.com/sh2001sh/new-api/internal/gateway/translation"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformcopy "github.com/sh2001sh/new-api/internal/platform/copyx"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -64,21 +63,8 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if info.RelayMode == gatewaycontract.RelayModeChatCompletions &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		gatewaytranslation.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
-		applySystemPromptIfNeeded(c, info, request)
-		usage, newAPIError := chatCompletionsViaResponses(c, info, adaptor, request)
-		if newAPIError != nil {
-			return newAPIError
-		}
-
-		containAudioTokens := usage.CompletionTokenDetails.AudioTokens > 0 || usage.PromptTokensDetails.AudioTokens > 0
-		containsAudioRatios := gatewaystore.ContainsAudioRatio(info.OriginModelName) || gatewaystore.ContainsAudioCompletionRatio(info.OriginModelName)
-		if containAudioTokens && containsAudioRatios {
-			billingapp.PostAudioConsumeQuota(c, info, usage, "")
-		} else {
-			billingapp.PostTextConsumeQuota(c, info, usage, nil)
-		}
-		return nil
+		shouldBridgeBeforeNative(info, bridgeChatToResponses) {
+		return executeChatToResponsesBridge(c, info, adaptor, request)
 	}
 
 	var requestBody io.Reader
@@ -96,6 +82,14 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, info, request)
 		if err != nil {
+			if info.RelayMode == gatewaycontract.RelayModeChatCompletions &&
+				shouldFallbackAfterConversion(info, bridgeChatToResponses, err) {
+				bridgeError := executeChatToResponsesBridge(c, info, adaptor, request)
+				if bridgeError == nil {
+					rememberProtocolFallback(info, bridgeChatToResponses)
+				}
+				return bridgeError
+			}
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
@@ -175,6 +169,15 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
 		if httpResp.StatusCode != http.StatusOK {
 			newAPIError := platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+			if info.RelayMode == gatewaycontract.RelayModeChatCompletions &&
+				shouldFallbackAfterStatus(info, bridgeChatToResponses, newAPIError) {
+				bridgeError := executeChatToResponsesBridge(c, info, adaptor, request)
+				if bridgeError == nil {
+					rememberProtocolFallback(info, bridgeChatToResponses)
+					return nil
+				}
+				return preferBridgeError(newAPIError, bridgeError)
+			}
 			platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
 			return newAPIError
 		}

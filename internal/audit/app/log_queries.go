@@ -1,9 +1,10 @@
 package app
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"context"
 	"errors"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	"strings"
 
 	auditdomain "github.com/sh2001sh/new-api/internal/audit/domain"
 	"github.com/sh2001sh/new-api/internal/audit/projection"
@@ -21,6 +22,14 @@ func ListUserLogs(userID int, query LogListQuery) ([]*auditschema.Log, int64, er
 	return projection.ListUserLogs(userID, query)
 }
 
+func ListAdminLogGroups() ([]string, error) {
+	return projection.ListUsedLogGroups(0)
+}
+
+func ListUserLogGroups(userID int) ([]string, error) {
+	return projection.ListUsedLogGroups(userID)
+}
+
 func GetLogsByTokenID(tokenID int) ([]*auditschema.Log, error) {
 	return projection.GetLogByTokenID(tokenID)
 }
@@ -29,8 +38,9 @@ func GetAdminLogStats(query LogListQuery) (auditschema.Stat, error) {
 	return projection.SumUsedQuota(query)
 }
 
-func GetUserLogStats(username string, query LogListQuery) (auditschema.Stat, error) {
-	query.Username = username
+func GetUserLogStats(userID int, query LogListQuery) (auditschema.Stat, error) {
+	query.UserID = userID
+	query.Username = ""
 	return projection.SumUsedQuota(query)
 }
 
@@ -53,5 +63,17 @@ func ListUserQuotaDates(userID int, startTimestamp int64, endTimestamp int64) ([
 	if endTimestamp-startTimestamp > maxUserQuotaRangeSeconds {
 		return nil, errors.New("时间跨度不能超过 1 个月")
 	}
-	return projection.GetQuotaDataByUserID(userID, startTimestamp, endTimestamp)
+	rows, err := projection.GetQuotaDataByUserID(userID, startTimestamp, endTimestamp)
+	if isMissingAuditProjection(err) {
+		return []*auditdomain.QuotaData{}, nil
+	}
+	return rows, err
+}
+
+func isMissingAuditProjection(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table") || strings.Contains(message, "does not exist")
 }

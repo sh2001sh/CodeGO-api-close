@@ -3,7 +3,6 @@ import {
   BadgeCheck,
   Box,
   Command,
-  Compass,
   Egg,
   FileText,
   Images,
@@ -12,6 +11,7 @@ import {
   Package,
   Radio,
   ShieldCheck,
+  Store,
   RefreshCcw,
   ReceiptText,
   ScrollText,
@@ -20,16 +20,16 @@ import {
   Ticket,
   User,
   Users,
-  HandCoins,
   LibraryBig,
+  ReceiptText,
+  ChartNoAxesCombined,
 } from 'lucide-react'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
 import { type SidebarData } from '@/components/layout/types'
 
-export function useSidebarData(): SidebarData {
-  const { t } = useTranslation()
-
+export function buildSidebarData(t: TFunction): SidebarData {
   return {
     workspaces: [
       {
@@ -71,9 +71,14 @@ export function useSidebarData(): SidebarData {
             icon: Activity,
           },
           {
-            title: t('Group status'),
+            title: t('分组状态'),
             url: '/group-status',
-            icon: Compass,
+            icon: ChartNoAxesCombined,
+          },
+          {
+            title: t('分组市场'),
+            url: '/marketplace',
+            icon: Store,
           },
           {
             title: t('Model analytics'),
@@ -97,16 +102,6 @@ export function useSidebarData(): SidebarData {
         title: t('Personal'),
         items: [
           {
-            title: t('Wallet'),
-            url: '/wallet',
-            icon: Gem,
-          },
-          {
-            title: '电子发票',
-            url: '/invoices',
-            icon: ReceiptText,
-          },
-          {
             title: t('Blind box'),
             url: '/blind-box',
             icon: Ticket,
@@ -117,19 +112,9 @@ export function useSidebarData(): SidebarData {
             icon: Package,
           },
           {
-            title: t('Collective benefit plan'),
-            url: '/group-buy',
-            icon: Users,
-          },
-          {
-            title: t('Daily Lucky Number'),
-            url: '/daily-lucky-number',
-            icon: Sparkles,
-          },
-          {
-            title: t('Invites'),
-            url: '/invite-rewards',
-            icon: RefreshCcw,
+            title: t('Wallet'),
+            url: '/wallet',
+            icon: Gem,
           },
           {
             title: t('Profile'),
@@ -137,14 +122,35 @@ export function useSidebarData(): SidebarData {
             icon: User,
           },
           {
-            title: t('Bounties'),
-            url: '/bounties',
-            icon: HandCoins,
-          },
-          {
-            title: t('Community resources'),
-            url: '/community-resources',
-            icon: LibraryBig,
+            title: t('额度与权益'),
+            icon: Gem,
+            items: [
+              {
+                title: '电子发票',
+                url: '/invoices',
+                icon: ReceiptText,
+              },
+              {
+                title: t('Collective benefit plan'),
+                url: '/group-buy',
+                icon: Users,
+              },
+              {
+                title: t('Daily Lucky Number'),
+                url: '/daily-lucky-number',
+                icon: Sparkles,
+              },
+              {
+                title: t('Invites'),
+                url: '/invite-rewards',
+                icon: RefreshCcw,
+              },
+              {
+                title: t('Community resources'),
+                url: '/community-resources',
+                icon: LibraryBig,
+              },
+            ],
           },
         ],
       },
@@ -158,57 +164,63 @@ export function useSidebarData(): SidebarData {
             icon: Radio,
           },
           {
-            title: t('Models'),
-            url: '/models/metadata',
-            icon: Box,
-          },
-          {
-            title: t('Users'),
-            url: '/users',
-            icon: Users,
-          },
-          {
-            title: t('Redemption codes'),
-            url: '/redemption-codes',
-            icon: Ticket,
-          },
-          {
-            title: t('Subscriptions'),
-            url: '/subscriptions',
-            icon: ScrollText,
-          },
-          {
-            title: t('Blind box admin'),
-            url: '/subscriptions#blind-box-admin',
-            activeUrls: ['/subscriptions'],
-            configUrls: ['/blind-box-admin'],
-            icon: Egg,
-          },
-          {
-            title: t('Daily Lucky Number'),
-            url: '/subscriptions#daily-lucky-admin',
-            activeUrls: ['/subscriptions'],
-            configUrls: ['/daily-lucky-admin'],
-            icon: Sparkles,
-          },
-          {
-            title: t('System settings'),
-            url: '/system-settings/site',
-            activeUrls: ['/system-settings'],
+            title: t('管理工具'),
             icon: Settings,
-          },
-          {
-            title: t('Operations'),
-            url: '/operations',
-            icon: ShieldCheck,
-          },
-          {
-            title: t('Bounty management'),
-            url: '/bounties/admin',
-            icon: HandCoins,
+            items: [
+              {
+                title: t('Models'),
+                url: '/models/metadata',
+                icon: Box,
+              },
+              {
+                title: t('Users'),
+                url: '/users',
+                icon: Users,
+              },
+              {
+                title: t('Redemption codes'),
+                url: '/redemption-codes',
+                icon: Ticket,
+              },
+              {
+                title: t('Subscriptions'),
+                url: '/subscriptions',
+                icon: ScrollText,
+              },
+              {
+                title: t('Blind box admin'),
+                url: '/subscriptions#blind-box-admin',
+                activeUrls: ['/subscriptions'],
+                configUrls: ['/blind-box-admin'],
+                icon: Egg,
+              },
+              {
+                title: t('Daily Lucky Number'),
+                url: '/subscriptions#daily-lucky-admin',
+                activeUrls: ['/subscriptions'],
+                configUrls: ['/daily-lucky-admin'],
+                icon: Sparkles,
+              },
+              {
+                title: t('System settings'),
+                url: '/system-settings/site',
+                activeUrls: ['/system-settings'],
+                icon: Settings,
+              },
+              {
+                title: t('Operations'),
+                url: '/operations',
+                icon: ShieldCheck,
+              },
+            ],
           },
         ],
       },
     ],
   }
+}
+
+export function useSidebarData(): SidebarData {
+  const { t } = useTranslation()
+  return buildSidebarData(t)
 }

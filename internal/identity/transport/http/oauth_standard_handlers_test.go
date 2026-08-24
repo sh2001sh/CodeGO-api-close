@@ -1,13 +1,15 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"context"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	"github.com/sh2001sh/new-api/internal/identity/oauth"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	"net/http"
@@ -17,6 +19,7 @@ import (
 
 type stubOAuthProvider struct {
 	name           string
+	prefix         string
 	enabled        bool
 	providerUserID string
 	username       string
@@ -63,6 +66,9 @@ func (p *stubOAuthProvider) SetProviderUserID(user *identityschema.User, provide
 }
 
 func (p *stubOAuthProvider) GetProviderPrefix() string {
+	if p.prefix != "" {
+		return p.prefix
+	}
 	return "stub_"
 }
 
@@ -160,6 +166,60 @@ func TestHandleOAuthLogsInNewUser(t *testing.T) {
 	}
 	if user.Username != "oauth-user" || user.GitHubId != "stub-provider-id" {
 		t.Fatalf("unexpected oauth user: %#v", user)
+	}
+}
+
+func TestHandleLinuxDOOAuthGrantsRegistrationBlindBoxesWithoutInvitation(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	originalSetting := blindboxsettings.Get()
+	t.Cleanup(func() { blindboxsettings.Set(originalSetting) })
+	setting := blindboxsettings.Get()
+	setting.RegistrationRewardEnabled = true
+	setting.RegistrationRewardStartAt = 0
+	setting.RegistrationRewardEndAt = 0
+	blindboxsettings.Set(setting)
+
+	provider := &stubOAuthProvider{
+		name:           "Root Invite OAuth",
+		prefix:         "linuxdo_",
+		enabled:        true,
+		providerUserID: "root-invite-provider-id",
+		username:       "root-invite-oauth-user",
+		displayName:    "Root Invite OAuth User",
+		email:          "root-invite-oauth@example.com",
+	}
+	oauth.Register("root-invite-oauth", provider)
+	t.Cleanup(func() { oauth.Unregister("root-invite-oauth") })
+
+	engine := gin.New()
+	engine.Use(sessions.Sessions("session", cookie.NewStore([]byte("oauth-root-invite-test-secret"))))
+	engine.GET("/prepare", func(c *gin.Context) {
+		session := sessions.Default(c)
+		session.Set("oauth_state", "state-root-invite")
+		if err := session.Save(); err != nil {
+			t.Fatalf("failed to seed oauth session: %v", err)
+		}
+		c.Status(http.StatusOK)
+	})
+	engine.GET("/oauth/:provider", HandleOAuth)
+
+	prepareRecorder := httptest.NewRecorder()
+	engine.ServeHTTP(prepareRecorder, httptest.NewRequest(http.MethodGet, "/prepare", nil))
+	request := httptest.NewRequest(http.MethodGet, "/oauth/root-invite-oauth?state=state-root-invite&code=oauth-code", nil)
+	request.Header.Set("Cookie", prepareRecorder.Header().Get("Set-Cookie"))
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected oauth login success, got %#v", response)
+	}
+	var order commerceschema.BlindBoxOrder
+	if err := db.Where("user_id = ?", 1).First(&order).Error; err != nil {
+		t.Fatalf("expected registration blind box order: %v", err)
+	}
+	if order.Quantity != 5 || order.OpenedCount != 0 {
+		t.Fatalf("unexpected blind box order: %#v", order)
 	}
 }
 

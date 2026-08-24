@@ -57,6 +57,12 @@ export type SectionPageLayoutProps = {
   children: ReactNode
 }
 
+export const SECTION_PAGE_LAYOUT_CLASS_NAME =
+  'codego-section-page flex h-full min-h-0 flex-1 flex-col overflow-hidden'
+
+export const SECTION_PAGE_CONTENT_CLASS_NAME =
+  'codego-page-content min-h-0 flex-1 overflow-auto px-4 pt-5 pb-6 sm:px-7 sm:pt-6 sm:pb-8'
+
 export function SectionPageLayout(props: SectionPageLayoutProps) {
   const [footerContainer, setFooterContainer] = useState<HTMLDivElement | null>(
     null
@@ -85,34 +91,40 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
   })
 
   return (
-    <>
+    <div className={SECTION_PAGE_LAYOUT_CLASS_NAME}>
       {auxiliaryChildren}
       <PageFooterProvider container={footerContainer}>
         <Main>
-          <div className='shrink-0 px-3 pt-3 pb-2.5 sm:px-5 sm:pt-5 sm:pb-3'>
+          <div className='codego-page-intro shrink-0 px-4 pt-5 pb-5 sm:px-7 sm:pt-7 sm:pb-6'>
             {breadcrumb != null && (
-              <div className='mb-2 sm:mb-3'>{breadcrumb}</div>
+              <div className='codego-page-breadcrumb mb-4'>{breadcrumb}</div>
             )}
-            <div className='overview-hero-card flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-4 py-4 sm:px-5'>
+            <div className='flex flex-wrap items-end justify-between gap-x-8 gap-y-5'>
               <div className='max-w-3xl min-w-0'>
-                <h2 className='text-lg font-semibold tracking-tight text-balance sm:text-xl'>
+                <div className='codego-page-title-row mb-2 flex items-center gap-3'>
+                  <span className='codego-page-signal' aria-hidden='true' />
+                  <span className='text-muted-foreground text-xs font-medium'>
+                    Workspace
+                  </span>
+                </div>
+                <h2 className='codego-page-title text-foreground text-2xl font-semibold tracking-[-0.03em] text-balance sm:text-3xl'>
                   {title}
                 </h2>
                 {description != null && (
-                  <p className='text-muted-foreground mt-1.5 text-sm leading-6'>
+                  <p className='codego-page-description text-muted-foreground mt-2 max-w-2xl text-sm leading-6 sm:text-[15px]'>
                     {description}
                   </p>
                 )}
               </div>
               {actions != null && (
-                <div className='flex shrink-0 flex-wrap items-center gap-2 sm:gap-x-4'>
+                <div className='codego-page-actions flex shrink-0 flex-wrap items-center gap-2'>
                   {actions}
                 </div>
               )}
             </div>
           </div>
 
-          <div className='min-h-0 flex-1 overflow-auto px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-5'>
+          <div className={SECTION_PAGE_CONTENT_CLASS_NAME}>
             {content}
           </div>
 
@@ -122,7 +134,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
           />
         </Main>
       </PageFooterProvider>
-    </>
+    </div>
   )
 }
 

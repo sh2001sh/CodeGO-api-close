@@ -18,12 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
 import {
-  ArrowRight,
   Check,
   Circle,
   KeyRound,
   LinkIcon,
-  Package,
+  MessageSquare,
+  WalletCards,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -36,7 +36,7 @@ function EndpointRow(props: {
   copyLabel: string
 }) {
   return (
-    <div className='bg-background/72 flex min-w-0 items-center gap-2 rounded-xl border border-white/60 px-3 py-2 dark:border-white/10'>
+    <div className='bg-background/72 border-border/70 flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2'>
       <span className='text-muted-foreground shrink-0 text-[11px] font-medium'>
         {props.label}
       </span>
@@ -68,30 +68,30 @@ export function OverviewHeroPanel(props: { guide: SetupGuideState }) {
     <section className='overview-hero-card p-5 sm:p-6 xl:p-7'>
       <div className='grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)] xl:items-start'>
         <div className='flex min-w-0 flex-col gap-5'>
-          <div className='space-y-3'>
+          <div className='space-y-2.5'>
             <div className='text-primary text-xs font-semibold tracking-[0.16em] uppercase'>
               快速开始
             </div>
-            <h2 className='max-w-xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl xl:text-5xl'>
-              先看钱包、套餐，再去盲盒
+            <h2 className='max-w-xl text-2xl font-semibold tracking-tight text-balance sm:text-[1.7rem]'>
+              先完成一次调用，再管理额度
             </h2>
-            <p className='text-muted-foreground max-w-xl text-sm leading-7 sm:text-[15px]'>
-              从这里直接进入钱包、套餐和盲盒，先确认余额和订阅状态，再处理购买或抽取。
+            <p className='text-muted-foreground max-w-xl text-sm leading-6'>
+              创建密钥并发送第一条请求后，再根据实际用量选择套餐和额度方式。
             </p>
           </div>
 
           <div className='flex flex-wrap items-center gap-2'>
-            <Button variant='outline' render={<Link to='/wallet' />}>
+            <Button render={<Link to='/keys' />}>
               <KeyRound data-icon='inline-start' />
-              查看钱包
+              创建 API 密钥
             </Button>
             <Button variant='outline' render={<Link to='/packages' />}>
-              <Package data-icon='inline-start' />
-              查看套餐
+              <WalletCards data-icon='inline-start' />
+              查看可用套餐
             </Button>
-            <Button render={<Link to='/blind-box' />}>
-              <ArrowRight data-icon='inline-end' />
-              进入盲盒
+            <Button variant='outline' render={<Link to='/playground' />}>
+              <MessageSquare data-icon='inline-start' />
+              打开 AI 聊天
             </Button>
           </div>
 
@@ -132,7 +132,7 @@ export function OverviewHeroPanel(props: { guide: SetupGuideState }) {
 
         <div className='overview-soft-card flex min-w-0 flex-col gap-4 p-5'>
           <div className='flex items-center gap-2.5'>
-            <span className='bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl'>
+            <span className='border-primary/30 text-primary bg-primary/[0.04] flex size-10 shrink-0 items-center justify-center rounded-xl border'>
               <LinkIcon className='size-5' aria-hidden='true' />
             </span>
             <div className='min-w-0'>

@@ -28,7 +28,6 @@ type SelfProfileResponse struct {
 	TelegramId      string         `json:"telegram_id"`
 	Group           string         `json:"group"`
 	Quota           int            `json:"quota"`
-	ClaudeQuota     int            `json:"claude_quota"`
 	UsedQuota       int            `json:"used_quota"`
 	RequestCount    int            `json:"request_count"`
 	AffCode         string         `json:"aff_code"`
@@ -49,7 +48,7 @@ func GetSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	walletQuota, claudeWalletQuota, err := loadDisplayWalletQuotas(user)
+	walletQuota, err := loadDisplayWalletQuota(user)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +72,6 @@ func GetSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 		TelegramId:      user.TelegramId,
 		Group:           user.Group,
 		Quota:           walletQuota,
-		ClaudeQuota:     claudeWalletQuota,
 		UsedQuota:       user.UsedQuota,
 		RequestCount:    user.RequestCount,
 		AffCode:         user.AffCode,
@@ -89,19 +87,11 @@ func GetSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 	}, nil
 }
 
-func loadDisplayWalletQuotas(user *identityschema.User) (int, int, error) {
+func loadDisplayWalletQuota(user *identityschema.User) (int, error) {
 	if user == nil {
-		return 0, 0, nil
+		return 0, nil
 	}
-	walletQuota, err := billingapp.GetUserWalletQuota(user.Id)
-	if err != nil {
-		return 0, 0, err
-	}
-	claudeWalletQuota, err := billingapp.GetUserClaudeWalletQuota(user.Id)
-	if err != nil {
-		return 0, 0, err
-	}
-	return walletQuota, claudeWalletQuota, nil
+	return billingapp.GetUserClaudeWalletQuota(user.Id)
 }
 
 // ListUserModels returns the authenticated user's deduplicated model catalog.

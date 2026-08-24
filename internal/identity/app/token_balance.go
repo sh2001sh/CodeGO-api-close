@@ -35,7 +35,7 @@ func BuildTokenBalanceSummary(userID int, tokenID int) (*TokenBalanceSummary, er
 	if err != nil {
 		return nil, err
 	}
-	walletQuota, _, err := loadDisplayWalletQuotas(user)
+	walletQuota, err := loadDisplayWalletQuota(user)
 	if err != nil {
 		return nil, err
 	}

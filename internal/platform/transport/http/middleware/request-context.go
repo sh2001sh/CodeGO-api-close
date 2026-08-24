@@ -31,7 +31,7 @@ func IsHeavyGlobalAPIRateLimitedRequest(method, path string) bool {
 
 func GlobalAPIRateLimitExceptReadPaths() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if isAuthenticatedAPIRoute(c.Request.Method, c.Request.URL.Path) {
+		if isAuthenticatedAPIRoute(c.Request.URL.Path) {
 			c.Next()
 			return
 		}
@@ -43,7 +43,7 @@ func GlobalAPIRateLimitExceptReadPaths() gin.HandlerFunc {
 	}
 }
 
-func isAuthenticatedAPIRoute(method, path string) bool {
+func isAuthenticatedAPIRoute(path string) bool {
 	if strings.HasPrefix(path, "/api/desktop/") {
 		return path != "/api/desktop/import/config" &&
 			path != "/api/desktop/release/latest" &&
@@ -58,12 +58,6 @@ func isAuthenticatedAPIRoute(method, path string) bool {
 		strings.HasPrefix(path, "/api/admin/") ||
 		strings.HasPrefix(path, "/api/log") {
 		return true
-	}
-	if path == "/api/bounties" || strings.HasPrefix(path, "/api/bounties/") {
-		return strings.Contains(path, "/mine") ||
-			strings.Contains(path, "/balances") ||
-			strings.Contains(path, "/notifications") ||
-			method != "GET"
 	}
 	return strings.HasPrefix(path, "/api/user/self") ||
 		strings.HasPrefix(path, "/api/user/models") ||

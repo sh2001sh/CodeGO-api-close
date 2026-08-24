@@ -8,7 +8,6 @@ import (
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
-	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 
 	"strings"
@@ -33,6 +32,13 @@ func ValidateBlindBoxPurchase(userID int, quantity int) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	var walletPurchaseCount int64
+	if err := platformdb.DB.Model(&commerceschema.BalanceBlindBoxPurchase{}).
+		Where("user_id = ? AND purchase_date = ? AND total_quota > 0", userID, currentBalanceBlindBoxDate()).
+		Select("COALESCE(SUM(quantity), 0)").Scan(&walletPurchaseCount).Error; err != nil && !isBalanceBlindBoxSchemaMissing(err) {
+		return 0, err
+	}
+	todayCount += int(walletPurchaseCount)
 	if todayCount+quantity > setting.DailyLimit {
 		return 0, fmt.Errorf("daily blind box limit reached: %d", setting.DailyLimit)
 	}
@@ -46,14 +52,14 @@ func ValidateBlindBoxPurchase(userID int, quantity int) (float64, error) {
 	return setting.UnitPrice * float64(quantity), nil
 }
 
-// CompleteBlindBoxOrder completes a pending blind-box payment and auto-opens remaining boxes.
+// CompleteBlindBoxOrder completes a verified payment. Expired orders are
+// accepted because a provider callback can arrive after a user closes checkout.
 func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPaymentProvider string, actualPaymentMethod string) error {
 	if strings.TrimSpace(tradeNo) == "" {
 		return errors.New("tradeNo is empty")
 	}
 
-	shouldAutoOpen := false
-	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var order commerceschema.BlindBoxOrder
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(blindBoxTradeNoColumn()+" = ?", tradeNo).First(&order).Error; err != nil {
 			return commercedomain.ErrBlindBoxOrderNotFound
@@ -62,10 +68,9 @@ func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPayme
 			return commerceschema.ErrPaymentMethodMismatch
 		}
 		if order.Status == constant.TopUpStatusSuccess {
-			shouldAutoOpen = true
 			return nil
 		}
-		if order.Status != constant.TopUpStatusPending {
+		if order.Status != constant.TopUpStatusPending && order.Status != constant.TopUpStatusExpired {
 			return commercedomain.ErrBlindBoxOrderStatusInvalid
 		}
 
@@ -80,19 +85,12 @@ func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPayme
 		if err := awardReferralFirstPurchaseBonusTx(tx, order.UserId, commercedomain.ReferralPurchaseTypeBlindBox, "blind_box_order", order.TradeNo); err != nil {
 			return err
 		}
-		shouldAutoOpen = true
+		if err := issuePaidBlindBoxOrderInventoryTx(tx, &order); err != nil {
+			return err
+		}
+		order.OpenedCount = order.Quantity
 		return tx.Save(&order).Error
 	})
-	if err != nil {
-		return err
-	}
-
-	if shouldAutoOpen {
-		if _, openErr := OpenBlindBoxOrderByTradeNo(tradeNo); openErr != nil {
-			platformobservability.SysError(fmt.Sprintf("failed to auto open blind box order %s: %s", tradeNo, openErr.Error()))
-		}
-	}
-	return nil
 }
 
 // ExpireBlindBoxOrder marks a pending blind-box order as expired.

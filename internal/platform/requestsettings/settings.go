@@ -16,7 +16,34 @@ var PromptSafetyEnabled = true
 var StreamCacheQueueLength = 0
 
 var SensitiveWords = []string{
-	"test_sensitive",
+	"contains:credential stuffing",
+	"contains:steal browser cookies",
+	"contains:sql injection payload",
+	"contains:bypass rate limit",
+	"contains:bypass moderation",
+	"contains:evade safety filter",
+	"contains:reverse shell",
+	"contains:privilege escalation",
+	"contains:keylogger",
+	"contains:ransomware",
+	"contains:malware loader",
+	"contains:crack password",
+	"contains:phishing page",
+}
+
+var PromptAuditReviewRules = []string{
+	"contains:jailbreak prompt",
+	"contains:system override",
+	"contains:ignore previous instructions",
+	"contains:ignore all prior instructions",
+	"contains:disregard previous instructions",
+	"contains:reveal system prompt",
+	"contains:无视此前限制",
+	"contains:忽略之前的指令",
+	"contains:绕过安全限制",
+	"contains:提示注入",
+	"re:(?i)\\b(ignore|disregard|override|bypass)\\b.{0,96}\\b(instruction|policy|guardrail|safety|system prompt)\\b",
+	"re:(?i)\\b(jailbreak|dan mode|developer mode)\\b",
 }
 
 var ModelRequestRateLimitEnabled = false
@@ -98,6 +125,22 @@ func SensitiveWordsFromString(s string) {
 		w = strings.TrimSpace(w)
 		if w != "" {
 			SensitiveWords = append(SensitiveWords, w)
+		}
+	}
+}
+
+// PromptAuditReviewRulesToString serializes Guard-review rules into newline-separated text.
+func PromptAuditReviewRulesToString() string {
+	return strings.Join(PromptAuditReviewRules, "\n")
+}
+
+// PromptAuditReviewRulesFromString replaces Guard-review rules from newline-separated text.
+func PromptAuditReviewRulesFromString(s string) {
+	PromptAuditReviewRules = []string{}
+	for _, rule := range strings.Split(s, "\n") {
+		rule = strings.TrimSpace(rule)
+		if rule != "" {
+			PromptAuditReviewRules = append(PromptAuditReviewRules, rule)
 		}
 	}
 }

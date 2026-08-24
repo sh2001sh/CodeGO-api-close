@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Sparkles, Star } from 'lucide-react'
+import { CalendarClock, Hash, Sparkles, Star } from 'lucide-react'
 import {
   AnimatePresence,
   motion,
@@ -25,6 +25,7 @@ import {
 } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { blindBoxGuaranteeLabel } from '../lib/blind-box-guarantee'
 import {
   RARITY_BADGE,
   RARITY_RING,
@@ -83,15 +84,20 @@ const REDUCED_ITEM: Variants = {
 
 function rewardTypeLabel(record: BlindBoxRecord) {
   if (record.reward_type === 'subscription') return '套餐'
-  if (record.reward_type === 'claude_quota') return 'Claude'
+  if (record.reward_type === 'claude_quota' || record.reward_type === 'quota') {
+    return '统一额度'
+  }
   if (record.reward_type === 'prop') return '道具'
   return '额度'
 }
 
 function isManualUseProp(record: BlindBoxRecord) {
-  return ['consume_discount_95', 'consume_discount_90'].includes(
-    record.prop_type || ''
-  )
+  return [
+    'consume_discount_95',
+    'consume_discount_90',
+    'consume_discount_10',
+    'monthly_pass_multiplier',
+  ].includes(record.prop_type || '')
 }
 
 export function PrizeRevealHeader(props: {
@@ -147,11 +153,22 @@ export function PrizeRevealList(props: {
   formatTimestamp: (timestamp?: number) => string
 }) {
   const reduced = useReducedMotion()
+  const variants = reduced
+    ? REDUCED_CONTAINER
+    : {
+        ...REVEAL_CONTAINER,
+        animate: {
+          transition: {
+            staggerChildren: props.records.length > 20 ? 0.015 : 0.12,
+            delayChildren: 0.08,
+          },
+        },
+      }
 
   return (
     <motion.div
       className='grid gap-3'
-      variants={reduced ? REDUCED_CONTAINER : REVEAL_CONTAINER}
+      variants={variants}
       initial='initial'
       animate='animate'
     >
@@ -197,7 +214,7 @@ function PrizeRevealCard(props: {
               {record.reward_title}
             </div>
             <div className='border-border/70 bg-background/60 text-muted-foreground rounded-full border px-2.5 py-0.5 text-xs font-medium'>
-              {rewardTypeLabel(record)}
+              统一盲盒 · {rewardTypeLabel(record)}
             </div>
             {badge ? (
               <div
@@ -211,7 +228,7 @@ function PrizeRevealCard(props: {
             ) : null}
             {record.is_pity ? (
               <div className='border-primary/30 bg-primary/10 text-primary rounded-full border px-2.5 py-0.5 text-xs font-medium'>
-                保底
+                {blindBoxGuaranteeLabel(record)}
               </div>
             ) : null}
           </div>
@@ -233,26 +250,59 @@ function PrizeRevealCard(props: {
       </div>
       {record.reward_type === 'prop' ? (
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
-          {manualUseProp
-            ? propActive
-              ? '已启用，持续 24 小时自动生效'
-              : propAvailable
-                ? '点击立即使用后生效，持续 24 小时'
-                : '该道具已失效'
-            : record.prop_status === 'used'
-              ? '已用于最近一次符合条件的订单'
-              : record.prop_status === 'reserved'
-                ? '已锁定到待支付订单，支付完成后自动使用'
-                : '下次满足条件时自动抵扣一次'}
+          {record.prop_type === 'extra_draw'
+            ? '已自动补发 1 个待开启盲盒，可继续在库存中开启'
+            : manualUseProp
+              ? propActive
+                ? record.prop_type === 'consume_discount_10'
+                  ? '已启用，全部现有官方分组通用，累计 15 分钟并可暂停'
+                  : record.prop_type === 'monthly_pass_multiplier'
+                    ? '套餐权益已启用，仅实际扣月卡额度时生效'
+                    : '已启用，仅官方渠道可用，持续 24 小时'
+                : propAvailable
+                  ? record.prop_type === 'consume_discount_10'
+                    ? '点击启用后累计可用 15 分钟，可暂停，在原有官方分组直接生效'
+                    : record.prop_type === 'monthly_pass_multiplier'
+                      ? '点击启用套餐权益，无需切换分组'
+                      : '点击启用后持续 24 小时，仅官方渠道生效'
+                  : '该道具已失效'
+              : record.prop_status === 'used'
+                ? '已用于最近一次符合条件的订单'
+                : record.prop_status === 'reserved'
+                  ? '已锁定到待支付订单，支付完成后自动使用'
+                  : '下次满足条件时自动抵扣一次'}
         </div>
-      ) : record.reward_type === 'claude_quota' ? (
+      ) : record.reward_type === 'claude_quota' ||
+        record.reward_type === 'quota' ? (
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
-          已进入 Claude 钱包，永久有效
+          已进入统一额度账户，永久有效
         </div>
-      ) : record.reward_type === 'quota' ? (
-        <div className='text-muted-foreground mt-3 text-xs leading-5'>
-          已进入可用余额，永久有效
-        </div>
+      ) : null}
+      {record.lucky_number ? (
+        <motion.div
+          initial={
+            props.reduced ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 6 }
+          }
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{
+            duration: props.reduced ? 0.15 : 0.32,
+            ease: EASE_OUT_QUINT,
+            delay: props.reduced ? 0 : 0.12,
+          }}
+          className='border-primary/25 bg-primary/[0.055] mt-3 flex flex-col gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between'
+        >
+          <div className='flex items-center gap-2'>
+            <Hash className='text-primary size-4' aria-hidden='true' />
+            <span className='text-muted-foreground text-xs'>今日幸运号</span>
+            <span className='text-foreground font-mono text-lg font-semibold tracking-widest tabular-nums'>
+              {record.lucky_number}
+            </span>
+          </div>
+          <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+            <CalendarClock className='size-3.5' aria-hidden='true' />
+            仅参与 {record.lucky_draw_date || '今日'} 开奖，次日失效
+          </div>
+        </motion.div>
       ) : null}
     </motion.div>
   )

@@ -67,7 +67,7 @@ function StageHeader(props: {
             每日幸运数字
           </h2>
           <p className='text-muted-foreground mt-0.5 truncate text-xs'>
-            有效月卡自动参与，无需签到
+            月卡持续参与，盲盒每盒赠送一个当日号码
           </p>
         </div>
       </div>
@@ -140,7 +140,7 @@ function DrawConsole(props: {
         <p className='text-muted-foreground mt-1.5 max-w-xl text-sm leading-6'>
           {props.status.phase === 'disabled'
             ? '现有号码和历史记录不受影响，活动恢复后将继续自动开奖。'
-            : '系统从右向左连续比对月卡尾号，命中后奖励自动进入钱包余额。'}
+            : '系统从右向左连续比对月卡尾号和当天盲盒号码，命中后奖励自动进入钱包余额。'}
         </p>
       </div>
       <div className='shrink-0'>
@@ -232,7 +232,7 @@ function ParticipationStrip(props: {
     {
       icon: ShieldCheck,
       label: '参与方式',
-      value: '有效月卡自动加入',
+      value: '月卡持续参与 · 盲盒当日参与',
       tone: 'text-success bg-success/10',
     },
   ]

@@ -182,7 +182,7 @@ func GetMinTopup() int64 {
 }
 
 func NormalizeTopupWalletType(walletType string) string {
-	return commercedomain.NormalizeWalletType(walletType)
+	return commerceschema.WalletTypeClaude
 }
 
 func IsClaudeTopupWallet(walletType string) bool {

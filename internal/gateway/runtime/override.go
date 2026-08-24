@@ -2033,6 +2033,7 @@ func mergeObjects(data []byte, path string, value interface{}, keepOrigin bool) 
 //   - upstream_model/model：始终为通道映射后的上游模型名。
 //   - original_model：请求最初指定的模型名。
 //   - request_path：请求路径
+//   - user_id/user_group/using_group/token_id：当前路由主体的非 PII 标识。
 //   - is_channel_test：是否为渠道测试请求（同 is_test）。
 func BuildParamOverrideContext(info *RelayInfo) map[string]interface{} {
 	if info == nil {
@@ -2057,6 +2058,10 @@ func BuildParamOverrideContext(info *RelayInfo) map[string]interface{} {
 			ctx["request_path"] = requestPath
 		}
 	}
+	ctx["user_id"] = info.UserId
+	ctx["user_group"] = info.UserGroup
+	ctx["using_group"] = info.UsingGroup
+	ctx["token_id"] = info.TokenId
 
 	ctx[paramOverrideContextRequestHeaders] = buildRequestHeadersContext(info.RequestHeaders)
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAuthStore } from '@/stores/auth-store'
 import { getSelf } from '@/lib/api'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
-import { useAuthStore } from '@/stores/auth-store'
 import {
   getPublicPlans,
   getSelfSubscriptionFull,
@@ -12,17 +12,12 @@ import type {
   SelfSubscriptionData,
 } from '@/features/subscriptions/types'
 import { DEFAULT_DISCOUNT_RATE } from '../constants'
-import {
-  getDefaultPaymentType,
-  getMinTopupAmount,
-  isWaffoPancakePayment,
-} from '../lib'
+import { getDefaultPaymentType, isWaffoPancakePayment } from '../lib'
 import type {
   CreemProduct,
   PaymentMethod,
   PresetAmount,
   UserWalletData,
-  WalletType,
 } from '../types'
 import { useCreemPayment } from './use-creem-payment'
 import { usePayment } from './use-payment'
@@ -31,11 +26,7 @@ import { useTopupInfo } from './use-topup-info'
 import { useWaffoPancakePayment } from './use-waffo-pancake-payment'
 import { useWaffoPayment } from './use-waffo-payment'
 
-interface UseWalletWorkspaceOptions {
-  initialWalletType?: WalletType
-}
-
-export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
+export function useWalletWorkspace() {
   const [user, setUser] = useState<UserWalletData | null>(null)
   const [userLoading, setUserLoading] = useState(true)
   const [subscriptionData, setSubscriptionData] =
@@ -44,8 +35,6 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
   const [publicPlans, setPublicPlans] = useState<PlanRecord[]>([])
   const [publicPlansLoading, setPublicPlansLoading] = useState(true)
   const [topupAmount, setTopupAmount] = useState(0)
-  const [selectedWalletType, setSelectedWalletType] =
-    useState<WalletType>(options.initialWalletType ?? 'default')
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod>()
@@ -151,19 +140,13 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
 
   useEffect(() => {
     if (topupInfo && topupAmount === 0) {
-      const minTopup =
-        selectedWalletType === 'claude' ? 1 : getMinTopupAmount(topupInfo)
+      const minTopup = 1
       setTopupAmount(minTopup)
 
       const defaultPaymentType = getDefaultPaymentType(topupInfo)
-      calculatePaymentAmount(minTopup, defaultPaymentType, selectedWalletType)
+      calculatePaymentAmount(minTopup, defaultPaymentType)
     }
-  }, [topupInfo, topupAmount, calculatePaymentAmount, selectedWalletType])
-
-  useEffect(() => {
-    if (!options.initialWalletType) return
-    setSelectedWalletType(options.initialWalletType)
-  }, [options.initialWalletType])
+  }, [topupInfo, topupAmount, calculatePaymentAmount])
 
   const getCurrentPaymentType = useCallback(() => {
     return selectedPaymentMethod?.type || getDefaultPaymentType(topupInfo)
@@ -173,40 +156,18 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
     (preset: PresetAmount) => {
       setTopupAmount(preset.value)
       setSelectedPreset(preset.value)
-      calculatePaymentAmount(
-        preset.value,
-        getCurrentPaymentType(),
-        selectedWalletType
-      )
+      calculatePaymentAmount(preset.value, getCurrentPaymentType())
     },
-    [calculatePaymentAmount, getCurrentPaymentType, selectedWalletType]
+    [calculatePaymentAmount, getCurrentPaymentType]
   )
 
   const handleTopupAmountChange = useCallback(
     (amount: number) => {
       setTopupAmount(amount)
       setSelectedPreset(null)
-      calculatePaymentAmount(
-        amount,
-        getCurrentPaymentType(),
-        selectedWalletType
-      )
+      calculatePaymentAmount(amount, getCurrentPaymentType())
     },
-    [calculatePaymentAmount, getCurrentPaymentType, selectedWalletType]
-  )
-
-  const handleWalletTypeChange = useCallback(
-    (walletType: WalletType) => {
-      setSelectedWalletType(walletType)
-      const nextAmount =
-        walletType === 'claude'
-          ? Math.max(1, topupAmount)
-          : Math.max(getMinTopupAmount(topupInfo), topupAmount)
-      setTopupAmount(nextAmount)
-      setSelectedPreset(null)
-      calculatePaymentAmount(nextAmount, getCurrentPaymentType(), walletType)
-    },
-    [calculatePaymentAmount, getCurrentPaymentType, topupAmount, topupInfo]
+    [calculatePaymentAmount, getCurrentPaymentType]
   )
 
   const handlePaymentMethodSelect = useCallback(
@@ -215,23 +176,18 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
       setPaymentLoading(method.type)
 
       try {
-        const minTopup =
-          selectedWalletType === 'claude' ? 1 : getMinTopupAmount(topupInfo)
+        const minTopup = 1
         if (topupAmount < minTopup) {
           return
         }
 
-        await calculatePaymentAmount(
-          topupAmount,
-          method.type,
-          selectedWalletType
-        )
+        await calculatePaymentAmount(topupAmount, method.type)
         setConfirmDialogOpen(true)
       } finally {
         setPaymentLoading(null)
       }
     },
-    [calculatePaymentAmount, selectedWalletType, topupAmount, topupInfo]
+    [calculatePaymentAmount, topupAmount]
   )
 
   const handlePaymentConfirm = useCallback(async () => {
@@ -239,12 +195,8 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
 
     const isPancake = isWaffoPancakePayment(selectedPaymentMethod.type)
     const success = isPancake
-      ? await processWaffoPancakePayment(topupAmount, selectedWalletType)
-      : await processPayment(
-          topupAmount,
-          selectedPaymentMethod.type,
-          selectedWalletType
-        )
+      ? await processWaffoPancakePayment(topupAmount)
+      : await processPayment(topupAmount, selectedPaymentMethod.type)
 
     if (success) {
       setConfirmDialogOpen(false)
@@ -255,7 +207,6 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
     processPayment,
     processWaffoPancakePayment,
     selectedPaymentMethod,
-    selectedWalletType,
     topupAmount,
   ])
 
@@ -291,20 +242,17 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
       setPaymentLoading(loadingKey)
 
       try {
-        await processWaffoPayment(topupAmount, index, selectedWalletType)
+        await processWaffoPayment(topupAmount, index)
       } finally {
         setPaymentLoading(null)
       }
     },
-    [processWaffoPayment, selectedWalletType, topupAmount]
+    [processWaffoPayment, topupAmount]
   )
 
   const getDiscountRate = useCallback(() => {
-    if (selectedWalletType === 'claude') {
-      return DEFAULT_DISCOUNT_RATE
-    }
-    return topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
-  }, [selectedWalletType, topupInfo, topupAmount])
+    return DEFAULT_DISCOUNT_RATE
+  }, [])
 
   return {
     user,
@@ -317,7 +265,6 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
     presetAmounts,
     topupLoading,
     topupAmount,
-    selectedWalletType,
     selectedPreset,
     selectedPaymentMethod,
     paymentAmount,
@@ -339,7 +286,6 @@ export function useWalletWorkspace(options: UseWalletWorkspaceOptions = {}) {
     fetchPublicPlans,
     handleSelectPreset,
     handleTopupAmountChange,
-    handleWalletTypeChange,
     handlePaymentMethodSelect,
     handlePaymentConfirm,
     handleRedeem,

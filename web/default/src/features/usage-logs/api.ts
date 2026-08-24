@@ -24,6 +24,7 @@ import type {
   GetLogStatsParams,
   GetLogStatsResponse,
   GetTaskLogsParams,
+  UsageLogGroupOption,
   UserInfo,
 } from './types'
 
@@ -81,6 +82,49 @@ export const getLogStats = (params: GetLogStatsParams = {}) =>
 export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
+
+export function normalizeUsageLogGroupOptions(
+  value: unknown
+): UsageLogGroupOption[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): UsageLogGroupOption[] => {
+    if (typeof item === 'string' && item.trim()) {
+      return [{ value: item, label: item }]
+    }
+    if (!item || typeof item !== 'object') return []
+    const option = item as Record<string, unknown>
+    if (typeof option.value !== 'string' || !option.value.trim()) return []
+    return [
+      {
+        value: option.value,
+        label:
+          typeof option.label === 'string' && option.label.trim()
+            ? option.label
+            : option.value,
+        ...(typeof option.public_id === 'string' && option.public_id.trim()
+          ? { public_id: option.public_id }
+          : {}),
+        ...(typeof option.marketplace_group_id === 'string' &&
+        option.marketplace_group_id.trim()
+          ? { marketplace_group_id: option.marketplace_group_id }
+          : {}),
+      },
+    ]
+  })
+}
+
+export async function getUsageLogGroups(
+  isAdmin: boolean
+): Promise<UsageLogGroupOption[]> {
+  const path = isAdmin
+    ? '/api/log/groups/options'
+    : '/api/log/self/groups/options'
+  const res = await api.get(path)
+  if (!res.data?.success || !Array.isArray(res.data.data)) {
+    throw new Error(res.data?.message || 'Unable to load usage log groups.')
+  }
+  return normalizeUsageLogGroupOptions(res.data.data)
+}
 
 export async function getUserInfo(
   userId: number

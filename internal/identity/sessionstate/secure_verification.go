@@ -68,18 +68,35 @@ func MarkPasskeyReady(c *gin.Context) error {
 }
 
 func RequireSecureVerificationMethod(c *gin.Context, method string) error {
+	verifiedMethod, err := requireSecureVerification(c)
+	if err != nil {
+		return err
+	}
+	if verifiedMethod != method {
+		return ErrSecureVerificationMethodMismatch
+	}
+	return nil
+}
+
+// RequireSecureVerification accepts any recently completed strong verification.
+func RequireSecureVerification(c *gin.Context) error {
+	_, err := requireSecureVerification(c)
+	return err
+}
+
+func requireSecureVerification(c *gin.Context) (string, error) {
 	session := sessions.Default(c)
 	verifiedAt, ok := session.Get(SecureVerificationSessionKey).(int64)
 	if !ok || time.Now().Unix()-verifiedAt >= SecureVerificationTimeout {
 		session.Delete(SecureVerificationSessionKey)
 		session.Delete(SecureVerificationMethodSessionKey)
 		_ = session.Save()
-		return ErrSecureVerificationRequired
+		return "", ErrSecureVerificationRequired
 	}
 
 	verifiedMethod, ok := session.Get(SecureVerificationMethodSessionKey).(string)
-	if !ok || verifiedMethod != method {
-		return ErrSecureVerificationMethodMismatch
+	if !ok || verifiedMethod == "" {
+		return "", ErrSecureVerificationMethodMismatch
 	}
-	return nil
+	return verifiedMethod, nil
 }

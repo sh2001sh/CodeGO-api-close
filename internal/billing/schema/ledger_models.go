@@ -81,14 +81,14 @@ func (BillingBalanceSnapshot) TableName() string {
 
 type BillingLedgerEntry struct {
 	EntryID        string          `json:"entry_id" gorm:"column:entry_id;primaryKey;size:64"`
-	AccountID      string          `json:"account_id" gorm:"column:account_id;size:64;index:idx_billing_ledger_entries_account_created;index"`
+	AccountID      string          `json:"account_id" gorm:"column:account_id;size:64;index:idx_billing_ledger_entries_account_created"`
 	ReferenceType  string          `json:"reference_type" gorm:"column:reference_type;size:32;index:idx_billing_ledger_entries_reference"`
 	ReferenceID    string          `json:"reference_id" gorm:"column:reference_id;size:128;index:idx_billing_ledger_entries_reference"`
 	EntryType      string          `json:"entry_type" gorm:"column:entry_type;size:32;index"`
 	Direction      string          `json:"direction" gorm:"column:direction;size:16"`
 	Amount         int64           `json:"amount" gorm:"column:amount"`
 	BalanceAfter   *int64          `json:"balance_after" gorm:"column:balance_after"`
-	IdempotencyKey string          `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:uq_billing_ledger_entries_idempotency"`
+	IdempotencyKey string          `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:idx_ledger_entries_idempotency_key"`
 	ReasonCode     string          `json:"reason_code" gorm:"column:reason_code;size:64"`
 	ReasonDetail   string          `json:"reason_detail" gorm:"column:reason_detail;type:text"`
 	OperatorType   string          `json:"operator_type" gorm:"column:operator_type;size:32"`
@@ -121,7 +121,7 @@ type BillingReservation struct {
 	AccountID      string     `json:"account_id" gorm:"column:account_id;size:64;index;index:idx_billing_reservations_account_status"`
 	ReservedAmount int64      `json:"reserved_amount" gorm:"column:reserved_amount"`
 	Status         string     `json:"status" gorm:"column:status;size:32;index;index:idx_billing_reservations_account_status"`
-	IdempotencyKey string     `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:uq_billing_reservations_idempotency"`
+	IdempotencyKey string     `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:idx_reservations_idempotency_key"`
 	ExpiresAt      *time.Time `json:"expires_at" gorm:"column:expires_at;index"`
 	CreatedAt      time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt      time.Time  `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
@@ -146,12 +146,12 @@ func (r *BillingReservation) BeforeCreate(_ *gorm.DB) error {
 
 type BillingSettlement struct {
 	SettlementID    string    `json:"settlement_id" gorm:"column:settlement_id;primaryKey;size:64"`
-	ReservationID   string    `json:"reservation_id" gorm:"column:reservation_id;size:64;uniqueIndex:uq_billing_settlements_reservation;index"`
+	ReservationID   string    `json:"reservation_id" gorm:"column:reservation_id;size:64;uniqueIndex:idx_settlements_reservation_id"`
 	UsageEvidenceID string    `json:"usage_evidence_id" gorm:"column:usage_evidence_id;size:64"`
 	ActualAmount    int64     `json:"actual_amount" gorm:"column:actual_amount"`
 	DeltaAmount     int64     `json:"delta_amount" gorm:"column:delta_amount"`
 	Status          string    `json:"status" gorm:"column:status;size:32"`
-	IdempotencyKey  string    `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:uq_billing_settlements_idempotency"`
+	IdempotencyKey  string    `json:"idempotency_key" gorm:"column:idempotency_key;size:255;uniqueIndex:idx_settlements_idempotency_key"`
 	SettledAt       time.Time `json:"settled_at" gorm:"column:settled_at;autoCreateTime"`
 	CreatedAt       time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 }

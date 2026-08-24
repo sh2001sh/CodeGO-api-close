@@ -55,6 +55,8 @@ export type PricingModel = {
   billing_expr?: string
   /** Pricing version returned by backend, useful for cache busting */
   pricing_version?: string
+  /** False when a marketplace model has no site billing configuration yet. */
+  pricing_available?: boolean
   /**
    * Optional model metadata fields. These are not yet returned by the backend
    * and are populated client-side from {@link inferModelMetadata}.
@@ -93,10 +95,12 @@ export type PricingData = {
   success: boolean
   message?: string
   data: PricingModel[]
+  priced_models?: string[]
+  priced_model_details?: PricingModel[]
   vendors: PricingVendor[]
   group_ratio: Record<string, number>
   usable_group: Record<string, { desc: string; ratio: number }>
-  supported_endpoint: Record<string, string>
+  supported_endpoint: Record<string, { path?: string; method?: string }>
   auto_groups: string[]
 }
 

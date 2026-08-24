@@ -10,7 +10,6 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
-	"math/rand"
 	"strings"
 	// OpenBlindBoxes opens the requested number of blind boxes for the user.
 )
@@ -141,6 +140,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 		record := commerceschema.BlindBoxOpenRecord{
 			UserId:     userID,
 			OrderId:    currentOrder.Id,
+			PoolType:   commerceschema.BlindBoxPoolTypeStandard,
 			CreateTime: platformruntime.GetTimestamp(),
 		}
 		pityTriggered := pityState.ConsecutiveLowRewards+1 >= effectivePityThreshold
@@ -156,7 +156,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			record.RewardTitle = "1 小时 0 倍率卡"
 			record.RewardTier = "zero_hour_hidden"
 			record.RewardWalletType = ""
-			if err := tx.Create(&record).Error; err != nil {
+			if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 				return nil, err
 			}
 			prop, err := createBlindBoxPropTx(tx, userID, record.Id, record.RewardTitle)
@@ -179,13 +179,13 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			}
 		}
 
-		subscriptionHit := rand.Float64() < setting.SubscriptionPrizeProbability
+		subscriptionHit := secureBlindBoxRandomFloat64() < setting.SubscriptionPrizeProbability
 		if subscriptionHit {
 			subscriptionPlan, err := getBlindBoxSubscriptionPlanTx(tx)
 			if err != nil {
 				return nil, err
 			}
-			sub, _, err := ApplySubscriptionPurchaseTx(tx, userID, subscriptionPlan, "blind_box")
+			sub, mergeQuota, err := prepareBlindBoxSubscriptionRewardTx(tx, userID, subscriptionPlan)
 			if err != nil {
 				return nil, err
 			}
@@ -195,6 +195,28 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			record.UserSubscriptionId = sub.Id
 			record.RewardUSD = 0
 			pityState.ConsecutiveLowRewards = 0
+			if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
+				return nil, err
+			}
+			if mergeQuota {
+				if err := creditBlindBoxSubscriptionQuotaTx(tx, sub, subscriptionPlan.TotalAmount, record.Id); err != nil {
+					return nil, err
+				}
+			}
+			if err := awardMonthlyPassPropTx(tx, userID, subscriptionPlan, fmt.Sprintf("blind-box-subscription:%d", record.Id)); err != nil {
+				return nil, err
+			}
+			if prop, propErr := primaryMonthlyPassPropTx(tx, userID); propErr == nil {
+				record.PropId = prop.Id
+				record.PropType = prop.PropType
+				record.PropStatus = prop.Status
+				record.PropExpiresAt = prop.ExpiresAt
+				if err := tx.Save(&record).Error; err != nil {
+					return nil, err
+				}
+			}
+			records = append(records, record)
+			continue
 		} else {
 			rewardUSD := 0.0
 			tierName := "pity"
@@ -253,9 +275,9 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				if tierName == "first_purchase" {
 					record.RewardTitle = formatFirstPurchaseBlindBoxRewardTitle(totalRewardUSD)
 				} else {
-					record.RewardTitle = fmt.Sprintf("%.2f Claude 额度奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", totalRewardUSD)
 				}
-				if err := tx.Create(&record).Error; err != nil {
+				if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 					return nil, err
 				}
 				if err := applyBlindBoxWalletRewardTx(tx, userID, record.Id, creditAmount, commerceschema.BlindBoxRewardWalletTypeClaude); err != nil {
@@ -285,11 +307,11 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				if tierName == "first_purchase" {
 					record.RewardTitle = formatFirstPurchaseBlindBoxRewardTitle(totalRewardUSD)
 				} else if tierWalletType == commerceschema.BlindBoxRewardWalletTypeClaude {
-					record.RewardTitle = fmt.Sprintf("%.2f Claude 额度奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", totalRewardUSD)
 				} else {
-					record.RewardTitle = fmt.Sprintf("%.2f 美元奖励", totalRewardUSD)
+					record.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", totalRewardUSD)
 				}
-				if err := tx.Create(&record).Error; err != nil {
+				if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 					return nil, err
 				}
 				if err := applyBlindBoxWalletRewardTx(tx, userID, record.Id, creditAmount, tierWalletType); err != nil {
@@ -307,7 +329,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 				continue
 			}
 
-			if err := tx.Create(&record).Error; err != nil {
+			if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 				return nil, err
 			}
 			if record.RewardType == commerceschema.BlindBoxRewardTypeProp {
@@ -325,7 +347,7 @@ func openBlindBoxesTx(tx *gorm.DB, userID int, count int, orderID *int) ([]comme
 			continue
 		}
 
-		if err := tx.Create(&record).Error; err != nil {
+		if err := createBlindBoxOpenRecordTx(tx, &record); err != nil {
 			return nil, err
 		}
 		records = append(records, record)

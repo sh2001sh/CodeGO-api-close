@@ -63,7 +63,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		case gatewaycontract.RelayModeCompletions:
 			return fmt.Sprintf("%s/completions", fimBaseURL), nil
 		default:
-			return fmt.Sprintf("%s/v1/chat/completions", info.ChannelBaseUrl), nil
+			return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/chat/completions"), nil
 		}
 	}
 }

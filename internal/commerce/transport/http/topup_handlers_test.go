@@ -62,12 +62,14 @@ func setupCommerceHTTPTestDB(t *testing.T) *gorm.DB {
 		&commerceschema.SubscriptionOrder{},
 		&commerceschema.UserSubscription{},
 		&commerceschema.SubscriptionClaudeConversion{},
-		&commerceschema.WalletQuotaConversion{},
+		&commerceschema.WalletTransferSecurity{},
+		&commerceschema.WalletTransfer{},
 		&commerceschema.SubscriptionResetOpportunityAccount{},
 		&commerceschema.SubscriptionResetOpportunityLedger{},
 		&commerceschema.GroupBuyOrder{},
 		&commerceschema.GroupBuyMember{},
 		&commerceschema.InvoiceRequest{},
+		&commerceschema.InvoiceRequestItem{},
 	); err != nil {
 		t.Fatalf("failed to migrate commerce http tables: %v", err)
 	}
@@ -182,8 +184,8 @@ func TestRedeemTopUpCodeReturnsRedemptionResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload user: %v", err)
 	}
-	if reloaded.Quota != 5 {
-		t.Fatalf("expected redeemed quota 5, got %d", reloaded.Quota)
+	if reloaded.Quota != 0 || reloaded.ClaudeQuota != 5 {
+		t.Fatalf("expected redeemed unified credit 5, got quota=%d unified=%d", reloaded.Quota, reloaded.ClaudeQuota)
 	}
 }
 
@@ -206,7 +208,7 @@ func TestRedeemTopUpCodeRequiresComplianceConfirmation(t *testing.T) {
 	}
 }
 
-func TestRequestAmountSupportsClaudeWallet(t *testing.T) {
+func TestRequestAmountForcesUnifiedWallet(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 	user := &identityschema.User{Id: 1, Username: "quote-user", Password: "password123", DisplayName: "Quote User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", AffCode: "QT01"}
 	if err := db.Create(user).Error; err != nil {
@@ -215,7 +217,7 @@ func TestRequestAmountSupportsClaudeWallet(t *testing.T) {
 
 	ctx, recorder := newCommerceContext(t, stdhttp.MethodPost, "/api/user/amount", map[string]any{
 		"amount":      2,
-		"wallet_type": commerceschema.WalletTypeClaude,
+		"wallet_type": commerceschema.WalletTypeDefault,
 	}, user.Id)
 	RequestAmount(ctx)
 
@@ -299,7 +301,17 @@ func TestAdminCompleteTopUpCreditsQuota(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload user: %v", err)
 	}
-	if reloaded.Quota != int(platformruntime.QuotaPerUnit*2) {
-		t.Fatalf("expected quota %d, got %d", int(platformruntime.QuotaPerUnit*2), reloaded.Quota)
+	if reloaded.ClaudeQuota != int(platformruntime.QuotaPerUnit*2) {
+		t.Fatalf("expected quota %d, got %d", int(platformruntime.QuotaPerUnit*2), reloaded.ClaudeQuota)
+	}
+	if reloaded.Quota != 0 {
+		t.Fatalf("expected legacy quota to stay zero, got %d", reloaded.Quota)
+	}
+	var completed commerceschema.TopUp
+	if err := db.Where("trade_no = ?", "pending-topup-1").First(&completed).Error; err != nil {
+		t.Fatalf("failed to reload completed topup: %v", err)
+	}
+	if completed.WalletType != commerceschema.WalletTypeClaude {
+		t.Fatalf("expected unified wallet type, got %q", completed.WalletType)
 	}
 }

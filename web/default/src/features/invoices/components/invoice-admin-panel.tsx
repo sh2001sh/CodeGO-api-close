@@ -21,6 +21,13 @@ import { FileCheck2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -41,7 +48,6 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { getAdminInvoiceRequests, updateAdminInvoiceRequest } from '../api'
 import type {
-  InvoiceDeliveryMethod,
   InvoiceRequest,
   InvoiceStatus,
   UpdateInvoiceRequestPayload,
@@ -53,8 +59,6 @@ type AdminDraft = UpdateInvoiceRequestPayload
 const emptyDraft = (): AdminDraft => ({
   status: 'issued',
   invoice_number: '',
-  delivery_method: 'email',
-  document_url: '',
   admin_note: '',
 })
 
@@ -77,7 +81,21 @@ export function InvoiceAdminPanel() {
     queryFn: () => getAdminInvoiceRequests(status),
   })
   const update = useMutation({
-    mutationFn: () => updateAdminInvoiceRequest(selected!.id, draft),
+    mutationFn: () =>
+      updateAdminInvoiceRequest(
+        selected!.id,
+        draft.status === 'issued'
+          ? {
+              status: 'issued',
+              invoice_number: draft.invoice_number,
+              admin_note: '',
+            }
+          : {
+              status: 'rejected',
+              invoice_number: '',
+              admin_note: draft.admin_note,
+            }
+      ),
     onSuccess: () => {
       toast.success(draft.status === 'issued' ? '已登记开票信息' : '已驳回申请')
       setSelected(null)
@@ -89,7 +107,6 @@ export function InvoiceAdminPanel() {
         queryKey: ['invoice-eligible-orders'],
       })
     },
-    onError: () => toast.error('处理失败，请检查开票信息'),
   })
 
   const openReview = (request: InvoiceRequest) => {
@@ -97,8 +114,6 @@ export function InvoiceAdminPanel() {
     setDraft({
       status: 'issued',
       invoice_number: request.invoice_number,
-      delivery_method: request.delivery_method || 'email',
-      document_url: request.document_url,
       admin_note: request.admin_note,
     })
   }
@@ -107,101 +122,111 @@ export function InvoiceAdminPanel() {
     value: AdminDraft[K]
   ) => setDraft((current) => ({ ...current, [key]: value }))
   const isIssued = draft.status === 'issued'
+  const invoiceNumberRequired = isIssued && !draft.invoice_number.trim()
+  const rejectionReasonRequired = !isIssued && !draft.admin_note.trim()
 
   return (
-    <section className='border-border mt-8 border-t pt-6'>
-      <div className='mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center'>
-        <div>
-          <h2 className='text-base font-semibold'>发票审核</h2>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            仅管理员可查看抬头、税号和接收邮箱。
-          </p>
+    <Card className='bg-card/95'>
+      <CardHeader className='gap-3 border-b'>
+        <div className='flex flex-col justify-between gap-3 sm:flex-row sm:items-start'>
+          <div>
+            <CardTitle>发票审核</CardTitle>
+            <CardDescription className='mt-1'>
+              仅管理员可查看抬头、税号和接收邮箱，并登记发票号码或驳回原因。
+            </CardDescription>
+          </div>
+          <NativeSelect
+            value={status}
+            onChange={(event) =>
+              setStatus(event.target.value as InvoiceStatus | 'all')
+            }
+            className='w-full sm:w-36'
+          >
+            <option value='pending'>待处理</option>
+            <option value='issued'>已开具</option>
+            <option value='rejected'>已驳回</option>
+            <option value='all'>全部</option>
+          </NativeSelect>
         </div>
-        <NativeSelect
-          value={status}
-          onChange={(event) =>
-            setStatus(event.target.value as InvoiceStatus | 'all')
-          }
-        >
-          <option value='pending'>待处理</option>
-          <option value='issued'>已开具</option>
-          <option value='rejected'>已驳回</option>
-          <option value='all'>全部</option>
-        </NativeSelect>
-      </div>
-
-      <div className='border-border overflow-hidden rounded-lg border'>
-        {requests.isLoading ? (
-          <p className='text-muted-foreground py-8 text-center text-sm'>
-            正在加载申请...
-          </p>
-        ) : null}
-        {requests.isError ? (
-          <p className='text-destructive py-8 text-center text-sm'>
-            申请数据加载失败
-          </p>
-        ) : null}
-        {requests.data ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>申请人 / 订单</TableHead>
-                <TableHead>开票信息</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>提交时间</TableHead>
-                <TableHead className='text-right'>处理</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requests.data.items.map((request) => (
-                <TableRow key={request.id}>
-                  <TableCell>
-                    <div className='font-medium'>
-                      用户 #{request.user_id} · {request.order_title}
-                    </div>
-                    <div className='text-muted-foreground text-xs'>
-                      {request.trade_no} · {request.currency}{' '}
-                      {request.order_amount.toFixed(2)}
-                    </div>
-                  </TableCell>
-                  <TableCell className='whitespace-normal'>
-                    <div>{request.title}</div>
-                    <div className='text-muted-foreground text-xs'>
-                      {request.invoice_type === 'enterprise'
-                        ? `${request.tax_number} · `
-                        : ''}
-                      {request.email}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <InvoiceStatusBadge status={request.status} />
-                  </TableCell>
-                  <TableCell>{formatTime(request.created_at)}</TableCell>
-                  <TableCell className='text-right'>
-                    <Button
-                      size='sm'
-                      variant='outline'
-                      onClick={() => openReview(request)}
-                    >
-                      处理
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {requests.data.items.length === 0 ? (
+      </CardHeader>
+      <CardContent>
+        <div className='border-border bg-background/75 overflow-hidden rounded-2xl border'>
+          {requests.isLoading ? (
+            <p className='text-muted-foreground py-10 text-center text-sm'>
+              正在加载申请...
+            </p>
+          ) : null}
+          {requests.isError ? (
+            <p className='text-destructive py-10 text-center text-sm'>
+              申请数据加载失败
+            </p>
+          ) : null}
+          {requests.data ? (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={5}
-                    className='text-muted-foreground h-24 text-center'
-                  >
-                    没有符合筛选条件的申请
-                  </TableCell>
+                  <TableHead>申请人 / 订单</TableHead>
+                  <TableHead>开票信息</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>提交时间</TableHead>
+                  <TableHead className='text-right'>处理</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        ) : null}
-      </div>
+              </TableHeader>
+              <TableBody>
+                {requests.data.items.map((request) => (
+                  <TableRow key={request.id}>
+                    <TableCell className='align-top whitespace-normal'>
+                      <div className='font-medium'>
+                        用户 #{request.user_id} · {request.order_title}
+                      </div>
+                      <div className='text-muted-foreground text-xs'>
+                        {request.order_count > 1
+                          ? `合并 ${request.order_count} 笔订单`
+                          : request.trade_no}{' '}
+                        · {request.currency} {request.order_amount.toFixed(2)}
+                      </div>
+                    </TableCell>
+                    <TableCell className='align-top whitespace-normal'>
+                      <div>{request.title}</div>
+                      <div className='text-muted-foreground text-xs'>
+                        {request.invoice_type === 'enterprise'
+                          ? request.tax_number + ' · '
+                          : ''}
+                        {request.email}
+                      </div>
+                    </TableCell>
+                    <TableCell className='align-top'>
+                      <InvoiceStatusBadge status={request.status} />
+                    </TableCell>
+                    <TableCell className='align-top whitespace-normal'>
+                      {formatTime(request.created_at)}
+                    </TableCell>
+                    <TableCell className='text-right align-top'>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => openReview(request)}
+                      >
+                        处理
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {requests.data.items.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className='text-muted-foreground h-28 text-center'
+                    >
+                      没有符合筛选条件的申请
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          ) : null}
+        </div>
+      </CardContent>
 
       <Dialog
         open={Boolean(selected)}
@@ -234,69 +259,54 @@ export function InvoiceAdminPanel() {
               </NativeSelect>
             </label>
             {isIssued ? (
-              <>
-                <label className='grid gap-1.5 text-sm font-medium'>
-                  发票号码
-                  <Input
-                    value={draft.invoice_number}
-                    onChange={(event) =>
-                      updateDraft('invoice_number', event.target.value)
-                    }
-                    maxLength={128}
-                  />
-                </label>
-                <label className='grid gap-1.5 text-sm font-medium'>
-                  发放方式
-                  <NativeSelect
-                    value={draft.delivery_method}
-                    onChange={(event) =>
-                      updateDraft(
-                        'delivery_method',
-                        event.target.value as InvoiceDeliveryMethod
-                      )
-                    }
-                    className='w-full'
-                  >
-                    <option value='email'>发送至申请邮箱</option>
-                    <option value='download'>提供下载链接</option>
-                  </NativeSelect>
-                </label>
-                <label className='grid gap-1.5 text-sm font-medium'>
-                  HTTPS 下载链接
-                  <span className='text-muted-foreground font-normal'>
-                    必填，用户将从申请记录中下载
-                  </span>
-                  <Input
-                    type='url'
-                    value={draft.document_url}
-                    onChange={(event) =>
-                      updateDraft('document_url', event.target.value)
-                    }
-                    placeholder='https://发票文件或电子发票平台的 HTTPS 地址'
-                  />
-                </label>
-              </>
+              <label className='grid gap-1.5 text-sm font-medium'>
+                发票号码
+                <Input
+                  value={draft.invoice_number}
+                  onChange={(event) =>
+                    updateDraft('invoice_number', event.target.value)
+                  }
+                  maxLength={128}
+                  autoFocus
+                />
+                <span className='text-muted-foreground font-normal'>
+                  电子税务局将自动向申请邮箱发送电子发票，本站不再另行发送。
+                </span>
+              </label>
+            ) : (
+              <label className='grid gap-1.5 text-sm font-medium'>
+                驳回原因{' '}
+                <span className='text-destructive font-normal'>必填</span>
+                <Textarea
+                  value={draft.admin_note}
+                  onChange={(event) =>
+                    updateDraft('admin_note', event.target.value)
+                  }
+                  maxLength={1000}
+                  rows={3}
+                />
+              </label>
+            )}
+            {invoiceNumberRequired ? (
+              <p className='text-destructive text-sm' role='alert'>
+                请填写发票号码后再确认开具。
+              </p>
             ) : null}
-            <label className='grid gap-1.5 text-sm font-medium'>
-              {isIssued ? '内部备注' : '驳回原因'}{' '}
-              {isIssued ? (
-                <span className='text-muted-foreground font-normal'>可选</span>
-              ) : null}
-              <Textarea
-                value={draft.admin_note}
-                onChange={(event) =>
-                  updateDraft('admin_note', event.target.value)
-                }
-                maxLength={1000}
-                rows={3}
-              />
-            </label>
+            {rejectionReasonRequired ? (
+              <p className='text-destructive text-sm' role='alert'>
+                请填写驳回原因后再提交，用户将能够在申请记录中看到该原因。
+              </p>
+            ) : null}
           </div>
           <DialogFooter showCloseButton>
             <Button
               variant={isIssued ? 'default' : 'destructive'}
               onClick={() => update.mutate()}
-              disabled={update.isPending}
+              disabled={
+                update.isPending ||
+                invoiceNumberRequired ||
+                rejectionReasonRequired
+              }
             >
               {isIssued ? <FileCheck2 /> : <XCircle />}
               {update.isPending
@@ -308,6 +318,6 @@ export function InvoiceAdminPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </Card>
   )
 }

@@ -48,7 +48,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	switch info.RelayFormat {
 	case types.RelayFormatClaude:
 		if hasSpecialPlan && specialPlan.ClaudeBaseURL != "" {
-			return fmt.Sprintf("%s/v1/messages", specialPlan.ClaudeBaseURL), nil
+			return relaycommon.JoinBaseURLPath(specialPlan.ClaudeBaseURL, "/v1/messages"), nil
 		}
 		return fmt.Sprintf("%s/api/anthropic/v1/messages", baseURL), nil
 	default:

@@ -66,7 +66,9 @@ func SubmitRelayTask(c *gin.Context) {
 	var taskErr *dto.TaskError
 	defer func() {
 		if taskErr != nil && relayInfo.Billing != nil {
-			relayInfo.Billing.Refund(c)
+			if refundErr := billingapp.RefundRelayBillingSync(c, relayInfo); refundErr != nil {
+				platformobservability.SysError("synchronous task billing refund failed: " + refundErr.Error())
+			}
 		}
 	}()
 
@@ -139,7 +141,7 @@ func SubmitRelayTask(c *gin.Context) {
 	}
 
 	if taskErr == nil {
-		if settleErr := relayInfo.Billing.Settle(result.Quota); settleErr != nil {
+		if settleErr := billingapp.SettleRelayBilling(c, relayInfo, result.Quota); settleErr != nil {
 			platformobservability.SysError("settle task billing error: " + settleErr.Error())
 		}
 		billingapp.LogTaskConsumption(c, relayInfo)
@@ -151,14 +153,15 @@ func SubmitRelayTask(c *gin.Context) {
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = relayInfo.TokenId
 		task.PrivateData.BillingContext = &workflowschema.TaskBillingContext{
-			ModelPrice:      relayInfo.PriceData.ModelPrice,
-			GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
-			ModelRatio:      relayInfo.PriceData.ModelRatio,
-			OtherRatios:     relayInfo.PriceData.OtherRatios,
-			OriginModelName: relayInfo.OriginModelName,
-			PerCallBilling:  platformtext.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+			ModelPrice:        relayInfo.PriceData.ModelPrice,
+			GroupRatio:        relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+			ModelRatio:        relayInfo.PriceData.ModelRatio,
+			OtherRatios:       relayInfo.PriceData.OtherRatios,
+			OriginModelName:   relayInfo.OriginModelName,
+			FundingQuotaScale: relayInfo.SubscriptionQuotaScale,
+			PerCallBilling:    platformtext.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
 		}
-		task.Quota = result.Quota
+		task.Quota = billingapp.BillingQuotaForLog(relayInfo, result.Quota)
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action
 		if insertErr := workflowdomain.InsertTask(task); insertErr != nil {
@@ -200,22 +203,13 @@ func shouldRetryTaskRelay(c *gin.Context, taskErr *dto.TaskError, retryTimes int
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
-	if taskErr.StatusCode == http.StatusTooManyRequests || taskErr.StatusCode == http.StatusTemporaryRedirect {
-		return true
-	}
-	if taskErr.StatusCode/100 == 5 {
-		if gatewaystore.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode) {
-			return false
-		}
-		return true
-	}
-	if taskErr.StatusCode == http.StatusBadRequest || taskErr.StatusCode == http.StatusRequestTimeout {
-		return false
-	}
 	if taskErr.LocalError || taskErr.StatusCode/100 == 2 {
 		return false
 	}
-	return true
+	if gatewaystore.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode) {
+		return false
+	}
+	return gatewaystore.ShouldRetryByStatusCode(taskErr.StatusCode)
 }
 
 func addUsedTaskChannel(c *gin.Context, channelID int) {

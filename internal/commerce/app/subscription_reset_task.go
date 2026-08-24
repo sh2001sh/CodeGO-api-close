@@ -17,6 +17,7 @@ const (
 	subscriptionMaintenanceBatchSize        = 300
 	subscriptionCleanupInterval             = 30 * time.Minute
 	subscriptionProjectionReconcileInterval = 15 * time.Minute
+	subscriptionLuckyBackfillInterval       = 10 * time.Minute
 )
 
 var (
@@ -24,6 +25,7 @@ var (
 	subscriptionMaintenanceRunning      atomic.Bool
 	subscriptionCleanupLast             atomic.Int64
 	subscriptionProjectionReconcileLast atomic.Int64
+	subscriptionLuckyBackfillLast       atomic.Int64
 )
 
 // StartSubscriptionMaintenanceTask owns non-workflow subscription maintenance.
@@ -53,6 +55,30 @@ func runSubscriptionMaintenanceOnce() {
 	defer subscriptionMaintenanceRunning.Store(false)
 
 	ctx := context.Background()
+	totalExpiredTopUps := 0
+	for {
+		n, err := ExpireDueTopUps(subscriptionMaintenanceBatchSize)
+		if err != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("pending topup expiry task failed: %v", err))
+			break
+		}
+		totalExpiredTopUps += n
+		if n < subscriptionMaintenanceBatchSize {
+			break
+		}
+	}
+	totalExpiredBlindBoxOrders := 0
+	for {
+		n, err := ExpireDueBlindBoxOrders(subscriptionMaintenanceBatchSize)
+		if err != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("pending blind-box order expiry task failed: %v", err))
+			break
+		}
+		totalExpiredBlindBoxOrders += n
+		if n < subscriptionMaintenanceBatchSize {
+			break
+		}
+	}
 	totalExpired := 0
 	for {
 		n, err := ExpireDueSubscriptions(subscriptionMaintenanceBatchSize)
@@ -85,7 +111,25 @@ func runSubscriptionMaintenanceOnce() {
 			logger.LogWarn(ctx, fmt.Sprintf("subscription projection reconciliation failed: %v", err))
 		}
 	}
-	if platformconfig.DebugEnabled && totalExpired > 0 {
-		logger.LogDebug(ctx, "subscription maintenance: expired_count=%d", totalExpired)
+	lastLuckyBackfill := time.Unix(subscriptionLuckyBackfillLast.Load(), 0)
+	if time.Since(lastLuckyBackfill) >= subscriptionLuckyBackfillInterval {
+		if result, err := BackfillDailyLuckyNumbers(); err == nil {
+			subscriptionLuckyBackfillLast.Store(time.Now().Unix())
+			if platformconfig.DebugEnabled && result.Created > 0 {
+				logger.LogDebug(ctx, fmt.Sprintf("daily lucky number backfill: created=%d scanned=%d", result.Created, result.Scanned))
+			}
+		} else {
+			logger.LogWarn(ctx, fmt.Sprintf("daily lucky number backfill failed: %v", err))
+		}
+		if merged, err := ReconcileMonthlyPassProps(); err == nil {
+			if platformconfig.DebugEnabled && merged > 0 {
+				logger.LogDebug(ctx, fmt.Sprintf("monthly pass prop reconciliation: merged=%d", merged))
+			}
+		} else {
+			logger.LogWarn(ctx, fmt.Sprintf("monthly pass prop reconciliation failed: %v", err))
+		}
+	}
+	if platformconfig.DebugEnabled && (totalExpired > 0 || totalExpiredTopUps > 0 || totalExpiredBlindBoxOrders > 0) {
+		logger.LogDebug(ctx, "commerce maintenance: expired_subscriptions=%d expired_topups=%d expired_blind_box_orders=%d", totalExpired, totalExpiredTopUps, totalExpiredBlindBoxOrders)
 	}
 }

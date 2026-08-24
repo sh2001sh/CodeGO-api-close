@@ -32,7 +32,6 @@ import {
   isWaffoPancakePayment,
   submitPaymentForm,
 } from '../lib'
-import type { WalletType } from '../types'
 
 // ============================================================================
 // Payment Hook
@@ -45,11 +44,7 @@ export function usePayment() {
 
   // Calculate payment amount
   const calculatePaymentAmount = useCallback(
-    async (
-      topupAmount: number,
-      paymentType: string,
-      walletType: WalletType = 'default'
-    ) => {
+    async (topupAmount: number, paymentType: string) => {
       try {
         setCalculating(true)
 
@@ -58,16 +53,13 @@ export function usePayment() {
         const response = isStripe
           ? await calculateStripeAmount({
               amount: topupAmount,
-              wallet_type: walletType,
             })
           : isPancake
             ? await calculateWaffoPancakeAmount({
                 amount: topupAmount,
-                wallet_type: walletType,
               })
             : await calculateAmount({
                 amount: topupAmount,
-                wallet_type: walletType,
               })
 
         if (isApiSuccess(response) && response.data) {
@@ -91,11 +83,7 @@ export function usePayment() {
 
   // Process payment
   const processPayment = useCallback(
-    async (
-      topupAmount: number,
-      paymentType: string,
-      walletType: WalletType = 'default'
-    ) => {
+    async (topupAmount: number, paymentType: string) => {
       try {
         setProcessing(true)
 
@@ -106,12 +94,10 @@ export function usePayment() {
           ? await requestStripePayment({
               amount,
               payment_method: 'stripe',
-              wallet_type: walletType,
             })
           : await requestPayment({
               amount,
               payment_method: paymentType,
-              wallet_type: walletType,
             })
 
         if (!isApiSuccess(response)) {

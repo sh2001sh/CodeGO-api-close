@@ -33,10 +33,11 @@ type RoutePoolGroupChannel struct {
 }
 
 type RoutePoolMetrics struct {
-	PoolID  int64                    `json:"pool_id"`
-	Group   string                   `json:"group"`
-	Model   string                   `json:"model"`
-	Members []RoutePoolMemberMetrics `json:"members"`
+	PoolID      int64                      `json:"pool_id"`
+	Group       string                     `json:"group"`
+	Model       string                     `json:"model"`
+	RequestType gatewayruntime.RequestType `json:"request_type"`
+	Members     []RoutePoolMemberMetrics   `json:"members"`
 }
 
 type RoutePoolMemberMetrics struct {
@@ -60,7 +61,7 @@ func ListRoutePools() ([]gatewaystore.RoutePoolDetail, error) {
 // assigned to channels. It intentionally includes groups that have not opted
 // in yet, so Root can see whether they are still using legacy routing.
 func ListRoutePoolGroups() ([]RoutePoolGroup, error) {
-	channels, err := gatewaystore.ListAllChannelSummaries()
+	channels, err := listOfficialRoutePoolChannels()
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +125,7 @@ func SaveRoutePoolGroup(group string, enabled bool, members []gatewayschema.Rout
 	if group == "" {
 		return nil, errors.New("group is required")
 	}
-	channels, err := gatewaystore.ListAllChannelSummaries()
+	channels, err := listOfficialRoutePoolChannels()
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +158,20 @@ func SaveRoutePoolGroup(group string, enabled bool, members []gatewayschema.Rout
 		}
 	}
 	return gatewaystore.SaveRoutePool(&pool, members)
+}
+
+func listOfficialRoutePoolChannels() ([]*gatewayschema.Channel, error) {
+	channels, err := gatewaystore.ListAllChannelSummaries()
+	if err != nil {
+		return nil, err
+	}
+	official := make([]*gatewayschema.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if channel != nil && channel.IsOfficial() {
+			official = append(official, channel)
+		}
+	}
+	return official, nil
 }
 
 func SaveRoutePool(pool gatewayschema.RoutePool, members []gatewayschema.RoutePoolMember) (*gatewaystore.RoutePoolDetail, error) {
@@ -193,7 +208,8 @@ func GetRoutePoolMetrics(poolID int64, modelName string) (*RoutePoolMetrics, err
 			return nil, err
 		}
 	}
-	metrics := &RoutePoolMetrics{PoolID: detail.Pool.ID, Group: detail.Pool.Group, Model: modelName}
+	requestType := gatewayruntime.RequestTypeChatShortStream
+	metrics := &RoutePoolMetrics{PoolID: detail.Pool.ID, Group: detail.Pool.Group, Model: modelName, RequestType: requestType}
 	scored := make([]scoredRoutePoolCandidate, 0, len(members))
 	memberIndexes := make([]int, 0, len(members))
 	for _, member := range members {
@@ -209,11 +225,11 @@ func GetRoutePoolMetrics(poolID int64, modelName string) (*RoutePoolMetrics, err
 			metric.ChannelName = channel.Name
 			metric.Eligible = member.Enabled && gatewaystore.IsChannelEnabledForGroupModel(detail.Pool.Group, modelName, member.ChannelID)
 		}
-		if health, found := gatewayruntime.GetChannelHealth(member.ChannelID, modelName); found {
+		if health, found := gatewayruntime.GetChannelHealth(member.ChannelID, modelName, requestType); found {
 			metric.Health = health
 		}
 		if channelErr == nil && channel != nil {
-			if health, found := gatewayruntime.GetFaultDomainHealth(routePoolFaultDomain(member, channel), modelName); found {
+			if health, found := gatewayruntime.GetFaultDomainHealth(routePoolFaultDomain(member, channel), modelName, requestType); found {
 				metric.FaultDomainHealth = health
 			}
 		}
@@ -223,7 +239,7 @@ func GetRoutePoolMetrics(poolID int64, modelName string) (*RoutePoolMetrics, err
 			memberIndexes = append(memberIndexes, len(metrics.Members)-1)
 		}
 	}
-	applyRoutePoolTTFTPenalty(scored, modelName)
+	applyRoutePoolTTFTPenalty(scored, modelName, requestType)
 	for index, candidate := range scored {
 		metrics.Members[memberIndexes[index]].Score = candidate.score
 	}

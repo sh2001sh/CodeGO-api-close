@@ -21,7 +21,7 @@ import type { AxiosRequestConfig } from 'axios'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { api } from '@/lib/api'
+import { api, cancelSelfRequests } from '@/lib/api'
 import { getOAuthState } from '../api'
 import {
   buildGitHubOAuthUrl,
@@ -41,14 +41,14 @@ type LogoutRequestConfig = AxiosRequestConfig & {
 export function useOAuthLogin(status: SystemStatus | null) {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
-  const [githubButtonText, setGithubButtonText] = useState('')
+  const [githubButtonText, setGithubButtonText] = useState(() =>
+    t('Continue with GitHub')
+  )
   const [githubButtonDisabled, setGithubButtonDisabled] = useState(false)
   const githubTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const { auth } = useAuthStore()
 
   useEffect(() => {
-    setGithubButtonText(t('Continue with GitHub'))
-
     return () => {
       if (githubTimeoutRef.current) {
         clearTimeout(githubTimeoutRef.current)
@@ -57,6 +57,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
   }, [t])
 
   const resetSession = async () => {
+    cancelSelfRequests()
     try {
       auth.reset()
     } catch (_error) {

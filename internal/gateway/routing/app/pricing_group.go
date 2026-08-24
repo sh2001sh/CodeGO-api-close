@@ -1,6 +1,9 @@
 package app
 
 import (
+	"sort"
+	"strings"
+
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
@@ -10,16 +13,130 @@ import (
 	platformstore "github.com/sh2001sh/new-api/internal/platform/store"
 )
 
-const pricingVersion = "a42d372ccf0b5dd13ecf71203521f9d2"
+const pricingVersion = "9d31d94c6e1ec64de1cf66f93783919fa08f15504215145e869f095730c9f728"
 
 type PricingPayload struct {
-	Data              []gatewaydomain.Pricing                 `json:"data"`
-	Vendors           []gatewaydomain.PricingVendor           `json:"vendors"`
-	GroupRatio        map[string]float64                      `json:"group_ratio"`
-	UsableGroup       map[string]string                       `json:"usable_group"`
-	SupportedEndpoint map[string]gatewaycontract.EndpointInfo `json:"supported_endpoint"`
-	AutoGroups        []string                                `json:"auto_groups"`
-	PricingVersion    string                                  `json:"pricing_version"`
+	Data               []gatewaydomain.Pricing                 `json:"data"`
+	PricedModels       []string                                `json:"priced_models"`
+	PricedModelDetails []gatewaydomain.Pricing                 `json:"priced_model_details"`
+	Vendors            []gatewaydomain.PricingVendor           `json:"vendors"`
+	GroupRatio         map[string]float64                      `json:"group_ratio"`
+	UsableGroup        map[string]string                       `json:"usable_group"`
+	SupportedEndpoint  map[string]gatewaycontract.EndpointInfo `json:"supported_endpoint"`
+	AutoGroups         []string                                `json:"auto_groups"`
+	PricingVersion     string                                  `json:"pricing_version"`
+}
+
+// loadPricedModelDetails returns complete site-level billing details without
+// exposing the internal groups that made a model visible to the projection.
+func loadPricedModelDetails(pricing []gatewaydomain.Pricing) []gatewaydomain.Pricing {
+	byName := make(map[string]gatewaydomain.Pricing, len(pricing))
+	for _, item := range pricing {
+		key := strings.ToLower(strings.TrimSpace(item.ModelName))
+		if key == "" {
+			continue
+		}
+		item.EnableGroup = []string{}
+		item.PricingVersion = pricingVersion
+		byName[key] = item
+	}
+	for _, modelName := range gatewaystore.GetConfiguredModelBillingNames() {
+		key := strings.ToLower(strings.TrimSpace(modelName))
+		if key == "" {
+			continue
+		}
+		if _, ok := byName[key]; ok {
+			continue
+		}
+		if detail, ok := configuredModelBillingDetail(modelName); ok {
+			byName[key] = detail
+		}
+	}
+
+	result := make([]gatewaydomain.Pricing, 0, len(byName))
+	for _, detail := range byName {
+		result = append(result, detail)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return strings.ToLower(result[i].ModelName) < strings.ToLower(result[j].ModelName)
+	})
+	return result
+}
+
+func configuredModelBillingDetail(modelName string) (gatewaydomain.Pricing, bool) {
+	detail := gatewaydomain.Pricing{
+		ModelName:      modelName,
+		EnableGroup:    []string{},
+		PricingVersion: pricingVersion,
+	}
+	if price, ok := gatewaystore.GetModelPrice(modelName, false); ok {
+		detail.QuotaType = 1
+		detail.ModelPrice = price
+	} else if ratio, ok, _ := gatewaystore.GetModelRatio(modelName); ok {
+		detail.QuotaType = 0
+		detail.ModelRatio = ratio
+		detail.CompletionRatio = gatewaystore.GetCompletionRatio(modelName)
+	} else if gatewaystore.GetBillingMode(modelName) != gatewaystore.BillingModeTieredExpr {
+		return gatewaydomain.Pricing{}, false
+	}
+	if cacheRatio, ok := gatewaystore.GetCacheRatio(modelName); ok {
+		detail.CacheRatio = &cacheRatio
+	}
+	if createCacheRatio, ok := gatewaystore.GetCreateCacheRatio(modelName); ok {
+		detail.CreateCacheRatio = &createCacheRatio
+	}
+	if imageRatio, ok := gatewaystore.GetImageRatio(modelName); ok {
+		detail.ImageRatio = &imageRatio
+	}
+	if gatewaystore.ContainsAudioRatio(modelName) {
+		audioRatio := gatewaystore.GetAudioRatio(modelName)
+		detail.AudioRatio = &audioRatio
+	}
+	if gatewaystore.ContainsAudioCompletionRatio(modelName) {
+		audioCompletionRatio := gatewaystore.GetAudioCompletionRatio(modelName)
+		detail.AudioCompletionRatio = &audioCompletionRatio
+	}
+	if gatewaystore.GetBillingMode(modelName) == gatewaystore.BillingModeTieredExpr {
+		if expr, ok := gatewaystore.GetBillingExpr(modelName); ok && strings.TrimSpace(expr) != "" {
+			detail.BillingMode = gatewaystore.BillingModeTieredExpr
+			detail.BillingExpr = expr
+		}
+	}
+	return detail, true
+}
+
+// loadPricedModelNames returns every model that has a site-level price or is
+// already present in the pricing projection. Marketplace-only models can be
+// absent from the projection because they are not backed by an official
+// channel, but their global model price still makes them priced models for
+// channel configuration purposes.
+func loadPricedModelNames(pricing []gatewaydomain.Pricing) []string {
+	seen := make(map[string]struct{}, len(pricing))
+	result := make([]string, 0, len(pricing))
+	for _, item := range pricing {
+		if item.ModelName == "" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(item.ModelName))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, item.ModelName)
+	}
+	for _, modelName := range gatewaystore.GetConfiguredModelBillingNames() {
+		if modelName == "" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(modelName))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, modelName)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func loadGatewayPricing() []gatewaydomain.Pricing {
@@ -97,19 +214,22 @@ func filterPricingByUsableGroups(pricing []gatewaydomain.Pricing, usableGroup ma
 }
 
 func BuildPricingPayload(userID int, hasUser bool) PricingPayload {
-	pricing := filterPricingByUsableGroups(loadGatewayPricing(), resolveUsableGroups(userID, hasUser))
+	allPricing := loadGatewayPricing()
+	pricing := filterPricingByUsableGroups(allPricing, resolveUsableGroups(userID, hasUser))
 	userGroup := resolveUserGroup(userID, hasUser)
 	usableGroup := GetUserUsableGroups(userGroup)
 	groupRatio := visibleGroupRatios(userGroup, usableGroup)
 
 	return PricingPayload{
-		Data:              pricing,
-		Vendors:           loadGatewayVendors(),
-		GroupRatio:        groupRatio,
-		UsableGroup:       usableGroup,
-		SupportedEndpoint: loadGatewaySupportedEndpointMap(),
-		AutoGroups:        GetUserAutoGroup(userGroup),
-		PricingVersion:    pricingVersion,
+		Data:               pricing,
+		PricedModels:       loadPricedModelNames(allPricing),
+		PricedModelDetails: loadPricedModelDetails(allPricing),
+		Vendors:            loadGatewayVendors(),
+		GroupRatio:         groupRatio,
+		UsableGroup:        usableGroup,
+		SupportedEndpoint:  loadGatewaySupportedEndpointMap(),
+		AutoGroups:         GetUserAutoGroup(userGroup),
+		PricingVersion:     pricingVersion,
 	}
 }
 
@@ -128,9 +248,12 @@ func BuildUserGroupsPayload(userID int) map[string]map[string]any {
 
 	for groupName := range gatewaystore.GetGroupRatioCopy() {
 		if desc, ok := userUsableGroups[groupName]; ok {
+			subscriptionPolicy := gatewaystore.GetSubscriptionGroupPolicy(groupName)
 			usableGroups[groupName] = map[string]any{
-				"ratio": GetUserGroupRatio(userGroup, groupName),
-				"desc":  desc,
+				"ratio":                GetUserGroupRatio(userGroup, groupName),
+				"desc":                 desc,
+				"subscription_enabled": subscriptionPolicy.Enabled,
+				"subscription_ratio":   subscriptionPolicy.Multiplier,
 			}
 		}
 	}
@@ -144,10 +267,9 @@ func BuildUserGroupsPayload(userID int) map[string]map[string]any {
 	if zeroHour, err := commerceapp.BuildZeroHourOverview(userID); err == nil && zeroHour.Active {
 		usableGroups[commerceapp.ZeroHourGroup] = map[string]any{
 			"ratio": 0,
-			"desc":  "盲盒 0 倍率卡生效中，仅限 default 分组非生图模型",
+			"desc":  "盲盒 0 倍率卡生效中，仅限 " + commerceapp.MultiplierCardRouteGroup() + " 的非生图模型",
 		}
 	}
-
 	return usableGroups
 }
 

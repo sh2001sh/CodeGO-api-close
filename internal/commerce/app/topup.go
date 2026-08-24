@@ -134,7 +134,6 @@ func CreateEpayTopUp(userID int, req EpayRequest) (*EpayCheckoutResponse, error)
 	}
 
 	payMoney := GetTopupPayMoney(req.Amount, group, walletType)
-	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney)
 	if payMoney < 0.01 {
 		return nil, errors.New("充值金额过低")
 	}

@@ -13,6 +13,7 @@ const (
 	StreamEndReasonNone        StreamEndReason = ""
 	StreamEndReasonDone        StreamEndReason = "done"
 	StreamEndReasonTimeout     StreamEndReason = "timeout"
+	StreamEndReasonMaxDuration StreamEndReason = "max_duration"
 	StreamEndReasonClientGone  StreamEndReason = "client_gone"
 	StreamEndReasonScannerErr  StreamEndReason = "scanner_error"
 	StreamEndReasonHandlerStop StreamEndReason = "handler_stop"

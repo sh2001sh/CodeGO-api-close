@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformratelimit "github.com/sh2001sh/new-api/internal/platform/ratelimit"
 )
 
@@ -26,44 +27,46 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 	key := "rateLimit:" + mark + c.ClientIP()
 	listLength, err := rdb.LLen(ctx, key).Result()
 	if err != nil {
-		fmt.Println(err.Error())
-		c.Status(http.StatusInternalServerError)
-		c.Abort()
+		platformobservability.SysLog(fmt.Sprintf("redis rate limiter unavailable: %v", err))
 		return
 	}
 	if listLength < int64(maxRequestNum) {
 		rdb.LPush(ctx, key, time.Now().Format(timeFormat))
-		rdb.Expire(ctx, key, platformconfig.RateLimitKeyExpirationDuration)
+		rdb.Expire(ctx, key, rateLimitKeyExpiration(duration))
 	} else {
 		oldTimeStr, _ := rdb.LIndex(ctx, key, -1).Result()
 		oldTime, err := time.Parse(timeFormat, oldTimeStr)
 		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
+			platformobservability.SysLog(fmt.Sprintf("redis rate limiter timestamp invalid: %v", err))
 			return
 		}
 		nowTimeStr := time.Now().Format(timeFormat)
 		nowTime, err := time.Parse(timeFormat, nowTimeStr)
 		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
+			platformobservability.SysLog(fmt.Sprintf("redis rate limiter clock parse failed: %v", err))
 			return
 		}
 		// time.Since will return negative number!
 		// See: https://stackoverflow.com/questions/50970900/why-is-time-since-returning-negative-durations-on-windows
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
-			rdb.Expire(ctx, key, platformconfig.RateLimitKeyExpirationDuration)
+			rdb.Expire(ctx, key, rateLimitKeyExpiration(duration))
 			c.Status(http.StatusTooManyRequests)
 			c.Abort()
 			return
 		} else {
 			rdb.LPush(ctx, key, time.Now().Format(timeFormat))
 			rdb.LTrim(ctx, key, 0, int64(maxRequestNum-1))
-			rdb.Expire(ctx, key, platformconfig.RateLimitKeyExpirationDuration)
+			rdb.Expire(ctx, key, rateLimitKeyExpiration(duration))
 		}
 	}
+}
+
+func rateLimitKeyExpiration(duration int64) time.Duration {
+	window := time.Duration(duration) * time.Second
+	if window > platformconfig.RateLimitKeyExpirationDuration {
+		return window
+	}
+	return platformconfig.RateLimitKeyExpirationDuration
 }
 
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
@@ -76,7 +79,7 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 }
 
 func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
-	if platformcache.RedisEnabled {
+	if platformcache.RedisEnabled && platformcache.RDB != nil {
 		return func(c *gin.Context) {
 			redisRateLimiter(c, maxRequestNum, duration, mark)
 		}
@@ -123,7 +126,7 @@ func enforceGlobalAuthenticatedAPIRateLimit(c *gin.Context) bool {
 	if key == "" {
 		return true
 	}
-	if platformcache.RedisEnabled {
+	if platformcache.RedisEnabled && platformcache.RDB != nil {
 		allowed, err := platformratelimit.NewRedisLimiter(c.Request.Context(), platformcache.RDB).Allow(
 			c.Request.Context(),
 			"rateLimit:GA:"+key,
@@ -132,9 +135,8 @@ func enforceGlobalAuthenticatedAPIRateLimit(c *gin.Context) bool {
 			platformratelimit.WithRequested(1),
 		)
 		if err != nil {
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
-			return false
+			platformobservability.SysLog(fmt.Sprintf("authenticated API rate limiter unavailable: %v", err))
+			return true
 		}
 		if !allowed {
 			c.Status(http.StatusTooManyRequests)
@@ -170,10 +172,48 @@ func globalAuthenticatedRateLimitKey(c *gin.Context) string {
 }
 
 func CriticalRateLimit() func(c *gin.Context) {
-	if platformconfig.CriticalRateLimitEnable {
-		return rateLimitFactory(platformconfig.CriticalRateLimitNum, platformconfig.CriticalRateLimitDuration, "CT")
+	if !platformconfig.CriticalRateLimitEnable {
+		return defNext
 	}
-	return defNext
+
+	ipLimiter := rateLimitFactory(platformconfig.CriticalRateLimitNum, platformconfig.CriticalRateLimitDuration, "CT")
+	userLimiter := userRateLimitFactory(platformconfig.CriticalRateLimitNum, platformconfig.CriticalRateLimitDuration, "CTU")
+	return func(c *gin.Context) {
+		if c.GetInt("id") > 0 {
+			userLimiter(c)
+			return
+		}
+		ipLimiter(c)
+	}
+}
+
+// BlindBoxOpenRateLimit limits opening by authenticated user rather than the
+// shared client IP. Opening a batch one at a time is an expected workflow, so
+// a user must be able to reveal a large granted batch without waiting for a
+// shared window to expire. The transaction layer remains the authority for
+// stock consumption and reward issuance.
+func BlindBoxOpenRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(120, 60, "BBO")
+}
+
+// BalanceBlindBoxOpenRateLimit limits balance blind-box reveals per
+// authenticated user. It is intentionally separate from regular blind-box
+// reveals and payment creation so a shared network cannot exhaust another
+// user's allowance.
+func BalanceBlindBoxOpenRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(60, 60, "BBOB")
+}
+
+// BlindBoxPaymentRateLimit prevents duplicate payment creation while keeping
+// the limit scoped to the authenticated user rather than a shared client IP.
+func BlindBoxPaymentRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(10, 60, "BBP")
+}
+
+// RegistrationRateLimit allows up to five account-creation attempts from the
+// same IP in a rolling ten-minute window.
+func RegistrationRateLimit() gin.HandlerFunc {
+	return rateLimitFactory(5, 10*60, "RG10")
 }
 
 func DownloadRateLimit() func(c *gin.Context) {
@@ -188,7 +228,7 @@ func UploadRateLimit() func(c *gin.Context) {
 // instead of client IP, making it resistant to proxy rotation attacks.
 // Must be used AFTER authentication middleware (UserAuth).
 func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
-	if platformcache.RedisEnabled {
+	if platformcache.RedisEnabled && platformcache.RDB != nil {
 		return func(c *gin.Context) {
 			userId := c.GetInt("id")
 			if userId == 0 {
@@ -225,9 +265,7 @@ func userRedisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, key
 	rdb := platformcache.RDB
 	listLength, err := rdb.LLen(ctx, key).Result()
 	if err != nil {
-		fmt.Println(err.Error())
-		c.Status(http.StatusInternalServerError)
-		c.Abort()
+		platformobservability.SysLog(fmt.Sprintf("redis user rate limiter unavailable: %v", err))
 		return
 	}
 	if listLength < int64(maxRequestNum) {
@@ -237,17 +275,13 @@ func userRedisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, key
 		oldTimeStr, _ := rdb.LIndex(ctx, key, -1).Result()
 		oldTime, err := time.Parse(timeFormat, oldTimeStr)
 		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
+			platformobservability.SysLog(fmt.Sprintf("redis user rate limiter timestamp invalid: %v", err))
 			return
 		}
 		nowTimeStr := time.Now().Format(timeFormat)
 		nowTime, err := time.Parse(timeFormat, nowTimeStr)
 		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
+			platformobservability.SysLog(fmt.Sprintf("redis user rate limiter clock parse failed: %v", err))
 			return
 		}
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {

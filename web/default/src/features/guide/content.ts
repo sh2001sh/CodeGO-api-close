@@ -194,8 +194,7 @@ export const guideSections: GuideSection[] = [
     diagram_title: '盲盒规则',
     diagram_steps: [
       '按页面价格购买',
-      '普通额度直接入钱包',
-      'Claude 额度直接入 Claude 额度池',
+      '统一额度直接进入账户',
       '结果弹窗确认后完成入账',
     ],
     images: [
@@ -207,7 +206,7 @@ export const guideSections: GuideSection[] = [
     ],
     notes: [
       '购买前先确认当前价格、数量和支付方式。',
-      '抽到普通额度会直接进入钱包，Claude 额度会直接进入 Claude 额度池。',
+      '抽到统一额度后，会直接进入账户并永久有效。',
       '结果弹窗可以直接关闭，也可以点击确定确认领取。',
     ],
   },

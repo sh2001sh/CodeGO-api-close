@@ -44,8 +44,23 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	other["cache_ratio"] = cacheRatio
 	other["model_price"] = modelPrice
 	other["user_group_ratio"] = userGroupRatio
+	other["total_duration_ms"] = time.Since(relayInfo.StartTime).Milliseconds()
 	if relayInfo.HasSendResponse() {
 		other["frt"] = float64(relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds())
+		if attemptTTFT, ok := relayInfo.AttemptTTFT(); ok {
+			other["attempt_ttft_ms"] = attemptTTFT.Milliseconds()
+		}
+		if endToEndTTFT, ok := relayInfo.EndToEndTTFT(); ok {
+			other["e2e_ttft_ms"] = endToEndTTFT.Milliseconds()
+		}
+	}
+	if trace := relayInfo.FirstByteTrace.Snapshot(); trace != nil {
+		other["first_byte_trace"] = trace
+		if responseStartMs := trace["total_raw_event_ms"]; responseStartMs > 0 {
+			// A Responses lifecycle event confirms that the request reached the
+			// model service, but is not necessarily visible model text.
+			other["response_start_ms"] = responseStartMs
+		}
 	}
 	other["generation_time_ms"] = time.Since(relayInfo.StartTime).Milliseconds()
 	if relayInfo.HasSendResponse() {
@@ -131,15 +146,27 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 	if relayInfo.BillingSource != "" {
 		other["billing_source"] = relayInfo.BillingSource
 	}
+	if relayInfo.MarketplaceGroupID != "" {
+		other["marketplace_group_id"] = relayInfo.MarketplaceGroupID
+		other["marketplace_source_type"] = relayInfo.MarketplaceSourceType
+		other["credit_pool_policy"] = relayInfo.MarketplaceCreditPolicy
+		other["marketplace_multiplier"] = relayInfo.MarketplaceMultiplier
+		other["marketplace_platform_commission_rate"] = 0.05
+		other["marketplace_transaction_fee_rate"] = 0.0
+		other["marketplace_owner_net_rate"] = 0.95
+	}
+	billingQuotaCategory, billingQuotaLabel := billingQuotaSource(relayInfo)
+	if billingQuotaCategory != "" {
+		other["billing_quota_category"] = billingQuotaCategory
+		other["billing_quota_label"] = billingQuotaLabel
+	}
 	switch relayInfo.BillingSource {
-	case BillingSourceClaudeWallet:
-		other["billing_quota_field"] = "claude_quota"
-		if relayInfo.FinalPreConsumedQuota > 0 {
-			other["claude_quota_pre_consumed"] = relayInfo.FinalPreConsumedQuota
-		}
-	case BillingSourceSubscription:
 	case BillingSourceWallet:
 		other["billing_quota_field"] = "quota"
+		if relayInfo.FinalPreConsumedQuota > 0 {
+			other["quota_pre_consumed"] = relayInfo.FinalPreConsumedQuota
+		}
+	case BillingSourceSubscription:
 	default:
 		if relayInfo.BillingSource != "" {
 			other["billing_quota_field"] = "quota"
@@ -149,6 +176,18 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		other["billing_preference"] = relayInfo.UserSetting.BillingPreference
 	}
 	if relayInfo.BillingSource == BillingSourceSubscription {
+		if relayInfo.SubscriptionGroupMultiplier > 0 {
+			other["subscription_group_multiplier"] = relayInfo.SubscriptionGroupMultiplier
+		}
+		if relayInfo.SubscriptionPackageMultiplier > 0 && relayInfo.SubscriptionPackageMultiplier < 1 {
+			other["subscription_package_multiplier"] = relayInfo.SubscriptionPackageMultiplier
+		}
+		if relayInfo.SubscriptionQuotaScale > 0 {
+			other["subscription_quota_scale"] = relayInfo.SubscriptionQuotaScale
+		}
+		if relayInfo.SubscriptionGroupRatio > 0 {
+			other["subscription_group_ratio"] = relayInfo.SubscriptionGroupRatio
+		}
 		if relayInfo.SubscriptionId != 0 {
 			other["subscription_id"] = relayInfo.SubscriptionId
 		}
@@ -188,11 +227,46 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 	}
 }
 
+// BillingQuotaForLog returns the amount charged to the selected funding source.
+// The normal usage quota is calculated with the wallet/group ratio. Subscription
+// billing may apply a different scale, so exposing that raw quota would make a
+// subscription request appear undercharged in usage logs.
+func BillingQuotaForLog(relayInfo *relaycommon.RelayInfo, usageQuota int) int {
+	if relayInfo == nil {
+		return usageQuota
+	}
+	if relayInfo.BillingSettled {
+		return relayInfo.BillingSettledQuota
+	}
+	if relayInfo.BillingSource != BillingSourceSubscription {
+		return usageQuota
+	}
+	consumed := relayInfo.SubscriptionPreConsumed + relayInfo.SubscriptionPostDelta
+	if consumed <= 0 {
+		return usageQuota
+	}
+	return int(consumed)
+}
+
+func billingQuotaSource(relayInfo *relaycommon.RelayInfo) (category string, label string) {
+	if relayInfo == nil {
+		return "", ""
+	}
+	switch relayInfo.BillingSource {
+	case BillingSourceWallet:
+		return "universal", "通用额度"
+	case BillingSourceSubscription:
+		return "subscription", "GPT 套餐额度"
+	default:
+		return "", ""
+	}
+}
+
 func appendBillingContent(content string, relayInfo *relaycommon.RelayInfo) string {
-	if relayInfo == nil || relayInfo.BillingSource != BillingSourceClaudeWallet {
+	if relayInfo == nil || relayInfo.BillingSource != BillingSourceWallet {
 		return content
 	}
-	note := "Billed from Claude quota"
+	note := "Billed from unified credit"
 	if content == "" {
 		return note
 	}

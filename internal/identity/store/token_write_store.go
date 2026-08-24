@@ -34,6 +34,7 @@ func UpdateToken(token *identityschema.Token) (err error) {
 			"allow_ips",
 			"group",
 			"cross_group_retry",
+			"marketplace_multiplier_limit",
 		).
 		Updates(token).Error
 }

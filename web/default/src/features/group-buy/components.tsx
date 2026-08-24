@@ -22,14 +22,14 @@ const TIER_NAMES: Record<number, string> = {
 
 export function CollectiveBenefitHero() {
   return (
-    <section className='relative min-h-[310px] overflow-hidden rounded-2xl border border-white/10 bg-[#191512] text-white'>
+    <section className='relative min-h-[310px] overflow-hidden rounded-xl border border-white/10 bg-[var(--night-surface)] text-[var(--night-foreground)]'>
       <img
         src={collectiveBenefitHero}
         alt=''
         aria-hidden='true'
         className='absolute inset-0 h-full w-full object-cover object-center opacity-60 sm:object-right sm:opacity-85'
       />
-      <div className='absolute inset-0 bg-[linear-gradient(90deg,#191512_0%,rgba(25,21,18,0.96)_38%,rgba(25,21,18,0.2)_78%,rgba(25,21,18,0.05)_100%)]' />
+      <div className='absolute inset-0 bg-[linear-gradient(90deg,var(--night-surface)_0%,color-mix(in_srgb,var(--night-surface)_96%,transparent)_38%,color-mix(in_srgb,var(--night-surface)_20%,transparent)_78%,color-mix(in_srgb,var(--night-surface)_5%,transparent)_100%)]' />
 
       <div className='relative flex min-h-[310px] max-w-2xl flex-col justify-between p-6 sm:p-8 lg:p-10'>
         <div>

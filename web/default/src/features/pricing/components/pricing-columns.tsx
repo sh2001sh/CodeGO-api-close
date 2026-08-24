@@ -164,6 +164,18 @@ export function usePricingColumns(
       ),
       cell: ({ row }) => {
         const model = row.original
+        if (model.pricing_available === false) {
+          return (
+            <div className='min-w-[140px]'>
+              <span className='text-warning text-xs font-medium'>
+                {t('价格待配置')}
+              </span>
+              <div className='text-muted-foreground/60 mt-0.5 text-[10px]'>
+                {t('暂不展示预估费用')}
+              </div>
+            </div>
+          )
+        }
         const dynamicSummary = getDynamicPricingSummary(model, {
           tokenUnit,
           showRechargePrice,
@@ -288,6 +300,9 @@ export function usePricingColumns(
       header: t('Cached'),
       cell: ({ row }) => {
         const model = row.original
+        if (model.pricing_available === false) {
+          return <span className='text-muted-foreground/30 text-xs'>—</span>
+        }
         const dynamicSummary = getDynamicPricingSummary(model, {
           tokenUnit,
           showRechargePrice,

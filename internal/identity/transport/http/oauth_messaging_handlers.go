@@ -18,12 +18,18 @@ type weChatBindRequest struct {
 
 // HandleWeChatOAuth handles login-or-register via WeChat.
 func HandleWeChatOAuth(c *gin.Context) {
-	user, err := identityapp.CompleteWeChatLogin(c.Request.Context(), c.Query("code"))
+	session := sessions.Default(c)
+	affCode := c.Query("aff")
+	if affCode == "" {
+		affCode, _ = session.Get("aff").(string)
+	}
+	user, err := identityapp.CompleteWeChatLogin(c.Request.Context(), c.Query("code"), affCode)
 	if err != nil {
 		handleMessagingOAuthError(c, err)
 		return
 	}
-	if err := establishAuthenticatedSession(c, sessions.Default(c), user); err != nil {
+	session.Delete("aff")
+	if err := establishAuthenticatedSession(c, session, user); err != nil {
 		handleAuthError(c, err)
 	}
 }

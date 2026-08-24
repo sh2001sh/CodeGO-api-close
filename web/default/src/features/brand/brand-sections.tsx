@@ -39,8 +39,8 @@ export function OffersSection() {
         <div className='offer-story-detail'>
           <Gift className='size-5' />
           <p>
-            随机获得普通额度、Claude
-            专用额度或其他权益，为下一次调用补充一点意外。
+            随机获得通用额度、官方 GPT
+            专属额度或其他权益，为下一次调用补充一点意外。
           </p>
           <Button variant='outline' render={<Link to='/blind-box' />}>
             去开盲盒

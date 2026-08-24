@@ -1,9 +1,13 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
@@ -12,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 type relayErrorEnvelope struct {
@@ -20,6 +25,59 @@ type relayErrorEnvelope struct {
 		Type    string `json:"type"`
 		Code    string `json:"code"`
 	} `json:"error"`
+}
+
+func TestRefundRelayBillingSkipsRequestsWithoutRelayInfo(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	apiErr := types.NewErrorWithStatusCode(errors.New("service busy"), types.ErrorCodeServiceBusy, http.StatusServiceUnavailable)
+
+	require.Same(t, apiErr, refundRelayBillingIfNeeded(ctx, nil, apiErr))
+}
+
+func TestRelayFailureSampleRequiresUpstreamAttempt(t *testing.T) {
+	apiErr := types.NewErrorWithStatusCode(
+		errors.New("用户额度不足"),
+		types.ErrorCodeInsufficientUserQuota,
+		http.StatusForbidden,
+	)
+
+	require.False(t, shouldRecordRelayFailureSample(false, apiErr))
+	require.True(t, shouldRecordRelayFailureSample(true, apiErr))
+	require.False(t, shouldRecordRelayFailureSample(true, nil))
+	badRequest := types.NewErrorWithStatusCode(errors.New("invalid payload"), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest)
+	require.False(t, shouldRecordRelayFailureSample(true, badRequest))
+}
+
+func TestFinalRelayFailureLogRespectsNoRecordFlag(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("id", 1)
+
+	recordable := types.NewErrorWithStatusCode(
+		errors.New("upstream unavailable"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusServiceUnavailable,
+	)
+	localQuota := types.NewErrorWithStatusCode(
+		errors.New("用户额度不足"),
+		types.ErrorCodeInsufficientUserQuota,
+		http.StatusForbidden,
+		types.ErrOptionWithNoRecordErrorLog(),
+	)
+
+	require.True(t, shouldRecordFinalRelayFailureLog(ctx, recordable))
+	require.False(t, shouldRecordFinalRelayFailureLog(ctx, localQuota))
+	require.False(t, shouldRecordFinalRelayFailureLog(nil, recordable))
+}
+
+func TestRetryChannelReusableHonorsOnlyGlobalChannelStatus(t *testing.T) {
+	enabled := &gatewayschema.Channel{Id: 6, Status: constant.ChannelStatusEnabled}
+	require.True(t, isRetryChannelReusable(enabled))
+
+	disabled := &gatewayschema.Channel{Id: 6, Status: constant.ChannelStatusAutoDisabled}
+	require.False(t, isRetryChannelReusable(disabled))
+	require.False(t, isRetryChannelReusable(nil))
 }
 
 func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {
@@ -33,6 +91,97 @@ func TestShouldRetryGatewayTimeoutBeforeResponseDelivery(t *testing.T) {
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldNotRetryDeterministicNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	err := types.NewOpenAIError(errors.New("endpoint not found"), types.ErrorCodeBadResponseStatusCode, http.StatusNotFound)
+
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
+func TestShouldNotRetryAfterResponsesCreateWasWrittenUpstream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set(string(constant.ContextKeyResponsesReplayForbidden), true)
+	err := types.NewOpenAIError(errors.New("upstream websocket closed"), types.ErrorCodeBadResponseStatusCode, 524)
+
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
+func TestShouldRetryCapacityBeforeResponseDelivery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ctx.Set("original_model", "gpt-5.6-sol")
+	err := types.NewOpenAIError(
+		errors.New("selected model is at capacity. Please try a different model."),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusServiceUnavailable,
+	)
+
+	require.True(t, shouldRetry(ctx, err, 1))
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
+func TestShouldRetryToolRequestOnlyBeforeSemanticOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set("original_model", "gpt-5.6-sol")
+	relaycommon.InitializeRequestProfile(ctx, "gpt-5.6-sol", ctx.Request.URL.Path, relaycommon.RequestProfileHint{
+		IsStream: true,
+		HasTools: true,
+	})
+	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	gatewaystream.BeginRelayAttempt(ctx)
+	gatewaystream.MarkAttemptBootstrap(ctx)
+	err := types.NewOpenAIError(
+		errors.New("upstream temporarily unavailable"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusGatewayTimeout,
+	)
+
+	require.True(t, shouldRetry(ctx, err, 1))
+
+	gatewaystream.MarkSemanticCommitted(ctx)
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
+func TestShouldRetryGPTFailureOnlyWithinInitialWindow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	err := types.NewOpenAIError(errors.New("upstream timeout"), types.ErrorCodeBadResponseStatusCode, http.StatusGatewayTimeout)
+
+	t.Run("retries an early GPT failure", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		ctx.Set("original_model", "gpt-5.6-sol")
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-relaycommon.GPTInitialFailureRetryWindow+time.Second))
+
+		require.True(t, shouldRetry(ctx, err, 1))
+	})
+
+	t.Run("does not restart a late GPT failure", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		ctx.Set("original_model", "gpt-5.6-sol")
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-relaycommon.GPTInitialFailureRetryWindow-time.Second))
+
+		require.False(t, shouldRetry(ctx, err, 1))
+	})
+
+	t.Run("does not change non GPT retry behavior", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		ctx.Set("original_model", "claude-opus-5")
+		httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-relaycommon.GPTInitialFailureRetryWindow-time.Second))
+
+		require.True(t, shouldRetry(ctx, err, 1))
+	})
+}
+
 func TestShouldRetryResponsesStreamBeforeContentDespiteLifecycleEvent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -43,8 +192,127 @@ func TestShouldRetryResponsesStreamBeforeContentDespiteLifecycleEvent(t *testing
 	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
 	require.True(t, shouldRetry(ctx, err, 1))
 
-	ctx.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	gatewaystream.MarkSemanticCommitted(ctx)
 	require.False(t, shouldRetry(ctx, err, 1))
+}
+
+func TestFinalizeRelayErrorWritesSanitizedResponsesStreamErrorAfterCommit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyIsStream, true)
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	apiErr := types.NewOpenAIError(
+		errors.New("upstream channel #67 responses stream closed before response.completed (request id: hidden)"),
+		types.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	)
+
+	finalizeRelayError(ctx, types.RelayFormatOpenAI, nil, apiErr, "downstream")
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "event: error")
+	require.Contains(t, recorder.Body.String(), types.ModelUnavailableMessage)
+	require.Contains(t, recorder.Body.String(), "downstream")
+	require.NotContains(t, recorder.Body.String(), "channel #67")
+	require.NotContains(t, recorder.Body.String(), "hidden")
+}
+
+func TestFinalizeRelayErrorSkipsCancelledClient(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set(string(constant.ContextKeyClientGone), true)
+	apiErr := types.NewOpenAIError(
+		errors.New("responses stream closed before response.completed"),
+		types.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	)
+
+	finalizeRelayError(ctx, types.RelayFormatOpenAI, nil, apiErr, "downstream")
+
+	require.Empty(t, recorder.Body.String())
+}
+
+func TestFinalizeRelayErrorDoesNotAppendAfterResponsesTerminalEvent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyIsStream, true)
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	ctx.Set(string(constant.ContextKeyResponsesTerminalSent), true)
+	apiErr := types.NewOpenAIError(errors.New("upstream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	finalizeRelayError(ctx, types.RelayFormatOpenAIResponses, nil, apiErr, "downstream")
+	require.Empty(t, recorder.Body.String())
+}
+
+func TestShouldNotRetryAfterClientDisconnect(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set(string(constant.ContextKeyClientGone), true)
+	err := types.NewOpenAIError(errors.New("responses stream closed before response.completed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
+func TestShouldRetryLateResponsesStreamBeforeSemanticContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set("original_model", "gpt-5.6-sol")
+	httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, time.Now().Add(-2*relaycommon.GPTInitialFailureRetryWindow))
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	err := types.NewOpenAIError(errors.New("upstream produced no semantic output"), types.ErrorCodeChannelResponseTimeExceeded, http.StatusGatewayTimeout)
+
+	require.True(t, shouldRetry(ctx, err, 1))
+}
+
+func TestShouldRetryResponsesFailureAfterLegacyNinetySecondBudget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set("original_model", "gpt-5.6-sol")
+	ctx.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	startedAt := time.Now().Add(-121 * time.Second)
+	httpctx.SetContextKey(ctx, constant.ContextKeyRequestStartTime, startedAt)
+	profile := relaycommon.InitializeRequestProfile(
+		ctx,
+		"gpt-5.6-sol",
+		ctx.Request.URL.Path,
+		relaycommon.RequestProfileHint{IsStream: true, HasUpstreamState: true},
+	)
+	budget := relaycommon.StartRequestBudget(ctx, profile, startedAt)
+	require.True(t, budget.TryBeginAttempt(startedAt, "provider:a"))
+	err := types.NewOpenAIError(
+		errors.New("responses stream closed before response.completed"),
+		types.ErrorCodeBadResponse,
+		http.StatusBadGateway,
+	)
+
+	require.True(t, shouldRetry(ctx, err, 1))
+}
+
+func TestRouteSelectionWaitIsLimitedAndHonorsCancellation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	requestContext, cancel := context.WithCancel(context.Background())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(requestContext)
+	ctx.Set(routeSelectionExhaustedContextKey, true)
+
+	require.True(t, shouldWaitForRouteSelection(ctx, 0))
+	require.True(t, shouldWaitForRouteSelection(ctx, 1))
+	require.False(t, shouldWaitForRouteSelection(ctx, 2))
+
+	cancel()
+	started := time.Now()
+	require.False(t, waitForRouteSelection(ctx, 0))
+	require.Less(t, time.Since(started), 100*time.Millisecond)
 }
 
 func TestFinalizeRelayErrorMasksChineseUpstreamQuotaLeak(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 )
 
 const logSearchCountLimit = 10000
+const logGroupOptionLimit = 200
 
 func GetLogByTokenID(tokenID int) ([]*auditschema.Log, error) {
 	var logs []*auditschema.Log
@@ -38,9 +39,12 @@ func ListAdminLogs(query auditdomain.LogListQuery) ([]*auditschema.Log, int64, e
 	if query.LogType != auditschema.LogTypeUnknown {
 		tx = tx.Where("logs.type = ?", query.LogType)
 	}
+	if query.UserID > 0 {
+		tx = tx.Where("logs.user_id = ?", query.UserID)
+	}
 
 	tx = applyLogContainsFilter(tx, "logs.model_name", query.ModelName)
-	tx = applyLogContainsFilter(tx, "logs.username", query.Username)
+	tx = applyLogExactFilter(tx, "logs.username", query.Username)
 	tx = applyLogContainsFilter(tx, "logs.token_name", query.TokenName)
 	if query.RequestID != "" {
 		tx = tx.Where("logs.request_id = ?", query.RequestID)
@@ -57,9 +61,7 @@ func ListAdminLogs(query auditdomain.LogListQuery) ([]*auditschema.Log, int64, e
 	if query.Channel != 0 {
 		tx = tx.Where("logs.channel_id = ?", query.Channel)
 	}
-	if query.Group != "" {
-		tx = tx.Where("logs."+logGroupColumn()+" = ?", query.Group)
-	}
+	tx = applyLogContainsFilter(tx, "logs."+logGroupColumn(), query.Group)
 	if err := tx.Model(&auditschema.Log{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -97,9 +99,7 @@ func ListUserLogs(userID int, query auditdomain.LogListQuery) ([]*auditschema.Lo
 	if query.EndTimestamp != 0 {
 		tx = tx.Where("logs.created_at <= ?", query.EndTimestamp)
 	}
-	if query.Group != "" {
-		tx = tx.Where("logs."+logGroupColumn()+" = ?", query.Group)
-	}
+	tx = applyLogContainsFilter(tx, "logs."+logGroupColumn(), query.Group)
 	if err := tx.Model(&auditschema.Log{}).Limit(logSearchCountLimit).Count(&total).Error; err != nil {
 		platformobservability.SysError("failed to count user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
@@ -118,8 +118,12 @@ func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {
 	tx := platformdb.LogDB.Table("logs").Select("sum(quota) quota")
 	rpmTpmQuery := platformdb.LogDB.Table("logs").Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm")
 
-	tx = applyLogContainsFilter(tx, "username", query.Username)
-	rpmTpmQuery = applyLogContainsFilter(rpmTpmQuery, "username", query.Username)
+	if query.UserID > 0 {
+		tx = tx.Where("user_id = ?", query.UserID)
+		rpmTpmQuery = rpmTpmQuery.Where("user_id = ?", query.UserID)
+	}
+	tx = applyLogExactFilter(tx, "username", query.Username)
+	rpmTpmQuery = applyLogExactFilter(rpmTpmQuery, "username", query.Username)
 	tx = applyLogContainsFilter(tx, "token_name", query.TokenName)
 	rpmTpmQuery = applyLogContainsFilter(rpmTpmQuery, "token_name", query.TokenName)
 	if query.StartTimestamp != 0 {
@@ -134,11 +138,9 @@ func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {
 		tx = tx.Where("channel_id = ?", query.Channel)
 		rpmTpmQuery = rpmTpmQuery.Where("channel_id = ?", query.Channel)
 	}
-	if query.Group != "" {
-		groupCol := logGroupColumn()
-		tx = tx.Where(groupCol+" = ?", query.Group)
-		rpmTpmQuery = rpmTpmQuery.Where(groupCol+" = ?", query.Group)
-	}
+	groupCol := logGroupColumn()
+	tx = applyLogContainsFilter(tx, groupCol, query.Group)
+	rpmTpmQuery = applyLogContainsFilter(rpmTpmQuery, groupCol, query.Group)
 
 	tx = tx.Where("type = ?", auditschema.LogTypeConsume)
 	rpmTpmQuery = rpmTpmQuery.Where("type = ?", auditschema.LogTypeConsume)
@@ -153,6 +155,22 @@ func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {
 		return stat, errors.New("查询统计数据失败")
 	}
 	return stat, nil
+}
+
+// ListUsedLogGroups returns distinct groups visible to an administrator or user.
+func ListUsedLogGroups(userID int) ([]string, error) {
+	groups := make([]string, 0)
+	groupCol := logGroupColumn()
+	query := platformdb.LogDB.Table("logs").
+		Distinct(groupCol).
+		Where(groupCol + " <> ''")
+	if userID > 0 {
+		query = query.Where("user_id = ?", userID)
+	}
+	err := query.Order(groupCol+" ASC").
+		Limit(logGroupOptionLimit).
+		Pluck(groupCol, &groups).Error
+	return groups, err
 }
 
 func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64, error) {

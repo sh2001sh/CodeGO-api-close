@@ -1,17 +1,18 @@
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/glebarez/sqlite"
 	auditdomain "github.com/sh2001sh/new-api/internal/audit/domain"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
-	bountyschema "github.com/sh2001sh/new-api/internal/bounty/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	communityschema "github.com/sh2001sh/new-api/internal/community/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -26,6 +27,18 @@ import (
 	"time"
 )
 
+const (
+	defaultSQLMaxIdleConnections = 15
+	defaultSQLMaxOpenConnections = 50
+	defaultSQLMaxLifetimeSeconds = 300
+)
+
+type sqlPoolConfig struct {
+	maxIdle         int
+	maxOpen         int
+	maxLifetimeSecs int
+}
+
 // InitPrimaryDB initializes the primary application database.
 func InitPrimaryDB() error {
 	db, err := openDatabase("SQL_DSN", false)
@@ -33,7 +46,7 @@ func InitPrimaryDB() error {
 		platformobservability.FatalLog(err.Error())
 		return err
 	}
-	if platformconfig.DebugEnabled {
+	if platformconfig.SQLDebugEnabled {
 		db = db.Debug()
 	}
 	platformdb.DB = db
@@ -47,9 +60,20 @@ func InitPrimaryDB() error {
 	if err != nil {
 		return err
 	}
-	sqlDB.SetMaxIdleConns(platformconfig.GetEnvOrDefaultInt("SQL_MAX_IDLE_CONNS", 100))
-	sqlDB.SetMaxOpenConns(platformconfig.GetEnvOrDefaultInt("SQL_MAX_OPEN_CONNS", 1000))
-	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(platformconfig.GetEnvOrDefaultInt("SQL_MAX_LIFETIME", 60)))
+	configureSQLPool(sqlDB)
+	// SQLite local deployments need additive marketplace columns even when
+	// full legacy AutoMigrate is intentionally disabled.
+	if platformdb.UsingSQLite {
+		if err := migrateMarketplaceModelVerification(platformdb.DB); err != nil {
+			return err
+		}
+		if err := migrateMarketplaceAutoRoutePool(platformdb.DB); err != nil {
+			return err
+		}
+		if err := migrateMarketplaceTransportCapabilities(platformdb.DB); err != nil {
+			return err
+		}
+	}
 
 	if !platformconfig.IsMasterNode {
 		return nil
@@ -75,7 +99,7 @@ func InitLogDB() error {
 		platformobservability.FatalLog(err.Error())
 		return err
 	}
-	if platformconfig.DebugEnabled {
+	if platformconfig.SQLDebugEnabled {
 		db = db.Debug()
 	}
 	platformdb.LogDB = db
@@ -89,9 +113,7 @@ func InitLogDB() error {
 	if err != nil {
 		return err
 	}
-	sqlDB.SetMaxIdleConns(platformconfig.GetEnvOrDefaultInt("SQL_MAX_IDLE_CONNS", 100))
-	sqlDB.SetMaxOpenConns(platformconfig.GetEnvOrDefaultInt("SQL_MAX_OPEN_CONNS", 1000))
-	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(platformconfig.GetEnvOrDefaultInt("SQL_MAX_LIFETIME", 60)))
+	configureSQLPool(sqlDB)
 
 	if !platformconfig.IsMasterNode {
 		return nil
@@ -103,6 +125,45 @@ func InitLogDB() error {
 
 	platformobservability.SysLog("database migration started")
 	return migrateLogDB()
+}
+
+func configureSQLPool(sqlDB *sql.DB) {
+	if sqlDB == nil {
+		return
+	}
+	config := resolveSQLPoolConfig()
+	sqlDB.SetMaxIdleConns(config.maxIdle)
+	sqlDB.SetMaxOpenConns(config.maxOpen)
+	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(config.maxLifetimeSecs))
+	platformobservability.SysLog(fmt.Sprintf(
+		"database connection pool configured: max_open=%d max_idle=%d max_lifetime=%ds",
+		config.maxOpen,
+		config.maxIdle,
+		config.maxLifetimeSecs,
+	))
+}
+
+func resolveSQLPoolConfig() sqlPoolConfig {
+	maxOpen := platformconfig.GetEnvOrDefaultInt("SQL_MAX_OPEN_CONNS", defaultSQLMaxOpenConnections)
+	if maxOpen <= 0 {
+		maxOpen = defaultSQLMaxOpenConnections
+	}
+	maxIdle := platformconfig.GetEnvOrDefaultInt("SQL_MAX_IDLE_CONNS", defaultSQLMaxIdleConnections)
+	if maxIdle < 0 {
+		maxIdle = defaultSQLMaxIdleConnections
+	}
+	if maxIdle > maxOpen {
+		maxIdle = maxOpen
+	}
+	maxLifetimeSecs := platformconfig.GetEnvOrDefaultInt("SQL_MAX_LIFETIME", defaultSQLMaxLifetimeSeconds)
+	if maxLifetimeSecs <= 0 {
+		maxLifetimeSecs = defaultSQLMaxLifetimeSeconds
+	}
+	return sqlPoolConfig{
+		maxIdle:         maxIdle,
+		maxOpen:         maxOpen,
+		maxLifetimeSecs: maxLifetimeSecs,
+	}
 }
 
 // CloseDatabases closes the primary and log database handles.
@@ -185,6 +246,8 @@ func migratePrimaryDB() error {
 
 	err := platformdb.DB.AutoMigrate(
 		&gatewayschema.Channel{},
+		&gatewayschema.ResponsesBackgroundJob{},
+		&gatewayschema.ResponsesBackgroundEvent{},
 		&identityschema.Token{},
 		&identityschema.User{},
 		&identitydomain.PasskeyCredential{},
@@ -215,12 +278,15 @@ func migratePrimaryDB() error {
 		&commerceschema.UserSubscription{},
 		&commerceschema.SubscriptionPreConsumeRecord{},
 		&commerceschema.GroupBuyOrder{},
+		&commerceschema.GroupBuyMember{},
 		&commerceschema.BlindBoxOrder{},
 		&commerceschema.BlindBoxGrant{},
 		&commerceschema.BlindBoxCredit{},
 		&commerceschema.BlindBoxOpenRecord{},
 		&commerceschema.BlindBoxProp{},
+		&commerceschema.BlindBoxPropGift{},
 		&commerceschema.BlindBoxPityState{},
+		&commerceschema.BalanceBlindBoxPityState{},
 		&workflowschema.GeneMapShare{},
 		&identitydomain.UserWeChatBinding{},
 		&identitydomain.MiniProgramBindCode{},
@@ -238,16 +304,17 @@ func migratePrimaryDB() error {
 		&identitydomain.DesktopDiagnosticReport{},
 		&identitydomain.DesktopTelemetryEvent{},
 		&identitydomain.ImageWorkspaceItem{},
-		&bountyschema.BountyTask{},
-		&bountyschema.BountyApplication{},
-		&bountyschema.BountyMaterialRequest{},
-		&bountyschema.BountyMaterialReply{},
-		&bountyschema.BountySubmission{},
-		&bountyschema.BountyDispute{},
-		&bountyschema.BountyEvent{},
-		&bountyschema.BountyNotification{},
-		&bountyschema.BountyReport{},
 		&communityschema.Resource{},
+		&marketplaceschema.Channel{},
+		&marketplaceschema.ChannelIDSequence{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{},
+		&marketplaceschema.GPT56MappingRun{},
+		&marketplaceschema.RankingSnapshot{},
+		&marketplaceschema.MultiplierTrendSnapshot{},
+		&marketplaceschema.ChannelFeedback{},
+		&marketplaceschema.Settlement{},
+		&marketplaceschema.AutoRoutePoolMember{},
 	)
 	if err != nil {
 		return err
@@ -287,7 +354,7 @@ func ensureCodeGoSchemas() error {
 	if !platformdb.UsingPostgreSQL {
 		return nil
 	}
-	schemas := []string{"billing", "gateway", "workflow", "readmodel", "audit", "platform"}
+	schemas := []string{"billing", "gateway", "workflow", "readmodel", "audit", "platform", "marketplace"}
 	for _, schema := range schemas {
 		if err := platformdb.DB.Exec("CREATE SCHEMA IF NOT EXISTS " + schema).Error; err != nil {
 			return err

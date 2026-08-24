@@ -11,6 +11,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 
 	"github.com/sh2001sh/new-api/types"
@@ -65,6 +66,31 @@ func ListAllChannelSummaries() ([]*gatewayschema.Channel, error) {
 	return channels, err
 }
 
+// HasEnabledChannelForGroup reports whether at least one enabled channel is
+// assigned to the group. It protects administrative routing configuration from
+// pointing user traffic at a group with no candidates.
+func HasEnabledChannelForGroup(group string) (bool, error) {
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return false, nil
+	}
+	channels, err := ListAllChannelSummaries()
+	if err != nil {
+		return false, err
+	}
+	for _, channel := range channels {
+		if channel.Status != constant.ChannelStatusEnabled {
+			continue
+		}
+		for _, channelGroup := range channel.GetGroups() {
+			if strings.TrimSpace(channelGroup) == group {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 // SearchChannels searches channels for admin views.
 func SearchChannels(keyword string, group string, modelName string, idSort bool, sortOptions ...ChannelSortOptions) ([]*gatewayschema.Channel, error) {
 	var channels []*gatewayschema.Channel
@@ -79,7 +105,9 @@ func SearchChannels(keyword string, group string, modelName string, idSort bool,
 	}
 
 	order := resolveChannelSortOptions(idSort, sortOptions)
-	baseQuery := platformdb.DB.Model(&gatewayschema.Channel{}).Omit("key")
+	baseQuery := platformdb.DB.Model(&gatewayschema.Channel{}).
+		Where("channel_scope <> ?", gatewayschema.ChannelScopeExternal).
+		Omit("key")
 
 	whereClause := "(id = ? OR name LIKE ? OR `key` = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 	if platformdb.UsingPostgreSQL {
@@ -266,7 +294,9 @@ func SearchChannelTags(keyword string, group string, modelName string, idSort bo
 		order = "id desc"
 	}
 
-	baseQuery := platformdb.DB.Model(&gatewayschema.Channel{}).Omit("key")
+	baseQuery := platformdb.DB.Model(&gatewayschema.Channel{}).
+		Where("channel_scope <> ?", gatewayschema.ChannelScopeExternal).
+		Omit("key")
 	whereClause := "(id = ? OR name LIKE ? OR " + keyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 	args := []any{platformtext.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + modelName + "%"}
 	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
@@ -311,8 +341,11 @@ func InitChannelCache() {
 		if channel.Status != constant.ChannelStatusEnabled {
 			continue
 		}
-		for _, group := range strings.Split(channel.Group, ",") {
-			for _, modelName := range strings.Split(channel.Models, ",") {
+		for _, group := range channel.GetGroups() {
+			if _, ok := newGroupToModelChannels[group]; !ok {
+				newGroupToModelChannels[group] = make(map[string][]int)
+			}
+			for _, modelName := range channel.GetModels() {
 				newGroupToModelChannels[group][modelName] = append(newGroupToModelChannels[group][modelName], channel.Id)
 			}
 		}
@@ -555,7 +588,14 @@ func GetNextEnabledChannelKey(channel *gatewayschema.Channel) (string, int, *typ
 		return "", 0, types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 	if !channel.ChannelInfo.IsMultiKey {
-		return channel.Key, 0, nil
+		key, err := platformsecurity.DecryptSecret(channel.Key)
+		if err != nil {
+			return "", 0, types.NewError(err, types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+		}
+		if strings.TrimSpace(key) == "" {
+			return "", 0, types.NewError(errors.New("no keys available"), types.ErrorCodeChannelNoAvailableKey)
+		}
+		return key, 0, nil
 	}
 
 	runtimeChannel := channel
@@ -622,6 +662,28 @@ func GetNextEnabledChannelKey(channel *gatewayschema.Channel) (string, int, *typ
 	default:
 		return keys[enabledIdx[0]], enabledIdx[0], nil
 	}
+}
+
+// GetEnabledChannelKeyByIndex returns the exact pinned key for a persistent
+// transport session and rejects keys that have since been disabled.
+func GetEnabledChannelKeyByIndex(channel *gatewayschema.Channel, index int) (string, *types.NewAPIError) {
+	if channel == nil || index < 0 {
+		return "", types.NewError(errors.New("invalid pinned channel key"), types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+	}
+	keys := channel.GetKeys()
+	if index >= len(keys) {
+		return "", types.NewError(errors.New("pinned channel key no longer exists"), types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+	}
+	if channel.ChannelInfo.IsMultiKey && channel.ChannelInfo.MultiKeyStatusList != nil {
+		if status, exists := channel.ChannelInfo.MultiKeyStatusList[index]; exists && status != constant.ChannelStatusEnabled {
+			return "", types.NewError(errors.New("pinned channel key is disabled"), types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+		}
+	}
+	key := strings.TrimSpace(keys[index])
+	if key == "" {
+		return "", types.NewError(errors.New("pinned channel key is empty"), types.ErrorCodeChannelNoAvailableKey, types.ErrOptionWithSkipRetry())
+	}
+	return key, nil
 }
 
 // IsChannelEnabledForGroupModel reports whether the channel can serve the group/model pair.
@@ -773,11 +835,11 @@ func cacheUpdateChannelStatus(channelID int, status int) {
 	}
 	channel.Status = status
 	if status == constant.ChannelStatusEnabled {
-		for _, group := range strings.Split(channel.Group, ",") {
+		for _, group := range channel.GetGroups() {
 			if _, ok := group2model2channels[group]; !ok {
 				group2model2channels[group] = make(map[string][]int)
 			}
-			for _, modelName := range strings.Split(channel.Models, ",") {
+			for _, modelName := range channel.GetModels() {
 				channelIDs := group2model2channels[group][modelName]
 				if isChannelIDInList(channelIDs, channelID) {
 					continue

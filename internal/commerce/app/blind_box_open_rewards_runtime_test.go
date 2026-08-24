@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"testing"
 
 	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
@@ -16,4 +17,13 @@ func TestPickBlindBoxTierNormalizesIncompleteProbability(t *testing.T) {
 
 	tier := pickBlindBoxTierForRoll(tiers, 0.4)
 	assert.Equal(t, "second", tier.Name)
+}
+
+func TestDefaultBalanceBlindBoxProbabilitiesSumToOne(t *testing.T) {
+	setting := blindboxsettings.Get()
+	total := 0.0
+	for _, tier := range setting.BalanceBlindBoxTiers {
+		total += tier.Probability
+	}
+	assert.LessOrEqual(t, math.Abs(total-1), 0.00000001)
 }

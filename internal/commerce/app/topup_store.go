@@ -5,6 +5,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
@@ -12,13 +13,22 @@ import (
 
 	"gorm.io/gorm"
 	"strings"
+	"time"
 )
 
 const topUpQueryWindowSeconds int64 = 30 * 24 * 60 * 60
 
 const searchTopUpCountHardLimit = 10000
 
-// CreatePendingTopUpOrderWithBlindBoxDiscount creates a pending top-up order and binds any reserved blind-box discount.
+const (
+	defaultPendingTopUpExpiryMinutes = 3
+	minimumPendingTopUpExpiryMinutes = 1
+	maximumPendingTopUpExpiryMinutes = 24 * 60
+)
+
+// CreatePendingTopUpOrderWithBlindBoxDiscount creates a pending top-up order
+// from its pre-discount price and applies at most one reserved card in the same
+// transaction. Checkout creators must not apply the card before calling it.
 func CreatePendingTopUpOrderWithBlindBoxDiscount(topUp *commerceschema.TopUp) (float64, error) {
 	if topUp == nil {
 		return 0, errors.New("topup is nil")
@@ -82,6 +92,63 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 		}
 		return nil
 	})
+}
+
+// PendingTopUpExpiry returns the maximum time an unpaid top-up can reserve a prop.
+func PendingTopUpExpiry() time.Duration {
+	minutes := platformconfig.GetEnvOrDefaultInt("TOPUP_PENDING_EXPIRY_MINUTES", defaultPendingTopUpExpiryMinutes)
+	if minutes < minimumPendingTopUpExpiryMinutes || minutes > maximumPendingTopUpExpiryMinutes {
+		minutes = defaultPendingTopUpExpiryMinutes
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+// ExpireDueTopUps cancels stale pending top-ups and releases their reserved props.
+func ExpireDueTopUps(limit int) (int, error) {
+	if limit <= 0 {
+		limit = 300
+	}
+
+	now := platformruntime.GetTimestamp()
+	cutoff := now - int64(PendingTopUpExpiry().Seconds())
+	var ids []int
+	if err := platformdb.DB.Model(&commerceschema.TopUp{}).
+		Where("status = ? AND create_time > 0 AND create_time <= ?", constant.TopUpStatusPending, cutoff).
+		Order("create_time asc, id asc").
+		Limit(limit).
+		Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+
+	expired := 0
+	for _, id := range ids {
+		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+			topUp := &commerceschema.TopUp{}
+			if err := tx.Set("gorm:query_option", "FOR UPDATE").
+				Where("id = ? AND status = ? AND create_time <= ?", id, constant.TopUpStatusPending, cutoff).
+				First(topUp).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				return err
+			}
+
+			topUp.Status = constant.TopUpStatusExpired
+			topUp.CompleteTime = now
+			if err := tx.Save(topUp).Error; err != nil {
+				return err
+			}
+			if err := ReleaseReservedBlindBoxPropByTradeNoTx(tx, topUp.TradeNo, commerceschema.BlindBoxPropOrderTypeTopup); err != nil {
+				return err
+			}
+			expired++
+			return nil
+		})
+		if err != nil {
+			return expired, err
+		}
+	}
+	return expired, nil
 }
 
 // GetUserTopUps loads recent top-up records for a specific user.

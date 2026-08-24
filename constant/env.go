@@ -1,6 +1,12 @@
 package constant
 
 var StreamingTimeout int
+var StreamingFirstByteTimeout int
+var StreamingLongContextFirstByteTimeout int
+var StreamingMaxDuration int
+var StreamingLongContextMaxDuration int
+var StreamingAdaptiveProgressTimeout int
+var StreamingAdaptiveInitialTimeout int
 var DifyDebug bool
 var MaxFileDownloadMB int
 var StreamScannerMaxBufferMB int

@@ -1,8 +1,8 @@
 package app
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"fmt"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"strings"
 	"time"
@@ -127,6 +127,7 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayIn
 		"upstream_error_code":  fmt.Sprintf("%v", oai.Code),
 		"violation_fee_marker": CSAMViolationMarker,
 	}
+	relaycommon.AttachRouteLogInfo(ctx, other)
 
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:      relayInfo.ChannelId,

@@ -54,7 +54,7 @@ export function GeneralError({
     : t('Please try again later.')
 
   return (
-    <div className={cn('h-svh w-full', className)}>
+    <div className={cn('codego-error-page h-svh w-full', className)}>
       <div className='m-auto flex h-full w-full flex-col items-center justify-center gap-2'>
         {!minimal && (
           <h1 className='text-[7rem] leading-tight font-bold'>
@@ -62,6 +62,15 @@ export function GeneralError({
           </h1>
         )}
         <span className='font-medium'>{title}</span>
+        {import.meta.env.DEV && error != null && (
+          <pre className='text-destructive max-w-3xl overflow-auto rounded border p-2 text-left text-xs whitespace-pre-wrap'>
+            {String(
+              (error as { stack?: string; message?: string }).message ?? error
+            )}
+            {'\n'}
+            {(error as { stack?: string }).stack ?? ''}
+          </pre>
+        )}
         <p className='text-muted-foreground text-center'>
           {t('We apologize for the inconvenience.')} <br /> {description}
         </p>

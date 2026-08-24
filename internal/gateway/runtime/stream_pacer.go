@@ -7,15 +7,14 @@ import (
 	"unicode"
 )
 
-const gptStreamTargetTokensPerSecond = 50
-
 const (
-	firstStreamChunkTokenBudget = 4
-	streamChunkTokenBudget      = 8
+	firstStreamChunkTokenBudget = 16
+	streamChunkTokenBudget      = 128
 )
 
-// StreamPacer keeps GPT text output in a believable sustained range after the
-// first text delta. Control frames and the first delta remain immediate.
+// StreamPacer splits large GPT deltas into protocol-safe fragments and tracks
+// visible output. It never delays fragments: upstream flow control is the only
+// pacing source.
 type StreamPacer struct {
 	started         bool
 	firstContentAt  time.Time
@@ -33,6 +32,9 @@ func (p *StreamPacer) Pace(ctx context.Context, text string) error {
 	if p == nil || text == "" {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	tokens := estimateStreamTokens(text)
 	if tokens <= 0 {
 		return nil
@@ -45,18 +47,6 @@ func (p *StreamPacer) Pace(ctx context.Context, text string) error {
 	}
 
 	p.estimatedTokens += tokens
-	targetAt := p.firstContentAt.Add(
-		time.Duration(p.estimatedTokens) * time.Second / gptStreamTargetTokensPerSecond,
-	)
-	if wait := time.Until(targetAt); wait > 0 {
-		timer := time.NewTimer(wait)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
 	return nil
 }
 
@@ -78,7 +68,7 @@ func (p *StreamPacer) OutputDuration() (time.Duration, bool) {
 }
 
 // SplitText breaks oversized text deltas into small, protocol-safe fragments.
-// The first fragment is emitted immediately; later fragments are paced by Pace.
+// Every fragment is emitted immediately.
 func (p *StreamPacer) SplitText(text string) []string {
 	if text == "" {
 		return nil
@@ -120,6 +110,7 @@ func (p *StreamPacer) SplitText(text string) []string {
 			current.Reset()
 			tokens = 0
 			latinRunes = 0
+			budget = streamChunkTokenBudget
 		}
 	}
 	if current.Len() > 0 {

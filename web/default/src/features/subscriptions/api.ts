@@ -205,7 +205,9 @@ export async function getSubscriptionOrderStatus(
   return res.data
 }
 
-export async function cancelSubscriptionOrder(tradeNo: string): Promise<ApiResponse> {
+export async function cancelSubscriptionOrder(
+  tradeNo: string
+): Promise<ApiResponse> {
   const res = await api.post(`/api/subscription/orders/${tradeNo}/cancel`)
   return res.data
 }
@@ -261,12 +263,12 @@ export async function consumeSubscriptionResetOpportunity(): Promise<
 
 export async function createSubscriptionClaudeConversion(payload: {
   subscriptionId: number
-  sourceQuota: number
+  conversionPercent: number
   requestId: string
 }): Promise<ApiResponse<SubscriptionClaudeConversionResult>> {
   const res = await api.post('/api/subscription/self/claude-conversions', {
     subscription_id: payload.subscriptionId,
-    source_quota: payload.sourceQuota,
+    conversion_percent: payload.conversionPercent,
     request_id: payload.requestId,
   })
   return res.data

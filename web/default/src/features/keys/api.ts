@@ -17,6 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import {
+  loadSelectableMarketplaceGroups,
+  type MarketplaceGroupPage,
+} from './lib/marketplace-group-options'
 import type {
   ApiKey,
   ApiResponse,
@@ -46,6 +50,21 @@ export interface DesktopImportLinkResponse {
   tool: string
   token_name: string
   provider_name: string
+}
+
+export interface ApiKeyGroupOptionData {
+  value: string
+  label: string
+  desc: string
+  ratio?: number | string
+  subscriptionEnabled?: boolean
+  subscriptionRatio?: number
+  successRate?: number | null
+  requestCount?: number
+  category: 'official' | 'marketplace' | 'marketplace_auto'
+  disabled?: boolean
+  models?: string[]
+  mappingStatus?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
 }
 
 // ============================================================================
@@ -120,6 +139,21 @@ export async function updateApiKeyStatus(
   return res.data
 }
 
+export async function testApiKeyConnectivity(
+  id: number,
+  model: string
+): Promise<
+  ApiResponse<{
+    model: string
+    group: string
+    channel_id: number
+    latency_ms: number
+  }>
+> {
+  const res = await api.post(`/api/token/${id}/test`, { model })
+  return res.data
+}
+
 // Fetch the real (unmasked) key for a token by ID
 export async function fetchTokenKey(
   id: number
@@ -143,4 +177,42 @@ export async function createDesktopImportLink(
 ): Promise<ApiResponse<DesktopImportLinkResponse>> {
   const res = await api.post('/api/desktop/import/deeplink', data)
   return res.data
+}
+
+export async function getSelectableMarketplaceGroups(): Promise<
+  ApiKeyGroupOptionData[]
+> {
+  const groups = await loadSelectableMarketplaceGroups(
+    async (page, pageSize) => {
+      const query = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+        include_access: 'true',
+        sort: 'score',
+        direction: 'desc',
+        window_hours: '24',
+      })
+      const res = await api.get<ApiResponse<MarketplaceGroupPage>>(
+        `/api/marketplace/groups?${query.toString()}`
+      )
+      if (!res.data.success || !res.data.data) {
+        throw new Error(res.data.message || 'Failed to load marketplace groups')
+      }
+      return res.data.data
+    }
+  )
+
+  return groups.map((group) => ({
+    value: `market:${group.id}`,
+    label: group.system_display_name,
+    desc: `${group.source_label || '来源待审核'} · 余额与套餐均可使用`,
+    ratio: group.multiplier,
+    subscriptionEnabled: group.subscription_enabled,
+    subscriptionRatio: group.subscription_multiplier,
+    successRate: group.success_rate,
+    requestCount: group.request_count,
+    mappingStatus: group.gpt56_mapping_status || '',
+    category: 'marketplace' as const,
+    models: group.models,
+  }))
 }

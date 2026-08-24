@@ -38,7 +38,6 @@ interface UserQuotaSectionProps {
   currencyLabel: string
   tokensOnly: boolean
   onAdjustQuota: () => void
-  onAdjustClaudeQuota: () => void
 }
 
 function formatQuotaInput(value: number | undefined, tokensOnly: boolean) {
@@ -57,7 +56,7 @@ export function UserQuotaSection(props: UserQuotaSectionProps) {
         render={({ field }) => (
           <FormItem>
             <FormLabel>
-              {props.t('Remaining Quota ({{currency}})', {
+              {props.t('Universal credit ({{currency}})', {
                 currency: props.currencyLabel,
               })}
             </FormLabel>
@@ -75,42 +74,7 @@ export function UserQuotaSection(props: UserQuotaSectionProps) {
                 onClick={props.onAdjustQuota}
               >
                 <Pencil className='mr-1 h-4 w-4' />
-                {props.t('Adjust Quota')}
-              </Button>
-            </div>
-            <FormDescription>
-              {formatQuota(parseQuotaFromDollars(field.value || 0))}
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <FormField
-        control={props.form.control}
-        name='claude_quota_dollars'
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>
-              {props.t('Claude Quota ({{currency}})', {
-                currency: props.currencyLabel,
-              })}
-            </FormLabel>
-            <div className='flex gap-2'>
-              <FormControl>
-                <Input
-                  value={formatQuotaInput(field.value, props.tokensOnly)}
-                  readOnly
-                  className='flex-1'
-                />
-              </FormControl>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={props.onAdjustClaudeQuota}
-              >
-                <Pencil className='mr-1 h-4 w-4' />
-                {props.t('Adjust Claude Quota')}
+                {props.t('Adjust universal credit')}
               </Button>
             </div>
             <FormDescription>

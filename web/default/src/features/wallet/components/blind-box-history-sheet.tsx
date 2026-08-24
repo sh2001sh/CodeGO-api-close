@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
+  Clock3,
   ChevronLeft,
   ChevronRight,
   Gift,
+  Hash,
   Loader2,
   PackageCheck,
   Sparkles,
@@ -20,6 +22,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { getBlindBoxHistory, isApiSuccess } from '../api'
+import { blindBoxGuaranteeLabel } from '../lib/blind-box-guarantee'
 import type { BlindBoxHistoryPage, BlindBoxRecord } from '../types'
 import { formatBlindBoxTimestamp, resolveRewardTone } from './blind-box-dialogs'
 
@@ -27,9 +30,13 @@ const PAGE_SIZE = 20
 
 const PROP_TITLES: Record<string, string> = {
   topup_discount_90: '充值九折卡',
-  subscription_discount_90: '套餐九折卡',
+  subscription_discount_90: '历史套餐折扣卡',
   consume_discount_95: '0.95 倍率卡',
   consume_discount_90: '0.9 倍率卡',
+  consume_discount_10: '15 分钟 0.1 倍率卡',
+  extra_draw: '再来一抽',
+  monthly_pass_multiplier: '套餐 0.1 倍率卡',
+  zero_hour_multiplier: '历史 0 倍率道具',
 }
 
 export function BlindBoxHistorySheet(props: {
@@ -44,8 +51,11 @@ export function BlindBoxHistorySheet(props: {
   useEffect(() => {
     if (!props.open) return
     let active = true
-    setLoading(true)
-    setError('')
+    queueMicrotask(() => {
+      if (!active) return
+      setLoading(true)
+      setError('')
+    })
     void getBlindBoxHistory(page, PAGE_SIZE)
       .then((response) => {
         if (!active) return
@@ -67,7 +77,7 @@ export function BlindBoxHistorySheet(props: {
   }, [page, props.open])
 
   useEffect(() => {
-    if (props.open) setPage(1)
+    if (props.open) queueMicrotask(() => setPage(1))
   }, [props.open])
 
   const totalPages = useMemo(
@@ -150,7 +160,6 @@ export function BlindBoxHistorySheet(props: {
 function HistoryRecord(props: { record: BlindBoxRecord }) {
   const record = props.record
   const detail = rewardDetail(record)
-  const Icon = rewardIcon(record)
 
   return (
     <div className='border-border/70 bg-background/50 rounded-xl border p-3.5'>
@@ -161,7 +170,7 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
             resolveRewardTone(record)
           )}
         >
-          <Icon className='size-4' />
+          <RewardIcon record={record} />
         </div>
         <div className='min-w-0 flex-1'>
           <div className='flex flex-wrap items-start justify-between gap-x-3 gap-y-1'>
@@ -175,14 +184,52 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
           <div className='text-muted-foreground mt-1 text-xs leading-5'>
             {detail.description}
           </div>
+          {record.lucky_number ? <LuckyNumberHistory record={record} /> : null}
           <div className='mt-2 flex flex-wrap gap-1.5'>
+            <HistoryTag>统一盲盒</HistoryTag>
             <HistoryTag>{detail.type}</HistoryTag>
-            {record.is_pity ? <HistoryTag>保底奖励</HistoryTag> : null}
+            {record.is_pity ? (
+              <HistoryTag>{blindBoxGuaranteeLabel(record)}</HistoryTag>
+            ) : null}
             {record.reward_type === 'prop' && record.prop_status ? (
               <HistoryTag>{propStatusLabel(record.prop_status)}</HistoryTag>
             ) : null}
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function RewardIcon(props: { record: BlindBoxRecord }) {
+  const className = 'size-4'
+  if (props.record.reward_type === 'prop') {
+    return <TicketPercent className={className} />
+  }
+  if (props.record.reward_type === 'subscription') {
+    return <PackageCheck className={className} />
+  }
+  if (props.record.reward_type === 'claude_quota') {
+    return <Sparkles className={className} />
+  }
+  return <Gift className={className} />
+}
+
+function LuckyNumberHistory(props: { record: BlindBoxRecord }) {
+  const { record } = props
+
+  return (
+    <div className='border-primary/20 bg-primary/[0.045] mt-2.5 flex flex-col gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between'>
+      <div className='flex min-w-0 items-center gap-2'>
+        <Hash className='text-primary size-4 shrink-0' aria-hidden='true' />
+        <span className='text-muted-foreground shrink-0 text-xs'>幸运号</span>
+        <span className='text-foreground font-mono text-base font-semibold tracking-widest tabular-nums'>
+          {record.lucky_number}
+        </span>
+      </div>
+      <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+        <Clock3 className='size-3.5 shrink-0' aria-hidden='true' />
+        仅限 {record.lucky_draw_date || '开出当日'} 有效
       </div>
     </div>
   )
@@ -198,6 +245,13 @@ function HistoryTag(props: { children: React.ReactNode }) {
 
 function rewardDetail(record: BlindBoxRecord) {
   if (record.reward_type === 'prop') {
+    if (record.reward_title === '再来一抽') {
+      return {
+        title: '再来一抽',
+        description: '已自动补发 1 个待开启盲盒，不占每日购买数量。',
+        type: '额外机会',
+      }
+    }
     const title = PROP_TITLES[record.prop_type || ''] || record.reward_title
     return {
       title: title || '实用道具奖励',
@@ -212,36 +266,35 @@ function rewardDetail(record: BlindBoxRecord) {
       type: '套餐',
     }
   }
-  if (record.reward_type === 'claude_quota') {
+  if (record.reward_type === 'claude_quota' || record.reward_type === 'quota') {
     return {
-      title: record.reward_title || `$${record.reward_usd} Claude 额度`,
-      description: `${formatQuota(record.credit_amount || 0)} 已进入 Claude 钱包，永久有效。`,
-      type: 'Claude 额度',
+      title:
+        record.reward_title ||
+        (record.credit_amount > 0
+          ? `${formatQuota(record.credit_amount)} 通用额度`
+          : `${record.reward_usd} USD 通用额度`),
+      description: `${formatQuota(record.credit_amount || 0)} 已进入通用额度钱包，永久有效。`,
+      type: '通用额度',
     }
   }
-  return {
-    title: record.reward_title || `$${record.reward_usd} 普通额度`,
-    description: `${formatQuota(record.credit_amount || 0)} 已进入普通钱包，永久有效。`,
-    type: '普通额度',
-  }
-}
-
-function rewardIcon(record: BlindBoxRecord) {
-  if (record.reward_type === 'prop') return TicketPercent
-  if (record.reward_type === 'subscription') return PackageCheck
-  if (record.reward_type === 'claude_quota') return Sparkles
-  return Gift
+  return { title: record.reward_title, description: '', type: '奖励' }
 }
 
 function propDescription(propType: string) {
+  if (propType === 'extra_draw')
+    return '已自动补发 1 个待开启盲盒，不占每日购买数量。'
   if (propType === 'topup_discount_90')
     return '下次钱包充值自动享受九折，仅使用一次。'
   if (propType === 'subscription_discount_90')
-    return '下次购买套餐自动享受九折，仅使用一次。'
+    return '迁移前获得的历史折扣卡，可转换为充值九折卡后使用。'
   if (propType === 'consume_discount_95')
-    return '手动启用后，额度消耗倍率按 0.95 计算，持续 24 小时。'
+    return '仅官方渠道可用，启用后按 0.95 倍率计算，持续 24 小时。'
   if (propType === 'consume_discount_90')
-    return '手动启用后，额度消耗倍率按 0.9 计算，持续 24 小时。'
+    return '仅官方渠道可用，启用后按 0.90 倍率计算，持续 24 小时。'
+  if (propType === 'consume_discount_10')
+    return '全部现有官方分组通用，无需切换专属分组；累计 15 分钟，可暂停。'
+  if (propType === 'monthly_pass_multiplier')
+    return '套餐赠送权益，无需切换分组；仅实际扣月卡额度时额外乘 0.1。'
   return '道具已进入“我的道具”，可按页面规则使用。'
 }
 

@@ -48,13 +48,22 @@ function resolveTopTier(payload?: LuckyNumberSelfPayload): MembershipTier {
 function resolveBestMatch(payload?: LuckyNumberSelfPayload): number {
   const winning = payload?.today_draw?.winning_number
   if (!payload || !winning) return 0
-  return payload.subscriptions.reduce((best, entry) => {
+  const subscriptionBest = payload.subscriptions.reduce((best, entry) => {
     const suffix = normalizeLuckyNumber(
       entry.subscription.lucky_number?.lucky_suffix ??
         entry.number?.lucky_suffix
     )
     return Math.max(best, getMatchedDigits(suffix, winning))
   }, 0)
+  return (payload.today_blind_box_numbers || []).reduce((best, entry) => {
+    if (entry.draw_date !== payload.today_draw?.draw_date) {
+      return best
+    }
+    return Math.max(
+      best,
+      getMatchedDigits(normalizeLuckyNumber(entry.lucky_suffix), winning)
+    )
+  }, subscriptionBest)
 }
 
 export function DailyLuckyNumberPage() {
@@ -96,12 +105,36 @@ export function DailyLuckyNumberPage() {
     staleTime: 60 * 1000,
   })
 
+  const payload = selfQuery.data
+  const todayPublicWinsQuery = useQuery({
+    queryKey: [
+      'daily-lucky-number',
+      'public-wins',
+      'today',
+      payload?.today_draw?.draw_date,
+    ],
+    enabled: Boolean(payload?.today_draw?.draw_date),
+    queryFn: async (): Promise<LuckyPublicWinPage> => {
+      const response = await getDailyLuckyNumberPublicWins(
+        1,
+        100,
+        payload?.today_draw?.draw_date
+      )
+      if (!response.success || !response.data) {
+        throw new Error(
+          response.message || 'Unable to load the public winners list.'
+        )
+      }
+      return response.data
+    },
+    staleTime: 60 * 1000,
+  })
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [])
 
-  const payload = selfQuery.data
   const countdownSeconds = useMemo(
     () =>
       Math.max(
@@ -115,12 +148,14 @@ export function DailyLuckyNumberPage() {
     void selfQuery.refetch()
     void historyQuery.refetch()
     void publicWinsQuery.refetch()
+    void todayPublicWinsQuery.refetch()
   }
 
   const refreshing =
     selfQuery.isFetching ||
     historyQuery.isFetching ||
-    publicWinsQuery.isFetching
+    publicWinsQuery.isFetching ||
+    todayPublicWinsQuery.isFetching
 
   const topTier = useMemo(() => resolveTopTier(payload), [payload])
   const bestMatch = useMemo(() => resolveBestMatch(payload), [payload])
@@ -180,31 +215,38 @@ export function DailyLuckyNumberPage() {
             </Alert>
           ) : payload ? (
             <>
-              <DrawStage
-                payload={payload}
-                countdownSeconds={countdownSeconds}
-                onOpenRules={openRules}
-              />
-              <LuckyMatchBoard
-                subscriptions={payload.subscriptions}
-                draw={payload.today_draw}
-                rewards={payload.recent_rewards}
-                rules={payload.rules}
-              />
-              <RewardLadder
-                rules={payload.rules}
-                tier={topTier}
-                matchedDigits={bestMatch}
-                onOpenRules={openRules}
-              />
-              <TodayWinnersPanel
-                records={publicWinsQuery.data?.records}
-                drawDate={payload.today_draw?.draw_date}
-                timezone={payload.timezone}
-                loading={publicWinsQuery.isLoading}
-                error={publicWinsQuery.isError}
-                onRetry={() => void publicWinsQuery.refetch()}
-              />
+              <div className='grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]'>
+                <div className='flex min-w-0 flex-col gap-5'>
+                  <DrawStage
+                    payload={payload}
+                    countdownSeconds={countdownSeconds}
+                    onOpenRules={openRules}
+                  />
+                  <LuckyMatchBoard
+                    subscriptions={payload.subscriptions}
+                    blindBoxNumbers={payload.today_blind_box_numbers || []}
+                    draw={payload.today_draw}
+                    rewards={payload.recent_rewards}
+                    rules={payload.rules}
+                  />
+                </div>
+                <div className='flex min-w-0 flex-col gap-5'>
+                  <RewardLadder
+                    rules={payload.rules}
+                    tier={topTier}
+                    matchedDigits={bestMatch}
+                    onOpenRules={openRules}
+                  />
+                  <TodayWinnersPanel
+                    records={todayPublicWinsQuery.data?.records}
+                    drawDate={payload.today_draw?.draw_date}
+                    timezone={payload.timezone}
+                    loading={todayPublicWinsQuery.isLoading}
+                    error={todayPublicWinsQuery.isError}
+                    onRetry={() => void todayPublicWinsQuery.refetch()}
+                  />
+                </div>
+              </div>
               <HistoryPanel
                 tab={historyTab}
                 onTabChange={setHistoryTab}

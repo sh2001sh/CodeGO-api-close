@@ -12,6 +12,7 @@ import { SiteSeo } from '@/components/seo'
 import { AdminRewardSetting } from './admin-reward-setting'
 import {
   getCommunityResourceConfig,
+  deleteCommunityResource,
   listAdminCommunityResources,
   listCommunityResources,
   listMyCommunityResources,
@@ -24,6 +25,7 @@ import { ResourceSubmitSheet } from './resource-submit-sheet'
 import type {
   CommunityResource,
   ResourceCategory,
+  ResourceStatus,
   SubmitResourceInput,
 } from './types'
 
@@ -39,12 +41,13 @@ export function CommunityResourcesPage() {
   const [searchInput, setSearchInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [category, setCategory] = useState<ResourceCategory | 'all'>('all')
+  const [adminStatus, setAdminStatus] = useState<ResourceStatus | 'all'>('all')
   const [page, setPage] = useState(1)
   const filters = {
     keyword,
     category,
     page,
-    status: view === 'admin' ? ('pending' as const) : undefined,
+    status: view === 'admin' ? adminStatus : undefined,
   }
 
   const configQuery = useQuery({
@@ -60,6 +63,7 @@ export function CommunityResourcesPage() {
     },
     enabled: view !== 'admin' || isAdmin,
   })
+  const result = resourcesQuery.data
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ['community-resources'] })
@@ -97,6 +101,17 @@ export function CommunityResourcesPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const deleteMutation = useMutation({
+    mutationFn: deleteCommunityResource,
+    onSuccess: () => {
+      if ((result?.items.length ?? 0) === 1 && page > 1) {
+        setPage((current) => Math.max(1, current - 1))
+      }
+      refresh()
+      toast.success(t('Resource deleted'))
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
   const configMutation = useMutation({
     mutationFn: updateCommunityResourceConfig,
     onSuccess: () => {
@@ -110,10 +125,9 @@ export function CommunityResourcesPage() {
     ['published', t('Resource library')],
     ['mine', t('My submissions')],
     ...(isAdmin
-      ? ([['admin', t('Review queue')]] as Array<[View, string]>)
+      ? ([['admin', t('Resource management')]] as Array<[View, string]>)
       : []),
   ]
-  const result = resourcesQuery.data
 
   function changeView(next: View) {
     setView(next)
@@ -237,6 +251,32 @@ export function CommunityResourcesPage() {
                     {t('Other')}
                   </NativeSelectOption>
                 </NativeSelect>
+                {view === 'admin' ? (
+                  <NativeSelect
+                    className='w-28 sm:w-36'
+                    value={adminStatus}
+                    onChange={(event) => {
+                      setAdminStatus(
+                        event.target.value as ResourceStatus | 'all'
+                      )
+                      setPage(1)
+                    }}
+                    aria-label={t('Filter by status')}
+                  >
+                    <NativeSelectOption value='all'>
+                      {t('All statuses')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value='pending'>
+                      {t('pending')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value='approved'>
+                      {t('approved')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value='rejected'>
+                      {t('rejected')}
+                    </NativeSelectOption>
+                  </NativeSelect>
+                ) : null}
                 <Button
                   type='submit'
                   variant='outline'
@@ -262,10 +302,21 @@ export function CommunityResourcesPage() {
               loading={resourcesQuery.isLoading}
               admin={view === 'admin'}
               reviewing={reviewMutation.isPending}
+              deletingId={
+                deleteMutation.isPending ? deleteMutation.variables : undefined
+              }
               config={configQuery.data}
               onReview={(resource, status, grantReward) =>
                 reviewMutation.mutate({ resource, status, grantReward })
               }
+              onDelete={async (resource) => {
+                try {
+                  await deleteMutation.mutateAsync(resource.id)
+                  return true
+                } catch {
+                  return false
+                }
+              }}
             />
 
             {resourcesQuery.isError ? (

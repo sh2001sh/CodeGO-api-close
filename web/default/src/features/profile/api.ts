@@ -25,8 +25,6 @@ import type {
   DeleteAccountRequest,
   CheckinStatusResponse,
   CheckinResponse,
-  MiniProgramBinding,
-  MiniProgramBindCodePayload,
 } from './types'
 
 // ============================================================================
@@ -127,25 +125,6 @@ export async function bindEmail(
  */
 export async function bindWeChat(code: string): Promise<ApiResponse> {
   const res = await api.get(`/api/oauth/wechat/bind?code=${code}`)
-  return res.data
-}
-
-export async function createMiniProgramBindCode(): Promise<
-  ApiResponse<MiniProgramBindCodePayload>
-> {
-  const res = await api.post('/api/user/miniprogram/bind-code')
-  return res.data
-}
-
-export async function getMiniProgramBinding(): Promise<
-  ApiResponse<MiniProgramBinding>
-> {
-  const res = await api.get('/api/user/miniprogram/binding')
-  return res.data
-}
-
-export async function deleteMiniProgramBinding(): Promise<ApiResponse> {
-  const res = await api.delete('/api/user/miniprogram/binding')
   return res.data
 }
 

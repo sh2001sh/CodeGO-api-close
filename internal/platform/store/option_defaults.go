@@ -141,10 +141,8 @@ func buildDefaultOptionMap() map[string]string {
 		"CreateCacheRatio":                     gatewaystore.CreateCacheRatio2JSONString(),
 		"GroupRatio":                           gatewaystore.GroupRatio2JSONString(),
 		"GroupGroupRatio":                      gatewaystore.GroupGroupRatio2JSONString(),
-		commerceschema.SubscriptionClaudeConversionEnabledOptionKey:          strconv.FormatBool(commerceschema.SubscriptionClaudeConversionEnabled),
-		commerceschema.SubscriptionClaudeConversionRatioNumeratorOptionKey:   strconv.Itoa(commerceschema.SubscriptionClaudeConversionRatioNumerator),
-		commerceschema.SubscriptionClaudeConversionRatioDenominatorOptionKey: strconv.Itoa(commerceschema.SubscriptionClaudeConversionRatioDenominator),
-		commerceschema.SubscriptionClaudeConversionExcludeDayPassOptionKey:   strconv.FormatBool(commerceschema.SubscriptionClaudeConversionExcludeDayPass),
+		gatewaystore.SubscriptionGroupPolicyOptionKey:               gatewaystore.SubscriptionGroupPolicy2JSONString(),
+		commerceschema.SubscriptionClaudeConversionEnabledOptionKey: strconv.FormatBool(commerceschema.SubscriptionClaudeConversionEnabled),
 		"UserUsableGroups":              gatewaygroups.UserUsableGroups2JSONString(),
 		"CompletionRatio":               gatewaystore.CompletionRatio2JSONString(),
 		"ImageRatio":                    gatewaystore.ImageRatio2JSONString(),
@@ -164,12 +162,14 @@ func buildDefaultOptionMap() map[string]string {
 		"StopOnSensitiveEnabled":        strconv.FormatBool(requestsettings.StopOnSensitiveEnabled),
 		"PromptSafetyEnabled":           strconv.FormatBool(requestsettings.PromptSafetyEnabled),
 		"SensitiveWords":                requestsettings.SensitiveWordsToString(),
+		"PromptAuditReviewRules":        requestsettings.PromptAuditReviewRulesToString(),
 		"StreamCacheQueueLength":        strconv.Itoa(requestsettings.StreamCacheQueueLength),
 		"AutomaticDisableKeywords":      platformops.AutomaticDisableKeywordsToString(),
 		"AutomaticDisableStatusCodes":   gatewaystore.AutomaticDisableStatusCodesToString(),
 		"AutomaticRetryStatusCodes":     gatewaystore.AutomaticRetryStatusCodesToString(),
 		"ExposeRatioEnabled":            strconv.FormatBool(gatewaystore.IsExposeRatioEnabled()),
 	}
+	optionMap["blind_box_setting.multiplier_card_route_group"] = "纯Pro号池"
 
 	if raw, err := platformencoding.Marshal(commercedomain.DefaultPointsRulesConfig()); err == nil {
 		optionMap[commercedomain.PointsRulesOptionKey] = string(raw)

@@ -36,7 +36,9 @@ data/
 .gocache-temp
 .gopath
 .tmp/
+.codex-temp/
 .playwright-cli/
+artifacts/
 output/playwright/
 web/default/.playwright-cli/
 web/default/output/playwright/

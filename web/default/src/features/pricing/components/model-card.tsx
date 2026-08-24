@@ -54,6 +54,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const usdExchangeRate = props.usdExchangeRate ?? 1
   const showRechargePrice = props.showRechargePrice ?? false
   const isTokenBased = isTokenBasedModel(props.model)
+  const pricingAvailable = props.model.pricing_available !== false
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
@@ -93,15 +94,15 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   return (
     <div
       className={cn(
-        'group bg-card relative flex min-h-[230px] flex-col overflow-hidden rounded-2xl border p-3 transition-all duration-200 sm:p-5',
+        'group bg-card relative flex min-h-[230px] flex-col overflow-hidden rounded-xl border p-3 transition-colors duration-200 sm:p-5',
         isFreeModel
-          ? 'border-success/25 hover:border-success/45 shadow-[0_0_18px_color-mix(in_oklch,var(--success)_6%,transparent)] hover:shadow-[0_0_22px_color-mix(in_oklch,var(--success)_14%,transparent)]'
-          : 'hover:border-foreground/18 hover:bg-card'
+          ? 'border-success/35 hover:border-success/55'
+          : 'hover:border-foreground/18'
       )}
     >
       {isFreeModel && (
         <div className='pointer-events-none absolute right-4 bottom-4 z-0'>
-          <Badge className='border-success/15 bg-success/8 text-success/55 rounded-full border px-3 py-1 text-[11px] tracking-[0.16em] uppercase shadow-none'>
+          <Badge className='border-success/25 bg-success/[0.06] text-success/70 rounded-[4px] border px-2.5 py-0.5 text-[11px] tracking-[0.14em] uppercase shadow-none'>
             <Sparkles className='size-3' />
             {t('Free')}
           </Badge>
@@ -127,7 +128,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             </h3>
 
             <div className='mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs sm:mt-1 sm:gap-x-3'>
-              {dynamicSummary ? (
+              {!pricingAvailable ? (
+                <span className='text-warning text-xs font-medium'>
+                  {t('价格待配置')}
+                </span>
+              ) : dynamicSummary ? (
                 dynamicSummary.isSpecialExpression ? (
                   <span className='min-w-0'>
                     <span className='text-warning'>
@@ -279,11 +284,12 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       <div className='border-border/60 relative z-10 mt-3 flex items-center justify-end gap-1.5 border-t pt-3'>
         <button
           type='button'
-          onClick={props.onClick}
-          className='text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition-colors sm:px-2.5 sm:py-1.5'
+          onClick={pricingAvailable ? props.onClick : undefined}
+          disabled={!pricingAvailable}
+          className='text-muted-foreground hover:text-foreground hover:bg-muted disabled:hover:text-muted-foreground inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent sm:px-2.5 sm:py-1.5'
         >
-          {t('Details')}
-          <ChevronRight className='size-3.5' />
+          {pricingAvailable ? t('Details') : t('价格待配置')}
+          {pricingAvailable && <ChevronRight className='size-3.5' />}
         </button>
         <button
           type='button'

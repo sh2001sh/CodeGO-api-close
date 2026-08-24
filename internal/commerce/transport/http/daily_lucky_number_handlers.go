@@ -30,12 +30,42 @@ func getDailyLuckyNumberHistory(c *gin.Context) {
 
 func getDailyLuckyNumberPublicWins(c *gin.Context) {
 	page := platformpagination.GetPageQuery(c)
-	payload, err := commerceapp.ListDailyLuckyNumberPublicWins(page.GetPage(), page.GetPageSize())
+	payload, err := commerceapp.ListDailyLuckyNumberPublicWins(page.GetPage(), page.GetPageSize(), c.Query("draw_date"))
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
 	httpapi.ApiSuccess(c, payload)
+}
+
+func getDailyLuckyRewardNotifications(c *gin.Context) {
+	payload, err := commerceapp.ListDailyLuckyRewardNotifications(c.GetInt("id"), 10)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, payload)
+}
+
+func markDailyLuckyRewardNotificationRead(c *gin.Context) {
+	notificationID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || notificationID <= 0 {
+		httpapi.ApiErrorMsg(c, "invalid notification id")
+		return
+	}
+	if err := commerceapp.MarkDailyLuckyRewardNotificationRead(c.GetInt("id"), notificationID); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, nil)
+}
+
+func markAllDailyLuckyRewardNotificationsRead(c *gin.Context) {
+	if err := commerceapp.MarkAllDailyLuckyRewardNotificationsRead(c.GetInt("id")); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, nil)
 }
 
 func getAdminDailyLuckyNumberConfig(c *gin.Context) {

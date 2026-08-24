@@ -11,6 +11,10 @@ var SessionSecret = uuid.New().String()
 var CryptoSecret = uuid.New().String()
 
 var DebugEnabled bool
+
+// SQLDebugEnabled is intentionally separate from application debug logging.
+// Production instances should keep GORM SQL tracing disabled unless explicitly opted in.
+var SQLDebugEnabled bool
 var MemoryCacheEnabled bool
 var IsMasterNode bool
 
@@ -26,9 +30,21 @@ var BatchUpdateInterval int
 
 var RelayTimeout int
 
-// RelayResponseHeaderTimeout bounds outbound connection, TLS, and response-header waits
-// without limiting a stream after the upstream has started responding.
+// RelayResponseHeaderTimeout optionally bounds text-model response-header waits.
+// Zero delegates first-response timing to the provider while connection and TLS
+// establishment retain their independent safety deadline.
 var RelayResponseHeaderTimeout int
+
+// ImageResponseHeaderTimeout bounds the initial wait for synchronous image
+// generation/edit responses. Image providers commonly spend longer preparing
+// an image before sending response headers, so text-model first-byte limits do
+// not apply to these endpoints.
+var ImageResponseHeaderTimeout int
 var RelayMaxIdleConns int
 var RelayMaxIdleConnsPerHost int
+var RelayMaxConnsPerHost int
+var RelayIdleConnTimeoutSeconds int
+var RelayTLSHandshakeTimeoutSeconds int
+var GroupStatusCacheSeconds int
+var RelayMaxConcurrentRequests int
 var TrustedProxies []string

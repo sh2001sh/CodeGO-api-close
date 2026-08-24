@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -22,17 +23,45 @@ type HasImage interface {
 }
 
 func GetFullRequestURL(baseURL string, requestURL string, channelType int) string {
-	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
+	fullRequestURL := joinBaseURLPath(baseURL, requestURL)
 
 	if strings.HasPrefix(baseURL, "https://gateway.ai.cloudflare.com") {
 		switch channelType {
 		case constant.ChannelTypeOpenAI:
-			fullRequestURL = fmt.Sprintf("%s%s", baseURL, strings.TrimPrefix(requestURL, "/v1"))
+			fullRequestURL = joinBaseURLPath(baseURL, strings.TrimPrefix(requestURL, "/v1"))
 		case constant.ChannelTypeAzure:
-			fullRequestURL = fmt.Sprintf("%s%s", baseURL, strings.TrimPrefix(requestURL, "/openai/deployments"))
+			fullRequestURL = joinBaseURLPath(baseURL, strings.TrimPrefix(requestURL, "/openai/deployments"))
 		}
 	}
 	return fullRequestURL
+}
+
+// JoinBaseURLPath accepts provider base URLs with or without a version prefix.
+// It is used by adapters that build provider-specific paths directly.
+func JoinBaseURLPath(baseURL string, requestPath string) string {
+	return joinBaseURLPath(baseURL, requestPath)
+}
+
+func joinBaseURLPath(baseURL string, requestPath string) string {
+	baseURL = strings.TrimSpace(baseURL)
+	requestPath = strings.TrimSpace(requestPath)
+	if baseURL == "" {
+		return requestPath
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(requestPath, "/")
+	}
+	basePath := strings.TrimRight(parsed.Path, "/")
+	relativePath := "/" + strings.TrimLeft(requestPath, "/")
+	if strings.HasSuffix(basePath, "/v1") && (relativePath == "/v1" || strings.HasPrefix(relativePath, "/v1/")) {
+		relativePath = strings.TrimPrefix(relativePath, "/v1")
+		if relativePath == "" {
+			relativePath = "/"
+		}
+	}
+	parsed.Path = strings.TrimRight(basePath, "/") + "/" + strings.TrimLeft(relativePath, "/")
+	return strings.TrimRight(parsed.String(), "/")
 }
 
 func GetAPIVersion(c *gin.Context) string {

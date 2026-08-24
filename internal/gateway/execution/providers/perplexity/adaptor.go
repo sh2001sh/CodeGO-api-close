@@ -39,7 +39,7 @@ func (a *Adaptor) Init(*relaycommon.RelayInfo) {}
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.RelayMode == gatewaycontract.RelayModeResponses {
-		return fmt.Sprintf("%s/v1/responses", info.ChannelBaseUrl), nil
+		return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/responses"), nil
 	}
 	return fmt.Sprintf("%s/chat/completions", info.ChannelBaseUrl), nil
 }

@@ -47,6 +47,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { GroupRatioVisualEditor } from './group-ratio-visual-editor'
 import { GroupSpecialUsableRulesEditor } from './group-special-usable-editor'
+import { SubscriptionGroupPolicyEditor } from './subscription-group-policy-editor'
 
 type GroupFormValues = {
   GroupRatio: string
@@ -56,6 +57,7 @@ type GroupFormValues = {
   AutoGroups: string
   DefaultUseAutoGroup: boolean
   GroupSpecialUsableGroup: string
+  SubscriptionGroupPolicy: string
 }
 
 type GroupRatioFormProps = {
@@ -129,6 +131,14 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               value={form.watch('GroupSpecialUsableGroup')}
               onChange={(value) =>
                 handleFieldChange('GroupSpecialUsableGroup', value)
+              }
+            />
+
+            <SubscriptionGroupPolicyEditor
+              groupRatio={form.watch('GroupRatio')}
+              value={form.watch('SubscriptionGroupPolicy')}
+              onChange={(value) =>
+                handleFieldChange('SubscriptionGroupPolicy', value)
               }
             />
 
@@ -273,6 +283,25 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormDescription>
                     {t(
                       'Nested JSON defining per-group rules for adding (+:), removing (-:), or appending usable groups.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='SubscriptionGroupPolicy'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Subscription billing')}</FormLabel>
+                  <FormControl>
+                    <Textarea rows={8} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'JSON map of billing group to subscription enablement and multiplier.'
                     )}
                   </FormDescription>
                   <FormMessage />

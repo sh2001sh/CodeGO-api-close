@@ -1,0 +1,198 @@
+package app
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/glebarez/sqlite"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	ownerInternalID := 101
+	foreignInternalID := 202
+	require.NoError(t, db.Create([]marketplaceschema.Channel{
+		{ID: "owner-channel", OwnerUserID: 10, InternalChannelID: &ownerInternalID, Status: "active", ProviderType: "openai"},
+		{ID: "foreign-channel", OwnerUserID: 11, InternalChannelID: &foreignInternalID, Status: "active", ProviderType: "openai"},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Group{
+		{ID: "owner-group", ChannelID: "owner-channel", OwnerUserID: 10, SystemDisplayName: "Codex-Plus-owner", InternalGroupName: "Codex-Plus-owner", PublicSlug: "owner", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1},
+		{ID: "foreign-group", ChannelID: "foreign-channel", OwnerUserID: 11, SystemDisplayName: "Codex-Plus-foreign", InternalGroupName: "Codex-Plus-foreign", PublicSlug: "foreign", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1},
+	}).Error)
+	require.NoError(t, db.Create([]identityschema.User{
+		{Id: 300, ExternalId: "A2B3C4", Username: "consumer-300", Password: "password", AffCode: "AFF300"},
+		{Id: 301, ExternalId: "D5E6F7", Username: "consumer-301", Password: "password", AffCode: "AFF301"},
+	}).Error)
+	now := time.Now().Unix()
+	require.NoError(t, logDB.Create([]auditschema.Log{
+		{UserId: 300, CreatedAt: now, Type: auditschema.LogTypeConsume, ChannelId: ownerInternalID, RequestId: "owner-success", ModelName: "gpt-5", Quota: 100, Username: "secret-user", TokenName: "secret-token", Ip: "127.0.0.1", Content: "secret-content", Other: "secret-other"},
+		{UserId: 301, CreatedAt: now - 1, Type: auditschema.LogTypeError, ChannelId: ownerInternalID, RequestId: "owner-error", UpstreamRequestId: "upstream-401", ModelName: "claude-sonnet", Content: "masked error", Other: `{"owner_error":"status_code=401, invalid upstream account","status_code":401,"error_type":"openai_error","error_code":"bad_response_status_code","retry_count":2,"request_path":"/v1/responses","total_duration_ms":12345,"e2e_ttft_ms":5300,"attempt_ttft_ms":3990}`},
+		{UserId: 999, CreatedAt: now - 2, Type: auditschema.LogTypeConsume, ChannelId: foreignInternalID, RequestId: "foreign-success", ModelName: "gpt-5"},
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{
+		RequestID: "owner-success", GroupID: "owner-group", OwnerUserID: 10, ConsumerUserID: 300,
+		ConsumerAmount: 100, PlatformCommission: 5, OwnerNetAmount: 95, Multiplier: 1,
+		Status: "pending", AvailableAt: time.Now().Add(time.Hour),
+	}).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{Page: 1, PageSize: 20})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, result.Total)
+	require.EqualValues(t, 2, result.Summary.RequestCount)
+	require.EqualValues(t, 1, result.Summary.SuccessCount)
+	require.EqualValues(t, 1, result.Summary.FailedCount)
+	require.Equal(t, int64(100), result.Summary.ConsumerAmount)
+	require.Equal(t, int64(95), result.Summary.OwnerIncome)
+	require.Len(t, result.Items, 2)
+	itemsByRequestID := make(map[string]OwnerUsageLogItem, len(result.Items))
+	for _, item := range result.Items {
+		itemsByRequestID[item.RequestID] = item
+	}
+	success := itemsByRequestID["owner-success"]
+	require.Equal(t, "A2B3C4", success.UserID)
+	require.Equal(t, int64(95), success.OwnerIncome)
+	require.Equal(t, "pending", success.IncomeStatus)
+	failed := itemsByRequestID["owner-error"]
+	require.Equal(t, "D5E6F7", failed.UserID)
+	require.Zero(t, failed.OwnerIncome)
+	require.Equal(t, "failed", failed.Status)
+	require.Equal(t, "upstream-401", failed.UpstreamRequestID)
+	require.Equal(t, "status_code=401, invalid upstream account", failed.ErrorMessage)
+	require.EqualValues(t, 5300, failed.FirstByteMs)
+	require.EqualValues(t, 3990, failed.AttemptTTFTMs)
+	require.EqualValues(t, 12345, failed.TotalDurationMs)
+	require.Equal(t, 401, failed.StatusCode)
+	require.Equal(t, 2, failed.RetryCount)
+	payload, err := json.Marshal(result.Items)
+	require.NoError(t, err)
+	for _, sensitiveKey := range []string{
+		`"user_id":300`,
+		`"user_id":301`,
+		`"username":`,
+		`"token_name":`,
+		`"ip":`,
+		`"content":`,
+		`"other":`,
+	} {
+		require.NotContains(t, string(payload), sensitiveKey)
+	}
+}
+
+func TestListOwnerUsageLogsSearchesOwnedDetailsAndExternalUser(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	internalID := 101
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "owned", OwnerUserID: 10, InternalChannelID: &internalID, Status: "active", ProviderType: "openai"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "owned-group", ChannelID: "owned", OwnerUserID: 10, InternalGroupName: "owned", PublicSlug: "owned", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1}).Error)
+	require.NoError(t, db.Create(&identityschema.User{Id: 801, ExternalId: "CG8B6L", Username: "private", Password: "password"}).Error)
+	require.NoError(t, logDB.Create([]auditschema.Log{
+		{UserId: 801, Type: auditschema.LogTypeError, ChannelId: internalID, RequestId: "req-find-me", ModelName: "gpt-5.6", Content: "masked", Other: `{"owner_error":"upstream websocket rejected","status_code":401}`},
+		{UserId: 801, Type: auditschema.LogTypeConsume, ChannelId: internalID, RequestId: "req-other", ModelName: "gpt-4.1"},
+	}).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{Search: "CG8B6L", Status: "failed"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.Equal(t, "req-find-me", result.Items[0].RequestID)
+
+	result, err = ListOwnerUsageLogs(10, OwnerUsageLogQuery{Search: "websocket rejected"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.Equal(t, "upstream websocket rejected", result.Items[0].ErrorMessage)
+}
+
+func TestListOwnerUsageLogsFiltersSingleOwnedChannel(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	firstInternalID, secondInternalID := 101, 102
+	require.NoError(t, db.Create([]marketplaceschema.Channel{
+		{ID: "first", OwnerUserID: 10, InternalChannelID: &firstInternalID, Status: "active", ProviderType: "openai"},
+		{ID: "second", OwnerUserID: 10, InternalChannelID: &secondInternalID, Status: "active", ProviderType: "openai"},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Group{
+		{ID: "first-group", ChannelID: "first", OwnerUserID: 10, SystemDisplayName: "First", InternalGroupName: "First", PublicSlug: "first", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1},
+		{ID: "second-group", ChannelID: "second", OwnerUserID: 10, SystemDisplayName: "Second", InternalGroupName: "Second", PublicSlug: "second", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1},
+	}).Error)
+	require.NoError(t, db.Create([]identityschema.User{
+		{Id: 201, ExternalId: "G8H9J2", Username: "consumer-201", Password: "password", AffCode: "AFF201"},
+		{Id: 202, ExternalId: "K3L4M5", Username: "consumer-202", Password: "password", AffCode: "AFF202"},
+	}).Error)
+	require.NoError(t, logDB.Create([]auditschema.Log{
+		{UserId: 201, Type: auditschema.LogTypeConsume, ChannelId: firstInternalID, RequestId: "first-request"},
+		{UserId: 202, Type: auditschema.LogTypeConsume, ChannelId: secondInternalID, RequestId: "second-request"},
+	}).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{ChannelID: "second"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "second", result.Items[0].ChannelID)
+	require.Equal(t, "K3L4M5", result.Items[0].UserID)
+}
+
+func TestListOwnerUsageLogsRejectsForeignChannelFilter(t *testing.T) {
+	openOwnerUsageLogTestDB(t)
+	_, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{ChannelID: "foreign-channel"})
+	require.EqualError(t, err, "渠道不存在或无权访问")
+}
+
+func TestListOwnerUsageLogsFiltersRowsAndIncomeByTimeRange(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	internalID := 101
+	reference := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, db.Create(&marketplaceschema.Channel{
+		ID: "owner-channel", OwnerUserID: 10, InternalChannelID: &internalID,
+		Status: "active", ProviderType: "openai",
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{
+		ID: "owner-group", ChannelID: "owner-channel", OwnerUserID: 10,
+		SystemDisplayName: "Owner", InternalGroupName: "Owner", PublicSlug: "owner",
+		SourceType: "marketplace_user", CreditPoolPolicy: "universal",
+		LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1,
+	}).Error)
+	require.NoError(t, logDB.Create([]auditschema.Log{
+		{CreatedAt: reference.Add(-48 * time.Hour).Unix(), Type: auditschema.LogTypeConsume, ChannelId: internalID, RequestId: "old"},
+		{CreatedAt: reference.Add(-2 * time.Hour).Unix(), Type: auditschema.LogTypeConsume, ChannelId: internalID, RequestId: "current"},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Settlement{
+		{RequestID: "old", GroupID: "owner-group", OwnerUserID: 10, ConsumerAmount: 100, OwnerNetAmount: 95, Status: "released", CreatedAt: reference.Add(-48 * time.Hour)},
+		{RequestID: "current", GroupID: "owner-group", OwnerUserID: 10, ConsumerAmount: 200, OwnerNetAmount: 190, Status: "pending", CreatedAt: reference.Add(-2 * time.Hour)},
+	}).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{
+		StartTimestamp: reference.Add(-24 * time.Hour).Unix(),
+		EndTimestamp:   reference.Unix(),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.EqualValues(t, 1, result.Summary.RequestCount)
+	require.Equal(t, int64(200), result.Summary.ConsumerAmount)
+	require.Equal(t, int64(190), result.Summary.OwnerIncome)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "current", result.Items[0].RequestID)
+}
+
+func openOwnerUsageLogTestDB(t *testing.T) (*gorm.DB, *gorm.DB) {
+	t.Helper()
+	originalDB, originalLogDB := platformdb.DB, platformdb.LogDB
+	originalSQLite, originalPostgreSQL := platformdb.UsingSQLite, platformdb.UsingPostgreSQL
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.LogDB = originalDB, originalLogDB
+		platformdb.UsingSQLite, platformdb.UsingPostgreSQL = originalSQLite, originalPostgreSQL
+	})
+	platformdb.UsingSQLite, platformdb.UsingPostgreSQL = true, false
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	logDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	platformdb.DB, platformdb.LogDB = db, logDB
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.Settlement{}))
+	require.NoError(t, logDB.AutoMigrate(&auditschema.Log{}))
+	return db, logDB
+}

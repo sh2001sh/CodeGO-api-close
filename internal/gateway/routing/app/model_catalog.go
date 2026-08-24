@@ -2,6 +2,7 @@ package app
 
 import (
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -99,39 +100,12 @@ func loadGatewayModelQuotaTypes(modelName string) []int {
 
 // CollectUserOpenAIModels returns the visible models for one user/token context.
 func CollectUserOpenAIModels(userID int, tokenModelLimitEnabled bool, tokenModelLimit map[string]bool, tokenGroup string) ([]dto.OpenAIModels, error) {
-	userOpenAIModels := make([]dto.OpenAIModels, 0)
-
-	acceptUnsetRatioModel := platformops.IsSelfUseModeEnabled()
-	if !acceptUnsetRatioModel && userID > 0 {
-		userSettings, _ := identitystore.LoadUserSetting(userID, false)
-		if userSettings.AcceptUnsetRatioModel {
-			acceptUnsetRatioModel = true
-		}
-	}
-
-	appendModel := func(modelName string) {
-		if !acceptUnsetRatioModel && !relaycommon.HasModelBillingConfig(modelName) {
-			return
-		}
-		if oaiModel, ok := openAIModelsMap[modelName]; ok {
-			oaiModel.SupportedEndpointTypes = loadGatewayModelSupportedEndpointTypes(modelName)
-			userOpenAIModels = append(userOpenAIModels, oaiModel)
-			return
-		}
-		userOpenAIModels = append(userOpenAIModels, dto.OpenAIModels{
-			Id:                     modelName,
-			Object:                 "model",
-			Created:                1626777600,
-			OwnedBy:                "custom",
-			SupportedEndpointTypes: loadGatewayModelSupportedEndpointTypes(modelName),
-		})
-	}
-
 	if tokenModelLimitEnabled {
+		models := make([]string, 0, len(tokenModelLimit))
 		for allowModel := range tokenModelLimit {
-			appendModel(allowModel)
+			models = append(models, allowModel)
 		}
-		return userOpenAIModels, nil
+		return CollectOpenAIModelsForNames(userID, models), nil
 	}
 
 	userGroup, err := identitystore.LoadUserGroup(userID, false)
@@ -154,10 +128,46 @@ func CollectUserOpenAIModels(userID int, tokenModelLimitEnabled bool, tokenModel
 	} else {
 		models = loadGatewayGroupEnabledModels(group)
 	}
-	for _, modelName := range models {
-		appendModel(modelName)
+	return CollectOpenAIModelsForNames(userID, models), nil
+}
+
+// CollectOpenAIModelsForNames builds the public model catalog entries for an
+// explicit model set while preserving the user's billing visibility policy.
+func CollectOpenAIModelsForNames(userID int, modelNames []string) []dto.OpenAIModels {
+	userOpenAIModels := make([]dto.OpenAIModels, 0, len(modelNames))
+	acceptUnsetRatioModel := platformops.IsSelfUseModeEnabled()
+	if !acceptUnsetRatioModel && userID > 0 {
+		userSettings, _ := identitystore.LoadUserSetting(userID, false)
+		acceptUnsetRatioModel = userSettings.AcceptUnsetRatioModel
 	}
-	return userOpenAIModels, nil
+
+	seen := make(map[string]struct{}, len(modelNames))
+	for _, modelName := range modelNames {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			continue
+		}
+		if _, ok := seen[modelName]; ok {
+			continue
+		}
+		seen[modelName] = struct{}{}
+		if !acceptUnsetRatioModel && !relaycommon.HasModelBillingConfig(modelName) {
+			continue
+		}
+		if oaiModel, ok := openAIModelsMap[modelName]; ok {
+			oaiModel.SupportedEndpointTypes = loadGatewayModelSupportedEndpointTypes(modelName)
+			userOpenAIModels = append(userOpenAIModels, oaiModel)
+			continue
+		}
+		userOpenAIModels = append(userOpenAIModels, dto.OpenAIModels{
+			Id:                     modelName,
+			Object:                 "model",
+			Created:                1626777600,
+			OwnedBy:                "custom",
+			SupportedEndpointTypes: loadGatewayModelSupportedEndpointTypes(modelName),
+		})
+	}
+	return userOpenAIModels
 }
 
 // BuildAnthropicModels adapts OpenAI model entries to the Anthropic list shape.

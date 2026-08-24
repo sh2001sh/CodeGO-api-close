@@ -84,19 +84,11 @@ export function useRedemption() {
           }
         } else {
           const quotaText = formatQuota(result.quota || 0)
-          if (result.wallet_type === 'claude') {
-            toast.success(
-              i18next.t('Redemption successful! Added Claude quota: {{quota}}', {
-                quota: quotaText,
-              })
-            )
-          } else {
-            toast.success(
-              i18next.t('Redemption successful! Added: {{quota}}', {
-                quota: quotaText,
-              })
-            )
-          }
+          toast.success(
+            i18next.t('Redemption successful! Added universal quota: {{quota}}', {
+              quota: quotaText,
+            })
+          )
         }
         await getSelf()
         return true

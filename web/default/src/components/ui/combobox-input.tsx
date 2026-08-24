@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 export type ComboboxInputOption = {
   value: string
   label: string
+  meta?: string
   icon?: React.ReactNode
 }
 
@@ -32,6 +33,7 @@ interface ComboboxInputProps {
   options: ComboboxInputOption[]
   value?: string
   onValueChange: (value: string) => void
+  onValueCommit?: (value: string) => void
   placeholder?: string
   emptyText?: string
   className?: string
@@ -43,6 +45,7 @@ export function ComboboxInput({
   options,
   value = '',
   onValueChange,
+  onValueCommit,
   placeholder = '请选择或输入...',
   emptyText = '未找到选项。',
   className,
@@ -60,7 +63,10 @@ export function ComboboxInput({
     () => options.find((option) => option.value === value),
     [options, value]
   )
-  const displayValue = open ? searchValue : (selectedOption?.label ?? value)
+  const selectedLabel = selectedOption?.meta
+    ? `${selectedOption.meta} · ${selectedOption.label}`
+    : selectedOption?.label
+  const displayValue = open ? searchValue : (selectedLabel ?? value)
 
   const filteredOptions = React.useMemo(() => {
     if (!searchValue.trim()) return options
@@ -68,7 +74,8 @@ export function ComboboxInput({
     return options.filter(
       (option) =>
         option.label.toLowerCase().includes(search) ||
-        option.value.toLowerCase().includes(search)
+        option.value.toLowerCase().includes(search) ||
+        option.meta?.toLowerCase().includes(search)
     )
   }, [options, searchValue])
 
@@ -97,6 +104,7 @@ export function ComboboxInput({
 
   const handleSelect = (selectedValue: string) => {
     onValueChange(selectedValue)
+    onValueCommit?.(selectedValue)
     setOpen(false)
     setSearchValue('')
     inputRef.current?.focus()
@@ -217,7 +225,14 @@ export function ComboboxInput({
                     )}
                   />
                   {option.icon && <span>{option.icon}</span>}
-                  <span className='truncate'>{option.label}</span>
+                  {option.meta && (
+                    <span className='border-border bg-muted text-muted-foreground shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] leading-none'>
+                      {option.meta}
+                    </span>
+                  )}
+                  <span className='min-w-0 truncate' title={option.label}>
+                    {option.label}
+                  </span>
                 </li>
               ))}
             </ul>

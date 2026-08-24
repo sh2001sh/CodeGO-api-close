@@ -809,6 +809,13 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	if streamErr != nil {
 		return nil, streamErr
 	}
+	if info.ReceivedResponseCount == 0 {
+		return nil, types.NewOpenAIError(
+			errors.New("upstream Claude stream ended without events"),
+			types.ErrorCodeBadResponse,
+			http.StatusBadGateway,
+		)
+	}
 	HandleStreamFinalResponse(c, info, claudeInfo)
 	return claudeInfo.Usage, nil
 }

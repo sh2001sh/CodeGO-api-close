@@ -119,42 +119,119 @@ func LoadTokenByKey(key string, fromDB bool) (token *identityschema.Token, err e
 	return token, err
 }
 
+func loadTokenByKeyWithSource(key string, fromDB bool) (*identityschema.Token, string, error) {
+	if !fromDB && platformcache.RedisReady() {
+		if token, err := cacheGetTokenByKey(key); err == nil {
+			return token, "redis", nil
+		}
+	}
+	token, err := loadTokenByKeyFromDB(key)
+	return token, "database", err
+}
+
+func loadTokenByKeyFromDB(key string) (*identityschema.Token, error) {
+	var token *identityschema.Token
+	err := platformdb.DB.Where(tokenKeyColumn()+" = ?", key).First(&token).Error
+	return token, err
+}
+
 func ValidateUserToken(key string) (token *identityschema.Token, err error) {
 	if key == "" {
+		logTokenAuthFailure("missing_key", key, "none")
 		return nil, identitydomain.ErrTokenNotProvided
 	}
-	token, err = LoadTokenByKey(key, false)
+	var source string
+	token, source, err = loadTokenByKeyWithSource(key, false)
 	if err == nil {
-		if token.Status == constant.TokenStatusExhausted ||
-			token.Status == constant.TokenStatusExpired ||
-			token.Status != constant.TokenStatusEnabled {
-			return token, identitydomain.ErrTokenInvalid
-		}
-		if token.ExpiredTime != -1 && token.ExpiredTime < platformruntime.GetTimestamp() {
-			if !platformcache.RedisEnabled {
-				token.Status = constant.TokenStatusExpired
-				if updateErr := updateTokenStatus(token); updateErr != nil {
-					platformobservability.SysLog("failed to update token status" + updateErr.Error())
+		if reason := tokenInvalidReason(token); reason != "" {
+			if source == "redis" {
+				dbToken, dbErr := loadTokenByKeyFromDB(key)
+				if dbErr == nil {
+					dbReason := tokenInvalidReason(dbToken)
+					if dbReason == "" {
+						if cacheErr := cacheSetToken(*dbToken); cacheErr != nil {
+							platformobservability.SysLog("token_auth_cache_refresh_failed: " + cacheErr.Error())
+						}
+						platformobservability.SysLog(fmt.Sprintf("token_auth_cache_fallback: key_fp=%s cached_reason=%s result=database_valid", tokenKeyFingerprint(key), reason))
+						return dbToken, nil
+					}
+					logTokenAuthFailure("database_"+dbReason, key, "database")
+					persistTokenInvalidStatusIfNeeded(dbToken, dbReason)
+					return dbToken, identitydomain.ErrTokenInvalid
 				}
-			}
-			return token, identitydomain.ErrTokenInvalid
-		}
-		if !token.UnlimitedQuota && token.RemainQuota <= 0 {
-			if !platformcache.RedisEnabled {
-				token.Status = constant.TokenStatusExhausted
-				if updateErr := updateTokenStatus(token); updateErr != nil {
-					platformobservability.SysLog("failed to update token status" + updateErr.Error())
+				if errors.Is(dbErr, gorm.ErrRecordNotFound) {
+					logTokenAuthFailure("not_found", key, "database")
+					return nil, identitydomain.ErrTokenInvalid
 				}
+				logTokenAuthFailure("database_error", key, "database")
+				return nil, fmt.Errorf("%w: %v", platformerrx.ErrDatabase, dbErr)
 			}
+			logTokenAuthFailure(reason, key, source)
+			persistTokenInvalidStatusIfNeeded(token, reason)
 			return token, identitydomain.ErrTokenInvalid
 		}
 		return token, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		logTokenAuthFailure("not_found", key, source)
+	} else {
+		logTokenAuthFailure("database_error", key, source)
 	}
 	platformobservability.SysLog("ValidateUserToken: failed to get token: " + err.Error())
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, identitydomain.ErrTokenInvalid
 	}
 	return nil, fmt.Errorf("%w: %v", platformerrx.ErrDatabase, err)
+}
+
+func tokenInvalidReason(token *identityschema.Token) string {
+	if token == nil {
+		return "not_found"
+	}
+	if token.Status == constant.TokenStatusExhausted {
+		return "exhausted"
+	}
+	if token.Status == constant.TokenStatusExpired {
+		return "expired"
+	}
+	if token.Status != constant.TokenStatusEnabled {
+		return "disabled"
+	}
+	if token.ExpiredTime != -1 && token.ExpiredTime < platformruntime.GetTimestamp() {
+		return "expired"
+	}
+	if !token.UnlimitedQuota && token.RemainQuota <= 0 {
+		return "exhausted"
+	}
+	return ""
+}
+
+func persistTokenInvalidStatusIfNeeded(token *identityschema.Token, reason string) {
+	if platformcache.RedisEnabled || token == nil {
+		return
+	}
+	if reason == "expired" {
+		token.Status = constant.TokenStatusExpired
+	} else if reason == "exhausted" {
+		token.Status = constant.TokenStatusExhausted
+	} else {
+		return
+	}
+	if updateErr := updateTokenStatus(token); updateErr != nil {
+		platformobservability.SysLog("failed to update token status: " + updateErr.Error())
+	}
+}
+
+func tokenKeyFingerprint(key string) string {
+	fingerprint := platformsecurity.GenerateHMAC(strings.TrimSpace(key))
+	if len(fingerprint) > 12 {
+		return fingerprint[:12]
+	}
+	return fingerprint
+}
+
+func logTokenAuthFailure(reason, key, source string) {
+	platformobservability.SysLog(fmt.Sprintf("token_auth_failed: key_fp=%s reason=%s source=%s", tokenKeyFingerprint(key), reason, source))
 }
 
 func DeleteUserToken(userID int, tokenID int) error {

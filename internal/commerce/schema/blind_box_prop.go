@@ -12,15 +12,20 @@ const (
 	BlindBoxPropTypeSubscriptionDiscount90 = "subscription_discount_90"
 	BlindBoxPropTypeConsumeDiscount95      = "consume_discount_95"
 	BlindBoxPropTypeConsumeDiscount90      = "consume_discount_90"
+	BlindBoxPropTypeConsumeDiscount10      = "consume_discount_10"
 	BlindBoxPropTypeZeroHourMultiplier     = "zero_hour_multiplier"
+	BlindBoxPropTypeMonthlyPassMultiplier  = "monthly_pass_multiplier"
+	BlindBoxPropTypeExtraDraw              = "extra_draw"
 )
 
 const (
 	BlindBoxPropStatusAvailable = "available"
 	BlindBoxPropStatusActive    = "active"
+	BlindBoxPropStatusPaused    = "paused"
 	BlindBoxPropStatusReserved  = "reserved"
 	BlindBoxPropStatusUsed      = "used"
 	BlindBoxPropStatusExpired   = "expired"
+	BlindBoxPropGiftCompleted   = "completed"
 )
 
 const (
@@ -40,17 +45,36 @@ type BlindBoxProp struct {
 	DiscountRate float64 `json:"discount_rate" gorm:"type:decimal(8,4);not null;default:0"`
 	Multiplier   float64 `json:"multiplier" gorm:"type:decimal(8,4);not null;default:1"`
 
-	DurationSeconds int64 `json:"duration_seconds" gorm:"bigint;not null;default:0"`
-	ActivatedAt     int64 `json:"activated_at" gorm:"bigint;index;default:0"`
-	ExpiresAt       int64 `json:"expires_at" gorm:"bigint;index;default:0"`
-	ReservedAt      int64 `json:"reserved_at" gorm:"bigint;default:0"`
-	UsedAt          int64 `json:"used_at" gorm:"bigint;default:0"`
+	DurationSeconds   int64 `json:"duration_seconds" gorm:"bigint;not null;default:0"`
+	RemainingSeconds  int64 `json:"remaining_seconds" gorm:"bigint;not null;default:0"`
+	MaxDiscountQuota  int64 `json:"max_discount_quota" gorm:"bigint;not null;default:0"`
+	UsedDiscountQuota int64 `json:"used_discount_quota" gorm:"bigint;not null;default:0"`
+	ActivatedAt       int64 `json:"activated_at" gorm:"bigint;index;default:0"`
+	ExpiresAt         int64 `json:"expires_at" gorm:"bigint;index;default:0"`
+	ReservedAt        int64 `json:"reserved_at" gorm:"bigint;default:0"`
+	UsedAt            int64 `json:"used_at" gorm:"bigint;default:0"`
 
 	ReservedOrderType    string `json:"reserved_order_type" gorm:"type:varchar(32);index;default:''"`
 	ReservedOrderTradeNo string `json:"reserved_order_trade_no" gorm:"type:varchar(255);index;default:''"`
+	BenefitReference     string `json:"benefit_reference" gorm:"type:varchar(255);index;default:''"`
 
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
+}
+
+// BlindBoxPropGift records one atomic prop ownership transfer.
+type BlindBoxPropGift struct {
+	Id                  int    `json:"id"`
+	RequestId           string `json:"request_id" gorm:"type:varchar(64);not null;uniqueIndex"`
+	PropId              int    `json:"prop_id" gorm:"not null;index"`
+	SenderUserId        int    `json:"-" gorm:"not null;index"`
+	RecipientUserId     int    `json:"-" gorm:"not null;index"`
+	SenderExternalId    string `json:"sender_external_id" gorm:"type:varchar(16);not null"`
+	RecipientExternalId string `json:"recipient_external_id" gorm:"type:varchar(16);not null"`
+	PropType            string `json:"prop_type" gorm:"type:varchar(64);not null"`
+	PropTitle           string `json:"prop_title" gorm:"type:varchar(255);not null"`
+	Status              string `json:"status" gorm:"type:varchar(24);not null"`
+	CreatedAt           int64  `json:"created_at" gorm:"type:bigint;not null;index"`
 }
 
 // BlindBoxZeroHourState tracks one user's hidden zero-multiplier draw progress.
@@ -65,12 +89,13 @@ type BlindBoxZeroHourState struct {
 }
 
 type BlindBoxPropSpec struct {
-	PropType        string
-	Title           string
-	DiscountRate    float64
-	Multiplier      float64
-	DurationSeconds int64
-	Activatable     bool
+	PropType         string
+	Title            string
+	DiscountRate     float64
+	Multiplier       float64
+	DurationSeconds  int64
+	MaxDiscountQuota int64
+	Activatable      bool
 }
 
 func (p *BlindBoxProp) BeforeCreate(tx *gorm.DB) error {
@@ -85,5 +110,13 @@ func (p *BlindBoxProp) BeforeCreate(tx *gorm.DB) error {
 
 func (p *BlindBoxProp) BeforeUpdate(tx *gorm.DB) error {
 	p.UpdatedAt = platformruntime.GetTimestamp()
+	return nil
+}
+
+func (g *BlindBoxPropGift) BeforeCreate(_ *gorm.DB) error {
+	g.CreatedAt = platformruntime.GetTimestamp()
+	if g.Status == "" {
+		g.Status = BlindBoxPropGiftCompleted
+	}
 	return nil
 }

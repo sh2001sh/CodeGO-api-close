@@ -225,10 +225,16 @@ func (r *GeneralOpenAIRequest) GetSystemRoleName() string {
 const CustomType = "custom"
 
 type ToolCallRequest struct {
-	ID       string          `json:"id,omitempty"`
-	Type     string          `json:"type"`
-	Function FunctionRequest `json:"function,omitempty"`
-	Custom   json.RawMessage `json:"custom,omitempty"`
+	ID          string          `json:"id,omitempty"`
+	Type        string          `json:"type"`
+	Name        string          `json:"name,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Parameters  any             `json:"parameters,omitempty"`
+	Format      json.RawMessage `json:"format,omitempty"`
+	Namespace   string          `json:"namespace,omitempty"`
+	Tools       json.RawMessage `json:"tools,omitempty"`
+	Function    FunctionRequest `json:"function,omitempty"`
+	Custom      json.RawMessage `json:"custom,omitempty"`
 }
 
 type FunctionRequest struct {
@@ -236,6 +242,7 @@ type FunctionRequest struct {
 	Name        string `json:"name"`
 	Parameters  any    `json:"parameters,omitempty"`
 	Arguments   string `json:"arguments,omitempty"`
+	Strict      *bool  `json:"strict,omitempty"`
 }
 
 type StreamOptions struct {
@@ -856,14 +863,18 @@ type OpenAIResponsesRequest struct {
 	Model   string          `json:"model"`
 	Input   json.RawMessage `json:"input,omitempty"`
 	Include json.RawMessage `json:"include,omitempty"`
-	// 在后台运行推理，暂时还不支持依赖的接口
-	// Background         json.RawMessage `json:"background,omitempty"`
-	Conversation       json.RawMessage `json:"conversation,omitempty"`
-	ContextManagement  json.RawMessage `json:"context_management,omitempty"`
-	Instructions       json.RawMessage `json:"instructions,omitempty"`
-	MaxOutputTokens    *uint           `json:"max_output_tokens,omitempty"`
-	TopLogProbs        *int            `json:"top_logprobs,omitempty"`
-	Metadata           json.RawMessage `json:"metadata,omitempty"`
+	// Background requests are executed asynchronously and can be queried, resumed, or cancelled.
+	Background        *bool           `json:"background,omitempty"`
+	Conversation      json.RawMessage `json:"conversation,omitempty"`
+	ContextManagement json.RawMessage `json:"context_management,omitempty"`
+	Instructions      json.RawMessage `json:"instructions,omitempty"`
+	MaxOutputTokens   *uint           `json:"max_output_tokens,omitempty"`
+	TopLogProbs       *int            `json:"top_logprobs,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	// ClientMetadata is an opaque Responses client state object. Keep it as raw
+	// JSON so turn/session fingerprints and future provider fields survive the
+	// DTO conversion path without being re-shaped or dropped.
+	ClientMetadata     json.RawMessage `json:"client_metadata,omitempty"`
 	ParallelToolCalls  json.RawMessage `json:"parallel_tool_calls,omitempty"`
 	PreviousResponseID string          `json:"previous_response_id,omitempty"`
 	Reasoning          *Reasoning      `json:"reasoning,omitempty"`
@@ -881,6 +892,8 @@ type OpenAIResponsesRequest struct {
 	Stream           *bool           `json:"stream,omitempty"`
 	StreamOptions    *StreamOptions  `json:"stream_options,omitempty"`
 	Temperature      *float64        `json:"temperature,omitempty"`
+	FrequencyPenalty *float64        `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64        `json:"presence_penalty,omitempty"`
 	Text             json.RawMessage `json:"text,omitempty"`
 	ToolChoice       json.RawMessage `json:"tool_choice,omitempty"`
 	Tools            json.RawMessage `json:"tools,omitempty"` // 需要处理的参数很少，MCP 参数太多不确定，所以用 map

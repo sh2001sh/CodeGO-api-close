@@ -50,6 +50,7 @@ import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-p
 import type { UsageLog } from '../../data/schema'
 import {
   parseLogOther,
+  getUsageLogGroupDisplayName,
   getParamOverrideActionLabel,
   parseAuditLine,
   decodeBillingExprB64,
@@ -65,6 +66,9 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { BillingQuotaSourceBadge } from '../billing-quota-source'
+import { BillingCalculationSection } from './billing-calculation-section'
+import { RouteSummarySection } from './route-summary-section'
 
 function timingTextColorClass(
   variant: 'success' | 'warning' | 'danger'
@@ -133,6 +137,11 @@ function formatRatio(ratio: number | undefined): string {
   return ratio.toFixed(4)
 }
 
+function formatTraceDuration(milliseconds: number | undefined): string {
+  if (milliseconds == null) return '-'
+  return formatUseTime(milliseconds / 1000)
+}
+
 function BillingBreakdown(props: {
   log: UsageLog
   other: LogOtherData
@@ -145,7 +154,7 @@ function BillingBreakdown(props: {
   const isTieredExpr = other.billing_mode === 'tiered_expr'
   const tieredSummary = getTieredBillingSummary(other)
 
-  const rows: Array<{ label: string; value: string }> = []
+  const rows: Array<{ label: string; value: React.ReactNode }> = []
   const priceOpts = { digitsLarge: 4, digitsSmall: 6, abbreviate: false }
   const fmtPrice = (usd: number) => formatBillingCurrencyFromUSD(usd, priceOpts)
   const baseInputUSD = other.model_ratio != null ? other.model_ratio * 2.0 : 0
@@ -200,10 +209,19 @@ function BillingBreakdown(props: {
 
   const userGR = other.user_group_ratio
   const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
-  const effectiveGR = isUserGR ? userGR : other.group_ratio
+  const isSubscription = other.billing_source === 'subscription'
+  const effectiveGR = isSubscription
+    ? other.subscription_group_multiplier
+    : isUserGR
+      ? userGR
+      : other.group_ratio
   if (effectiveGR != null && Number.isFinite(effectiveGR)) {
     rows.push({
-      label: isUserGR ? t('User Exclusive Ratio') : t('Group Ratio'),
+      label: isSubscription
+        ? t('Subscription multiplier')
+        : isUserGR
+          ? t('User Exclusive Ratio')
+          : t('Group Ratio'),
       value: `${formatRatio(effectiveGR)}x`,
     })
   }
@@ -307,6 +325,13 @@ function BillingBreakdown(props: {
     })
   }
 
+  if (other.billing_source || other.billing_quota_category) {
+    rows.push({
+      label: t('Quota source'),
+      value: <BillingQuotaSourceBadge other={other} />,
+    })
+  }
+
   rows.push({
     label: t('Total Cost'),
     value: formatLogQuota(log.quota),
@@ -401,6 +426,15 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
+  const streamStartMs = other?.response_start_ms ?? other?.frt ?? 0
+  const timingTrace = other?.first_byte_trace
+  const hasDetailedTiming =
+    timingTrace?.request_body_restore_ms != null ||
+    timingTrace?.billing_reservation_ms != null ||
+    timingTrace?.request_conversion_ms != null ||
+    timingTrace?.upstream_request_setup_ms != null ||
+    timingTrace?.upstream_response_headers_ms != null ||
+    timingTrace?.headers_to_first_event_ms != null
   const typeConfig = getLogTypeConfig(props.log.type)
 
   const isViolation = isViolationFeeLog(other)
@@ -481,6 +515,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const useChannel = other?.admin_info?.use_channel
   const channelChain =
     useChannel && useChannel.length > 0 ? useChannel.join(' → ') : undefined
+  const routeGroupName = getUsageLogGroupDisplayName(props.log.group, other)
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -555,10 +590,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 />
               )}
 
-              {(props.log.group || other?.group) && (
+              {getUsageLogGroupDisplayName(props.log.group, other) && (
                 <DetailRow
                   label={t('Group')}
-                  value={props.log.group || other?.group || ''}
+                  value={getUsageLogGroupDisplayName(props.log.group, other)}
                   mono
                 />
               )}
@@ -569,7 +604,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   value={
                     <span className='flex items-center gap-1'>
                       <Globe
-                        className='size-3 text-warning'
+                        className='text-warning size-3'
                         aria-hidden='true'
                       />
                       {props.log.ip}
@@ -596,18 +631,35 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     >
                       {formatUseTime(props.log.use_time)}
                       {props.log.is_stream &&
-                        other?.frt != null &&
-                        other.frt > 0 && (
+                        ((other?.response_start_ms != null &&
+                          other.response_start_ms > 0) ||
+                          (other?.frt != null && other.frt > 0)) && (
                           <span
                             className={cn(
                               'font-normal',
                               timingTextColorClass(
-                                getFirstResponseTimeColor(other.frt / 1000)
+                                getFirstResponseTimeColor(streamStartMs / 1000)
                               )
                             )}
                           >
                             {' '}
-                            (FRT: {formatUseTime(other.frt / 1000)})
+                            {other.response_start_ms != null &&
+                              other.response_start_ms > 0 && (
+                                <>
+                                  ({t('Response started')}:{' '}
+                                  {formatUseTime(
+                                    other.response_start_ms / 1000
+                                  )}
+                                  )
+                                </>
+                              )}
+                            {other.frt != null && other.frt > 0 && (
+                              <>
+                                {' '}
+                                ({t('First token')}:{' '}
+                                {formatUseTime(other.frt / 1000)})
+                              </>
+                            )}
                           </span>
                         )}
                     </span>
@@ -615,6 +667,103 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 />
               )}
             </div>
+
+            {other?.route_summary && (
+              <RouteSummarySection
+                summary={other.route_summary}
+                groupName={routeGroupName}
+                failed={props.log.type === 5}
+              />
+            )}
+
+            {props.isAdmin && timingTrace && hasDetailedTiming && (
+              <DetailSection label={t('Gateway Timing Breakdown')}>
+                <DetailRow
+                  label={t('Request Validation')}
+                  value={formatTraceDuration(timingTrace.request_validation_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Admission')}
+                  value={formatTraceDuration(timingTrace.admission_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Relay Info')}
+                  value={formatTraceDuration(timingTrace.relay_info_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Preflight')}
+                  value={formatTraceDuration(timingTrace.preflight_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Route Selection')}
+                  value={formatTraceDuration(timingTrace.route_selection_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Dispatch')}
+                  value={formatTraceDuration(timingTrace.dispatch_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Request Body Restore')}
+                  value={formatTraceDuration(
+                    timingTrace.request_body_restore_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Billing Reservation')}
+                  value={formatTraceDuration(
+                    timingTrace.billing_reservation_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Request Conversion')}
+                  value={formatTraceDuration(timingTrace.request_conversion_ms)}
+                  mono
+                />
+                <DetailRow
+                  label={t('Upstream Request Setup')}
+                  value={formatTraceDuration(
+                    timingTrace.upstream_request_setup_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Upstream Response Headers')}
+                  value={formatTraceDuration(
+                    timingTrace.upstream_response_headers_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Headers to First Event')}
+                  value={formatTraceDuration(
+                    timingTrace.headers_to_first_event_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Channel first event')}
+                  value={formatTraceDuration(
+                    timingTrace.upstream_first_event_ms
+                  )}
+                  mono
+                />
+                <DetailRow
+                  label={t('Channel first semantic output')}
+                  value={formatTraceDuration(
+                    timingTrace.upstream_first_semantic_event_ms
+                  )}
+                  mono
+                />
+              </DetailSection>
+            )}
 
             {/* Request conversion (admin only, not for refund) */}
             {showConversion && (
@@ -629,7 +778,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     aria-label={t('Copy to clipboard')}
                   >
                     {copiedText === conversionLabel ? (
-                      <Check className='size-3 text-success' />
+                      <Check className='text-success size-3' />
                     ) : (
                       <Copy className='size-3' />
                     )}
@@ -722,7 +871,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   />
                 ))}
                 {showLegacyTopupWarning && (
-                  <div className='flex items-start gap-1.5 text-xs text-warning'>
+                  <div className='text-warning flex items-start gap-1.5 text-xs'>
                     <Info
                       className='mt-0.5 size-3.5 shrink-0'
                       aria-hidden='true'
@@ -850,11 +999,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
 
             {/* Billing breakdown (consume type) */}
             {isConsume && other && !isViolation && (
-              <BillingBreakdown
-                log={props.log}
-                other={other}
-                isAdmin={props.isAdmin}
-              />
+              <>
+                <BillingBreakdown
+                  log={props.log}
+                  other={other}
+                  isAdmin={props.isAdmin}
+                />
+                <BillingCalculationSection log={props.log} other={other} />
+              </>
             )}
 
             {/* Tiered pricing breakdown (when billing_mode is tiered_expr) */}
@@ -878,9 +1030,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   value={
                     <span className='flex items-center gap-1'>
                       {other.admin_info.local_count_tokens ? (
-                        <Monitor className='size-3 text-info' />
+                        <Monitor className='text-info size-3' />
                       ) : (
-                        <Cloud className='size-3 text-success' />
+                        <Cloud className='text-success size-3' />
                       )}
                       <span className='text-xs'>
                         {other.admin_info.local_count_tokens
@@ -938,6 +1090,29 @@ export function DetailsDialog(props: DetailsDialogProps) {
             {/* Subscription billing details */}
             {isSubscription && other && (
               <DetailSection label={t('Subscription Billing')}>
+                {other.subscription_group_multiplier != null && (
+                  <DetailRow
+                    label={t('Subscription multiplier')}
+                    value={`${other.subscription_group_multiplier}x`}
+                    mono
+                  />
+                )}
+                {other.subscription_package_multiplier != null && (
+                  <DetailRow
+                    label={t('Plan multiplier card')}
+                    value={t('{{multiplier}}x applied', {
+                      multiplier: other.subscription_package_multiplier,
+                    })}
+                    mono
+                  />
+                )}
+                {other.subscription_group_ratio != null && (
+                  <DetailRow
+                    label={t('Original group ratio')}
+                    value={`${other.subscription_group_ratio}x`}
+                    mono
+                  />
+                )}
                 {other.subscription_plan_id && (
                   <DetailRow
                     label={t('Plan')}
@@ -1029,7 +1204,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     aria-label={t('Copy to clipboard')}
                   >
                     {copiedText === details ? (
-                      <Check className='size-3 text-success' />
+                      <Check className='text-success size-3' />
                     ) : (
                       <Copy className='size-3' />
                     )}

@@ -1,7 +1,6 @@
 package app
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -10,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/sh2001sh/new-api/constant"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	"io"
@@ -49,7 +49,7 @@ func SetWeChatHTTPClientForTest(client *http.Client) {
 }
 
 // CompleteWeChatLogin completes the WeChat login or registration flow.
-func CompleteWeChatLogin(ctx context.Context, code string) (*AuthenticatedSessionUser, error) {
+func CompleteWeChatLogin(ctx context.Context, code string, affCode string) (*AuthenticatedSessionUser, error) {
 	if !platformconfig.WeChatAuthEnabled {
 		return nil, ErrWeChatAuthDisabled
 	}
@@ -77,7 +77,11 @@ func CompleteWeChatLogin(ctx context.Context, code string) (*AuthenticatedSessio
 		user.DisplayName = "WeChat User"
 		user.Role = constant.RoleCommonUser
 		user.Status = constant.UserStatusEnabled
-		if err := insertUserAndApplyRegistrationRewards(user, 0); err != nil {
+		inviterID := 0
+		if affCode != "" {
+			inviterID, _ = identitystore.LoadUserIDByAffiliateCode(affCode)
+		}
+		if err := insertUserAndApplyRegistrationRewards(user, inviterID); err != nil {
 			return nil, err
 		}
 	}

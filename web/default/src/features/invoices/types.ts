@@ -18,7 +18,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 export type InvoiceSourceType = 'topup' | 'subscription'
 export type InvoiceType = 'personal' | 'enterprise'
 export type InvoiceStatus = 'pending' | 'issued' | 'rejected'
-export type InvoiceDeliveryMethod = 'email' | 'download'
 
 export type InvoiceEligibleOrder = {
   source_type: InvoiceSourceType
@@ -33,11 +32,12 @@ export type InvoiceEligibleOrder = {
 export type InvoiceRequest = {
   id: number
   user_id: number
-  source_type: InvoiceSourceType
+  source_type: InvoiceSourceType | 'batch'
   trade_no: string
   order_amount: number
   currency: string
   order_title: string
+  order_count: number
   invoice_type: InvoiceType
   title: string
   tax_number: string
@@ -45,8 +45,6 @@ export type InvoiceRequest = {
   remark: string
   status: InvoiceStatus
   invoice_number: string
-  delivery_method: InvoiceDeliveryMethod | ''
-  document_url: string
   admin_note: string
   handled_by: number
   issued_at: number
@@ -62,6 +60,7 @@ export type InvoicePage = {
 }
 
 export type CreateInvoiceRequestPayload = {
+  orders: Array<Pick<InvoiceEligibleOrder, 'source_type' | 'trade_no'>>
   source_type: InvoiceSourceType
   trade_no: string
   invoice_type: InvoiceType
@@ -74,7 +73,5 @@ export type CreateInvoiceRequestPayload = {
 export type UpdateInvoiceRequestPayload = {
   status: Extract<InvoiceStatus, 'issued' | 'rejected'>
   invoice_number: string
-  delivery_method: InvoiceDeliveryMethod | ''
-  document_url: string
   admin_note: string
 }

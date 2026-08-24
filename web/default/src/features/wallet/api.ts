@@ -44,10 +44,21 @@ import type {
   BlindBoxOpenResponse,
   BlindBoxOrderStatusResponse,
   BlindBoxProp,
+  BlindBoxPropGift,
+  BlindBoxRecord,
   BlindBoxHistoryResponse,
-  WalletQuotaConversionOverviewResponse,
-  WalletQuotaConversionRequest,
-  WalletQuotaConversionResponse,
+  BalanceBlindBoxOverview,
+  BalanceBlindBoxGift,
+  BalanceBlindBoxPurchase,
+  ConfigureWalletTransferPasswordRequest,
+  CreateWalletTransferRequest,
+  WalletTransferOverviewResponse,
+  WalletTransferRecipient,
+  WalletTransferRecipientResponse,
+  WalletTransferResponse,
+  WalletTransferEmailCodeResponse,
+  UnifiedCreditMigrationDetailResponse,
+  BalanceBlindBoxSimulationResult,
 } from './types'
 
 // ============================================================================
@@ -61,6 +72,11 @@ export function isApiSuccess(response: ApiResponse): boolean {
   return response.success === true || response.message === 'success'
 }
 
+export async function getUnifiedCreditMigrationDetail(): Promise<UnifiedCreditMigrationDetailResponse> {
+  const res = await api.get('/api/wallet/unified-credit-migration')
+  return res.data
+}
+
 /**
  * Get topup configuration info
  */
@@ -69,15 +85,45 @@ export async function getTopupInfo(): Promise<TopupInfoResponse> {
   return res.data
 }
 
-export async function getWalletQuotaConversions(): Promise<WalletQuotaConversionOverviewResponse> {
-  const res = await api.get('/api/wallet/quota-conversions')
+export async function getWalletTransfers(
+  page = 1,
+  pageSize = 10
+): Promise<WalletTransferOverviewResponse> {
+  const params = new URLSearchParams({
+    p: String(page),
+    page_size: String(pageSize),
+  })
+  const res = await api.get(`/api/wallet/transfers?${params.toString()}`)
   return res.data
 }
 
-export async function createWalletQuotaConversion(
-  request: WalletQuotaConversionRequest
-): Promise<WalletQuotaConversionResponse> {
-  const res = await api.post('/api/wallet/quota-conversions', request)
+export async function lookupWalletTransferRecipient(
+  externalId: string
+): Promise<WalletTransferRecipientResponse> {
+  const res = await api.get(
+    `/api/wallet/transfers/recipients/${encodeURIComponent(externalId)}`
+  )
+  return res.data
+}
+
+export async function configureWalletTransferPassword(
+  request: ConfigureWalletTransferPasswordRequest
+): Promise<ApiResponse<{ password_set: boolean }>> {
+  const res = await api.put('/api/wallet/transfers/payment-password', request)
+  return res.data
+}
+
+export async function sendWalletTransferPasswordEmailCode(): Promise<WalletTransferEmailCodeResponse> {
+  const res = await api.post(
+    '/api/wallet/transfers/payment-password/email-code'
+  )
+  return res.data
+}
+
+export async function createWalletTransfer(
+  request: CreateWalletTransferRequest
+): Promise<WalletTransferResponse> {
+  const res = await api.post('/api/wallet/transfers', request)
   return res.data
 }
 
@@ -296,6 +342,13 @@ export async function getBlindBoxOrderStatus(
   return res.data
 }
 
+export async function cancelBlindBoxOrder(
+  tradeNo: string
+): Promise<ApiResponse> {
+  const res = await api.post(`/api/blind-box/orders/${tradeNo}/cancel`)
+  return res.data
+}
+
 export async function openBlindBoxes(
   request: BlindBoxOpenRequest
 ): Promise<BlindBoxOpenResponse> {
@@ -307,5 +360,114 @@ export async function activateBlindBoxProp(
   propId: number
 ): Promise<ApiResponse<{ prop: BlindBoxProp }>> {
   const res = await api.post(`/api/blind-box/props/${propId}/use`)
+  return res.data
+}
+
+export async function pauseBlindBoxProp(
+  propId: number
+): Promise<ApiResponse<{ prop: BlindBoxProp }>> {
+  const res = await api.post(`/api/blind-box/props/${propId}/pause`)
+  return res.data
+}
+
+export async function convertBlindBoxProp(
+  propId: number,
+  targetType: 'topup_discount_90' | 'subscription_discount_90'
+): Promise<ApiResponse<{ prop: BlindBoxProp }>> {
+  const res = await api.post(`/api/blind-box/props/${propId}/convert`, {
+    target_type: targetType,
+  })
+  return res.data
+}
+
+export async function giftBlindBoxProp(
+  propId: number,
+  requestId: string,
+  recipientExternalId: string
+): Promise<
+  ApiResponse<{
+    gift: BlindBoxPropGift
+    recipient: WalletTransferRecipient
+  }>
+> {
+  const res = await api.post(`/api/blind-box/props/${propId}/gift`, {
+    request_id: requestId,
+    recipient_external_id: recipientExternalId,
+  })
+  return res.data
+}
+
+export async function openBalanceBlindBox(
+  requestId: string,
+  count = 1
+): Promise<
+  ApiResponse<{
+    record: BlindBoxRecord
+    records: BlindBoxRecord[]
+    balance_usd: number
+    overview: BalanceBlindBoxOverview
+  }>
+> {
+  const res = await api.post('/api/blind-box/inventory/open', {
+    request_id: requestId,
+    count,
+  })
+  return res.data
+}
+
+export async function purchaseBalanceBlindBoxes(
+  requestId: string,
+  count: number
+): Promise<
+  ApiResponse<{
+    purchase: BalanceBlindBoxPurchase
+    overview: BalanceBlindBoxOverview
+  }>
+> {
+  const res = await api.post('/api/blind-box/inventory/purchase', {
+    request_id: requestId,
+    count,
+  })
+  return res.data
+}
+
+export async function giftBalanceBlindBoxes(
+  requestId: string,
+  recipientExternalId: string,
+  count: number
+): Promise<
+  ApiResponse<{
+    gift: BalanceBlindBoxGift
+    overview: BalanceBlindBoxOverview
+    recipient: {
+      external_id: string
+      display_name_masked: string
+    }
+  }>
+> {
+  const res = await api.post('/api/blind-box/inventory/gift', {
+    request_id: requestId,
+    recipient_external_id: recipientExternalId,
+    count,
+  })
+  return res.data
+}
+
+export async function simulateBalanceBlindBoxes(
+  balanceQuota: number,
+  count: number,
+  state: {
+    smallPityProgress: number
+    pityProgress: number
+    firstDrawEligible: boolean
+  }
+): Promise<ApiResponse<BalanceBlindBoxSimulationResult>> {
+  const res = await api.post('/api/blind-box/simulation/draw', {
+    balance_quota: balanceQuota,
+    count,
+    small_pity_progress: state.smallPityProgress,
+    pity_progress: state.pityProgress,
+    first_draw_eligible: state.firstDrawEligible,
+  })
   return res.data
 }

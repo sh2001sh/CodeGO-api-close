@@ -8,8 +8,10 @@ import (
 )
 
 type ledgerEntrySnapshotAggregate struct {
-	AvailableBalance int64 `gorm:"column:available_balance"`
-	GrantedTotal     int64 `gorm:"column:granted_total"`
+	AvailableBalance    int64 `gorm:"column:available_balance"`
+	GrantedTotal        int64 `gorm:"column:granted_total"`
+	DirectConsumedTotal int64 `gorm:"column:direct_consumed_total"`
+	DirectRefundedTotal int64 `gorm:"column:direct_refunded_total"`
 }
 
 type ledgerSettlementSnapshotAggregate struct {
@@ -31,7 +33,9 @@ func aggregateExpectedBalanceSnapshot(db *gorm.DB, accountID string) (billingsch
 				WHEN entry_type IN ('reserve_hold', 'settle_debit') THEN -amount
 				ELSE 0
 			END), 0) AS available_balance,
-			COALESCE(SUM(CASE WHEN entry_type = 'grant_credit' THEN amount ELSE 0 END), 0) AS granted_total
+			COALESCE(SUM(CASE WHEN entry_type = 'grant_credit' THEN amount ELSE 0 END), 0) AS granted_total,
+			COALESCE(SUM(CASE WHEN entry_type = 'settle_debit' AND COALESCE(reference_type, '') <> 'settlement' THEN amount ELSE 0 END), 0) AS direct_consumed_total,
+			COALESCE(SUM(CASE WHEN entry_type = 'settle_credit' AND COALESCE(reference_type, '') <> 'settlement' THEN amount ELSE 0 END), 0) AS direct_refunded_total
 		`).
 		Scan(&entries).Error; err != nil {
 		return expected, err
@@ -52,8 +56,8 @@ func aggregateExpectedBalanceSnapshot(db *gorm.DB, accountID string) (billingsch
 		Scan(&settlements).Error; err != nil {
 		return expected, err
 	}
-	expected.ConsumedTotal = settlements.ConsumedTotal
-	expected.RefundedTotal = settlements.RefundedTotal
+	expected.ConsumedTotal = settlements.ConsumedTotal + entries.DirectConsumedTotal
+	expected.RefundedTotal = settlements.RefundedTotal + entries.DirectRefundedTotal
 
 	if err := db.Model(&billingschema.BillingReservation{}).
 		Where("account_id = ? AND status = ?", accountID, billingschema.BillingReservationStatusOpen).

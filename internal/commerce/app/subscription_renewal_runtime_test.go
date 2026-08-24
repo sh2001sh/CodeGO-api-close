@@ -144,7 +144,7 @@ func TestApplySubscriptionPurchaseBonusTx_DoesNotGrantRenewalBonus(t *testing.T)
 
 	preview := &commercedomain.SubscriptionPurchasePreview{Action: commerceschema.SubscriptionPurchaseActionRenew}
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
-		return ApplySubscriptionPurchaseBonusTx(tx, user.Id, subscription, plan, preview)
+		return ApplySubscriptionPurchaseBonusTx(tx, user.Id, subscription, plan, preview, "renewal-bonus-test")
 	}))
 
 	var reloaded commerceschema.UserSubscription

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   consumeSubscriptionResetOpportunity,
   updateBillingPreference,
@@ -24,7 +23,7 @@ import {
   getOrderedSubscriptions,
   type WalletPlanMeta,
 } from './wallet-panel-utils'
-import { WalletQuotaConversionCard } from './wallet-quota-conversion-card'
+import { WalletPeerTransferCard } from './wallet-peer-transfer-card'
 import { WalletResetOpportunityPanel } from './wallet-reset-opportunity-panel'
 
 const ALL_FUNDING_SOURCES: FundingSource[] = ['subscription', 'wallet']
@@ -42,8 +41,8 @@ interface WalletPagePanelsProps {
   subscriptionLoading?: boolean
   onSubscriptionRefresh?: () => Promise<void>
   onUserRefresh?: () => Promise<void>
-  section: 'funding' | 'conversion' | 'billing'
-  onOpenConversionHistory?: () => void
+  section: 'funding' | 'transfer' | 'billing'
+  onOpenTransferHistory?: () => void
 }
 
 export function WalletPagePanels(props: WalletPagePanelsProps) {
@@ -54,9 +53,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
   const [draftOrderIds, setDraftOrderIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const [usingResetOpportunity, setUsingResetOpportunity] = useState(false)
-  const [conversionMode, setConversionMode] = useState<'wallet' | 'plan'>(
-    'wallet'
-  )
 
   const activeSubscriptions = useMemo(
     () => props.subscriptionData?.subscriptions ?? [],
@@ -66,6 +62,7 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   useEffect(() => {
     if (!props.subscriptionData) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraftFundingSourceOrder(
       normalizeFundingSourceOrder(
         props.subscriptionData.funding_source_order,
@@ -242,57 +239,45 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   if (props.section === 'funding') {
     return (
-      <RedemptionCodePanel
-        title={t('Redemption code')}
-        description={t(
-          'Redeem codes can add standard balance, Claude quota, plans, or promotional benefits.'
-        )}
-        topupLink={props.topupLink}
-        redemptionCode={props.redemptionCode}
-        onRedemptionCodeChange={props.onRedemptionCodeChange}
-        onRedeem={props.onRedeem}
-        redeeming={props.redeeming}
-      />
+      <div className='space-y-4'>
+        <RedemptionCodePanel
+          title={t('Redemption code')}
+          description={t('兑换码可发放统一额度、月卡、盲盒或活动权益。')}
+          topupLink={props.topupLink}
+          redemptionCode={props.redemptionCode}
+          onRedemptionCodeChange={props.onRedemptionCodeChange}
+          onRedeem={props.onRedeem}
+          redeeming={props.redeeming}
+        />
+        <div className='app-page-shell p-4'>
+          <SubscriptionClaudeConversionCard
+            subscriptionData={props.subscriptionData}
+            loading={isLoadingPanels}
+            mode='wallet'
+            planTitles={Object.fromEntries(
+              Array.from(planMetaMap.entries()).map(([id, meta]) => [
+                id,
+                { title: meta.title, subtitle: meta.subtitle },
+              ])
+            )}
+            onRefresh={async () => {
+              await Promise.all([
+                props.onSubscriptionRefresh?.(),
+                props.onUserRefresh?.(),
+              ])
+            }}
+          />
+        </div>
+      </div>
     )
   }
 
-  if (props.section === 'conversion') {
+  if (props.section === 'transfer') {
     return (
-      <div className='space-y-4'>
-        <Tabs
-          value={conversionMode}
-          onValueChange={(value) =>
-            setConversionMode(value as 'wallet' | 'plan')
-          }
-        >
-          <TabsList className='grid w-full max-w-xl grid-cols-2'>
-            <TabsTrigger value='wallet'>{t('Wallet balances')}</TabsTrigger>
-            <TabsTrigger value='plan'>{t('Plan quota')}</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {conversionMode === 'wallet' ? (
-          <WalletQuotaConversionCard
-            onUserRefresh={props.onUserRefresh}
-            onOpenHistory={props.onOpenConversionHistory}
-          />
-        ) : (
-          <SubscriptionClaudeConversionCard
-            subscriptionData={props.subscriptionData}
-            loading={props.subscriptionLoading}
-            planTitles={Object.fromEntries(
-              Array.from(planMetaMap.entries()).map(([id, value]) => [
-                id,
-                {
-                  title: value.title || t('Plan #{{id}}', { id }),
-                  subtitle: value.subtitle || t('Subscription'),
-                },
-              ])
-            )}
-            onRefresh={props.onSubscriptionRefresh}
-          />
-        )}
-      </div>
+      <WalletPeerTransferCard
+        onUserRefresh={props.onUserRefresh}
+        onOpenHistory={props.onOpenTransferHistory}
+      />
     )
   }
 

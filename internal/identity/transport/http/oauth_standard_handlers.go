@@ -70,8 +70,14 @@ func HandleOAuth(c *gin.Context) {
 		handleStandardOAuthError(c, err)
 		return
 	}
+	session.Delete("oauth_state")
+	session.Delete("aff")
 
 	if result.Action == "bind" {
+		if err := session.Save(); err != nil {
+			handleAuthError(c, err)
+			return
+		}
 		httpapi.ApiSuccessI18n(c, i18n.MsgOAuthBindSuccess, gin.H{"action": "bind"})
 		return
 	}

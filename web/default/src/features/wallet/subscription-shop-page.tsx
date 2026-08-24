@@ -1,4 +1,4 @@
-import { SubscriptionPlansCard } from './components/subscription-plans-card'
+import { SubscriptionSettlementHistory } from './components/subscription-settlement-history'
 import { WalletStatsCard } from './components/wallet-stats-card'
 import { WalletWorkspaceShell } from './components/wallet-workspace-shell'
 import { useWalletWorkspace } from './hooks/use-wallet-workspace'
@@ -8,19 +8,11 @@ export function SubscriptionShopPage() {
 
   return (
     <WalletWorkspaceShell
-      title='套餐购买'
-      description='先查看当前生效中的订阅与额度，再选购新的月卡或日卡。GPT 模型使用套餐额度，Claude 使用独立钱包额度，生效套餐可按规则比例转换为 Claude 额度。'
+      title='历史套餐清算'
+      description='查看月卡取消后的统一额度清算结果。月卡购买、续费、升级、燃料和集享入口已停止。'
       framedMain={false}
       main={
-        <SubscriptionPlansCard
-          topupInfo={workspace.topupInfo}
-          plans={workspace.publicPlans}
-          plansLoading={workspace.publicPlansLoading}
-          subscriptionData={workspace.subscriptionData}
-          subscriptionLoading={workspace.subscriptionLoading}
-          onSubscriptionRefresh={workspace.fetchSubscriptionData}
-          onPlansRefresh={workspace.fetchPublicPlans}
-        />
+        <SubscriptionSettlementHistory />
       }
       sidebar={
         <WalletStatsCard

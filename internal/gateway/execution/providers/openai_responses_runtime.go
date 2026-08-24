@@ -169,9 +169,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		if callID == "" {
 			return true
 		}
-		if outputText.Len() > 0 {
-			return true
-		}
 		if !sendStartIfNeeded() {
 			return false
 		}
@@ -289,7 +286,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				}
 			}
 		case "response.output_item.added", "response.output_item.done":
-			if streamResp.Item == nil || streamResp.Item.Type != "function_call" {
+			if streamResp.Item == nil || !isResponsesChatToolCallType(streamResp.Item.Type) {
 				break
 			}
 			itemID := strings.TrimSpace(streamResp.Item.ID)
@@ -301,10 +298,13 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				toolCallCanonicalIDByItemID[itemID] = callID
 			}
 			name := strings.TrimSpace(streamResp.Item.Name)
+			if streamResp.Item.Namespace != "" {
+				name = streamResp.Item.Namespace + "__" + name
+			}
 			if name != "" {
 				toolCallNameByID[callID] = name
 			}
-			newArgs := streamResp.Item.ArgumentsString()
+			newArgs := responsesChatToolArguments(streamResp.Item)
 			prevArgs := toolCallArgsByID[callID]
 			argsDelta := ""
 			if newArgs != "" {
@@ -333,6 +333,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				sr.Stop(streamErr)
 				return
 			}
+		case "response.custom_tool_call_input.delta":
+			// Custom tool input is wrapped as {"input": ...} once the item is done.
+			// Emitting raw freeform fragments here would create invalid Chat JSON.
 		case "response.completed":
 			if streamResp.Response != nil {
 				if streamResp.Response.Model != "" {
@@ -375,7 +378,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					info.ClaudeConvertInfo.Usage = usage
 				}
 				finishReason := "stop"
-				if sawToolCall && outputText.Len() == 0 {
+				if sawToolCall {
 					finishReason = "tool_calls"
 				}
 				stop := gatewaystream.GenerateStopResponse(responseID, createAt, model, finishReason)
@@ -416,7 +419,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			info.ClaudeConvertInfo.Usage = usage
 		}
 		finishReason := "stop"
-		if sawToolCall && outputText.Len() == 0 {
+		if sawToolCall {
 			finishReason = "tool_calls"
 		}
 		if !sendChatChunk(gatewaystream.GenerateStopResponse(responseID, createAt, model, finishReason)) {
@@ -434,4 +437,19 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		handleNonOpenAIFinalResponse(c, info, responseID, createAt, model, usage)
 	}
 	return usage, nil
+}
+
+func isResponsesChatToolCallType(itemType string) bool {
+	return itemType == "function_call" || itemType == "custom_tool_call" || itemType == "tool_search_call"
+}
+
+func responsesChatToolArguments(item *dto.ResponsesOutput) string {
+	if item == nil {
+		return ""
+	}
+	if item.Type == "custom_tool_call" {
+		wrapped, _ := platformencoding.Marshal(map[string]string{"input": item.Input})
+		return string(wrapped)
+	}
+	return item.ArgumentsString()
 }

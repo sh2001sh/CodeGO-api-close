@@ -79,15 +79,65 @@ func TestRequestSpecificResponseHeaderTimeoutUsesDedicatedSharedClient(t *testin
 	InitHTTPClient()
 
 	standard := GetHTTPClientWithResponseHeaderTimeout(45 * time.Second)
+	fast := GetHTTPClientWithResponseHeaderTimeout(20 * time.Second)
 	adaptive := GetHTTPClientWithResponseHeaderTimeout(90 * time.Second)
 	require.Same(t, GetHTTPClient(), standard)
+	require.NotSame(t, standard, fast)
+	require.Same(t, fast, GetHTTPClientWithResponseHeaderTimeout(20*time.Second))
 	require.NotSame(t, standard, adaptive)
 	require.Same(t, adaptive, GetHTTPClientWithResponseHeaderTimeout(90*time.Second))
+	assertSpecificClientResponseHeaderTimeout(t, fast, 20*time.Second)
+	assertSpecificClientResponseHeaderTimeout(t, adaptive, 90*time.Second)
+}
 
-	transport, ok := adaptive.Transport.(*http.Transport)
+func TestDisabledResponseHeaderTimeoutKeepsConnectionDeadline(t *testing.T) {
+	previousHeaderTimeout := platformconfig.RelayResponseHeaderTimeout
+	t.Cleanup(func() {
+		platformconfig.RelayResponseHeaderTimeout = previousHeaderTimeout
+		ResetProxyClientCache()
+		InitHTTPClient()
+	})
+
+	platformconfig.RelayResponseHeaderTimeout = 0
+	ResetProxyClientCache()
+	InitHTTPClient()
+
+	transport, ok := GetHTTPClient().Transport.(*http.Transport)
 	require.True(t, ok)
-	require.Equal(t, 90*time.Second, transport.ResponseHeaderTimeout)
-	require.Equal(t, 90*time.Second, transport.TLSHandshakeTimeout)
+	require.Zero(t, transport.ResponseHeaderTimeout)
+	require.Equal(t, outboundConnectionTimeout, transport.TLSHandshakeTimeout)
+}
+
+func TestOutboundTransportKeepsConnectionsReusable(t *testing.T) {
+	previousIdle := platformconfig.RelayIdleConnTimeoutSeconds
+	previousTLS := platformconfig.RelayTLSHandshakeTimeoutSeconds
+	previousMax := platformconfig.RelayMaxConnsPerHost
+	t.Cleanup(func() {
+		platformconfig.RelayIdleConnTimeoutSeconds = previousIdle
+		platformconfig.RelayTLSHandshakeTimeoutSeconds = previousTLS
+		platformconfig.RelayMaxConnsPerHost = previousMax
+		ResetProxyClientCache()
+		InitHTTPClient()
+	})
+	platformconfig.RelayIdleConnTimeoutSeconds = 75
+	platformconfig.RelayTLSHandshakeTimeoutSeconds = 7
+	platformconfig.RelayMaxConnsPerHost = 32
+	InitHTTPClient()
+
+	transport, ok := GetHTTPClient().Transport.(*http.Transport)
+	require.True(t, ok)
+	require.Equal(t, 75*time.Second, transport.IdleConnTimeout)
+	require.Equal(t, 7*time.Second, transport.TLSHandshakeTimeout)
+	require.Equal(t, 32, transport.MaxConnsPerHost)
+	require.Equal(t, 1*time.Second, transport.ExpectContinueTimeout)
+}
+
+func assertSpecificClientResponseHeaderTimeout(t *testing.T, client *http.Client, expected time.Duration) {
+	t.Helper()
+	transport, ok := client.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.Equal(t, expected, transport.ResponseHeaderTimeout)
+	require.Equal(t, outboundConnectionTimeout, transport.TLSHandshakeTimeout)
 }
 
 func assertClientResponseHeaderTimeout(t *testing.T, client *http.Client) {
@@ -97,5 +147,5 @@ func assertClientResponseHeaderTimeout(t *testing.T, client *http.Client) {
 	transport, ok := client.Transport.(*http.Transport)
 	require.True(t, ok)
 	require.Equal(t, 45*time.Second, transport.ResponseHeaderTimeout)
-	require.Equal(t, 45*time.Second, transport.TLSHandshakeTimeout)
+	require.Equal(t, outboundConnectionTimeout, transport.TLSHandshakeTimeout)
 }

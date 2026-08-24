@@ -11,32 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// IncreaseUserQuota increments a user's wallet quota and mirrors the change into cache.
-func IncreaseUserQuota(userID int, quota int) error {
-	if quota < 0 {
-		return errors.New("quota 不能为负数！")
-	}
-	gopool.Go(func() {
-		if err := cacheAdjustUserQuota(userID, int64(quota)); err != nil {
-			platformobservability.SysLog("failed to increase user quota: " + err.Error())
-		}
-	})
-	return platformdb.DB.Model(&identityschema.User{}).Where("id = ?", userID).Update("quota", gorm.Expr("quota + ?", quota)).Error
-}
-
-// DecreaseUserQuota decrements a user's wallet quota and mirrors the change into cache.
-func DecreaseUserQuota(userID int, quota int) error {
-	if quota < 0 {
-		return errors.New("quota 不能为负数！")
-	}
-	gopool.Go(func() {
-		if err := cacheAdjustUserQuota(userID, -int64(quota)); err != nil {
-			platformobservability.SysLog("failed to decrease user quota: " + err.Error())
-		}
-	})
-	return platformdb.DB.Model(&identityschema.User{}).Where("id = ?", userID).Update("quota", gorm.Expr("quota - ?", quota)).Error
-}
-
 // IncreaseUserClaudeQuota increments a user's Claude wallet quota and mirrors the change into cache.
 func IncreaseUserClaudeQuota(userID int, quota int) error {
 	if quota < 0 {
@@ -76,8 +50,15 @@ func UpdateUserUsedQuotaAndRequestCount(userID int, quota int) {
 	}
 }
 
-func cacheAdjustUserQuota(userID int, delta int64) error {
-	return platformcache.AdjustUserQuotaCache(userID, delta)
+// UpdateUserUsedQuota adjusts accumulated usage without changing request count.
+func UpdateUserUsedQuota(userID int, quota int) {
+	if quota == 0 {
+		return
+	}
+	if err := platformdb.DB.Model(&identityschema.User{}).Where("id = ?", userID).
+		Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error; err != nil {
+		platformobservability.SysLog("failed to update user used quota: " + err.Error())
+	}
 }
 
 func cacheAdjustUserClaudeQuota(userID int, delta int64) error {

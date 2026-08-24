@@ -91,3 +91,29 @@ func TestUpdateRoutePoolMemberCostMultipliers_UpdatesEveryPoolMembership(t *test
 	require.Equal(t, `{"gpt-test":0.08}`, members[0].ModelCostOverrides)
 	require.False(t, members[1].Enabled)
 }
+
+func TestUpdateRoutePoolMemberFaultDomains_UpdatesEveryPoolMembership(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.RoutePool{}, &gatewayschema.RoutePoolMember{}))
+	originalDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		InvalidateRoutePoolCache()
+	})
+
+	require.NoError(t, db.Create(&gatewayschema.RoutePoolMember{RoutePoolID: 1, ChannelID: 50, CostMultiplier: 1, FaultDomain: "provider:primary"}).Error)
+	require.NoError(t, db.Create(&gatewayschema.RoutePoolMember{RoutePoolID: 2, ChannelID: 50, CostMultiplier: 1, FaultDomain: "provider:primary"}).Error)
+	changed, missing, err := UpdateRoutePoolMemberFaultDomains(map[int]string{50: "provider:secondary", 999: "provider:unknown"})
+	require.NoError(t, err)
+	require.Equal(t, 2, changed)
+	require.Equal(t, []int{999}, missing)
+
+	var members []gatewayschema.RoutePoolMember
+	require.NoError(t, db.Where("channel_id = ?", 50).Find(&members).Error)
+	require.Len(t, members, 2)
+	for _, member := range members {
+		require.Equal(t, "provider:secondary", member.FaultDomain)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
@@ -23,13 +24,20 @@ type LedgerRelayFunding struct {
 	accountID   string
 	source      string
 
-	reservationID string
-	settlementID  string
-	reserved      int
-	legacyHeld    int
+	reservationID  string
+	settlementID   string
+	reserved       int
+	legacyHeld     int
+	initialBalance *int
 }
 
 func NewLedgerRelayFunding(userID int, requestID string, source string) (*LedgerRelayFunding, error) {
+	return NewLedgerRelayFundingWithInitialBalance(userID, requestID, source, nil)
+}
+
+// NewLedgerRelayFundingWithInitialBalance reuses a balance read during funding
+// selection so the reservation path does not load the same wallet twice.
+func NewLedgerRelayFundingWithInitialBalance(userID int, requestID string, source string, initialBalance *int) (*LedgerRelayFunding, error) {
 	if userID <= 0 {
 		return nil, fmt.Errorf("invalid user id")
 	}
@@ -37,11 +45,9 @@ func NewLedgerRelayFunding(userID int, requestID string, source string) (*Ledger
 		return nil, fmt.Errorf("request id is required for ledger billing")
 	}
 
-	funding := &LedgerRelayFunding{userID: userID, requestID: requestID, source: source}
+	funding := &LedgerRelayFunding{userID: userID, requestID: requestID, source: source, initialBalance: initialBalance}
 	switch source {
 	case BillingSourceWallet:
-		funding.accountType = billingAccountTypeWallet
-	case BillingSourceClaudeWallet:
 		funding.accountType = billingAccountTypeClaudeWallet
 	default:
 		return nil, fmt.Errorf("unsupported ledger funding source: %s", source)
@@ -84,6 +90,7 @@ func (f *LedgerRelayFunding) PreConsume(amount int) error {
 		RequestID:      f.requestID,
 		ReservedAmount: int64(amount),
 		IdempotencyKey: f.idempotencyKey("reserve"),
+		ExpiresAt:      relayReservationExpiry(),
 	})
 	if err != nil {
 		return err
@@ -103,6 +110,54 @@ func (f *LedgerRelayFunding) PreConsume(amount int) error {
 	f.reservationID = reservation.ReservationID
 	f.reserved = amount
 	f.legacyHeld = amount
+	return nil
+}
+
+func relayReservationExpiry() *time.Time {
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
+	return &expiresAt
+}
+
+// ReserveAdditional expands the request's open wallet reservation for a higher-priced retry.
+func (f *LedgerRelayFunding) ReserveAdditional(amount int64) error {
+	if amount <= 0 {
+		return nil
+	}
+	if f.reservationID == "" {
+		return fmt.Errorf("ledger reservation is missing")
+	}
+	maxInt := int(^uint(0) >> 1)
+	if amount > int64(maxInt-f.reserved) {
+		return fmt.Errorf("additional reservation amount is too large")
+	}
+
+	target := f.reserved + int(amount)
+	reservation, err := billingdomain.IncreaseReservation(billingdomain.IncreaseReservationParams{
+		ReservationID:  f.reservationID,
+		Amount:         amount,
+		IdempotencyKey: f.idempotencyKey(fmt.Sprintf("reserve-increase-%d", target)),
+	})
+	if err != nil {
+		return err
+	}
+	if reservation.ReservedAmount != int64(target) {
+		return billingdomain.ErrLedgerConflict
+	}
+
+	if err := f.projectLegacyDelta(int(amount)); err != nil {
+		_, releaseErr := billingdomain.ReleaseReservation(billingdomain.ReleaseReservationParams{
+			ReservationID:  f.reservationID,
+			IdempotencyKey: f.idempotencyKey("release-after-increase-projection-failure"),
+			ReasonCode:     "legacy_projection_failed",
+		})
+		if releaseErr != nil {
+			return fmt.Errorf("project additional legacy balance: %w; release reservation: %v", err, releaseErr)
+		}
+		return err
+	}
+
+	f.reserved = target
+	f.legacyHeld += int(amount)
 	return nil
 }
 
@@ -186,23 +241,37 @@ func (f *LedgerRelayFunding) SettlementID() string {
 	return f.settlementID
 }
 
+func (f *LedgerRelayFunding) AvailableBalance() (int64, error) {
+	if f.accountID == "" {
+		return 0, errors.New("ledger account is missing")
+	}
+	var snapshot billingschema.BillingBalanceSnapshot
+	if err := platformdb.DB.Where("account_id = ?", f.accountID).First(&snapshot).Error; err != nil {
+		return 0, err
+	}
+	return snapshot.AvailableBalance, nil
+}
+
 func (f *LedgerRelayFunding) ensureAccount() (*billingschema.BillingAccount, error) {
 	if f.accountID != "" {
 		return &billingschema.BillingAccount{AccountID: f.accountID}, nil
 	}
 
-	legacyBalance, err := f.legacyBalance()
-	if err != nil {
-		return nil, err
+	legacyBalance := 0
+	if f.initialBalance != nil {
+		legacyBalance = *f.initialBalance
+	} else {
+		var err error
+		legacyBalance, err = f.legacyBalance()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return ensureMirroredUserAccount(f.userID, f.accountType, legacyBalance)
 }
 
 func (f *LedgerRelayFunding) legacyBalance() (int, error) {
-	if f.accountType == billingAccountTypeClaudeWallet {
-		return GetUserClaudeWalletQuota(f.userID)
-	}
-	return GetUserWalletQuota(f.userID)
+	return GetUserClaudeWalletQuota(f.userID)
 }
 
 func (f *LedgerRelayFunding) idempotencyKey(operation string) string {
@@ -237,14 +306,8 @@ func (f *LedgerRelayFunding) projectLegacyDelta(delta int) error {
 	if delta == 0 {
 		return nil
 	}
-	if f.accountType == billingAccountTypeClaudeWallet {
-		if delta > 0 {
-			return identitystore.DecreaseUserClaudeQuota(f.userID, delta)
-		}
-		return identitystore.IncreaseUserClaudeQuota(f.userID, -delta)
-	}
 	if delta > 0 {
-		return identitystore.DecreaseUserQuota(f.userID, delta)
+		return identitystore.DecreaseUserClaudeQuota(f.userID, delta)
 	}
-	return identitystore.IncreaseUserQuota(f.userID, -delta)
+	return identitystore.IncreaseUserClaudeQuota(f.userID, -delta)
 }

@@ -13,6 +13,14 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
@@ -31,6 +39,10 @@ const tierSchema = z.object({
 const schema = z.object({
   enabled: z.boolean(),
   unitPrice: z.coerce.number().min(0),
+  expireDays: z.coerce.number().int().min(1).max(365),
+  registrationRewardEnabled: z.boolean(),
+  registrationRewardStartAt: z.string(),
+  registrationRewardEndAt: z.string(),
   dailyLimit: z.coerce.number().int().min(1),
   monthlyLimit: z.coerce.number().int().min(1),
   dailyOpenLimit: z.coerce.number().int().min(1),
@@ -40,6 +52,7 @@ const schema = z.object({
   lowRewardThresholdUSD: z.coerce.number().min(0),
   subscriptionPrizeProbability: z.coerce.number().min(0).max(1),
   subscriptionPlanTitle: z.string().min(1),
+  multiplierCardRouteGroup: z.string().min(1, '请选择倍率卡路由分组'),
   countOptions: z.string().superRefine((value, ctx) => {
     try {
       const parsed = JSON.parse(value)
@@ -108,12 +121,37 @@ function stringifyJson(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
+function formatDateTimeLocal(timestamp: number): string {
+  if (!timestamp) return ''
+  const date = new Date(timestamp * 1000)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 16)
+}
+
+function parseDateTimeLocal(value: string): number {
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : 0
+}
+
+function parseGroupNames(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    return Object.keys(parsed).sort((left, right) => left.localeCompare(right))
+  } catch {
+    return []
+  }
+}
+
 export function BlindBoxSettingsSection({
   defaultValues,
 }: {
   defaultValues: {
     enabled: boolean
     unitPrice: number
+    expireDays: number
+    registrationRewardEnabled: boolean
+    registrationRewardStartAt: number
+    registrationRewardEndAt: number
     dailyLimit: number
     monthlyLimit: number
     dailyOpenLimit: number
@@ -123,6 +161,8 @@ export function BlindBoxSettingsSection({
     lowRewardThresholdUSD: number
     subscriptionPrizeProbability: number
     subscriptionPlanTitle: string
+    multiplierCardRouteGroup: string
+    groupRatio: string
     countOptions: number[]
     tiers: BlindBoxTierSetting[]
   }
@@ -134,6 +174,14 @@ export function BlindBoxSettingsSection({
     defaultValues: {
       enabled: defaultValues.enabled,
       unitPrice: defaultValues.unitPrice,
+      expireDays: defaultValues.expireDays,
+      registrationRewardEnabled: defaultValues.registrationRewardEnabled,
+      registrationRewardStartAt: formatDateTimeLocal(
+        defaultValues.registrationRewardStartAt
+      ),
+      registrationRewardEndAt: formatDateTimeLocal(
+        defaultValues.registrationRewardEndAt
+      ),
       dailyLimit: defaultValues.dailyLimit,
       monthlyLimit: defaultValues.monthlyLimit,
       dailyOpenLimit: defaultValues.dailyOpenLimit,
@@ -143,6 +191,8 @@ export function BlindBoxSettingsSection({
       lowRewardThresholdUSD: defaultValues.lowRewardThresholdUSD,
       subscriptionPrizeProbability: defaultValues.subscriptionPrizeProbability,
       subscriptionPlanTitle: defaultValues.subscriptionPlanTitle,
+      multiplierCardRouteGroup:
+        defaultValues.multiplierCardRouteGroup || '纯Pro号池',
       countOptions: stringifyJson(defaultValues.countOptions),
       tiers: stringifyJson(defaultValues.tiers),
     },
@@ -150,12 +200,31 @@ export function BlindBoxSettingsSection({
 
   const { isDirty, isSubmitting } = form.formState
   const enabled = form.watch('enabled')
+  const registrationRewardEnabled = form.watch('registrationRewardEnabled')
+  const routeGroups = parseGroupNames(defaultValues.groupRatio)
 
   async function onSubmit(values: Values) {
     const normalizedCountOptions = normalizeCountOptions(values.countOptions)
     const normalizedTiers = normalizeTiers(values.tiers)
     const defaultCountOptions = JSON.stringify(defaultValues.countOptions)
     const defaultTiers = JSON.stringify(defaultValues.tiers)
+    const registrationRewardStartAt = parseDateTimeLocal(
+      values.registrationRewardStartAt
+    )
+    const registrationRewardEndAt = parseDateTimeLocal(
+      values.registrationRewardEndAt
+    )
+
+    if (
+      registrationRewardStartAt > 0 &&
+      registrationRewardEndAt > 0 &&
+      registrationRewardEndAt <= registrationRewardStartAt
+    ) {
+      form.setError('registrationRewardEndAt', {
+        message: '结束时间必须晚于开始时间',
+      })
+      return
+    }
 
     const updates: Array<{ key: string; value: string }> = []
 
@@ -174,6 +243,26 @@ export function BlindBoxSettingsSection({
       'blind_box_setting.unit_price',
       values.unitPrice,
       defaultValues.unitPrice
+    )
+    pushIfChanged(
+      'blind_box_setting.expire_days',
+      values.expireDays,
+      defaultValues.expireDays
+    )
+    pushIfChanged(
+      'blind_box_setting.registration_reward_enabled',
+      values.registrationRewardEnabled,
+      defaultValues.registrationRewardEnabled
+    )
+    pushIfChanged(
+      'blind_box_setting.registration_reward_start_at',
+      registrationRewardStartAt,
+      defaultValues.registrationRewardStartAt
+    )
+    pushIfChanged(
+      'blind_box_setting.registration_reward_end_at',
+      registrationRewardEndAt,
+      defaultValues.registrationRewardEndAt
     )
     pushIfChanged(
       'blind_box_setting.daily_limit',
@@ -220,6 +309,11 @@ export function BlindBoxSettingsSection({
       values.subscriptionPlanTitle.trim(),
       defaultValues.subscriptionPlanTitle
     )
+    pushIfChanged(
+      'blind_box_setting.multiplier_card_route_group',
+      values.multiplierCardRouteGroup,
+      defaultValues.multiplierCardRouteGroup || '纯Pro号池'
+    )
 
     if (normalizedCountOptions !== defaultCountOptions) {
       updates.push({
@@ -246,6 +340,7 @@ export function BlindBoxSettingsSection({
     form.reset({
       ...values,
       subscriptionPlanTitle: values.subscriptionPlanTitle.trim(),
+      multiplierCardRouteGroup: values.multiplierCardRouteGroup,
       countOptions: stringifyJson(JSON.parse(normalizedCountOptions)),
       tiers: stringifyJson(JSON.parse(normalizedTiers)),
     })
@@ -280,6 +375,108 @@ export function BlindBoxSettingsSection({
             )}
           />
 
+          <FormField
+            control={form.control}
+            name='registrationRewardEnabled'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                <div className='space-y-0.5'>
+                  <FormLabel className='text-base'>启用邀请码注册赠盒</FormLabel>
+                  <FormDescription>
+                    仅在活动有效期内，填写有效邀请码的新用户才获得 5 个未开启盲盒
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={updateOption.isPending || isSubmitting}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <div className='grid gap-6 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='registrationRewardStartAt'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>邀请赠盒活动开始时间</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='datetime-local'
+                      disabled={!registrationRewardEnabled}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>留空表示保存后立即生效</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='registrationRewardEndAt'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>邀请赠盒活动结束时间</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='datetime-local'
+                      disabled={!registrationRewardEnabled}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>留空表示不设截止时间</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='multiplierCardRouteGroup'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>倍率卡路由分组</FormLabel>
+                  <Select
+                    items={routeGroups.map((group) => ({
+                      value: group,
+                      label: group,
+                    }))}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={
+                      routeGroups.length === 0 ||
+                      updateOption.isPending ||
+                      isSubmitting
+                    }
+                  >
+                    <FormControl>
+                      <SelectTrigger className='w-full'>
+                        <SelectValue placeholder='选择已有分组' />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        {routeGroups.map((group) => (
+                          <SelectItem key={group} value={group}>
+                            {group}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    0 和 0.1 倍率卡启用后仅路由到此分组；倍率仍由卡本身固定，生图模型不可用。
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
           <div className='grid gap-6 md:grid-cols-2 xl:grid-cols-4'>
             <FormField
               control={form.control}
@@ -303,6 +500,22 @@ export function BlindBoxSettingsSection({
                   <FormControl>
                     <Input type='number' min={1} {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='expireDays'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>盲盒有效期（天）</FormLabel>
+                  <FormControl>
+                    <Input type='number' min={1} max={365} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    邀请码注册赠送和购买获得的未开启盲盒，到期后不可再开启
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

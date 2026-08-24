@@ -16,10 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { AlertTriangle, CheckCircle2, Layers3, RefreshCcw, Rows3 } from 'lucide-react'
+import { Layers3, RefreshCcw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { SectionPageLayout } from '@/components/layout'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -28,21 +29,47 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
+import { SectionPageLayout } from '@/components/layout'
 import { GroupStatusMonitorCard } from './group-status-monitor-card'
-import {
-  formatSampleWindowLabel,
-  sortItems,
-  summarizeGroups,
-} from './presentation'
+import { sortItems, summarizeGroups } from './presentation'
 import { useSidebarGroupStatus } from './use-sidebar-group-status'
 
 export function SidebarGroupStatusPage() {
   const { t } = useTranslation()
   const query = useSidebarGroupStatus()
-  const items = sortItems(query.data?.data ?? [])
-  const summary = summarizeGroups(items)
+  const [source, setSource] = useState<'all' | 'official' | 'marketplace_user'>(
+    'all'
+  )
+  const [search, setSearch] = useState('')
+  const [modelFilter, setModelFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const allItems = sortItems(query.data?.data ?? [])
+  const normalizedSearch = search.trim().toLowerCase()
+  const items = allItems.filter((item) => {
+    const sourceMatches =
+      source === 'all' || (item.source_type ?? 'official') === source
+    const modelMatches =
+      !modelFilter || item.models.some((model) => model.model === modelFilter)
+    const statusMatches = !statusFilter || item.status === statusFilter
+    const searchMatches =
+      !normalizedSearch ||
+      [
+        item.group,
+        item.display_name ?? '',
+        ...item.models.map((model) => model.model),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedSearch)
+    return sourceMatches && modelMatches && statusMatches && searchMatches
+  })
+  const modelOptions = Array.from(
+    new Set(allItems.flatMap((item) => item.models.map((model) => model.model)))
+  ).sort()
+  const summary = summarizeGroups(allItems)
 
   return (
     <SectionPageLayout>
@@ -54,7 +81,9 @@ export function SidebarGroupStatusPage() {
         <Button
           variant='outline'
           size='sm'
-          render={<Link to='/dashboard/$section' params={{ section: 'overview' }} />}
+          render={
+            <Link to='/dashboard/$section' params={{ section: 'overview' }} />
+          }
         >
           概览
         </Button>
@@ -74,6 +103,70 @@ export function SidebarGroupStatusPage() {
         <div className='mx-auto flex w-full max-w-[1700px] flex-col gap-5'>
           <OverviewPanel summary={summary} loading={query.isLoading} />
 
+          <div className='border-border flex flex-col gap-3 border-b pb-3'>
+            <div
+              className='bg-muted flex w-fit rounded-md p-1'
+              aria-label='分组来源筛选'
+            >
+              {(
+                [
+                  ['all', '全部'],
+                  ['official', '官方渠道'],
+                  ['marketplace_user', '第三方渠道'],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  size='sm'
+                  variant={source === value ? 'secondary' : 'ghost'}
+                  onClick={() => setSource(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className='flex flex-col gap-2 xl:flex-row xl:items-center'>
+              <label className='relative min-w-0 flex-1 xl:max-w-xl'>
+                <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder='搜索分组名称、内部 ID 或模型'
+                  aria-label='搜索分组名称、内部 ID 或模型'
+                  className='bg-background pl-9'
+                />
+              </label>
+              <NativeSelect
+                value={modelFilter}
+                onChange={(event) => setModelFilter(event.target.value)}
+                aria-label='按模型筛选'
+                className='bg-background xl:w-52'
+              >
+                <option value=''>全部模型</option>
+                {modelOptions.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                aria-label='按状态筛选'
+                className='bg-background xl:w-40'
+              >
+                <option value=''>全部状态</option>
+                <option value='healthy'>稳定</option>
+                <option value='unstable'>波动</option>
+                <option value='failed'>异常</option>
+                <option value='unknown'>暂无近期请求</option>
+              </NativeSelect>
+            </div>
+            <span className='text-muted-foreground text-xs'>
+              官方与第三方分组均可按来源、名称、模型和当前状态快速定位。
+            </span>
+          </div>
+
           {query.isLoading ? (
             <BoardSkeleton />
           ) : query.isError ? (
@@ -83,18 +176,29 @@ export function SidebarGroupStatusPage() {
           ) : (
             <div className='flex flex-col gap-5'>
               {items.map((group) => (
-                <section
-                  key={group.group}
-                  className='app-page-shell p-4'
-                >
+                <section key={group.group} className='app-page-shell p-4'>
                   <div className='mb-4 flex items-end justify-between gap-3'>
                     <div className='space-y-1'>
-                      <h3 className='text-xl font-semibold tracking-tight text-foreground'>
-                        {group.group}
+                      <h3 className='text-foreground text-xl font-semibold tracking-tight'>
+                        {group.display_name || group.group}
                       </h3>
                       <p className='text-muted-foreground text-sm'>
-                        {group.models.length} 个模型
+                        {(group.source_type ?? 'official') ===
+                        'marketplace_user'
+                          ? '第三方渠道 · 套餐与余额'
+                          : '官方渠道'}{' '}
+                        · {group.models.length} 个模型
                       </p>
+                    </div>
+                    <div className='shrink-0 text-right'>
+                      <div className='text-muted-foreground text-xs'>
+                        缓存命中率
+                      </div>
+                      <div className='mt-0.5 text-lg font-semibold tabular-nums'>
+                        {group.cache_hit_rate == null
+                          ? '--'
+                          : `${group.cache_hit_rate.toFixed(1)}%`}
+                      </div>
                     </div>
                   </div>
 
@@ -131,93 +235,71 @@ function OverviewPanel(props: {
       label: '业务分组',
       value: String(props.summary.groups),
       hint: '当前可查看的分组数',
-      icon: Layers3,
       tone: 'text-muted-foreground',
     },
     {
-      label: '正常模型',
+      label: '稳定模型',
       value: String(props.summary.healthyModels),
-      hint: `共 ${props.summary.models} 个模型`,
-      icon: CheckCircle2,
+      hint: '最新非空 30 分钟请求桶成功率 ≥ 90%',
       tone: 'text-success',
     },
     {
-      label: '缓慢模型',
-      value: String(props.summary.slowModels),
-      hint:
-        props.summary.sampleWindow == null
-          ? '暂无采样窗口'
-          : `${formatSampleWindowLabel(props.summary.sampleWindow)} 成功率窗口`,
-      icon: AlertTriangle,
+      label: '波动模型',
+      value: String(props.summary.unstableModels),
+      hint: '最新非空 30 分钟请求桶成功率 85%–90%',
       tone: 'text-warning',
     },
     {
-      label: '故障模型',
-      value: String(props.summary.degradedModels),
-      hint:
-        props.summary.sampleWindow == null
-          ? '暂无采样窗口'
-          : `${formatSampleWindowLabel(props.summary.sampleWindow)} 成功率窗口`,
-      icon: AlertTriangle,
+      label: '异常模型',
+      value: String(props.summary.failedModels),
+      hint: '最新非空 30 分钟请求桶成功率低于 85%',
       tone: 'text-destructive',
     },
     {
-      label: '观测中模型',
+      label: '暂无近期请求模型',
       value: String(props.summary.unknownModels),
-      hint: '暂无足够请求样本',
-      icon: Rows3,
+      hint: '近 6 小时没有请求样本',
       tone: 'text-muted-foreground',
     },
   ]
 
   return (
-    <Card className='border-border/70 bg-gradient-to-br from-background via-background to-primary/5'>
-      <CardHeader className='border-b border-border/70'>
+    <Card className='border-border/70'>
+      <CardHeader className='border-border/70 border-b'>
         <CardTitle className='flex items-center gap-2'>
           <Layers3 className='text-primary size-4' />
           分组模型状态
         </CardTitle>
         <CardDescription className='max-w-[72ch] leading-6'>
-          快速查看哪些模型稳定可用，哪些模型最近出现波动，并定位问题出现的大致时间段。
+          三处状态统一取近 6 小时内最新非空的 30 分钟请求桶；绿色表示成功率至少
+          90%，不代表每次请求都成功。
         </CardDescription>
       </CardHeader>
-      <CardContent className='grid gap-3 pt-4 md:grid-cols-2 xl:grid-cols-5'>
-        {metrics.map((metric) => {
-          const Icon = metric.icon
-
-          return (
-            <div
-              key={metric.label}
-              className='rounded-2xl border border-border/70 bg-background/88 px-4 py-3 dark:bg-background/70'
-            >
-              <div className='flex items-start justify-between gap-3'>
-                <div className='space-y-1'>
-                  <div className='text-muted-foreground text-xs font-medium'>
-                    {metric.label}
-                  </div>
-                  {props.loading ? (
-                    <Skeleton className='h-7 w-18 rounded-md' />
-                  ) : (
-                    <div className='text-2xl font-semibold tracking-tight tabular-nums'>
-                      {metric.value}
-                    </div>
-                  )}
-                  <div className='text-muted-foreground text-xs'>
-                    {metric.hint}
-                  </div>
-                </div>
+      <CardContent className='pt-4'>
+        <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
+          {metrics.map((metric) => (
+            <div key={metric.label} className='px-4 py-1 first:pl-0'>
+              <div className='text-muted-foreground text-xs font-medium'>
+                {metric.label}
+              </div>
+              {props.loading ? (
+                <Skeleton className='mt-1.5 h-7 w-16 rounded-md' />
+              ) : (
                 <div
                   className={cn(
-                    'bg-muted flex size-10 items-center justify-center rounded-2xl',
+                    'app-numeric mt-1.5 text-2xl font-semibold tracking-tight',
                     metric.tone
                   )}
                 >
-                  <Icon className='size-5' />
+                  {metric.value}
                 </div>
+              )}
+              <div className='text-muted-foreground mt-0.5 text-xs leading-5'>
+                {metric.hint}
               </div>
             </div>
-          )
-        })}
+          ))}
+        </div>
       </CardContent>
     </Card>
   )
@@ -235,10 +317,7 @@ function BoardSkeleton() {
             </div>
             <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
               {Array.from({ length: 5 }).map((__, cardIndex) => (
-                <Skeleton
-                  key={cardIndex}
-                  className='h-48 w-full rounded-2xl'
-                />
+                <Skeleton key={cardIndex} className='h-48 w-full rounded-2xl' />
               ))}
             </div>
           </CardContent>

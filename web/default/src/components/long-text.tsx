@@ -45,13 +45,10 @@ export function LongText({
   const [isOverflown, setIsOverflown] = useState(false)
 
   useEffect(() => {
-    if (checkOverflow(ref.current)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsOverflown(true)
-      return
-    }
-
-    setIsOverflown(false)
+    const frame = requestAnimationFrame(() => {
+      setIsOverflown(checkOverflow(ref.current))
+    })
+    return () => cancelAnimationFrame(frame)
   }, [])
 
   if (!isOverflown)

@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -35,10 +36,49 @@ func FlushWriter(c *gin.Context) (err error) {
 	if c.Request != nil && c.Request.Context().Err() != nil {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
+	if err := StreamWorkerContext(c).Err(); err != nil {
+		return fmt.Errorf("stream worker context done: %w", err)
+	}
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		return errors.New("streaming error: flusher not found")
+	}
+	if value, exists := c.Get(gatewayruntime.FirstByteTraceContextKey); exists {
+		if trace, ok := value.(*gatewayruntime.FirstByteTrace); ok {
+			trace.MarkFirstFlush()
+		}
+	}
+	flusher.Flush()
+	return nil
+}
+
+// FlushHeaders commits only the HTTP streaming headers. It deliberately does
+// not mark response body delivery, so a pre-semantic upstream failure can
+// remain retry-safe.
+func FlushHeaders(c *gin.Context) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("header flush panic recovered: %v", r)
+		}
+	}()
+	if c == nil || c.Writer == nil {
+		return nil
+	}
+	if c.Request != nil && c.Request.Context().Err() != nil {
+		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+	}
+	if err := StreamWorkerContext(c).Err(); err != nil {
+		return fmt.Errorf("stream worker context done: %w", err)
+	}
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		return errors.New("streaming error: flusher not found")
+	}
+	if value, exists := c.Get(gatewayruntime.FirstByteTraceContextKey); exists {
+		if trace, ok := value.(*gatewayruntime.FirstByteTrace); ok {
+			trace.MarkHeadersFlush()
+		}
 	}
 	flusher.Flush()
 	return nil
@@ -57,7 +97,19 @@ func SetEventStreamHeaders(c *gin.Context) {
 }
 
 func IsClientGone(c *gin.Context) bool {
-	return c == nil || c.Request == nil || c.Request.Context().Err() != nil
+	if c == nil || c.Request == nil || c.Request.Context().Err() != nil {
+		MarkClientGone(c)
+		return true
+	}
+	return false
+}
+
+// MarkClientGone records a downstream disconnect for the relay error path.
+// It is intentionally request-local and never exposed to API consumers.
+func MarkClientGone(c *gin.Context) {
+	if c != nil {
+		c.Set(string(constant.ContextKeyClientGone), true)
+	}
 }
 
 func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
@@ -96,6 +148,9 @@ func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data st
 	c.Render(-1, CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 	c.Render(-1, CustomEvent{Data: fmt.Sprintf("data: %s", data)})
 	err := FlushWriter(c)
+	if err != nil && IsClientGone(c) {
+		return err
+	}
 	if err == nil {
 		markResponseBodyDelivered(c)
 	}

@@ -87,7 +87,6 @@ func UpdateRedemption(redemption commerceschema.Redemption, statusOnly bool) (*c
 	if err != nil {
 		return nil, err
 	}
-
 	if !statusOnly {
 		if err := validateRedemptionName(redemption.Name); err != nil {
 			return nil, err
@@ -184,21 +183,21 @@ func prepareRedemptionForWrite(redemption *commerceschema.Redemption) error {
 			return ErrRedemptionBlindBoxQuantityInvalid
 		}
 		redemption.Quota = 0
-		redemption.WalletType = commerceschema.WalletTypeDefault
+		redemption.WalletType = commerceschema.WalletTypeClaude
 		redemption.PlanId = 0
 		redemption.PlanTitle = ""
 	default:
 		if redemption.Quota <= 0 {
 			return ErrRedemptionQuotaRequired
 		}
-		redemption.WalletType = commercedomain.NormalizeWalletType(redemption.WalletType)
+		redemption.WalletType = commerceschema.WalletTypeClaude
 		redemption.PlanId = 0
 		redemption.PlanTitle = ""
 		redemption.BlindBoxQuantity = 0
 	}
 
 	if redemption.RedeemType == commerceschema.RedemptionTypeSubscription {
-		redemption.WalletType = commerceschema.WalletTypeDefault
+		redemption.WalletType = commerceschema.WalletTypeClaude
 	}
 	return nil
 }

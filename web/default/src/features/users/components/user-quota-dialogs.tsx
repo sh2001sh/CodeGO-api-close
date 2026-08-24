@@ -24,12 +24,9 @@ import { UserQuotaDialog } from './user-quota-dialog'
 interface UserQuotaDialogsProps {
   currentRow?: User
   quotaDialogOpen: boolean
-  claudeQuotaDialogOpen: boolean
   currentQuotaRaw: number
-  currentClaudeQuotaRaw: number
   t: TFunction
   onQuotaOpenChange: (open: boolean) => void
-  onClaudeQuotaOpenChange: (open: boolean) => void
   onSuccess: () => void
 }
 
@@ -39,24 +36,14 @@ export function UserQuotaDialogs(props: UserQuotaDialogsProps) {
   }
 
   return (
-    <>
-      <UserQuotaDialog
-        open={props.quotaDialogOpen}
-        onOpenChange={props.onQuotaOpenChange}
-        userId={props.currentRow.id}
-        currentQuota={parseQuotaFromDollars(props.currentQuotaRaw || 0)}
-        onSuccess={props.onSuccess}
-      />
-      <UserQuotaDialog
-        open={props.claudeQuotaDialogOpen}
-        onOpenChange={props.onClaudeQuotaOpenChange}
-        userId={props.currentRow.id}
-        currentQuota={parseQuotaFromDollars(props.currentClaudeQuotaRaw || 0)}
-        action='add_claude_quota'
-        title={props.t('Adjust Claude Quota')}
-        currentLabel={props.t('Current Claude quota')}
-        onSuccess={props.onSuccess}
-      />
-    </>
+    <UserQuotaDialog
+      open={props.quotaDialogOpen}
+      onOpenChange={props.onQuotaOpenChange}
+      userId={props.currentRow.id}
+      currentQuota={parseQuotaFromDollars(props.currentQuotaRaw || 0)}
+      title={props.t('Adjust universal credit')}
+      currentLabel={props.t('当前通用额度')}
+      onSuccess={props.onSuccess}
+    />
   )
 }

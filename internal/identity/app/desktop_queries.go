@@ -23,11 +23,9 @@ type DesktopAccountSnapshot struct {
 	DisplayName        string   `json:"display_name"`
 	Group              string   `json:"group"`
 	Quota              int      `json:"quota"`
-	ClaudeQuota        int      `json:"claude_quota"`
 	UsedQuota          int      `json:"used_quota"`
 	RequestCount       int      `json:"request_count"`
 	QuotaUSD           float64  `json:"quota_usd"`
-	ClaudeQuotaUSD     float64  `json:"claude_quota_usd"`
 	UsedQuotaUSD       float64  `json:"used_quota_usd"`
 	BillingPreference  string   `json:"billing_preference"`
 	FundingSourceOrder []string `json:"funding_source_order"`
@@ -107,7 +105,7 @@ func BuildDesktopAccountSummary(userID int) (*DesktopAccountSummaryResponse, err
 	if err != nil {
 		return nil, err
 	}
-	walletQuota, claudeWalletQuota, err := loadDisplayWalletQuotas(user)
+	walletQuota, err := loadDisplayWalletQuota(user)
 	if err != nil {
 		return nil, err
 	}
@@ -149,11 +147,9 @@ func BuildDesktopAccountSummary(userID int) (*DesktopAccountSummaryResponse, err
 			DisplayName:        user.DisplayName,
 			Group:              user.Group,
 			Quota:              walletQuota,
-			ClaudeQuota:        claudeWalletQuota,
 			UsedQuota:          user.UsedQuota,
 			RequestCount:       user.RequestCount,
 			QuotaUSD:           quotaToUSD(walletQuota),
-			ClaudeQuotaUSD:     quotaToUSD(claudeWalletQuota),
 			UsedQuotaUSD:       quotaToUSD(user.UsedQuota),
 			BillingPreference:  setting.BillingPreference,
 			FundingSourceOrder: setting.FundingSourceOrder,

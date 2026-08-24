@@ -50,7 +50,6 @@ export interface UserProfile {
   /** Current quota balance */
   quota: number
   /** Claude-only quota balance */
-  claude_quota?: number
   /** Total used quota */
   used_quota: number
   /** Total request count */
@@ -169,22 +168,6 @@ export interface BindingItem {
   isBound: boolean
   isEnabled: boolean
   onBind: () => void
-}
-
-export interface MiniProgramBinding {
-  bound: boolean
-  status?: string
-  openid_masked?: string
-  account_masked?: string
-  username_masked?: string
-  bound_at?: number
-  last_seen_at?: number
-}
-
-export interface MiniProgramBindCodePayload {
-  code: string
-  expires_at: number
-  ttl_seconds: number
 }
 
 /**

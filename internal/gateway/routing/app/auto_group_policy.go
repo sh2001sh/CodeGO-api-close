@@ -2,133 +2,24 @@ package app
 
 import (
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/samber/hot"
 	"github.com/sh2001sh/new-api/constant"
-	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
-	"github.com/sh2001sh/new-api/internal/platform/cachex"
 	platformhttpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 )
 
-const (
-	autoGroupFailureThreshold = 3
-	autoGroupCooldownDuration = 2 * time.Minute
-	autoGroupCircuitTTL       = 10 * time.Minute
-)
-
-type autoGroupCircuit struct {
-	ConsecutiveFailures int       `json:"consecutive_failures"`
-	CooldownUntil       time.Time `json:"cooldown_until"`
-}
-
-var (
-	autoGroupCircuitCacheOnce sync.Once
-	autoGroupCircuitCache     *cachex.HybridCache[autoGroupCircuit]
-	autoGroupCircuitLocks     [64]sync.Mutex
-)
-
-func autoGroupCircuitKey(group string, model string) string {
-	return group + "\x00" + model
-}
-
-func getAutoGroupCircuitCache() *cachex.HybridCache[autoGroupCircuit] {
-	autoGroupCircuitCacheOnce.Do(func() {
-		autoGroupCircuitCache = cachex.NewHybridCache[autoGroupCircuit](cachex.HybridCacheConfig[autoGroupCircuit]{
-			Namespace:  cachex.Namespace("new-api:auto_group_circuit:v1"),
-			Redis:      platformcache.RDB,
-			RedisCodec: cachex.JSONCodec[autoGroupCircuit]{},
-			RedisEnabled: func() bool {
-				return platformcache.RedisEnabled && platformcache.RDB != nil
-			},
-			Memory: func() *hot.HotCache[string, autoGroupCircuit] {
-				return hot.NewHotCache[string, autoGroupCircuit](hot.LRU, 10_000).
-					WithTTL(autoGroupCircuitTTL).
-					WithJanitor().
-					Build()
-			},
-		})
-	})
-	return autoGroupCircuitCache
-}
-
-func autoGroupCircuitLock(key string) *sync.Mutex {
-	index := 0
-	for _, char := range key {
-		index = (index*31 + int(char)) % len(autoGroupCircuitLocks)
-	}
-	return &autoGroupCircuitLocks[index]
-}
-
-func isAutoGroupCooling(group string, model string, now time.Time) bool {
-	state, found, err := getAutoGroupCircuitCache().Get(autoGroupCircuitKey(group, model))
-	return err == nil && found && state.CooldownUntil.After(now)
-}
-
-func recordAutoGroupSuccess(group string, model string) {
-	if group == "" || model == "" {
-		return
-	}
-	key := autoGroupCircuitKey(group, model)
-	lock := autoGroupCircuitLock(key)
-	lock.Lock()
-	defer lock.Unlock()
-	_, _ = getAutoGroupCircuitCache().DeleteMany([]string{key})
-}
-
-func recordAutoGroupFailure(group string, model string, now time.Time) {
-	if group == "" || model == "" {
-		return
-	}
-
-	key := autoGroupCircuitKey(group, model)
-	lock := autoGroupCircuitLock(key)
-	lock.Lock()
-	defer lock.Unlock()
-
-	state, found, err := getAutoGroupCircuitCache().Get(key)
-	if err != nil {
-		return
-	}
-	if !found {
-		state = autoGroupCircuit{}
-	}
-	if state.CooldownUntil.After(now) {
-		return
-	}
-	state.ConsecutiveFailures++
-	if state.ConsecutiveFailures >= autoGroupFailureThreshold {
-		state.ConsecutiveFailures = 0
-		state.CooldownUntil = now.Add(autoGroupCooldownDuration)
-	}
-	_ = getAutoGroupCircuitCache().SetWithTTL(key, state, autoGroupCircuitTTL)
-}
-
-func resetAutoGroupCircuitCacheForTest() error {
-	if autoGroupCircuitCache != nil {
-		if err := autoGroupCircuitCache.Purge(); err != nil {
-			return err
-		}
-	}
-	autoGroupCircuitCacheOnce = sync.Once{}
-	autoGroupCircuitCache = nil
-	return nil
-}
-
-// OrderAutoGroups returns permitted auto groups ordered by availability policy.
-// Lower effective user pricing is preferred unless that group/model is cooling.
-func OrderAutoGroups(userGroup string, model string) []string {
+// OrderAutoGroups returns configured automatic groups in user preference order,
+// with only this user's actively cooling routes stably demoted.
+func OrderAutoGroups(c *gin.Context, userGroup, model string) []string {
 	groups := GetUserAutoGroup(userGroup)
-	return orderGroupsByAutoPolicy(userGroup, model, groups)
+	return orderGroupsByAutoPolicy(c, userGroup, model, groups, time.Now())
 }
 
-// OrderAutoFallbackGroups returns user-permitted groups that were deliberately
-// left out of the configured automatic pool. They are only considered when no
-// configured automatic group can serve the requested model, which lets model-
-// specific groups such as Claude remain available without changing GPT routing.
-func OrderAutoFallbackGroups(userGroup string, model string, excluded []string) []string {
+// OrderAutoFallbackGroups returns permitted groups outside the configured Auto
+// list. They have no configured rank, so effective cost is their deterministic
+// preference while user-scoped cooling still demotes unhealthy fallbacks.
+func OrderAutoFallbackGroups(c *gin.Context, userGroup, model string, excluded []string) []string {
 	excludedSet := make(map[string]struct{}, len(excluded))
 	for _, group := range excluded {
 		excludedSet[group] = struct{}{}
@@ -145,20 +36,35 @@ func OrderAutoFallbackGroups(userGroup string, model string, excluded []string) 
 		}
 		groups = append(groups, group)
 	}
-	return orderGroupsByAutoPolicy(userGroup, model, groups)
+	sort.SliceStable(groups, func(i, j int) bool {
+		left := GetUserGroupRatio(userGroup, groups[i])
+		right := GetUserGroupRatio(userGroup, groups[j])
+		if left == right {
+			return groups[i] < groups[j]
+		}
+		return left < right
+	})
+	return orderGroupsByAutoPolicy(c, userGroup, model, groups, time.Now())
 }
 
-func orderGroupsByAutoPolicy(userGroup string, model string, groups []string) []string {
-	now := time.Now()
-	sort.SliceStable(groups, func(i, j int) bool {
-		leftCooling := isAutoGroupCooling(groups[i], model, now)
-		rightCooling := isAutoGroupCooling(groups[j], model, now)
-		if leftCooling != rightCooling {
-			return !leftCooling
+func orderGroupsByAutoPolicy(c *gin.Context, _ string, model string, groups []string, now time.Time) []string {
+	preferred := make([]string, 0, len(groups))
+	cooling := make([]string, 0, len(groups))
+	for _, group := range groups {
+		switch {
+		case isAutoGroupCooling(c, group, model, now):
+			cooling = append(cooling, group)
+		case autoGroupNeedsRecoveryProbe(c, group, model, now):
+			if tryStartAutoGroupRecoveryProbe(c, group, model, now) {
+				preferred = append(preferred, group)
+			} else {
+				cooling = append(cooling, group)
+			}
+		default:
+			preferred = append(preferred, group)
 		}
-		return GetUserGroupRatio(userGroup, groups[i]) < GetUserGroupRatio(userGroup, groups[j])
-	})
-	return groups
+	}
+	return append(preferred, cooling...)
 }
 
 func selectedAutoGroup(ctx *gin.Context) string {
@@ -168,12 +74,12 @@ func selectedAutoGroup(ctx *gin.Context) string {
 	return platformhttpctx.GetContextKeyString(ctx, constant.ContextKeyAutoGroup)
 }
 
-// RecordAutoGroupSuccess closes the model-specific circuit after a successful relay.
+// RecordAutoGroupSuccess advances only the current user's group/model circuit.
 func RecordAutoGroupSuccess(ctx *gin.Context, model string) {
-	recordAutoGroupSuccess(selectedAutoGroup(ctx), model)
+	recordAutoGroupSuccess(ctx, selectedAutoGroup(ctx), model, time.Now())
 }
 
-// RecordAutoGroupFailure advances the model-specific circuit after a retryable relay failure.
+// RecordAutoGroupFailure advances only the current user's group/model circuit.
 func RecordAutoGroupFailure(ctx *gin.Context, model string) {
-	recordAutoGroupFailure(selectedAutoGroup(ctx), model, time.Now())
+	recordAutoGroupFailure(ctx, selectedAutoGroup(ctx), model, time.Now())
 }

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useCallback, useState } from 'react'
 import { type Row } from '@tanstack/react-table'
 import {
+  Activity,
   Trash2,
   Edit,
   Power,
@@ -172,6 +173,24 @@ export function DataTableRowActions<TData>({
 
   return (
     <div className='flex items-center justify-end gap-1'>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              onClick={() => {
+                setCurrentRow(apiKey)
+                setOpen('connectivity-test')
+              }}
+              aria-label={t('测试连通性')}
+            />
+          }
+        >
+          <Activity className='size-4' />
+        </TooltipTrigger>
+        <TooltipContent>{t('测试连通性')}</TooltipContent>
+      </Tooltip>
       <Tooltip>
         <TooltipTrigger
           render={

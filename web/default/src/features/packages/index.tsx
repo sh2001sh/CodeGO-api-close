@@ -39,6 +39,7 @@ import { WalletStatsCard } from '@/features/wallet/components/wallet-stats-card'
 import { WalletWorkspaceShell } from '@/features/wallet/components/wallet-workspace-shell'
 import { useWalletWorkspace } from '@/features/wallet/hooks/use-wallet-workspace'
 import { CurrentPackagePanel, PlanZone } from './components'
+import { MonthlyPlanRules } from './monthly-plan-rules'
 
 type ZoneId = 'starter' | 'monthly' | 'shortterm'
 
@@ -190,7 +191,7 @@ export function PackagesPage() {
       <WalletWorkspaceShell
         title={t('Plans')}
         description={t(
-          'Choose a plan based on your usage rhythm. Eligible plans can join the Collective Benefit Program and unlock additional quota by participation tier.'
+          'Choose a plan based on your usage rhythm. Eligible plans automatically join the Collective Benefit Program and unlock additional quota by participation tier.'
         )}
         canonicalPath='/packages'
         framedMain={false}
@@ -209,7 +210,7 @@ export function PackagesPage() {
               <TitledCard
                 title={t('Plan purchase')}
                 description={t(
-                  'Compare the price, base quota, and validity first. Plans marked for collective benefit also show the final quota available at each participation tier.'
+                  'Compare the price, base quota, and validity first. Plans marked for collective benefit automatically join the queue after payment and show the final quota available at each participation tier.'
                 )}
                 icon={<Crown className='h-4 w-4' />}
                 action={
@@ -230,6 +231,7 @@ export function PackagesPage() {
                 }
                 contentClassName='space-y-5'
               >
+                <MonthlyPlanRules />
                 <PackageModelScopeNotice />
                 {primaryPlanZones.map((zone) => {
                   if (

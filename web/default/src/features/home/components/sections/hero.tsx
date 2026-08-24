@@ -86,7 +86,7 @@ const usagePaths = [
     step: '1',
     icon: <Wallet className='h-4 w-4 text-emerald-600' />,
     title: '充值或选套餐',
-    description: '按需选择月卡、日卡，或单独给 Claude 额度池充值。',
+    description: '按需选择 GPT 套餐，或单独充值通用额度。',
   },
   {
     step: '2',
@@ -131,7 +131,7 @@ export function Hero(props: HeroProps) {
           >
             <motion.div
               variants={heroItem}
-              className='ios-pill inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold text-primary'
+              className='ios-pill text-primary inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold'
             >
               <Layers className='h-3.5 w-3.5' />
               Code Go · 多模型 AI 接入平台
@@ -228,7 +228,7 @@ export function Hero(props: HeroProps) {
                   从充值到领取福利，整个流程都很直接。
                 </div>
               </div>
-              <span className='ios-pill px-2.5 py-1 text-[11px] font-medium text-primary'>
+              <span className='ios-pill text-primary px-2.5 py-1 text-[11px] font-medium'>
                 Code Go
               </span>
             </div>

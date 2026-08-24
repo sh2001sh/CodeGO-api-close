@@ -1,10 +1,6 @@
 package schema
 
-import (
-	"strings"
-
-	"gorm.io/gorm"
-)
+import "gorm.io/gorm"
 
 const (
 	RedemptionTypeQuota        = "quota"
@@ -21,7 +17,7 @@ type Redemption struct {
 	Name             string         `json:"name" gorm:"index"`
 	RedeemType       string         `json:"redeem_type" gorm:"type:varchar(32);not null;default:'quota';index"`
 	Quota            int            `json:"quota" gorm:"default:100"`
-	WalletType       string         `json:"wallet_type" gorm:"type:varchar(32);not null;default:'default';index"`
+	WalletType       string         `json:"wallet_type" gorm:"type:varchar(32);not null;default:'claude';index"`
 	PlanId           int            `json:"plan_id" gorm:"default:0;index"`
 	PlanTitle        string         `json:"plan_title" gorm:"type:varchar(128);default:''"`
 	BlindBoxQuantity int            `json:"blind_box_quantity" gorm:"type:int;not null;default:0"`
@@ -44,8 +40,5 @@ func (redemption *Redemption) BeforeUpdate(_ *gorm.DB) error {
 }
 
 func normalizeWalletType(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return "default"
-	}
-	return strings.TrimSpace(value)
+	return WalletTypeClaude
 }

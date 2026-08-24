@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/dto"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -25,6 +27,13 @@ func OaiResponsesCompactionHandler(c *gin.Context, resp *http.Response) (*dto.Us
 	if oaiError := compactResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	if !hasCompactionOutput(compactResp.Output) {
+		return nil, types.NewOpenAIError(
+			fmt.Errorf("upstream returned a compact response without a compaction output item"),
+			types.ErrorCodeBadResponseBody,
+			http.StatusBadGateway,
+		)
+	}
 
 	platformhttpx.IOCopyBytesGracefully(c, resp, responseBody)
 
@@ -40,4 +49,22 @@ func OaiResponsesCompactionHandler(c *gin.Context, resp *http.Response) (*dto.Us
 	}
 
 	return &usage, nil
+}
+
+func hasCompactionOutput(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var items []struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(raw, &items) != nil {
+		return false
+	}
+	for _, item := range items {
+		if item.Type == "compaction" || item.Type == "compaction_summary" {
+			return true
+		}
+	}
+	return false
 }

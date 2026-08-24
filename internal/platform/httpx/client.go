@@ -23,6 +23,8 @@ var (
 	responseHeaderTimeoutClientMu sync.Mutex
 )
 
+const outboundConnectionTimeout = 10 * time.Second
+
 func relayResponseHeaderTimeout() time.Duration {
 	if platformconfig.RelayResponseHeaderTimeout <= 0 {
 		return 0
@@ -35,19 +37,33 @@ func newOutboundTransport(proxyFunc func(*http.Request) (*url.URL, error), dialC
 }
 
 func newOutboundTransportWithResponseHeaderTimeout(proxyFunc func(*http.Request) (*url.URL, error), dialContext func(context.Context, string, string) (net.Conn, error), responseHeaderTimeout time.Duration) *http.Transport {
+	idleConnTimeout := time.Duration(platformconfig.RelayIdleConnTimeoutSeconds) * time.Second
+	if idleConnTimeout <= 0 {
+		idleConnTimeout = 90 * time.Second
+	}
+	tlsHandshakeTimeout := time.Duration(platformconfig.RelayTLSHandshakeTimeoutSeconds) * time.Second
+	if tlsHandshakeTimeout <= 0 {
+		tlsHandshakeTimeout = outboundConnectionTimeout
+	}
+	dialer := &net.Dialer{Timeout: outboundConnectionTimeout, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
-		MaxIdleConns:        platformconfig.RelayMaxIdleConns,
-		MaxIdleConnsPerHost: platformconfig.RelayMaxIdleConnsPerHost,
-		ForceAttemptHTTP2:   true,
-		Proxy:               proxyFunc,
-		DialContext:         dialContext,
+		MaxIdleConns:          platformconfig.RelayMaxIdleConns,
+		MaxIdleConnsPerHost:   platformconfig.RelayMaxIdleConnsPerHost,
+		MaxConnsPerHost:       platformconfig.RelayMaxConnsPerHost,
+		IdleConnTimeout:       idleConnTimeout,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true,
+		Proxy:                 proxyFunc,
+		DialContext:           dialContext,
 	}
 	if responseHeaderTimeout > 0 {
 		transport.ResponseHeaderTimeout = responseHeaderTimeout
-		transport.TLSHandshakeTimeout = responseHeaderTimeout
-		if transport.DialContext == nil {
-			transport.DialContext = (&net.Dialer{Timeout: responseHeaderTimeout}).DialContext
-		}
+	}
+	// Do not couple connection establishment to the optional response-header
+	// budget. Disabling the latter must not permit stalled TCP/TLS handshakes.
+	transport.TLSHandshakeTimeout = tlsHandshakeTimeout
+	if transport.DialContext == nil {
+		transport.DialContext = dialer.DialContext
 	}
 	if platformconfig.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = platformconfig.InsecureTLSConfig
@@ -98,7 +114,11 @@ func sharedHTTPClientOrDefault() *http.Client {
 // GetHTTPClientWithResponseHeaderTimeout returns a shared client for a
 // request-specific first-byte budget. The global client remains unchanged.
 func GetHTTPClientWithResponseHeaderTimeout(responseHeaderTimeout time.Duration) *http.Client {
-	if responseHeaderTimeout <= relayResponseHeaderTimeout() {
+	// The request-specific timeout may be lower than the global relay budget
+	// (for example, the 20s GPT first-byte budget). Reuse the global client
+	// only when the budgets are identical; otherwise its transport would
+	// silently restore the global timeout.
+	if responseHeaderTimeout <= 0 || responseHeaderTimeout == relayResponseHeaderTimeout() {
 		return sharedHTTPClientOrDefault()
 	}
 	responseHeaderTimeoutClientMu.Lock()
@@ -147,7 +167,7 @@ func NewProxyHTTPClient(proxyURL string) (*http.Client, error) {
 // NewProxyHTTPClientWithResponseHeaderTimeout applies a request-specific
 // first-byte budget while retaining proxy connection reuse.
 func NewProxyHTTPClientWithResponseHeaderTimeout(proxyURL string, responseHeaderTimeout time.Duration) (*http.Client, error) {
-	if responseHeaderTimeout <= relayResponseHeaderTimeout() {
+	if responseHeaderTimeout <= 0 || responseHeaderTimeout == relayResponseHeaderTimeout() {
 		return NewProxyHTTPClient(proxyURL)
 	}
 	return newProxyHTTPClient(proxyURL, responseHeaderTimeout)

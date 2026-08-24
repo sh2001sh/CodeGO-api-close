@@ -93,7 +93,18 @@ type SubscriptionCreemCheckoutPayload struct {
 }
 
 func NormalizeSubscriptionPurchaseFields(userID int, req SubscriptionPurchaseFields) (string, int64, error) {
+	plan, err := GetSubscriptionPlanByID(req.PlanID)
+	if err != nil {
+		return "", 0, err
+	}
+	return normalizeSubscriptionPurchaseFieldsForPlan(userID, plan, req)
+}
+
+func normalizeSubscriptionPurchaseFieldsForPlan(userID int, plan *commerceschema.SubscriptionPlan, req SubscriptionPurchaseFields) (string, int64, error) {
 	purchaseType := commercedomain.NormalizeSubscriptionPurchaseType(req.PurchaseType)
+	if purchaseType == commerceschema.SubscriptionPurchaseTypeNormal && supportsGroupBuyPlan(plan) {
+		purchaseType = commerceschema.SubscriptionPurchaseTypeGroupBuy
+	}
 	groupBuyID := req.GroupBuyID
 	if purchaseType != commerceschema.SubscriptionPurchaseTypeJoinGroup {
 		groupBuyID = 0
@@ -124,7 +135,7 @@ func PrepareSubscriptionPurchase(userID int, req SubscriptionPurchaseFields) (*c
 		return nil, nil, "", 0, errors.New("internal plan cannot be purchased")
 	}
 
-	purchaseType, groupBuyID, err := NormalizeSubscriptionPurchaseFields(userID, req)
+	purchaseType, groupBuyID, err := normalizeSubscriptionPurchaseFieldsForPlan(userID, plan, req)
 	if err != nil {
 		return nil, nil, "", 0, err
 	}

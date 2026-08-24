@@ -16,15 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import type { NavGroup } from '@/components/layout/types'
+import { useMyMarketplaceChannels } from '@/features/marketplace/hooks'
 import { CacheStatsDialog } from '@/features/system-settings/general/channel-affinity/cache-stats-dialog'
 import { UserInfoDialog } from './components/dialogs/user-info-dialog'
+import { OwnerChannelUsageLogs } from './components/owner-channel-usage-logs'
 import {
   UsageLogsProvider,
   useUsageLogsContext,
@@ -48,6 +50,11 @@ function UsageLogsContent() {
   const params = route.useParams()
   const activeCategory = resolveUsageLogsSectionId(params.section)
   const pageMeta = getUsageLogsSectionMeta(activeCategory)
+  const ownerChannelsQuery = useMyMarketplaceChannels()
+  const ownerChannels = ownerChannelsQuery.data ?? []
+  const [commonView, setCommonView] = useState<'personal' | 'channel'>(
+    'personal'
+  )
   const {
     selectedUserId,
     userInfoDialogOpen,
@@ -117,7 +124,28 @@ function UsageLogsContent() {
                 </TabsList>
               </Tabs>
             )}
-            <UsageLogsTable logCategory={activeCategory} />
+            {activeCategory === 'common' && ownerChannels.length > 0 && (
+              <Tabs
+                value={commonView}
+                onValueChange={(value) =>
+                  setCommonView(value as 'personal' | 'channel')
+                }
+              >
+                <TabsList className='h-auto max-w-full flex-wrap justify-start'>
+                  <TabsTrigger value='personal'>
+                    {t('个人使用日志')}
+                  </TabsTrigger>
+                  <TabsTrigger value='channel'>{t('渠道使用日志')}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+            {activeCategory === 'common' &&
+            commonView === 'channel' &&
+            ownerChannels.length > 0 ? (
+              <OwnerChannelUsageLogs channels={ownerChannels} />
+            ) : (
+              <UsageLogsTable logCategory={activeCategory} />
+            )}
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

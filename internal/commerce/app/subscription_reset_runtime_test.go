@@ -284,3 +284,61 @@ func TestUseUserSubscriptionResetOpportunity_ClearsCurrentSubscriptionAndLimitsM
 	assert.Equal(t, 1, summary.AvailableCount)
 	assert.Equal(t, 1, summary.UsedTotal)
 }
+
+func TestUseUserSubscriptionResetOpportunitySkipsConvertedPass(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	insertSubscriptionResetAppTestUser(t, 7211, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 7211, 0, 1000)
+	now := time.Now().Unix()
+	convertedSub := &commerceschema.UserSubscription{
+		Id: 7311, UserId: 7211, PlanId: plan.Id, AmountTotal: 1000, AmountUsed: 300,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}
+	eligibleSub := &commerceschema.UserSubscription{
+		Id: 7312, UserId: 7211, PlanId: plan.Id, AmountTotal: 1000, AmountUsed: 200,
+		StartTime: now - 3600, EndTime: now + 2*86400, Status: "active",
+	}
+	require.NoError(t, db.Create(convertedSub).Error)
+	require.NoError(t, db.Create(eligibleSub).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionClaudeConversion{
+		UserId: 7211, UserSubscriptionId: convertedSub.Id, RequestId: "converted-reset-skip",
+		Status: commerceschema.SubscriptionClaudeConversionStatusCompleted, ConversionPercent: 20,
+	}).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityAccount{
+		UserId: 7211, EarnedTotal: 1, AvailableTotal: 1,
+	}).Error)
+	require.NoError(t, restoreSubscriptionLedgerBalanceAfterResetTx(db, eligibleSub, "converted-skip-test"))
+
+	result, err := UseUserSubscriptionResetOpportunity(7211)
+	require.NoError(t, err)
+	assert.Equal(t, eligibleSub.Id, result.UserSubscriptionId)
+
+	var untouched commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", convertedSub.Id).First(&untouched).Error)
+	assert.EqualValues(t, 300, untouched.AmountUsed)
+	var reset commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", eligibleSub.Id).First(&reset).Error)
+	assert.Zero(t, reset.AmountUsed)
+}
+
+func TestUseUserSubscriptionResetOpportunityRejectsWhenAllPassesConverted(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	insertSubscriptionResetAppTestUser(t, 7221, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 7221, 0, 1000)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{
+		Id: 7321, UserId: 7221, PlanId: plan.Id, AmountTotal: 1000, AmountUsed: 200,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}
+	require.NoError(t, db.Create(sub).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionClaudeConversion{
+		UserId: 7221, UserSubscriptionId: sub.Id, RequestId: "converted-reset-reject",
+		Status: commerceschema.SubscriptionClaudeConversionStatusCompleted, ConversionPercent: 20,
+	}).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityAccount{
+		UserId: 7221, EarnedTotal: 1, AvailableTotal: 1,
+	}).Error)
+
+	_, err := UseUserSubscriptionResetOpportunity(7221)
+	require.ErrorIs(t, err, commerceschema.ErrSubscriptionResetOpportunityConverted)
+}

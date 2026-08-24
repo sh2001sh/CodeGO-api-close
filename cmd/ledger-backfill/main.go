@@ -7,8 +7,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
+	"sort"
 
+	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
@@ -16,6 +21,7 @@ import (
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformstore "github.com/sh2001sh/new-api/internal/platform/store"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -39,11 +45,19 @@ type negativeWalletLegacySummary struct {
 	TotalNormalizedQuota int64
 }
 
+type balanceBlindBoxLossCandidate struct {
+	UserID            int
+	DrawCount         int
+	RewardCents       int64
+	CompensationCents int64
+}
+
 func main() {
 	apply := flag.Bool("apply", false, "persist ledger accounts and bootstrap entries")
 	limit := flag.Int("limit", 0, "optional maximum subjects per account type")
 	normalizeNegativeWalletLegacy := flag.Bool("normalize-negative-wallet-legacy", false, "normalize strict negative legacy wallet quotas to the canonical zero ledger balance")
 	groupBuyID := flag.Int64("reconcile-group-buy-id", 0, "reconcile missing group-buy tier bonus for one group")
+	balanceBlindBoxLossBefore := flag.Int64("balance-blind-box-loss-compensation-before", 0, "compensate users whose balance blind-box rewards were below their total $15 draw cost before this Unix timestamp")
 	flag.Parse()
 
 	platformconfig.IsMasterNode = true
@@ -66,6 +80,27 @@ func main() {
 			log.Fatalf("reconcile group buy bonus: %v", err)
 		}
 		fmt.Printf("group-buy members adjusted: %d\n", adjusted)
+		return
+	}
+	if *balanceBlindBoxLossBefore > 0 {
+		plan, err := inspectBalanceBlindBoxLossCompensation(*balanceBlindBoxLossBefore)
+		if err != nil {
+			log.Fatalf("inspect balance blind-box loss compensation: %v", err)
+		}
+		var totalCents int64
+		for _, candidate := range plan {
+			totalCents += candidate.CompensationCents
+		}
+		fmt.Printf("balance blind-box loss compensation users: %d\n", len(plan))
+		fmt.Printf("balance blind-box loss compensation total: $%.2f\n", float64(totalCents)/100)
+		if !*apply {
+			fmt.Println("dry-run only; rerun with --apply --balance-blind-box-loss-compensation-before to issue the locked historical compensation")
+			return
+		}
+		if err := applyBalanceBlindBoxLossCompensation(*balanceBlindBoxLossBefore); err != nil {
+			log.Fatalf("apply balance blind-box loss compensation: %v", err)
+		}
+		fmt.Println("balance blind-box loss compensation completed")
 		return
 	}
 	if *normalizeNegativeWalletLegacy {
@@ -102,6 +137,82 @@ func main() {
 		log.Fatalf("apply ledger backfill: %v", err)
 	}
 	fmt.Println("ledger backfill completed")
+}
+
+func inspectBalanceBlindBoxLossCompensation(before int64) ([]balanceBlindBoxLossCandidate, error) {
+	return inspectBalanceBlindBoxLossCompensationTx(platformdb.DB, before)
+}
+
+func inspectBalanceBlindBoxLossCompensationTx(tx *gorm.DB, before int64) ([]balanceBlindBoxLossCandidate, error) {
+	if before <= 0 || !tx.Migrator().HasTable(&commerceschema.BlindBoxOpenRecord{}) {
+		return nil, nil
+	}
+	var records []commerceschema.BlindBoxOpenRecord
+	if err := tx.Where("pool_type = ? AND create_time < ?", commerceschema.BlindBoxPoolTypeBalance15, before).
+		Select("user_id", "reward_usd").Find(&records).Error; err != nil {
+		return nil, err
+	}
+	byUser := make(map[int]*balanceBlindBoxLossCandidate)
+	for _, record := range records {
+		candidate := byUser[record.UserId]
+		if candidate == nil {
+			candidate = &balanceBlindBoxLossCandidate{UserID: record.UserId}
+			byUser[record.UserId] = candidate
+		}
+		candidate.DrawCount++
+		candidate.RewardCents += int64(math.Round(record.RewardUSD * 100))
+	}
+	result := make([]balanceBlindBoxLossCandidate, 0, len(byUser))
+	for _, candidate := range byUser {
+		candidate.CompensationCents = int64(candidate.DrawCount)*1500 - candidate.RewardCents
+		if candidate.CompensationCents > 0 {
+			result = append(result, *candidate)
+		}
+	}
+	sort.Slice(result, func(left, right int) bool { return result[left].UserID < result[right].UserID })
+	return result, nil
+}
+
+func applyBalanceBlindBoxLossCompensation(before int64) error {
+	plan, err := inspectBalanceBlindBoxLossCompensation(before)
+	if err != nil {
+		return err
+	}
+	for _, candidate := range plan {
+		if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+			lockedPlan, err := inspectBalanceBlindBoxLossCompensationTx(tx, before)
+			if err != nil {
+				return err
+			}
+			var current *balanceBlindBoxLossCandidate
+			for index := range lockedPlan {
+				if lockedPlan[index].UserID == candidate.UserID {
+					current = &lockedPlan[index]
+					break
+				}
+			}
+			if current == nil {
+				return nil
+			}
+			amount := int64(math.Round(float64(current.CompensationCents) * platformruntime.QuotaPerUnit / 100))
+			key := fmt.Sprintf("balance-blind-box-loss-compensation:v1:before:%d:user:%d", before, current.UserID)
+			granted, err := billingapp.GrantBonusWalletQuotaTx(tx, current.UserID, amount, "balance_blind_box_loss_compensation", fmt.Sprintf("before:%d", before), key)
+			if err != nil || !granted {
+				return err
+			}
+			return auditapp.RecordLogTx(tx, current.UserID, auditschema.LogTypeTopup, fmt.Sprintf(
+				"余额盲盒历史回溯补偿：截至 %d，共 %d 次抽取，奖品标称价值 $%.2f，扣款 $%.2f，补偿 $%.2f。",
+				before,
+				current.DrawCount,
+				float64(current.RewardCents)/100,
+				float64(current.DrawCount)*15,
+				float64(current.CompensationCents)/100,
+			))
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func inspectNegativeWalletLegacy(limit int) (negativeWalletLegacySummary, error) {

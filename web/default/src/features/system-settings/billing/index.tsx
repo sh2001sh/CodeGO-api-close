@@ -57,6 +57,8 @@ const defaultBillingSettings: BillingSettings = {
   AutoGroups: '',
   DefaultUseAutoGroup: false,
   'group_ratio_setting.group_special_usable_group': '{}',
+  SubscriptionGroupPolicy:
+    '{"default":{"enabled":true,"multiplier":1},"vip":{"enabled":true,"multiplier":1},"svip":{"enabled":true,"multiplier":1}}',
   PayAddress: '',
   EpayId: '',
   EpayKey: '',
@@ -122,6 +124,10 @@ const defaultBillingSettings: BillingSettings = {
   'checkin_setting.max_quota': 10000,
   'blind_box_setting.enabled': false,
   'blind_box_setting.unit_price': 2.5,
+  'blind_box_setting.expire_days': 7,
+  'blind_box_setting.registration_reward_enabled': true,
+  'blind_box_setting.registration_reward_start_at': 0,
+  'blind_box_setting.registration_reward_end_at': 0,
   'blind_box_setting.daily_limit': 50,
   'blind_box_setting.monthly_limit': 500,
   'blind_box_setting.daily_open_limit': 5000,
@@ -131,6 +137,7 @@ const defaultBillingSettings: BillingSettings = {
   'blind_box_setting.low_reward_threshold_usd': 5,
   'blind_box_setting.subscription_prize_probability': 0.003,
   'blind_box_setting.subscription_plan_title': 'Standard月卡',
+  'blind_box_setting.multiplier_card_route_group': '纯Pro号池',
   'blind_box_setting.count_options': [1, 5, 10, 20, 50],
   'blind_box_setting.tiers': [
     { name: 'starter', min_usd: 1, max_usd: 3, probability: 0.18 },

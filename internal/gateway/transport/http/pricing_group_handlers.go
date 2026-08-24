@@ -14,14 +14,16 @@ func GetPricing(c *gin.Context) {
 
 	payload := gatewayroutingapp.BuildPricingPayload(userID, hasUser)
 	c.JSON(stdhttp.StatusOK, gin.H{
-		"success":            true,
-		"data":               payload.Data,
-		"vendors":            payload.Vendors,
-		"group_ratio":        payload.GroupRatio,
-		"usable_group":       payload.UsableGroup,
-		"supported_endpoint": payload.SupportedEndpoint,
-		"auto_groups":        payload.AutoGroups,
-		"pricing_version":    payload.PricingVersion,
+		"success":              true,
+		"data":                 payload.Data,
+		"priced_models":        payload.PricedModels,
+		"priced_model_details": payload.PricedModelDetails,
+		"vendors":              payload.Vendors,
+		"group_ratio":          payload.GroupRatio,
+		"usable_group":         payload.UsableGroup,
+		"supported_endpoint":   payload.SupportedEndpoint,
+		"auto_groups":          payload.AutoGroups,
+		"pricing_version":      payload.PricingVersion,
 	})
 }
 

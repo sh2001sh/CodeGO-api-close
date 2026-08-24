@@ -1,8 +1,6 @@
 package app
 
 import (
-	"encoding/json"
-	"math"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -21,22 +19,29 @@ const (
 	routePoolProbeRate             = 0.02
 	routePoolCostRecoveryProbeRate = 0.12
 	routePoolCostRecoveryGap       = 0.33
-	routePoolFallbackCostThreshold = 0.12
 	routePoolContextKey            = "automatic_route_pool_selection"
+	routePoolFaultDomainContextKey = "automatic_route_pool_fault_domain"
 
 	routePoolAffinityContextKey = "automatic_route_pool_affinity"
 	routePoolAffinityTTL        = 3 * time.Minute
 	routePoolSwitchImprovement  = 0.15
+	routePoolLatencyCostPremium = 0.15
+	// Unknown compaction capabilities remain usable during backfill, but a
+	// confirmed-capable route must win whenever one is available.
+	routePoolUnknownCompactionPenalty = 1_000_000
 )
 
 type scoredRoutePoolCandidate struct {
-	channel      *gatewayschema.Channel
-	score        float64
-	probe        bool
-	cost         float64
-	faultDomain  string
-	channelProbe bool
-	domainProbe  bool
+	channel                  *gatewayschema.Channel
+	score                    float64
+	compactionCapabilityRank int
+	probe                    bool
+	cost                     float64
+	health                   gatewayruntime.ChannelHealth
+	faultDomain              string
+	channelProbe             bool
+	credentialProbe          bool
+	domainProbe              bool
 }
 
 // RoutePoolSelection is request-local and consumed only by settlement code.
@@ -51,7 +56,7 @@ type routePoolAffinity struct {
 
 // selectAutomaticPoolChannel returns managed=true when the group has an enabled
 // automatic pool. In that case priority and weight are deliberately ignored.
-func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatewayschema.Channel, bool, error) {
+func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry int, allowLastResort bool) (*gatewayschema.Channel, bool, error) {
 	detail, err := gatewaystore.LoadEnabledRoutePool(group)
 	if err != nil || detail == nil {
 		return nil, detail != nil, err
@@ -61,75 +66,66 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string) (*gatew
 		return nil, true, err
 	}
 	now := time.Now()
-	healthy := make([]scoredRoutePoolCandidate, 0, len(candidates))
-	probes := make([]scoredRoutePoolCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		if channelAlreadyUsed(c, candidate.Channel.Id) {
-			continue
-		}
-		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
-		faultDomain := routePoolFaultDomain(candidate.Member, candidate.Channel)
-		domainHealth, domainFound := gatewayruntime.GetFaultDomainHealth(faultDomain, modelName)
-		if domainFound && gatewayruntime.IsFaultDomainCooling(faultDomain, modelName) {
-			continue
-		}
-		if found && (health.State == gatewayruntime.ChannelHealthCooling || health.State == gatewayruntime.ChannelHealthHalfOpen) {
-			if (health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now)) ||
-				(health.State == gatewayruntime.ChannelHealthHalfOpen && health.RecoveryProbeUntil.After(now)) {
-				continue
-			}
-			cost := routePoolModelCost(candidate.Member, modelName)
-			probes = append(probes, scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), probe: true, cost: cost, faultDomain: faultDomain, channelProbe: true, domainProbe: domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen)})
-			continue
-		}
-		cost := routePoolModelCost(candidate.Member, modelName)
-		scored := scoredRoutePoolCandidate{channel: candidate.Channel, score: effectiveRoutePoolCost(candidate.Member, modelName, health), cost: cost, faultDomain: faultDomain}
-		if domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen) {
-			scored.probe = true
-			scored.domainProbe = true
-			probes = append(probes, scored)
-			continue
-		}
-		healthy = append(healthy, scored)
-	}
+	requestType := gatewayruntime.RequestTypeFromContext(c)
+	healthy, probes, lastResortProbes := buildRoutePoolCandidateSets(c, candidates, modelName, requestType, now)
+	healthy, probes, lastResortProbes = preferRemoteCompactionCandidates(healthy, probes, lastResortProbes)
 
-	applyRoutePoolTTFTPenalty(healthy, modelName)
-	applyRoutePoolTTFTPenalty(probes, modelName)
-	primaryHealthy := routePoolPrimaryCostCandidates(healthy)
-	primaryProbes := routePoolPrimaryCostCandidates(probes)
-	if len(primaryHealthy) > 0 {
-		healthy = primaryHealthy
-		probes = primaryProbes
-	} else if len(primaryProbes) > 0 {
-		probes = primaryProbes
-	}
+	applyRoutePoolTTFTPenalty(healthy, modelName, requestType)
+	applyRoutePoolTTFTPenalty(probes, modelName, requestType)
+	applyRoutePoolTTFTPenalty(lastResortProbes, modelName, requestType)
+	healthy = routePoolPreferredHealthTier(healthy)
 	prepareRoutePoolAffinity(c, detail.Pool.ID, group, modelName)
-	if probe := reserveRoutePoolRecoveryProbe(probes, modelName); probe != nil {
-		return selectRoutePoolCandidate(c, detail.Pool.ID, probe), true, nil
+	// Healthy routes always win. Recovery probes are only used when no stable
+	// route is available, so a half-open member cannot displace live capacity.
+	if len(healthy) > 0 {
+		if sticky := getRoutePoolStickyCandidate(c, healthy, modelName); sticky != nil {
+			return selectRoutePoolCandidate(c, detail.Pool.ID, sticky), true, nil
+		}
+		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy)), true, nil
 	}
-	if len(healthy) == 0 {
-		return nil, true, nil
-	}
-	if sticky := getRoutePoolStickyCandidate(c, healthy, modelName); sticky != nil {
-		return selectRoutePoolCandidate(c, detail.Pool.ID, sticky), true, nil
-	}
-	return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy)), true, nil
+	return selectAutomaticPoolFallback(c, detail.Pool.ID, group, modelName, retry, allowLastResort, requestType, probes, lastResortProbes), true, nil
 }
 
-func reserveRoutePoolRecoveryProbe(probes []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
-	for len(probes) > 0 {
-		probe := chooseLowestRoutePoolCandidate(probes)
-		if probe == nil {
-			return nil
-		}
-		channelReady := !probe.channelProbe || gatewayruntime.TryStartChannelRecoveryProbe(probe.channel.Id, modelName)
-		domainReady := !probe.domainProbe || gatewayruntime.TryStartFaultDomainRecoveryProbe(probe.faultDomain, modelName)
-		if channelReady && domainReady {
-			return probe
-		}
-		probes = removeRoutePoolCandidate(probes, probe.channel.Id)
+func selectAutomaticPoolFallback(
+	c *gin.Context,
+	poolID int64,
+	group, modelName string,
+	retry int,
+	allowLastResort bool,
+	requestType gatewayruntime.RequestType,
+	probes, lastResortProbes []scoredRoutePoolCandidate,
+) *gatewayschema.Channel {
+	if !allowLastResort {
+		return nil
 	}
-	return nil
+	if probe := reserveRoutePoolRecoveryProbe(c, probes, modelName, requestType); probe != nil {
+		gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeNormal)
+		return selectRoutePoolCandidate(c, poolID, probe)
+	}
+	if retry > 0 {
+		if probe := reserveRoutePoolEmergencyRetryProbe(c, lastResortProbes, modelName, requestType); probe != nil {
+			probeMode := gatewayruntime.RouteDecisionProbeEmergency
+			if c != nil && c.GetBool(string(constant.ContextKeyRateLimitRetry)) {
+				probeMode = gatewayruntime.RouteDecisionProbeRateLimit
+			}
+			gatewayruntime.SetRouteDecisionProbeMode(c, probeMode)
+			return selectRoutePoolCandidate(c, poolID, probe)
+		}
+	}
+	if probe := reserveRoutePoolLastResortProbe(c, lastResortProbes, modelName, requestType); probe != nil {
+		gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
+		return selectRoutePoolCandidate(c, poolID, probe)
+	}
+	// A busy probe lease is a concurrency guard, not an availability gate.
+	fallback := chooseBestRoutePoolLastResortProbe(lastResortProbes)
+	if fallback == nil {
+		return nil
+	}
+	if c != nil {
+		_ = gatewayruntime.AcquireAllCoolingFallback(c, group, modelName, requestType)
+		gatewayruntime.SetRouteDecisionProbeMode(c, gatewayruntime.RouteDecisionProbeLastResort)
+	}
+	return selectRoutePoolCandidate(c, poolID, fallback)
 }
 
 func removeRoutePoolCandidate(candidates []scoredRoutePoolCandidate, channelID int) []scoredRoutePoolCandidate {
@@ -152,79 +148,6 @@ func routePoolFaultDomain(member gatewayschema.RoutePoolMember, channel *gateway
 	return gatewayruntime.ChannelFaultDomain(channel.Type, channel.GetBaseURL())
 }
 
-// RecordAutomaticPoolAffinity keeps an unbound token on the selected pool
-// member for a short period. Explicit cache affinity remains independent.
-func RecordAutomaticPoolAffinity(c *gin.Context, selectedChannelID int) {
-	if c == nil {
-		return
-	}
-	affinity, ok := c.Get(routePoolAffinityContextKey)
-	if !ok {
-		return
-	}
-	value, ok := affinity.(routePoolAffinity)
-	if !ok || value.CacheKey == "" {
-		return
-	}
-	if successfulChannelID := c.GetInt(string(constant.ContextKeyChannelId)); successfulChannelID > 0 {
-		selectedChannelID = successfulChannelID
-	}
-	if selectedChannelID > 0 {
-		_ = gatewayruntime.RecordPreferredChannel(value.CacheKey, selectedChannelID, int(routePoolAffinityTTL.Seconds()))
-	}
-}
-
-// ShouldMigrateAutomaticPoolAffinity permits explicit cache affinity to escape
-// an unhealthy automatic-pool member without making healthy sessions drift.
-func ShouldMigrateAutomaticPoolAffinity(group, modelName string, channelID int) bool {
-	detail, err := gatewaystore.LoadEnabledRoutePool(group)
-	if err != nil || detail == nil || channelID <= 0 {
-		return false
-	}
-	candidates, err := gatewaystore.LoadRoutePoolCandidates(group, modelName, detail)
-	if err != nil {
-		return false
-	}
-	now := time.Now()
-	healthy := make([]scoredRoutePoolCandidate, 0, len(candidates))
-	var current *scoredRoutePoolCandidate
-	for _, candidate := range candidates {
-		health, found := gatewayruntime.GetChannelHealth(candidate.Channel.Id, modelName)
-		if found && health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(now) {
-			continue
-		}
-		scored := scoredRoutePoolCandidate{
-			channel: candidate.Channel,
-			score:   effectiveRoutePoolCost(candidate.Member, modelName, health),
-			cost:    routePoolModelCost(candidate.Member, modelName),
-		}
-		healthy = append(healthy, scored)
-		if candidate.Channel.Id == channelID {
-			current = &healthy[len(healthy)-1]
-		}
-	}
-	if current == nil || len(healthy) < 2 {
-		return false
-	}
-	applyRoutePoolTTFTPenalty(healthy, modelName)
-	for index := range healthy {
-		if healthy[index].channel.Id == channelID {
-			current = &healthy[index]
-			break
-		}
-	}
-	best := chooseLowestRoutePoolCandidate(healthy)
-	if best == nil || best.channel.Id == channelID {
-		return false
-	}
-	health, _ := gatewayruntime.GetChannelHealth(channelID, modelName)
-	if routePoolHardMigrationRequired(health, routePoolMedianTTFT(healthy, modelName)) {
-		return true
-	}
-	return (health.State == gatewayruntime.ChannelHealthDegraded || routePoolReliabilityNeedsMigration(health)) &&
-		best.score <= current.score*(1-routePoolSwitchImprovement)
-}
-
 func selectRoutePoolCandidate(c *gin.Context, poolID int64, candidate *scoredRoutePoolCandidate) *gatewayschema.Channel {
 	if candidate == nil {
 		return nil
@@ -232,6 +155,10 @@ func selectRoutePoolCandidate(c *gin.Context, poolID int64, candidate *scoredRou
 	if c != nil {
 		gatewayruntime.MarkAutomaticPool(c)
 		c.Set(routePoolContextKey, RoutePoolSelection{PoolID: poolID, ProcurementCostMultiplier: candidate.cost})
+		if candidate.faultDomain != "" {
+			c.Set(routePoolFaultDomainContextKey, candidate.faultDomain)
+			c.Set("channel_fault_domain", candidate.faultDomain)
+		}
 	}
 	return candidate.channel
 }
@@ -247,6 +174,19 @@ func GetRoutePoolSelection(c *gin.Context) (RoutePoolSelection, bool) {
 	}
 	selection, ok := value.(RoutePoolSelection)
 	return selection, ok && selection.PoolID > 0 && selection.ProcurementCostMultiplier > 0
+}
+
+// SetRoutePoolSelectionSnapshot restores a previously selected procurement
+// route for deferred execution without running route selection again.
+func SetRoutePoolSelectionSnapshot(c *gin.Context, selection RoutePoolSelection, faultDomain string) {
+	if c == nil || selection.PoolID <= 0 || selection.ProcurementCostMultiplier <= 0 {
+		return
+	}
+	c.Set(routePoolContextKey, selection)
+	if faultDomain != "" {
+		c.Set(routePoolFaultDomainContextKey, faultDomain)
+		c.Set("channel_fault_domain", faultDomain)
+	}
 }
 
 func chooseRoutePoolHealthyCandidate(candidates []scoredRoutePoolCandidate) *scoredRoutePoolCandidate {
@@ -272,16 +212,19 @@ func chooseRoutePoolHealthyCandidate(candidates []scoredRoutePoolCandidate) *sco
 	return &selected
 }
 
-// routePoolPrimaryCostCandidates keeps costly routes as an explicit fallback.
-// They are eligible only after no affordable healthy route remains.
-func routePoolPrimaryCostCandidates(candidates []scoredRoutePoolCandidate) []scoredRoutePoolCandidate {
-	primary := make([]scoredRoutePoolCandidate, 0, len(candidates))
+// routePoolPreferredHealthTier keeps cost inside the selected stability tier.
+// A degraded cheap route must not mask a healthy, more expensive alternative.
+func routePoolPreferredHealthTier(candidates []scoredRoutePoolCandidate) []scoredRoutePoolCandidate {
+	stable := make([]scoredRoutePoolCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		if candidate.cost <= routePoolFallbackCostThreshold {
-			primary = append(primary, candidate)
+		if candidate.health.State != gatewayruntime.ChannelHealthDegraded {
+			stable = append(stable, candidate)
 		}
 	}
-	return primary
+	if len(stable) > 0 {
+		return stable
+	}
+	return candidates
 }
 
 // routePoolRecoveryProbeRate lets a clearly cheaper model route demonstrate
@@ -301,190 +244,12 @@ func routePoolRecoveryProbeRate(healthy, probes []scoredRoutePoolCandidate) floa
 	return routePoolProbeRate
 }
 
-func prepareRoutePoolAffinity(c *gin.Context, poolID int64, group, modelName string) {
-	if c == nil || poolID <= 0 || c.GetInt(string(constant.ContextKeyTokenId)) <= 0 {
-		return
-	}
-	key := strings.Join([]string{
-		"route_pool",
-		strconv.FormatInt(poolID, 10),
-		strconv.Itoa(c.GetInt(string(constant.ContextKeyTokenId))),
-		group,
-		modelName,
-	}, ":")
-	c.Set(routePoolAffinityContextKey, routePoolAffinity{CacheKey: key})
-}
-
-func getRoutePoolStickyCandidate(c *gin.Context, candidates []scoredRoutePoolCandidate, modelName string) *scoredRoutePoolCandidate {
-	if c == nil {
-		return nil
-	}
-	value, ok := c.Get(routePoolAffinityContextKey)
-	if !ok {
-		return nil
-	}
-	affinity, ok := value.(routePoolAffinity)
-	if !ok || affinity.CacheKey == "" {
-		return nil
-	}
-	channelID, found, err := gatewayruntime.GetPreferredChannel(affinity.CacheKey)
-	if err != nil || !found {
-		return nil
-	}
-	var sticky *scoredRoutePoolCandidate
-	for index := range candidates {
-		if candidates[index].channel.Id == channelID {
-			sticky = &candidates[index]
-			break
-		}
-	}
-	if sticky == nil || channelAlreadyUsed(c, channelID) {
-		gatewayruntime.InvalidatePreferredChannel(affinity.CacheKey)
-		return nil
-	}
-	health, _ := gatewayruntime.GetChannelHealth(channelID, modelName)
-	if routePoolHardMigrationRequired(health, routePoolMedianTTFT(candidates, modelName)) {
-		gatewayruntime.InvalidatePreferredChannel(affinity.CacheKey)
-		return nil
-	}
-	best := chooseLowestRoutePoolCandidate(candidates)
-	if best != nil && best.channel.Id != channelID && best.score <= sticky.score*(1-routePoolSwitchImprovement) {
-		return nil
-	}
-	return sticky
-}
-
 func chooseLowestRoutePoolCandidate(candidates []scoredRoutePoolCandidate) *scoredRoutePoolCandidate {
 	if len(candidates) == 0 {
 		return nil
 	}
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].score < candidates[j].score })
 	return &candidates[0]
-}
-
-func effectiveRoutePoolCost(member gatewayschema.RoutePoolMember, modelName string, health gatewayruntime.ChannelHealth) float64 {
-	cost := routePoolModelCost(member, modelName)
-	if cost <= 0 {
-		cost = 1
-	}
-	if health.Window5Requests < 20 {
-		cost *= 1.10
-	}
-	if health.Window5Requests >= 5 {
-		cost *= routePoolReliabilityPenalty(routePoolConservativeSuccessRate(health))
-	}
-	if health.State == gatewayruntime.ChannelHealthDegraded {
-		cost *= 1.35
-	}
-	if health.ConsecutiveRetryableFailures > 0 {
-		cost *= math.Pow(1.25, float64(health.ConsecutiveRetryableFailures))
-	}
-	return cost
-}
-
-func routePoolReliabilityPenalty(rate float64) float64 {
-	switch {
-	case rate >= 98:
-		return 1
-	case rate >= 95:
-		return 1.15 + (98-rate)*0.12
-	case rate >= 90:
-		return 2.5 + (95-rate)*0.3
-	default:
-		return math.Min(15, 5+(90-rate)*0.2)
-	}
-}
-
-func routePoolConservativeSuccessRate(health gatewayruntime.ChannelHealth) float64 {
-	requests := health.Window5Requests
-	successes := health.Window5Successes
-	if requests < 20 || successes < 0 || successes > requests {
-		return health.SuccessRate5m
-	}
-	p := float64(successes) / float64(requests)
-	z := 1.96
-	denominator := 1 + z*z/float64(requests)
-	center := p + z*z/(2*float64(requests))
-	margin := z * math.Sqrt((p*(1-p)+z*z/(4*float64(requests)))/float64(requests))
-	lowerBound := (center - margin) / denominator * 100
-	return health.SuccessRate5m*0.8 + lowerBound*0.2
-}
-
-func routePoolModelCost(member gatewayschema.RoutePoolMember, modelName string) float64 {
-	cost := member.CostMultiplier
-	var overrides map[string]float64
-	if err := json.Unmarshal([]byte(member.ModelCostOverrides), &overrides); err == nil {
-		if override, ok := overrides[modelName]; ok && override > 0 {
-			cost = override
-		}
-	}
-	return cost
-}
-
-func applyRoutePoolTTFTPenalty(candidates []scoredRoutePoolCandidate, modelName string) {
-	if len(candidates) < 2 {
-		return
-	}
-	values := make([]float64, 0, len(candidates))
-	for _, candidate := range candidates {
-		health, found := gatewayruntime.GetChannelHealth(candidate.channel.Id, modelName)
-		if found && health.TTFTP95Milliseconds > 0 {
-			values = append(values, health.TTFTP95Milliseconds)
-		}
-	}
-	if len(values) == 0 {
-		return
-	}
-	sort.Float64s(values)
-	median := values[(len(values)-1)/2]
-	if median <= 0 {
-		return
-	}
-	for index := range candidates {
-		health, found := gatewayruntime.GetChannelHealth(candidates[index].channel.Id, modelName)
-		if !found || health.TTFTP95Milliseconds <= 0 {
-			continue
-		}
-		ratio := health.TTFTP95Milliseconds / median
-		switch {
-		case ratio > 2.5:
-			candidates[index].score *= 2
-		case ratio > 1.5:
-			candidates[index].score *= 1.35
-		}
-	}
-}
-
-func routePoolMedianTTFT(candidates []scoredRoutePoolCandidate, modelName string) float64 {
-	values := make([]float64, 0, len(candidates))
-	for _, candidate := range candidates {
-		health, found := gatewayruntime.GetChannelHealth(candidate.channel.Id, modelName)
-		if found && health.TTFTP95Milliseconds > 0 {
-			values = append(values, health.TTFTP95Milliseconds)
-		}
-	}
-	if len(values) == 0 {
-		return 0
-	}
-	sort.Float64s(values)
-	return values[(len(values)-1)/2]
-}
-
-func routePoolHardMigrationRequired(health gatewayruntime.ChannelHealth, medianTTFT float64) bool {
-	if health.State == gatewayruntime.ChannelHealthCooling && health.CoolingUntil.After(time.Now()) {
-		return true
-	}
-	if health.ConsecutiveRetryableFailures >= 2 {
-		return true
-	}
-	if health.Window5Requests >= 10 && routePoolConservativeSuccessRate(health) < 85 {
-		return true
-	}
-	return medianTTFT > 0 && health.TTFTP95Milliseconds > medianTTFT*2.5
-}
-
-func routePoolReliabilityNeedsMigration(health gatewayruntime.ChannelHealth) bool {
-	return health.Window5Requests >= 20 && health.SuccessRate5m < 95
 }
 
 func channelAlreadyUsed(c *gin.Context, channelID int) bool {

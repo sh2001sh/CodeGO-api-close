@@ -205,11 +205,11 @@ func subscriptionLedgerAvailableQuotaTx(tx *gorm.DB, sub *commerceschema.UserSub
 		return 0, false, err
 	}
 
-	var entryCount int64
-	if err := tx.Model(&billingschema.BillingLedgerEntry{}).Where("account_id = ?", account.AccountID).Count(&entryCount).Error; err != nil {
+	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
+	if err != nil {
 		return 0, false, err
 	}
-	if entryCount == 0 {
+	if !ledgerBacked {
 		return 0, false, nil
 	}
 

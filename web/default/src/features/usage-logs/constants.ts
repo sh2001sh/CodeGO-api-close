@@ -87,7 +87,7 @@ export const LOG_TYPES = [
   { value: 2, label: 'Consume', color: 'green' },
   { value: 3, label: 'Manage', color: 'orange' },
   { value: 4, label: 'System', color: 'purple' },
-  { value: 5, label: 'Error', color: 'red' },
+  { value: 5, label: 'Failed', color: 'red' },
   { value: 6, label: 'Refund', color: 'blue' },
 ] as const
 

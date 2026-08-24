@@ -1,12 +1,19 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { SidebarGroupModelStatusItem, SidebarGroupStatusBucket } from './types'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { buildHealthSegments } from './presentation'
+import type {
+  SidebarGroupModelStatusItem,
+  SidebarGroupStatusBucket,
+} from './types'
 
 const SEGMENT_CLASS = {
   healthy: 'bg-success',
-  slow: 'bg-warning',
-  critical: 'bg-destructive',
+  unstable: 'bg-warning',
+  failed: 'bg-destructive',
   unknown: 'bg-muted',
 } as const
 
@@ -15,7 +22,10 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
   const total = segments.length || 1
   const bucketSeconds =
     props.item.bucket_seconds ??
-    inferBucketSeconds(props.item.series_window ?? props.item.sample_window, total)
+    inferBucketSeconds(
+      props.item.series_window ?? props.item.sample_window,
+      total
+    )
 
   return (
     <div className='space-y-2'>
@@ -29,7 +39,7 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
                   aria-label={buildBucketLabel(bucket, bucketSeconds)}
                   style={{ flex: '1 1 0%' }}
                   className={cn(
-                    'h-6 min-w-0 rounded transition-all hover:scale-110 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                    'focus-visible:ring-ring h-6 min-w-0 rounded transition-all hover:scale-110 hover:shadow-md focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none',
                     SEGMENT_CLASS[tone]
                   )}
                 />
@@ -37,7 +47,9 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
             />
             <TooltipContent side='top' className='max-w-none'>
               <div className='space-y-0.5'>
-                <div className='font-medium'>{formatBucketRange(bucket.ts, bucketSeconds)}</div>
+                <div className='font-medium'>
+                  {formatBucketRange(bucket.ts, bucketSeconds)}
+                </div>
                 <div className='text-background/80 text-xs'>
                   {bucket.request_count > 0 && bucket.success_rate != null
                     ? `成功率 ${bucket.success_rate.toFixed(1)}%`
@@ -49,10 +61,10 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
         ))}
       </div>
 
-      <div className='flex items-center gap-x-3 text-[10px] text-muted-foreground'>
-        <LegendSwatch className={SEGMENT_CLASS.healthy} label='顺畅' />
-        <LegendSwatch className={SEGMENT_CLASS.slow} label='缓慢' />
-        <LegendSwatch className={SEGMENT_CLASS.critical} label='故障' />
+      <div className='text-muted-foreground flex items-center gap-x-3 text-[10px]'>
+        <LegendSwatch className={SEGMENT_CLASS.healthy} label='稳定' />
+        <LegendSwatch className={SEGMENT_CLASS.unstable} label='波动' />
+        <LegendSwatch className={SEGMENT_CLASS.failed} label='异常' />
         <LegendSwatch className={SEGMENT_CLASS.unknown} label='无样本' />
       </div>
     </div>
@@ -82,7 +94,10 @@ function formatTime(date: Date) {
   }).format(date)
 }
 
-function buildBucketLabel(bucket: SidebarGroupStatusBucket, bucketSeconds: number) {
+function buildBucketLabel(
+  bucket: SidebarGroupStatusBucket,
+  bucketSeconds: number
+) {
   const range = formatBucketRange(bucket.ts, bucketSeconds)
   if (bucket.request_count <= 0 || bucket.success_rate == null) {
     return `${range}，暂无请求样本`

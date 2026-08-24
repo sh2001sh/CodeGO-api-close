@@ -55,6 +55,13 @@ export interface CommonLogFilters extends CommonFilters {
   upstreamRequestId?: string
 }
 
+export interface UsageLogGroupOption {
+  value: string
+  label: string
+  public_id?: string
+  marketplace_group_id?: string
+}
+
 /**
  * Task logs specific filters
  */
@@ -86,6 +93,24 @@ export interface ChannelAffinityInfo {
 }
 
 export interface LogOtherData {
+  first_byte_trace?: {
+    request_validation_ms?: number
+    admission_ms?: number
+    relay_info_ms?: number
+    preflight_ms?: number
+    route_selection_ms?: number
+    request_body_restore_ms?: number
+    billing_reservation_ms?: number
+    dispatch_ms?: number
+    request_conversion_ms?: number
+    upstream_request_setup_ms?: number
+    upstream_response_headers_ms?: number
+    headers_to_first_event_ms?: number
+    upstream_first_event_ms?: number
+    event_to_semantic_ms?: number
+    upstream_first_semantic_event_ms?: number
+    total_ms?: number
+  }
   admin_info?: {
     is_multi_key?: boolean
     multi_key_index?: number
@@ -103,7 +128,29 @@ export interface LogOtherData {
     admin_username?: string
     admin_id?: number | string
   }
+  route_summary?: {
+    mode: 'auto'
+    candidate_count: number
+    selected_order?: number
+    skipped_count?: number
+    retry_count?: number
+    fallback: boolean
+    skip_reasons?: Array<
+      | 'unavailable'
+      | 'capacity_limit'
+      | 'credential_cooling'
+      | 'failed_route'
+      | 'selection_error'
+      | 'setup_error'
+      | 'stream_circuit'
+    >
+  }
   request_path?: string
+  status?: 'failed'
+  status_code?: number
+  error_type?: string
+  error_code?: string
+  retry_count?: number
   request_conversion?: string[]
   ws?: boolean
   audio?: boolean
@@ -130,6 +177,8 @@ export interface LogOtherData {
   audio_ratio?: number
   audio_completion_ratio?: number
   frt?: number
+  response_start_ms?: number
+  total_duration_ms?: number
   generation_time_ms?: number
   stream_output_tokens?: number
   stream_output_time_ms?: number
@@ -157,6 +206,12 @@ export interface LogOtherData {
   is_system_prompt_overwritten?: boolean
   po?: string[]
   billing_source?: string
+  billing_quota_category?: 'universal' | 'gpt' | 'subscription'
+  billing_quota_label?: string
+  marketplace_group_id?: string
+  marketplace_group_display_name?: string
+  marketplace_channel_id?: string
+  marketplace_public_slug?: string
   group?: string
   stream_status?: {
     status?: string
@@ -170,6 +225,13 @@ export interface LogOtherData {
   violation_fee_code?: string
   violation_fee_marker?: string
   fee_quota?: number
+  quota_before_discount?: number
+  quota_after_discount?: number
+  usage_discount_rate?: number
+  usage_discount_multiplier?: number
+  usage_discount_quota?: number
+  usage_discount_source?: string
+  usage_discount_title?: string
   // Reject / intercept reason (admin)
   reject_reason?: string
   // Task-related fields (for refund logs, type=6)
@@ -183,6 +245,10 @@ export interface LogOtherData {
   subscription_pre_consumed?: number
   subscription_post_delta?: number
   subscription_consumed?: number
+  subscription_group_multiplier?: number
+  subscription_package_multiplier?: number
+  subscription_quota_scale?: number
+  subscription_group_ratio?: number
   subscription_remain?: number
   subscription_total?: number
 }

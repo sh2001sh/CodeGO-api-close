@@ -90,11 +90,18 @@ func settleDailyLuckyReward(rewardID int) error {
 		if userID <= 0 {
 			return fmt.Errorf("lucky reward %d has no owner user", reward.Id)
 		}
-		idempotencyKey := fmt.Sprintf("lucky-draw:%s:%d", drawDateForRewardTx(tx, reward.DrawId), reward.UserSubscriptionId)
-		if err := billingapp.CreditWalletQuotaTx(tx, userID, int(reward.FinalRewardQuota), idempotencyKey, "subscription_lucky_draw"); err != nil {
+		participantKey := fmt.Sprintf("subscription:%d", reward.UserSubscriptionId)
+		if reward.ParticipationType == "blind_box" && reward.BlindBoxOpenRecordId > 0 {
+			participantKey = fmt.Sprintf("blind-box:%d", reward.BlindBoxOpenRecordId)
+		}
+		idempotencyKey := fmt.Sprintf("lucky-draw:%s:%s", drawDateForRewardTx(tx, reward.DrawId), participantKey)
+		if err := billingapp.CreditUnifiedWalletQuotaTx(tx, userID, int(reward.FinalRewardQuota), idempotencyKey, "subscription_lucky_draw"); err != nil {
 			return err
 		}
 		if err := recordLuckyRewardLogTx(tx, userID, &reward); err != nil {
+			return err
+		}
+		if err := createLuckyRewardNotificationTx(tx, userID, reward.Id); err != nil {
 			return err
 		}
 		reward.CreditStatus = commerceschema.SubscriptionLuckyRewardCreditCredited
@@ -102,6 +109,18 @@ func settleDailyLuckyReward(rewardID int) error {
 		reward.CreditedAt = platformruntime.GetTimestamp()
 		return tx.Save(&reward).Error
 	})
+}
+
+func createLuckyRewardNotificationTx(tx *gorm.DB, userID, rewardID int) error {
+	if tx == nil || userID <= 0 || rewardID <= 0 {
+		return errors.New("invalid lucky reward notification params")
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(
+		&commerceschema.SubscriptionLuckyRewardNotification{
+			RewardId: rewardID,
+			UserId:   userID,
+		},
+	).Error
 }
 
 func recordLuckyRewardLogTx(tx *gorm.DB, userID int, reward *commerceschema.SubscriptionLuckyReward) error {

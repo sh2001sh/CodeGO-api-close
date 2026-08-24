@@ -5,11 +5,30 @@ import (
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 )
 
-func BuildPerfMetricsSummary(hours int) (any, error) {
+func BuildPerfMetricsSummary(hours int, group string) (any, error) {
 	if hours <= 0 {
 		hours = 24
 	}
-	return auditprojection.QuerySummaryAll(hours)
+	if group == "" {
+		return auditprojection.QuerySummaryAll(hours)
+	}
+	rows, err := auditprojection.QuerySummaryByGroupModels(hours, []string{group})
+	if err != nil {
+		return auditprojection.SummaryAllResult{}, err
+	}
+	models := make([]auditprojection.ModelSummary, 0, len(rows))
+	for _, row := range rows {
+		models = append(models, auditprojection.ModelSummary{
+			ModelName:    row.ModelName,
+			AvgTtftMs:    row.AvgTtftMs,
+			AvgLatencyMs: row.AvgLatencyMs,
+			SuccessRate:  row.SuccessRate,
+			AvgTps:       row.AvgTps,
+			CacheHitRate: row.CacheHitRate,
+			RequestCount: row.RequestCount,
+		})
+	}
+	return auditprojection.SummaryAllResult{Models: models}, nil
 }
 
 func BuildPerfMetrics(modelName string, group string, hours int) (*auditprojection.QueryResult, error) {

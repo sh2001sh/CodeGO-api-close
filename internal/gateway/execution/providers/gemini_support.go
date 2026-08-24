@@ -179,7 +179,7 @@ func fetchGeminiModels(baseURL, apiKey, proxyURL string) ([]string, error) {
 	const maxPages = 100
 
 	for page := 0; page < maxPages; page++ {
-		url := fmt.Sprintf("%s/v1beta/models", baseURL)
+		url := relaycommon.JoinBaseURLPath(baseURL, "/v1beta/models")
 		if nextPageToken != "" {
 			url = fmt.Sprintf("%s?pageToken=%s", url, nextPageToken)
 		}

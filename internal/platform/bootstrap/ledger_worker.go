@@ -4,9 +4,9 @@ import (
 	"context"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
-	bountyapp "github.com/sh2001sh/new-api/internal/bounty/app"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformapp "github.com/sh2001sh/new-api/internal/platform/app"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -32,14 +32,16 @@ func RunLedgerWorker() {
 }
 
 func startLedgerWorkerBackgroundTasks() {
+	marketplacesettlement.RegisterReleaseHook(billingapp.CreditMarketplaceOwnerEarningsTx)
+	marketplacesettlement.StartReleaseWorker(context.Background())
 	startOptionSyncLoop()
 	billingapp.StartLedgerWorker(context.Background())
 	billingapp.StartOperationalSLOMonitor(context.Background())
 	commerceapp.StartDailyLuckyNumberTask()
 	auditprojection.StartReadModelWorker(context.Background())
+	startDataArchiveMaintenance(context.Background())
 	commerceapp.StartSubscriptionMaintenanceTask()
 	commerceapp.StartGroupBuySettlementTask()
 	identityapp.StartImageWorkspaceCleanupTask()
-	bountyapp.StartBountyMaintenanceTask()
 	platformapp.StartIndexNowSubmissionTask(defaultweb.BuildFS())
 }

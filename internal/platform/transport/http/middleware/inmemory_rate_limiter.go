@@ -42,6 +42,13 @@ func (l *InMemoryRateLimiter) clearExpiredItems() {
 }
 
 func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration int64) bool {
+	allowed, _ := l.RequestWithRetryAfter(key, maxRequestNum, duration)
+	return allowed
+}
+
+// RequestWithRetryAfter records an attempt and reports how long a rejected
+// caller must wait before the oldest attempt leaves the rolling window.
+func (l *InMemoryRateLimiter) RequestWithRetryAfter(key string, maxRequestNum int, duration int64) (bool, int64) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -50,18 +57,22 @@ func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration in
 	if ok {
 		if len(*queue) < maxRequestNum {
 			*queue = append(*queue, now)
-			return true
+			return true, 0
 		}
 		if now-(*queue)[0] >= duration {
 			*queue = (*queue)[1:]
 			*queue = append(*queue, now)
-			return true
+			return true, 0
 		}
-		return false
+		retryAfter := duration - (now - (*queue)[0])
+		if retryAfter < 1 {
+			retryAfter = 1
+		}
+		return false, retryAfter
 	}
 
 	s := make([]int64, 0, maxRequestNum)
 	l.store[key] = &s
 	*l.store[key] = append(*l.store[key], now)
-	return true
+	return true, 0
 }

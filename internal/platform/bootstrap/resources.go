@@ -11,6 +11,7 @@ import (
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	"github.com/sh2001sh/new-api/internal/identity/oauth"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
+	platformconcurrency "github.com/sh2001sh/new-api/internal/platform/concurrency"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
@@ -25,6 +26,7 @@ func initResources() error {
 	}
 
 	initEnvironment()
+	platformconcurrency.ConfigureRelayAdmission(platformconfig.RelayMaxConcurrentRequests)
 	platformcache.ConfigureRedisRuntime(platformcache.RedisRuntimeConfig{
 		DebugEnabled:  platformconfig.DebugEnabled,
 		SyncFrequency: platformconfig.SyncFrequency,

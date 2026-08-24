@@ -20,12 +20,8 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if relayInfo.IsPlayground {
 		return nil
 	}
-	token, err := GetTokenByKey(relayInfo.TokenKey)
-	if err != nil {
-		return err
-	}
-	if !relayInfo.TokenUnlimited && token.RemainQuota < quota {
-		return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
+	if relayInfo.TokenUnlimited {
+		return nil
 	}
 	return AdjustTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
 }
@@ -43,7 +39,7 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 			relayInfo.SubscriptionPostDelta += delta
 		}
 	} else {
-		err = AdjustWalletQuota(relayInfo.UserId, quota)
+		err = AdjustClaudeWalletQuota(relayInfo.UserId, quota)
 		if err != nil {
 			return err
 		}

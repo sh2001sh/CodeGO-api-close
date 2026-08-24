@@ -9,12 +9,8 @@ export const EMPTY_SUBSCRIPTIONS: SelfSubscriptionData = {
   subscription_order_ids: [],
   subscriptions: [],
   all_subscriptions: [],
-  claude_quota: 0,
   conversion_config: {
     enabled: true,
-    ratio_numerator: 1,
-    ratio_denominator: 10,
-    exclude_day_pass: true,
   },
   recent_conversions: [],
   reset_opportunity: {

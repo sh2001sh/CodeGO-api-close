@@ -50,29 +50,36 @@ export function BlindBoxDisabledNotice() {
 
 function summarizeRewards(
   statistics: BlindBoxStatistics | undefined,
-  rewardType: string
+  rewardTypes: string[]
 ) {
-  const entry = statistics?.rewards?.find(
-    (reward) => reward.reward_type === rewardType
+  const entries = (statistics?.rewards || []).filter((reward) =>
+    rewardTypes.includes(reward.reward_type)
   )
-  if (!entry || entry.opened_count <= 0) return '—'
-  if (rewardType === 'quota' || rewardType === 'claude_quota') {
-    return `${entry.opened_count} 次 · $${entry.reward_usd.toFixed(2)}`
+  const openedCount = entries.reduce(
+    (total, entry) => total + entry.opened_count,
+    0
+  )
+  if (openedCount <= 0) return '—'
+  if (rewardTypes.some((type) => type === 'quota' || type === 'claude_quota')) {
+    const rewardUsd = entries.reduce(
+      (total, entry) => total + entry.reward_usd,
+      0
+    )
+    return `${openedCount} 次 · $${rewardUsd.toFixed(2)}`
   }
-  return `${entry.opened_count} 次`
+  return `${openedCount} 次`
 }
 
 export function BlindBoxStatsPanel(props: { statistics?: BlindBoxStatistics }) {
   const rows = [
-    { label: '普通额度', value: summarizeRewards(props.statistics, 'quota') },
     {
-      label: 'Claude 额度',
-      value: summarizeRewards(props.statistics, 'claude_quota'),
+      label: '通用额度',
+      value: summarizeRewards(props.statistics, ['quota', 'claude_quota']),
     },
-    { label: '道具', value: summarizeRewards(props.statistics, 'prop') },
+    { label: '道具', value: summarizeRewards(props.statistics, ['prop']) },
     {
       label: '月卡',
-      value: summarizeRewards(props.statistics, 'subscription'),
+      value: summarizeRewards(props.statistics, ['subscription']),
     },
   ]
 

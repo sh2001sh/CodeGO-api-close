@@ -174,8 +174,8 @@ func InvalidateRoutePoolCache() {
 
 // UpdateRoutePoolMemberCostMultipliers updates explicitly configured member costs
 // without changing their enabled state or model-specific manual overrides.
-// Missing channels are returned so external cost synchronizers cannot silently
-// report a successful update for an unconfigured route-pool member.
+// Missing channels are returned so callers cannot silently report a successful
+// update for an unconfigured route-pool member.
 func UpdateRoutePoolMemberCostMultipliers(updates map[int]float64, epsilon float64) (int, []int, error) {
 	if len(updates) == 0 {
 		return 0, nil, nil
@@ -212,6 +212,58 @@ func UpdateRoutePoolMemberCostMultipliers(updates map[int]float64, epsilon float
 				if err := tx.Model(&gatewayschema.RoutePoolMember{}).
 					Where("id = ?", member.ID).
 					Update("cost_multiplier", updates[channelID]).Error; err != nil {
+					return err
+				}
+				changed++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+	if changed > 0 {
+		InvalidateRoutePoolCache()
+	}
+	return changed, missing, nil
+}
+
+// UpdateRoutePoolMemberFaultDomains keeps a managed upstream's current shared
+// fault boundary aligned across every pool membership. It leaves user-managed
+// channels untouched because callers must provide explicit channel IDs.
+func UpdateRoutePoolMemberFaultDomains(updates map[int]string) (int, []int, error) {
+	if len(updates) == 0 {
+		return 0, nil, nil
+	}
+
+	channelIDs := make([]int, 0, len(updates))
+	for channelID, domain := range updates {
+		if channelID <= 0 || strings.TrimSpace(domain) == "" {
+			return 0, nil, errors.New("route pool fault domain updates require positive channel ids and domains")
+		}
+		channelIDs = append(channelIDs, channelID)
+	}
+	sort.Ints(channelIDs)
+
+	changed := 0
+	missing := make([]int, 0)
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		for _, channelID := range channelIDs {
+			var members []gatewayschema.RoutePoolMember
+			if err := tx.Where("channel_id = ?", channelID).Find(&members).Error; err != nil {
+				return err
+			}
+			if len(members) == 0 {
+				missing = append(missing, channelID)
+				continue
+			}
+			for _, member := range members {
+				if strings.EqualFold(strings.TrimSpace(member.FaultDomain), strings.TrimSpace(updates[channelID])) {
+					continue
+				}
+				if err := tx.Model(&gatewayschema.RoutePoolMember{}).
+					Where("id = ?", member.ID).
+					Update("fault_domain", strings.TrimSpace(updates[channelID])).Error; err != nil {
 					return err
 				}
 				changed++

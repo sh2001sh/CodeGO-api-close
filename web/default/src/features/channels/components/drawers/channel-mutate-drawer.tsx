@@ -237,7 +237,6 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.system_prompt?.trim() ||
     values.force_format ||
     values.thinking_to_content ||
-    values.claude_wallet_enabled ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
     values.claude_beta_query ||
@@ -2478,6 +2477,33 @@ export function ChannelMutateDrawer({
                           </FormItem>
                         )}
                       />
+
+                      <FormField
+                        control={form.control}
+                        name='sensitive_word_interception_enabled'
+                        render={({ field }) => (
+                          <FormItem className='flex items-center justify-between border-t pt-4'>
+                            <div className='space-y-0.5'>
+                              <FormLabel>{t('敏感词拦截')}</FormLabel>
+                              <FormDescription>
+                                {field.value
+                                  ? t(
+                                      '请求会接入平台敏感词检测，命中规则时按平台策略拦截。'
+                                    )
+                                  : t(
+                                      '请求不接入平台敏感词检测，由管理员自行承担内容治理责任。'
+                                    )}
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
                     </div>
 
                     <div className='space-y-4 border-t pt-4'>
@@ -3038,28 +3064,6 @@ export function ChannelMutateDrawer({
                                 {t(
                                   'Convert reasoning_content to <think> tag in content'
                                 )}
-                              </FormDescription>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='claude_wallet_enabled'
-                        render={({ field }) => (
-                          <FormItem className='flex items-center justify-between px-4 py-3'>
-                            <div className='space-y-0.5'>
-                              <FormLabel>Claude 钱包渠道</FormLabel>
-                              <FormDescription>
-                                标记后，此渠道的请求只从 Claude
-                                额度扣费，不使用盲盒、套餐或普通余额。
                               </FormDescription>
                             </div>
                             <FormControl>

@@ -21,6 +21,7 @@ var (
 	ErrEmailDomainNotAllowed    = errors.New("The administrator has enabled the email domain name whitelist, and your email address is not allowed due to special symbols or it's not in the whitelist.")
 	ErrEmailAliasNotAllowed     = errors.New("管理员已启用邮箱地址别名限制，您的邮箱地址由于包含特殊符号而被拒绝。")
 	ErrPasswordResetLinkInvalid = errors.New("重置链接非法或已过期")
+	ErrBoundEmailRequired       = errors.New("请先绑定邮箱")
 )
 
 // PasswordResetRequest captures the public password-reset completion payload.
@@ -68,6 +69,26 @@ func SendRegistrationVerification(email string) error {
 	subject := fmt.Sprintf("%s邮箱验证邮件", platformconfig.SystemName)
 	content := renderRegistrationVerificationEmail(platformconfig.SystemName, code, VerificationValidMinutes)
 	return sendEmail(subject, email, content)
+}
+
+// SendWalletTransferPasswordVerification sends a code to the user's bound email.
+func SendWalletTransferPasswordVerification(userID int) (string, error) {
+	user, err := identitystore.LoadUserByID(userID, true)
+	if err != nil {
+		return "", err
+	}
+	email := strings.TrimSpace(user.Email)
+	if email == "" {
+		return "", ErrBoundEmailRequired
+	}
+	code := GenerateVerificationCode(6)
+	RegisterVerificationCodeWithKey(email, code, WalletTransferPasswordPurpose)
+	subject := fmt.Sprintf("%s支付密码验证", platformconfig.SystemName)
+	content := renderRegistrationVerificationEmail(platformconfig.SystemName, code, VerificationValidMinutes)
+	if err := sendEmail(subject, email, content); err != nil {
+		return "", err
+	}
+	return email, nil
 }
 
 // SendPasswordResetEmail sends a password reset email when the address exists.
@@ -135,6 +156,19 @@ func validateVerificationEmail(email string) error {
 		if strings.Contains(localPart, "+") || strings.Contains(localPart, ".") {
 			return ErrEmailAliasNotAllowed
 		}
+	}
+	return nil
+}
+
+// validateRegistrationEmail always rejects aliases because registration is a
+// high-risk account-creation path, even when email verification is disabled.
+func validateRegistrationEmail(email string) error {
+	if err := validateVerificationEmail(email); err != nil {
+		return err
+	}
+	parts := strings.SplitN(strings.TrimSpace(email), "@", 2)
+	if len(parts) == 2 && (strings.Contains(parts[0], "+") || strings.Contains(parts[0], ".")) {
+		return ErrEmailAliasNotAllowed
 	}
 	return nil
 }

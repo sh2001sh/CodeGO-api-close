@@ -1,11 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import {
-  ArrowRight,
-  Gift,
-  RefreshCcw,
-  Sparkles,
-  Wallet,
-} from 'lucide-react'
+import { ArrowRight, Gift, RefreshCcw, Sparkles, Wallet } from 'lucide-react'
 import { AnimateInView } from '@/components/animate-in-view'
 
 interface FeaturesProps {
@@ -18,7 +12,7 @@ const activityCards = [
     tag: '盲盒活动',
     title: '首抽奖励，开盒拿随机奖励',
     description:
-      '首次开盒会优先给出更实用的结果，抽到的普通额度和 Claude 额度都会直接到账。',
+      '首次开盒会优先给出更实用的结果，抽到的统一额度会直接到账。',
     to: '/blind-box',
     cta: '去开盲盒',
   },
@@ -47,7 +41,7 @@ export function Features(_props: FeaturesProps) {
     <section className='px-6 py-20 md:px-10 md:py-24'>
       <div className='mx-auto max-w-7xl'>
         <AnimateInView className='mx-auto max-w-3xl text-center'>
-          <div className='ios-pill inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold text-primary'>
+          <div className='ios-pill text-primary inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold'>
             <Sparkles className='h-3.5 w-3.5' />
             平台福利
           </div>

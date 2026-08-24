@@ -1,8 +1,8 @@
 package app
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"fmt"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -46,16 +46,16 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = info.UpstreamModelName
 	}
+	relaycommon.AttachRouteLogInfo(c, other)
 
 	auditapp.RecordConsumeLog(c, info.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
 		TokenName: tokenName,
-		Quota:     info.PriceData.Quota,
+		Quota:     BillingQuotaForLog(info, info.PriceData.Quota),
 		Content:   logContent,
 		TokenId:   info.TokenId,
 		Group:     info.UsingGroup,
 		Other:     other,
 	})
-	RecordUsageStats(info.UserId, info.ChannelId, info.PriceData.Quota)
 }

@@ -22,6 +22,11 @@ export type PerformanceSeriesPoint = {
   avg_latency_ms: number
   success_rate: number
   avg_tps: number
+  cache_hit_rate: number
+  input_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  request_count: number
 }
 
 export type PerformanceGroup = {
@@ -30,6 +35,10 @@ export type PerformanceGroup = {
   avg_latency_ms: number
   success_rate: number
   avg_tps: number
+  cache_hit_rate: number
+  input_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
   series: PerformanceSeriesPoint[]
 }
 
@@ -49,6 +58,10 @@ export type PerfModelSummary = {
   avg_latency_ms: number
   success_rate: number
   avg_tps: number
+  cache_hit_rate: number
+  input_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
   request_count: number
 }
 

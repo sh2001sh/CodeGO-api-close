@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next'
-import { getCurrencyDisplay } from '@/lib/currency'
+import { formatQuotaWithCurrency, getCurrencyDisplay } from '@/lib/currency'
 import type { SubscriptionPlan } from '../types'
 import { formatDuration, formatResetPeriod } from './format'
 
@@ -147,8 +147,11 @@ export function formatSubscriptionPlanPrice(
 }
 
 export function formatSubscriptionQuotaAmount(amount?: number | null): string {
-  const usdAmount = subscriptionQuotaUnitsToUSD(amount)
-  return `$${formatNumber(usdAmount)}`
+  return formatQuotaWithCurrency(Number(amount || 0), {
+    digitsLarge: 2,
+    digitsSmall: 4,
+    abbreviate: true,
+  })
 }
 
 export function getSubscriptionPlanSubtitle(

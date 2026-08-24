@@ -39,11 +39,7 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 	}
 
 	now := platformruntime.GetTimestamp()
-	userQuota, err := billingapp.GetUserWalletQuota(userID)
-	if err != nil {
-		return nil, err
-	}
-	claudeQuota, err := billingapp.GetUserClaudeWalletQuota(userID)
+	userQuota, err := billingapp.GetUserClaudeWalletQuota(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +59,7 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 		}
 	}
 	if err := platformdb.DB.Model(&commerceschema.BlindBoxOrder{}).
-		Where("user_id = ? AND status = ?", userID, constant.TopUpStatusPending).
+		Where("user_id = ? AND status = ? AND create_time > ?", userID, constant.TopUpStatusPending, pendingBlindBoxOrderCutoff(now)).
 		Select("COALESCE(SUM(quantity - opened_count), 0)").
 		Scan(&overview.PendingBoxes).Error; err != nil {
 		return nil, err
@@ -81,12 +77,14 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 	if err := attachBlindBoxPropStateTx(platformdb.DB, overview.RecentRecords); err != nil {
 		return nil, err
 	}
+	if err := attachBlindBoxLuckyNumbersTx(platformdb.DB, overview.RecentRecords); err != nil {
+		return nil, err
+	}
 	for index := range overview.RecentRecords {
 		normalizeBlindBoxOpenRecordDisplay(&overview.RecentRecords[index])
 	}
 
-	overview.RemainingQuota = int64(userQuota)
-	overview.ClaudeQuota = int64(claudeQuota)
+	overview.Quota = int64(userQuota)
 
 	var pity commerceschema.BlindBoxPityState
 	if err := platformdb.DB.Where("user_id = ?", userID).First(&pity).Error; err == nil {
@@ -187,6 +185,9 @@ func ListBlindBoxHistory(userID int, page int, pageSize int) (*BlindBoxHistoryPa
 	if err := attachBlindBoxPropStateTx(platformdb.DB, result.Records); err != nil {
 		return nil, err
 	}
+	if err := attachBlindBoxLuckyNumbersTx(platformdb.DB, result.Records); err != nil {
+		return nil, err
+	}
 	for index := range result.Records {
 		normalizeBlindBoxOpenRecordDisplay(&result.Records[index])
 	}
@@ -250,9 +251,10 @@ func sumBlindBoxOrderQuantity(userID int, start, end int64) (int, error) {
 		Total int64 `gorm:"column:total"`
 	}
 	var row result
+	cutoff := pendingBlindBoxOrderCutoff(platformruntime.GetTimestamp())
 	err := platformdb.DB.Model(&commerceschema.BlindBoxOrder{}).
 		Select("COALESCE(SUM(quantity), 0) AS total").
-		Where("user_id = ? AND create_time >= ? AND create_time < ? AND status <> ? AND money > 0", userID, start, end, constant.TopUpStatusExpired).
+		Where("user_id = ? AND create_time >= ? AND create_time < ? AND money > 0 AND (status = ? OR (status = ? AND create_time > ?))", userID, start, end, constant.TopUpStatusSuccess, constant.TopUpStatusPending, cutoff).
 		Scan(&row).Error
 	return int(row.Total), err
 }
@@ -291,11 +293,11 @@ func normalizeBlindBoxOpenRecordDisplay(record *commerceschema.BlindBoxOpenRecor
 			record.RewardTitle = spec.Title
 		}
 	}
-	if record.RewardType == commerceschema.BlindBoxRewardTypeQuota && record.RewardTitle == "" {
-		record.RewardTitle = fmt.Sprintf("%.2f 美元奖励", record.RewardUSD)
+	if record.RewardType == commerceschema.BlindBoxRewardTypeQuota {
+		record.RewardTitle = fmt.Sprintf("%.2f 统一额度奖励", record.RewardUSD)
 	}
-	if record.RewardType == commerceschema.BlindBoxRewardTypeClaudeQuota && record.RewardTitle == "" {
-		record.RewardTitle = fmt.Sprintf("%.2f Claude 额度奖励", record.RewardUSD)
+	if record.RewardType == commerceschema.BlindBoxRewardTypeClaudeQuota {
+		record.RewardTitle = fmt.Sprintf("%.2f 通用额度奖励", record.RewardUSD)
 	}
 	if record.RewardType == commerceschema.BlindBoxRewardTypeProp && record.RewardTitle == "" {
 		record.RewardTitle = "实用道具奖励"

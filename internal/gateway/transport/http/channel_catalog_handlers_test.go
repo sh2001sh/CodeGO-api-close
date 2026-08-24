@@ -39,6 +39,11 @@ func TestGetAllChannelsSanitizesMultiKeyChannelInfo(t *testing.T) {
 		},
 	}
 	require.NoError(t, db.Create(&channel).Error)
+	externalChannel := channel
+	externalChannel.Id = 2
+	externalChannel.Name = "marketplace-external-hidden"
+	externalChannel.ChannelScope = gatewayschema.ChannelScopeExternal
+	require.NoError(t, db.Create(&externalChannel).Error)
 	require.NoError(t, gatewaystore.AddChannelAbilities(&channel, nil))
 
 	recorder := httptest.NewRecorder()
@@ -52,6 +57,26 @@ func TestGetAllChannelsSanitizesMultiKeyChannelInfo(t *testing.T) {
 	require.Contains(t, body, "\"success\":true")
 	require.NotContains(t, body, "hidden")
 	require.NotContains(t, body, "\"multi_key_disabled_time\"")
+	require.NotContains(t, body, "marketplace-external-hidden")
+}
+
+func TestSearchChannelsExcludesMarketplaceExternalChannels(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	for _, channel := range []gatewayschema.Channel{
+		{Id: 11, Type: 1, Key: "official-key", Status: constant.ChannelStatusEnabled, Name: "shared-search-official", Models: "gpt-4o", Group: "default", ChannelScope: gatewayschema.ChannelScopeOfficial},
+		{Id: 12, Type: 1, Key: "external-key", Status: constant.ChannelStatusEnabled, Name: "shared-search-external", Models: "gpt-4o", Group: "default", ChannelScope: gatewayschema.ChannelScopeExternal},
+	} {
+		require.NoError(t, db.Create(&channel).Error)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/channel/search?keyword=shared-search&p=1&page_size=20", nil)
+	SearchChannels(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "shared-search-official")
+	require.NotContains(t, recorder.Body.String(), "shared-search-external")
 }
 
 func TestAddChannelBatchPrefixDoesNotAccumulate(t *testing.T) {

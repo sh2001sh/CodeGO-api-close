@@ -81,6 +81,20 @@ func validateOptionValue(key string, value string) error {
 		}
 	case "GroupRatio":
 		return gatewaystore.CheckGroupRatio(value)
+	case gatewaystore.SubscriptionGroupPolicyOptionKey:
+		return gatewaystore.ValidateSubscriptionGroupPolicyJSONString(value)
+	case "blind_box_setting.multiplier_card_route_group":
+		group := strings.TrimSpace(value)
+		if !gatewaystore.ContainsGroupRatio(group) {
+			return fmt.Errorf("倍率卡路由分组不存在，请从现有分组中选择")
+		}
+		hasChannel, err := gatewaystore.HasEnabledChannelForGroup(group)
+		if err != nil {
+			return err
+		}
+		if !hasChannel {
+			return fmt.Errorf("倍率卡路由分组没有已启用渠道")
+		}
 	case "ImageRatio":
 		return gatewaystore.UpdateImageRatioByJSONString(value)
 	case "AudioRatio":

@@ -551,17 +551,7 @@ func usageTotalTokens(usage *dto.Usage) int {
 
 func getChannelAffinityUsageCacheStatsCache() *cachex.HybridCache[ChannelAffinityUsageCacheCounters] {
 	channelAffinityUsageCacheStatsOnce.Do(func() {
-		setting := gatewaystore.GetChannelAffinitySetting()
-		capacity := 100_000
-		defaultTTLSeconds := 3600
-		if setting != nil {
-			if setting.MaxEntries > 0 {
-				capacity = setting.MaxEntries
-			}
-			if setting.DefaultTTLSeconds > 0 {
-				defaultTTLSeconds = setting.DefaultTTLSeconds
-			}
-		}
+		capacity, ttl := channelAffinityCacheCapacityAndTTL()
 
 		channelAffinityUsageCacheStatsCache = cachex.NewHybridCache[ChannelAffinityUsageCacheCounters](cachex.HybridCacheConfig[ChannelAffinityUsageCacheCounters]{
 			Namespace: cachex.Namespace(channelAffinityUsageCacheStatsNamespace),
@@ -572,13 +562,28 @@ func getChannelAffinityUsageCacheStatsCache() *cachex.HybridCache[ChannelAffinit
 			RedisCodec: cachex.JSONCodec[ChannelAffinityUsageCacheCounters]{},
 			Memory: func() *hot.HotCache[string, ChannelAffinityUsageCacheCounters] {
 				return hot.NewHotCache[string, ChannelAffinityUsageCacheCounters](hot.LRU, capacity).
-					WithTTL(time.Duration(defaultTTLSeconds) * time.Second).
+					WithTTL(ttl).
 					WithJanitor().
 					Build()
 			},
 		})
 	})
 	return channelAffinityUsageCacheStatsCache
+}
+
+func channelAffinityCacheCapacityAndTTL() (int, time.Duration) {
+	setting := gatewaystore.GetChannelAffinitySetting()
+	capacity := 100_000
+	defaultTTLSeconds := 3600
+	if setting != nil {
+		if setting.MaxEntries > 0 {
+			capacity = setting.MaxEntries
+		}
+		if setting.DefaultTTLSeconds > 0 {
+			defaultTTLSeconds = setting.DefaultTTLSeconds
+		}
+	}
+	return capacity, time.Duration(defaultTTLSeconds) * time.Second
 }
 
 func channelAffinityUsageCacheStatsLock(key string) *sync.Mutex {

@@ -68,6 +68,9 @@ func ListAdminUsers(pageInfo *platformpagination.PageInfo) (*platformpagination.
 	if err := populateInviterExternalIDs(users); err != nil {
 		return nil, err
 	}
+	if err := projectUnifiedCreditForAdminUsers(users); err != nil {
+		return nil, err
+	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
 	return pageInfo, nil
@@ -79,6 +82,9 @@ func SearchAdminUsers(keyword string, group string, pageInfo *platformpagination
 		return nil, err
 	}
 	if err := populateInviterExternalIDs(users); err != nil {
+		return nil, err
+	}
+	if err := projectUnifiedCreditForAdminUsers(users); err != nil {
 		return nil, err
 	}
 	pageInfo.SetTotal(int(total))
@@ -97,7 +103,24 @@ func GetAdminUserDetail(targetUserID int, actorRole int) (*identityschema.User, 
 	if err := populateInviterExternalIDs([]*identityschema.User{user}); err != nil {
 		return nil, err
 	}
+	if err := projectUnifiedCreditForAdminUsers([]*identityschema.User{user}); err != nil {
+		return nil, err
+	}
 	return user, nil
+}
+
+func projectUnifiedCreditForAdminUsers(users []*identityschema.User) error {
+	for _, user := range users {
+		if user == nil || user.Id <= 0 {
+			continue
+		}
+		quota, err := billingapp.GetUserClaudeWalletQuota(user.Id)
+		if err != nil {
+			return err
+		}
+		user.Quota = quota
+	}
+	return nil
 }
 
 func populateInviterExternalIDs(users []*identityschema.User) error {
@@ -161,7 +184,11 @@ func CreateAdminUser(req AdminUserMutateRequest, actorRole int) error {
 		DisplayName: candidate.DisplayName,
 		Role:        candidate.Role,
 	}
-	return insertUserAndApplyRegistrationRewards(&cleanUser, 0)
+	if err := identitystore.CreateUser(&cleanUser, 0); err != nil {
+		return err
+	}
+	recordRegistrationBonusLog(cleanUser.Id)
+	return nil
 }
 
 func UpdateAdminUser(req AdminUserMutateRequest, actorRole int) error {
@@ -284,12 +311,7 @@ func ManageAdminUser(req AdminUserManageRequest, actor AdminActionActor) (*UserR
 		}
 		user.Role = constant.RoleCommonUser
 	case "add_quota":
-		if err := applyAdminQuotaChange(user, req, actor, false); err != nil {
-			return nil, err
-		}
-		return &UserRoleStatusResponse{Role: user.Role, Status: user.Status}, nil
-	case "add_claude_quota":
-		if err := applyAdminQuotaChange(user, req, actor, true); err != nil {
+		if err := applyAdminQuotaChange(user, req, actor); err != nil {
 			return nil, err
 		}
 		return &UserRoleStatusResponse{Role: user.Role, Status: user.Status}, nil
@@ -311,7 +333,7 @@ func ManageAdminUser(req AdminUserManageRequest, actor AdminActionActor) (*UserR
 	return &UserRoleStatusResponse{Role: user.Role, Status: user.Status}, nil
 }
 
-func applyAdminQuotaChange(user identityschema.User, req AdminUserManageRequest, actor AdminActionActor, claude bool) error {
+func applyAdminQuotaChange(user identityschema.User, req AdminUserManageRequest, actor AdminActionActor) error {
 	adminInfo := map[string]any{
 		"admin_id":       actor.UserID,
 		"admin_username": actor.Username,
@@ -322,57 +344,32 @@ func applyAdminQuotaChange(user identityschema.User, req AdminUserManageRequest,
 		if req.Value <= 0 {
 			return ErrUserQuotaChangeZero
 		}
-		if claude {
-			if err := billingapp.AdjustClaudeWalletQuota(user.Id, -req.Value); err != nil {
-				return err
-			}
-			auditapp.RecordLogWithAdminInfo(user.Id, auditschema.LogTypeManage,
-				fmt.Sprintf("admin increased user Claude quota by %s", logger.LogQuota(req.Value)), adminInfo)
-			return nil
-		}
-		if err := billingapp.AdjustWalletQuota(user.Id, -req.Value); err != nil {
+		if err := billingapp.AdjustClaudeWalletQuota(user.Id, -req.Value); err != nil {
 			return err
 		}
 		auditapp.RecordLogWithAdminInfo(user.Id, auditschema.LogTypeManage,
-			fmt.Sprintf("管理员增加用户额度 %s", logger.LogQuota(req.Value)), adminInfo)
+			fmt.Sprintf("管理员增加用户统一额度 %s", logger.LogQuota(req.Value)), adminInfo)
 		return nil
 	case "subtract":
 		if req.Value <= 0 {
 			return ErrUserQuotaChangeZero
 		}
-		if claude {
-			if err := billingapp.AdjustClaudeWalletQuota(user.Id, req.Value); err != nil {
-				return err
-			}
-			auditapp.RecordLogWithAdminInfo(user.Id, auditschema.LogTypeManage,
-				fmt.Sprintf("admin decreased user Claude quota by %s", logger.LogQuota(req.Value)), adminInfo)
-			return nil
-		}
-		if err := billingapp.AdjustWalletQuota(user.Id, req.Value); err != nil {
+		if err := billingapp.AdjustClaudeWalletQuota(user.Id, req.Value); err != nil {
 			return err
 		}
 		auditapp.RecordLogWithAdminInfo(user.Id, auditschema.LogTypeManage,
-			fmt.Sprintf("管理员减少用户额度 %s", logger.LogQuota(req.Value)), adminInfo)
+			fmt.Sprintf("管理员减少用户统一额度 %s", logger.LogQuota(req.Value)), adminInfo)
 		return nil
 	case "override":
 		if req.Value == 0 {
 			return ErrUserQuotaChangeZero
 		}
-		if claude {
-			oldQuota := user.ClaudeQuota
-			if err := billingapp.SetClaudeWalletQuota(user.Id, req.Value); err != nil {
-				return err
-			}
-			auditapp.RecordLogWithAdminInfo(user.Id, auditschema.LogTypeManage,
-				fmt.Sprintf("admin overrode user Claude quota from %s to %s", logger.LogQuota(oldQuota), logger.LogQuota(req.Value)), adminInfo)
-			return nil
-		}
-		oldQuota := user.Quota
-		if err := billingapp.SetWalletQuota(user.Id, req.Value); err != nil {
+		oldQuota := user.ClaudeQuota
+		if err := billingapp.SetClaudeWalletQuota(user.Id, req.Value); err != nil {
 			return err
 		}
 		auditapp.RecordLogWithAdminInfo(user.Id, auditschema.LogTypeManage,
-			fmt.Sprintf("管理员覆盖用户额度从 %s 为 %s", logger.LogQuota(oldQuota), logger.LogQuota(req.Value)), adminInfo)
+			fmt.Sprintf("管理员覆盖用户统一额度从 %s 为 %s", logger.LogQuota(oldQuota), logger.LogQuota(req.Value)), adminInfo)
 		return nil
 	default:
 		return ErrInvalidParams

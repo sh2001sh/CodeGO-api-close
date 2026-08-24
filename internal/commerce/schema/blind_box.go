@@ -13,7 +13,12 @@ const (
 
 	BlindBoxOrderSourcePurchase            = "purchase"
 	BlindBoxOrderSourceAdminGrant          = "admin_grant"
+	BlindBoxOrderSourceRegistrationBenefit = "registration_benefit"
 	BlindBoxOrderSourceSubscriptionBenefit = "subscription_benefit"
+
+	BlindBoxPoolTypeStandard  = "standard"
+	BlindBoxPoolTypeBalance15 = "balance_15"
+	BlindBoxPoolTypeUnified   = "unified"
 
 	BlindBoxCreditStatusActive    = "active"
 	BlindBoxCreditStatusExhausted = "exhausted"
@@ -82,19 +87,33 @@ type BlindBoxOpenRecord struct {
 	UserId             int     `json:"user_id" gorm:"index"`
 	OrderId            int     `json:"order_id" gorm:"index"`
 	RewardType         string  `json:"reward_type" gorm:"type:varchar(32);index"`
-	RewardWalletType   string  `json:"reward_wallet_type" gorm:"type:varchar(32);default:'default';index"`
+	RewardWalletType   string  `json:"reward_wallet_type" gorm:"type:varchar(32);default:'claude';index"`
 	RewardUSD          float64 `json:"reward_usd"`
 	CreditAmount       int64   `json:"credit_amount" gorm:"type:bigint;not null;default:0"`
 	RewardTitle        string  `json:"reward_title" gorm:"type:varchar(255)"`
 	RewardTier         string  `json:"reward_tier" gorm:"type:varchar(64)"`
+	PoolType           string  `json:"pool_type" gorm:"type:varchar(32);default:'standard';index"`
 	UserSubscriptionId int     `json:"user_subscription_id" gorm:"index"`
+	RequestId          *string `json:"-" gorm:"type:varchar(64);uniqueIndex"`
 	IsPity             bool    `json:"is_pity"`
 	CreateTime         int64   `json:"create_time" gorm:"bigint;index"`
 
-	PropId        int    `json:"prop_id,omitempty" gorm:"-"`
-	PropType      string `json:"prop_type,omitempty" gorm:"-"`
-	PropStatus    string `json:"prop_status,omitempty" gorm:"-"`
-	PropExpiresAt int64  `json:"prop_expires_at,omitempty" gorm:"-"`
+	PropId         int    `json:"prop_id,omitempty" gorm:"-"`
+	PropType       string `json:"prop_type,omitempty" gorm:"-"`
+	PropStatus     string `json:"prop_status,omitempty" gorm:"-"`
+	PropExpiresAt  int64  `json:"prop_expires_at,omitempty" gorm:"-"`
+	LuckyNumber    string `json:"lucky_number,omitempty" gorm:"-"`
+	LuckyDrawDate  string `json:"lucky_draw_date,omitempty" gorm:"-"`
+	LuckyExpiresAt int64  `json:"lucky_expires_at,omitempty" gorm:"-"`
+}
+
+// BalanceBlindBoxPityState tracks the independent $35 guarantee for balance draws.
+type BalanceBlindBoxPityState struct {
+	Id                    int   `json:"id"`
+	UserId                int   `json:"user_id" gorm:"uniqueIndex"`
+	ConsecutiveUnder6USD  int   `json:"consecutive_under_6_usd"`
+	ConsecutiveUnder35USD int   `json:"consecutive_under_35_usd"`
+	UpdatedAt             int64 `json:"updated_at" gorm:"bigint"`
 }
 
 type BlindBoxPityState struct {
@@ -122,6 +141,16 @@ func (p *BlindBoxPityState) BeforeCreate(tx *gorm.DB) error {
 }
 
 func (p *BlindBoxPityState) BeforeUpdate(tx *gorm.DB) error {
+	p.UpdatedAt = platformruntime.GetTimestamp()
+	return nil
+}
+
+func (p *BalanceBlindBoxPityState) BeforeCreate(tx *gorm.DB) error {
+	p.UpdatedAt = platformruntime.GetTimestamp()
+	return nil
+}
+
+func (p *BalanceBlindBoxPityState) BeforeUpdate(tx *gorm.DB) error {
 	p.UpdatedAt = platformruntime.GetTimestamp()
 	return nil
 }

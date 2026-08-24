@@ -2,10 +2,17 @@ package claude
 
 import (
 	"encoding/base64"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,6 +42,63 @@ func TestFormatClaudeResponseInfoMessageStart(t *testing.T) {
 	require.Equal(t, 50, claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens)
 	require.Equal(t, "msg_123", claudeInfo.ResponseID)
 	require.Equal(t, "claude-3-5-sonnet", claudeInfo.Model)
+}
+
+func TestClaudeStreamHandlerRejectsEmptyUpstreamStream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "http://example.test/v1/messages", nil)
+	info := &relaycommon.RelayInfo{
+		IsStream:        true,
+		OriginModelName: "claude-sonnet-4-6",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "claude-sonnet-4-6",
+		},
+	}
+
+	usage, apiErr := ClaudeStreamHandler(ctx, &http.Response{Body: io.NopCloser(strings.NewReader(""))}, info)
+
+	require.Nil(t, usage)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+	require.Zero(t, info.ReceivedResponseCount)
+}
+
+func TestClaudeStreamHandlerAcceptsUpstreamStreamWithEvents(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"type":"message_start","message":{"id":"msg_123","model":"claude-sonnet-4-6","usage":{"input_tokens":100}}}`,
+		"",
+		`data: {"type":"message_delta","usage":{"output_tokens":5}}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "http://example.test/v1/messages", nil)
+	info := &relaycommon.RelayInfo{
+		IsStream:        true,
+		OriginModelName: "claude-sonnet-4-6",
+		RelayFormat:     types.RelayFormatOpenAI,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "claude-sonnet-4-6",
+		},
+	}
+
+	usage, apiErr := ClaudeStreamHandler(ctx, &http.Response{Body: io.NopCloser(strings.NewReader(body))}, info)
+
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	require.Equal(t, 100, usage.PromptTokens)
+	require.Equal(t, 5, usage.CompletionTokens)
+	require.Equal(t, 2, info.ReceivedResponseCount)
 }
 
 func TestFormatClaudeResponseInfoMessageDeltaFullUsage(t *testing.T) {

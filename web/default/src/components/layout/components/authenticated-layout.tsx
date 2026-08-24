@@ -38,7 +38,10 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
     <LayoutProvider>
       <SearchProvider>
         <WorkspaceProvider>
-          <SidebarProvider defaultOpen={defaultOpen} className='flex-col'>
+          <SidebarProvider
+            defaultOpen={defaultOpen}
+            className='codego-console-shell flex-col'
+          >
             <SkipToMain />
             <AppHeader />
             <div className='flex min-h-0 w-full flex-1'>

@@ -99,7 +99,7 @@ func prepareNewUser(user *identityschema.User, inviterID int) error {
 		}
 		user.Password = hashedPassword
 	}
-	user.Quota = platformconfig.QuotaForNewUser
+	user.ClaudeQuota = platformconfig.QuotaForNewUser
 	user.AffCode = platformruntime.GetRandomString(4)
 	if user.ExternalId == "" {
 		externalID, err := identityschema.GenerateExternalUserID()

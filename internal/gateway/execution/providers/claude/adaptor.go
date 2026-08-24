@@ -2,7 +2,6 @@ package claude
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -36,7 +35,7 @@ func (a *Adaptor) ConvertImageRequest(*gin.Context, *relaycommon.RelayInfo, dto.
 func (a *Adaptor) Init(*relaycommon.RelayInfo) {}
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	requestURL := fmt.Sprintf("%s/v1/messages", info.ChannelBaseUrl)
+	requestURL := relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/messages")
 	if !shouldAppendClaudeBetaQuery(info) {
 		return requestURL, nil
 	}

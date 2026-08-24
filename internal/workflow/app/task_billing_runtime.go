@@ -1,9 +1,10 @@
 package app
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"context"
 	"fmt"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	"math"
 
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
@@ -43,7 +44,18 @@ func taskBillingAdjustFunding(task *workflowschema.Task, delta int) error {
 	if taskBillingIsSubscription(task) {
 		return commerceapp.PostConsumeUserSubscriptionUsageDelta(task.PrivateData.SubscriptionId, taskBillingModelName(task), int64(delta))
 	}
-	return billingapp.AdjustWalletQuota(task.UserId, delta)
+	return billingapp.AdjustClaudeWalletQuota(task.UserId, delta)
+}
+
+func taskFundingQuota(task *workflowschema.Task, quota int) int {
+	if task == nil || quota <= 0 {
+		return quota
+	}
+	billingContext := task.PrivateData.BillingContext
+	if billingContext == nil || billingContext.FundingQuotaScale <= 0 || billingContext.FundingQuotaScale == 1 {
+		return quota
+	}
+	return int(math.Round(float64(quota) * billingContext.FundingQuotaScale))
 }
 
 func taskBillingAdjustTokenQuota(ctx context.Context, task *workflowschema.Task, delta int) {
@@ -94,6 +106,7 @@ func recordTaskRefund(ctx context.Context, task *workflowschema.Task, reason str
 		return
 	}
 	taskBillingAdjustTokenQuota(ctx, task, -quota)
+	billingapp.AdjustUsageQuotaStats(task.UserId, task.ChannelId, -quota)
 
 	other := taskBillingOther(task)
 	other["task_id"] = task.TaskID
@@ -154,6 +167,8 @@ func settleTaskQuotaDelta(ctx context.Context, task *workflowschema.Task, actual
 		logType = auditschema.LogTypeConsume
 		logQuota = quotaDelta
 		billingapp.RecordUsageStats(task.UserId, task.ChannelId, quotaDelta)
+	} else {
+		billingapp.AdjustUsageQuotaStats(task.UserId, task.ChannelId, quotaDelta)
 	}
 
 	other := taskBillingOther(task)
@@ -212,6 +227,7 @@ func settleTaskQuotaByTokens(ctx context.Context, task *workflowschema.Task, tot
 	}
 
 	actualQuota := platformmath.SaturatingMulToInt(float64(totalTokens), modelRatio, finalGroupRatio, otherMultiplier)
+	actualQuota = taskFundingQuota(task, actualQuota)
 	reason := fmt.Sprintf(
 		"token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f",
 		totalTokens,
@@ -232,7 +248,7 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 	}
 	if adaptor != nil {
 		if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-			settleTaskQuotaDelta(ctx, task, actualQuota, "adaptor计费调整")
+			settleTaskQuotaDelta(ctx, task, taskFundingQuota(task, actualQuota), "adaptor计费调整")
 			return
 		}
 	}

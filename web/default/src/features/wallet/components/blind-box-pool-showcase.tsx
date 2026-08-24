@@ -21,7 +21,6 @@ import {
   Crown,
   PackageOpen,
   Sparkles,
-  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
@@ -56,9 +55,15 @@ const REDUCED_CELL = {
   animate: { opacity: 1, transition: { duration: 0.18 } },
 }
 
-export function BlindBoxPoolShowcase(props: { data: BlindBoxSelfData | null }) {
+export function BlindBoxPoolShowcase(props: {
+  data: BlindBoxSelfData | null
+  tiers?: BlindBoxTier[]
+  title?: string
+  description?: string
+  hideSubscription?: boolean
+}) {
   const reduced = Boolean(useReducedMotion())
-  const grouped = groupTiersByRewardType(props.data?.tiers || [])
+  const grouped = groupTiersByRewardType(props.tiers || props.data?.tiers || [])
   const hiddenProbability = props.data?.subscription_prize_probability || 0
   const hiddenTitle = props.data?.subscription_plan_title || 'Lite 月卡'
 
@@ -66,15 +71,15 @@ export function BlindBoxPoolShowcase(props: { data: BlindBoxSelfData | null }) {
     <section className='app-page-shell overflow-hidden'>
       <div className='border-border/70 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5'>
         <div className='flex min-w-0 items-center gap-3'>
-          <span className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
+          <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-lg'>
             <Boxes className='size-4' aria-hidden='true' />
           </span>
           <div className='min-w-0'>
             <h2 className='text-foreground text-base font-semibold'>
-              奖池一览
+              {props.title || '奖池一览'}
             </h2>
             <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-              每次抽取都从下面所有奖励中按概率开出一项
+              {props.description || '每次抽取都从下面所有奖励中按概率开出一项'}
             </p>
           </div>
         </div>
@@ -82,42 +87,31 @@ export function BlindBoxPoolShowcase(props: { data: BlindBoxSelfData | null }) {
       </div>
 
       <div className='space-y-5 px-4 py-4 sm:px-5 sm:py-5'>
-        <PoolGroup
-          icon={Crown}
-          title='隐藏款'
-          hint='最稀有的一档，抽中直接获得月卡'
-          reduced={reduced}
-        >
-          <PoolCell
-            label={hiddenTitle}
-            probability={hiddenProbability}
-            rarity='legendary'
-            note='直接发放一张月卡，享受对应档位权益'
-            reduced={reduced}
-          />
-        </PoolGroup>
-
-        {grouped.claude.length > 0 ? (
+        {!props.hideSubscription ? (
           <PoolGroup
-            icon={Sparkles}
-            title='Claude 额度'
-            hint='直接进入 Claude 钱包，永久有效'
+            icon={Crown}
+            title='隐藏款'
+            hint='最稀有的一档，抽中直接获得月卡'
             reduced={reduced}
           >
-            {grouped.claude.map((tier) => (
-              <TierCell key={tier.name} tier={tier} reduced={reduced} />
-            ))}
+            <PoolCell
+              label={hiddenTitle}
+              probability={hiddenProbability}
+              rarity='legendary'
+              note='直接发放一张月卡，享受对应档位权益'
+              reduced={reduced}
+            />
           </PoolGroup>
         ) : null}
 
-        {grouped.quota.length > 0 ? (
+        {grouped.credit.length > 0 ? (
           <PoolGroup
-            icon={Wallet}
-            title='普通额度'
-            hint='直接进入钱包余额，永久有效'
+            icon={Sparkles}
+            title='通用额度'
+            hint='直接进入通用额度钱包，永久有效'
             reduced={reduced}
           >
-            {grouped.quota.map((tier) => (
+            {grouped.credit.map((tier) => (
               <TierCell key={tier.name} tier={tier} reduced={reduced} />
             ))}
           </PoolGroup>
@@ -231,9 +225,16 @@ function PoolCell(props: {
           />
         </div>
         <span className='text-muted-foreground shrink-0 font-mono text-xs font-medium tabular-nums'>
-          {(props.probability * 100).toFixed(1)}%
+          {formatProbability(props.probability)}
         </span>
       </div>
     </motion.div>
   )
+}
+
+function formatProbability(probability: number) {
+  if (probability <= 0) return '0%'
+  const percentage = probability * 100
+  if (percentage < 0.001) return '<0.001%'
+  return `${percentage.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}%`
 }

@@ -11,8 +11,9 @@ import (
 
 func GetPerfMetricsSummary(c *gin.Context) {
 	hours := parsePerfMetricsHours(c.Query("hours"))
+	group := strings.TrimSpace(c.Query("group"))
 
-	result, err := auditapp.BuildPerfMetricsSummary(hours)
+	result, err := auditapp.BuildPerfMetricsSummary(hours, group)
 	if err != nil {
 		c.JSON(stdhttp.StatusInternalServerError, gin.H{
 			"success": false,

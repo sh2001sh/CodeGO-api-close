@@ -24,9 +24,7 @@ export function ParticipationRules(props: {
           )}
         </RuleFact>
         <RuleFact title={t('Eligibility')}>
-          {t(
-            'A subscription participates automatically when it is active at the draw snapshot, belongs to a monthly plan, has Daily Lucky Number enabled, and already has a membership card number.'
-          )}
+          有效月卡在开奖快照时自动参与；每开启一个盲盒，还会获得一个仅限所属开奖周期参与的四位幸运号。
         </RuleFact>
         <RuleFact title={t('Purchases and upgrades')}>
           {t(
@@ -38,11 +36,13 @@ export function ParticipationRules(props: {
             'Each active membership card owned by the same user is matched independently. Rewards are credited to the specific card that produced the match.'
           )}
         </RuleFact>
+        <RuleFact title='盲盒幸运号'>
+          盲盒号码与月卡号码独立参与。每个盲盒对应一个号码，20:00
+          前开出参与当日开奖，20:00 起开出参与次日开奖，并按基础 1.0 倍率结算。
+        </RuleFact>
       </div>
       <p className='text-muted-foreground text-xs leading-5'>
-        {t(
-          'No check-in, manual sign-up, or extra draw purchase is required. Purchasing, renewing, or upgrading a membership card currently does not grant a blind box automatically; blind boxes and Daily Lucky Number are separate benefits.'
-        )}
+        无需签到或手动报名。月卡号码在月卡有效期内持续参与；盲盒号码只参与所属周期对应的一次开奖。
       </p>
     </div>
   )
@@ -57,9 +57,7 @@ export function MatchingRules() {
         <RuleStep
           number='1'
           title={t('Take the suffix')}
-          detail={t(
-            'Take the final four digits from the complete membership card number.'
-          )}
+          detail={t('月卡取完整卡号末四位；盲盒直接使用开盒时生成的四位号码。')}
         />
         <RuleStep
           number='2'

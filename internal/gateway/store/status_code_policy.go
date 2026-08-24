@@ -19,10 +19,9 @@ var AutomaticDisableStatusCodeRanges = []StatusCodeRange{{Start: 401, End: 401}}
 // Retry transport and upstream status failures before a response reaches the user.
 // The relay handler separately prevents retries once a response body was delivered.
 var AutomaticRetryStatusCodeRanges = []StatusCodeRange{
-	{Start: 100, End: 199},
-	{Start: 300, End: 399},
-	{Start: 401, End: 407},
-	{Start: 409, End: 499},
+	{Start: 408, End: 409},
+	{Start: 425, End: 425},
+	{Start: 429, End: 429},
 	{Start: 500, End: 599},
 }
 

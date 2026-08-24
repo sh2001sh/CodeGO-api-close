@@ -16,6 +16,7 @@ func formatUserLogs(logs []*auditschema.Log, startIdx int) {
 		if otherMap != nil {
 			delete(otherMap, "admin_info")
 			delete(otherMap, "stream_status")
+			delete(otherMap, "owner_error")
 		}
 		logs[i].Other = platformtext.MapToJsonStr(otherMap)
 		logs[i].Id = startIdx + i + 1
@@ -38,6 +39,14 @@ func applyLogContainsFilter(tx *gorm.DB, column string, value string) *gorm.DB {
 		return tx
 	}
 	return tx.Where(column+" LIKE ? ESCAPE '!'", pattern)
+}
+
+func applyLogExactFilter(tx *gorm.DB, column string, value string) *gorm.DB {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return tx
+	}
+	return tx.Where(column+" = ?", value)
 }
 
 func logGroupColumn() string {

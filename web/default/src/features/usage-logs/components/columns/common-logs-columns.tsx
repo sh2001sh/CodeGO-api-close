@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
-import { CircleAlert, Sparkles, KeyRound } from 'lucide-react'
+import { BadgeCheck, CircleAlert, Sparkles, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
@@ -45,8 +45,10 @@ import {
   getTieredBillingSummary,
   hasAnyCacheTokens,
   parseLogOther,
+  getUsageLogGroupDisplayName,
   isViolationFeeLog,
 } from '../../lib/format'
+import { getEffectiveTokenThroughput } from '../../lib/throughput'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -54,6 +56,7 @@ import {
   isPerCallBilling,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { BillingQuotaSourceBadge } from '../billing-quota-source'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { ModelBadge } from '../model-badge'
 import { useUsageLogsContext } from '../usage-logs-provider'
@@ -64,6 +67,38 @@ interface DetailSegment {
   danger?: boolean
 }
 
+function UsageDiscountBadge(props: { other: LogOtherData | null }) {
+  const { t } = useTranslation()
+  const packageMultiplier = props.other?.subscription_package_multiplier
+  const isPackageCard =
+    props.other?.billing_source === 'subscription' &&
+    packageMultiplier != null &&
+    packageMultiplier > 0 &&
+    packageMultiplier < 1
+  const usageMultiplier = props.other?.usage_discount_multiplier
+  const isUsageCard =
+    props.other?.usage_discount_source === 'blind_box_multiplier_card' &&
+    usageMultiplier != null &&
+    usageMultiplier > 0 &&
+    usageMultiplier < 1
+  if (!isPackageCard && !isUsageCard) return null
+
+  const multiplier = isPackageCard ? packageMultiplier : usageMultiplier
+
+  return (
+    <span className='border-success/30 bg-success/10 text-success inline-flex w-fit items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium'>
+      <BadgeCheck className='size-3' aria-hidden='true' />
+      {isPackageCard
+        ? t('{{multiplier}}x plan multiplier card', {
+            multiplier: formatRatioCompact(multiplier),
+          })
+        : t('{{multiplier}}x multiplier card', {
+            multiplier: formatRatioCompact(multiplier),
+          })}
+    </span>
+  )
+}
+
 function formatRatioCompact(ratio: number | undefined): string {
   if (ratio == null || !Number.isFinite(ratio)) return '-'
   return ratio % 1 === 0
@@ -72,6 +107,15 @@ function formatRatioCompact(ratio: number | undefined): string {
 }
 
 function getGroupRatioText(other: LogOtherData | null): string | null {
+  const subscriptionMultiplier = other?.subscription_group_multiplier
+  if (
+    other?.billing_source === 'subscription' &&
+    subscriptionMultiplier != null &&
+    Number.isFinite(subscriptionMultiplier)
+  ) {
+    return `${formatRatioCompact(subscriptionMultiplier)}x`
+  }
+
   const userGroupRatio = other?.user_group_ratio
   if (
     userGroupRatio != null &&
@@ -226,14 +270,22 @@ function buildDetailSegments(
     } else {
       const userGroupRatio = other.user_group_ratio
       const groupRatio = other.group_ratio
+      const subscriptionMultiplier = other.subscription_group_multiplier
+      const isSubscription = other.billing_source === 'subscription'
       const isUserGroup =
         userGroupRatio != null &&
         Number.isFinite(userGroupRatio) &&
         userGroupRatio !== -1
-      const effectiveRatio = isUserGroup ? userGroupRatio : groupRatio
-      const ratioLabel = isUserGroup
-        ? t('User Exclusive Ratio')
-        : t('Group Ratio')
+      const effectiveRatio = isSubscription
+        ? subscriptionMultiplier
+        : isUserGroup
+          ? userGroupRatio
+          : groupRatio
+      const ratioLabel = isSubscription
+        ? t('Subscription multiplier')
+        : isUserGroup
+          ? t('User Exclusive Ratio')
+          : t('Group Ratio')
 
       if (effectiveRatio != null && Number.isFinite(effectiveRatio)) {
         segments.push({
@@ -335,7 +387,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     {affinity && (
                       <button
                         type='button'
-                        className='absolute -top-1 -right-1 leading-none text-warning'
+                        className='text-warning absolute -top-1 -right-1 leading-none'
                         onClick={(e) => {
                           e.stopPropagation()
                           setAffinityTarget({
@@ -468,8 +520,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
       const other = parseLogOther(log.other)
       const displayName = sensitiveVisible ? tokenName : '••••'
-      let group = log.group
-      if (!group) group = other?.group || ''
+      const group = getUsageLogGroupDisplayName(log.group, other)
 
       const metaParts: string[] = []
       const groupRatioText = getGroupRatioText(other)
@@ -477,6 +528,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         metaParts.push(sensitiveVisible ? group : '••••')
       }
       if (groupRatioText) metaParts.push(groupRatioText)
+      if (other?.route_summary) {
+        const order = other.route_summary.selected_order
+        metaParts.push(
+          order ? t('Auto · 第 {{order}} 路', { order }) : t('Auto · 未命中')
+        )
+      }
 
       return (
         <div className='flex max-w-[200px] flex-col gap-0.5'>
@@ -547,29 +604,24 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
         const frt = other?.frt
-        const recordedGenerationTime = other?.generation_time_ms
-        const streamOutputTokens = other?.stream_output_tokens
-        const streamOutputTime = other?.stream_output_time_ms
-        const generationTime =
-          streamOutputTime != null && streamOutputTime > 0
-            ? streamOutputTime / 1000
-            : recordedGenerationTime != null && recordedGenerationTime > 0
-            ? recordedGenerationTime / 1000
-            : log.is_stream && frt != null && frt > 0
-              ? Math.max(useTime - frt / 1000, 0)
-              : useTime
-        const throughputTokens =
-          log.is_stream && streamOutputTokens != null && streamOutputTokens > 0
-            ? streamOutputTokens
-            : log.completion_tokens
-        const tokensPerSecond =
-          generationTime > 0 &&
-          throughputTokens > 0 &&
-          (!log.is_stream || streamOutputTokens != null || !/^gpt/i.test(log.model_name))
-            ? throughputTokens / generationTime
-            : null
+        const responseStartMs = other?.response_start_ms
+        const upstreamFirstEventMs =
+          other?.first_byte_trace?.upstream_first_event_ms
+        const displayedStreamStartMs =
+          upstreamFirstEventMs != null && upstreamFirstEventMs > 0
+            ? upstreamFirstEventMs
+            : responseStartMs != null && responseStartMs > 0
+              ? responseStartMs
+              : frt
+        const tokensPerSecond = getEffectiveTokenThroughput({
+          completionTokens: log.completion_tokens,
+          totalDurationMs: other?.total_duration_ms,
+          useTimeSeconds: useTime,
+        })
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
-        const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null
+        const streamStartVariant = displayedStreamStartMs
+          ? getFirstResponseTimeColor(displayedStreamStartMs / 1000)
+          : null
 
         const pillBg: Record<string, string> = {
           success: 'border border-success/20 bg-success/8',
@@ -607,16 +659,28 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 {formatUseTime(useTime)}
               </span>
               {log.is_stream &&
-                (frt != null && frt > 0 ? (
-                  <span
-                    className={cn(
-                      'inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
-                      pillBg[frtVariant!],
-                      pillText[frtVariant!]
-                    )}
-                  >
-                    {formatUseTime(frt / 1000)}
-                  </span>
+                (displayedStreamStartMs != null &&
+                displayedStreamStartMs > 0 ? (
+                  <TooltipProvider delay={300}>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            className={cn(
+                              'inline-flex cursor-help items-center rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
+                              pillBg[streamStartVariant!],
+                              pillText[streamStartVariant!]
+                            )}
+                          />
+                        }
+                      >
+                        {formatUseTime(displayedStreamStartMs / 1000)}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('Channel first event')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 ) : (
                   <span className='border-border/60 text-muted-foreground/50 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px]'>
                     N/A
@@ -633,14 +697,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       {Math.round(tokensPerSecond)}
                     </span>
                     {' t/s'}
-                    {streamOutputTime != null && streamOutputTime > 0 && (
-                      <>
-                        {' · '}
-                        <span className='font-mono tabular-nums'>
-                          {formatUseTime(streamOutputTime / 1000)}
-                        </span>
-                      </>
-                    )}
                   </>
                 )}
               </span>
@@ -650,7 +706,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger
-                        render={<CircleAlert className='size-3 text-destructive' />}
+                        render={
+                          <CircleAlert className='text-destructive size-3' />
+                        }
                       ></TooltipTrigger>
                       <TooltipContent>
                         <div className='space-y-0.5 text-xs'>
@@ -743,16 +801,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (isSubscription) {
           return (
             <div className='flex flex-col items-start gap-1'>
-              <span className='border-success/30 bg-success/10 text-success inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium'>
-                <span
-                  className='bg-success size-1.5 rounded-full'
-                  aria-hidden='true'
-                />
-                {t('Subscription')}
-              </span>
               <span className='text-success font-mono text-xs font-semibold tabular-nums'>
                 {formatLogQuota(quota)}
               </span>
+              <BillingQuotaSourceBadge other={other} />
+              <UsageDiscountBadge other={other} />
             </div>
           )
         }
@@ -764,6 +817,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <span className='border-border/80 bg-muted/60 inline-flex w-fit items-center rounded-md border px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums'>
               {quotaStr}
             </span>
+            <BillingQuotaSourceBadge other={other} />
+            <UsageDiscountBadge other={other} />
           </div>
         )
       },

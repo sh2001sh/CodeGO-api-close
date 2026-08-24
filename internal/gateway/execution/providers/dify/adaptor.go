@@ -2,7 +2,6 @@ package dify
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -45,13 +44,13 @@ func (a *Adaptor) Init(*relaycommon.RelayInfo) {
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	switch a.BotType {
 	case BotTypeWorkFlow:
-		return fmt.Sprintf("%s/v1/workflows/run", info.ChannelBaseUrl), nil
+		return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/workflows/run"), nil
 	case BotTypeCompletion:
-		return fmt.Sprintf("%s/v1/completion-messages", info.ChannelBaseUrl), nil
+		return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/completion-messages"), nil
 	case BotTypeAgent, BotTypeChatFlow:
 		fallthrough
 	default:
-		return fmt.Sprintf("%s/v1/chat-messages", info.ChannelBaseUrl), nil
+		return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/chat-messages"), nil
 	}
 }
 

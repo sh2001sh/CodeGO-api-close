@@ -3,23 +3,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   calculateBlindBoxAmount,
-  getBlindBoxOrderStatus,
   getBlindBoxSelf,
   isApiSuccess,
-  openBlindBoxes,
-  requestBlindBoxPayment,
   activateBlindBoxProp,
+  pauseBlindBoxProp,
+  convertBlindBoxProp,
 } from '../api'
-import { submitPaymentForm } from '../lib'
 import type {
-  BlindBoxOrderStatus,
   BlindBoxProp,
   BlindBoxRecord,
   BlindBoxSelfData,
@@ -30,23 +21,20 @@ import {
   BlindBoxPrizeDialog,
   EMPTY_PAYMENT_STATE,
   EMPTY_PRIZE_STATE,
-  getBlindBoxMethodLabel,
-  type BlindBoxPaymentState,
   type PrizeDialogState,
 } from './blind-box-dialogs'
 import { BlindBoxHistorySheet } from './blind-box-history-sheet'
 import { BlindBoxPaymentDialog } from './blind-box-payment-dialog'
+import { BlindBoxPropGiftDialog } from './blind-box-prop-gift-dialog'
+import { BlindBoxPropsDialog } from './blind-box-props-dialog'
 import { BlindBoxSidebar } from './blind-box-sidebar'
-import { BlindBoxPropsList } from './blind-box-view-parts'
+import { useBlindBoxChangedEvent } from './use-blind-box-changed-event'
+import { useBlindBoxPayment } from './use-blind-box-payment'
 
 interface BlindBoxCardProps {
   onSubscriptionRefresh: () => Promise<void>
   onUserRefresh: () => Promise<void>
   paymentResult?: 'success' | 'pending' | 'fail'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function BlindBoxCard(props: BlindBoxCardProps) {
@@ -58,12 +46,10 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod | null>(null)
   const [amountDue, setAmountDue] = useState(0)
-  const [paying, setPaying] = useState(false)
-  const [openingCount, setOpeningCount] = useState<number | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [showProps, setShowProps] = useState(false)
-  const [paymentState, setPaymentState] =
-    useState<BlindBoxPaymentState>(EMPTY_PAYMENT_STATE)
+  const [convertingPropId, setConvertingPropId] = useState<number | null>(null)
+  const [giftProp, setGiftProp] = useState<BlindBoxProp | null>(null)
   const [prizeState, setPrizeState] =
     useState<PrizeDialogState>(EMPTY_PRIZE_STATE)
 
@@ -101,6 +87,29 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     ])
   }, [fetchSelf, props])
 
+  const {
+    paying,
+    paymentState,
+    setPaymentState,
+    handlePay,
+    handleOpenExternal,
+    handleCancelPayment,
+    handleContinuePaymentInBackground,
+    handleRetryPayment,
+  } = useBlindBoxPayment({
+    paymentResult: props.paymentResult,
+    data,
+    setData,
+    selectedQuantity,
+    setSelectedQuantity,
+    selectedPaymentMethod,
+    setSelectedPaymentMethod,
+    amountDue,
+    refreshAll,
+    onSubscriptionRefresh: props.onSubscriptionRefresh,
+    onUserRefresh: props.onUserRefresh,
+  })
+
   useEffect(() => {
     void fetchSelf()
   }, [fetchSelf])
@@ -122,266 +131,11 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     void loadAmount()
   }, [selectedQuantity])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
+  useBlindBoxChangedEvent(setPrizeState, refreshAll)
 
-    const handleBlindBoxChanged = (event: Event) => {
-      const detail =
-        event instanceof CustomEvent && isRecord(event.detail)
-          ? event.detail
-          : null
-      const records = Array.isArray(detail?.records)
-        ? (detail.records as BlindBoxRecord[])
-        : []
-      const openCount = Number(detail?.openCount || records.length || 0)
-      if (records.length > 0) {
-        setPrizeState({
-          open: true,
-          records,
-          openCount,
-        })
-      }
-      void refreshAll()
-    }
-
-    window.addEventListener('blind-box:changed', handleBlindBoxChanged)
-    return () => {
-      window.removeEventListener('blind-box:changed', handleBlindBoxChanged)
-    }
-  }, [refreshAll])
-
-  useEffect(() => {
-    if (!props.paymentResult) return
-
-    const syncPaymentResult = async () => {
-      if (props.paymentResult === 'success') {
-        toast.success('支付成功，系统正在同步盲盒结果。')
-      } else if (props.paymentResult === 'pending') {
-        toast.message('支付处理中，结果稍后会同步回来。')
-      } else {
-        toast.error('支付未完成，请重新发起购买。')
-      }
-
-      await refreshAll()
-      if (typeof window !== 'undefined') {
-        window.history.replaceState({}, '', window.location.pathname)
-      }
-    }
-
-    void syncPaymentResult()
-  }, [props.paymentResult, refreshAll])
-
-  useEffect(() => {
-    if (
-      !paymentState.open ||
-      paymentState.stage !== 'pending' ||
-      !paymentState.orderId
-    ) {
-      return
-    }
-
-    let active = true
-
-    const pollOrder = async () => {
-      try {
-        const response = await getBlindBoxOrderStatus(paymentState.orderId)
-        if (!active || !response.success || !response.data) return
-
-        const order = response.data as BlindBoxOrderStatus
-        if (order.status === 'success') {
-          const refreshed = await getBlindBoxSelf()
-          if (isApiSuccess(refreshed) && refreshed.data) {
-            setData(refreshed.data)
-            const openCount = Math.max(
-              1,
-              Number(
-                order.opened_count || order.quantity || paymentState.quantity
-              )
-            )
-            const resultRecords = (
-              refreshed.data.overview?.recent_records || []
-            ).slice(0, openCount)
-            setPrizeState({
-              open: resultRecords.length > 0,
-              records: resultRecords,
-              openCount,
-            })
-          }
-          await Promise.all([
-            props.onSubscriptionRefresh(),
-            props.onUserRefresh(),
-          ])
-          setPaymentState(EMPTY_PAYMENT_STATE)
-          return
-        }
-
-        if (order.status === 'expired') {
-          setPaymentState((current) => ({
-            ...current,
-            stage: 'failed',
-            message: '订单已过期或支付未完成，请重新发起购买。',
-          }))
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : ''
-        if (errorMsg.includes('timeout') || errorMsg.includes('超时')) {
-          setPaymentState((current) => ({
-            ...current,
-            stage: 'failed',
-            message: '支付超时，请检查网络连接后重试',
-          }))
-        }
-      }
-    }
-
-    void pollOrder()
-    const timer = window.setInterval(() => {
-      void pollOrder()
-    }, 2000)
-
-    return () => {
-      active = false
-      window.clearInterval(timer)
-    }
-  }, [paymentState, props])
-
-  const availableBoxes = data?.overview?.available_boxes || 0
-  const pendingBoxes = data?.overview?.pending_boxes || 0
-  const remainingQuota = data?.overview?.remaining_quota || 0
-  const claudeQuota = data?.overview?.claude_quota || 0
-  const effectivePityThreshold =
-    data?.overview?.effective_pity_threshold || data?.pity_threshold || 1
-  const pityProgress = data?.overview?.pity_progress || 0
-  const remainingPity = Math.max(0, effectivePityThreshold - pityProgress)
-
-  const startPendingPayment = useCallback(
-    (args: {
-      orderId: string
-      amountDue: number
-      quantity: number
-      methodLabel: string
-      payUrl?: string
-      qrCodeUrl?: string
-      formUrl?: string
-      formFields?: Record<string, unknown> | null
-      retryPayload?: { quantity: number; paymentMethod: string }
-    }) => {
-      setPaymentState({
-        open: true,
-        stage: 'pending',
-        orderId: args.orderId,
-        amountDue: args.amountDue,
-        methodLabel: args.methodLabel,
-        payUrl: args.payUrl || '',
-        qrCodeUrl: args.qrCodeUrl || '',
-        formUrl: args.formUrl || '',
-        formFields: args.formFields || null,
-        quantity: args.quantity,
-        message: '请在当前弹窗内扫码支付，付款完成后这里会自动显示结果。',
-        pollingStartTime: Date.now(),
-        retryPayload: args.retryPayload,
-      })
-    },
-    []
-  )
-
-  const handlePay = useCallback(async () => {
-    if (!selectedPaymentMethod) {
-      toast.error('请选择支付方式')
-      return
-    }
-
-    setPaying(true)
-    try {
-      const response = await requestBlindBoxPayment({
-        quantity: selectedQuantity,
-        payment_method: selectedPaymentMethod.type,
-      })
-      if (!isApiSuccess(response)) {
-        const errorMsg = response.message || '发起支付失败'
-        let userFriendlyMsg = errorMsg
-
-        if (
-          errorMsg.includes('余额不足') ||
-          errorMsg.includes('insufficient')
-        ) {
-          userFriendlyMsg = '余额不足，请先充值'
-        } else if (errorMsg.includes('超时') || errorMsg.includes('timeout')) {
-          userFriendlyMsg = '网络超时，请检查网络连接后重试'
-        } else if (errorMsg.includes('限额') || errorMsg.includes('limit')) {
-          userFriendlyMsg = '已达到购买限额，请稍后再试'
-        }
-
-        throw new Error(userFriendlyMsg)
-      }
-
-      const payload = isRecord(response.data) ? response.data : {}
-      const formFields = isRecord(payload.form) ? payload.form : null
-      const orderId = String(payload.order_id || '')
-      startPendingPayment({
-        orderId,
-        amountDue: Number(payload.amount_due || amountDue),
-        quantity: Number(payload.quantity || selectedQuantity),
-        methodLabel: getBlindBoxMethodLabel(selectedPaymentMethod),
-        payUrl: String(payload.pay_url || response.url || ''),
-        qrCodeUrl: String(payload.qrcode_url || ''),
-        formUrl: formFields ? String(response.url || '') : '',
-        formFields,
-        retryPayload: {
-          quantity: selectedQuantity,
-          paymentMethod: selectedPaymentMethod.type,
-        },
-      })
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : '发起支付失败'
-      toast.error(errorMsg)
-
-      setPaymentState({
-        open: true,
-        stage: 'failed',
-        orderId: '',
-        amountDue,
-        methodLabel: getBlindBoxMethodLabel(selectedPaymentMethod),
-        payUrl: '',
-        qrCodeUrl: '',
-        formUrl: '',
-        formFields: null,
-        quantity: selectedQuantity,
-        message: errorMsg,
-        retryPayload: {
-          quantity: selectedQuantity,
-          paymentMethod: selectedPaymentMethod.type,
-        },
-      })
-    } finally {
-      setPaying(false)
-    }
-  }, [amountDue, selectedPaymentMethod, selectedQuantity, startPendingPayment])
-
-  const handleManualOpen = useCallback(
-    async (count: number) => {
-      setOpeningCount(count)
-      try {
-        const response = await openBlindBoxes({ count })
-        if (!response.success || !response.data) {
-          throw new Error(response.message || '处理失败')
-        }
-
-        setPrizeState({
-          open: true,
-          records: response.data.records || [],
-          openCount: response.data.open_count || count,
-        })
-        await refreshAll()
-      } catch {
-        toast.error('处理失败')
-      } finally {
-        setOpeningCount(null)
-      }
-    },
-    [refreshAll]
-  )
-
+  const availableBoxes = data?.inventory?.inventory_count || 0
+  const pendingBoxes = 0
+  const quota = data?.overview?.quota || 0
   const handleUseReward = useCallback(
     (record: BlindBoxRecord) => {
       if (
@@ -390,7 +144,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
         ![
           'consume_discount_95',
           'consume_discount_90',
+          'consume_discount_10',
           'zero_hour_multiplier',
+          'monthly_pass_multiplier',
         ].includes(record.prop_type || '')
       ) {
         return
@@ -403,8 +159,12 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           }
           toast.success(
             record.prop_type === 'zero_hour_multiplier'
-              ? `${record.reward_title} 已启用，zero-hour 分组将持续 1 小时。`
-              : `${record.reward_title} 已启用，24 小时后自动失效。`
+              ? '历史 0 倍率道具已启用。'
+              : record.prop_type === 'consume_discount_10'
+                ? '盲盒 0.1 倍率卡已启用，全部现有官方分组通用，累计 15 分钟并可随时暂停。'
+                : record.prop_type === 'monthly_pass_multiplier'
+                  ? '套餐 0.1 倍率卡已启用，无需切换分组；仅实际扣月卡额度时生效。'
+                  : `${record.reward_title} 已启用，仅官方渠道可用，24 小时后自动失效。`
           )
           await refreshAll()
           await queryClient.invalidateQueries({ queryKey: ['user-groups'] })
@@ -418,13 +178,32 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
 
   const handleUseProp = useCallback(
     async (prop: BlindBoxProp) => {
-      if (prop.status !== 'available') return
+      if (
+        prop.status !== 'available' &&
+        !(
+          [
+            'monthly_pass_multiplier',
+            'consume_discount_10',
+            'zero_hour_multiplier',
+          ].includes(prop.prop_type) && prop.status === 'paused'
+        )
+      ) {
+        return
+      }
       try {
         const response = await activateBlindBoxProp(prop.id)
         if (!isApiSuccess(response)) {
           throw new Error(response.message || t('Failed to use prop'))
         }
-        toast.success(t('{{title}} is now active.', { title: prop.title }))
+        toast.success(
+          [
+            'monthly_pass_multiplier',
+            'consume_discount_10',
+            'zero_hour_multiplier',
+          ].includes(prop.prop_type)
+            ? `${prop.title} 已开启，可随时暂停。`
+            : t('{{title}} is now active.', { title: prop.title })
+        )
         await refreshAll()
         await queryClient.invalidateQueries({ queryKey: ['user-groups'] })
       } catch (error) {
@@ -436,36 +215,54 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     [queryClient, refreshAll, t]
   )
 
-  const handleOpenExternal = useCallback(() => {
-    if (paymentState.formUrl && paymentState.formFields) {
-      submitPaymentForm(paymentState.formUrl, paymentState.formFields)
-      return
-    }
-    if (paymentState.payUrl) {
-      window.open(paymentState.payUrl, '_blank', 'noopener,noreferrer')
-    }
-  }, [paymentState.formFields, paymentState.formUrl, paymentState.payUrl])
+  const handlePauseProp = useCallback(
+    async (prop: BlindBoxProp) => {
+      if (prop.status !== 'active') return
+      try {
+        const response = await pauseBlindBoxProp(prop.id)
+        if (!isApiSuccess(response)) {
+          throw new Error(response.message || '暂停失败')
+        }
+        toast.success(`${prop.title} 已暂停，剩余时间已保留。`)
+        await refreshAll()
+        await queryClient.invalidateQueries({ queryKey: ['user-groups'] })
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '暂停失败')
+      }
+    },
+    [queryClient, refreshAll]
+  )
 
-  const handleRetryPayment = useCallback(() => {
-    if (!paymentState.retryPayload) return
-
-    const method = data?.pay_methods?.find(
-      (m) => m.type === paymentState.retryPayload?.paymentMethod
-    )
-    if (!method) {
-      toast.error('支付方式不可用，请重新选择')
-      setPaymentState(EMPTY_PAYMENT_STATE)
-      return
-    }
-
-    setSelectedQuantity(paymentState.retryPayload.quantity)
-    setSelectedPaymentMethod(method)
-    setPaymentState(EMPTY_PAYMENT_STATE)
-
-    setTimeout(() => {
-      void handlePay()
-    }, 100)
-  }, [paymentState.retryPayload, data?.pay_methods, handlePay])
+  const handleConvertProp = useCallback(
+    async (prop: BlindBoxProp) => {
+      if (
+        prop.status !== 'available' ||
+        !['topup_discount_90', 'subscription_discount_90'].includes(
+          prop.prop_type
+        )
+      ) {
+        return
+      }
+      const targetType =
+        prop.prop_type === 'topup_discount_90'
+          ? 'subscription_discount_90'
+          : 'topup_discount_90'
+      setConvertingPropId(prop.id)
+      try {
+        const response = await convertBlindBoxProp(prop.id, targetType)
+        if (!isApiSuccess(response) || !response.data?.prop) {
+          throw new Error(response.message || '转换失败')
+        }
+        toast.success(`已转换为${response.data.prop.title}`)
+        await refreshAll()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '转换失败')
+      } finally {
+        setConvertingPropId(null)
+      }
+    },
+    [refreshAll]
+  )
 
   return (
     <>
@@ -478,22 +275,16 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
             selectedPaymentMethod={selectedPaymentMethod}
             amountDue={amountDue}
             paying={paying}
-            openingCount={openingCount}
-            availableBoxes={availableBoxes}
-            effectivePityThreshold={effectivePityThreshold}
-            pityProgress={pityProgress}
-            remainingPity={remainingPity}
             onQuantityChange={setSelectedQuantity}
             onPaymentMethodChange={setSelectedPaymentMethod}
             onPay={() => void handlePay()}
-            onManualOpen={(count) => void handleManualOpen(count)}
             onOpenProps={() => setShowProps(true)}
+            onRefresh={refreshAll}
           />
         </div>
 
         <BlindBoxSidebar
-          remainingQuota={remainingQuota}
-          claudeQuota={claudeQuota}
+          quota={quota}
           availableBoxes={availableBoxes}
           pendingBoxes={pendingBoxes}
           records={data?.overview?.recent_records || []}
@@ -512,7 +303,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           )
         }}
         onOpenExternal={handleOpenExternal}
+        onCancel={handleCancelPayment}
         onContinueInBackground={() => {
+          handleContinuePaymentInBackground()
           toast.message('支付正在后台处理，完成后会自动同步结果')
         }}
         onRetry={handleRetryPayment}
@@ -531,18 +324,32 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
 
       <BlindBoxHistorySheet open={showHistory} onOpenChange={setShowHistory} />
 
-      <Dialog open={showProps} onOpenChange={setShowProps}>
-        <DialogContent className='sm:max-w-lg'>
-          <DialogHeader>
-            <DialogTitle>我的道具</DialogTitle>
-          </DialogHeader>
-          <BlindBoxPropsList
-            props={data?.props || []}
-            disabled={openingCount !== null || paying}
-            onUse={(prop) => void handleUseProp(prop)}
-          />
-        </DialogContent>
-      </Dialog>
+      <BlindBoxPropsDialog
+        open={showProps}
+        props={data?.props || []}
+        disabled={paying}
+        convertingPropId={convertingPropId}
+        onOpenChange={setShowProps}
+        onUse={(prop) => void handleUseProp(prop)}
+        onPause={(prop) => void handlePauseProp(prop)}
+        onConvert={(prop) => void handleConvertProp(prop)}
+        onGift={(prop) => {
+          setShowProps(false)
+          setGiftProp(prop)
+        }}
+      />
+
+      <BlindBoxPropGiftDialog
+        open={giftProp != null}
+        prop={giftProp}
+        onOpenChange={(open) => {
+          if (!open) setGiftProp(null)
+        }}
+        onGifted={async () => {
+          setGiftProp(null)
+          await refreshAll()
+        }}
+      />
     </>
   )
 }

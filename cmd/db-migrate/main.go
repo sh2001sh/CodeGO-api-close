@@ -25,6 +25,9 @@ func main() {
 		panic(fmt.Errorf("initialize primary database: %w", err))
 	}
 	defer platformstore.CloseDatabases()
+	if err := platformstore.InitLogDB(); err != nil {
+		panic(fmt.Errorf("initialize log database: %w", err))
+	}
 	if *bootstrap {
 		if *dryRun {
 			panic("--bootstrap cannot be combined with --dry-run")

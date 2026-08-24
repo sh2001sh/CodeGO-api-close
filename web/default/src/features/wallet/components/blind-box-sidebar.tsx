@@ -30,8 +30,7 @@ const REDUCED_ITEM: Variants = {
 }
 
 export function BlindBoxSidebar(props: {
-  remainingQuota: number
-  claudeQuota: number
+  quota: number
   availableBoxes: number
   pendingBoxes: number
   records: BlindBoxRecord[]
@@ -51,8 +50,7 @@ export function BlindBoxSidebar(props: {
     >
       <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
         <AssetBoard
-          remainingQuota={props.remainingQuota}
-          claudeQuota={props.claudeQuota}
+          quota={props.quota}
           availableBoxes={props.availableBoxes}
           pendingBoxes={props.pendingBoxes}
         />
@@ -168,7 +166,7 @@ function PropsPreview(props: {
         </ul>
       ) : (
         <p className='text-muted-foreground mt-2 text-xs leading-5'>
-          还没有道具，抽中折扣卡或倍率卡后会显示在这里。
+          还没有可管理的倍率卡；“再来一抽”会直接补发到盲盒库存。
         </p>
       )}
 
@@ -186,8 +184,7 @@ function PropsPreview(props: {
 }
 
 function AssetBoard(props: {
-  remainingQuota: number
-  claudeQuota: number
+  quota: number
   availableBoxes: number
   pendingBoxes: number
 }) {
@@ -198,8 +195,7 @@ function AssetBoard(props: {
         <div className='text-foreground text-sm font-semibold'>开奖状态</div>
       </div>
       <div className='grid grid-cols-2 gap-2.5'>
-        <Tile label='当前钱包额度' value={formatQuota(props.remainingQuota)} />
-        <Tile label='Claude 额度' value={formatQuota(props.claudeQuota)} />
+        <Tile label='通用额度' value={formatQuota(props.quota)} />
         <Tile
           label='待开盲盒'
           value={String(props.availableBoxes)}
@@ -240,10 +236,7 @@ function SettlementCard() {
       </div>
       <div className='space-y-2 text-xs leading-5'>
         <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
-          普通额度直接进入钱包，永久有效。
-        </div>
-        <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
-          Claude 额度直接进入 Claude 钱包，永久有效。
+          通用额度直接进入通用额度钱包，永久有效。
         </div>
         <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
           道具会在本页展示并按规则自动生效或手动启用。

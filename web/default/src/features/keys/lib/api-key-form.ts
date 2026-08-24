@@ -37,6 +37,11 @@ export function getApiKeyFormSchema(t: TFunction) {
       allow_ips: z.string().optional(),
       group: z.string().optional(),
       cross_group_retry: z.boolean().optional(),
+      marketplace_multiplier_limit: z
+        .number()
+        .min(0, t('第三方倍率上限不能小于 0'))
+        .max(1_000_000, t('第三方倍率上限不能超过 1,000,000'))
+        .optional(),
       tokenCount: z.number().min(1).optional(),
     })
     .superRefine((data, ctx) => {
@@ -57,9 +62,7 @@ export function getApiKeyFormSchema(t: TFunction) {
     })
 }
 
-export type ApiKeyFormValues = z.infer<
-  ReturnType<typeof getApiKeyFormSchema>
->
+export type ApiKeyFormValues = z.infer<ReturnType<typeof getApiKeyFormSchema>>
 
 // ============================================================================
 // Form Defaults
@@ -74,6 +77,7 @@ export const API_KEY_FORM_DEFAULT_VALUES: ApiKeyFormValues = {
   allow_ips: '',
   group: DEFAULT_GROUP,
   cross_group_retry: true,
+  marketplace_multiplier_limit: 0,
   tokenCount: 1,
 }
 
@@ -110,7 +114,8 @@ export function transformFormDataToPayload(
     model_limits: data.model_limits.join(','),
     allow_ips: data.allow_ips || '',
     group: data.group || '',
-    cross_group_retry: data.group === 'auto' ? !!data.cross_group_retry : false,
+    cross_group_retry: data.group === 'auto' ? true : false,
+    marketplace_multiplier_limit: data.marketplace_multiplier_limit || 0,
   }
 }
 
@@ -135,7 +140,8 @@ export function transformApiKeyToFormDefaults(
       : [],
     allow_ips: apiKey.allow_ips || '',
     group: apiKey.group || DEFAULT_GROUP,
-    cross_group_retry: !!apiKey.cross_group_retry,
+    cross_group_retry: apiKey.group === 'auto' ? true : false,
+    marketplace_multiplier_limit: apiKey.marketplace_multiplier_limit || 0,
     tokenCount: 1,
   }
 }

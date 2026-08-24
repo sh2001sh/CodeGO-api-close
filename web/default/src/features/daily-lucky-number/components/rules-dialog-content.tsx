@@ -76,9 +76,8 @@ function RulesCoreSummary() {
             {t('The short version')}
           </h3>
           <p className='text-muted-foreground mt-1.5 text-sm leading-6'>
-            {t(
-              'The system compares the last four digits of your membership card number with the single four-digit lucky number announced for the whole site that day, one digit at a time from right to left. More consecutive matches earn a higher base reward, and the membership tier multiplier is then applied.'
-            )}
+            系统将月卡尾号或盲盒周期号码，与对应开奖日公布的四位幸运号从右向左连续比对。月卡按等级倍率结算；每开启一个盲盒获得的号码仅限所属周期参与，并按基础
+            1.0 倍率结算。20:00 前开出参与当日开奖，20:00 起开出参与次日开奖。
           </p>
         </div>
       </div>

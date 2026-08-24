@@ -41,11 +41,11 @@ type UpdateSubscriptionPreferenceRequest struct {
 	SubscriptionOrderIds []int    `json:"subscription_order_ids"`
 }
 
-// CreateSubscriptionClaudeConversionRequest requests a quota-to-Claude conversion.
+// CreateSubscriptionClaudeConversionRequest requests monthly-pass settlement to unified credit.
 type CreateSubscriptionClaudeConversionRequest struct {
-	SubscriptionId int    `json:"subscription_id"`
-	SourceQuota    int64  `json:"source_quota"`
-	RequestId      string `json:"request_id"`
+	SubscriptionId    int    `json:"subscription_id"`
+	ConversionPercent int    `json:"conversion_percent"`
+	RequestId         string `json:"request_id"`
 }
 
 // ListSubscriptionPlans returns enabled public subscription plans with purchase previews when available.
@@ -196,10 +196,6 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	claudeQuota, err := GetUserClaudeQuota(userID)
-	if err != nil {
-		return nil, err
-	}
 	recentConversions, err := ListRecentSubscriptionClaudeConversions(userID, 10)
 	if err != nil {
 		return nil, err
@@ -212,8 +208,20 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 			continue
 		}
 		if plan, planErr := GetSubscriptionPlanByID(item.Subscription.PlanId); planErr == nil && plan != nil {
-			preview := BuildSubscriptionClaudeConversionPreview(plan, item.Subscription)
-			item.Subscription.ConversionPreview = &preview
+			if commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) == commerceschema.SubscriptionPlanTypeMonthly {
+				preview := BuildSubscriptionClaudeConversionPreview(plan, item.Subscription)
+				if preview.Eligible {
+					resetUsed, resetErr := subscriptionHasResetOpportunityUsageTx(platformdb.DB, item.Subscription.Id)
+					if resetErr != nil {
+						return nil, resetErr
+					}
+					if resetUsed {
+						preview.Eligible = false
+						preview.IneligibleReason = commerceschema.ErrSubscriptionClaudeConversionResetUsed.Error()
+					}
+				}
+				item.Subscription.ConversionPreview = &preview
+			}
 		}
 		activeSubscriptionIDs = append(activeSubscriptionIDs, item.Subscription.Id)
 		activeSubscriptionSet[item.Subscription.Id] = struct{}{}
@@ -242,7 +250,6 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 		"subscriptions":          activeSubscriptions,
 		"all_subscriptions":      allSubscriptions,
 		"reset_opportunity":      resetOpportunity,
-		"claude_quota":           claudeQuota,
 		"conversion_config":      GetSubscriptionClaudeConversionConfig(),
 		"recent_conversions":     recentConversions,
 	}, nil
@@ -279,22 +286,27 @@ func BuildSubscriptionClaudeConversionsPayload(userID int) (map[string]any, erro
 
 // CreateSubscriptionClaudeConversion converts subscription quota into Claude quota for the current user.
 func CreateSubscriptionClaudeConversion(userID int, req CreateSubscriptionClaudeConversionRequest) (map[string]any, error) {
-	result, err := ConvertSubscriptionQuotaToClaudeQuota(req.RequestId, userID, req.SubscriptionId, req.SourceQuota)
+	result, err := ConvertMonthlyPassToUnifiedCredit(req.RequestId, userID, req.SubscriptionId, req.ConversionPercent)
 	if err != nil {
 		return nil, err
 	}
 	if planInfo, planErr := GetSubscriptionPlanInfoByUserSubscriptionID(req.SubscriptionId); planErr == nil && planInfo != nil {
-		auditapp.RecordLog(userID, auditschema.LogTypeTopup, BuildSubscriptionClaudeConversionLog(planInfo.PlanTitle, result.SourceQuota, result.TargetClaudeQuota))
+		auditapp.RecordLog(userID, auditschema.LogTypeTopup, BuildSubscriptionClaudeConversionLog(planInfo.PlanTitle, result.ConversionPercent, result.TargetQuota))
 	}
 	return map[string]any{
-		"subscription_id":     result.SubscriptionId,
-		"source_quota":        result.SourceQuota,
-		"target_claude_quota": result.TargetClaudeQuota,
-		"claude_quota_after":  result.ClaudeQuotaAfter,
-		"amount_used_after":   result.AmountUsedAfter,
-		"period_used_after":   result.PeriodUsedAfter,
-		"conversion":          result.Conversion,
-		"config":              result.Config,
+		"subscription_id":       result.SubscriptionId,
+		"source_quota":          result.SourceQuota,
+		"target_quota":          result.TargetQuota,
+		"quota_after":           result.QuotaAfter,
+		"amount_used_after":     result.AmountUsedAfter,
+		"period_used_after":     result.PeriodUsedAfter,
+		"plan_price_amount":     result.PlanPriceAmount,
+		"unused_ratio":          result.UnusedRatio,
+		"conversion_percent":    result.ConversionPercent,
+		"remaining_ratio_after": result.RemainingRatioAfter,
+		"subscription_ended":    result.SubscriptionEnded,
+		"conversion":            result.Conversion,
+		"config":                result.Config,
 	}, nil
 }
 

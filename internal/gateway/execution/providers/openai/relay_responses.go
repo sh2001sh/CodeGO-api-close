@@ -1,10 +1,12 @@
 package openai
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	helper "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -14,8 +16,22 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 )
+
+const (
+	responsesPreOutputEventLimit = 128
+	responsesPreOutputByteLimit  = 1 << 20
+)
+
+type bufferedResponsesStreamEvent struct {
+	response dto.ResponsesStreamResponse
+	data     string
+}
 
 func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	defer platformhttpx.CloseResponseBodyGracefully(resp)
@@ -77,13 +93,53 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	defer platformhttpx.CloseResponseBodyGracefully(resp)
+	if turnState := strings.TrimSpace(resp.Header.Get("x-codex-turn-state")); turnState != "" {
+		c.Writer.Header().Set("x-codex-turn-state", turnState)
+	}
+	helper.MarkAttemptConnected(c)
 	// Responses streams often begin with lifecycle events before model content.
 	// A disconnect in that phase can be retried without duplicating output.
 	c.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+	helper.MarkAttemptBootstrap(c)
+	if earlyHeadersFlushEnabled() {
+		helper.SetEventStreamHeaders(c)
+		c.Writer.WriteHeaderNow()
+		if err := helper.FlushHeaders(c); err != nil && c.Request.Context().Err() == nil {
+			logger.LogWarn(c, "early response headers flush failed: "+err.Error())
+		}
+	}
 
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
-	var sawResponseCompleted bool
+	var sawSemanticOutput atomic.Bool
+	var sawCompactionOutput atomic.Bool
+	var sawResponseCompleted atomic.Bool
+	var firstOutputTimedOut atomic.Bool
+	var terminalFailure error
+	var preOutputEvents []bufferedResponsesStreamEvent
+	preOutputEventsBuffered := 0
+	preOutputEventsDropped := 0
+	preOutputBytes := 0
+	if responsesRequestUsesImageGeneration(info) {
+		relaycommon.MarkImageGenerationRequest(c)
+	}
+	firstOutputTimeout := relaycommon.StreamFirstOutputTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
+	var firstOutputTimer *time.Timer
+	if firstOutputTimeout > 0 {
+		firstOutputTimer = time.AfterFunc(firstOutputTimeout, func() {
+			if !sawSemanticOutput.Load() && !sawResponseCompleted.Load() {
+				firstOutputTimedOut.Store(true)
+				if info.StreamStatus != nil {
+					info.StreamStatus.SetEndReason(
+						gatewaycontract.StreamEndReasonTimeout,
+						fmt.Errorf("semantic output timeout after %s", firstOutputTimeout),
+					)
+				}
+				_ = resp.Body.Close()
+			}
+		})
+		defer firstOutputTimer.Stop()
+	}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -94,17 +150,80 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sr.Error(err)
 			return
 		}
-		if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
-			logger.LogError(c, "failed to write responses stream response: "+err.Error())
-			sr.Stop(err)
+		if turnState := responsesTurnStateFromEvent(streamResponse.Headers); turnState != "" {
+			c.Writer.Header().Set("x-codex-turn-state", turnState)
+		}
+		semanticOutput := hasResponsesStreamContent(streamResponse)
+		if streamResponse.Type == dto.ResponsesOutputTypeItemDone && isResponsesCompactionItem(streamResponse.Item) {
+			sawCompactionOutput.Store(true)
+		}
+		textOutput := isResponsesTextDelta(streamResponse)
+		if isResponsesFailureEvent(streamResponse) {
+			terminalFailure = responsesFailureError(streamResponse)
+			if sawSemanticOutput.Load() {
+				if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+					sr.Stop(err)
+					return
+				}
+				c.Set(string(constant.ContextKeyResponsesTerminalSent), true)
+			}
+			sr.Stop(terminalFailure)
 			return
 		}
-		if hasResponsesStreamContent(streamResponse) {
-			c.Set(string(constant.ContextKeyStreamContentDelivered), true)
+		if semanticOutput {
+			sr.MarkProgress()
+			if sawSemanticOutput.CompareAndSwap(false, true) {
+				if info.FirstByteTrace != nil {
+					info.FirstByteTrace.MarkFirstSemanticReadAt(sr.ReceivedAt(), textOutput)
+				}
+				info.SetFirstSemanticResponseTime()
+				if firstOutputTimer != nil {
+					firstOutputTimer.Stop()
+				}
+				if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents); err != nil {
+					logger.LogError(c, "failed to flush responses lifecycle events: "+err.Error())
+					sr.Stop(err)
+					return
+				}
+				preOutputEvents = nil
+			}
+			if textOutput && info.FirstByteTrace != nil {
+				info.FirstByteTrace.MarkFirstTextReadAt(sr.ReceivedAt())
+				info.FirstByteTrace.MarkFirstTextEvent()
+			}
+			helper.MarkSemanticCommitted(c)
+			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+				logger.LogError(c, "failed to write responses stream response: "+err.Error())
+				sr.Stop(err)
+				return
+			}
+		} else if streamResponse.Type == "response.completed" {
+			if !sawSemanticOutput.Load() && !sawCompactionOutput.Load() && !hasResponsesCompletedContent(streamResponse) {
+				terminalFailure = errors.New("upstream returned an empty response.completed event")
+				sr.Stop(terminalFailure)
+				return
+			}
+			sawResponseCompleted.Store(true)
+			if firstOutputTimer != nil {
+				firstOutputTimer.Stop()
+			}
+			if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents); err != nil {
+				logger.LogError(c, "failed to flush responses lifecycle events: "+err.Error())
+				sr.Stop(err)
+				return
+			}
+			preOutputEvents = nil
+			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+				logger.LogError(c, "failed to write responses stream response: "+err.Error())
+				sr.Stop(err)
+				return
+			}
+		} else {
+			preOutputEventsDropped += appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, streamResponse, data)
+			preOutputEventsBuffered = len(preOutputEvents)
 		}
 		switch streamResponse.Type {
 		case "response.completed":
-			sawResponseCompleted = true
 			sr.Done()
 			if streamResponse.Response != nil {
 				if streamResponse.Response.Usage != nil {
@@ -145,10 +264,70 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		}
 	})
+	// The scanner may observe a downstream cancellation while it is unwinding
+	// its workers. StreamStatus is the synchronized outcome of those workers,
+	// so use it to reliably propagate client-gone to the main relay path before
+	// classifying an incomplete stream.
+	if info.StreamStatus != nil && info.StreamStatus.EndReason == gatewaycontract.StreamEndReasonClientGone {
+		helper.MarkClientGone(c)
+	} else {
+		helper.IsClientGone(c)
+	}
+	streamEndReason := ""
+	upstreamEOF := false
+	if info.StreamStatus != nil {
+		streamEndReason = string(info.StreamStatus.EndReason)
+		upstreamEOF = info.StreamStatus.EndReason == gatewaycontract.StreamEndReasonEOF
+	}
+	localTimeoutReason := relaycommon.LocalStreamTimeoutReason(c)
+	c.Set("responses_stream_lifecycle", map[string]interface{}{
+		"received_events":            info.ReceivedResponseCount,
+		"semantic_output_seen":       sawSemanticOutput.Load(),
+		"response_completed_seen":    sawResponseCompleted.Load(),
+		"pre_output_events_buffered": preOutputEventsBuffered,
+		"pre_output_events_dropped":  preOutputEventsDropped,
+		"first_output_timeout_ms":    firstOutputTimeout.Milliseconds(),
+		"first_output_timed_out":     firstOutputTimedOut.Load(),
+		"stream_end_reason":          streamEndReason,
+		"local_timeout_reason":       localTimeoutReason,
+		"upstream_eof":               upstreamEOF,
+		"client_disconnected":        c.GetBool(string(constant.ContextKeyClientGone)),
+	})
 
-	if !sawResponseCompleted {
+	if firstOutputTimedOut.Load() && !sawSemanticOutput.Load() {
+		return nil, types.NewOpenAIError(
+			fmt.Errorf("upstream produced no semantic output before %s", firstOutputTimeout),
+			types.ErrorCodeChannelResponseTimeExceeded,
+			http.StatusGatewayTimeout,
+		)
+	}
+
+	if localTimeoutReason != "" && !sawResponseCompleted.Load() {
 		options := make([]types.NewAPIErrorOptions, 0, 1)
 		if c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+			_ = sendSyntheticResponsesFailure(c, info, "gateway stream timeout: "+localTimeoutReason)
+			options = append(options, types.ErrOptionWithSkipRetry())
+		}
+		return nil, types.NewOpenAIError(
+			fmt.Errorf("gateway stream timeout: %s", localTimeoutReason),
+			types.ErrorCodeChannelResponseTimeExceeded,
+			http.StatusGatewayTimeout,
+			options...,
+		)
+	}
+
+	if terminalFailure != nil {
+		options := make([]types.NewAPIErrorOptions, 0, 1)
+		if c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+			options = append(options, types.ErrOptionWithSkipRetry())
+		}
+		return nil, types.NewOpenAIError(terminalFailure, types.ErrorCodeBadResponse, http.StatusBadGateway, options...)
+	}
+
+	if !sawResponseCompleted.Load() {
+		options := make([]types.NewAPIErrorOptions, 0, 1)
+		if c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+			_ = sendSyntheticResponsesFailure(c, info, "upstream stream closed before response.completed")
 			options = append(options, types.ErrOptionWithSkipRetry())
 		}
 		return nil, types.NewOpenAIError(
@@ -175,12 +354,71 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	info.ConversationResponseText = responseTextBuilder.String()
+	helper.MarkAttemptCompleted(c)
 
 	return usage, nil
 }
 
-func hasResponsesStreamContent(streamResponse dto.ResponsesStreamResponse) bool {
-	return streamResponse.Delta != "" && strings.HasSuffix(streamResponse.Type, ".delta")
+func earlyHeadersFlushEnabled() bool {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("GATEWAY_EARLY_HEADERS_FLUSH")))
+	return err == nil && enabled
+}
+
+func responsesRequestUsesImageGeneration(info *relaycommon.RelayInfo) bool {
+	if info == nil {
+		return false
+	}
+	if gatewaycontract.IsImageGenerationModel(info.OriginModelName) {
+		return true
+	}
+	request, ok := info.Request.(*dto.OpenAIResponsesRequest)
+	if !ok {
+		return false
+	}
+	for _, tool := range request.GetToolsMap() {
+		if strings.EqualFold(strings.TrimSpace(platformencoding.Interface2String(tool["type"])), "image_generation") {
+			return true
+		}
+	}
+	return false
+}
+
+// appendBufferedResponsesStreamEvent keeps lifecycle data bounded until the
+// first model-visible event. Overflowing lifecycle-only events are discarded,
+// not treated as an upstream failure, so large Responses continuations remain
+// retry-safe and can still reach their first output.
+func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, size *int, response dto.ResponsesStreamResponse, data string) (dropped int) {
+	if len(data) > responsesPreOutputByteLimit {
+		return 1
+	}
+	for len(*events) > 0 && (len(*events) >= responsesPreOutputEventLimit || *size+len(data) > responsesPreOutputByteLimit) {
+		dropIndex := 0
+		if (*events)[0].response.Type == "response.created" && len(*events) > 1 {
+			dropIndex = 1
+		}
+		*size -= len((*events)[dropIndex].data)
+		*events = append((*events)[:dropIndex], (*events)[dropIndex+1:]...)
+		dropped++
+	}
+	if len(*events) >= responsesPreOutputEventLimit || *size+len(data) > responsesPreOutputByteLimit {
+		return dropped + 1
+	}
+	*events = append(*events, bufferedResponsesStreamEvent{response: response, data: data})
+	*size += len(data)
+	return dropped
+}
+
+func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayInfo, events []bufferedResponsesStreamEvent) error {
+	for _, event := range events {
+		if err := sendResponsesStreamData(c, info, event.response, event.data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isResponsesTextDelta(streamResponse dto.ResponsesStreamResponse) bool {
+	return streamResponse.Type == "response.output_text.delta" && streamResponse.Delta != ""
 }
 
 func responsesOutputText(response *dto.OpenAIResponsesResponse) string {

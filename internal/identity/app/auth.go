@@ -121,6 +121,11 @@ func RegisterPasswordUser(req RegisterRequest) error {
 			return ErrVerificationCodeInvalid
 		}
 	}
+	if user.Email != "" {
+		if err := validateRegistrationEmail(user.Email); err != nil {
+			return err
+		}
+	}
 
 	exist, err := identitystore.UserExistsOrDeleted(user.Username, user.Email)
 	if err != nil {

@@ -189,7 +189,7 @@ func TestManageUserPromoteReturnsRoleStatusPayload(t *testing.T) {
 func TestManageUserOverrideQuotaUpdatesQuota(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
 
-	user := &identityschema.User{Id: 1, Username: "quota-user", Password: "password123", DisplayName: "Quota User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", Quota: 100, AffCode: "AU05"}
+	user := &identityschema.User{Id: 1, Username: "quota-user", Password: "password123", DisplayName: "Quota User", Role: constant.RoleCommonUser, Status: constant.UserStatusEnabled, Group: "default", ClaudeQuota: 100, AffCode: "AU05"}
 	if err := db.Create(user).Error; err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
@@ -213,8 +213,8 @@ func TestManageUserOverrideQuotaUpdatesQuota(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload user: %v", err)
 	}
-	if reloaded.Quota != 500 {
-		t.Fatalf("expected overridden quota, got %d", reloaded.Quota)
+	if reloaded.ClaudeQuota != 500 {
+		t.Fatalf("expected overridden quota, got %d", reloaded.ClaudeQuota)
 	}
 }
 

@@ -9,25 +9,30 @@ import (
 	"gorm.io/gorm"
 )
 
-// DebitWalletQuotaTx atomically debits the standard wallet and its ledger mirror.
-func DebitWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string) error {
+// DebitLegacyGPTQuotaTxWithReason is restricted to the one-time unified-credit migration.
+func DebitLegacyGPTQuotaTxWithReason(tx *gorm.DB, userID int, amount int, operationID, reasonCode string) error {
 	return debitUserWalletQuotaTx(tx, userID, amount, operationID, mirroredWalletTxStore{
 		accountType: billingAccountTypeWallet,
 		readBalance: getUserWalletQuotaTx,
 		applyDelta:  decreaseUserWalletQuotaTx,
-	}, true)
+	}, true, reasonCode)
 }
 
-// DebitClaudeWalletQuotaTx atomically debits the Claude wallet and its ledger mirror.
+// DebitClaudeWalletQuotaTx atomically debits unified credit and its ledger mirror.
 func DebitClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string) error {
+	return DebitClaudeWalletQuotaTxWithReason(tx, userID, amount, operationID, "wallet_quota_conversion_debit")
+}
+
+// DebitClaudeWalletQuotaTxWithReason debits the universal wallet with an explicit ledger reason.
+func DebitClaudeWalletQuotaTxWithReason(tx *gorm.DB, userID int, amount int, operationID, reasonCode string) error {
 	return debitUserWalletQuotaTx(tx, userID, amount, operationID, mirroredWalletTxStore{
 		accountType: billingAccountTypeClaudeWallet,
 		readBalance: getUserClaudeWalletQuotaTx,
 		applyDelta:  decreaseUserClaudeWalletQuotaTx,
-	}, false)
+	}, false, reasonCode)
 }
 
-func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string, mirrored mirroredWalletTxStore, consumeBonus bool) error {
+func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string, mirrored mirroredWalletTxStore, consumeBonus bool, reasonCode string) error {
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
@@ -49,8 +54,13 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID str
 	if err := reconcileAccountBalanceTx(tx, account, userID, legacyBalance); err != nil {
 		return err
 	}
-	if err := applyLedgerDeltaTx(tx, account, userID, amount, operationID, "wallet_quota_conversion_debit"); err != nil {
+	if err := applyLedgerDeltaTx(tx, account, userID, amount, operationID, defaultReasonCode(reasonCode, "wallet_debit")); err != nil {
 		return err
+	}
+	if reasonCode != "wallet_peer_transfer_debit" && reasonCode != "wallet_peer_transfer_fee" {
+		if err := ConsumeWalletRewardHoldsTx(tx, account.AccountID, int64(amount)); err != nil {
+			return err
+		}
 	}
 	if err := mirrored.applyDelta(tx, userID, amount); err != nil {
 		return err

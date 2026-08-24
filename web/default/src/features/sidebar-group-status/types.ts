@@ -16,7 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export type SidebarGroupAvailabilityStatus = 'healthy' | 'slow' | 'degraded' | 'unknown'
+export type SidebarGroupAvailabilityStatus =
+  | 'healthy'
+  | 'unstable'
+  | 'failed'
+  | 'unknown'
 
 export type SidebarGroupModelStatusItem = {
   model: string
@@ -26,6 +30,7 @@ export type SidebarGroupModelStatusItem = {
   series_window?: number
   bucket_seconds?: number
   request_count?: number
+  cache_hit_rate?: number | null
   series?: SidebarGroupStatusBucket[]
 }
 
@@ -37,8 +42,12 @@ export type SidebarGroupStatusBucket = {
 
 export type SidebarGroupStatusItem = {
   group: string
+  display_name?: string
+  source_type?: 'official' | 'marketplace_user'
   status: SidebarGroupAvailabilityStatus
   request_count?: number
+  success_rate?: number | null
+  cache_hit_rate?: number | null
   models: SidebarGroupModelStatusItem[]
 }
 

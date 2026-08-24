@@ -2,7 +2,6 @@ package siliconflow
 
 import (
 	"errors"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 	"github.com/sh2001sh/new-api/dto"
@@ -57,7 +56,7 @@ func (a *Adaptor) Init(*relaycommon.RelayInfo) {}
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.RelayMode == gatewaycontract.RelayModeRerank {
-		return fmt.Sprintf("%s/v1/rerank", info.ChannelBaseUrl), nil
+		return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/rerank"), nil
 	}
 	return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, info.RequestURLPath, info.ChannelType), nil
 }

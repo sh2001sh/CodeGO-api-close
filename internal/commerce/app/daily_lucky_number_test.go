@@ -21,10 +21,110 @@ func prepareDailyLuckyNumberTestDB(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	require.NoError(t, db.AutoMigrate(
 		&commerceschema.SubscriptionLuckyNumber{},
+		&commerceschema.BlindBoxDailyLuckyNumber{},
 		&commerceschema.SubscriptionLuckyDraw{},
 		&commerceschema.SubscriptionLuckyReward{},
+		&commerceschema.SubscriptionLuckyRewardNotification{},
 		&commerceschema.SubscriptionBlindBoxBenefitCycle{},
 	))
+}
+
+func TestBlindBoxLuckyDrawWindowUsesDrawTimeAsBusinessDayBoundary(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+	setting := luckysettings.Get()
+	setting.Timezone = "Asia/Shanghai"
+	setting.DrawHour = 20
+	setting.DrawMinute = 0
+
+	tests := []struct {
+		name      string
+		now       time.Time
+		drawDate  string
+		expiresAt time.Time
+	}{
+		{
+			name:      "one second before draw belongs to current draw",
+			now:       time.Date(2026, 8, 13, 19, 59, 59, 0, location),
+			drawDate:  "2026-08-13",
+			expiresAt: time.Date(2026, 8, 13, 20, 0, 0, 0, location),
+		},
+		{
+			name:      "draw instant starts next draw window",
+			now:       time.Date(2026, 8, 13, 20, 0, 0, 0, location),
+			drawDate:  "2026-08-14",
+			expiresAt: time.Date(2026, 8, 14, 20, 0, 0, 0, location),
+		},
+		{
+			name:      "after draw belongs to next draw",
+			now:       time.Date(2026, 8, 13, 23, 30, 0, 0, location),
+			drawDate:  "2026-08-14",
+			expiresAt: time.Date(2026, 8, 14, 20, 0, 0, 0, location),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			drawDate, expiresAt := blindBoxLuckyDrawWindow(test.now, setting)
+			require.Equal(t, test.drawDate, drawDate)
+			require.Equal(t, test.expiresAt.Unix(), expiresAt)
+		})
+	}
+}
+
+func TestBlindBoxLuckyNumberParticipatesOnlyOnItsDrawDate(t *testing.T) {
+	prepareDailyLuckyNumberTestDB(t)
+	db := platformDBForDailyLuckyTest(t)
+	setting := luckysettings.Get()
+	location, err := setting.Location()
+	require.NoError(t, err)
+	now := time.Now().In(location)
+	today := now.Format(luckyDrawDateLayout)
+
+	require.NoError(t, db.Create(&commerceschema.BlindBoxDailyLuckyNumber{
+		BlindBoxOpenRecordId: 9981,
+		UserId:               9982,
+		DrawDate:             today,
+		LuckySuffix:          "3141",
+		ExpiresAt:            time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, location).Unix(),
+	}).Error)
+
+	participants, err := listLuckyDrawParticipantsTx(db, now.Unix())
+	require.NoError(t, err)
+	require.Len(t, participants, 1)
+	require.NotNil(t, participants[0].BlindBoxNumber)
+	require.Equal(t, "3141", participants[0].Number.LuckySuffix)
+
+	tomorrow := now.AddDate(0, 0, 1)
+	participants, err = listLuckyDrawParticipantsTx(db, tomorrow.Unix())
+	require.NoError(t, err)
+	require.Empty(t, participants)
+}
+
+func TestBlindBoxLuckyNumberRemainsEligibleAtScheduledDrawInstant(t *testing.T) {
+	prepareDailyLuckyNumberTestDB(t)
+	db := platformDBForDailyLuckyTest(t)
+	setting := luckysettings.Get()
+	location, err := setting.Location()
+	require.NoError(t, err)
+	drawAt := time.Date(2026, 8, 13, setting.DrawHour, setting.DrawMinute, 0, 0, location)
+
+	require.NoError(t, db.Create(&commerceschema.BlindBoxDailyLuckyNumber{
+		BlindBoxOpenRecordId: 9983,
+		UserId:               9984,
+		DrawDate:             drawAt.Format(luckyDrawDateLayout),
+		LuckySuffix:          "2718",
+		ExpiresAt:            drawAt.Unix(),
+	}).Error)
+
+	participants, err := appendBlindBoxLuckyParticipantsTx(db, nil, drawAt.Unix())
+	require.NoError(t, err)
+	require.Len(t, participants, 1)
+	require.Equal(t, "2718", participants[0].Number.LuckySuffix)
+
+	participants, err = appendBlindBoxLuckyParticipantsTx(db, nil, drawAt.Add(time.Second).Unix())
+	require.NoError(t, err)
+	require.Empty(t, participants)
 }
 
 func TestLuckyMatchDigitsReturnsOnlyTheHighestSuffixMatch(t *testing.T) {
@@ -177,8 +277,8 @@ func TestDailyLuckyRewardSettlementWritesLedgerOnce(t *testing.T) {
 	require.Equal(t, subscription.AmountTotal, savedSubscription.AmountTotal)
 	var savedUser identityschema.User
 	require.NoError(t, db.First(&savedUser, user.Id).Error)
-	require.Equal(t, int(reward.FinalRewardQuota), savedUser.Quota)
-	snapshot := loadCommerceBillingSnapshot(t, user.Id, "wallet")
+	require.Equal(t, int(reward.FinalRewardQuota), savedUser.ClaudeQuota)
+	snapshot := loadCommerceBillingSnapshot(t, user.Id, "claude_wallet")
 	require.Equal(t, reward.FinalRewardQuota, snapshot.AvailableBalance)
 	var savedReward commerceschema.SubscriptionLuckyReward
 	require.NoError(t, db.First(&savedReward, reward.Id).Error)
@@ -194,6 +294,20 @@ func TestDailyLuckyRewardSettlementWritesLedgerOnce(t *testing.T) {
 	require.NoError(t, db.Where("user_id = ? AND type = ?", user.Id, auditschema.LogTypeTopup).Find(&logs).Error)
 	require.Len(t, logs, 1)
 	require.Contains(t, logs[0].Content, "每日幸运号中奖到账")
+	var notifications []commerceschema.SubscriptionLuckyRewardNotification
+	require.NoError(t, db.Where("user_id = ?", user.Id).Find(&notifications).Error)
+	require.Len(t, notifications, 1)
+	require.Equal(t, reward.Id, notifications[0].RewardId)
+
+	notificationPage, err := ListDailyLuckyRewardNotifications(user.Id, 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), notificationPage.UnreadCount)
+	require.Len(t, notificationPage.Items, 1)
+	require.Equal(t, reward.Id, notificationPage.Items[0].Reward.Reward.Id)
+	require.NoError(t, MarkDailyLuckyRewardNotificationRead(user.Id, notifications[0].Id))
+	notificationPage, err = ListDailyLuckyRewardNotifications(user.Id, 10)
+	require.NoError(t, err)
+	require.Zero(t, notificationPage.UnreadCount)
 }
 
 func TestSubscriptionPurchaseDoesNotGrantBlindBoxBenefits(t *testing.T) {

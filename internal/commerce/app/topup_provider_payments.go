@@ -545,7 +545,6 @@ func CreateWaffoTopUp(ctx context.Context, userID int, req WaffoPayRequest) (*Wa
 	if IsClaudeTopupWallet(walletType) {
 		payMoney = float64(req.Amount)
 	}
-	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney)
 	if payMoney < 0.01 {
 		return nil, errors.New("充值金额过低")
 	}
@@ -796,7 +795,6 @@ func CreateXunhuTopUp(ctx context.Context, userID int, req EpayRequest) (*XunhuC
 		return nil, errors.New("failed to get user group")
 	}
 	payMoney := GetTopupPayMoney(req.Amount, group, walletType)
-	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney)
 	if payMoney < 0.01 {
 		return nil, errors.New("payment amount is too low")
 	}
@@ -920,7 +918,7 @@ func genStripeLink(referenceID string, customerID string, email string, money fl
 	}
 	productName := fmt.Sprintf("账户充值 %d", amount)
 	if IsClaudeTopupWallet(walletType) {
-		productName = fmt.Sprintf("Claude 额度充值 %d", amount)
+		productName = fmt.Sprintf("通用额度充值 %d", amount)
 	}
 	unitAmount := StripeMoneyToMinorUnits(money)
 	if unitAmount <= 0 {

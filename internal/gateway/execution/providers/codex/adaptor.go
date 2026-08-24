@@ -93,6 +93,8 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 	request.Store = json.RawMessage("false")
 	request.MaxOutputTokens = nil
 	request.Temperature = nil
+	request.FrequencyPenalty = nil
+	request.PresencePenalty = nil
 	return request, nil
 }
 
@@ -140,6 +142,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
+	if info.RelayMode == gatewaycontract.RelayModeAlphaSearch {
+		return nil, types.NewError(errors.New("codex channel: alpha search response is handled directly"), types.ErrorCodeInvalidRequest)
+	}
 	if info.RelayMode != gatewaycontract.RelayModeResponses && info.RelayMode != gatewaycontract.RelayModeResponsesCompact {
 		return nil, types.NewError(errors.New("codex channel: endpoint not supported"), types.ErrorCodeInvalidRequest)
 	}
@@ -156,12 +161,15 @@ func (a *Adaptor) GetChannelName() string {
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	if info.RelayMode != gatewaycontract.RelayModeResponses && info.RelayMode != gatewaycontract.RelayModeResponsesCompact {
-		return "", errors.New("codex channel: only /v1/responses and /v1/responses/compact are supported")
-	}
 	path := "/backend-api/codex/responses"
-	if info.RelayMode == gatewaycontract.RelayModeResponsesCompact {
+	switch info.RelayMode {
+	case gatewaycontract.RelayModeResponses:
+	case gatewaycontract.RelayModeResponsesCompact:
 		path = "/backend-api/codex/responses/compact"
+	case gatewaycontract.RelayModeAlphaSearch:
+		path = "/backend-api/codex/alpha/search"
+	default:
+		return "", errors.New("codex channel: only /v1/responses, /v1/responses/compact and /v1/alpha/search are supported")
 	}
 	return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, path, info.ChannelType), nil
 }

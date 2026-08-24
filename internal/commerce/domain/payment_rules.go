@@ -2,18 +2,12 @@ package domain
 
 import (
 	"math"
-	"strings"
 
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 )
 
 func NormalizeWalletType(walletType string) string {
-	switch strings.ToLower(strings.TrimSpace(walletType)) {
-	case commerceschema.WalletTypeClaude:
-		return commerceschema.WalletTypeClaude
-	default:
-		return commerceschema.WalletTypeDefault
-	}
+	return commerceschema.WalletTypeClaude
 }
 
 func IsClaudeWalletType(walletType string) bool {

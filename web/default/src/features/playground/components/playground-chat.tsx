@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -80,6 +81,7 @@ export function PlaygroundChat({
   onCancelEdit,
   onSaveEditAndSubmit,
 }: PlaygroundChatProps) {
+  const { t } = useTranslation()
   const [editText, setEditText] = useState('')
   const [originalText, setOriginalText] = useState('')
 
@@ -104,6 +106,27 @@ export function PlaygroundChat({
       {/* Remove outer padding; apply padding to inner centered container to align with input */}
       <ConversationContent className='p-0'>
         <div className='mx-auto w-full max-w-4xl px-4 py-4'>
+          {messages.length === 0 && (
+            <div className='playground-empty-state flex min-h-[min(52vh,34rem)] flex-col items-center justify-center px-4 py-10 text-center'>
+              <div className='playground-empty-mark border-primary/20 bg-primary/8 text-primary mb-6 flex size-16 items-center justify-center rounded-2xl border'>
+                <span
+                  className='size-5 rounded-full border-2 border-current'
+                  aria-hidden='true'
+                />
+              </div>
+              <p className='text-primary/80 mb-2 text-xs font-semibold tracking-[0.18em] uppercase'>
+                Code Go · AI coding gateway
+              </p>
+              <h1 className='text-foreground max-w-xl text-3xl font-semibold tracking-[-0.03em] text-balance sm:text-4xl'>
+                {t('A clear path from question to working code')}
+              </h1>
+              <p className='text-muted-foreground mt-4 max-w-lg text-sm leading-6 sm:text-base'>
+                {t(
+                  'Choose a model, describe what you are building, and keep the whole exchange in one calm workspace.'
+                )}
+              </p>
+            </div>
+          )}
           {messages.map((message, messageIndex) => {
             const { versions = [] } = message
             const isLastAssistantMessage =

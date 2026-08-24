@@ -69,7 +69,7 @@ export function CodeGoDesktopEntryPanel() {
               key={item.label}
               className='overview-soft-card flex items-start gap-3 px-3 py-3'
             >
-              <span className='bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-xl'>
+              <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-8 shrink-0 items-center justify-center rounded-xl'>
                 <Icon className='size-3.5' aria-hidden='true' />
               </span>
               <div className='min-w-0'>

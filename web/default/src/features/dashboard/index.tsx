@@ -26,8 +26,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { FadeIn } from '@/components/page-transition'
 import { SiteSeo } from '@/components/seo'
+import { ModelCacheAnalysis } from './components/models/model-cache-analysis'
 import { ModelOperationsOverview } from './components/models/model-operations-overview'
-import { ModelValueComparison } from './components/models/model-value-comparison'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
@@ -154,7 +154,7 @@ export function Dashboard() {
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
-  const [modelView, setModelView] = useState<'overview' | 'trend' | 'compare'>(
+  const [modelView, setModelView] = useState<'overview' | 'trend' | 'cache'>(
     'overview'
   )
   const [dataLoading, setDataLoading] = useState(false)
@@ -274,7 +274,7 @@ export function Dashboard() {
               <Tabs
                 value={modelView}
                 onValueChange={(value) =>
-                  setModelView(value as 'overview' | 'trend' | 'compare')
+                  setModelView(value as 'overview' | 'trend' | 'cache')
                 }
               >
                 <TabsList>
@@ -282,9 +282,7 @@ export function Dashboard() {
                     {t('Operations overview')}
                   </TabsTrigger>
                   <TabsTrigger value='trend'>{t('Trend analysis')}</TabsTrigger>
-                  <TabsTrigger value='compare'>
-                    {t('Value comparison')}
-                  </TabsTrigger>
+                  <TabsTrigger value='cache'>{t('缓存分析')}</TabsTrigger>
                 </TabsList>
               </Tabs>
               {modelView === 'overview' && (
@@ -293,7 +291,7 @@ export function Dashboard() {
                   loading={dataLoading}
                 />
               )}
-              {modelView === 'compare' && <ModelValueComparison />}
+              {modelView === 'cache' && <ModelCacheAnalysis />}
               {modelView === 'trend' && isAdmin && (
                 <FadeIn delay={0.05}>
                   <Suspense fallback={<PerformanceOverviewFallback />}>

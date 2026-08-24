@@ -19,9 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { useNavigate } from '@tanstack/react-router'
 import i18n from 'i18next'
 import { useAuthStore } from '@/stores/auth-store'
-import { getSelf } from '@/lib/api'
+import { cancelSelfRequests, getSelf } from '@/lib/api'
 import type { User } from '@/features/users/types'
-import { saveUserId } from '../lib/storage'
+import { removeUserId, saveUserId } from '../lib/storage'
+
+let loginTransition = 0
 
 function getSavedLanguage(user: User): string | undefined {
   const userData = user as Record<string, unknown>
@@ -57,6 +59,11 @@ export function useAuthRedirect() {
     userData?: { id?: number } | null,
     redirectTo?: string
   ) => {
+    const transition = ++loginTransition
+    cancelSelfRequests()
+    removeUserId()
+    auth.setUser(null)
+
     // Save user ID if available
     if (userData?.id) {
       saveUserId(userData.id)
@@ -65,6 +72,7 @@ export function useAuthRedirect() {
     // Fetch and set user data
     try {
       const self = await getSelf()
+      if (transition !== loginTransition) return
       if (self?.success && self.data) {
         const user = self.data as User
         auth.setUser(user)

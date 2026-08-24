@@ -84,7 +84,7 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 			}
 			return nil
 		}
-		if order.Status != constant.TopUpStatusPending {
+		if order.Status != constant.TopUpStatusPending && order.Status != constant.TopUpStatusExpired {
 			return commerceschema.ErrSubscriptionOrderStatusInvalid
 		}
 
@@ -164,6 +164,11 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 		if preview != nil {
 			upgradeGroup = strings.TrimSpace(sub.UpgradeGroup)
 		}
+		if preview != nil && preview.Action != commerceschema.SubscriptionPurchaseActionUpgrade {
+			if err := awardMonthlyPassPropTx(tx, order.UserId, plan, fmt.Sprintf("monthly-pass-order:%d", order.Id)); err != nil {
+				return err
+			}
+		}
 		if err := upsertSubscriptionTopUpTx(tx, order); err != nil {
 			return err
 		}
@@ -182,7 +187,7 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 		if err := ConsumeReservedBlindBoxPropByTradeNoTx(tx, tradeNo, commerceschema.BlindBoxPropOrderTypeSubscription); err != nil {
 			return err
 		}
-		if err := ApplySubscriptionPurchaseBonusTx(tx, order.UserId, sub, plan, preview); err != nil {
+		if err := ApplySubscriptionPurchaseBonusTx(tx, order.UserId, sub, plan, preview, order.TradeNo); err != nil {
 			return err
 		}
 		if err := ApplyGroupBuyPurchaseAfterPaymentTx(tx, order, plan, sub); err != nil {

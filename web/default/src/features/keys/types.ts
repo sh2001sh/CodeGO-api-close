@@ -42,6 +42,7 @@ export const apiKeySchema = z.object({
     }, z.boolean())
     .optional()
     .default(false),
+  marketplace_multiplier_limit: z.number().optional().default(0),
   model_limits_enabled: z.boolean(),
   model_limits: z.string().nullish().default(''),
   allow_ips: z.string().nullish().default(''),
@@ -92,6 +93,7 @@ export interface ApiKeyFormData {
   allow_ips: string
   group: string
   cross_group_retry: boolean
+  marketplace_multiplier_limit: number
 }
 
 // ============================================================================
@@ -104,3 +106,4 @@ export type ApiKeysDialogType =
   | 'delete'
   | 'batch-delete'
   | 'desktop-client'
+  | 'connectivity-test'

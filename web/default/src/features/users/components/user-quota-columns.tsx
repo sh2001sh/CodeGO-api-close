@@ -101,43 +101,5 @@ export function createUserQuotaColumns(t: TFunction): ColumnDef<User>[] {
       },
       meta: { label: t('Quota') },
     },
-    {
-      id: 'claude_quota',
-      accessorKey: 'claude_quota',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Claude Quota')} />
-      ),
-      cell: ({ row }) => {
-        const claudeQuota = row.original.claude_quota || 0
-
-        if (claudeQuota <= 0) {
-          return (
-            <StatusBadge
-              label={t('No Claude Quota')}
-              variant='neutral'
-              copyable={false}
-            />
-          )
-        }
-
-        return (
-          <Tooltip>
-            <TooltipTrigger
-              render={<div className='w-[130px] cursor-help' />}
-            >
-              <span className='font-medium tabular-nums'>
-                {formatQuota(claudeQuota)}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className='text-xs'>
-                {t('Remaining Claude quota')}: {formatQuota(claudeQuota)}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        )
-      },
-      meta: { label: t('Claude Quota') },
-    },
   ]
 }

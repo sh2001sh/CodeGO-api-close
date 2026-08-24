@@ -15,9 +15,10 @@ import (
 )
 
 type luckyDrawParticipant struct {
-	Subscription commerceschema.UserSubscription
-	Plan         commerceschema.SubscriptionPlan
-	Number       commerceschema.SubscriptionLuckyNumber
+	Subscription   commerceschema.UserSubscription
+	Plan           commerceschema.SubscriptionPlan
+	Number         commerceschema.SubscriptionLuckyNumber
+	BlindBoxNumber *commerceschema.BlindBoxDailyLuckyNumber
 }
 
 func createDailyLuckyDraw(drawDate string, drawAt time.Time, setting luckysettings.Setting) (*commerceschema.SubscriptionLuckyDraw, error) {
@@ -104,19 +105,31 @@ func createDailyLuckyDraw(drawDate string, drawAt time.Time, setting luckysettin
 			if finalUSD > 0 {
 				status = commerceschema.SubscriptionLuckyRewardCreditPending
 			}
+			participationType := "subscription"
+			blindBoxOpenRecordID := 0
+			userSubscriptionID := participant.Subscription.Id
+			userID := participant.Subscription.UserId
+			if participant.BlindBoxNumber != nil {
+				participationType = "blind_box"
+				blindBoxOpenRecordID = participant.BlindBoxNumber.BlindBoxOpenRecordId
+				userSubscriptionID = -blindBoxOpenRecordID
+				userID = participant.BlindBoxNumber.UserId
+			}
 			reward := &commerceschema.SubscriptionLuckyReward{
-				DrawId:             draw.Id,
-				UserSubscriptionId: participant.Subscription.Id,
-				UserId:             participant.Subscription.UserId,
-				LuckyNumber:        participant.Number.LuckySuffix,
-				MembershipTier:     luckyMembershipTier(&participant.Plan),
-				MatchedDigits:      matched,
-				BaseRewardUSD:      roundLuckyUSD(baseReward),
-				TierMultiplier:     multiplier,
-				JackpotRewardUSD:   roundLuckyUSD(jackpotReward),
-				FinalRewardQuota:   luckyRewardQuota(finalUSD),
-				CreditStatus:       status,
-				CreditedAt:         platformruntime.GetTimestamp(),
+				DrawId:               draw.Id,
+				UserSubscriptionId:   userSubscriptionID,
+				BlindBoxOpenRecordId: blindBoxOpenRecordID,
+				ParticipationType:    participationType,
+				UserId:               userID,
+				LuckyNumber:          participant.Number.LuckySuffix,
+				MembershipTier:       luckyMembershipTier(&participant.Plan),
+				MatchedDigits:        matched,
+				BaseRewardUSD:        roundLuckyUSD(baseReward),
+				TierMultiplier:       multiplier,
+				JackpotRewardUSD:     roundLuckyUSD(jackpotReward),
+				FinalRewardQuota:     luckyRewardQuota(finalUSD),
+				CreditStatus:         status,
+				CreditedAt:           platformruntime.GetTimestamp(),
 			}
 			if reward.FinalRewardQuota > 0 {
 				reward.CreditedAt = 0
@@ -178,7 +191,7 @@ func listLuckyDrawParticipantsTx(tx *gorm.DB, drawUnix int64) ([]luckyDrawPartic
 		return nil, err
 	}
 	if len(subscriptions) == 0 {
-		return []luckyDrawParticipant{}, nil
+		return appendBlindBoxLuckyParticipantsTx(tx, nil, drawUnix)
 	}
 	planIDs := make([]int, 0, len(subscriptions))
 	for _, sub := range subscriptions {
@@ -193,15 +206,22 @@ func listLuckyDrawParticipantsTx(tx *gorm.DB, drawUnix int64) ([]luckyDrawPartic
 		planMap[plan.Id] = plan
 	}
 	subscriptionIDs := make([]int, 0, len(subscriptions))
-	for _, sub := range subscriptions {
+	for index := range subscriptions {
+		sub := &subscriptions[index]
 		plan, ok := planMap[sub.PlanId]
 		if !ok || commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) != commerceschema.SubscriptionPlanTypeMonthly || !plan.LuckyDrawEnabled {
 			continue
 		}
+		// Backfilled/admin-created subscriptions may not have a number yet.
+		// Allocate it lazily before building the participant set so they can
+		// enter the very draw being settled.
+		if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, &plan); err != nil {
+			return nil, err
+		}
 		subscriptionIDs = append(subscriptionIDs, sub.Id)
 	}
 	if len(subscriptionIDs) == 0 {
-		return []luckyDrawParticipant{}, nil
+		return appendBlindBoxLuckyParticipantsTx(tx, nil, drawUnix)
 	}
 	var numbers []commerceschema.SubscriptionLuckyNumber
 	if err := tx.Where("user_subscription_id IN ?", subscriptionIDs).Find(&numbers).Error; err != nil {
@@ -222,6 +242,28 @@ func listLuckyDrawParticipantsTx(tx *gorm.DB, drawUnix int64) ([]luckyDrawPartic
 			continue
 		}
 		participants = append(participants, luckyDrawParticipant{Subscription: sub, Plan: plan, Number: number})
+	}
+	return appendBlindBoxLuckyParticipantsTx(tx, participants, drawUnix)
+}
+
+func appendBlindBoxLuckyParticipantsTx(tx *gorm.DB, participants []luckyDrawParticipant, drawUnix int64) ([]luckyDrawParticipant, error) {
+	setting := luckysettings.Get()
+	location, err := setting.Location()
+	if err != nil {
+		return nil, err
+	}
+	drawDate := time.Unix(drawUnix, 0).In(location).Format(luckyDrawDateLayout)
+	var numbers []commerceschema.BlindBoxDailyLuckyNumber
+	if err := tx.Where("draw_date = ? AND expires_at >= ?", drawDate, drawUnix).Order("id asc").Find(&numbers).Error; err != nil {
+		return nil, err
+	}
+	for index := range numbers {
+		number := numbers[index]
+		participants = append(participants, luckyDrawParticipant{
+			Plan:           commerceschema.SubscriptionPlan{MembershipTier: commerceschema.SubscriptionMembershipTierNone},
+			Number:         commerceschema.SubscriptionLuckyNumber{LuckySuffix: number.LuckySuffix},
+			BlindBoxNumber: &number,
+		})
 	}
 	return participants, nil
 }

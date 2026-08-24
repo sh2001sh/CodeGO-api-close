@@ -9,6 +9,7 @@ import (
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -186,6 +187,10 @@ func AddToken(c *gin.Context) {
 			return
 		}
 	}
+	if err := marketplaceapp.ValidateMultiplierLimitValue(token.MarketplaceMultiplierLimit); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
 	maxTokens := identitystore.GetMaxUserTokens()
 	count, err := identityapp.CountTokensForUser(c.GetInt("id"))
 	if err != nil {
@@ -199,6 +204,13 @@ func AddToken(c *gin.Context) {
 		})
 		return
 	}
+	token.Group, token.CrossGroupRetry, err = normalizeTokenGroupSelection(
+		c.GetInt("id"), token.Group, token.CrossGroupRetry,
+	)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
 	key, err := platformruntime.GenerateKey()
 	if err != nil {
 		httpapi.ApiErrorI18n(c, i18n.MsgTokenGenerateFailed)
@@ -206,19 +218,20 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	cleanToken := identityschema.Token{
-		UserId:             c.GetInt("id"),
-		Name:               token.Name,
-		Key:                key,
-		CreatedTime:        platformruntime.GetTimestamp(),
-		AccessedTime:       platformruntime.GetTimestamp(),
-		ExpiredTime:        token.ExpiredTime,
-		RemainQuota:        token.RemainQuota,
-		UnlimitedQuota:     token.UnlimitedQuota,
-		ModelLimitsEnabled: token.ModelLimitsEnabled,
-		ModelLimits:        token.ModelLimits,
-		AllowIps:           token.AllowIps,
-		Group:              gatewayroutingapp.NormalizeTokenGroup(token.Group),
-		CrossGroupRetry:    token.CrossGroupRetry,
+		UserId:                     c.GetInt("id"),
+		Name:                       token.Name,
+		Key:                        key,
+		CreatedTime:                platformruntime.GetTimestamp(),
+		AccessedTime:               0,
+		ExpiredTime:                token.ExpiredTime,
+		RemainQuota:                token.RemainQuota,
+		UnlimitedQuota:             token.UnlimitedQuota,
+		ModelLimitsEnabled:         token.ModelLimitsEnabled,
+		ModelLimits:                token.ModelLimits,
+		AllowIps:                   token.AllowIps,
+		Group:                      gatewayroutingapp.NormalizeTokenGroup(token.Group),
+		CrossGroupRetry:            token.CrossGroupRetry,
+		MarketplaceMultiplierLimit: token.MarketplaceMultiplierLimit,
 	}
 	err = identityapp.InsertUserToken(&cleanToken)
 	if err != nil {
@@ -269,6 +282,10 @@ func UpdateToken(c *gin.Context) {
 			return
 		}
 	}
+	if err := marketplaceapp.ValidateMultiplierLimitValue(token.MarketplaceMultiplierLimit); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
 	cleanToken, err := identityapp.GetUserToken(userID, token.Id)
 	if err != nil {
 		httpapi.ApiError(c, err)
@@ -287,6 +304,13 @@ func UpdateToken(c *gin.Context) {
 	if statusOnly != "" {
 		cleanToken.Status = token.Status
 	} else {
+		token.Group, token.CrossGroupRetry, err = normalizeTokenGroupSelection(
+			userID, token.Group, token.CrossGroupRetry,
+		)
+		if err != nil {
+			httpapi.ApiError(c, err)
+			return
+		}
 		cleanToken.Name = token.Name
 		cleanToken.ExpiredTime = token.ExpiredTime
 		cleanToken.RemainQuota = token.RemainQuota
@@ -296,6 +320,7 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.AllowIps = token.AllowIps
 		cleanToken.Group = gatewayroutingapp.NormalizeTokenGroup(token.Group)
 		cleanToken.CrossGroupRetry = token.CrossGroupRetry
+		cleanToken.MarketplaceMultiplierLimit = token.MarketplaceMultiplierLimit
 	}
 	err = identityapp.UpdateUserToken(cleanToken)
 	if err != nil {
@@ -307,6 +332,25 @@ func UpdateToken(c *gin.Context) {
 		"message": "",
 		"data":    identityapp.BuildMaskedTokenResponse(cleanToken),
 	})
+}
+
+func normalizeTokenGroupSelection(userID int, group string, crossGroupRetry bool) (string, bool, error) {
+	group = gatewayroutingapp.NormalizeTokenGroup(group)
+	if group == gatewayroutingapp.AutoGroupName {
+		// Auto is inherently a cross-group route pool. Keep the legacy field
+		// enabled for compatibility, but do not expose it as a user choice.
+		return group, true, nil
+	}
+	if marketplaceapp.IsMarketplaceAutoTokenGroup(group) {
+		return group, false, nil
+	}
+	if !marketplaceapp.IsMarketplaceTokenGroup(group) {
+		return group, crossGroupRetry, nil
+	}
+	if _, err := marketplaceapp.ResolveTokenGroupBinding(group, userID); err != nil {
+		return "", false, err
+	}
+	return group, false, nil
 }
 
 func DeleteTokenBatch(c *gin.Context) {

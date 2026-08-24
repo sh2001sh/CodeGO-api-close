@@ -88,7 +88,7 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	if relayInfo.UsePrice {
 		return nil
 	}
-	userQuota, err := GetUserWalletQuota(relayInfo.UserId)
+	userQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 		ModelRatio: modelRatio,
 		GroupRatio: actualGroupRatio,
 	})
-	quota = applyUsageConsumptionDiscount(relayInfo.UserId, quota)
+	quota = applyUsageConsumptionDiscount(relayInfo, quota)
 
 	if userQuota < quota {
 		return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
@@ -181,7 +181,8 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredOk {
 		quota = tieredQuota
 	}
-	quota = applyUsageConsumptionDiscount(relayInfo.UserId, quota)
+	discountDetail := calculateUsageConsumptionDiscount(relayInfo, quota)
+	quota = discountDetail.QuotaAfterDiscount
 
 	var logContent string
 	if !usePrice {
@@ -195,8 +196,6 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		quota = 0
 		logContent += "（可能是上游超时）"
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, modelName, relayInfo.FinalPreConsumedQuota))
-	} else {
-		RecordUsageStats(relayInfo.UserId, relayInfo.ChannelId, quota)
 	}
 
 	if err := SettleRelayBilling(ctx, relayInfo, quota); err != nil {
@@ -212,13 +211,15 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
+	appendUsageConsumptionDiscountInfo(other, discountDetail)
+	relaycommon.AttachRouteLogInfo(ctx, other)
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.InputTokens,
 		CompletionTokens: usage.OutputTokens,
 		ModelName:        modelName,
 		TokenName:        ctx.GetString("token_name"),
-		Quota:            quota,
+		Quota:            BillingQuotaForLog(relayInfo, quota),
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(useTimeSeconds),
@@ -287,7 +288,8 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredOk {
 		quota = tieredQuota
 	}
-	quota = applyUsageConsumptionDiscount(relayInfo.UserId, quota)
+	discountDetail := calculateUsageConsumptionDiscount(relayInfo, quota)
+	quota = discountDetail.QuotaAfterDiscount
 
 	var logContent string
 	if !usePrice {
@@ -301,8 +303,6 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		quota = 0
 		logContent += "（可能是上游超时）"
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, relayInfo.OriginModelName, relayInfo.FinalPreConsumedQuota))
-	} else {
-		RecordUsageStats(relayInfo.UserId, relayInfo.ChannelId, quota)
 	}
 
 	if err := SettleRelayBilling(ctx, relayInfo, quota); err != nil {
@@ -318,13 +318,15 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
+	appendUsageConsumptionDiscountInfo(other, discountDetail)
+	relaycommon.AttachRouteLogInfo(ctx, other)
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
 		ModelName:        relayInfo.OriginModelName,
 		TokenName:        ctx.GetString("token_name"),
-		Quota:            quota,
+		Quota:            BillingQuotaForLog(relayInfo, quota),
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(useTimeSeconds),
@@ -333,6 +335,15 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		Other:            other,
 	})
 	gopool.Go(func() {
-		auditprojection.RecordRelaySample(relayInfo, true, int64(usage.CompletionTokens))
+		cacheReadTokens := usage.PromptTokensDetails.CachedTokens
+		cacheWriteTokens := usage.PromptTokensDetails.GetCachedCreationTokens()
+		auditprojection.RecordRelayUsageSample(
+			relayInfo,
+			true,
+			performanceInputTokens(usage.PromptTokens, cacheReadTokens, cacheWriteTokens, false),
+			int64(cacheReadTokens),
+			int64(cacheWriteTokens),
+			int64(usage.CompletionTokens),
+		)
 	})
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatQuota } from '@/lib/format'
+import { CountUp } from '@/components/count-up'
 import { Progress } from '@/components/ui/progress'
 
 function clampPercent(used: number, total: number) {
@@ -90,16 +91,19 @@ export function UsageChart(props: { points: UsagePoint[] }) {
                 >
                   <div
                     className={`
-                      relative rounded-t-2xl transition-all duration-200
-                      ${isHovered ? 'shadow-lg' : ''}
+                      dawn-bar relative rounded-t-md transition-colors duration-200
+                      ${isHovered ? 'opacity-80' : ''}
                       ${isPeak
-                        ? 'bg-gradient-to-b from-primary/70 to-primary'
+                        ? 'bg-primary'
                         : isCurrent
-                          ? 'bg-gradient-to-b from-muted-foreground/40 to-muted-foreground/70'
-                          : 'bg-gradient-to-b from-muted to-muted-foreground/20'
+                          ? 'bg-muted-foreground/60'
+                          : 'bg-muted-foreground/20'
                       }
                     `}
-                    style={{ height: `${height}%` }}
+                    style={{
+                      height: `${height}%`,
+                      animationDelay: `${index * 35}ms`,
+                    }}
                   >
                     {isHovered && (
                       <div className='absolute -top-14 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg'>
@@ -133,14 +137,20 @@ export function DataMetric(props: {
   label: string
   value: string
   hint?: string
+  numeric?: number
+  format?: (value: number) => string
 }) {
   return (
     <div className='overview-soft-card px-3 py-3'>
       <div className='text-muted-foreground text-[11px] font-medium'>
         {props.label}
       </div>
-      <div className='text-foreground mt-1 text-lg font-semibold'>
-        {props.value}
+      <div className='text-foreground app-numeric mt-1 text-lg font-semibold'>
+        {props.numeric != null && props.format ? (
+          <CountUp value={props.numeric} format={props.format} />
+        ) : (
+          props.value
+        )}
       </div>
       {props.hint ? (
         <div className='text-muted-foreground mt-1 text-xs'>

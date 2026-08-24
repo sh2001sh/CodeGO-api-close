@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ArrowRight, ChevronDown, Layers3, Sparkles } from 'lucide-react'
+import { ArrowRight, ChevronDown, Gift, Layers3, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { getCurrencyLabel } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -23,6 +24,13 @@ import {
   translatePlanSubtitle,
   translatePlanTitle,
 } from './lib/display'
+
+const monthlyPassBenefitKey = {
+  lite: '15-minute 0.1x multiplier card',
+  standard: '30-minute 0.1x multiplier card',
+  pro: '45-minute 0.1x multiplier card',
+  ultra: '1-hour 0.1x multiplier card',
+} as const
 
 export function PackagePlanCard(props: {
   record: PlanRecord
@@ -67,11 +75,17 @@ export function PackagePlanCard(props: {
     plan.fuel_enabled === true &&
     Number(plan.fuel_min_quota || 0) > 0 &&
     Number(plan.fuel_quota_step || 0) > 0
+  const monthlyPassBenefit =
+    plan.plan_type === 'monthly'
+      ? monthlyPassBenefitKey[
+          plan.membership_tier as keyof typeof monthlyPassBenefitKey
+        ]
+      : undefined
 
   return (
     <Card
       className={cn(
-        'border-border bg-card relative h-full overflow-hidden shadow-sm transition-all hover:shadow-md',
+        'border-border bg-card relative h-full overflow-hidden transition-colors duration-200 hover:border-primary/40',
         isRecommended && 'border-primary bg-primary/[0.035] border-2'
       )}
     >
@@ -116,7 +130,7 @@ export function PackagePlanCard(props: {
         <div className='space-y-2'>
           <div className='flex items-center justify-between text-sm'>
             <span className='text-muted-foreground'>
-              {t('Base quota (USD)')}
+              {t('Base quota ({{currency}})', { currency: getCurrencyLabel() })}
             </span>
             <span className='text-foreground font-semibold'>
               {formatSubscriptionQuotaAmount(baseQuota)}
@@ -128,6 +142,24 @@ export function PackagePlanCard(props: {
               {formatDuration(plan, t)}
             </span>
           </div>
+          {monthlyPassBenefit && (
+            <div className='border-primary/20 bg-primary/[0.06] flex items-start gap-2 rounded-md border px-2.5 py-2'>
+              <Gift className='text-primary mt-0.5 h-4 w-4 shrink-0' />
+              <div className='min-w-0 text-xs'>
+                <div className='text-foreground font-semibold'>
+                  {t('Monthly pass bonus')}
+                </div>
+                <div className='text-primary mt-0.5 font-medium'>
+                  {t(monthlyPassBenefit)}
+                </div>
+                <div className='text-muted-foreground mt-0.5 leading-relaxed'>
+                  {t(
+                    '无需切换分组；实际扣月卡额度时额外乘 0.1，余额扣费仍按原倍率。'
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {groupBuyEnabled && (
             <div className='bg-muted/40 -mx-4 mt-2 space-y-1.5 px-4 py-2'>
               <div className='flex items-center justify-between gap-2'>
@@ -138,6 +170,11 @@ export function PackagePlanCard(props: {
                 <span className='text-muted-foreground text-[11px]'>
                   {t('Final quota by tier')}
                 </span>
+              </div>
+              <div className='text-primary text-xs leading-relaxed'>
+                {t(
+                  'Payment automatically joins the current collective benefit queue.'
+                )}
               </div>
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-muted-foreground'>
@@ -243,17 +280,6 @@ export function PackagePlanCard(props: {
             {limitReached ? t('Purchase limit reached') : actionLabel}
             {!limitReached && <ArrowRight className='ml-1 h-4 w-4' />}
           </Button>
-          {groupBuyEnabled && (
-            <Button
-              variant='outline'
-              className='w-full'
-              disabled={limitReached || props.record.action === 'disabled'}
-              onClick={() => props.onPurchase('group_buy')}
-            >
-              <Layers3 className='mr-1 h-4 w-4' />
-              {t('Participate in collective benefit')}
-            </Button>
-          )}
           {limitReached && (
             <div className='text-muted-foreground text-center text-xs'>
               {t('Limit reached ({{current}}/{{limit}})', {

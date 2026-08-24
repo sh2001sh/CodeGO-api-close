@@ -3,19 +3,24 @@ package app
 import (
 	"fmt"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
+	"net/http"
 	"time"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
+	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 	"github.com/sh2001sh/new-api/types"
 )
+
+var hasAlternativeSelectableRoute = gatewaystore.HasAlternativeSelectableRoute
 
 // ProcessChannelError applies shared disable/logging behavior for channel failures.
 func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
@@ -23,24 +28,64 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 	modelName := c.GetString("original_model")
 	failureClass := classifyUpstreamFailure(err)
+	gatewayruntime.FinishRouteDecisionAttempt(c, false, err.StatusCode, string(failureClass), string(gatewaystream.AttemptStageFromContext(c)))
+	localMaxDuration := isLocalStreamMaxDuration(c)
+	clientGone := c.GetBool(string(constant.ContextKeyClientGone))
+	if session := responsesws.FromContext(c); session != nil && session.ReplayForbidden() {
+		c.Set(string(constant.ContextKeyResponsesReplayForbidden), true)
+	}
+	if err.StatusCode == http.StatusTooManyRequests && !clientGone {
+		c.Set(string(constant.ContextKeyRateLimitRetry), true)
+	}
 	modelScopedFailure := failureClass == upstreamFailureModelUnavailable || failureClass == upstreamFailureAccountExhausted
-	if modelScopedFailure && modelName != "" {
+	credentialRejected := failureClass == upstreamFailureCredentialRejected
+	profile, hasProfile := gatewayruntime.RequestProfileFromContext(c)
+	upstreamStateBound := hasProfile && profile.MigrationCapability == gatewayruntime.MigrationUpstreamStateBound
+	cacheAffinity524 := isResponsesProxyTimeout(err) && hasProfile && profile.MigrationCapability == gatewayruntime.MigrationCacheAffinity
+	if cacheAffinity524 && !clientGone {
+		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+		allowMultiKeyMigrationAfterFailure(c)
+	}
+	if !clientGone && !upstreamStateBound && gatewayruntime.HasRemainingCrossGroupRoute(c) && isRetryableChannelFailure(err) {
+		gatewayruntime.AllowRetryAfterChannelAffinityFailure(c)
+	}
+	preserveOnlyRoute := shouldPreserveOnlyRoute(c, channelError.ChannelId, modelName, modelScopedFailure, credentialRejected, err)
+	retryFallbackChannel := shouldRetryCurrentChannelIfNoAlternative(c, err) ||
+		shouldRetryPreservedOnlyRoute(c, preserveOnlyRoute)
+	if retryFallbackChannel {
+		httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, channelError.ChannelId)
+		gatewayruntime.AllowRetryAfterChannelAffinityFailure(c)
+	}
+	if !localMaxDuration && !clientGone && !upstreamStateBound && isRetryableChannelFailure(err) && !modelScopedFailure && !credentialRejected && !preserveOnlyRoute {
+		// A retry must leave the complete upstream fault domain. Channel IDs
+		// can represent different keys on the same provider host.
+		gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
+		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+	}
+	if modelScopedFailure && !preserveOnlyRoute && modelName != "" && !clientGone {
 		group := selectedChannelGroup(c)
-		alternative, lookupErr := gatewaystore.HasAlternativeEnabledAbility(channelError.ChannelId, group, modelName)
+		alternative, lookupErr := hasAlternativeSelectableRoute(channelError.ChannelId, group, modelName)
 		if lookupErr != nil {
 			platformobservability.SysError(fmt.Sprintf("检查通道「%s」（#%d）的模型 %s 备用路由失败：%v", channelError.ChannelName, channelError.ChannelId, modelName, lookupErr))
-		} else if alternative {
-			cooling := coolModelScopedUpstreamFailure(channelError.ChannelId, modelName, c.GetString(constant.RequestIdKey), err)
+		}
+		alternative = alternative || gatewayruntime.HasRemainingCrossGroupRoute(c)
+		if alternative {
+			cooling := coolModelScopedUpstreamFailure(channelError.ChannelId, modelName, c.GetString(constant.RequestIdKey), err, gatewayruntime.RequestTypeFromContext(c))
 			c.Set("model_unavailable_with_alternative", true)
+			gatewayruntime.AllowRetryAfterChannelAffinityFailure(c)
+			// A prompt-cache affinity is valuable only while its selected route is
+			// usable. Keeping it after a model-scoped rejection makes Codex return
+			// the same 503 without ever reaching its configured fallback routes.
+			gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 			if cooling {
 				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 上游不可用，已临时冷却该模型路由并切换备用渠道", channelError.ChannelName, channelError.ChannelId, modelName))
 			} else {
-				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 第 %d 次连续失败，保留试错空间", channelError.ChannelName, channelError.ChannelId, modelName, channelHealthFailureCount(channelError.ChannelId, modelName)))
+				platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 第 %d 次连续失败，保留试错空间", channelError.ChannelName, channelError.ChannelId, modelName, channelHealthFailureCount(c, channelError.ChannelId, modelName)))
 			}
-		} else {
+		} else if lookupErr == nil {
 			platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 是唯一可用路由，保留渠道与模型路由", channelError.ChannelName, channelError.ChannelId, modelName))
 		}
-	} else if ShouldDisableChannel(err) && channelError.AutoBan {
+	} else if !clientGone && !credentialRejected && !preserveOnlyRoute && ShouldDisableChannel(err) && channelError.AutoBan {
 		gopool.Go(func() {
 			DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
@@ -48,23 +93,47 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	// A partial Responses stream must never be retried in the current request:
 	// clients may have already received output. It still needs model-level
 	// cooling so subsequent requests choose another healthy route.
-	if failureClass == upstreamFailureIncompleteStream {
+	if failureClass == upstreamFailureIncompleteStream && !localMaxDuration && !clientGone && !preserveOnlyRoute {
+		// A stream which ended before semantic output is safe to replay, but a
+		// retry must leave the failed upstream domain instead of cycling through
+		// different keys backed by the same provider path.
+		if shouldExcludeFaultDomainForIncompleteStream(c) {
+			gatewayruntime.ExcludeFaultDomain(c, c.GetString("channel_fault_domain"))
+		}
 		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
-		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, modelName, gatewayruntime.IncompleteStreamCooldown())
-		if shouldRecordIncompleteStreamFaultDomainFailure(c) {
-			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), modelName, c.GetString(constant.RequestIdKey), gatewayruntime.IncompleteStreamCooldown())
+		recordChannelTransientFailure(c, channelError.ChannelId, modelName, err)
+		if shouldRecordIncompleteStreamFaultDomainFailure(c, err) {
+			recordFaultDomainTransientFailure(c, channelError.ChannelId, modelName, err)
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
-	} else if isRetryableChannelFailure(err) && !modelScopedFailure {
-		cooldown := retryableFailureCooldown(c, err)
-		gatewayruntime.RecordChannelRetryableFailureWithCooldown(channelError.ChannelId, c.GetString("original_model"), cooldown)
-		if shouldRecordFaultDomainFailure(c) {
-			gatewayruntime.RecordFaultDomainRetryableFailure(c.GetString("channel_fault_domain"), c.GetString("original_model"), c.GetString(constant.RequestIdKey), cooldown)
+	} else if failureClass == upstreamFailureIncompleteStream && preserveOnlyRoute {
+		// A sole route has nowhere else to fail over to. Cooling it after a
+		// stream closes turns a transient upstream error into a misleading
+		// "no available channel" response for every concurrent request.
+		gatewayruntime.RecordUserIncompleteStreamFailure(c, modelName)
+	} else if credentialRejected && !localMaxDuration && !clientGone {
+		gatewayruntime.RecordChannelCredentialFailure(channelError.ChannelId)
+		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）被上游拒绝访问，已进行凭据级短冷却并切换备用渠道", channelError.ChannelName, channelError.ChannelId))
+	} else if !localMaxDuration && !clientGone && isRetryableChannelFailure(err) && !modelScopedFailure && !preserveOnlyRoute {
+		recordChannelTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
+		if shouldRecordFaultDomainFailure(c, err) {
+			recordFaultDomainTransientFailure(c, channelError.ChannelId, c.GetString("original_model"), err)
 		}
 		gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
 	}
 
-	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
+	if retryFallbackChannel {
+		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）首包超时，当前分组无备用渠道时允许重试一次", channelError.ChannelName, channelError.ChannelId))
+	}
+	if preserveOnlyRoute {
+		platformobservability.SysLog(fmt.Sprintf("通道「%s」（#%d）的模型 %s 是当前分组唯一可用路由，保留后续探测，不进入冷却", channelError.ChannelName, channelError.ChannelId, modelName))
+	}
+
+	// Relay requests record one user-visible failure only after all retry
+	// candidates are exhausted. Keep this per-attempt record for channel tests
+	// and other non-relay operations that have no request ID.
+	if constant.ErrorLogEnabled && c.GetString(constant.RequestIdKey) == "" && types.IsRecordErrorLog(err) {
 		userID := c.GetInt("id")
 		tokenName := c.GetString("token_name")
 		modelName := c.GetString("original_model")
@@ -79,12 +148,19 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["error_code"] = err.GetErrorCode()
 		other["status_code"] = err.StatusCode
 		other["upstream_failure_class"] = failureClass
+		if localMaxDuration {
+			other["local_stream_max_duration"] = true
+		}
+		if clientGone {
+			other["client_disconnected"] = true
+		}
 		other["channel_id"] = channelID
 		other["channel_name"] = c.GetString("channel_name")
 		other["channel_type"] = c.GetInt("channel_type")
 
 		adminInfo := make(map[string]interface{})
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
+		adminInfo["attempt_stage"] = gatewaystream.AttemptStageFromContext(c)
 		if httpctx.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
 			adminInfo["is_multi_key"] = true
 			adminInfo["multi_key_index"] = httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
@@ -96,13 +172,18 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		if circuit, ok := gatewayruntime.UserStreamFailureCircuitAuditFromContext(c); ok {
 			adminInfo["user_stream_failure_circuit"] = circuit
 		}
+		if lifecycle, ok := c.Get("responses_stream_lifecycle"); ok {
+			adminInfo["responses_stream_lifecycle"] = lifecycle
+		}
 		other["admin_info"] = adminInfo
+		other["owner_error"] = err.OwnerVisibleErrorWithStatusCode()
 
 		startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
 		if startTime.IsZero() {
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
+		other["total_duration_ms"] = time.Since(startTime).Milliseconds()
 		auditapp.RecordErrorLog(
 			c,
 			userID,
@@ -119,6 +200,138 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	}
 }
 
+func shouldPreserveOnlyRoute(c *gin.Context, channelID int, modelName string, modelScopedFailure bool, credentialRejected bool, err *types.NewAPIError) bool {
+	if c == nil || err == nil || channelID <= 0 || modelName == "" || credentialRejected ||
+		c.GetBool(string(constant.ContextKeyClientGone)) || !isRetryableChannelFailure(err) {
+		return false
+	}
+	if profile, found := gatewayruntime.RequestProfileFromContext(c); found && profile.MigrationCapability == gatewayruntime.MigrationUpstreamStateBound {
+		return true
+	}
+	if modelScopedFailure {
+		return false
+	}
+	if gatewayruntime.HasRemainingCrossGroupRoute(c) {
+		return false
+	}
+	alternative, lookupErr := hasAlternativeSelectableRoute(channelID, selectedChannelGroup(c), modelName)
+	if lookupErr != nil {
+		platformobservability.SysError(fmt.Sprintf("检查通道 #%d 的模型 %s 唯一路由状态失败：%v", channelID, modelName, lookupErr))
+		return false
+	}
+	return !alternative
+}
+
+const currentChannelRetryMaxElapsed = 3 * time.Second
+
+// shouldRetryCurrentChannelIfNoAlternative enables one fallback only after
+// the current group has no healthy alternate. A response-header timeout gets
+// one final retry by request policy; other transport failures must be fast.
+func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIError) bool {
+	if c == nil || err == nil || c.GetBool(string(constant.ContextKeyClientGone)) {
+		return false
+	}
+	if gatewayruntime.HasRemainingCrossGroupRoute(c) {
+		return false
+	}
+	// Responses lifecycle events are buffered until semantic output. An
+	// incomplete stream in this phase is safe to replay even after a longer
+	// upstream wait, provided ordinary selection found no other route. This
+	// preserves one recovery path for a sole candidate without duplicating
+	// client-visible output.
+	if gatewaystream.CanRetryResponsesBeforeSemanticOutput(c) &&
+		(err.StatusCode == http.StatusBadGateway || err.StatusCode == http.StatusGatewayTimeout || err.StatusCode == 524) {
+		if budget := gatewayruntime.RequestBudgetFromContext(c); budget != nil && !budget.CanRetry(time.Now()) {
+			return false
+		}
+		_, singleChannel := gatewayruntime.SingleUsedChannelID(c)
+		return singleChannel
+	}
+	if err.GetErrorCode() != types.ErrorCodeChannelResponseTimeExceeded && err.StatusCode != http.StatusGatewayTimeout && err.StatusCode != 524 {
+		startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+		if startTime.IsZero() || time.Since(startTime) > currentChannelRetryMaxElapsed {
+			return false
+		}
+		if err.GetErrorCode() != types.ErrorCodeDoRequestFailed && err.StatusCode != http.StatusBadGateway {
+			return false
+		}
+	}
+	if _, singleChannel := gatewayruntime.SingleUsedChannelID(c); !singleChannel {
+		return false
+	}
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||
+		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+		return false
+	}
+	return gatewaystream.AttemptStageFromContext(c) == gatewaystream.AttemptStageSelected
+}
+
+// shouldRetryPreservedOnlyRoute gives a sole eligible route one controlled
+// second attempt. Normal retry de-duplication excludes an already used channel;
+// without this marker, a transient 429/502 on a sole route is misreported as
+// "no available channel" instead of returning the real upstream result.
+func shouldRetryPreservedOnlyRoute(c *gin.Context, preserveOnlyRoute bool) bool {
+	if c == nil || !preserveOnlyRoute {
+		return false
+	}
+	if _, singleChannel := gatewayruntime.SingleUsedChannelID(c); !singleChannel {
+		return false
+	}
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||
+		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+		return false
+	}
+	return gatewaystream.AttemptStageFromContext(c) == gatewaystream.AttemptStageSelected
+}
+
+func isLocalStreamMaxDuration(c *gin.Context) bool {
+	return gatewayruntime.IsLocalStreamMaxDurationExceeded(c)
+}
+
+func recordChannelTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
+	requestID := c.GetString(constant.RequestIdKey)
+	requestType := gatewayruntime.RequestTypeFromContext(c)
+	if gatewayruntime.IsAutoRouteRequest(c) {
+		gatewayruntime.RecordChannelSoftFailureForRequest(channelID, modelName, requestID, requestType)
+		if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
+			(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
+			gatewayruntime.RecordUserChannelGatewayFailureForRequest(c, channelID, modelName, requestID, err.StatusCode, requestType)
+			return
+		}
+		gatewayruntime.RecordUserChannelRetryableFailureForRequest(c, channelID, modelName, requestID, retryableFailureCooldown(c, err), requestType)
+		return
+	}
+	if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
+		(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
+		gatewayruntime.RecordChannelGatewayFailureForRequest(channelID, modelName, requestID, err.StatusCode, requestType)
+		return
+	}
+	gatewayruntime.RecordChannelRetryableFailureForRequest(channelID, modelName, requestID, retryableFailureCooldown(c, err), requestType)
+}
+
+func recordFaultDomainTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
+	domain := c.GetString("channel_fault_domain")
+	requestID := c.GetString(constant.RequestIdKey)
+	cooldown := retryableFailureCooldown(c, err)
+	requestType := gatewayruntime.RequestTypeFromContext(c)
+	if gatewayruntime.IsAutoRouteRequest(c) {
+		gatewayruntime.RecordUserFaultDomainFailure(c, domain, modelName, requestID, cooldown, requestType)
+		return
+	}
+	gatewayruntime.RecordFaultDomainChannelFailure(domain, modelName, channelID, requestID, cooldown, requestType)
+}
+
+func isGatewayFailureStatus(statusCode int) bool {
+	return statusCode == http.StatusBadGateway || statusCode == http.StatusGatewayTimeout || statusCode == 524
+}
+
+func isResponsesProxyTimeout(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return err.StatusCode == 524 || (err.StatusCode == http.StatusGatewayTimeout && err.GetErrorCode() == types.ErrorCodeChannelResponseTimeExceeded)
+}
+
 func retryableFailureCooldown(c *gin.Context, err *types.NewAPIError) time.Duration {
 	if gatewayruntime.IsLongContextRequest(c) && err != nil && err.GetErrorCode() == types.ErrorCodeChannelResponseTimeExceeded {
 		return gatewayruntime.LongContextTimeoutCooldown()
@@ -129,11 +342,14 @@ func retryableFailureCooldown(c *gin.Context, err *types.NewAPIError) time.Durat
 	return gatewayruntime.RetryableFailureCooldown(err.StatusCode)
 }
 
-func shouldRecordFaultDomainFailure(c *gin.Context) bool {
-	return !gatewayruntime.IsLongContextRequest(c)
+func shouldRecordFaultDomainFailure(c *gin.Context, err *types.NewAPIError) bool {
+	return !gatewayruntime.IsLongContextRequest(c) && isProviderWideTransientFailure(err)
 }
 
-func shouldRecordIncompleteStreamFaultDomainFailure(c *gin.Context) bool {
+func shouldRecordIncompleteStreamFaultDomainFailure(c *gin.Context, err *types.NewAPIError) bool {
+	if !isProviderWideTransientFailure(err) {
+		return false
+	}
 	if !gatewayruntime.IsLongContextRequest(c) {
 		return true
 	}
@@ -143,15 +359,26 @@ func shouldRecordIncompleteStreamFaultDomainFailure(c *gin.Context) bool {
 	return !c.GetBool(string(constant.ContextKeyStreamContentDelivered))
 }
 
-func coolModelScopedUpstreamFailure(channelID int, modelName string, requestID string, err *types.NewAPIError) bool {
-	if IsModelUnavailableError(err) {
-		return gatewayruntime.RecordChannelModelUnavailable(channelID, modelName, requestID)
-	}
-	return gatewayruntime.CoolChannelModelForUpstreamFailure(channelID, modelName)
+func shouldExcludeFaultDomainForIncompleteStream(c *gin.Context) bool {
+	return c != nil && !c.GetBool(string(constant.ContextKeyStreamContentDelivered))
 }
 
-func channelHealthFailureCount(channelID int, modelName string) int {
-	state, found := gatewayruntime.GetChannelHealth(channelID, modelName)
+func isProviderWideTransientFailure(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)
+}
+
+func coolModelScopedUpstreamFailure(channelID int, modelName string, requestID string, err *types.NewAPIError, requestType gatewayruntime.RequestType) bool {
+	if IsModelUnavailableError(err) {
+		return gatewayruntime.RecordChannelModelUnavailable(channelID, modelName, requestID, requestType)
+	}
+	return gatewayruntime.CoolChannelModelForUpstreamFailure(channelID, modelName, requestType)
+}
+
+func channelHealthFailureCount(c *gin.Context, channelID int, modelName string) int {
+	state, found := gatewayruntime.GetChannelHealth(channelID, modelName, gatewayruntime.RequestTypeFromContext(c))
 	if !found {
 		return 0
 	}

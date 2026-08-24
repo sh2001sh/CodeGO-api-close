@@ -82,6 +82,13 @@ export async function reviewCommunityResource(
   return unwrap(response.data)
 }
 
+export async function deleteCommunityResource(id: number) {
+  const response = await api.delete<ApiEnvelope<{ id: number }>>(
+    `/api/admin/community-resources/${id}`
+  )
+  return unwrap(response.data)
+}
+
 export async function updateCommunityResourceConfig(rewardUsd: number) {
   const response = await api.put<ApiEnvelope<ResourceConfig>>(
     '/api/admin/community-resources/config',

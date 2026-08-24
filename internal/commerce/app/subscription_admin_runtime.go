@@ -85,6 +85,11 @@ func updateAdminUserSubscriptionRuntime(userSubscriptionID int, input adminUpdat
 		if err := maybeResetUserSubscriptionWithPlanTx(tx, sub, plan, now); err != nil {
 			return err
 		}
+		if subscriptionLuckyNumberTableReady() {
+			if err := backfillSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
+				return err
+			}
+		}
 		if err := tx.Save(sub).Error; err != nil {
 			return err
 		}

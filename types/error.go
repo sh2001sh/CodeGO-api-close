@@ -41,6 +41,9 @@ type ErrorCode string
 const (
 	ErrorCodeInvalidRequest         ErrorCode = "invalid_request"
 	ErrorCodeSensitiveWordsDetected ErrorCode = "sensitive_words_detected"
+	ErrorCodePromptGuardBlocked     ErrorCode = "prompt_guard_blocked"
+	ErrorCodePromptGuardUnavailable ErrorCode = "prompt_guard_unavailable"
+	ErrorCodePromptGuardInvalid     ErrorCode = "prompt_guard_invalid_response"
 	ErrorCodeViolationFeeGrokCSAM   ErrorCode = "violation_fee.grok.csam"
 
 	// new api error
@@ -86,9 +89,11 @@ const (
 	// quota error
 	ErrorCodeInsufficientUserQuota      ErrorCode = "insufficient_user_quota"
 	ErrorCodePreConsumeTokenQuotaFailed ErrorCode = "pre_consume_token_quota_failed"
+	ErrorCodeServiceBusy                ErrorCode = "service_busy"
 )
 
 const ModelUnavailableMessage = "当前模型服务暂不可用，请稍后重试"
+const ServiceBusyMessage = "服务当前繁忙，请稍后重试"
 
 type NewAPIError struct {
 	Err            error
@@ -146,6 +151,23 @@ func (e *NewAPIError) ErrorWithStatusCode() string {
 		return fmt.Sprintf("status_code=%d", e.StatusCode)
 	}
 	return e.sanitizeUpstreamProviderErrorMessage(fmt.Sprintf("status_code=%d, %s", e.StatusCode, msg))
+}
+
+// OwnerVisibleErrorWithStatusCode keeps upstream diagnostics for the owner of
+// the selected channel while redacting credentials that may appear in them.
+func (e *NewAPIError) OwnerVisibleErrorWithStatusCode() string {
+	if e == nil {
+		return ""
+	}
+	message := e.Error()
+	if e.StatusCode != 0 {
+		if message == "" {
+			message = fmt.Sprintf("status_code=%d", e.StatusCode)
+		} else {
+			message = fmt.Sprintf("status_code=%d, %s", e.StatusCode, message)
+		}
+	}
+	return platformtext.RedactCredentials(message)
 }
 
 func (e *NewAPIError) MaskSensitiveError() string {
@@ -212,7 +234,7 @@ func (e *NewAPIError) shouldSanitizeUpstreamProviderError() bool {
 	}
 	return e.StatusCode == http.StatusUnauthorized ||
 		e.StatusCode == http.StatusForbidden ||
-		e.StatusCode == http.StatusServiceUnavailable ||
+		(e.StatusCode >= http.StatusInternalServerError && e.StatusCode <= 599) ||
 		platformtext.IsUpstreamProviderUnavailableMessage(e.Error())
 }
 

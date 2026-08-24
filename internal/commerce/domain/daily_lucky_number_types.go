@@ -8,9 +8,18 @@ type LuckyNumberSubscription struct {
 	Number       *commerceschema.SubscriptionLuckyNumber `json:"number,omitempty"`
 }
 
+type BlindBoxLuckyNumber struct {
+	BlindBoxOpenRecordId int    `json:"blind_box_open_record_id"`
+	LuckySuffix          string `json:"lucky_suffix"`
+	DrawDate             string `json:"draw_date"`
+	ExpiresAt            int64  `json:"expires_at"`
+	CreatedAt            int64  `json:"created_at"`
+}
+
 // LuckyNumberRules is the public, non-operational rule snapshot used by the activity page.
 // Cost and budget controls remain admin-only fields.
 type LuckyNumberRules struct {
+	QuotaUnit           string  `json:"quota_unit"`
 	BaseReward1USD      float64 `json:"base_reward_1_usd"`
 	BaseReward2USD      float64 `json:"base_reward_2_usd"`
 	BaseReward3USD      float64 `json:"base_reward_3_usd"`
@@ -39,18 +48,20 @@ type LuckyDrawView struct {
 }
 
 type LuckyNumberSelfPayload struct {
-	Enabled       bool                      `json:"enabled"`
-	Timezone      string                    `json:"timezone"`
-	DrawHour      int                       `json:"draw_hour"`
-	DrawMinute    int                       `json:"draw_minute"`
-	NextDrawAt    int64                     `json:"next_draw_at"`
-	TodayDraw     *LuckyDrawView            `json:"today_draw,omitempty"`
-	PreviousDraw  *LuckyDrawView            `json:"previous_draw,omitempty"`
-	JackpotUSD    float64                   `json:"jackpot_usd"`
-	JackpotCapUSD float64                   `json:"jackpot_cap_usd"`
-	Rules         LuckyNumberRules          `json:"rules"`
-	Subscriptions []LuckyNumberSubscription `json:"subscriptions"`
-	RecentRewards []LuckyRewardView         `json:"recent_rewards"`
+	Enabled         bool                      `json:"enabled"`
+	QuotaUnit       string                    `json:"quota_unit"`
+	Timezone        string                    `json:"timezone"`
+	DrawHour        int                       `json:"draw_hour"`
+	DrawMinute      int                       `json:"draw_minute"`
+	NextDrawAt      int64                     `json:"next_draw_at"`
+	TodayDraw       *LuckyDrawView            `json:"today_draw,omitempty"`
+	PreviousDraw    *LuckyDrawView            `json:"previous_draw,omitempty"`
+	JackpotUSD      float64                   `json:"jackpot_usd"`
+	JackpotCapUSD   float64                   `json:"jackpot_cap_usd"`
+	Rules           LuckyNumberRules          `json:"rules"`
+	Subscriptions   []LuckyNumberSubscription `json:"subscriptions"`
+	BlindBoxNumbers []BlindBoxLuckyNumber     `json:"today_blind_box_numbers"`
+	RecentRewards   []LuckyRewardView         `json:"recent_rewards"`
 }
 
 type LuckyRewardView struct {
@@ -61,18 +72,20 @@ type LuckyRewardView struct {
 }
 
 type LuckyRewardRecord struct {
-	Id                 int     `json:"id"`
-	DrawId             int     `json:"draw_id"`
-	UserSubscriptionId int     `json:"user_subscription_id"`
-	LuckyNumber        string  `json:"lucky_number"`
-	MembershipTier     string  `json:"membership_tier"`
-	MatchedDigits      int     `json:"matched_digits"`
-	BaseRewardUSD      float64 `json:"base_reward_usd"`
-	TierMultiplier     float64 `json:"tier_multiplier"`
-	JackpotRewardUSD   float64 `json:"jackpot_reward_usd"`
-	FinalRewardQuota   int64   `json:"final_reward_quota"`
-	CreditStatus       string  `json:"credit_status"`
-	CreditedAt         int64   `json:"credited_at"`
+	Id                   int     `json:"id"`
+	DrawId               int     `json:"draw_id"`
+	UserSubscriptionId   int     `json:"user_subscription_id"`
+	BlindBoxOpenRecordId int     `json:"blind_box_open_record_id,omitempty"`
+	ParticipationType    string  `json:"participation_type,omitempty"`
+	LuckyNumber          string  `json:"lucky_number"`
+	MembershipTier       string  `json:"membership_tier"`
+	MatchedDigits        int     `json:"matched_digits"`
+	BaseRewardUSD        float64 `json:"base_reward_usd"`
+	TierMultiplier       float64 `json:"tier_multiplier"`
+	JackpotRewardUSD     float64 `json:"jackpot_reward_usd"`
+	FinalRewardQuota     int64   `json:"final_reward_quota"`
+	CreditStatus         string  `json:"credit_status"`
+	CreditedAt           int64   `json:"credited_at"`
 }
 
 type LuckyRewardPage struct {
@@ -80,6 +93,18 @@ type LuckyRewardPage struct {
 	PageSize int               `json:"page_size"`
 	Total    int64             `json:"total"`
 	Records  []LuckyRewardView `json:"records"`
+}
+
+type LuckyRewardNotification struct {
+	Id        int             `json:"id"`
+	Reward    LuckyRewardView `json:"reward"`
+	ReadAt    int64           `json:"read_at"`
+	CreatedAt int64           `json:"created_at"`
+}
+
+type LuckyRewardNotificationPage struct {
+	UnreadCount int64                     `json:"unread_count"`
+	Items       []LuckyRewardNotification `json:"items"`
 }
 
 type LuckyPublicWinPage struct {

@@ -12,6 +12,8 @@ import (
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformerrx "github.com/sh2001sh/new-api/internal/platform/errx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
@@ -143,18 +145,6 @@ func authHelper(c *gin.Context, minRole int) {
 		currentRole = user.Role
 		currentStatus = user.Status
 		currentGroup = user.Group
-		if session.Get("username") != user.Username ||
-			session.Get("role") != user.Role ||
-			session.Get("status") != user.Status ||
-			session.Get("group") != user.Group {
-			session.Set("username", user.Username)
-			session.Set("role", user.Role)
-			session.Set("status", user.Status)
-			session.Set("group", user.Group)
-			if err := session.Save(); err != nil {
-				platformobservability.SysLog("authHelper failed to sync session user state: " + err.Error())
-			}
-		}
 	}
 	// get header New-Api-User
 	apiUserIdStr := c.Request.Header.Get("New-Api-User")
@@ -439,13 +429,46 @@ func TokenAuth() func(c *gin.Context) {
 
 		userGroup := userCache.Group
 		tokenGroup := token.Group
+		legacyMonthlyPassGroup := tokenGroup == commerceapp.LegacyMonthlyPassGroup
+		if legacyMonthlyPassGroup {
+			tokenGroup = commerceapp.MultiplierCardRouteGroup()
+		}
+		requiresOfficialChannel, monthlyPassActive := commerceapp.ActiveMultiplierCardRoutePolicy(token.UserId)
+		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, requiresOfficialChannel)
+		httpctx.SetContextKey(c, constant.ContextKeyMonthlyPassActive, monthlyPassActive)
+		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelFallback, false)
 		zeroHourActive := tokenGroup == commerceapp.ZeroHourGroup
 		if zeroHourActive {
 			if !commerceapp.IsZeroHourGroupActive(token.UserId) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "0 倍率卡已结束，请切回 default 分组")
 				return
 			}
-			userGroup = "default"
+			userGroup = commerceapp.MultiplierCardRouteGroup()
+		} else if legacyMonthlyPassGroup {
+			userGroup = commerceapp.MultiplierCardRouteGroup()
+		} else if marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
+			httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, false)
+			// The request model is not known during authentication. The distributor
+			// resolves the user's pool to one real marketplace group afterwards.
+			userGroup = marketplacedomain.TokenAutoGroupValue
+		} else if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) {
+			httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, false)
+			binding, bindErr := marketplaceapp.ResolveTokenGroupBinding(tokenGroup, token.UserId)
+			if bindErr != nil {
+				abortWithOpenAiMessage(c, http.StatusForbidden, bindErr.Error())
+				return
+			}
+			if limitErr := marketplaceapp.EnforceMultiplierLimit(binding.Multiplier, token.MarketplaceMultiplierLimit); limitErr != nil {
+				abortWithOpenAiMessage(c, http.StatusForbidden, limitErr.Error())
+				return
+			}
+			userGroup = binding.InternalGroup
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceGroupID, binding.GroupID)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceOwnerID, binding.OwnerUserID)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, binding.SourceType)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, binding.CreditPoolPolicy)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, binding.Multiplier)
+			httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, binding.ModelPrices)
 		} else if tokenGroup != "" {
 			// check common.UserUsableGroups[userGroup]
 			if _, ok := gatewayroutingapp.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
@@ -468,9 +491,13 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 		if zeroHourActive {
-			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
-			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, commerceapp.MultiplierCardRouteGroup())
+			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, commerceapp.MultiplierCardRouteGroup())
 			httpctx.SetContextKey(c, constant.ContextKeyZeroHourActive, true)
+		}
+		if legacyMonthlyPassGroup {
+			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, commerceapp.MultiplierCardRouteGroup())
+			httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, commerceapp.MultiplierCardRouteGroup())
 		}
 		c.Next()
 	}
@@ -495,7 +522,11 @@ func SetupContextForToken(c *gin.Context, token *identityschema.Token, parts ...
 		c.Set("token_model_limit_enabled", false)
 	}
 	httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, gatewayroutingapp.NormalizeTokenGroup(token.Group))
-	httpctx.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
+	// Auto always traverses its configured group pool. The persisted legacy
+	// switch is ignored so older keys cannot disable Auto failover.
+	httpctx.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry,
+		token.Group == gatewayroutingapp.AutoGroupName || token.CrossGroupRetry)
+	httpctx.SetContextKey(c, constant.ContextKeyTokenMarketplaceMultiplierLimit, token.MarketplaceMultiplierLimit)
 	if len(parts) > 1 {
 		if identityapp.IsUserAdmin(token.UserId) {
 			c.Set("specific_channel_id", parts[1])

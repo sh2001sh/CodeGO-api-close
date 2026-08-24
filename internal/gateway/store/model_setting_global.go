@@ -7,18 +7,40 @@ import (
 	"github.com/sh2001sh/new-api/setting/config"
 )
 
-type ChatCompletionsToResponsesPolicy struct {
-	Enabled       bool     `json:"enabled"`
-	AllChannels   bool     `json:"all_channels"`
-	ChannelIDs    []int    `json:"channel_ids,omitempty"`
-	ChannelTypes  []int    `json:"channel_types,omitempty"`
-	ModelPatterns []string `json:"model_patterns,omitempty"`
+type ProtocolBridgeMode string
+
+const (
+	ProtocolBridgeModeAuto     ProtocolBridgeMode = "auto"
+	ProtocolBridgeModeForce    ProtocolBridgeMode = "force"
+	ProtocolBridgeModeDisabled ProtocolBridgeMode = "disabled"
+)
+
+type ProtocolBridgePolicy struct {
+	Mode          ProtocolBridgeMode `json:"mode,omitempty"`
+	Enabled       bool               `json:"enabled"`
+	AllChannels   bool               `json:"all_channels"`
+	ChannelIDs    []int              `json:"channel_ids,omitempty"`
+	ChannelTypes  []int              `json:"channel_types,omitempty"`
+	ModelPatterns []string           `json:"model_patterns,omitempty"`
 }
 
-func (p ChatCompletionsToResponsesPolicy) IsChannelEnabled(channelID int, channelType int) bool {
-	if !p.Enabled {
-		return false
+type ChatCompletionsToResponsesPolicy = ProtocolBridgePolicy
+
+func (p ProtocolBridgePolicy) EffectiveMode() ProtocolBridgeMode {
+	switch p.Mode {
+	case ProtocolBridgeModeForce, ProtocolBridgeModeDisabled:
+		return p.Mode
+	case ProtocolBridgeModeAuto:
+		return ProtocolBridgeModeAuto
+	case "":
+		if p.Enabled {
+			return ProtocolBridgeModeForce
+		}
 	}
+	return ProtocolBridgeModeAuto
+}
+
+func (p ProtocolBridgePolicy) MatchesChannel(channelID int, channelType int) bool {
 	if p.AllChannels {
 		return true
 	}
@@ -32,10 +54,15 @@ func (p ChatCompletionsToResponsesPolicy) IsChannelEnabled(channelID int, channe
 	return false
 }
 
+func (p ProtocolBridgePolicy) IsChannelEnabled(channelID int, channelType int) bool {
+	return p.EffectiveMode() == ProtocolBridgeModeForce && p.MatchesChannel(channelID, channelType)
+}
+
 type GlobalSettings struct {
-	PassThroughRequestEnabled        bool                             `json:"pass_through_request_enabled"`
-	ThinkingModelBlacklist           []string                         `json:"thinking_model_blacklist"`
-	ChatCompletionsToResponsesPolicy ChatCompletionsToResponsesPolicy `json:"chat_completions_to_responses_policy"`
+	PassThroughRequestEnabled        bool                 `json:"pass_through_request_enabled"`
+	ThinkingModelBlacklist           []string             `json:"thinking_model_blacklist"`
+	ChatCompletionsToResponsesPolicy ProtocolBridgePolicy `json:"chat_completions_to_responses_policy"`
+	ResponsesToChatCompletionsPolicy ProtocolBridgePolicy `json:"responses_to_chat_completions_policy"`
 }
 
 var defaultOpenAISettings = GlobalSettings{
@@ -45,7 +72,11 @@ var defaultOpenAISettings = GlobalSettings{
 		"kimi-k2-thinking",
 	},
 	ChatCompletionsToResponsesPolicy: ChatCompletionsToResponsesPolicy{
-		Enabled:     false,
+		Mode:        ProtocolBridgeModeAuto,
+		AllChannels: true,
+	},
+	ResponsesToChatCompletionsPolicy: ChatCompletionsToResponsesPolicy{
+		Mode:        ProtocolBridgeModeAuto,
 		AllChannels: true,
 	},
 }

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -38,6 +37,19 @@ type ChannelUsageDaily struct {
 	CompletionTokens int64  `gorm:"column:completion_tokens"`
 	Quota            int64  `gorm:"column:quota"`
 	UpdatedAt        time.Time
+}
+
+type UsageDailyCursor struct {
+	Name      string    `gorm:"column:name;primaryKey;size:64"`
+	LastLogID int64     `gorm:"column:last_log_id"`
+	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (UsageDailyCursor) TableName() string {
+	if platformdb.UsingPostgreSQL {
+		return "readmodel.usage_daily_cursors"
+	}
+	return "readmodel_usage_daily_cursors"
 }
 
 func (ChannelUsageDaily) TableName() string {
@@ -120,7 +132,7 @@ func EnsureReadModelSchema() error {
 	if platformdb.DB == nil {
 		return fmt.Errorf("primary database is not initialized")
 	}
-	return platformdb.DB.AutoMigrate(&UserUsageDaily{}, &ChannelUsageDaily{}, &BillingAccountView{})
+	return platformdb.DB.AutoMigrate(&UserUsageDaily{}, &ChannelUsageDaily{}, &BillingAccountView{}, &UsageDailyCursor{})
 }
 
 // ApplyReadModelMigrations creates reporting tables and records the schema version.
@@ -132,21 +144,32 @@ func ApplyReadModelMigrations(ctx context.Context) error {
 	if err := db.AutoMigrate(&readModelSchemaMigration{}); err != nil {
 		return err
 	}
-	const migrationID = "20260710_read_models"
-	var applied readModelSchemaMigration
-	err := db.Where("id = ?", migrationID).First(&applied).Error
-	if err == nil {
-		return nil
+	steps := []struct {
+		id     string
+		models []any
+	}{
+		{id: "20260710_read_models", models: []any{&UserUsageDaily{}, &ChannelUsageDaily{}, &BillingAccountView{}}},
+		{id: "20260819_usage_daily_incremental", models: []any{&UsageDailyCursor{}}},
 	}
-	if err != gorm.ErrRecordNotFound {
-		return err
-	}
-	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.AutoMigrate(&UserUsageDaily{}, &ChannelUsageDaily{}, &BillingAccountView{}); err != nil {
+	for _, step := range steps {
+		var applied readModelSchemaMigration
+		err := db.Where("id = ?", step.id).First(&applied).Error
+		if err == nil {
+			continue
+		}
+		if err != gorm.ErrRecordNotFound {
 			return err
 		}
-		return tx.Create(&readModelSchemaMigration{ID: migrationID}).Error
-	})
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.AutoMigrate(step.models...); err != nil {
+				return err
+			}
+			return tx.Create(&readModelSchemaMigration{ID: step.id}).Error
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func rebuildBillingAccountViews(ctx context.Context) error {
@@ -170,43 +193,5 @@ func rebuildBillingAccountViews(ctx context.Context) error {
 			return nil
 		}
 		return tx.CreateInBatches(views, 500).Error
-	})
-}
-
-func rebuildUsageDaily(ctx context.Context) error {
-	day := "date(created_at, 'unixepoch')"
-	if platformdb.UsingPostgreSQL {
-		day = "TO_CHAR(TO_TIMESTAMP(created_at), 'YYYY-MM-DD')"
-	}
-	userRows := []UserUsageDaily{}
-	channelRows := []ChannelUsageDaily{}
-	if err := platformdb.LogDB.WithContext(ctx).Model(&auditschema.Log{}).Where("type = ?", auditschema.LogTypeConsume).
-		Select(day + " AS day, user_id, COUNT(*) AS request_count, COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, COALESCE(SUM(completion_tokens), 0) AS completion_tokens, COALESCE(SUM(quota), 0) AS quota").
-		Group(day + ", user_id").Scan(&userRows).Error; err != nil {
-		return err
-	}
-	if err := platformdb.LogDB.WithContext(ctx).Model(&auditschema.Log{}).Where("type = ?", auditschema.LogTypeConsume).
-		Select(day + " AS day, channel_id, COUNT(*) AS request_count, COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, COALESCE(SUM(completion_tokens), 0) AS completion_tokens, COALESCE(SUM(quota), 0) AS quota").
-		Group(day + ", channel_id").Scan(&channelRows).Error; err != nil {
-		return err
-	}
-	return platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("1 = 1").Delete(&UserUsageDaily{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("1 = 1").Delete(&ChannelUsageDaily{}).Error; err != nil {
-			return err
-		}
-		if len(userRows) > 0 {
-			if err := tx.CreateInBatches(userRows, 500).Error; err != nil {
-				return err
-			}
-		}
-		if len(channelRows) > 0 {
-			if err := tx.CreateInBatches(channelRows, 500).Error; err != nil {
-				return err
-			}
-		}
-		return nil
 	})
 }

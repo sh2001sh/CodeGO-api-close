@@ -13,6 +13,7 @@ import (
 	rerankcommon "github.com/sh2001sh/new-api/internal/gateway/execution/providers/rerankcommon"
 	"github.com/sh2001sh/new-api/internal/gateway/execution/providers/synchttp"
 	"github.com/sh2001sh/new-api/internal/gateway/execution/reasoning"
+	responsesws "github.com/sh2001sh/new-api/internal/gateway/responsesws"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	gatewaytranslation "github.com/sh2001sh/new-api/internal/gateway/translation"
@@ -158,7 +159,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		if (info.RelayFormat == types.RelayFormatClaude || info.RelayFormat == types.RelayFormatGemini) &&
 			info.RelayMode != gatewaycontract.RelayModeResponses &&
 			info.RelayMode != gatewaycontract.RelayModeResponsesCompact {
-			return fmt.Sprintf("%s/v1/chat/completions", info.ChannelBaseUrl), nil
+			return relaycommon.JoinBaseURLPath(info.ChannelBaseUrl, "/v1/chat/completions"), nil
 		}
 		return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, info.RequestURLPath, info.ChannelType), nil
 	}
@@ -601,6 +602,44 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 		return synchttp.DoFormAPIRequest(a, c, info, requestBody)
 	} else if info.RelayMode == gatewaycontract.RelayModeRealtime {
 		return synchttp.DoWSSRequest(a, c, info, requestBody)
+	} else if info.RelayMode == gatewaycontract.RelayModeResponses && info.IsStream {
+		if c.GetBool(string(constant.ContextKeyNativeBackground)) {
+			rawBody, err := io.ReadAll(io.LimitReader(requestBody, 32<<20))
+			if err != nil {
+				return nil, err
+			}
+			return doNativeBackgroundRequest(a, c, info, rawBody)
+		}
+		if session := responsesws.FromContext(c); session != nil && session.NativeEnabled() {
+			requestURL, err := a.GetRequestURL(info)
+			if err != nil {
+				return nil, err
+			}
+			headers := http.Header{}
+			if err := a.SetupRequestHeader(c, &headers, info); err != nil {
+				return nil, err
+			}
+			var rawBody []byte
+			if requestBody != nil {
+				rawBody, err = io.ReadAll(io.LimitReader(requestBody, 32<<20))
+				if err != nil {
+					return nil, err
+				}
+			}
+			response, nativeErr := session.Do(c.Request.Context(), requestURL, headers, bytes.NewReader(rawBody))
+			if nativeErr == nil {
+				return response, nil
+			}
+			// Only dial/handshake failures are replayed. Once a response.create
+			// frame may have been written, HTTP fallback could duplicate work.
+			if !responsesws.CanFallbackToHTTP(nativeErr) ||
+				errors.Is(nativeErr, responsesws.ErrResponseInFlight) ||
+				c.Request.Context().Err() != nil {
+				return nil, nativeErr
+			}
+			return synchttp.DoAPIRequest(a, c, info, bytes.NewReader(rawBody))
+		}
+		return synchttp.DoAPIRequest(a, c, info, requestBody)
 	} else {
 		return synchttp.DoAPIRequest(a, c, info, requestBody)
 	}

@@ -72,9 +72,17 @@ func quotaUnitsToUSD(amount int64) float64 {
 	return float64(amount) / platformruntime.QuotaPerUnit
 }
 
-func addSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, bonusQuota int64) error {
+func addSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, bonusQuota int64, grantKey string) error {
 	if tx == nil || sub == nil || bonusQuota <= 0 {
 		return nil
+	}
+	grantKey = strings.TrimSpace(grantKey)
+	if grantKey == "" {
+		return errors.New("subscription bonus grant key is empty")
+	}
+	applied, err := creditMaterializedSubscriptionBonusTx(tx, sub, bonusQuota, grantKey)
+	if err != nil || !applied {
+		return err
 	}
 	sub.AmountTotal += bonusQuota
 	if sub.PeriodAmount > 0 {
@@ -88,38 +96,53 @@ func addSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, b
 		}).Error; err != nil {
 		return err
 	}
-	return creditMaterializedSubscriptionBonusTx(tx, sub, bonusQuota)
+	return nil
 }
 
 // creditMaterializedSubscriptionBonusTx mirrors a subscription bonus into an
 // existing ledger account. New subscriptions remain unmaterialized until first
 // use, at which point their full updated quota is bootstrapped once.
-func creditMaterializedSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, bonusQuota int64) error {
+// The returned bool reports whether the subscription projection should apply
+// the bonus. It is false when the same grant was already materialized.
+func creditMaterializedSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, bonusQuota int64, grantKey string) (bool, error) {
 	var account billingschema.BillingAccount
 	err := tx.Where("account_type = ? AND owner_type = ? AND owner_id = ?", "subscription", "user_subscription", sub.Id).
 		First(&account).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
+		return true, nil
 	}
 	if err != nil {
-		return err
+		return false, err
+	}
+
+	idempotencyKey := fmt.Sprintf("subscription-bonus:%d:%s", sub.Id, grantKey)
+	var existing billingschema.BillingLedgerEntry
+	err = tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error
+	if err == nil {
+		if existing.AccountID != account.AccountID || existing.Amount != bonusQuota || existing.EntryType != billingdomain.LedgerEntryTypeGrantCredit {
+			return false, billingdomain.ErrLedgerConflict
+		}
+		return false, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, err
 	}
 
 	_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID:      account.AccountID,
 		Amount:         bonusQuota,
-		IdempotencyKey: fmt.Sprintf("subscription-bonus:%d:%d:%d", sub.Id, sub.AmountTotal, bonusQuota),
+		IdempotencyKey: idempotencyKey,
 		ReasonCode:     "subscription_bonus",
 		ReferenceType:  "user_subscription",
 		ReferenceID:    fmt.Sprintf("%d", sub.Id),
 		OperatorType:   "commerce",
 		OperatorID:     "subscription_bonus",
 	})
-	return err
+	return err == nil, err
 }
 
 // ApplySubscriptionPurchaseBonusTx applies the starter-to-monthly upgrade bonus.
-func ApplySubscriptionPurchaseBonusTx(tx *gorm.DB, userID int, sub *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, preview *commercedomain.SubscriptionPurchasePreview) error {
+func ApplySubscriptionPurchaseBonusTx(tx *gorm.DB, userID int, sub *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, preview *commercedomain.SubscriptionPurchasePreview, tradeNo string) error {
 	if tx == nil || sub == nil || plan == nil || preview == nil {
 		return nil
 	}
@@ -140,7 +163,7 @@ func ApplySubscriptionPurchaseBonusTx(tx *gorm.DB, userID int, sub *commercesche
 		return nil
 	}
 	bonusQuota := quotaUnitsFromUSD(totalBonusUSD)
-	if err := addSubscriptionBonusTx(tx, sub, bonusQuota); err != nil {
+	if err := addSubscriptionBonusTx(tx, sub, bonusQuota, "purchase:"+strings.TrimSpace(tradeNo)+":starter-upgrade"); err != nil {
 		return err
 	}
 	return auditapp.RecordLogTx(tx, userID, auditschema.LogTypeTopup, fmt.Sprintf("套餐升级奖励到账，套餐: %s，奖励额度: $%.2f", plan.Title, totalBonusUSD))

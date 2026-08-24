@@ -35,11 +35,6 @@ export const REDEMPTION_TYPES = {
   BLIND_BOX: 'blind_box',
 } as const
 
-export const REDEMPTION_WALLET_TYPES = {
-  DEFAULT: 'default',
-  CLAUDE: 'claude',
-} as const
-
 export const REDEMPTION_STATUS_VALUES = Object.values(REDEMPTION_STATUS).map(
   (value) => String(value)
 ) as `${number}`[]

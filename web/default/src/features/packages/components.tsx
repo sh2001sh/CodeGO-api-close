@@ -27,7 +27,7 @@ import { SubscriptionLuckySummary } from '@/features/daily-lucky-number/componen
 import { useDailyLuckyNumberSelf } from '@/features/daily-lucky-number/hooks/use-daily-lucky-number'
 import {
   getSubscriptionDisabledReasonText,
-  subscriptionQuotaUnitsToUSD,
+  formatSubscriptionQuotaAmount,
 } from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
@@ -36,6 +36,10 @@ import type {
 } from '@/features/subscriptions/types'
 import { translatePlanTitle } from './lib/display'
 import { PackagePlanCard } from './package-plan-card'
+import {
+  StaggerContainer,
+  StaggerItem,
+} from '@/components/page-transition'
 
 type FuelConfig = { minimumQuota: number; quotaStep: number }
 
@@ -75,20 +79,21 @@ export function PlanZone(props: {
           ))}
         </div>
       ) : props.plans.length > 0 ? (
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+        <StaggerContainer className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
           {props.plans.map((record) => (
-            <PackagePlanCard
-              key={record.plan.id}
-              record={record}
-              purchaseCount={props.purchaseCountMap.get(record.plan.id) || 0}
-              onPurchase={(purchaseType) =>
-                props.onPurchase(record, purchaseType)
-              }
-              currentSubscription={props.currentSubscription}
-              onFuel={props.onFuel}
-            />
+            <StaggerItem key={record.plan.id}>
+              <PackagePlanCard
+                record={record}
+                purchaseCount={props.purchaseCountMap.get(record.plan.id) || 0}
+                onPurchase={(purchaseType) =>
+                  props.onPurchase(record, purchaseType)
+                }
+                currentSubscription={props.currentSubscription}
+                onFuel={props.onFuel}
+              />
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerContainer>
       ) : (
         <p className='text-muted-foreground border-border border-t pt-3 text-sm'>
           {t('No plans are currently available in this section.')}
@@ -150,18 +155,15 @@ export function CurrentPackagePanel(props: {
             </span>
           </div>
           <div className='text-muted-foreground text-sm tabular-nums'>
-            {t('Remaining')} $
-            {Math.max(
-              0,
-              subscriptionQuotaUnitsToUSD(
+            {t('Remaining')} {formatSubscriptionQuotaAmount(
+              Math.max(
+                0,
                 current.subscription.amount_total -
                   current.subscription.amount_used
               )
-            ).toFixed(2)}
-            /$
-            {subscriptionQuotaUnitsToUSD(
-              current.subscription.amount_total
-            ).toFixed(2)}
+            )}
+            /
+            {formatSubscriptionQuotaAmount(current.subscription.amount_total)}
           </div>
           <Progress
             className='order-last w-full sm:order-none sm:min-w-32 sm:flex-1'

@@ -75,7 +75,7 @@ func recordRedisRequest(ctx context.Context, rdb *redis.Client, key string, maxC
 }
 
 // Redis限流处理器
-func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) gin.HandlerFunc {
+func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int, next gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userId := strconv.Itoa(c.GetInt("id"))
 		ctx := context.Background()
@@ -119,7 +119,7 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 		}
 
 		// 4. 处理请求
-		c.Next()
+		runRateLimitedHandler(c, next)
 
 		// 5. 如果请求成功，记录成功请求
 		if c.Writer.Status() < 400 {
@@ -129,7 +129,7 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 }
 
 // 内存限流处理器
-func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) gin.HandlerFunc {
+func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int, next gin.HandlerFunc) gin.HandlerFunc {
 	inMemoryRateLimiter.Init(time.Duration(requestsettings.ModelRequestRateLimitDurationMinutes) * time.Minute)
 
 	return func(c *gin.Context) {
@@ -154,7 +154,7 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 		}
 
 		// 3. 处理请求
-		c.Next()
+		runRateLimitedHandler(c, next)
 
 		// 4. 如果请求成功，记录到实际的成功请求计数中
 		if c.Writer.Status() < 400 {
@@ -165,10 +165,20 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 
 // ModelRequestRateLimit 模型请求限流中间件
 func ModelRequestRateLimit() func(c *gin.Context) {
+	return modelRequestRateLimitWithHandler(nil)
+}
+
+// ModelRequestRateLimitWithHandler applies the regular per-request limit to an
+// explicit transport handler, including each request on a persistent socket.
+func ModelRequestRateLimitWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
+	return modelRequestRateLimitWithHandler(next)
+}
+
+func modelRequestRateLimitWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 在每个请求时检查是否启用限流
 		if !requestsettings.ModelRequestRateLimitEnabled {
-			c.Next()
+			runRateLimitedHandler(c, next)
 			return
 		}
 
@@ -192,9 +202,17 @@ func ModelRequestRateLimit() func(c *gin.Context) {
 
 		// 根据存储类型选择并执行限流处理器
 		if platformcache.RedisEnabled {
-			redisRateLimitHandler(duration, totalMaxCount, successMaxCount)(c)
+			redisRateLimitHandler(duration, totalMaxCount, successMaxCount, next)(c)
 		} else {
-			memoryRateLimitHandler(duration, totalMaxCount, successMaxCount)(c)
+			memoryRateLimitHandler(duration, totalMaxCount, successMaxCount, next)(c)
 		}
 	}
+}
+
+func runRateLimitedHandler(c *gin.Context, next gin.HandlerFunc) {
+	if next != nil {
+		next(c)
+		return
+	}
+	c.Next()
 }

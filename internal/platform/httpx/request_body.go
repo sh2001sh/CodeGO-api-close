@@ -13,11 +13,50 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	fastjson "github.com/goccy/go-json"
 	"github.com/sh2001sh/new-api/constant"
 )
 
 const KeyRequestBody = "key_request_body"
 const KeyBodyStorage = "key_body_storage"
+const KeyBodyTiming = "gateway_body_timing"
+const KeyRequestBodySnapshot = "key_request_body_snapshot"
+
+// RequestBodySnapshot contains the small set of JSON fields needed by routing.
+// It avoids decoding a large request once for model selection and again for
+// request-profile hints. Raw remains owned by BodyStorage and is not copied for
+// memory-backed bodies.
+type RequestBodySnapshot struct {
+	Raw                []byte          `json:"-"`
+	Model              string          `json:"model"`
+	Stream             *bool           `json:"stream"`
+	Tools              json.RawMessage `json:"tools"`
+	Functions          json.RawMessage `json:"functions"`
+	PromptCacheKey     json.RawMessage `json:"prompt_cache_key"`
+	PreviousResponseID string          `json:"previous_response_id"`
+	Conversation       json.RawMessage `json:"conversation"`
+}
+
+// bodyTimingRecorder is intentionally structural to keep the HTTP body
+// package independent from the gateway runtime package.
+type bodyTimingRecorder interface {
+	MarkBodyReadStarted()
+	MarkBodyReadDone()
+	MarkJSONDecodeStarted()
+	MarkJSONDecodeDone()
+}
+
+func bodyTiming(c *gin.Context) bodyTimingRecorder {
+	if c == nil {
+		return nil
+	}
+	value, exists := c.Get(KeyBodyTiming)
+	if !exists {
+		return nil
+	}
+	recorder, _ := value.(bodyTimingRecorder)
+	return recorder
+}
 
 var ErrRequestBodyTooLarge = errors.New("request body too large")
 
@@ -59,6 +98,10 @@ func GetRequestBody(c *gin.Context) (io.Seeker, error) {
 	}
 	maxBytes := int64(maxMB) << 20
 
+	if timing := bodyTiming(c); timing != nil {
+		timing.MarkBodyReadStarted()
+		defer timing.MarkBodyReadDone()
+	}
 	storage, err := CreateBodyStorageFromReader(c.Request.Body, c.Request.ContentLength, maxBytes)
 	_ = c.Request.Body.Close()
 	if err != nil {
@@ -91,6 +134,48 @@ func CleanupBodyStorage(c *gin.Context) {
 		}
 		c.Set(KeyBodyStorage, nil)
 	}
+	c.Set(KeyRequestBodySnapshot, nil)
+}
+
+// GetRequestBodySnapshot parses routing metadata once for a JSON request.
+// Non-JSON callers receive an empty snapshot without changing existing form or
+// multipart behavior.
+func GetRequestBodySnapshot(c *gin.Context) (*RequestBodySnapshot, error) {
+	if c == nil || !strings.HasPrefix(c.Request.Header.Get("Content-Type"), "application/json") {
+		return &RequestBodySnapshot{}, nil
+	}
+	if cached, exists := c.Get(KeyRequestBodySnapshot); exists && cached != nil {
+		if snapshot, ok := cached.(*RequestBodySnapshot); ok {
+			return snapshot, nil
+		}
+	}
+	storage, err := GetBodyStorage(c)
+	if err != nil {
+		return nil, err
+	}
+	snapshot := &RequestBodySnapshot{}
+	if storage.IsDisk() {
+		if _, err := storage.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+		if err := fastjson.NewDecoder(storage).Decode(snapshot); err != nil {
+			return nil, err
+		}
+		if _, err := storage.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+	} else {
+		raw, err := storage.Bytes()
+		if err != nil {
+			return nil, err
+		}
+		snapshot.Raw = raw
+		if err := fastjson.Unmarshal(raw, snapshot); err != nil {
+			return nil, err
+		}
+	}
+	c.Set(KeyRequestBodySnapshot, snapshot)
+	return snapshot, nil
 }
 
 func UnmarshalBodyReusable(c *gin.Context, v any) error {
@@ -100,11 +185,16 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 	}
 
 	contentType := c.Request.Header.Get("Content-Type")
+	timing := bodyTiming(c)
+	if timing != nil {
+		timing.MarkJSONDecodeStarted()
+		defer timing.MarkJSONDecodeDone()
+	}
 	if storage.IsDisk() && strings.HasPrefix(contentType, "application/json") {
 		if _, err := storage.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		if err := json.NewDecoder(storage).Decode(v); err != nil {
+		if err := fastjson.NewDecoder(storage).Decode(v); err != nil {
 			return err
 		}
 		if _, err := storage.Seek(0, io.SeekStart); err != nil {
@@ -121,7 +211,7 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 
 	switch {
 	case strings.HasPrefix(contentType, "application/json"):
-		err = json.Unmarshal(requestBody, v)
+		err = fastjson.Unmarshal(requestBody, v)
 	case strings.Contains(contentType, gin.MIMEPOSTForm):
 		err = parseFormData(requestBody, v)
 	case strings.Contains(contentType, gin.MIMEMultipartPOSTForm):

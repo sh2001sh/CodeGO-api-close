@@ -10,6 +10,7 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -62,23 +63,25 @@ type ResponsesUsageInfo struct {
 }
 
 type ChannelMeta struct {
-	ChannelType          int
-	ChannelId            int
-	ChannelIsMultiKey    bool
-	ChannelMultiKeyIndex int
-	ChannelBaseUrl       string
-	ApiType              int
-	ApiVersion           string
-	ApiKey               string
-	Organization         string
-	ChannelCreateTime    int64
-	ParamOverride        map[string]interface{}
-	HeadersOverride      map[string]interface{}
-	ChannelSetting       dto.ChannelSettings
-	ChannelOtherSettings dto.ChannelOtherSettings
-	UpstreamModelName    string
-	IsModelMapped        bool
-	SupportStreamOptions bool // 是否支持流式选项
+	ChannelType           int
+	ChannelId             int
+	ChannelScope          string
+	ChannelIsMultiKey     bool
+	ChannelMultiKeyIndex  int
+	ChannelBaseUrl        string
+	ApiType               int
+	ApiVersion            string
+	ApiKey                string
+	Organization          string
+	ChannelCreateTime     int64
+	ParamOverride         map[string]interface{}
+	HeadersOverride       map[string]interface{}
+	ChannelSetting        dto.ChannelSettings
+	ChannelOtherSettings  dto.ChannelOtherSettings
+	UpstreamModelName     string
+	IsModelMapped         bool
+	SupportStreamOptions  bool // 是否支持流式选项
+	ResponsesCapabilities gatewayschema.ResponsesCapabilities
 }
 
 type TokenCountMeta struct {
@@ -87,17 +90,25 @@ type TokenCountMeta struct {
 }
 
 type RelayInfo struct {
-	TokenId           int
-	TokenKey          string
-	TokenGroup        string
-	UserId            int
-	UsingGroup        string // 使用的分组，当auto跨分组重试时，会变动
-	UserGroup         string // 用户所在分组
-	TokenUnlimited    bool
-	StartTime         time.Time
-	FirstResponseTime time.Time
-	isFirstResponse   bool
-	StreamPacer       *StreamPacer
+	TokenId                 int
+	TokenKey                string
+	TokenGroup              string
+	MarketplaceGroupID      string
+	MarketplaceOwnerID      int
+	MarketplaceSourceType   string
+	MarketplaceCreditPolicy string
+	MarketplaceMultiplier   float64
+	UserId                  int
+	UsingGroup              string // 使用的分组，当auto跨分组重试时，会变动
+	UserGroup               string // 用户所在分组
+	TokenUnlimited          bool
+	StartTime               time.Time
+	AttemptStartTime        time.Time
+	FirstResponseTime       time.Time
+	FirstByteTrace          *FirstByteTrace
+	firstSemanticResponse   bool
+	isFirstResponse         bool
+	StreamPacer             *StreamPacer
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool
@@ -124,6 +135,11 @@ type RelayInfo struct {
 	SendResponseCount      int
 	ReceivedResponseCount  int
 	FinalPreConsumedQuota  int // 最终预消耗的配额
+	// BillingSettledQuota is the amount the authoritative ledger actually
+	// accepted. It can be lower than provider usage when no extra balance is
+	// available at final settlement.
+	BillingSettledQuota int
+	BillingSettled      bool
 	// ForcePreConsume 为 true 时禁用 BillingSession 的信任额度旁路，
 	// 强制预扣全额。用于异步任务（视频/音乐生成等），因为请求返回后任务仍在运行，
 	// 必须在提交前锁定全额。
@@ -152,14 +168,21 @@ type RelayInfo struct {
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.
 	SubscriptionAmountTotal               int64
 	SubscriptionAmountUsedAfterPreConsume int64
-	BlindBoxRequestId                     string
-	IsClaudeBetaQuery                     bool // /v1/messages?beta=true
-	IsChannelTest                         bool // channel test request
-	RetryIndex                            int
-	LastError                             *types.NewAPIError
-	RuntimeHeadersOverride                map[string]interface{}
-	UseRuntimeHeadersOverride             bool
-	ParamOverrideAudit                    []string
+	// SubscriptionGroupMultiplier is the configured subscription multiplier
+	// for the selected billing group. SubscriptionQuotaScale is the resulting
+	// scale applied to the normal group-priced quota.
+	SubscriptionGroupMultiplier   float64
+	SubscriptionPackageMultiplier float64
+	SubscriptionQuotaScale        float64
+	SubscriptionGroupRatio        float64
+	BlindBoxRequestId             string
+	IsClaudeBetaQuery             bool // /v1/messages?beta=true
+	IsChannelTest                 bool // channel test request
+	RetryIndex                    int
+	LastError                     *types.NewAPIError
+	RuntimeHeadersOverride        map[string]interface{}
+	UseRuntimeHeadersOverride     bool
+	ParamOverrideAudit            []string
 
 	// UpstreamRequestBodySize is the byte size of the marshaled upstream request
 	// body. It is set when the body is wrapped in a BodyStorage (see
@@ -204,6 +227,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	channelMeta := &ChannelMeta{
 		ChannelType:          channelType,
 		ChannelId:            httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId),
+		ChannelScope:         httpctx.GetContextKeyString(c, constant.ContextKeyChannelScope),
 		ChannelIsMultiKey:    httpctx.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey),
 		ChannelMultiKeyIndex: httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex),
 		ChannelBaseUrl:       httpctx.GetContextKeyString(c, constant.ContextKeyChannelBaseUrl),
@@ -217,6 +241,9 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 		UpstreamModelName:    httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel),
 		IsModelMapped:        false,
 		SupportStreamOptions: false,
+	}
+	if capabilities, ok := httpctx.GetContextKeyType[gatewayschema.ResponsesCapabilities](c, constant.ContextKeyChannelResponsesCapabilities); ok {
+		channelMeta.ResponsesCapabilities = capabilities
 	}
 
 	if channelType == constant.ChannelTypeAzure {
@@ -418,6 +445,21 @@ func GenRelayInfoResponses(c *gin.Context, request *dto.OpenAIResponsesRequest) 
 	return info
 }
 
+func GenRelayInfoAlphaSearch(c *gin.Context, request *dto.AlphaSearchRequest) *RelayInfo {
+	info := genBaseRelayInfo(c, request)
+	info.RelayMode = gatewaycontract.RelayModeAlphaSearch
+	info.RelayFormat = types.RelayFormatOpenAIAlphaSearch
+	info.ResponsesUsageInfo = &ResponsesUsageInfo{
+		BuiltInTools: map[string]*BuildInToolInfo{
+			dto.BuildInToolWebSearchPreview: {
+				ToolName:          dto.BuildInToolWebSearchPreview,
+				SearchContextSize: "medium",
+			},
+		},
+	}
+	return info
+}
+
 func GenRelayInfoGemini(c *gin.Context, request dto.Request) *RelayInfo {
 	info := genBaseRelayInfo(c, request)
 	info.RelayFormat = types.RelayFormatGemini
@@ -480,10 +522,15 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 
 		OriginModelName: httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel),
 
-		TokenId:        httpctx.GetContextKeyInt(c, constant.ContextKeyTokenId),
-		TokenKey:       httpctx.GetContextKeyString(c, constant.ContextKeyTokenKey),
-		TokenUnlimited: httpctx.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
-		TokenGroup:     tokenGroup,
+		TokenId:                 httpctx.GetContextKeyInt(c, constant.ContextKeyTokenId),
+		TokenKey:                httpctx.GetContextKeyString(c, constant.ContextKeyTokenKey),
+		TokenUnlimited:          httpctx.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
+		TokenGroup:              tokenGroup,
+		MarketplaceGroupID:      httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceGroupID),
+		MarketplaceOwnerID:      httpctx.GetContextKeyInt(c, constant.ContextKeyMarketplaceOwnerID),
+		MarketplaceSourceType:   httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceSourceType),
+		MarketplaceCreditPolicy: httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceCreditPolicy),
+		MarketplaceMultiplier:   httpctx.GetContextKeyFloat64(c, constant.ContextKeyMarketplaceMultiplier),
 
 		isFirstResponse: true,
 		RelayMode:       gatewaycontract.Path2RelayMode(c.Request.URL.Path),
@@ -493,6 +540,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 
 		StartTime:         startTime,
 		FirstResponseTime: startTime.Add(-time.Second),
+		FirstByteTrace:    NewFirstByteTrace(startTime),
 		StreamPacer:       NewStreamPacer(httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel)),
 		ThinkingContentInfo: ThinkingContentInfo{
 			IsFirstThinkingContent:  true,
@@ -578,6 +626,12 @@ func GenRelayInfo(c *gin.Context, relayFormat types.RelayFormat, request dto.Req
 			return GenRelayInfoResponsesCompaction(c, request), nil
 		}
 		return nil, errors.New("request is not a OpenAIResponsesCompactionRequest")
+	case types.RelayFormatOpenAIAlphaSearch:
+		if request, ok := request.(*dto.AlphaSearchRequest); ok {
+			info = GenRelayInfoAlphaSearch(c, request)
+			break
+		}
+		err = errors.New("request is not an AlphaSearchRequest")
 	case types.RelayFormatTask:
 		info = genBaseRelayInfo(c, nil)
 		info.TaskRelayInfo = &TaskRelayInfo{}
@@ -664,8 +718,28 @@ func (info *RelayInfo) GetEstimatePromptTokens() int {
 func (info *RelayInfo) SetFirstResponseTime() {
 	if info.isFirstResponse {
 		info.FirstResponseTime = time.Now()
+		if info.FirstByteTrace != nil {
+			info.FirstByteTrace.MarkFirstEvent()
+			if info.RelayFormat != types.RelayFormatOpenAIResponses {
+				info.FirstByteTrace.MarkFirstSemanticEvent()
+			}
+		}
 		info.isFirstResponse = false
 	}
+}
+
+// SetFirstSemanticResponseTime records the first model-visible output. SSE
+// lifecycle events such as response.created are intentionally excluded.
+func (info *RelayInfo) SetFirstSemanticResponseTime() {
+	if info == nil || info.firstSemanticResponse {
+		return
+	}
+	info.FirstResponseTime = time.Now()
+	if info.FirstByteTrace != nil {
+		info.FirstByteTrace.MarkFirstSemanticEvent()
+	}
+	info.isFirstResponse = false
+	info.firstSemanticResponse = true
 }
 
 func (info *RelayInfo) HasSendResponse() bool {

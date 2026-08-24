@@ -1,9 +1,44 @@
 package store
 
 import (
+	"strings"
+
+	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
+
+// LoadEnabledChannelsForGroup returns enabled channels with an enabled ability
+// in the given group.
+func LoadEnabledChannelsForGroup(group string) ([]*gatewayschema.Channel, error) {
+	if group == "" {
+		return nil, nil
+	}
+	groupColumn := "`group`"
+	if platformdb.UsingPostgreSQL {
+		groupColumn = `"group"`
+	}
+	var ids []int
+	if err := platformdb.DB.Model(&gatewayschema.Ability{}).
+		Where(groupColumn+" = ? AND enabled = ?", group, true).
+		Distinct("channel_id").Pluck("channel_id", &ids).Error; err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	channels, err := LoadChannelsByIDs(ids)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*gatewayschema.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if channel != nil && channel.Status == constant.ChannelStatusEnabled {
+			result = append(result, channel)
+		}
+	}
+	return result, nil
+}
 
 func LoadAllEnabledAbilitiesWithChannels() ([]gatewayschema.AbilityWithChannel, error) {
 	var abilities []gatewayschema.AbilityWithChannel
@@ -16,8 +51,35 @@ func LoadAllEnabledAbilitiesWithChannels() ([]gatewayschema.AbilityWithChannel, 
 }
 
 func LoadGroupEnabledModels(group string) []string {
-	var models []string
-	platformdb.DB.Model(&gatewayschema.Ability{}).Where(&gatewayschema.Ability{Group: group, Enabled: true}).Distinct("model").Pluck("model", &models)
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return nil
+	}
+	groupColumn := "`group`"
+	if platformdb.UsingPostgreSQL {
+		groupColumn = `"group"`
+	}
+	var rawModels []string
+	query := platformdb.DB.Model(&gatewayschema.Ability{}).
+		Where("enabled = ?", true).
+		Where("("+groupColumn+" = ? OR TRIM("+groupColumn+") = ?)", group, group).
+		Distinct("model").Pluck("model", &rawModels)
+	if query.Error != nil {
+		return nil
+	}
+	models := make([]string, 0, len(rawModels))
+	seen := make(map[string]struct{}, len(rawModels))
+	for _, model := range rawModels {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		models = append(models, model)
+	}
 	return models
 }
 
@@ -51,7 +113,7 @@ func ChannelHasExclusiveEnabledAbility(channelID int) (bool, error) {
 }
 
 // HasAlternativeEnabledAbility reports whether another enabled channel can
-// serve the same group/model pair.
+// serve the same group/model pair outside an automatic route pool.
 func HasAlternativeEnabledAbility(channelID int, group string, modelName string) (bool, error) {
 	if channelID <= 0 || group == "" || modelName == "" {
 		return false, nil
@@ -70,6 +132,36 @@ func HasAlternativeEnabledAbility(channelID int, group string, modelName string)
 		Where(groupColumn+" = ? AND model IN ? AND enabled = ? AND channel_id <> ?", group, models, true, channelID).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// HasAlternativeSelectableRoute reports whether the active group has another
+// channel that the selector may actually use. An enabled route pool is
+// authoritative: channels outside it, or disabled pool members, cannot keep a
+// failing sole pool member eligible for cooldown.
+func HasAlternativeSelectableRoute(channelID int, group string, modelName string) (bool, error) {
+	if channelID <= 0 || group == "" || modelName == "" {
+		return false, nil
+	}
+	detail, err := LoadEnabledRoutePool(group)
+	if err != nil {
+		return false, err
+	}
+	if detail == nil {
+		// Legacy groups are still selected from abilities directly. Treating an
+		// absent pool as no fallback makes a failed channel look like the only
+		// route and turns recoverable provider errors into downstream 503s.
+		return HasAlternativeEnabledAbility(channelID, group, modelName)
+	}
+	candidates, err := LoadRoutePoolCandidates(group, modelName, detail)
+	if err != nil {
+		return false, err
+	}
+	for _, candidate := range candidates {
+		if candidate.Channel != nil && candidate.Channel.Id != channelID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // LoadAlternativeEnabledChannels loads enabled alternatives for one group/model

@@ -30,3 +30,8 @@ export {
   ModelDetailsDrawer,
 } from './model-details'
 export { PricingTable } from './pricing-table'
+export { OfficialModelDirectory } from './official-model-directory'
+export {
+  PricingSourceNavigation,
+  type PricingSourceView,
+} from './pricing-source-navigation'

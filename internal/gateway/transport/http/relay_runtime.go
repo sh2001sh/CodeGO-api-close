@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -15,6 +16,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
@@ -23,8 +25,10 @@ import (
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -45,6 +49,12 @@ var relayUpgrader = websocket.Upgrader{
 		return true
 	},
 }
+
+const (
+	routeSelectionExhaustedContextKey = "route_selection_exhausted"
+	maxRouteSelectionWaitRetries      = 2
+	routeSelectionRetryDelay          = 500 * time.Millisecond
+)
 
 func addUsedChannel(c *gin.Context, channelID int) {
 	useChannel := c.GetStringSlice("use_channel")
@@ -76,57 +86,107 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 	return meta
 }
 
-func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *gatewayroutingapp.RetryParam) (*gatewayschema.Channel, *types.NewAPIError) {
-	if info.ChannelMeta == nil {
-		autoBan := c.GetBool("auto_ban")
-		autoBanInt := 1
-		if !autoBan {
-			autoBanInt = 0
+func retryFallbackChannel(c *gin.Context, retryParam *gatewayroutingapp.RetryParam, selectGroup string) (*gatewayschema.Channel, string) {
+	if c == nil || retryParam == nil || retryParam.GetRetry() <= 0 {
+		return nil, selectGroup
+	}
+	channelID := httpctx.GetContextKeyInt(c, constant.ContextKeyRetryFallbackChannelID)
+	if channelID <= 0 {
+		return nil, selectGroup
+	}
+	httpctx.SetContextKey(c, constant.ContextKeyRetryFallbackChannelID, 0)
+	channel, err := gatewaystore.GetCachedChannel(channelID)
+	if err != nil || channel == nil {
+		return nil, selectGroup
+	}
+	if retryParam.TokenGroup == gatewayroutingapp.AutoGroupName {
+		if selected := httpctx.GetContextKeyString(c, constant.ContextKeyAutoGroup); selected != "" {
+			selectGroup = selected
 		}
-		return &gatewayschema.Channel{
-			Id:      c.GetInt("channel_id"),
-			Type:    c.GetInt("channel_type"),
-			Name:    c.GetString("channel_name"),
-			AutoBan: &autoBanInt,
-		}, nil
 	}
+	// The first attempt already established group/model ability. Do not query the
+	// ability cache again here: a cache refresh between attempts can otherwise
+	// reject the very sole route that was just selected and turn its real
+	// upstream error into a misleading "no available channel" response. A manual
+	// global channel disable is still honored.
+	if !isRetryChannelReusable(channel) {
+		return nil, selectGroup
+	}
+	gatewayruntime.SelectRouteDecisionCandidate(c, selectGroup, channelID, false)
+	return channel, selectGroup
+}
 
-	channel, selectGroup, err := gatewayroutingapp.CacheGetRandomSatisfiedChannel(retryParam)
-	if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
-		info.RoutePoolID = selection.PoolID
-		info.ProcurementCostMultiplier = selection.ProcurementCostMultiplier
+// retryLastUsedSoleRoute is the final guard against retry de-duplication
+// turning a transient failure on a sole route into "no available channel".
+// It is reachable only on the second attempt before any downstream content is
+// delivered, and revalidates the channel's current enabled ability.
+func retryLastUsedSoleRoute(c *gin.Context, retryParam *gatewayroutingapp.RetryParam, selectGroup string) (*gatewayschema.Channel, string) {
+	if c == nil || retryParam == nil || retryParam.GetRetry() <= 0 ||
+		httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||
+		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+		return nil, selectGroup
 	}
-	info.PriceData.GroupRatioInfo = relaycommon.HandleGroupRatio(c, info)
-	if err != nil {
-		return nil, types.NewError(
-			fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）：%s", selectGroup, info.OriginModelName, err.Error()),
-			types.ErrorCodeGetChannelFailed,
-			types.ErrOptionWithSkipRetry(),
-		)
+	channelID, singleChannel := gatewayruntime.SingleUsedChannelID(c)
+	if !singleChannel {
+		return nil, selectGroup
 	}
-	if channel == nil {
-		return nil, types.NewError(
-			fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName),
-			types.ErrorCodeGetChannelFailed,
-			types.ErrOptionWithSkipRetry(),
-		)
+	channel, err := gatewaystore.GetCachedChannel(channelID)
+	if err != nil || !isRetryChannelReusable(channel) {
+		return nil, selectGroup
 	}
+	gatewayruntime.SelectRouteDecisionCandidate(c, selectGroup, channelID, false)
+	return channel, selectGroup
+}
 
-	newAPIError := gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
-	if newAPIError != nil {
-		return nil, newAPIError
+func isRetryChannelReusable(channel *gatewayschema.Channel) bool {
+	return channel != nil && channel.Status == constant.ChannelStatusEnabled
+}
+
+func shouldWaitForRouteSelection(c *gin.Context, attempt int) bool {
+	if budget := gatewayruntime.RequestBudgetFromContext(c); budget != nil && budget.Remaining(time.Now()) <= routeSelectionRetryDelay {
+		return false
 	}
-	return channel, nil
+	return c != nil && c.Request != nil &&
+		!c.GetBool(string(constant.ContextKeyClientGone)) &&
+		c.GetBool(routeSelectionExhaustedContextKey) &&
+		attempt < maxRouteSelectionWaitRetries
+}
+
+func waitForRouteSelection(c *gin.Context, attempt int) bool {
+	delay := time.Duration(attempt+1) * routeSelectionRetryDelay
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-c.Request.Context().Done():
+		return false
+	}
 }
 
 func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
 	if openaiErr == nil {
 		return false
 	}
+	if c != nil && c.GetBool(string(constant.ContextKeyClientGone)) {
+		return false
+	}
+	if c != nil && c.GetBool(string(constant.ContextKeyResponsesReplayForbidden)) {
+		return false
+	}
 	if gatewayruntime.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
+	if c != nil && c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+		// A model delta or tool call may already be visible to the client. Replaying
+		// after this point can duplicate output or client-side tool side effects.
+		return false
+	}
 	if retryTimes <= 0 {
+		return false
+	}
+	if budget := gatewayruntime.RequestBudgetFromContext(c); budget != nil && !budget.CanRetry(time.Now()) {
+		gatewayruntime.ExcludeRouteDecisionCandidate(c, "request_budget_exhausted")
 		return false
 	}
 	if _, ok := c.Get("specific_channel_id"); ok {
@@ -134,6 +194,12 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	}
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) &&
 		!canRetryResponsesStreamBeforeContent(c) {
+		return false
+	}
+	// Responses lifecycle frames do not contain model-visible output. A stalled
+	// upstream may emit those frames long before it fails, so keep the retry
+	// path available until semantic content is delivered.
+	if !canRetryResponsesStreamBeforeContent(c) && !withinGPTRetryFailureWindow(c) {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {
@@ -145,6 +211,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if gatewayexecutionapp.IsModelScopedUpstreamFailure(openaiErr) {
 		return c.GetBool("model_unavailable_with_alternative")
 	}
+	if gatewayexecutionapp.IsUpstreamCredentialRejectedError(openaiErr) {
+		return true
+	}
 	code := openaiErr.StatusCode
 	if code >= 200 && code < 300 {
 		return false
@@ -155,20 +224,68 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if gatewaystore.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
 		return false
 	}
+	if types.IsChannelError(openaiErr) {
+		if code >= 400 && code < 500 && !gatewaystore.ShouldRetryByStatusCode(code) {
+			return false
+		}
+		return true
+	}
 	return gatewaystore.ShouldRetryByStatusCode(code)
 }
 
+// withinGPTRetryFailureWindow only permits a GPT request to change upstreams
+// shortly after it starts. A healthy but slow connection is never interrupted;
+// the window is consulted only after an upstream error has already occurred.
+func withinGPTRetryFailureWindow(c *gin.Context) bool {
+	if c == nil || !strings.HasPrefix(strings.ToLower(c.GetString("original_model")), "gpt-") {
+		return true
+	}
+	startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+	if startTime.IsZero() {
+		return true
+	}
+	return time.Since(startTime) <= relaycommon.GPTInitialFailureRetryWindow
+}
+
 func canRetryResponsesStreamBeforeContent(c *gin.Context) bool {
-	return c.GetBool(string(constant.ContextKeyResponsesStreamRetrySafe)) &&
-		!c.GetBool(string(constant.ContextKeyStreamContentDelivered))
+	return gatewaystream.CanRetryResponsesBeforeSemanticOutput(c)
 }
 
 func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *websocket.Conn, apiErr *types.NewAPIError, requestID string) {
 	if apiErr == nil {
 		return
 	}
+	if c != nil && c.GetBool(string(constant.ContextKeyClientGone)) {
+		return
+	}
+	recordFinalRelayFailureLog(c, apiErr)
 	logger.LogError(c, fmt.Sprintf("relay error: %s", platformtext.LocalLogPreview(apiErr.Error())))
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
+		if !httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) || c.GetBool(string(constant.ContextKeyClientGone)) {
+			return
+		}
+		apiErr.SanitizeDownstreamResponse()
+		rawMessageWithRequestID := platformtext.MessageWithRequestID(apiErr.Error(), requestID)
+		if types.IsRemoteProviderError(apiErr) {
+			rawMessageWithRequestID = platformtext.SanitizeUpstreamProviderErrorMessage(rawMessageWithRequestID)
+		}
+		apiErr.SetMessage(rawMessageWithRequestID)
+		if c.GetBool(string(constant.ContextKeyResponsesTerminalSent)) {
+			return
+		}
+		switch relayFormat {
+		case types.RelayFormatOpenAIRealtime:
+			relaycommon.WssError(c, ws, apiErr.ToOpenAIError())
+		case types.RelayFormatClaude:
+			if err := gatewaystream.WriteClaudeStreamError(c, apiErr.ToClaudeError()); err != nil {
+				logger.LogError(c, "write claude stream error failed: "+err.Error())
+			}
+		default:
+			responses := c.Request != nil && strings.HasPrefix(c.Request.URL.Path, "/v1/responses")
+			if err := gatewaystream.WriteOpenAIStreamError(c, apiErr.ToOpenAIError(), responses); err != nil {
+				logger.LogError(c, "write openai stream error failed: "+err.Error())
+			}
+		}
 		return
 	}
 	apiErr.SanitizeDownstreamResponse()
@@ -192,13 +309,77 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 	}
 }
 
+// recordFinalRelayFailureLog makes terminal request failures visible in the
+// user's usage log. Retried attempts that later succeed never reach this point,
+// so each client request creates at most one zero-cost failure record.
+func recordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) {
+	if !shouldRecordFinalRelayFailureLog(c, apiErr) {
+		return
+	}
+
+	startTime := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+	useTimeSeconds := 0
+	if !startTime.IsZero() {
+		useTimeSeconds = int(time.Since(startTime).Seconds())
+	}
+	channelID := c.GetInt("channel_id")
+	other := map[string]interface{}{
+		"status":                  "failed",
+		"status_code":             apiErr.StatusCode,
+		"error_type":              apiErr.GetErrorType(),
+		"error_code":              apiErr.GetErrorCode(),
+		"retry_count":             max(len(c.GetStringSlice("use_channel"))-1, 0),
+		"counted_in_success_rate": shouldCountRelayFailureInSuccessRate(apiErr),
+		"owner_error":             apiErr.OwnerVisibleErrorWithStatusCode(),
+	}
+	if !startTime.IsZero() {
+		other["total_duration_ms"] = time.Since(startTime).Milliseconds()
+	}
+	if c.Request != nil && c.Request.URL != nil {
+		other["request_path"] = c.Request.URL.Path
+	}
+	if trace, found := c.Get(finalRelayTimingContextKey); found {
+		other["first_byte_trace"] = trace
+	}
+	gatewayruntime.AttachRouteLogInfo(c, other)
+
+	auditapp.RecordErrorLog(
+		c,
+		c.GetInt("id"),
+		channelID,
+		c.GetString("original_model"),
+		c.GetString("token_name"),
+		apiErr.MaskSensitiveErrorWithStatusCode(),
+		c.GetInt("token_id"),
+		useTimeSeconds,
+		httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream),
+		c.GetString("group"),
+		other,
+	)
+}
+
+const finalRelayTimingContextKey = "final_relay_first_byte_trace"
+
+func attachFinalRelayTiming(c *gin.Context, trace *relaycommon.FirstByteTrace) {
+	if c == nil || trace == nil {
+		return
+	}
+	c.Set(finalRelayTimingContextKey, trace.ProgressSnapshot(time.Now()))
+}
+
+func shouldRecordFinalRelayFailureLog(c *gin.Context, apiErr *types.NewAPIError) bool {
+	return c != nil && apiErr != nil && c.GetInt("id") > 0 && types.IsRecordErrorLog(apiErr)
+}
+
 func refundRelayBillingIfNeeded(c *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.NewAPIError) *types.NewAPIError {
-	if apiErr == nil {
-		return nil
+	if apiErr == nil || relayInfo == nil {
+		return apiErr
 	}
 	apiErr = billingapp.NormalizeViolationFeeError(apiErr)
 	if relayInfo.Billing != nil {
-		relayInfo.Billing.Refund(c)
+		if err := billingapp.RefundRelayBillingSync(c, relayInfo); err != nil {
+			platformobservability.SysError("synchronous billing refund failed: " + err.Error())
+		}
 	}
 	billingapp.ChargeViolationFeeIfNeeded(c, relayInfo, apiErr)
 	return apiErr
@@ -211,6 +392,21 @@ func recordRelayFailure(relayInfo *relaycommon.RelayInfo) {
 	gopool.Go(func() {
 		auditprojection.RecordRelaySample(relayInfo, false, 0)
 	})
+}
+
+func shouldRecordRelayFailureSample(upstreamStarted bool, apiErr *types.NewAPIError) bool {
+	return upstreamStarted && shouldCountRelayFailureInSuccessRate(apiErr)
+}
+
+func shouldCountRelayFailureInSuccessRate(apiErr *types.NewAPIError) bool {
+	if apiErr == nil {
+		return false
+	}
+	status := apiErr.StatusCode
+	if status == http.StatusBadRequest || status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status == http.StatusUnprocessableEntity {
+		return false
+	}
+	return status == 0 || status == http.StatusRequestTimeout || status == http.StatusConflict || status == http.StatusTooEarly || status == http.StatusTooManyRequests || status == http.StatusUnauthorized || status == http.StatusForbidden || status >= http.StatusInternalServerError
 }
 
 func restoreRelayRequestBody(c *gin.Context) *types.NewAPIError {

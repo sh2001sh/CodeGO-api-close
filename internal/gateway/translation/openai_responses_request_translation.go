@@ -101,7 +101,15 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 			continue
 		}
 
-		inputItems = append(inputItems, chatMessageToResponsesItem(msg, role))
+		if role == "assistant" && msg.GetReasoningContent() != "" {
+			inputItems = append(inputItems, map[string]any{
+				"type":    "reasoning",
+				"summary": []map[string]any{{"type": "summary_text", "text": msg.GetReasoningContent()}},
+			})
+		}
+		if shouldAppendChatMessage(msg, role) {
+			inputItems = append(inputItems, chatMessageToResponsesItem(msg, role))
+		}
 		inputItems = appendAssistantToolCalls(inputItems, role, msg.ParseToolCalls())
 	}
 
@@ -110,6 +118,19 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		return nil, err
 	}
 	return buildResponsesRequest(req, inputRaw, instructionsParts), nil
+}
+
+func shouldAppendChatMessage(message dto.Message, role string) bool {
+	if role != "assistant" {
+		return true
+	}
+	if message.Content == nil {
+		return false
+	}
+	if message.IsStringContent() {
+		return message.StringContent() != ""
+	}
+	return len(message.ParseContent()) > 0
 }
 
 func toolOutputContent(msg dto.Message) any {
@@ -205,19 +226,29 @@ func buildResponsesRequest(req *dto.GeneralOpenAIRequest, input json.RawMessage,
 	}
 
 	request := &dto.OpenAIResponsesRequest{
-		Model:             req.Model,
-		Input:             input,
-		Instructions:      instructionsRaw,
-		Stream:            req.Stream,
-		Temperature:       req.Temperature,
-		Text:              convertChatResponseFormatToResponsesText(req.ResponseFormat),
-		ToolChoice:        convertChatToolChoice(req.ToolChoice),
-		Tools:             convertChatTools(req.Tools),
-		TopP:              copyTopP(req.TopP),
-		User:              req.User,
-		ParallelToolCalls: convertParallelToolCalls(req.ParallelTooCalls),
-		Store:             req.Store,
-		Metadata:          req.Metadata,
+		Model:                req.Model,
+		Input:                input,
+		Instructions:         instructionsRaw,
+		Stream:               req.Stream,
+		Temperature:          req.Temperature,
+		FrequencyPenalty:     req.FrequencyPenalty,
+		PresencePenalty:      req.PresencePenalty,
+		Text:                 mergeResponsesTextVerbosity(convertChatResponseFormatToResponsesText(req.ResponseFormat), req.Verbosity),
+		ToolChoice:           convertChatToolChoice(req.ToolChoice),
+		Tools:                convertChatTools(req.Tools),
+		TopP:                 copyTopP(req.TopP),
+		User:                 req.User,
+		ParallelToolCalls:    convertParallelToolCalls(req.ParallelTooCalls),
+		Store:                req.Store,
+		Metadata:             req.Metadata,
+		ServiceTier:          rawString(req.ServiceTier),
+		PromptCacheKey:       rawMessageFromString(req.PromptCacheKey),
+		PromptCacheRetention: req.PromptCacheRetention,
+		SafetyIdentifier:     req.SafetyIdentifier,
+		TopLogProbs:          req.TopLogProbs,
+	}
+	if req.StreamOptions != nil {
+		request.StreamOptions = &dto.StreamOptions{IncludeObfuscation: req.StreamOptions.IncludeObfuscation}
 	}
 	if req.MaxTokens != nil || req.MaxCompletionTokens != nil {
 		request.MaxOutputTokens = lo.ToPtr(maxOutputTokens)
@@ -235,10 +266,22 @@ func convertChatTools(tools []dto.ToolCallRequest) json.RawMessage {
 	converted := make([]map[string]any, 0, len(tools))
 	for _, tool := range tools {
 		if tool.Type == "function" {
-			converted = append(converted, map[string]any{
+			item := map[string]any{
 				"type": "function", "name": tool.Function.Name,
 				"description": tool.Function.Description, "parameters": tool.Function.Parameters,
-			})
+			}
+			if tool.Function.Strict != nil {
+				item["strict"] = *tool.Function.Strict
+			}
+			converted = append(converted, item)
+			continue
+		}
+		if tool.Type == "custom" {
+			converted = append(converted, convertChatCustomTool(tool))
+			continue
+		}
+		if tool.Type == "namespace" {
+			converted = append(converted, convertChatNamespaceTool(tool))
 			continue
 		}
 		var item map[string]any
@@ -252,6 +295,65 @@ func convertChatTools(tools []dto.ToolCallRequest) json.RawMessage {
 	}
 	result, _ := platformencoding.Marshal(converted)
 	return result
+}
+
+func convertChatCustomTool(tool dto.ToolCallRequest) map[string]any {
+	item := map[string]any{"type": "custom"}
+	if len(tool.Custom) > 0 {
+		_ = platformencoding.Unmarshal(tool.Custom, &item)
+		item["type"] = "custom"
+	}
+	name := strings.TrimSpace(tool.Name)
+	if name == "" {
+		name = strings.TrimSpace(tool.Function.Name)
+	}
+	item["name"] = name
+	if tool.Description != "" {
+		item["description"] = tool.Description
+	}
+	if len(tool.Format) > 0 {
+		var format any
+		_ = platformencoding.Unmarshal(tool.Format, &format)
+		item["format"] = format
+	}
+	return item
+}
+
+func convertChatNamespaceTool(tool dto.ToolCallRequest) map[string]any {
+	item := map[string]any{"type": "namespace", "name": tool.Name}
+	if len(tool.Tools) > 0 {
+		var children any
+		_ = platformencoding.Unmarshal(tool.Tools, &children)
+		item["tools"] = children
+	}
+	return item
+}
+
+func rawMessageFromString(value string) json.RawMessage {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	raw, _ := platformencoding.Marshal(value)
+	return raw
+}
+
+func mergeResponsesTextVerbosity(text json.RawMessage, verbosity json.RawMessage) json.RawMessage {
+	if len(verbosity) == 0 {
+		return text
+	}
+	var value map[string]any
+	if len(text) > 0 {
+		_ = platformencoding.Unmarshal(text, &value)
+	}
+	if value == nil {
+		value = make(map[string]any)
+	}
+	var verbosityValue any
+	if platformencoding.Unmarshal(verbosity, &verbosityValue) == nil {
+		value["verbosity"] = verbosityValue
+	}
+	merged, _ := platformencoding.Marshal(value)
+	return merged
 }
 
 func convertChatToolChoice(choice any) json.RawMessage {

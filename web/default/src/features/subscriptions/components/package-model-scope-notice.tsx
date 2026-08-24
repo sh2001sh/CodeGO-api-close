@@ -18,14 +18,9 @@ export function PackageModelScopeNotice(props: { className?: string }) {
       />
       <div>
         <p className='text-foreground text-sm font-semibold'>
-          {t('Package purchase rules')}
+          {t('购买与续费规则')}
         </p>
         <ul className='text-muted-foreground mt-1 list-disc space-y-1 pl-4 text-xs leading-5'>
-          <li>
-            {t(
-              'Plan quota cannot be used with Claude models. Use Claude quota for Claude requests.'
-            )}
-          </li>
           <li>
             {t(
               'First-purchase discounts apply only to the first monthly plan. Starter, daily, and weekly plans neither receive nor consume this eligibility.'

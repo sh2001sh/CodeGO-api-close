@@ -8,6 +8,7 @@ import (
 const (
 	InvoiceSourceTopUp        = "topup"
 	InvoiceSourceSubscription = "subscription"
+	InvoiceSourceBatch        = "batch"
 
 	InvoiceTypePersonal   = "personal"
 	InvoiceTypeEnterprise = "enterprise"
@@ -15,13 +16,9 @@ const (
 	InvoiceStatusPending  = "pending"
 	InvoiceStatusIssued   = "issued"
 	InvoiceStatusRejected = "rejected"
-
-	InvoiceDeliveryEmail    = "email"
-	InvoiceDeliveryDownload = "download"
 )
 
-// InvoiceRequest is a user-submitted request for a paid commerce order.
-// One commercial order can only be invoiced once.
+// InvoiceRequest is a user-submitted request for one or more paid commerce orders.
 type InvoiceRequest struct {
 	ID int64 `json:"id"`
 
@@ -32,6 +29,7 @@ type InvoiceRequest struct {
 	OrderAmount float64 `json:"order_amount" gorm:"type:decimal(12,2);not null"`
 	Currency    string  `json:"currency" gorm:"type:varchar(8);not null;default:'CNY'"`
 	OrderTitle  string  `json:"order_title" gorm:"type:varchar(255);not null"`
+	OrderCount  int     `json:"order_count" gorm:"not null;default:1"`
 
 	InvoiceType string `json:"invoice_type" gorm:"type:varchar(16);not null"`
 	Title       string `json:"title" gorm:"type:varchar(255);not null"`
@@ -50,6 +48,21 @@ type InvoiceRequest struct {
 	CreatedAt int64 `json:"created_at" gorm:"bigint;not null"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint;not null"`
 }
+
+// InvoiceRequestItem locks one paid order to a single invoice request.
+type InvoiceRequestItem struct {
+	ID          int64   `json:"id"`
+	InvoiceID   int64   `json:"invoice_id" gorm:"not null;index"`
+	UserID      int     `json:"user_id" gorm:"not null;index"`
+	SourceType  string  `json:"source_type" gorm:"type:varchar(32);not null;uniqueIndex:uq_invoice_item_order"`
+	TradeNo     string  `json:"trade_no" gorm:"type:varchar(255);not null;uniqueIndex:uq_invoice_item_order"`
+	OrderAmount float64 `json:"order_amount" gorm:"type:decimal(12,2);not null"`
+	Currency    string  `json:"currency" gorm:"type:varchar(8);not null;default:'CNY'"`
+	OrderTitle  string  `json:"order_title" gorm:"type:varchar(255);not null"`
+	PaidAt      int64   `json:"paid_at" gorm:"not null"`
+}
+
+func (InvoiceRequestItem) TableName() string { return "invoice_request_items" }
 
 func (r *InvoiceRequest) BeforeCreate(_ *gorm.DB) error {
 	now := platformruntime.GetTimestamp()

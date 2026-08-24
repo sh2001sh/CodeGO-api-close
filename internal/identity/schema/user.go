@@ -47,7 +47,7 @@ type User struct {
 	VerificationCode             string         `json:"verification_code" gorm:"-:all"`
 	AccessToken                  *string        `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"`
 	Quota                        int            `json:"quota" gorm:"type:int;default:0"`
-	ClaudeQuota                  int            `json:"claude_quota" gorm:"type:int;default:0;column:claude_quota"`
+	ClaudeQuota                  int            `json:"-" gorm:"type:int;default:0;column:claude_quota"`
 	UsedQuota                    int            `json:"used_quota" gorm:"type:int;default:0;column:used_quota"`
 	RequestCount                 int            `json:"request_count" gorm:"type:int;default:0;"`
 	Group                        string         `json:"group" gorm:"type:varchar(64);default:'default'"`
@@ -86,7 +86,7 @@ func (user *User) ToBaseUser() *UserBase {
 		Id:          user.Id,
 		ExternalId:  user.ExternalId,
 		Group:       user.Group,
-		Quota:       user.Quota,
+		Quota:       user.ClaudeQuota,
 		ClaudeQuota: user.ClaudeQuota,
 		Status:      user.Status,
 		Username:    user.Username,

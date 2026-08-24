@@ -105,6 +105,21 @@ export function saveAffiliateCode(code: string): void {
   }
 }
 
+/**
+ * Returns the invite code from the current URL when present and persists it
+ * before an OAuth redirect can start.
+ */
+export function resolveAffiliateCode(): string {
+  if (typeof window === 'undefined') return ''
+
+  const code = new URLSearchParams(window.location.search).get('aff')?.trim()
+  if (code) {
+    saveAffiliateCode(code)
+    return code
+  }
+  return getAffiliateCode().trim()
+}
+
 export function removeAffiliateCode(): void {
   if (typeof window === 'undefined') return
   try {

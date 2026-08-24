@@ -12,6 +12,7 @@ import (
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformschema "github.com/sh2001sh/new-api/internal/platform/schema"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,7 @@ func setupRedemptionTestDB(t *testing.T) *gorm.DB {
 		&billingschema.BillingSettlement{},
 		&billingschema.BillingOutboxEvent{},
 		&identityschema.User{},
+		&platformschema.Option{},
 		&auditschema.Log{},
 		&commerceschema.Redemption{},
 		&commerceschema.TopUp{},
@@ -53,13 +55,22 @@ func setupRedemptionTestDB(t *testing.T) *gorm.DB {
 		&commerceschema.GroupBuyOrder{},
 		&commerceschema.GroupBuyMember{},
 		&commerceschema.SubscriptionClaudeConversion{},
-		&commerceschema.WalletQuotaConversion{},
+		&commerceschema.WalletTransferSecurity{},
+		&commerceschema.WalletTransfer{},
 		&commerceschema.BlindBoxOrder{},
 		&commerceschema.BlindBoxCredit{},
 		&commerceschema.BlindBoxOpenRecord{},
+		&commerceschema.BlindBoxDailyLuckyNumber{},
 		&commerceschema.BlindBoxPityState{},
+		&commerceschema.BalanceBlindBoxPityState{},
+		&commerceschema.BalanceBlindBoxPurchase{},
+		&commerceschema.BalanceBlindBoxItem{},
+		&commerceschema.BalanceBlindBoxGift{},
+		&commerceschema.BalanceBlindBoxGiftItem{},
 		&commerceschema.BlindBoxZeroHourState{},
 		&commerceschema.BlindBoxProp{},
+		&commerceschema.BlindBoxPropGift{},
+		&commerceschema.BlindBoxPropDiscountUsage{},
 		&billingschema.PointAccount{},
 		&billingschema.PointLedger{},
 		&commerceschema.SubscriptionResetOpportunityAccount{},
@@ -75,7 +86,7 @@ func setupRedemptionTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestRedeemCodeBlindBoxCreatesPendingOrderForManualOpen(t *testing.T) {
+func TestRedeemCodeBlindBoxCreatesSealedUnifiedInventory(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	originalSetting := blindboxsettings.Get()
@@ -122,7 +133,7 @@ func TestRedeemCodeBlindBoxCreatesPendingOrderForManualOpen(t *testing.T) {
 	require.NoError(t, db.Where("id = ?", result.BlindBoxOrderId).First(&order).Error)
 	assert.Equal(t, user.Id, order.UserId)
 	assert.Equal(t, 3, order.Quantity)
-	assert.Zero(t, order.OpenedCount)
+	assert.Equal(t, 3, order.OpenedCount)
 	assert.Equal(t, constant.TopUpStatusSuccess, order.Status)
 	assert.Equal(t, "redemption", order.PaymentMethod)
 	assert.Equal(t, "redemption", order.PaymentProvider)
@@ -131,14 +142,21 @@ func TestRedeemCodeBlindBoxCreatesPendingOrderForManualOpen(t *testing.T) {
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
 	assert.Zero(t, savedUser.Quota)
 
-	records, err := OpenBlindBoxes(user.Id, 3)
+	overview, err := GetBalanceBlindBoxOverview(user.Id)
 	require.NoError(t, err)
-	require.Len(t, records, 3)
+	require.Equal(t, int64(3), overview.InventoryCount)
+
+	opened, err := OpenBalanceBlindBox(user.Id, "redemption-open-9901", 3)
+	require.NoError(t, err)
+	require.Len(t, opened.Records, 3)
 	require.NoError(t, db.Where("id = ?", order.Id).First(&order).Error)
 	assert.Equal(t, 3, order.OpenedCount)
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-	snapshot := loadCommerceBillingSnapshot(t, user.Id, "wallet")
-	assert.Equal(t, int64(savedUser.Quota), snapshot.AvailableBalance)
+	assert.Zero(t, savedUser.Quota)
+	if savedUser.ClaudeQuota > 0 {
+		snapshot := loadCommerceBillingSnapshot(t, user.Id, "claude_wallet")
+		assert.Equal(t, int64(savedUser.ClaudeQuota), snapshot.AvailableBalance)
+	}
 
 	var saved commerceschema.Redemption
 	require.NoError(t, db.Where("id = ?", redemption.Id).First(&saved).Error)

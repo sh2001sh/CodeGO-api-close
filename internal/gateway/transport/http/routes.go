@@ -6,6 +6,12 @@ import (
 )
 
 func RegisterGatewayRoutes(apiRouter *gin.RouterGroup) {
+	promptAuditRoute := apiRouter.Group("/prompt-audit")
+	promptAuditRoute.Use(middleware.RootAuth())
+	{
+		promptAuditRoute.GET("/metrics", GetPromptAuditMetrics)
+	}
+
 	routePoolRoute := apiRouter.Group("/route-pools")
 	routePoolRoute.Use(middleware.RootAuth())
 	{

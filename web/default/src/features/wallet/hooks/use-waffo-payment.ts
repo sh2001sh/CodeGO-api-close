@@ -20,7 +20,6 @@ import { useState, useCallback } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { requestWaffoPayment, isApiSuccess } from '../api'
-import type { WalletType } from '../types'
 
 function getPaymentUrl(data: unknown): string | null {
   if (!data || typeof data !== 'object') {
@@ -49,17 +48,12 @@ export function useWaffoPayment() {
   const [processing, setProcessing] = useState(false)
 
   const processWaffoPayment = useCallback(
-    async (
-      topupAmount: number,
-      payMethodIndex?: number,
-      walletType: WalletType = 'default'
-    ) => {
+    async (topupAmount: number, payMethodIndex?: number) => {
       setProcessing(true)
 
       try {
         const response = await requestWaffoPayment({
           amount: Math.floor(topupAmount),
-          wallet_type: walletType,
           pay_method_index: payMethodIndex,
         })
 

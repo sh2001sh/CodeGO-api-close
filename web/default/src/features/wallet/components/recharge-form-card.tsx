@@ -38,7 +38,6 @@ import {
   formatPaymentAmount,
   getDiscountLabel,
   getPaymentIcon,
-  getMinTopupAmount,
   calculatePresetPricing,
 } from '../lib'
 import type {
@@ -47,7 +46,6 @@ import type {
   TopupInfo,
   CreemProduct,
   WaffoPayMethod,
-  WalletType,
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
 
@@ -56,8 +54,6 @@ interface RechargeFormCardProps {
   presetAmounts: PresetAmount[]
   selectedPreset: number | null
   onSelectPreset: (preset: PresetAmount) => void
-  selectedWalletType: WalletType
-  onWalletTypeChange: (walletType: WalletType) => void
   topupAmount: number
   onTopupAmountChange: (amount: number) => void
   paymentAmount: number
@@ -70,7 +66,6 @@ interface RechargeFormCardProps {
   redeeming: boolean
   topupLink?: string
   loading?: boolean
-  priceRatio?: number
   usdExchangeRate?: number
   onOpenBilling?: () => void
   creemProducts?: CreemProduct[]
@@ -78,7 +73,6 @@ interface RechargeFormCardProps {
   onCreemProductSelect?: (product: CreemProduct) => void
   enableWaffoTopup?: boolean
   waffoPayMethods?: WaffoPayMethod[]
-  waffoMinTopup?: number
   onWaffoMethodSelect?: (method: WaffoPayMethod, index: number) => void
   enableWaffoPancakeTopup?: boolean
   showRedemptionSection?: boolean
@@ -90,8 +84,6 @@ export function RechargeFormCard({
   presetAmounts,
   selectedPreset,
   onSelectPreset,
-  selectedWalletType,
-  onWalletTypeChange,
   topupAmount,
   onTopupAmountChange,
   paymentAmount,
@@ -104,7 +96,6 @@ export function RechargeFormCard({
   redeeming,
   topupLink,
   loading,
-  priceRatio = 1,
   usdExchangeRate = 1,
   onOpenBilling,
   creemProducts,
@@ -112,7 +103,6 @@ export function RechargeFormCard({
   onCreemProductSelect,
   enableWaffoTopup,
   waffoPayMethods,
-  waffoMinTopup,
   onWaffoMethodSelect,
   enableWaffoPancakeTopup,
   showRedemptionSection = true,
@@ -143,8 +133,7 @@ export function RechargeFormCard({
     Array.isArray(topupInfo?.pay_methods) && topupInfo.pay_methods.length > 0
   const hasWaffoPaymentMethods =
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
-  const minTopup = getMinTopupAmount(topupInfo)
-  const effectiveMinTopup = selectedWalletType === 'claude' ? 1 : minTopup
+  const effectiveMinTopup = 1
   const redemptionEnabled = topupInfo?.enable_redemption !== false
 
   if (loading) {
@@ -233,50 +222,13 @@ export function RechargeFormCard({
                 <Label className={sectionLabelClassName}>
                   {t('Recharge wallet')}
                 </Label>
-                <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
-                  {[
-                    {
-                      value: 'default' as const,
-                      title: t('Standard wallet'),
-                      description: t(
-                        'For non-Claude models, existing discounts and group rates apply.'
-                      ),
-                    },
-                    {
-                      value: 'claude' as const,
-                      title: t('Claude quota'),
-                      description: t(
-                        'Only for Claude models; minimum 1 with fixed 1:1 recharge.'
-                      ),
-                    },
-                  ].map((item) => (
-                    <Button
-                      key={item.value}
-                      type='button'
-                      variant='outline'
-                      onClick={() => onWalletTypeChange(item.value)}
-                      className={cn(
-                        compact
-                          ? 'h-auto min-h-16 flex-col items-start justify-start gap-1 rounded-xl px-3 py-2.5 text-left whitespace-normal'
-                          : 'h-auto min-h-20 flex-col items-start justify-start gap-1 rounded-xl p-3 text-left whitespace-normal',
-                        selectedWalletType === item.value
-                          ? 'border-foreground bg-foreground/5'
-                          : 'border-muted'
-                      )}
-                    >
-                      <span className='text-sm font-semibold'>
-                        {item.title}
-                      </span>
-                      <span
-                        className={cn(
-                          'text-muted-foreground text-xs leading-relaxed',
-                          compact && 'line-clamp-2'
-                        )}
-                      >
-                        {item.description}
-                      </span>
-                    </Button>
-                  ))}
+                <div className='border-border/70 bg-muted/30 rounded-lg border px-3 py-2.5'>
+                  <div className='text-sm font-semibold'>{t('统一额度')}</div>
+                  <div className='text-muted-foreground mt-0.5 text-xs leading-5'>
+                    {t(
+                      '充值后进入统一额度账户，永久有效，可用于全部可用模型分组。'
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -294,15 +246,8 @@ export function RechargeFormCard({
                     )}
                   >
                     {presetAmounts.map((preset, index) => {
-                      const amountDiscount =
-                        selectedWalletType === 'claude'
-                          ? 1.0
-                          : preset.discount ||
-                            topupInfo?.discount?.[preset.value] ||
-                            1.0
+                      const amountDiscount = 1.0
                       const discount = amountDiscount
-                      const effectivePriceRatio =
-                        selectedWalletType === 'claude' ? 1 : priceRatio
                       const {
                         displayValue,
                         actualPrice,
@@ -310,7 +255,7 @@ export function RechargeFormCard({
                         hasDiscount,
                       } = calculatePresetPricing(
                         preset.value,
-                        effectivePriceRatio,
+                        1,
                         discount,
                         usdExchangeRate
                       )
@@ -416,10 +361,7 @@ export function RechargeFormCard({
                     )}
                   >
                     {topupInfo?.pay_methods?.map((method) => {
-                      const minTopup =
-                        selectedWalletType === 'claude'
-                          ? 1
-                          : method.min_topup || 0
+                      const minTopup = 1
                       const disabled = minTopup > topupAmount
 
                       const button = (
@@ -486,10 +428,7 @@ export function RechargeFormCard({
                     >
                       {waffoPayMethods?.map((method, index) => {
                         const loadingKey = `waffo-${index}`
-                        const waffoMin =
-                          selectedWalletType === 'claude'
-                            ? 1
-                            : waffoMinTopup || 0
+                        const waffoMin = 1
                         const belowMin = waffoMin > topupAmount
 
                         const button = (

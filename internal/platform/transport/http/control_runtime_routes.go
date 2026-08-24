@@ -4,11 +4,11 @@ import (
 	adminopshttp "github.com/sh2001sh/new-api/internal/adminops/transport/http"
 	audithttp "github.com/sh2001sh/new-api/internal/audit/transport/http"
 	billinghttp "github.com/sh2001sh/new-api/internal/billing/transport/http"
-	bountyhttp "github.com/sh2001sh/new-api/internal/bounty/transport/http"
 	commercehttp "github.com/sh2001sh/new-api/internal/commerce/transport/http"
 	communityhttp "github.com/sh2001sh/new-api/internal/community/transport/http"
 	gatewayhttp "github.com/sh2001sh/new-api/internal/gateway/transport/http"
 	identityhttp "github.com/sh2001sh/new-api/internal/identity/transport/http"
+	marketplacehttp "github.com/sh2001sh/new-api/internal/marketplace/transport/http"
 	"github.com/sh2001sh/new-api/internal/platform/transport/http/middleware"
 	workflowhttp "github.com/sh2001sh/new-api/internal/workflow/transport/http"
 
@@ -65,8 +65,8 @@ func registerControlAPIRoutes(router *gin.Engine) {
 		audithttp.RegisterAuditRoutes(apiRouter)
 		workflowhttp.RegisterWorkflowRoutes(apiRouter)
 		billinghttp.RegisterBillingRoutes(apiRouter)
-		bountyhttp.RegisterBountyRoutes(apiRouter)
 		communityhttp.RegisterCommunityRoutes(apiRouter)
+		marketplacehttp.RegisterMarketplaceRoutes(apiRouter)
 	}
 }
 

@@ -145,6 +145,7 @@ export type ModelSettings = {
   'global.pass_through_request_enabled': boolean
   'global.thinking_model_blacklist': string
   'global.chat_completions_to_responses_policy': string
+  'global.responses_to_chat_completions_policy': string
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
   'gemini.safety_settings': string
@@ -222,6 +223,7 @@ export type BillingSettings = {
   AutoGroups: string
   DefaultUseAutoGroup: boolean
   'group_ratio_setting.group_special_usable_group': string
+  SubscriptionGroupPolicy: string
   PayAddress: string
   EpayId: string
   EpayKey: string
@@ -287,6 +289,10 @@ export type BillingSettings = {
   'checkin_setting.max_quota': number
   'blind_box_setting.enabled': boolean
   'blind_box_setting.unit_price': number
+  'blind_box_setting.expire_days': number
+  'blind_box_setting.registration_reward_enabled': boolean
+  'blind_box_setting.registration_reward_start_at': number
+  'blind_box_setting.registration_reward_end_at': number
   'blind_box_setting.daily_limit': number
   'blind_box_setting.monthly_limit': number
   'blind_box_setting.daily_open_limit': number
@@ -296,6 +302,7 @@ export type BillingSettings = {
   'blind_box_setting.low_reward_threshold_usd': number
   'blind_box_setting.subscription_prize_probability': number
   'blind_box_setting.subscription_plan_title': string
+  'blind_box_setting.multiplier_card_route_group': string
   'blind_box_setting.count_options': number[]
   'blind_box_setting.tiers': BlindBoxTierSetting[]
 }
@@ -347,8 +354,9 @@ export type SecuritySettings = {
   ModelRequestRateLimitGroup: string
   CheckSensitiveEnabled: boolean
   CheckSensitiveOnPromptEnabled: boolean
-  PromptSafetyEnabled: boolean
+  StopOnSensitiveEnabled: boolean
   SensitiveWords: string
+  PromptAuditReviewRules: string
   'fetch_setting.enable_ssrf_protection': boolean
   'fetch_setting.allow_private_ip': boolean
   'fetch_setting.domain_filter_mode': boolean

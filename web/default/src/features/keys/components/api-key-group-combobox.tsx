@@ -41,6 +41,14 @@ export type ApiKeyGroupOption = {
   label: string
   desc?: string
   ratio?: number | string
+  subscriptionEnabled?: boolean
+  subscriptionRatio?: number
+  successRate?: number | null
+  requestCount?: number
+  category?: 'official' | 'marketplace' | 'marketplace_auto'
+  disabled?: boolean
+  models?: string[]
+  mappingStatus?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
 }
 
 type ApiKeyGroupComboboxProps = {
@@ -76,9 +84,12 @@ function getRatioBadgeClassName(ratio: ApiKeyGroupOption['ratio']) {
   return 'border-success/30 bg-success/10 text-success'
 }
 
-function GroupRatioBadge({ ratio }: { ratio: ApiKeyGroupOption['ratio'] }) {
+function GroupRatioBadge(props: {
+  ratio: ApiKeyGroupOption['ratio']
+  label: 'Balance' | 'Plan'
+}) {
   const { t } = useTranslation()
-  const label = formatGroupRatio(ratio, t('Ratio'))
+  const label = formatGroupRatio(props.ratio, t(props.label))
 
   if (!label) return null
 
@@ -87,7 +98,47 @@ function GroupRatioBadge({ ratio }: { ratio: ApiKeyGroupOption['ratio'] }) {
       variant='outline'
       className={cn(
         'max-w-24 shrink-0 truncate text-[10px] sm:max-w-none sm:text-xs',
-        getRatioBadgeClassName(ratio)
+        getRatioBadgeClassName(props.ratio)
+      )}
+    >
+      {label}
+    </Badge>
+  )
+}
+
+function GroupRatioBadges({ option }: { option?: ApiKeyGroupOption }) {
+  if (!option) return null
+  return (
+    <span className='flex shrink-0 flex-wrap justify-end gap-1'>
+      <GroupRatioBadge ratio={option.ratio} label='Balance' />
+      {option.subscriptionEnabled && (
+        <GroupRatioBadge ratio={option.subscriptionRatio} label='Plan' />
+      )}
+      {option.successRate != null && option.requestCount !== 0 && (
+        <Badge variant='outline' className='shrink-0 text-[10px] sm:text-xs'>
+          成功率 {option.successRate.toFixed(1)}%
+        </Badge>
+      )}
+      <MappingStatusBadge option={option} />
+    </span>
+  )
+}
+
+function MappingStatusBadge({ option }: { option?: ApiKeyGroupOption }) {
+  const { t } = useTranslation()
+  if (!option?.mappingStatus || option.mappingStatus === 'matched') return null
+  const label =
+    option.mappingStatus === 'insufficient_evidence'
+      ? t('映射证据不足')
+      : t('映射不一致')
+  return (
+    <Badge
+      variant='outline'
+      className={cn(
+        'shrink-0 text-[10px] sm:text-xs',
+        option.mappingStatus === 'insufficient_evidence'
+          ? 'border-warning/35 bg-warning/10 text-warning-foreground'
+          : 'border-destructive/35 bg-destructive/10 text-destructive'
       )}
     >
       {label}
@@ -113,11 +164,15 @@ export function ApiKeyGroupCombobox({
 
     return options.filter((option) => {
       const ratioText = String(option.ratio ?? '').toLowerCase()
+      const subscriptionRatioText = String(
+        option.subscriptionRatio ?? ''
+      ).toLowerCase()
       return (
         option.value.toLowerCase().includes(search) ||
         option.label.toLowerCase().includes(search) ||
         option.desc?.toLowerCase().includes(search) ||
-        ratioText.includes(search)
+        ratioText.includes(search) ||
+        subscriptionRatioText.includes(search)
       )
     })
   }, [options, searchValue])
@@ -127,6 +182,15 @@ export function ApiKeyGroupCombobox({
     setOpen(false)
     setSearchValue('')
   }
+  const officialOptions = filteredOptions.filter(
+    (option) => option.category === undefined || option.category === 'official'
+  )
+  const marketplaceAutoOptions = filteredOptions.filter(
+    (option) => option.category === 'marketplace_auto'
+  )
+  const marketplaceOptions = filteredOptions.filter(
+    (option) => option.category === 'marketplace'
+  )
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -153,9 +217,7 @@ export function ApiKeyGroupCombobox({
               </span>
             )}
           </span>
-          <span className='hidden sm:block'>
-            <GroupRatioBadge ratio={selectedOption?.ratio} />
-          </span>
+          <GroupRatioBadges option={selectedOption} />
         </span>
         <ChevronsUpDown className='h-4 w-4 shrink-0 opacity-50' />
       </PopoverTrigger>
@@ -173,37 +235,65 @@ export function ApiKeyGroupCombobox({
           />
           <CommandList className='max-h-[360px]'>
             <CommandEmpty>{t('No group found.')}</CommandEmpty>
-            <CommandGroup>
-              {filteredOptions.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.value}
-                  onSelect={() => handleSelect(option.value)}
-                  className='data-[selected=true]:bg-muted items-start gap-3 rounded-lg px-3 py-3 transition-colors'
-                >
-                  <Check
-                    className={cn(
-                      'mt-0.5 h-4 w-4',
-                      value === option.value ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
-                  <span className='min-w-0 flex-1'>
-                    <span className='block truncate font-medium'>
-                      {option.label}
-                    </span>
-                    {option.desc && (
-                      <span className='text-muted-foreground block truncate text-xs'>
-                        {option.desc}
-                      </span>
-                    )}
-                  </span>
-                  <GroupRatioBadge ratio={option.ratio} />
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            <GroupOptions
+              heading={t('全局 Auto')}
+              options={marketplaceAutoOptions}
+              value={value}
+              onSelect={handleSelect}
+            />
+            <GroupOptions
+              heading={t('CodeGo 官方')}
+              options={officialOptions}
+              value={value}
+              onSelect={handleSelect}
+            />
+            <GroupOptions
+              heading={t('第三方分组')}
+              options={marketplaceOptions}
+              value={value}
+              onSelect={handleSelect}
+            />
           </CommandList>
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+function GroupOptions(props: {
+  heading: string
+  options: ApiKeyGroupOption[]
+  value?: string
+  onSelect: (value: string) => void
+}) {
+  if (props.options.length === 0) return null
+  return (
+    <CommandGroup heading={props.heading}>
+      {props.options.map((option) => (
+        <CommandItem
+          key={option.value}
+          value={option.value}
+          disabled={option.disabled}
+          onSelect={() => props.onSelect(option.value)}
+          className='data-[selected=true]:bg-muted items-start gap-3 rounded-lg px-3 py-3 transition-colors data-disabled:opacity-50'
+        >
+          <Check
+            className={cn(
+              'mt-0.5 h-4 w-4',
+              props.value === option.value ? 'opacity-100' : 'opacity-0'
+            )}
+          />
+          <span className='min-w-0 flex-1'>
+            <span className='block truncate font-medium'>{option.label}</span>
+            {option.desc && (
+              <span className='text-muted-foreground block truncate text-xs'>
+                {option.desc}
+              </span>
+            )}
+          </span>
+          <GroupRatioBadges option={option} />
+        </CommandItem>
+      ))}
+    </CommandGroup>
   )
 }

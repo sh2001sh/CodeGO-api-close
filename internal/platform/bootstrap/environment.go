@@ -66,6 +66,7 @@ func initEnvironment() {
 	}
 
 	platformconfig.DebugEnabled = os.Getenv("DEBUG") == "true"
+	platformconfig.SQLDebugEnabled = platformconfig.GetEnvOrDefaultBool("SQL_DEBUG", false)
 	platformtext.SetDebugEnabled(platformconfig.DebugEnabled)
 	platformconfig.MemoryCacheEnabled = os.Getenv("MEMORY_CACHE_ENABLED") == "true"
 	platformconfig.IsMasterNode = os.Getenv("NODE_TYPE") != "slave"
@@ -87,9 +88,18 @@ func initEnvironment() {
 	platformconfig.SyncFrequency = platformconfig.GetEnvOrDefaultInt("SYNC_FREQUENCY", 60)
 	platformconfig.BatchUpdateInterval = platformconfig.GetEnvOrDefaultInt("BATCH_UPDATE_INTERVAL", 5)
 	platformconfig.RelayTimeout = platformconfig.GetEnvOrDefaultInt("RELAY_TIMEOUT", 0)
-	platformconfig.RelayResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("RELAY_RESPONSE_HEADER_TIMEOUT", 45)
+	// Text providers own their bootstrap timeout and retry policy. A gateway
+	// response-header deadline would otherwise cancel a still-recovering relay
+	// and turn the local cancellation into a false provider failure.
+	platformconfig.RelayResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("RELAY_RESPONSE_HEADER_TIMEOUT", 0)
+	platformconfig.ImageResponseHeaderTimeout = platformconfig.GetEnvOrDefaultInt("IMAGE_RESPONSE_HEADER_TIMEOUT", 120)
 	platformconfig.RelayMaxIdleConns = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_IDLE_CONNS", 500)
 	platformconfig.RelayMaxIdleConnsPerHost = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_IDLE_CONNS_PER_HOST", 100)
+	platformconfig.RelayMaxConnsPerHost = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONNS_PER_HOST", 0)
+	platformconfig.RelayIdleConnTimeoutSeconds = platformconfig.GetEnvOrDefaultInt("RELAY_IDLE_CONN_TIMEOUT_SECONDS", 90)
+	platformconfig.RelayTLSHandshakeTimeoutSeconds = platformconfig.GetEnvOrDefaultInt("RELAY_TLS_HANDSHAKE_TIMEOUT_SECONDS", 10)
+	platformconfig.GroupStatusCacheSeconds = platformconfig.GetEnvOrDefaultInt("GROUP_STATUS_CACHE_SECONDS", 60)
+	platformconfig.RelayMaxConcurrentRequests = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONCURRENT_REQUESTS", 400)
 	platformconfig.GeminiSafetySetting = platformconfig.GetEnvOrDefaultString("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 	platformconfig.CohereSafetySetting = platformconfig.GetEnvOrDefaultString("COHERE_SAFETY_SETTING", "NONE")
 
@@ -104,6 +114,11 @@ func initEnvironment() {
 	platformconfig.CriticalRateLimitEnable = platformconfig.GetEnvOrDefaultBool("CRITICAL_RATE_LIMIT_ENABLE", true)
 	platformconfig.CriticalRateLimitNum = platformconfig.GetEnvOrDefaultInt("CRITICAL_RATE_LIMIT", 20)
 	platformconfig.CriticalRateLimitDuration = int64(platformconfig.GetEnvOrDefaultInt("CRITICAL_RATE_LIMIT_DURATION", 20*60))
+
+	platformconfig.LoginRateLimitEnable = platformconfig.GetEnvOrDefaultBool("LOGIN_RATE_LIMIT_ENABLE", true)
+	platformconfig.LoginIPRateLimitNum = platformconfig.GetEnvOrDefaultInt("LOGIN_IP_RATE_LIMIT", 120)
+	platformconfig.LoginAccountRateLimitNum = platformconfig.GetEnvOrDefaultInt("LOGIN_ACCOUNT_RATE_LIMIT", 20)
+	platformconfig.LoginRateLimitDuration = int64(platformconfig.GetEnvOrDefaultInt("LOGIN_RATE_LIMIT_DURATION", 10*60))
 
 	platformconfig.SearchRateLimitEnable = platformconfig.GetEnvOrDefaultBool("SEARCH_RATE_LIMIT_ENABLE", true)
 	platformconfig.SearchRateLimitNum = platformconfig.GetEnvOrDefaultInt("SEARCH_RATE_LIMIT", 10)
@@ -142,6 +157,12 @@ func printHelp() {
 
 func initConstantEnv() {
 	constant.StreamingTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_TIMEOUT", 300)
+	constant.StreamingFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_FIRST_BYTE_TIMEOUT", 0)
+	constant.StreamingLongContextFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_FIRST_BYTE_TIMEOUT", 0)
+	constant.StreamingMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_MAX_DURATION", 240)
+	constant.StreamingLongContextMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_MAX_DURATION", 540)
+	constant.StreamingAdaptiveProgressTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_ADAPTIVE_PROGRESS_TIMEOUT", 45)
+	constant.StreamingAdaptiveInitialTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_ADAPTIVE_INITIAL_TIMEOUT", 120)
 	constant.DifyDebug = platformconfig.GetEnvOrDefaultBool("DIFY_DEBUG", true)
 	constant.MaxFileDownloadMB = platformconfig.GetEnvOrDefaultInt("MAX_FILE_DOWNLOAD_MB", 64)
 	constant.StreamScannerMaxBufferMB = platformconfig.GetEnvOrDefaultInt("STREAM_SCANNER_MAX_BUFFER_MB", 128)

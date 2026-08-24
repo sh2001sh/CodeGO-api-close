@@ -70,6 +70,7 @@ export const channelSchema = z.object({
     multi_key_polling_index: 0,
     multi_key_mode: 'random',
   }),
+  sensitive_word_interception_enabled: z.boolean().default(true),
   settings: z.string().default('{}'), // other_settings JSON
 })
 
@@ -82,7 +83,6 @@ export type Channel = z.infer<typeof channelSchema>
 export interface ChannelSettings {
   force_format?: boolean
   thinking_to_content?: boolean
-  claude_wallet_enabled?: boolean
   proxy?: string
   pass_through_body_enabled?: boolean
   system_prompt?: string
@@ -318,6 +318,7 @@ export interface ChannelFormData {
   param_override?: string
   header_override?: string
   settings?: string
+  sensitive_word_interception_enabled?: boolean
   other?: string
   // Multi-key specific
   multi_key_mode?: 'single' | 'batch' | 'multi_to_single'

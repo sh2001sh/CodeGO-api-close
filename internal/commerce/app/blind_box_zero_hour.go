@@ -3,10 +3,12 @@ package app
 import (
 	"errors"
 	"math/rand"
+	"strings"
 	"sync/atomic"
 
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
@@ -19,14 +21,29 @@ func init() {
 }
 
 const (
-	ZeroHourGroup               = "zero-hour"
-	zeroHourDurationSeconds     = int64(60 * 60)
-	zeroHourProgressPerPaidOpen = int64(5)
-	zeroHourProgressCap         = int64(1000)
-	zeroHourBaseProbability     = 0.0001
-	zeroHourProbabilityStep     = 0.0000049
-	zeroHourProbabilityCap      = 0.005
+	ZeroHourGroup                     = "zero-hour"
+	MultiplierCardRouteGroupOptionKey = "blind_box_setting.multiplier_card_route_group"
+	DefaultMultiplierCardRouteGroup   = "纯Pro号池"
+	zeroHourDurationSeconds           = int64(60 * 60)
+	zeroHourProgressPerPaidOpen       = int64(5)
+	zeroHourProgressCap               = int64(1000)
+	zeroHourBaseProbability           = 0.0001
+	zeroHourProbabilityStep           = 0.0000049
+	zeroHourProbabilityCap            = 0.005
 )
+
+// MultiplierCardRouteGroup returns the Root-configured channel group used by
+// active 0 and 0.1 multiplier cards. Billing remains independently overridden
+// by the card type, so this only controls routing.
+func MultiplierCardRouteGroup() string {
+	platformconfig.OptionMapRWMutex.RLock()
+	group := strings.TrimSpace(platformconfig.OptionMap[MultiplierCardRouteGroupOptionKey])
+	platformconfig.OptionMapRWMutex.RUnlock()
+	if group == "" {
+		return DefaultMultiplierCardRouteGroup
+	}
+	return group
+}
 
 type ZeroHourOverview struct {
 	CurrentProbability float64 `json:"current_probability"`
@@ -162,7 +179,10 @@ func hasAvailableOrActiveZeroHourPropTx(tx *gorm.DB, userID int) bool {
 	var count int64
 	err := tx.Model(&commerceschema.BlindBoxProp{}).
 		Where("user_id = ? AND prop_type = ?", userID, commerceschema.BlindBoxPropTypeZeroHourMultiplier).
-		Where("status = ? OR (status = ? AND expires_at > ?)", commerceschema.BlindBoxPropStatusAvailable, commerceschema.BlindBoxPropStatusActive, now).
+		Where("status IN ? OR (status = ? AND expires_at > ?)", []string{
+			commerceschema.BlindBoxPropStatusAvailable,
+			commerceschema.BlindBoxPropStatusPaused,
+		}, commerceschema.BlindBoxPropStatusActive, now).
 		Count(&count).Error
 	return err == nil && count > 0
 }

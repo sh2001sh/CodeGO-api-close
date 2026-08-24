@@ -26,6 +26,7 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 	}
 	now := time.Now().In(location)
 	todayDate := now.Format(luckyDrawDateLayout)
+	blindBoxDrawDate, _ := blindBoxLuckyDrawWindow(now, setting)
 	todayAt := time.Date(now.Year(), now.Month(), now.Day(), setting.DrawHour, setting.DrawMinute, 0, 0, location)
 	nextDrawAt := todayAt
 	if !now.Before(todayAt) {
@@ -53,6 +54,10 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 	if err != nil {
 		return nil, err
 	}
+	blindBoxNumbers, err := listTodayBlindBoxLuckyNumbers(userID, blindBoxDrawDate, now.Unix())
+	if err != nil {
+		return nil, err
+	}
 	recentRewards, err := listLuckyRewardViews(userID, 20, 0)
 	if err != nil && subscriptionLuckyNumberTableReady() {
 		return nil, err
@@ -69,6 +74,7 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 	}
 	return &commercedomain.LuckyNumberSelfPayload{
 		Enabled:       setting.Enabled && subscriptionLuckyNumberTableReady(),
+		QuotaUnit:     setting.QuotaUnit,
 		Timezone:      setting.Timezone,
 		DrawHour:      setting.DrawHour,
 		DrawMinute:    setting.DrawMinute,
@@ -78,6 +84,7 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 		JackpotUSD:    jackpot,
 		JackpotCapUSD: setting.JackpotCapUSD,
 		Rules: commercedomain.LuckyNumberRules{
+			QuotaUnit:           setting.QuotaUnit,
 			BaseReward1USD:      setting.BaseReward1USD,
 			BaseReward2USD:      setting.BaseReward2USD,
 			BaseReward3USD:      setting.BaseReward3USD,
@@ -90,9 +97,36 @@ func BuildDailyLuckyNumberSelfPayload(userID int) (*commercedomain.LuckyNumberSe
 			JackpotIncrementUSD: setting.JackpotIncrementUSD,
 			JackpotCapUSD:       setting.JackpotCapUSD,
 		},
-		Subscriptions: subscriptions,
-		RecentRewards: recentRewards,
+		Subscriptions:   subscriptions,
+		BlindBoxNumbers: blindBoxNumbers,
+		RecentRewards:   recentRewards,
 	}, nil
+}
+
+func listTodayBlindBoxLuckyNumbers(userID int, drawDate string, nowUnix int64) ([]commercedomain.BlindBoxLuckyNumber, error) {
+	if !platformdb.DB.Migrator().HasTable(&commerceschema.BlindBoxDailyLuckyNumber{}) {
+		return []commercedomain.BlindBoxLuckyNumber{}, nil
+	}
+	var numbers []commerceschema.BlindBoxDailyLuckyNumber
+	if err := platformdb.DB.Where(
+		"user_id = ? AND draw_date = ? AND expires_at > ?",
+		userID,
+		drawDate,
+		nowUnix,
+	).Order("created_at desc, id desc").Find(&numbers).Error; err != nil {
+		return nil, err
+	}
+	result := make([]commercedomain.BlindBoxLuckyNumber, 0, len(numbers))
+	for _, number := range numbers {
+		result = append(result, commercedomain.BlindBoxLuckyNumber{
+			BlindBoxOpenRecordId: number.BlindBoxOpenRecordId,
+			LuckySuffix:          number.LuckySuffix,
+			DrawDate:             number.DrawDate,
+			ExpiresAt:            number.ExpiresAt,
+			CreatedAt:            number.CreatedAt,
+		})
+	}
+	return result, nil
 }
 
 func buildLuckyNumberSubscriptions(userID int) ([]commercedomain.LuckyNumberSubscription, error) {
@@ -160,13 +194,103 @@ func ListDailyLuckyNumberHistory(userID, page, pageSize int) (*commercedomain.Lu
 	return &commercedomain.LuckyRewardPage{Page: page, PageSize: pageSize, Total: total, Records: records}, nil
 }
 
+// ListDailyLuckyRewardNotifications returns recent user-visible reward notices.
+func ListDailyLuckyRewardNotifications(userID, limit int) (*commercedomain.LuckyRewardNotificationPage, error) {
+	if userID <= 0 {
+		return nil, errors.New("invalid user id")
+	}
+	if !luckyRewardNotificationTableReady() {
+		return &commercedomain.LuckyRewardNotificationPage{Items: []commercedomain.LuckyRewardNotification{}}, nil
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	var unreadCount int64
+	if err := platformdb.DB.Model(&commerceschema.SubscriptionLuckyRewardNotification{}).
+		Where("user_id = ? AND read_at = ?", userID, 0).Count(&unreadCount).Error; err != nil {
+		return nil, err
+	}
+	var notifications []commerceschema.SubscriptionLuckyRewardNotification
+	if err := platformdb.DB.Where("user_id = ?", userID).
+		Order("created_at desc, id desc").Limit(limit).Find(&notifications).Error; err != nil {
+		return nil, err
+	}
+	if len(notifications) == 0 {
+		return &commercedomain.LuckyRewardNotificationPage{
+			UnreadCount: unreadCount,
+			Items:       []commercedomain.LuckyRewardNotification{},
+		}, nil
+	}
+	rewardIDs := make([]int, 0, len(notifications))
+	for _, notification := range notifications {
+		rewardIDs = append(rewardIDs, notification.RewardId)
+	}
+	var rewards []commerceschema.SubscriptionLuckyReward
+	if err := platformdb.DB.Where("id IN ? AND user_id = ?", rewardIDs, userID).Find(&rewards).Error; err != nil {
+		return nil, err
+	}
+	rewardViews, err := buildLuckyRewardViews(rewards)
+	if err != nil {
+		return nil, err
+	}
+	viewByRewardID := make(map[int]commercedomain.LuckyRewardView, len(rewardViews))
+	for _, view := range rewardViews {
+		viewByRewardID[view.Reward.Id] = view
+	}
+	items := make([]commercedomain.LuckyRewardNotification, 0, len(notifications))
+	for _, notification := range notifications {
+		reward, ok := viewByRewardID[notification.RewardId]
+		if !ok {
+			continue
+		}
+		items = append(items, commercedomain.LuckyRewardNotification{
+			Id:        notification.Id,
+			Reward:    reward,
+			ReadAt:    notification.ReadAt,
+			CreatedAt: notification.CreatedAt,
+		})
+	}
+	return &commercedomain.LuckyRewardNotificationPage{UnreadCount: unreadCount, Items: items}, nil
+}
+
+func MarkDailyLuckyRewardNotificationRead(userID, notificationID int) error {
+	if userID <= 0 || notificationID <= 0 {
+		return errors.New("invalid lucky reward notification params")
+	}
+	return platformdb.DB.Model(&commerceschema.SubscriptionLuckyRewardNotification{}).
+		Where("id = ? AND user_id = ? AND read_at = ?", notificationID, userID, 0).
+		Update("read_at", platformruntime.GetTimestamp()).Error
+}
+
+func MarkAllDailyLuckyRewardNotificationsRead(userID int) error {
+	if userID <= 0 {
+		return errors.New("invalid user id")
+	}
+	return platformdb.DB.Model(&commerceschema.SubscriptionLuckyRewardNotification{}).
+		Where("user_id = ? AND read_at = ?", userID, 0).
+		Update("read_at", platformruntime.GetTimestamp()).Error
+}
+
 // ListDailyLuckyNumberPublicWins returns masked, settled public wins.
-func ListDailyLuckyNumberPublicWins(page, pageSize int) (*commercedomain.LuckyPublicWinPage, error) {
+func ListDailyLuckyNumberPublicWins(page, pageSize int, drawDate string) (*commercedomain.LuckyPublicWinPage, error) {
 	page, pageSize = normalizeLuckyPage(page, pageSize)
-	if !subscriptionLuckyNumberTableReady() {
+	if !luckyPublicWinsTablesReady() {
 		return &commercedomain.LuckyPublicWinPage{Page: page, PageSize: pageSize, Records: []commercedomain.LuckyPublicWin{}}, nil
 	}
 	query := platformdb.DB.Model(&commerceschema.SubscriptionLuckyReward{}).Where("matched_digits > ? AND credit_status = ?", 0, commerceschema.SubscriptionLuckyRewardCreditCredited)
+	if drawDate != "" {
+		var draw commerceschema.SubscriptionLuckyDraw
+		if err := platformdb.DB.Where("draw_date = ?", drawDate).First(&draw).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return &commercedomain.LuckyPublicWinPage{Page: page, PageSize: pageSize, Records: []commercedomain.LuckyPublicWin{}}, nil
+			}
+			return nil, err
+		}
+		query = query.Where("draw_id = ?", draw.Id)
+	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
@@ -241,7 +365,9 @@ func buildLuckyRewardViews(rewards []commerceschema.SubscriptionLuckyReward) ([]
 	for _, reward := range rewards {
 		draw, ok := drawMap[reward.DrawId]
 		if !ok {
-			return nil, errors.New("lucky draw not found for reward")
+			// Historical rewards can outlive a deleted or failed draw row. Keep
+			// the notification/history endpoint readable and omit only that row.
+			continue
 		}
 		result = append(result, commercedomain.LuckyRewardView{
 			Reward:        luckyRewardRecord(&reward),
@@ -275,18 +401,20 @@ func luckyRewardRecord(reward *commerceschema.SubscriptionLuckyReward) commerced
 		return commercedomain.LuckyRewardRecord{}
 	}
 	return commercedomain.LuckyRewardRecord{
-		Id:                 reward.Id,
-		DrawId:             reward.DrawId,
-		UserSubscriptionId: reward.UserSubscriptionId,
-		LuckyNumber:        reward.LuckyNumber,
-		MembershipTier:     reward.MembershipTier,
-		MatchedDigits:      reward.MatchedDigits,
-		BaseRewardUSD:      reward.BaseRewardUSD,
-		TierMultiplier:     reward.TierMultiplier,
-		JackpotRewardUSD:   reward.JackpotRewardUSD,
-		FinalRewardQuota:   reward.FinalRewardQuota,
-		CreditStatus:       reward.CreditStatus,
-		CreditedAt:         reward.CreditedAt,
+		Id:                   reward.Id,
+		DrawId:               reward.DrawId,
+		UserSubscriptionId:   reward.UserSubscriptionId,
+		BlindBoxOpenRecordId: reward.BlindBoxOpenRecordId,
+		ParticipationType:    reward.ParticipationType,
+		LuckyNumber:          reward.LuckyNumber,
+		MembershipTier:       reward.MembershipTier,
+		MatchedDigits:        reward.MatchedDigits,
+		BaseRewardUSD:        reward.BaseRewardUSD,
+		TierMultiplier:       reward.TierMultiplier,
+		JackpotRewardUSD:     reward.JackpotRewardUSD,
+		FinalRewardQuota:     reward.FinalRewardQuota,
+		CreditStatus:         reward.CreditStatus,
+		CreditedAt:           reward.CreditedAt,
 	}
 }
 
@@ -302,4 +430,14 @@ func maskLuckySuffix(value string) string {
 		return "****"
 	}
 	return "**" + value[2:]
+}
+
+func luckyRewardNotificationTableReady() bool {
+	return platformdb.DB != nil && platformdb.DB.Migrator().HasTable(&commerceschema.SubscriptionLuckyRewardNotification{})
+}
+
+func luckyPublicWinsTablesReady() bool {
+	return platformdb.DB != nil &&
+		platformdb.DB.Migrator().HasTable(&commerceschema.SubscriptionLuckyDraw{}) &&
+		platformdb.DB.Migrator().HasTable(&commerceschema.SubscriptionLuckyReward{})
 }

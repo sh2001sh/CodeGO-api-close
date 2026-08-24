@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -33,7 +34,23 @@ type ModelRequest struct {
 }
 
 func Distribute() func(c *gin.Context) {
+	return distributeWithHandler(nil)
+}
+
+// DistributeWithHandler runs channel distribution around an explicit handler.
+// It is used by transports that create a request context after the outer HTTP
+// middleware chain has already completed, such as Responses WebSocket turns.
+func DistributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
+	return distributeWithHandler(next)
+}
+
+func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		defer gatewayruntime.ReleaseAllCoolingFallbacks(c)
+		if httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime).IsZero() {
+			httpctx.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+		}
+		initializeFirstByteTrace(c)
 		var channel *gatewayschema.Channel
 		channelId, ok := httpctx.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
@@ -41,6 +58,7 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		gatewayruntime.InitializeRequestProfile(c, modelRequest.Model, c.Request.URL.Path, requestProfileHint(c))
 		if ok {
 			id, err := strconv.Atoi(channelId.(string))
 			if err != nil {
@@ -115,33 +133,45 @@ func Distribute() func(c *gin.Context) {
 					}
 					httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, usingGroup)
 				}
+				if autoChannel, autoGroup, managed, autoErr := selectMarketplaceAutoChannel(c, usingGroup, modelRequest.Model); managed {
+					if autoErr != nil {
+						logger.LogError(c, "第三方 Auto 路由失败: "+autoErr.Error())
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, platformtext.UpstreamQuotaGenericMessage, types.ErrorCodeModelNotFound)
+						return
+					}
+					channel = autoChannel
+					usingGroup = autoGroup
+					selectGroup = autoGroup
+				}
 
-				if preferredChannelID, found := gatewayruntime.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
-					preferred, err := gatewaystore.GetCachedChannel(preferredChannelID)
-					if err == nil && preferred != nil {
-						if preferred.Status != constant.ChannelStatusEnabled ||
-							gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model) ||
-							gatewayroutingapp.ShouldMigrateAutomaticPoolAffinity(usingGroup, modelRequest.Model, preferred.Id) {
-							gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
-							gatewayruntime.ExcludeRouteDecisionCandidate(c, "stale_affinity")
-						} else if usingGroup == "auto" {
-							userGroup := httpctx.GetContextKeyString(c, constant.ContextKeyUserGroup)
-							autoGroups := gatewayroutingapp.GetUserAutoGroup(userGroup)
-							for _, g := range autoGroups {
-								if gatewaystore.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) && !gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model) {
-									selectGroup = g
-									httpctx.SetContextKey(c, constant.ContextKeyAutoGroup, g)
-									channel = preferred
-									gatewayruntime.MarkChannelAffinityUsed(c, g, preferred.Id)
-									gatewayruntime.SelectRouteDecisionCandidate(c, g, preferred.Id, true)
-									break
+				if channel == nil {
+					if preferredChannelID, found := gatewayruntime.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
+						preferred, err := gatewaystore.GetCachedChannel(preferredChannelID)
+						if err == nil && preferred != nil {
+							if preferred.Status != constant.ChannelStatusEnabled ||
+								gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model, gatewayruntime.RequestTypeFromContext(c)) ||
+								gatewayroutingapp.ShouldMigrateAutomaticPoolAffinity(c, usingGroup, modelRequest.Model, preferred.Id) {
+								gatewayruntime.InvalidateChannelAffinityForCurrentRequest(c)
+								gatewayruntime.ExcludeRouteDecisionCandidate(c, "stale_affinity")
+							} else if usingGroup == "auto" {
+								userGroup := httpctx.GetContextKeyString(c, constant.ContextKeyUserGroup)
+								autoGroups := gatewayroutingapp.GetUserAutoGroup(userGroup)
+								for _, g := range autoGroups {
+									if gatewaystore.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) && !gatewayruntime.IsChannelCooling(preferred.Id, modelRequest.Model, gatewayruntime.RequestTypeFromContext(c)) {
+										selectGroup = g
+										httpctx.SetContextKey(c, constant.ContextKeyAutoGroup, g)
+										channel = preferred
+										gatewayruntime.MarkChannelAffinityUsed(c, g, preferred.Id)
+										gatewayruntime.SelectRouteDecisionCandidate(c, g, preferred.Id, true)
+										break
+									}
 								}
+							} else if gatewaystore.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) {
+								channel = preferred
+								selectGroup = usingGroup
+								gatewayruntime.MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
+								gatewayruntime.SelectRouteDecisionCandidate(c, usingGroup, preferred.Id, true)
 							}
-						} else if gatewaystore.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) {
-							channel = preferred
-							selectGroup = usingGroup
-							gatewayruntime.MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
-							gatewayruntime.SelectRouteDecisionCandidate(c, usingGroup, preferred.Id, true)
 						}
 					}
 				}
@@ -173,9 +203,12 @@ func Distribute() func(c *gin.Context) {
 				}
 			}
 		}
-		httpctx.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-		c.Next()
+		if next != nil {
+			next(c)
+		} else {
+			c.Next()
+		}
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			gatewayruntime.RecordChannelAffinity(c, channel.Id)
 			gatewayroutingapp.RecordAutomaticPoolAffinity(c, channel.Id)
@@ -183,11 +216,58 @@ func Distribute() func(c *gin.Context) {
 	}
 }
 
+func initializeFirstByteTrace(c *gin.Context) {
+	if _, exists := c.Get(gatewayruntime.FirstByteTraceContextKey); exists {
+		return
+	}
+	trace := gatewayruntime.NewFirstByteTrace(httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime))
+	c.Set(gatewayruntime.FirstByteTraceContextKey, trace)
+	c.Set(platformhttpx.KeyBodyTiming, trace)
+}
+
 // getModelFromRequest 浠庤姹備腑璇诲彇妯″瀷淇℃伅
 // 鏍规嵁 Content-Type 鑷姩澶勭悊锛?// - application/json
 // - application/x-www-form-urlencoded
 // - multipart/form-data
+type routingProfilePayload struct {
+	Stream             *bool           `json:"stream"`
+	Tools              json.RawMessage `json:"tools"`
+	Functions          json.RawMessage `json:"functions"`
+	PromptCacheKey     json.RawMessage `json:"prompt_cache_key"`
+	PreviousResponseID string          `json:"previous_response_id"`
+	Conversation       json.RawMessage `json:"conversation"`
+}
+
+func requestProfileHint(c *gin.Context) gatewayruntime.RequestProfileHint {
+	if snapshot, err := platformhttpx.GetRequestBodySnapshot(c); err == nil && snapshot.Model != "" {
+		return gatewayruntime.RequestProfileHint{
+			IsStream:         snapshot.Stream != nil && *snapshot.Stream,
+			HasTools:         hasRoutingProfileJSON(snapshot.Tools) || hasRoutingProfileJSON(snapshot.Functions),
+			HasCacheAffinity: hasRoutingProfileJSON(snapshot.PromptCacheKey),
+			HasUpstreamState: strings.TrimSpace(snapshot.PreviousResponseID) != "" || hasRoutingProfileJSON(snapshot.Conversation),
+		}
+	}
+	var payload routingProfilePayload
+	if err := platformhttpx.UnmarshalBodyReusable(c, &payload); err != nil {
+		return gatewayruntime.RequestProfileHint{}
+	}
+	return gatewayruntime.RequestProfileHint{
+		IsStream:         payload.Stream != nil && *payload.Stream,
+		HasTools:         hasRoutingProfileJSON(payload.Tools) || hasRoutingProfileJSON(payload.Functions),
+		HasCacheAffinity: hasRoutingProfileJSON(payload.PromptCacheKey),
+		HasUpstreamState: strings.TrimSpace(payload.PreviousResponseID) != "" || hasRoutingProfileJSON(payload.Conversation),
+	}
+}
+
+func hasRoutingProfileJSON(value json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(value))
+	return trimmed != "" && trimmed != "null" && trimmed != "[]" && trimmed != "{}" && trimmed != `""`
+}
+
 func getModelFromRequest(c *gin.Context) (*ModelRequest, error) {
+	if snapshot, err := platformhttpx.GetRequestBodySnapshot(c); err == nil && snapshot.Model != "" {
+		return &ModelRequest{Model: snapshot.Model}, nil
+	}
 	var modelRequest ModelRequest
 	err := platformhttpx.UnmarshalBodyReusable(c, &modelRequest)
 	if err != nil {

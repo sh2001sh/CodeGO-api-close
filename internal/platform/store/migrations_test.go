@@ -2,13 +2,21 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformschema "github.com/sh2001sh/new-api/internal/platform/schema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -18,6 +26,16 @@ type legacyUserForExternalIDMigration struct {
 	Id        int `gorm:"primaryKey"`
 	Username  string
 	DeletedAt gorm.DeletedAt
+}
+
+type legacyWalletTransferForFeeFieldsMigration struct {
+	Id              int `gorm:"primaryKey"`
+	AmountQuota     int64
+	SenderBalanceAt int64
+}
+
+func (legacyWalletTransferForFeeFieldsMigration) TableName() string {
+	return "wallet_transfers"
 }
 
 func (legacyUserForExternalIDMigration) TableName() string {
@@ -38,6 +56,7 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	platformdb.DB = db
 	platformdb.UsingSQLite = true
 	platformdb.UsingPostgreSQL = false
+	require.NoError(t, db.AutoMigrate(&gatewayschema.Channel{}))
 	for _, tableName := range []string{
 		"user_companion_pets",
 		"daily_mission_rewards",
@@ -52,6 +71,16 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	var migrationCount int64
 	require.NoError(t, db.Model(&schemaMigration{}).Count(&migrationCount).Error)
 	require.Equal(t, int64(len(V2MigrationIDs())), migrationCount)
+	require.True(t, db.Migrator().HasTable(&channelLatencyHistogramMigration{}))
+	for _, column := range []string{
+		"AttemptTTFTP50Ms", "AttemptTTFTP95Ms", "E2ETTFTP50Ms", "E2ETTFTP95Ms", "LatencySampleCount",
+	} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, column), column)
+	}
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.RankingSnapshot{}, "AttemptTTFTP95Ms"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260819_marketplace_latency_metrics"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AttemptTTFTP95Ms"))
 	for _, table := range []string{
 		"billing_outbox_events",
 		"billing_funding_source_policies",
@@ -65,10 +94,13 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 		"subscription_orders",
 		"user_subscriptions",
 		"subscription_pre_consume_records",
+		"subscription_claude_conversions",
 		"gateway_request_executions",
 		"gateway_route_plans",
 		"gateway_execution_attempts",
 		"gateway_usage_evidence",
+		"gateway_responses_background_jobs",
+		"gateway_responses_background_events",
 		"route_pools",
 		"route_pool_members",
 		"blind_box_orders",
@@ -76,10 +108,31 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	} {
 		require.True(t, db.Migrator().HasTable(table), table)
 	}
+	for _, column := range []string{"PlanPriceAmount", "UnusedRatio", "ConversionPercent"} {
+		require.True(t, db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, column), column)
+	}
 	require.NoError(t, db.Migrator().DropTable(&commerceschema.BlindBoxGrant{}))
 	require.False(t, db.Migrator().HasTable(&commerceschema.BlindBoxGrant{}))
 	require.NoError(t, ApplyV2Migrations(context.Background(), false))
 	require.True(t, db.Migrator().HasTable(&commerceschema.BlindBoxGrant{}))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+	require.False(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.False(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260816_unified_credit_v1_channel_scope"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceUserMaxConcurrency"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency"))
+	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "MarketplaceUserMaxConcurrency"))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260817_marketplace_channel_concurrency_limits"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceUserMaxConcurrency"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, "UserMaxConcurrency"))
 	for _, tableName := range []string{
 		"user_companion_pets",
 		"daily_mission_rewards",
@@ -87,6 +140,238 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	} {
 		require.False(t, db.Migrator().HasTable(tableName), tableName)
 	}
+}
+
+func TestPublishedOutboxCleanupIndexStatement(t *testing.T) {
+	postgres := publishedOutboxCleanupIndexStatement("postgres")
+	require.Contains(t, postgres, "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
+	require.Contains(t, postgres, "(published_at, event_id)")
+	require.Contains(t, postgres, "WHERE status = 'published'")
+	require.NotContains(t, postgres, "(status, published_at")
+
+	for _, dialect := range []string{"sqlite", "mysql"} {
+		statement := publishedOutboxCleanupIndexStatement(dialect)
+		require.Contains(t, statement, "(status, published_at, event_id)")
+		require.False(t, strings.Contains(statement, "WHERE status = 'published'"))
+	}
+}
+
+func TestMigratePublishedOutboxCleanupIndexSQLite(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingOutboxEvent{}))
+	require.NoError(t, migratePublishedOutboxCleanupIndex(db))
+	require.NoError(t, migratePublishedOutboxCleanupIndex(db))
+	require.True(t, db.Migrator().HasIndex(&billingschema.BillingOutboxEvent{}, "idx_billing_outbox_published_cleanup"))
+}
+
+func TestArchiveRetentionIndexStatements(t *testing.T) {
+	postgresGateway := gatewayArchiveIndexStatement("postgres")
+	require.Contains(t, postgresGateway, "CREATE INDEX CONCURRENTLY")
+	require.Contains(t, postgresGateway, "(updated_at, execution_id)")
+	require.Contains(t, postgresGateway, "WHERE status = 'settled'")
+	require.Contains(t, logArchiveIndexStatement("postgres"), "ON logs (created_at, id)")
+
+	require.Contains(t, gatewayArchiveIndexStatement("mysql"), "(status, updated_at, execution_id)")
+	require.NotContains(t, gatewayArchiveIndexStatement("mysql"), "IF NOT EXISTS")
+	require.NotContains(t, logArchiveIndexStatement("mysql"), "IF NOT EXISTS")
+	require.Contains(t, gatewayArchiveIndexStatement("sqlite"), "IF NOT EXISTS")
+}
+
+func TestMigrateArchiveRetentionIndexesSQLite(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	originalLogDB := platformdb.LogDB
+	t.Cleanup(func() { platformdb.LogDB = originalLogDB })
+	platformdb.LogDB = db
+	require.NoError(t, db.AutoMigrate(&gatewayschema.RequestExecution{}, &auditschema.Log{}))
+	require.NoError(t, migrateArchiveRetentionIndexes(db))
+	require.NoError(t, migrateArchiveRetentionIndexes(db))
+	require.True(t, db.Migrator().HasIndex(&gatewayschema.RequestExecution{}, "idx_gateway_executions_settled_archive"))
+	require.True(t, db.Migrator().HasIndex("logs", "idx_logs_archive_created_id"))
+}
+
+func TestMigrateMarketplaceAutoRoutePoolIsIdempotent(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+
+	originalPostgreSQL := platformdb.UsingPostgreSQL
+	t.Cleanup(func() {
+		platformdb.UsingPostgreSQL = originalPostgreSQL
+	})
+	platformdb.UsingPostgreSQL = false
+
+	require.NoError(t, migrateMarketplaceAutoRoutePool(db))
+	require.NoError(t, migrateMarketplaceAutoRoutePool(db))
+	require.True(t, db.Migrator().HasTable(&marketplaceschema.AutoRoutePoolMember{}))
+	require.True(t, db.Migrator().HasIndex(&marketplaceschema.AutoRoutePoolMember{}, "uq_marketplace_auto_pool_member"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.AutoRoutePoolMember{}, "Priority"))
+}
+
+func TestMigrateMarketplaceSubscriptionBillingUpgradesExistingGroupsAndSettlements(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &marketplaceschema.Settlement{}))
+
+	group := marketplaceschema.Group{
+		ID: "group", ChannelID: "channel", OwnerUserID: 1, PublicSlug: "group",
+		SystemDisplayName: "group", InternalGroupName: "group",
+		SourceType:       marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly,
+		Multiplier:       0.06, LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public",
+	}
+	require.NoError(t, db.Create(&group).Error)
+	settlement := marketplaceschema.Settlement{
+		ID: "settlement", RequestID: "request", GroupID: group.ID,
+		OwnerUserID: 1, ConsumerUserID: 2, ConsumerAmount: 60,
+		PlatformCommission: 3, OwnerNetAmount: 57, Multiplier: 0.06,
+		Status: "pending",
+	}
+	require.NoError(t, db.Create(&settlement).Error)
+
+	require.NoError(t, migrateMarketplaceSubscriptionBilling(db))
+	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
+	require.Equal(t, marketplacedomain.CreditPolicySubscriptionAndUniversal, group.CreditPoolPolicy)
+	require.NoError(t, db.First(&settlement, "id = ?", settlement.ID).Error)
+	require.Equal(t, int64(60), settlement.SettlementGrossAmount)
+}
+
+func TestMigrateWalletTransferFeeFieldsAddsMissingColumns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&legacyWalletTransferForFeeFieldsMigration{}))
+	require.NoError(t, db.Create(&legacyWalletTransferForFeeFieldsMigration{Id: 1, AmountQuota: 256}).Error)
+
+	require.NoError(t, migrateWalletTransferFeeFields(db))
+	require.True(t, db.Migrator().HasColumn(&commerceschema.WalletTransfer{}, "FeeQuota"))
+	require.True(t, db.Migrator().HasColumn(&commerceschema.WalletTransfer{}, "TotalDebitQuota"))
+	var totalDebitQuota int64
+	require.NoError(t, db.Raw("SELECT total_debit_quota FROM wallet_transfers WHERE id = ?", 1).Scan(&totalDebitQuota).Error)
+	require.EqualValues(t, 256, totalDebitQuota)
+	require.NoError(t, migrateWalletTransferFeeFields(db))
+}
+
+func TestMigrateSubscriptionClaudeConversionFieldsAddsMissingColumns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE subscription_claude_conversions (
+		id integer primary key,
+		user_id integer not null,
+		user_subscription_id integer not null,
+		request_id text not null,
+		status text not null,
+		source_quota integer not null default 0,
+		target_claude_quota integer not null default 0,
+		ratio_numerator integer not null default 1,
+		ratio_denominator integer not null default 10,
+		created_at integer,
+		updated_at integer
+	)`).Error)
+
+	for _, field := range []string{"PlanPriceAmount", "UnusedRatio", "ConversionPercent"} {
+		require.False(t, db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, field), field)
+	}
+	require.NoError(t, migrateSubscriptionClaudeConversionFields(db))
+	for _, field := range []string{"PlanPriceAmount", "UnusedRatio", "ConversionPercent"} {
+		require.True(t, db.Migrator().HasColumn(&commerceschema.SubscriptionClaudeConversion{}, field), field)
+	}
+	require.NoError(t, migrateSubscriptionClaudeConversionFields(db))
+}
+
+func TestMigrateTokenMarketplaceMultiplierLimitAddsMissingColumn(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE tokens (id integer primary key)`).Error)
+	require.False(t, db.Migrator().HasColumn(&identityschema.Token{}, "MarketplaceMultiplierLimit"))
+
+	require.NoError(t, migrateTokenMarketplaceMultiplierLimit(db))
+	require.True(t, db.Migrator().HasColumn(&identityschema.Token{}, "MarketplaceMultiplierLimit"))
+	require.NoError(t, migrateTokenMarketplaceMultiplierLimit(db))
+}
+
+func TestMigrateDailyLuckyUnifiedCreditRewardsOnlyScalesLegacyDefaults(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&platformschema.Option{}))
+	require.NoError(t, db.Create(&[]platformschema.Option{
+		{Key: "daily_lucky_number_setting.base_reward_1_usd", Value: "1"},
+		{Key: "daily_lucky_number_setting.base_reward_2_usd", Value: "2.75"},
+		{Key: "daily_lucky_number_setting.jackpot_cap_usd", Value: "1000.00"},
+	}).Error)
+
+	require.NoError(t, migrateDailyLuckyUnifiedCreditRewards(db))
+	var revised platformschema.Option
+	require.NoError(t, db.First(&revised, "key = ?", "daily_lucky_number_setting.base_reward_1_usd").Error)
+	require.Equal(t, "0.25", revised.Value)
+	var custom platformschema.Option
+	require.NoError(t, db.First(&custom, "key = ?", "daily_lucky_number_setting.base_reward_2_usd").Error)
+	require.Equal(t, "2.75", custom.Value)
+}
+
+func TestMigrateMarketplaceSoftDeleteAndNumericChannelIDs(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	originalPostgreSQL := platformdb.UsingPostgreSQL
+	t.Cleanup(func() { platformdb.UsingPostgreSQL = originalPostgreSQL })
+	platformdb.UsingPostgreSQL = false
+
+	require.NoError(t, db.AutoMigrate(
+		&gatewayschema.Channel{},
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{},
+	))
+	internal := gatewayschema.Channel{Key: "encrypted", OtherInfo: `{"marketplace_channel_id":"legacy-uuid"}`}
+	require.NoError(t, db.Create(&internal).Error)
+	channel := marketplaceschema.Channel{
+		ID: "legacy-uuid", OwnerUserID: 1, ProviderType: "openai_compatible",
+		BaseURLCiphertext: "url", CredentialCiphertext: "key", InternalChannelID: &internal.Id,
+	}
+	group := marketplaceschema.Group{
+		ID: "legacy-group", ChannelID: channel.ID, OwnerUserID: 1, PublicSlug: "legacy",
+		SystemDisplayName: "legacy", InternalGroupName: "legacy", SourceType: "marketplace_user",
+		CreditPoolPolicy: "universal_only", Multiplier: 1, LifecycleStatus: "active",
+		VerificationStatus: "passed", Visibility: "public",
+	}
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.VerificationRun{ID: "legacy-run", ChannelID: channel.ID, Status: "passed"}).Error)
+
+	require.NoError(t, migrateMarketplaceSoftDelete(db))
+	require.NoError(t, migrateMarketplaceNumericChannelIDs(db))
+	require.NoError(t, migrateMarketplaceIncrementalChannelIDs(db))
+
+	var migrated marketplaceschema.Channel
+	require.NoError(t, db.First(&migrated).Error)
+	require.Equal(t, "1", migrated.ID)
+	var migratedGroup marketplaceschema.Group
+	require.NoError(t, db.First(&migratedGroup, "id = ?", group.ID).Error)
+	require.Equal(t, migrated.ID, migratedGroup.ChannelID)
+	var migratedRun marketplaceschema.VerificationRun
+	require.NoError(t, db.First(&migratedRun, "id = ?", "legacy-run").Error)
+	require.Equal(t, migrated.ID, migratedRun.ChannelID)
+	require.NoError(t, db.First(&internal, internal.Id).Error)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal([]byte(internal.OtherInfo), &metadata))
+	require.Equal(t, migrated.ID, metadata["marketplace_channel_id"])
+	var sequence marketplaceschema.ChannelIDSequence
+	require.NoError(t, db.First(&sequence).Error)
+	require.Equal(t, uint64(1), sequence.ID)
+}
+
+func TestMigrateBlindBoxLegacyCreditMarkerUpgradesExistingSQLiteTable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE blind_box_credits (
+		id integer primary key,
+		user_id integer not null,
+		remaining_amount integer not null
+	)`).Error)
+
+	require.False(t, db.Migrator().HasColumn(&commerceschema.BlindBoxCredit{}, "MigratedAt"))
+	require.NoError(t, migrateBlindBoxLegacyCreditMarker(db))
+	require.True(t, db.Migrator().HasColumn(&commerceschema.BlindBoxCredit{}, "MigratedAt"))
+	require.NoError(t, migrateBlindBoxLegacyCreditMarker(db))
 }
 
 func TestSubscriptionFulfillmentMigrationMarksHistoricalSuccessCompleted(t *testing.T) {
@@ -176,4 +461,148 @@ func TestMigrateUserExternalIDsBackfillsExistingUsers(t *testing.T) {
 	require.NoError(t, migrateUserExternalIDs(db))
 	require.NoError(t, db.First(&users[0], 1).Error)
 	require.Equal(t, firstID, users[0].ExternalId)
+}
+
+func TestMigrateMarketplaceChannelSourceLabelsUpgradesExistingSQLiteTable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE marketplace_channels (
+		id text primary key,
+		owner_user_id integer not null,
+		provider_type text not null,
+		base_url_ciphertext text not null,
+		credential_ciphertext text not null,
+		status text not null
+	)`).Error)
+
+	require.False(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, "SubmittedSourceLabel"))
+	require.NoError(t, migrateMarketplaceChannelSourceLabels(db))
+	for _, field := range []string{
+		"SubmittedSourceLabel",
+		"ApprovedSourceLabel",
+		"SourceLabelStatus",
+		"SourceLabelReviewReason",
+	} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
+	}
+	require.True(t, db.Migrator().HasTable(&marketplaceschema.Settlement{}))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.RankingSnapshot{}, "CacheHitRate"))
+	require.False(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "CacheHitRate"))
+	require.NoError(t, migrateMarketplaceChannelSourceLabels(db))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "CacheHitRate"))
+	require.NoError(t, migrateMarketplaceChannelSourceLabels(db))
+}
+
+func TestMigrateMarketplaceModelVerificationUpgradesExistingSQLiteTable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE marketplace_channels (
+		id text primary key,
+		owner_user_id integer not null,
+		provider_type text not null,
+		base_url_ciphertext text not null,
+		credential_ciphertext text not null,
+		status text not null
+	)`).Error)
+
+	require.NoError(t, migrateMarketplaceModelVerification(db))
+	for _, field := range []string{"ModelVerificationResults", "ModelConsistencyStatus"} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
+	}
+	require.NoError(t, migrateMarketplaceModelVerification(db))
+}
+
+func TestMigrateMarketplaceChannelProbeFieldsUpgradesExistingSQLiteTable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE marketplace_channels (
+		id text primary key,
+		owner_user_id integer not null,
+		provider_type text not null,
+		base_url_ciphertext text not null,
+		credential_ciphertext text not null,
+		status text not null
+	)`).Error)
+
+	require.NoError(t, migrateMarketplaceChannelConnectivityTest(db))
+	require.NoError(t, migrateMarketplaceChannelAutoProbe(db))
+	require.NoError(t, migrateMarketplaceTransportCapabilities(db))
+	for _, field := range []string{
+		"ConnectivityTestStatus",
+		"ConnectivityTestCheckedAt",
+		"AutoProbeEnabled",
+		"AutoProbeIntervalMinutes",
+		"AutoProbeModel",
+		"AutoProbeLastStatus",
+		"AutoProbeLastAt",
+		"TransportCapabilities",
+	} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
+	}
+	for _, field := range []string{
+		"ConnectivityTestStatus",
+		"ConnectivityTestCheckedAt",
+		"AutoProbeEnabled",
+		"AutoProbeLastStatus",
+		"AutoProbeLastAt",
+	} {
+		require.True(t, db.Migrator().HasIndex(&marketplaceschema.Channel{}, field), field)
+	}
+	require.NoError(t, migrateMarketplaceChannelConnectivityTest(db))
+	require.NoError(t, migrateMarketplaceChannelAutoProbe(db))
+	require.NoError(t, migrateMarketplaceTransportCapabilities(db))
+}
+
+func TestMigrateUnifiedCreditV1ChannelScopeMarksMarketplaceChannelsExternal(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.Channel{}, &marketplaceschema.Channel{}))
+
+	official := gatewayschema.Channel{Id: 61, Key: "official", ChannelScope: gatewayschema.ChannelScopeOfficial}
+	marketplaceInternal := gatewayschema.Channel{Id: 62, Key: "marketplace", ChannelScope: gatewayschema.ChannelScopeOfficial}
+	require.NoError(t, db.Create(&[]gatewayschema.Channel{official, marketplaceInternal}).Error)
+	internalID := marketplaceInternal.Id
+	require.NoError(t, db.Create(&marketplaceschema.Channel{
+		ID: "marketplace-62", OwnerUserID: 9, ProviderType: "openai",
+		BaseURLCiphertext: "base", CredentialCiphertext: "credential",
+		Status: "active", InternalChannelID: &internalID,
+	}).Error)
+	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+	require.False(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+	require.NoError(t, db.Migrator().DropColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.False(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+
+	require.NoError(t, migrateUnifiedCreditV1ChannelScope(db))
+	require.NoError(t, migrateUnifiedCreditV1ChannelScope(db))
+
+	require.NoError(t, db.First(&official, official.Id).Error)
+	require.Equal(t, gatewayschema.ChannelScopeOfficial, official.ChannelScope)
+	require.NoError(t, db.First(&marketplaceInternal, marketplaceInternal.Id).Error)
+	require.Equal(t, gatewayschema.ChannelScopeExternal, marketplaceInternal.ChannelScope)
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "SensitiveWordInterceptionEnabled"))
+	require.True(t, db.Migrator().HasColumn(&gatewayschema.Channel{}, "MarketplaceMaxConcurrency"))
+	require.True(t, db.Migrator().HasTable(&commerceschema.BlindBoxPropDiscountUsage{}))
+}
+
+func TestMigrateMultiplierPrecisionBackfillsNominalAndEffectiveValues(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&commerceschema.BlindBoxProp{}))
+	prop := commerceschema.BlindBoxProp{UserId: 9, PropType: commerceschema.BlindBoxPropTypeConsumeDiscount90, Multiplier: 0.9}
+	require.NoError(t, db.Create(&prop).Error)
+
+	legacyUsage := commerceschema.BlindBoxPropDiscountUsage{
+		RequestId: "legacy-multiplier", UserId: 9, PropId: prop.Id, PropTitle: "0.9 倍率卡",
+		ChannelId: 6, ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "gpt-5",
+		QuotaBeforeDiscount: 999, QuotaAfterDiscount: 899, DiscountQuota: 100,
+		DiscountRate: 0.1001, Multiplier: 0.8999, RemainingQuota: 0,
+	}
+	require.NoError(t, db.AutoMigrate(&commerceschema.BlindBoxPropDiscountUsage{}))
+	require.NoError(t, db.Create(&legacyUsage).Error)
+
+	require.NoError(t, migrateMultiplierPrecision(db))
+	require.NoError(t, db.First(&legacyUsage, legacyUsage.Id).Error)
+	require.Equal(t, 0.9, legacyUsage.Multiplier)
+	require.Equal(t, 0.8999, legacyUsage.EffectiveMultiplier)
+	require.Equal(t, 0.1001, legacyUsage.DiscountRate)
 }

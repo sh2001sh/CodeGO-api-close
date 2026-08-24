@@ -6,6 +6,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewayproviders "github.com/sh2001sh/new-api/internal/gateway/execution/providers"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -95,7 +96,8 @@ func sanitizeChannels(channels []*gatewayschema.Channel) {
 }
 
 func buildChannelListQuery(group string, statusFilter int, typeFilter int) *gorm.DB {
-	query := platformdb.DB.Model(&gatewayschema.Channel{})
+	query := platformdb.DB.Model(&gatewayschema.Channel{}).
+		Where("channel_scope <> ?", gatewayschema.ChannelScopeExternal)
 	query = gatewaystore.ApplyChannelGroupFilter(query, group)
 	if statusFilter == constant.ChannelStatusEnabled {
 		query = query.Where("status = ?", constant.ChannelStatusEnabled)
@@ -415,7 +417,7 @@ func FetchRemoteModels(req FetchModelsRequest) ([]string, error) {
 	}
 
 	client := &stdhttp.Client{}
-	url := fmt.Sprintf("%s/v1/models", baseURL)
+	url := gatewayruntime.JoinBaseURLPath(baseURL, "/v1/models")
 	request, err := stdhttp.NewRequest(stdhttp.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -481,27 +483,27 @@ func FetchChannelUpstreamModelIDs(channel *gatewayschema.Channel) ([]string, err
 	var url string
 	switch channel.Type {
 	case constant.ChannelTypeAli:
-		url = fmt.Sprintf("%s/compatible-mode/v1/models", baseURL)
+		url = gatewayruntime.JoinBaseURLPath(baseURL, "/compatible-mode/v1/models")
 	case constant.ChannelTypeZhipu_v4:
 		if plan, ok := constant.ChannelSpecialBases[baseURL]; ok && plan.OpenAIBaseURL != "" {
-			url = fmt.Sprintf("%s/models", plan.OpenAIBaseURL)
+			url = gatewayruntime.JoinBaseURLPath(plan.OpenAIBaseURL, "/models")
 		} else {
-			url = fmt.Sprintf("%s/api/paas/v4/models", baseURL)
+			url = gatewayruntime.JoinBaseURLPath(baseURL, "/api/paas/v4/models")
 		}
 	case constant.ChannelTypeVolcEngine:
 		if plan, ok := constant.ChannelSpecialBases[baseURL]; ok && plan.OpenAIBaseURL != "" {
-			url = fmt.Sprintf("%s/v1/models", plan.OpenAIBaseURL)
+			url = gatewayruntime.JoinBaseURLPath(plan.OpenAIBaseURL, "/v1/models")
 		} else {
-			url = fmt.Sprintf("%s/v1/models", baseURL)
+			url = gatewayruntime.JoinBaseURLPath(baseURL, "/v1/models")
 		}
 	case constant.ChannelTypeMoonshot:
 		if plan, ok := constant.ChannelSpecialBases[baseURL]; ok && plan.OpenAIBaseURL != "" {
-			url = fmt.Sprintf("%s/models", plan.OpenAIBaseURL)
+			url = gatewayruntime.JoinBaseURLPath(plan.OpenAIBaseURL, "/models")
 		} else {
-			url = fmt.Sprintf("%s/v1/models", baseURL)
+			url = gatewayruntime.JoinBaseURLPath(baseURL, "/v1/models")
 		}
 	default:
-		url = fmt.Sprintf("%s/v1/models", baseURL)
+		url = gatewayruntime.JoinBaseURLPath(baseURL, "/v1/models")
 	}
 
 	key, _, apiErr := gatewaystore.GetNextEnabledChannelKey(channel)

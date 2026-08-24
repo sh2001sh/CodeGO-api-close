@@ -1,8 +1,6 @@
 package store
 
 import (
-	"strings"
-
 	"github.com/samber/lo"
 	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -70,8 +68,8 @@ func UpdateChannelAbilities(channel *gatewayschema.Channel, tx *gorm.DB) error {
 }
 
 func buildChannelAbilities(channel *gatewayschema.Channel) []gatewayschema.Ability {
-	models := strings.Split(channel.Models, ",")
-	groups := strings.Split(channel.Group, ",")
+	models := channel.GetModels()
+	groups := channel.GetGroups()
 	abilitySet := make(map[string]struct{})
 	abilities := make([]gatewayschema.Ability, 0, len(models))
 

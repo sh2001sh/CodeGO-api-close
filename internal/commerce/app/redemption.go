@@ -144,13 +144,9 @@ func RedeemCode(userID int, key string) (*RedemptionResult, error) {
 			result.BlindBoxQuantity = redemption.BlindBoxQuantity
 			result.BlindBoxOrderId = order.Id
 		default:
-			walletType := commercedomain.NormalizeWalletType(redemption.WalletType)
+			walletType := commerceschema.WalletTypeClaude
 			idempotencyKey := fmt.Sprintf("redemption:%d:%s", redemption.Id, walletType)
-			if walletType == commerceschema.WalletTypeClaude {
-				if err := billingapp.CreditClaudeWalletQuotaTx(tx, userID, redemption.Quota, idempotencyKey, "redemption_credit"); err != nil {
-					return err
-				}
-			} else if err := billingapp.CreditWalletQuotaTx(tx, userID, redemption.Quota, idempotencyKey, "redemption_credit"); err != nil {
+			if err := billingapp.CreditClaudeWalletQuotaTx(tx, userID, redemption.Quota, idempotencyKey, "redemption_credit"); err != nil {
 				return err
 			}
 			result.Quota = redemption.Quota
@@ -190,11 +186,7 @@ func RedeemCode(userID int, key string) (*RedemptionResult, error) {
 	case commerceschema.RedemptionTypeBlindBox:
 		auditapp.RecordLog(userID, auditschema.LogTypeTopup, fmt.Sprintf("Redeemed blind box code for %d blind box(es), redemption ID %d", result.BlindBoxQuantity, redemption.Id))
 	default:
-		if result.WalletType == commerceschema.WalletTypeClaude {
-			auditapp.RecordLog(userID, auditschema.LogTypeTopup, fmt.Sprintf("Redeemed Claude quota code for %s, redemption ID %d", logger.LogQuota(redemption.Quota), redemption.Id))
-		} else {
-			auditapp.RecordLog(userID, auditschema.LogTypeTopup, fmt.Sprintf("Redeemed quota code for %s, redemption ID %d", logger.LogQuota(redemption.Quota), redemption.Id))
-		}
+		auditapp.RecordLog(userID, auditschema.LogTypeTopup, fmt.Sprintf("Redeemed unified credit code for %s, redemption ID %d", logger.LogQuota(redemption.Quota), redemption.Id))
 	}
 
 	return result, nil
@@ -233,6 +225,13 @@ func createBlindBoxRedemptionOrderTx(tx *gorm.DB, userID int, quantity int, rede
 		ProviderPayload: fmt.Sprintf(`{"source":"redemption","redemption_id":%d}`, redemptionID),
 	}
 	if err := tx.Create(order).Error; err != nil {
+		return nil, err
+	}
+	if err := issuePaidBlindBoxOrderInventoryTx(tx, order); err != nil {
+		return nil, err
+	}
+	order.OpenedCount = order.Quantity
+	if err := tx.Save(order).Error; err != nil {
 		return nil, err
 	}
 	return order, nil

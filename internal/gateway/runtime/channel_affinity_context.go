@@ -434,6 +434,14 @@ func ShouldSkipRetryAfterChannelAffinityFailure(c *gin.Context) bool {
 	return meta.SkipRetry
 }
 
+// AllowRetryAfterChannelAffinityFailure clears only the request-local veto.
+// The successful affinity cache entry remains intact for later requests.
+func AllowRetryAfterChannelAffinityFailure(c *gin.Context) {
+	if c != nil {
+		c.Set(ginKeyChannelAffinitySkipRetry, false)
+	}
+}
+
 // InvalidateChannelAffinityForCurrentRequest removes a stale affinity entry before normal routing resumes.
 func InvalidateChannelAffinityForCurrentRequest(c *gin.Context) {
 	cacheKey, _, ok := getChannelAffinityContext(c)
@@ -528,4 +536,22 @@ func ObserveChannelAffinityUsageCacheFromContext(c *gin.Context, usage *dto.Usag
 		return
 	}
 	ObserveChannelAffinityUsageCache(statsCtx, usage, cachedTokenRateMode)
+}
+
+// ObserveConversationPromptHighWaterFromContext records the upstream prompt
+// high-water mark needed to classify subsequent Responses deltas correctly.
+func ObserveConversationPromptHighWaterFromContext(c *gin.Context, model string, usage *dto.Usage) {
+	statsCtx, ok := GetChannelAffinityStatsContext(c)
+	if !ok {
+		return
+	}
+	ObserveConversationPromptHighWater(statsCtx, model, usage)
+}
+
+func ConversationPromptHighWaterFromContext(c *gin.Context, model string) int {
+	statsCtx, ok := GetChannelAffinityStatsContext(c)
+	if !ok {
+		return 0
+	}
+	return ConversationPromptHighWater(statsCtx, model)
 }

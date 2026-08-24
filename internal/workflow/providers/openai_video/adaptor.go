@@ -109,9 +109,9 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.Action == constant.TaskActionRemix {
-		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, info.OriginTaskID), nil
+		return relaycommon.JoinBaseURLPath(a.baseURL, fmt.Sprintf("/v1/videos/%s/remix", info.OriginTaskID)), nil
 	}
-	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
+	return relaycommon.JoinBaseURLPath(a.baseURL, "/v1/videos"), nil
 }
 
 func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
@@ -234,7 +234,7 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 		return nil, fmt.Errorf("invalid task_id")
 	}
 
-	uri := fmt.Sprintf("%s/v1/videos/%s", baseURL, taskID)
+	uri := relaycommon.JoinBaseURLPath(baseURL, fmt.Sprintf("/v1/videos/%s", taskID))
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err

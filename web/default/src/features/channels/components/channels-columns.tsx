@@ -438,7 +438,6 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
         // Regular channel row
         const settings = parseChannelSettings(channel.setting)
         const isPassThrough = settings.pass_through_body_enabled === true
-        const isClaudeWallet = settings.claude_wallet_enabled === true
 
         return (
           <div className='flex items-center gap-2'>
@@ -469,14 +468,6 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                   <StatusBadge
                     label={`${channel.channel_info.multi_key_size} keys`}
                     variant='purple'
-                    size='sm'
-                    copyable={false}
-                  />
-                )}
-                {isClaudeWallet && (
-                  <StatusBadge
-                    label='Claude 钱包'
-                    variant='green'
                     size='sm'
                     copyable={false}
                   />

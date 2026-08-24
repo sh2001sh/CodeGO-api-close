@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func TestAggregateExpectedBalanceSnapshotIncludesOnlyCompletedSettlements(t *testing.T) {
+func TestAggregateExpectedBalanceSnapshotIncludesCompletedSettlementsAndDirectAdjustments(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
@@ -23,7 +23,9 @@ func TestAggregateExpectedBalanceSnapshotIncludesOnlyCompletedSettlements(t *tes
 	entries := []billingschema.BillingLedgerEntry{
 		{AccountID: accountID, EntryType: "grant_credit", Amount: 1_000, IdempotencyKey: "aggregate-grant"},
 		{AccountID: accountID, EntryType: "reserve_hold", Amount: 300, IdempotencyKey: "aggregate-hold"},
-		{AccountID: accountID, EntryType: "settle_credit", Amount: 50, IdempotencyKey: "aggregate-refund"},
+		{AccountID: accountID, EntryType: "settle_credit", ReferenceType: "settlement", Amount: 50, IdempotencyKey: "aggregate-refund"},
+		{AccountID: accountID, EntryType: "settle_debit", ReferenceType: "token", Amount: 25, IdempotencyKey: "aggregate-direct-consume"},
+		{AccountID: accountID, EntryType: "settle_credit", ReferenceType: "token", Amount: 10, IdempotencyKey: "aggregate-direct-refund"},
 		{AccountID: accountID, EntryType: "adjustment", Amount: 0, IdempotencyKey: "aggregate-adjustment"},
 	}
 	for _, entry := range entries {
@@ -41,9 +43,9 @@ func TestAggregateExpectedBalanceSnapshotIncludesOnlyCompletedSettlements(t *tes
 
 	snapshot, err := aggregateExpectedBalanceSnapshot(db, accountID)
 	require.NoError(t, err)
-	require.EqualValues(t, 750, snapshot.AvailableBalance)
+	require.EqualValues(t, 735, snapshot.AvailableBalance)
 	require.EqualValues(t, 1_000, snapshot.GrantedTotal)
-	require.EqualValues(t, 250, snapshot.ConsumedTotal)
-	require.EqualValues(t, 50, snapshot.RefundedTotal)
+	require.EqualValues(t, 275, snapshot.ConsumedTotal)
+	require.EqualValues(t, 60, snapshot.RefundedTotal)
 	require.EqualValues(t, 80, snapshot.ReservedBalance)
 }

@@ -90,7 +90,7 @@ func TransferAffiliateQuotaToBalance(userID int, quota int) error {
 		if user.AffQuota < quota {
 			return errors.New("邀请额度不足")
 		}
-		if err := billingapp.CreditWalletQuotaTx(tx, user.Id, quota, "affiliate-transfer:"+operationID, "affiliate_quota_transfer"); err != nil {
+		if err := billingapp.CreditClaudeWalletQuotaTx(tx, user.Id, quota, "affiliate-transfer:"+operationID, "affiliate_quota_transfer"); err != nil {
 			return err
 		}
 		if err := tx.Model(user).Update("aff_quota", gorm.Expr("aff_quota - ?", quota)).Error; err != nil {

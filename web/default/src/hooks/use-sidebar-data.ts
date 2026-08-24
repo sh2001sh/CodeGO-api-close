@@ -23,13 +23,12 @@ import {
   ReceiptText,
   ChartNoAxesCombined,
 } from 'lucide-react'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
 import { type SidebarData } from '@/components/layout/types'
 
-export function useSidebarData(): SidebarData {
-  const { t } = useTranslation()
-
+export function buildSidebarData(t: TFunction): SidebarData {
   return {
     workspaces: [
       {
@@ -102,6 +101,16 @@ export function useSidebarData(): SidebarData {
         title: t('Personal'),
         items: [
           {
+            title: t('Blind box'),
+            url: '/blind-box',
+            icon: Ticket,
+          },
+          {
+            title: t('Plans'),
+            url: '/packages',
+            icon: Package,
+          },
+          {
             title: t('Wallet'),
             url: '/wallet',
             icon: Gem,
@@ -119,16 +128,6 @@ export function useSidebarData(): SidebarData {
                 title: '电子发票',
                 url: '/invoices',
                 icon: ReceiptText,
-              },
-              {
-                title: t('Blind box'),
-                url: '/blind-box',
-                icon: Ticket,
-              },
-              {
-                title: t('Plans'),
-                url: '/packages',
-                icon: Package,
               },
               {
                 title: t('Collective benefit plan'),
@@ -218,4 +217,9 @@ export function useSidebarData(): SidebarData {
       },
     ],
   }
+}
+
+export function useSidebarData(): SidebarData {
+  const { t } = useTranslation()
+  return buildSidebarData(t)
 }

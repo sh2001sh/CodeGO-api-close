@@ -88,7 +88,7 @@ export function AdminGovernance() {
         releasing={releaseIncome.isPending}
         onRelease={() => {
           if ((ownerIncomeQuery.data?.pending_income ?? 0) <= 0) return
-          if (!window.confirm(t('确定回收当前筛选范围内的待结算收益吗？')))
+          if (!window.confirm(t('确定立即结算当前筛选范围内的待结算收益吗？')))
             return
           releaseIncome.mutate(
             {
@@ -99,7 +99,7 @@ export function AdminGovernance() {
             {
               onSuccess: (result) => {
                 toast.success(
-                  t('已回收 {{count}} 条收益，共 {{amount}}', {
+                  t('已结算 {{count}} 条收益，共 {{amount}}', {
                     count: result.released_count,
                     amount: formatQuota(result.released_amount),
                   })
@@ -107,7 +107,7 @@ export function AdminGovernance() {
               },
               onError: (error) =>
                 toast.error(
-                  error instanceof Error ? error.message : t('收益回收失败')
+                  error instanceof Error ? error.message : t('收益结算失败')
                 ),
             }
           )
@@ -251,7 +251,8 @@ export function AdminGovernance() {
                       {t('待结算')}: {formatQuota(channel.pending_income)}
                     </span>
                     <span>
-                      {t('已回收')}: {formatQuota(channel.released_income)}
+                      {t('已结算收益')}:{' '}
+                      {formatQuota(channel.released_income)}
                     </span>
                     <span>
                       {t('结算请求')}: {channel.request_count.toLocaleString()}

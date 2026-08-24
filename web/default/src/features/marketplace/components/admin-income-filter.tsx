@@ -43,7 +43,7 @@ export function AdminIncomeFilter(props: {
             value={formatQuota(report?.pending_income ?? 0)}
           />
           <IncomeValue
-            label={t('已回收')}
+            label={t('已结算收益')}
             value={formatQuota(report?.released_income ?? 0)}
           />
         </div>
@@ -94,10 +94,10 @@ export function AdminIncomeFilter(props: {
               props.isFetching ||
               (report?.pending_income ?? 0) <= 0
             }
-            title={t('按当前用户和时间范围回收待结算收益')}
+            title={t('按当前用户和时间范围结算待结算收益')}
           >
             <WalletCards className={props.releasing ? 'animate-pulse' : ''} />
-            {props.releasing ? t('回收中') : t('一键回收待结算')}
+            {props.releasing ? t('结算中') : t('立即结算待结算收益')}
           </Button>
         </div>
       </div>
@@ -125,7 +125,7 @@ export function AdminIncomeFilter(props: {
                 value={formatQuota(item.pending_income)}
               />
               <ReportValue
-                label={t('已回收')}
+                label={t('已结算收益')}
                 value={formatQuota(item.released_income)}
               />
               <ReportValue

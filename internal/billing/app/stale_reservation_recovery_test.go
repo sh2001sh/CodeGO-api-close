@@ -170,6 +170,34 @@ func TestRecoverStaleSubscriptionFallsBackToQuotaWhenJSONFieldIsMissing(t *testi
 	assertRecoveredBalance(t, db, account.AccountID, 600, 0, 400)
 }
 
+func TestRecoverStaleSubscriptionSettlesWhenProjectionWasDeleted(t *testing.T) {
+	db := setupStaleRecoveryTestDB(t)
+	now := time.Now().UTC()
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: 6201, QuotaUnit: billingQuotaUnitQuota,
+	})
+	require.NoError(t, err)
+	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{
+		AccountID: account.AccountID, Amount: 1_000, IdempotencyKey: "deleted-subscription:credit",
+	})
+	require.NoError(t, err)
+	_, err = billingdomain.CreateReservation(billingdomain.CreateReservationParams{
+		AccountID: account.AccountID, RequestID: "deleted-subscription", ReservedAmount: 300,
+		IdempotencyKey: "deleted-subscription:reserve", ExpiresAt: expiredAt(now),
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&auditschema.Log{
+		Type: auditschema.LogTypeConsume, RequestId: "deleted-subscription", Quota: 400,
+	}).Error)
+
+	result, err := RecoverStaleRelayReservations(context.Background(), now, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Requests)
+	require.Equal(t, 1, result.Settled)
+	require.EqualValues(t, 400, result.Amount)
+	assertRecoveredBalance(t, db, account.AccountID, 600, 0, 400)
+}
+
 func setupStaleRecoveryTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	originalDB := platformdb.DB

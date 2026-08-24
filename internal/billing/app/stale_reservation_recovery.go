@@ -259,6 +259,9 @@ func syncRecoveredProjection(tx *gorm.DB, account billingschema.BillingAccount, 
 	case "subscription":
 		var subscription commerceschema.UserSubscription
 		if err := tx.Where("id = ?", account.OwnerID).First(&subscription).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return 0, nil
+			}
 			return 0, err
 		}
 		used := max(subscription.AmountTotal-snapshot.AvailableBalance, 0)

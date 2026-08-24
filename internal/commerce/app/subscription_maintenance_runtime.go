@@ -1,6 +1,7 @@
 package app
 
 import (
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/store"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -149,6 +150,11 @@ func CleanupSubscriptionPreConsumeRecords(olderThanSeconds int64) (int64, error)
 		olderThanSeconds = 7 * 24 * 3600
 	}
 	cutoff := commercestore.GetDBTimestamp() - olderThanSeconds
-	res := platformdb.DB.Where("updated_at < ?", cutoff).Delete(&commerceschema.SubscriptionPreConsumeRecord{})
+	openRequests := platformdb.DB.Model(&billingschema.BillingReservation{}).
+		Select("request_id").
+		Where("status = ?", billingschema.BillingReservationStatusOpen)
+	res := platformdb.DB.Where("updated_at < ?", cutoff).
+		Where("request_id NOT IN (?)", openRequests).
+		Delete(&commerceschema.SubscriptionPreConsumeRecord{})
 	return res.RowsAffected, res.Error
 }

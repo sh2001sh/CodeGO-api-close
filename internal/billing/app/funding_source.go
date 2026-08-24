@@ -115,6 +115,10 @@ type ReservableFundingSource interface {
 	ReserveAdditional(amount int64) error
 }
 
+type fundingAvailableBalance interface {
+	AvailableBalance() (int64, error)
+}
+
 type SubscriptionFunding struct {
 	requestID       string
 	userID          int
@@ -180,6 +184,17 @@ func (s *SubscriptionFunding) ReservationID() string { return s.reservationID }
 func (s *SubscriptionFunding) AccountID() string { return s.accountID }
 
 func (s *SubscriptionFunding) SettlementID() string { return s.settlementID }
+
+func (s *SubscriptionFunding) AvailableBalance() (int64, error) {
+	if s.accountID == "" {
+		return 0, errors.New("subscription ledger account is missing")
+	}
+	var snapshot billingschema.BillingBalanceSnapshot
+	if err := platformdb.DB.Where("account_id = ?", s.accountID).First(&snapshot).Error; err != nil {
+		return 0, err
+	}
+	return snapshot.AvailableBalance, nil
+}
 
 func (s *SubscriptionFunding) loadSettlement() error {
 	if s.reservationID == "" {

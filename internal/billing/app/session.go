@@ -3,8 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
-	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"math"
 	"net/http"
 	"strings"
@@ -14,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -22,7 +22,6 @@ type BillingSession struct {
 	funding               FundingSource
 	preConsumedQuota      int
 	tokenConsumed         int
-	extraReserved         int
 	trusted               bool
 	quotaScale            float64
 	reservationQuotaScale float64
@@ -31,71 +30,6 @@ type BillingSession struct {
 	settled               bool
 	refunded              bool
 	mu                    sync.Mutex
-}
-
-func (s *BillingSession) Settle(actualQuota int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if actualQuota < 0 {
-		actualQuota = 0
-	}
-	actualQuota = s.scaleQuota(actualQuota, s.settlementQuotaScale())
-	if s.settled {
-		return nil
-	}
-	if s.trusted && s.preConsumedQuota == 0 && actualQuota > 0 {
-		if err := s.reserveTrustedSettlement(actualQuota); err != nil {
-			return err
-		}
-	}
-
-	delta := actualQuota - s.preConsumedQuota
-	if !s.fundingSettled {
-		if err := s.funding.Settle(delta); err != nil {
-			return err
-		}
-		s.fundingSettled = true
-	}
-
-	var tokenErr error
-	if !s.relayInfo.IsPlayground {
-		tokenErr = AdjustTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
-		if tokenErr != nil {
-			platformobservability.SysLog(fmt.Sprintf(
-				"error adjusting token quota after funding settled (userId=%d, tokenId=%d, delta=%d): %s",
-				s.relayInfo.UserId,
-				s.relayInfo.TokenId,
-				delta,
-				tokenErr.Error(),
-			))
-		}
-	}
-
-	if s.funding.Source() == BillingSourceSubscription {
-		s.relayInfo.SubscriptionPostDelta += int64(delta)
-	}
-
-	s.settled = true
-	return tokenErr
-}
-
-func (s *BillingSession) reserveTrustedSettlement(actualQuota int) error {
-	if err := s.funding.PreConsume(actualQuota); err != nil {
-		return err
-	}
-	if !s.relayInfo.IsPlayground {
-		if err := PreConsumeTokenQuota(s.relayInfo, actualQuota); err != nil {
-			if refundErr := s.funding.Refund(); refundErr != nil {
-				return errors.Join(err, fmt.Errorf("refund trusted funding reservation: %w", refundErr))
-			}
-			return err
-		}
-	}
-	s.preConsumedQuota = actualQuota
-	s.tokenConsumed = actualQuota
-	s.syncRelayInfo()
-	return nil
 }
 
 func (s *BillingSession) Refund(c *gin.Context) {
@@ -219,7 +153,6 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 
 	s.preConsumedQuota += delta
 	s.tokenConsumed += delta
-	s.extraReserved += delta
 	s.syncRelayInfo()
 	return nil
 }
@@ -358,10 +291,10 @@ func (s *BillingSession) syncRelayInfo() {
 
 	if sub, ok := s.funding.(*SubscriptionFunding); ok {
 		info.SubscriptionId = sub.subscriptionID
-		info.SubscriptionPreConsumed = sub.preConsumed + int64(s.extraReserved)
+		info.SubscriptionPreConsumed = sub.preConsumed
 		info.SubscriptionPostDelta = 0
 		info.SubscriptionAmountTotal = sub.AmountTotal
-		info.SubscriptionAmountUsedAfterPreConsume = sub.AmountUsedAfter + int64(s.extraReserved)
+		info.SubscriptionAmountUsedAfterPreConsume = sub.AmountUsedAfter
 		info.SubscriptionPlanId = sub.PlanId
 		info.SubscriptionPlanTitle = sub.PlanTitle
 	} else {

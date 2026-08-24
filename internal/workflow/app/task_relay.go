@@ -66,7 +66,9 @@ func SubmitRelayTask(c *gin.Context) {
 	var taskErr *dto.TaskError
 	defer func() {
 		if taskErr != nil && relayInfo.Billing != nil {
-			relayInfo.Billing.Refund(c)
+			if refundErr := billingapp.RefundRelayBillingSync(c, relayInfo); refundErr != nil {
+				platformobservability.SysError("synchronous task billing refund failed: " + refundErr.Error())
+			}
 		}
 	}()
 

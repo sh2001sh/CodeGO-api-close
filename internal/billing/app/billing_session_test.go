@@ -92,6 +92,44 @@ func TestBillingSessionSettleAdjustsWalletAndTokenToActualUsage(t *testing.T) {
 	require.Equal(t, 5500, userQuota)
 }
 
+func TestBillingSessionSettlementCapsAtReservedQuotaWhenBalanceIsInsufficient(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1090, 10_000)
+	seedToken(t, 2090, 1090, "sk-capped-settle", 10_000)
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		UserId: 1090, TokenId: 2090, TokenKey: "sk-capped-settle", OriginModelName: "gpt-5",
+		RequestId: "req-capped-settle", IsPlayground: true, ForcePreConsume: true,
+		UserSetting: dto.UserSetting{BillingPreference: "wallet_only"},
+	}
+	session, apiErr := NewBillingSession(ctx, info, 3_000)
+	require.Nil(t, apiErr)
+
+	require.NoError(t, session.Settle(12_000))
+	require.True(t, info.BillingSettled)
+	require.Equal(t, 10_000, info.BillingSettledQuota)
+	require.Equal(t, 10_000, BillingQuotaForLog(info, 12_000))
+
+	snapshot := loadBillingSnapshot(t, 1090, billingAccountTypeClaudeWallet)
+	require.Zero(t, snapshot.AvailableBalance)
+	require.EqualValues(t, 10_000, snapshot.ConsumedTotal)
+}
+
+func TestBillingSessionReserveDoesNotDoubleCountSubscriptionAdditionalQuota(t *testing.T) {
+	originalHooks := subscriptionFundingHooks
+	t.Cleanup(func() { subscriptionFundingHooks = originalHooks })
+	subscriptionFundingHooks.ReserveAdditional = func(string, int, string, int64) error { return nil }
+
+	info := &relaycommon.RelayInfo{}
+	funding := &SubscriptionFunding{requestID: "req-sub-retry", subscriptionID: 10, preConsumed: 100, AmountUsedAfter: 100}
+	session := &BillingSession{relayInfo: info, funding: funding, preConsumedQuota: 100}
+
+	require.NoError(t, session.Reserve(150))
+	require.EqualValues(t, 150, info.SubscriptionPreConsumed)
+	require.EqualValues(t, 150, info.SubscriptionAmountUsedAfterPreConsume)
+}
+
 func TestBillingSessionUsesOneReservationForRelayLifecycle(t *testing.T) {
 	truncate(t)
 	seedUser(t, 1012, 10000)

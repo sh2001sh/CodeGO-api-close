@@ -28,6 +28,7 @@ import (
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -376,7 +377,9 @@ func refundRelayBillingIfNeeded(c *gin.Context, relayInfo *relaycommon.RelayInfo
 	}
 	apiErr = billingapp.NormalizeViolationFeeError(apiErr)
 	if relayInfo.Billing != nil {
-		relayInfo.Billing.Refund(c)
+		if err := billingapp.RefundRelayBillingSync(c, relayInfo); err != nil {
+			platformobservability.SysError("synchronous billing refund failed: " + err.Error())
+		}
 	}
 	billingapp.ChargeViolationFeeIfNeeded(c, relayInfo, apiErr)
 	return apiErr

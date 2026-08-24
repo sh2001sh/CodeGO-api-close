@@ -76,11 +76,12 @@ func SettleRelayBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actu
 		if err := relayInfo.Billing.Settle(actualQuota); err != nil {
 			return err
 		}
-		if err := RecordRequestEconomics(relayInfo, actualQuota); err != nil {
+		settledQuota := BillingQuotaForLog(relayInfo, actualQuota)
+		if err := RecordRequestEconomics(relayInfo, settledQuota); err != nil {
 			platformobservability.SysError("record request economics: " + err.Error())
 		}
-		if relayInfo.MarketplaceGroupID != "" && actualQuota > 0 {
-			if err := marketplacesettlement.Record(marketplaceSettlementParams(relayInfo, actualQuota)); err != nil {
+		if relayInfo.MarketplaceGroupID != "" && settledQuota > 0 {
+			if err := marketplacesettlement.Record(marketplaceSettlementParams(relayInfo, settledQuota)); err != nil {
 				platformobservability.SysError("record marketplace settlement: " + err.Error())
 			}
 		}

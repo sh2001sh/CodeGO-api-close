@@ -18,6 +18,7 @@ const (
 	ledgerWorkerInterval           = 2 * time.Second
 	ledgerReconciliationInterval   = 30 * time.Minute
 	ledgerOutboxCleanupInterval    = time.Minute
+	staleReservationScanInterval   = time.Minute
 	ledgerOutboxPublishedRetention = 72 * time.Hour
 	ledgerOutboxCleanupBatchSize   = 5000
 )
@@ -33,11 +34,16 @@ func StartLedgerWorker(ctx context.Context) {
 		ticker := time.NewTicker(ledgerWorkerInterval)
 		defer ticker.Stop()
 		var lastCleanup time.Time
+		var lastStaleRecovery time.Time
 		for {
 			if _, err := RunLedgerWorkerBatch(ctx, ledgerWorkerAccountBatchSize); err != nil {
 				platformobservability.SysError("ledger worker batch failed: " + err.Error())
 			}
 			now := time.Now().UTC()
+			if lastStaleRecovery.IsZero() || now.Sub(lastStaleRecovery) >= staleReservationScanInterval {
+				runStaleReservationRecovery(ctx, now)
+				lastStaleRecovery = now
+			}
 			if lastCleanup.IsZero() || now.Sub(lastCleanup) >= ledgerOutboxCleanupInterval {
 				if _, err := cleanupPublishedLedgerOutboxBatch(ctx, now, ledgerOutboxCleanupBatchSize); err != nil {
 					platformobservability.SysError("ledger outbox cleanup failed: " + err.Error())
@@ -51,6 +57,29 @@ func StartLedgerWorker(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func runStaleReservationRecovery(ctx context.Context, now time.Time) {
+	total := StaleReservationRecoveryResult{}
+	for {
+		result, err := RecoverStaleRelayReservations(ctx, now, staleReservationRecoveryBatch)
+		total.Requests += result.Requests
+		total.Failed += result.Failed
+		total.Released += result.Released
+		total.Settled += result.Settled
+		total.Capped += result.Capped
+		total.Amount += result.Amount
+		if err != nil {
+			platformobservability.SysError("stale reservation recovery failed: " + err.Error())
+			break
+		}
+		if result.Requests < staleReservationRecoveryBatch {
+			break
+		}
+	}
+	if total.Requests > 0 || total.Failed > 0 {
+		platformobservability.SysLog(fmt.Sprintf("stale reservation recovery: requests=%d failed=%d released=%d settled=%d capped=%d amount=%d", total.Requests, total.Failed, total.Released, total.Settled, total.Capped, total.Amount))
+	}
 }
 
 // RunLedgerWorkerBatch rebuilds one snapshot per pending account and publishes all

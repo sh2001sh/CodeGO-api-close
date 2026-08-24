@@ -7,6 +7,7 @@ import (
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	"strings"
+	"time"
 
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -54,6 +55,7 @@ func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscripti
 		RequestID:      record.RequestId,
 		ReservedAmount: record.PreConsumed,
 		IdempotencyKey: "subscription:" + record.RequestId + ":reserve",
+		ExpiresAt:      subscriptionReservationExpiry(),
 	})
 	return err
 }
@@ -89,24 +91,37 @@ func ReserveAdditionalSubscriptionQuota(requestID string, subscriptionID int, mo
 		if err != nil {
 			return err
 		}
-		if err := applySubscriptionUsageDelta(plan, sub, modelName, amount); err != nil {
-			return err
-		}
-		if err := tx.Save(sub).Error; err != nil {
-			return err
-		}
 		account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
 			AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(subscriptionID), QuotaUnit: "quota",
 		})
 		if err != nil {
 			return err
 		}
+		var snapshot billingschema.BillingBalanceSnapshot
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
+			return err
+		}
+		if snapshot.AvailableBalance < amount {
+			return billingdomain.ErrInsufficientBalance
+		}
+		if err := applySubscriptionUsageDelta(plan, sub, modelName, amount); err != nil {
+			return fmt.Errorf("%w: %v", billingdomain.ErrInsufficientBalance, err)
+		}
+		if err := tx.Save(sub).Error; err != nil {
+			return err
+		}
 		_, err = billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
 			AccountID: account.AccountID, RequestID: requestID, ReservedAmount: amount,
 			IdempotencyKey: fmt.Sprintf("subscription:%s:reserve-extra:%d", requestID, amount),
+			ExpiresAt:      subscriptionReservationExpiry(),
 		})
 		return err
 	})
+}
+
+func subscriptionReservationExpiry() *time.Time {
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
+	return &expiresAt
 }
 
 // RefundSubscriptionPreConsume refunds a previous subscription pre-consume idempotently.

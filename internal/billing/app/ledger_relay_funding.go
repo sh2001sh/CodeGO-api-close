@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
@@ -89,6 +90,7 @@ func (f *LedgerRelayFunding) PreConsume(amount int) error {
 		RequestID:      f.requestID,
 		ReservedAmount: int64(amount),
 		IdempotencyKey: f.idempotencyKey("reserve"),
+		ExpiresAt:      relayReservationExpiry(),
 	})
 	if err != nil {
 		return err
@@ -109,6 +111,11 @@ func (f *LedgerRelayFunding) PreConsume(amount int) error {
 	f.reserved = amount
 	f.legacyHeld = amount
 	return nil
+}
+
+func relayReservationExpiry() *time.Time {
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
+	return &expiresAt
 }
 
 // ReserveAdditional expands the request's open wallet reservation for a higher-priced retry.
@@ -232,6 +239,17 @@ func (f *LedgerRelayFunding) AccountID() string {
 
 func (f *LedgerRelayFunding) SettlementID() string {
 	return f.settlementID
+}
+
+func (f *LedgerRelayFunding) AvailableBalance() (int64, error) {
+	if f.accountID == "" {
+		return 0, errors.New("ledger account is missing")
+	}
+	var snapshot billingschema.BillingBalanceSnapshot
+	if err := platformdb.DB.Where("account_id = ?", f.accountID).First(&snapshot).Error; err != nil {
+		return 0, err
+	}
+	return snapshot.AvailableBalance, nil
 }
 
 func (f *LedgerRelayFunding) ensureAccount() (*billingschema.BillingAccount, error) {

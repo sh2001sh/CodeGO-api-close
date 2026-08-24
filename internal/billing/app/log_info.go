@@ -232,7 +232,13 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 // billing may apply a different scale, so exposing that raw quota would make a
 // subscription request appear undercharged in usage logs.
 func BillingQuotaForLog(relayInfo *relaycommon.RelayInfo, usageQuota int) int {
-	if relayInfo == nil || relayInfo.BillingSource != BillingSourceSubscription {
+	if relayInfo == nil {
+		return usageQuota
+	}
+	if relayInfo.BillingSettled {
+		return relayInfo.BillingSettledQuota
+	}
+	if relayInfo.BillingSource != BillingSourceSubscription {
 		return usageQuota
 	}
 	consumed := relayInfo.SubscriptionPreConsumed + relayInfo.SubscriptionPostDelta

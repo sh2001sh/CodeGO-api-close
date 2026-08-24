@@ -1,11 +1,13 @@
 package app
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/sh2001sh/new-api/constant"
+	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/store"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,10 +76,21 @@ func TestCleanupSubscriptionPreConsumeRecords_RemovesExpiredRows(t *testing.T) {
 		PreConsumed:        20,
 		Status:             "consumed",
 	}
+	heldRecord := &commerceschema.SubscriptionPreConsumeRecord{
+		RequestId: "cleanup-held", UserId: 1, UserSubscriptionId: 4, PreConsumed: 30, Status: "consumed",
+	}
 	require.NoError(t, db.Create(oldRecord).Error)
 	require.NoError(t, db.Create(newRecord).Error)
+	require.NoError(t, db.Create(heldRecord).Error)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingLedgerEntry{}, &billingschema.BillingReservation{}, &billingschema.BillingOutboxEvent{}))
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{AccountType: "subscription", OwnerType: "user_subscription", OwnerID: 4})
+	require.NoError(t, err)
+	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{AccountID: account.AccountID, Amount: 100, IdempotencyKey: "cleanup-held-credit"})
+	require.NoError(t, err)
+	_, err = billingdomain.CreateReservation(billingdomain.CreateReservationParams{AccountID: account.AccountID, RequestID: heldRecord.RequestId, ReservedAmount: 30, IdempotencyKey: "cleanup-held-reserve"})
+	require.NoError(t, err)
 	require.NoError(t, db.Model(&commerceschema.SubscriptionPreConsumeRecord{}).
-		Where("id = ?", oldRecord.Id).
+		Where("id IN ?", []int{oldRecord.Id, heldRecord.Id}).
 		Update("updated_at", commercestore.GetDBTimestamp()-8*24*3600).Error)
 
 	rows, err := CleanupSubscriptionPreConsumeRecords(7 * 24 * 3600)
@@ -86,8 +99,9 @@ func TestCleanupSubscriptionPreConsumeRecords_RemovesExpiredRows(t *testing.T) {
 
 	var remaining []commerceschema.SubscriptionPreConsumeRecord
 	require.NoError(t, db.Order("id asc").Find(&remaining).Error)
-	require.Len(t, remaining, 1)
+	require.Len(t, remaining, 2)
 	assert.Equal(t, "cleanup-new", remaining[0].RequestId)
+	assert.Equal(t, "cleanup-held", remaining[1].RequestId)
 }
 
 func TestExpireDueSubscriptions_DowngradesUserGroupWhenLastUpgradeExpires(t *testing.T) {

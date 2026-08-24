@@ -17,6 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import {
+  loadSelectableMarketplaceGroups,
+  type MarketplaceGroupPage,
+} from './lib/marketplace-group-options'
 import type {
   ApiKey,
   ApiResponse,
@@ -61,23 +65,6 @@ export interface ApiKeyGroupOptionData {
   disabled?: boolean
   models?: string[]
   mappingStatus?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
-}
-
-interface MarketplaceGroupListResponse {
-  items: Array<{
-    id: string
-    system_display_name: string
-    source_label: string
-    lifecycle_status: string
-    verification_status: string
-    multiplier: number
-    subscription_enabled: boolean
-    subscription_multiplier: number
-    success_rate?: number
-    request_count?: number
-    gpt56_mapping_status?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
-    models: string[]
-  }>
 }
 
 // ============================================================================
@@ -195,28 +182,37 @@ export async function createDesktopImportLink(
 export async function getSelectableMarketplaceGroups(): Promise<
   ApiKeyGroupOptionData[]
 > {
-  const res = await api.get<ApiResponse<MarketplaceGroupListResponse>>(
-    '/api/marketplace/groups?page=1&page_size=50&include_access=true&sort=score&direction=desc&window_hours=24'
+  const groups = await loadSelectableMarketplaceGroups(
+    async (page, pageSize) => {
+      const query = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+        include_access: 'true',
+        sort: 'score',
+        direction: 'desc',
+        window_hours: '24',
+      })
+      const res = await api.get<ApiResponse<MarketplaceGroupPage>>(
+        `/api/marketplace/groups?${query.toString()}`
+      )
+      if (!res.data.success || !res.data.data) {
+        throw new Error(res.data.message || 'Failed to load marketplace groups')
+      }
+      return res.data.data
+    }
   )
-  if (!res.data.success || !res.data.data) return []
-  return res.data.data.items
-    .filter(
-      (group) =>
-        ['active', 'degraded'].includes(group.lifecycle_status) &&
-        group.verification_status === 'passed' &&
-        group.gpt56_mapping_status !== 'mismatch'
-    )
-    .map((group) => ({
-      value: `market:${group.id}`,
-      label: group.system_display_name,
-      desc: `${group.source_label || '来源待审核'} · 余额与套餐均可使用`,
-      ratio: group.multiplier,
-      subscriptionEnabled: group.subscription_enabled,
-      subscriptionRatio: group.subscription_multiplier,
-      successRate: group.success_rate,
-      requestCount: group.request_count,
-      mappingStatus: group.gpt56_mapping_status || '',
-      category: 'marketplace' as const,
-      models: group.models,
-    }))
+
+  return groups.map((group) => ({
+    value: `market:${group.id}`,
+    label: group.system_display_name,
+    desc: `${group.source_label || '来源待审核'} · 余额与套餐均可使用`,
+    ratio: group.multiplier,
+    subscriptionEnabled: group.subscription_enabled,
+    subscriptionRatio: group.subscription_multiplier,
+    successRate: group.success_rate,
+    requestCount: group.request_count,
+    mappingStatus: group.gpt56_mapping_status || '',
+    category: 'marketplace' as const,
+    models: group.models,
+  }))
 }

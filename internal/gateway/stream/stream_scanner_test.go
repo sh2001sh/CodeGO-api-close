@@ -278,6 +278,47 @@ func TestScanResponseRenewsAdaptiveDeadlineOnSemanticProgress(t *testing.T) {
 	require.Equal(t, gatewaycontract.StreamEndReasonDone, info.StreamStatus.EndReason)
 }
 
+func TestNativeResponsesAllowsSemanticGapPastAdaptiveDeadline(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	oldMaxDuration := constant.StreamingLongContextMaxDuration
+	oldProgress := constant.StreamingAdaptiveProgressTimeout
+	oldInitial := constant.StreamingAdaptiveInitialTimeout
+	constant.StreamingTimeout = 5
+	constant.StreamingLongContextMaxDuration = 3
+	constant.StreamingAdaptiveProgressTimeout = 1
+	constant.StreamingAdaptiveInitialTimeout = 1
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+		constant.StreamingLongContextMaxDuration = oldMaxDuration
+		constant.StreamingAdaptiveProgressTimeout = oldProgress
+		constant.StreamingAdaptiveInitialTimeout = oldInitial
+	})
+
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	relaycommon.InitializeRequestProfile(context, "gpt-5.6-sol", "/v1/responses", relaycommon.RequestProfileHint{IsStream: true, HasCacheAffinity: true})
+	relaycommon.MarkLongContextRequest(context, "gpt-5.6-sol", relaycommon.LongContextPromptTokenThreshold)
+	relaycommon.MarkSingleChannelRoute(context, true)
+
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	go func() {
+		_, _ = io.WriteString(writer, "data: lifecycle\n\n")
+		time.Sleep(1200 * time.Millisecond)
+		_, _ = io.WriteString(writer, "data: final\n\n")
+		_, _ = io.WriteString(writer, "data: [DONE]\n\n")
+	}()
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol"}
+
+	ScanResponse(context, &http.Response{Body: reader}, info, func(_ string, result *Result) {
+		result.MarkProgress()
+	})
+
+	require.Equal(t, gatewaycontract.StreamEndReasonDone, info.StreamStatus.EndReason)
+	require.Empty(t, relaycommon.LocalStreamTimeoutReason(context))
+}
+
 func TestScanResponseStopsBeforeIdleTimeoutWhenFirstByteIsMissing(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	oldFirstByteTimeout := constant.StreamingFirstByteTimeout

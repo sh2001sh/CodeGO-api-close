@@ -8,6 +8,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	"github.com/sh2001sh/new-api/types"
 )
 
 // StreamMaxDuration returns the absolute upstream stream budget. GPT requests
@@ -45,6 +46,16 @@ func StreamMaxDurationForRequest(c *gin.Context, model string, promptTokens int)
 // resets this window; image generation remains on its own long-running policy.
 func StreamAdaptiveProgressTimeoutForRequest(c *gin.Context, model string, promptTokens int) time.Duration {
 	if IsImageGenerationRequest(c) || gatewaycontract.IsImageGenerationModel(model) || !isGPTModel(model) {
+		return 0
+	}
+	// Native Responses streams may emit lifecycle events before spending a long
+	// time in server-side reasoning without visible deltas. Once such a stream
+	// has started, a fixed semantic-progress deadline can terminate a healthy
+	// request even while the upstream connection remains active. Keep the
+	// retryable initial-output deadline below, but let byte-idle and max-duration
+	// limits govern established native Responses streams.
+	if profile, found := RequestProfileFromContext(c); found &&
+		profile.IsStream && profile.Protocol == string(types.RelayFormatOpenAIResponses) {
 		return 0
 	}
 	if (c != nil && IsLongContextRequest(c)) || promptTokens >= LongContextPromptTokenThreshold {

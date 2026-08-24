@@ -57,6 +57,12 @@ export type SectionPageLayoutProps = {
   children: ReactNode
 }
 
+export const SECTION_PAGE_LAYOUT_CLASS_NAME =
+  'codego-section-page flex h-full min-h-0 flex-1 flex-col overflow-hidden'
+
+export const SECTION_PAGE_CONTENT_CLASS_NAME =
+  'codego-page-content min-h-0 flex-1 overflow-auto px-4 pt-5 pb-6 sm:px-7 sm:pt-6 sm:pb-8'
+
 export function SectionPageLayout(props: SectionPageLayoutProps) {
   const [footerContainer, setFooterContainer] = useState<HTMLDivElement | null>(
     null
@@ -85,7 +91,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
   })
 
   return (
-    <div className='codego-section-page'>
+    <div className={SECTION_PAGE_LAYOUT_CLASS_NAME}>
       {auxiliaryChildren}
       <PageFooterProvider container={footerContainer}>
         <Main>
@@ -118,7 +124,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
             </div>
           </div>
 
-          <div className='codego-page-content min-h-0 flex-1 overflow-auto px-4 pt-5 pb-6 sm:px-7 sm:pt-6 sm:pb-8'>
+          <div className={SECTION_PAGE_CONTENT_CLASS_NAME}>
             {content}
           </div>
 

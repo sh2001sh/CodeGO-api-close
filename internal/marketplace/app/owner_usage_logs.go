@@ -171,19 +171,25 @@ func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string,
 	}
 	summary.ConsumerAmount = totals.ConsumerAmount
 	summary.OwnerIncome = totals.OwnerIncome
+	summary.PendingIncome = totals.PendingIncome
+	summary.ReleasedIncome = totals.ReleasedIncome
 	return summary, nil
 }
 
 type ownerSettlementTotals struct {
 	ConsumerAmount int64 `gorm:"column:consumer_amount"`
 	OwnerIncome    int64 `gorm:"column:owner_income"`
+	PendingIncome  int64 `gorm:"column:pending_income"`
+	ReleasedIncome int64 `gorm:"column:released_income"`
 }
 
 func loadOwnerUsageSettlementSummary(ownerUserID int, channelIDs []int, groupIDs []string, query OwnerUsageLogQuery) (ownerSettlementTotals, error) {
 	var totals ownerSettlementTotals
 	settlementQuery := platformdb.DB.Model(&marketplaceschema.Settlement{}).
 		Where("owner_user_id = ? AND group_id IN ?", ownerUserID, groupIDs).
-		Select("COALESCE(SUM(consumer_amount), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income")
+		Select("COALESCE(SUM(consumer_amount), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income, " +
+			"COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income, " +
+			"COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount ELSE 0 END), 0) AS released_income")
 	if hasOwnerUsageContentFilters(query) {
 		var requestIDs []string
 		if err := ownerUsageLogDBQuery(channelIDs, query).

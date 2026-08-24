@@ -11,7 +11,7 @@ export function FormSection(props: {
   return (
     <section className='border-border grid gap-5 border-b px-4 py-6 sm:px-5 lg:grid-cols-[190px_minmax(0,1fr)]'>
       <div className='flex items-start gap-3'>
-        <span className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-md'>
+        <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-md'>
           <Icon className='size-4' />
         </span>
         <div>

@@ -47,27 +47,35 @@ function TrendLineChart(props: MultiplierTrendChartProps) {
     >
       <LineChart
         data={props.rows}
-        margin={{ top: 10, right: 12, left: -12, bottom: 0 }}
+        margin={{ top: 12, right: 16, left: -6, bottom: 4 }}
       >
-        <CartesianGrid vertical={false} strokeDasharray='3 3' />
+        <CartesianGrid
+          vertical={false}
+          stroke='var(--border)'
+          strokeDasharray='2 6'
+          strokeOpacity={0.7}
+        />
         <XAxis
           dataKey='timestamp'
           type='number'
           domain={['dataMin', 'dataMax']}
           tickFormatter={formatAxisTime}
           tickLine={false}
-          axisLine={false}
+          axisLine={{ stroke: 'var(--border)' }}
+          tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
           minTickGap={28}
         />
         <YAxis
           tickFormatter={(value) => `${formatMultiplier(Number(value))}x`}
           tickLine={false}
           axisLine={false}
-          width={54}
+          tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+          width={56}
           domain={yDomain}
           allowDataOverflow={false}
         />
         <Tooltip
+          cursor={{ stroke: 'var(--border)', strokeDasharray: '3 4' }}
           content={(tooltipProps) => (
             <TrendTooltip
               active={tooltipProps.active}
@@ -84,12 +92,14 @@ function TrendLineChart(props: MultiplierTrendChartProps) {
             name={source}
             type='stepAfter'
             stroke={SOURCE_COLORS[index % SOURCE_COLORS.length]}
-            strokeWidth={2}
+            strokeWidth={1.5}
             dot={props.rows.length <= 2 ? { r: 3 } : false}
-            activeDot={{ r: 4 }}
+            activeDot={{ r: 3.5, strokeWidth: 0 }}
             connectNulls={false}
             hide={!props.visibleSources.includes(source)}
-            isAnimationActive={false}
+            isAnimationActive
+            animationDuration={700}
+            animationEasing='ease-out'
           />
         ))}
       </LineChart>
@@ -162,7 +172,7 @@ function TrendTooltip(props: {
   const start = new Date(row.timestamp * 1000)
   const end = new Date((row.timestamp + props.bucketSeconds) * 1000)
   return (
-    <div className='border-border bg-background min-w-56 rounded-md border p-3 text-xs shadow-xl'>
+    <div className='border-border bg-background/95 min-w-56 rounded-md border p-3 text-xs'>
       <div className='font-medium'>{formatTimeRange(start, end)}</div>
       <div className='mt-2 grid gap-2'>
         {props.payload.map((item) => {

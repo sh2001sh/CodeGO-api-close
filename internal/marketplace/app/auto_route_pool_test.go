@@ -103,6 +103,33 @@ func TestAutoRoutePoolRejectsForeignPrivateGroup(t *testing.T) {
 	require.EqualError(t, err, "路由池包含不可用或无权访问的分组")
 }
 
+func TestAutoRoutePoolAllowsInvitedPrivateGroup(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.GroupAccess{},
+		&marketplaceschema.RankingSnapshot{},
+		&marketplaceschema.AutoRoutePoolMember{},
+	))
+	internalChannelID := 301
+	require.NoError(t, db.Create(&marketplaceschema.Channel{
+		ID: "invited-channel", OwnerUserID: 11, ProviderType: "openai",
+		DeclaredModels: `["gpt-5"]`, InternalChannelID: &internalChannelID,
+	}).Error)
+	group := autoRouteTestGroup("invited-private", "invited-channel", 11, 0.8)
+	group.Visibility = marketplacedomain.VisibilityPrivate
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.GroupAccess{
+		GroupID: group.ID, UserID: 20, GrantedByInvite: 1,
+	}).Error)
+
+	view, err := ReplaceAutoRoutePool(20, AutoRoutePoolUpdateRequest{GroupIDs: []string{group.ID}})
+	require.NoError(t, err)
+	require.Equal(t, 1, view.SelectedCount)
+	require.Equal(t, group.ID, view.Items[0].GroupID)
+}
+
 func TestMarketplaceAutoTokenGroupIsReserved(t *testing.T) {
 	require.True(t, IsMarketplaceAutoTokenGroup("market:auto"))
 	_, err := ResolveTokenGroupBinding("market:auto", 20)

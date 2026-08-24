@@ -90,12 +90,14 @@ export function RiskAcknowledgementDialog({
   const normalizedRequiredTextParts = useMemo<
     NormalizedRequiredTextPart[]
   >(() => {
-    let inputIndex = 0
-    return requiredTextParts.map((part) => {
+    return requiredTextParts.map((part, partIndex) => {
       if (part.type === 'input') {
-        const normalizedPart = { ...part, inputIndex }
-        inputIndex += 1
-        return normalizedPart
+        return {
+          ...part,
+          inputIndex: requiredTextParts
+            .slice(0, partIndex)
+            .filter((item) => item.type === 'input').length,
+        }
       }
       return part
     })
@@ -114,9 +116,11 @@ export function RiskAcknowledgementDialog({
 
   useEffect(() => {
     if (!open) return
-    setCheckedItems(Array(checklist.length).fill(false))
-    setTypedText('')
-    setTypedTextParts(Array(requiredTextInputCount).fill(''))
+    queueMicrotask(() => {
+      setCheckedItems(Array(checklist.length).fill(false))
+      setTypedText('')
+      setTypedTextParts(Array(requiredTextInputCount).fill(''))
+    })
   }, [open, checklist.length, requiredTextInputCount])
 
   const allChecked = useMemo(() => {

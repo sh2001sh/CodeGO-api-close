@@ -30,7 +30,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
   const { systemName, logo, loading } = useSystemConfig()
 
   return (
-    <div className='bg-background text-foreground relative min-h-svh'>
+    <div className='codego-auth-shell bg-background text-foreground relative min-h-svh'>
       <Link
         to='/'
         className='app-subtle-panel absolute top-4 left-4 z-10 flex items-center gap-3 px-3 py-2 text-sm transition-opacity hover:opacity-80 sm:top-8 sm:left-8'
@@ -54,8 +54,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       </Link>
       <div className='relative container flex min-h-svh items-center justify-center px-4 py-20 sm:px-6 lg:px-8'>
         <div className='w-full max-w-[1040px]'>
-          <div className='app-page-shell grid overflow-hidden lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]'>
-            <div className='border-border bg-muted/40 hidden flex-col justify-between border-r p-10 lg:flex'>
+          <div className='codego-auth-card app-page-shell grid overflow-hidden lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]'>
+            <div className='codego-auth-rail border-border bg-muted/40 hidden flex-col justify-between border-r p-10 lg:flex'>
               <div className='space-y-5'>
                 <div className='border-border text-muted-foreground inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.14em] uppercase'>
                   {t('Developer workspace')}
@@ -86,7 +86,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
               </div>
             </div>
 
-            <div className='flex min-h-[640px] items-center'>
+            <div className='codego-auth-form flex min-h-[640px] items-center'>
               <div className='mx-auto flex w-full max-w-[480px] flex-col justify-center px-5 py-8 sm:px-8 md:px-10'>
                 {children}
               </div>

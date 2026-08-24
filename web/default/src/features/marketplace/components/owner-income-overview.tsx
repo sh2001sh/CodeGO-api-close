@@ -55,8 +55,13 @@ export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
     },
     {
       icon: CircleDollarSign,
-      label: t('筛选范围收入'),
+      label: t('筛选范围总收入'),
       value: formatQuota(query.data?.summary.owner_income ?? 0),
+    },
+    {
+      icon: CircleDollarSign,
+      label: t('已回收收益'),
+      value: formatQuota(query.data?.summary.released_income ?? 0),
     },
     {
       icon: Activity,
@@ -127,7 +132,7 @@ export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
           {t('所选范围的收入统计加载失败，请重试。')}
         </div>
       )}
-      <div className='bg-card grid sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='bg-card grid sm:grid-cols-2 xl:grid-cols-5'>
         {metrics.map(({ icon: Icon, label, value }) => (
           <div
             key={label}

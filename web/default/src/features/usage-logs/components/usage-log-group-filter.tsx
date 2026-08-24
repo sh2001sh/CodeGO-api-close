@@ -34,6 +34,12 @@ interface UsageLogGroupFilterProps {
   className?: string
 }
 
+function publicGroupLabel(label: string, publicID?: string): string {
+  if (!publicID) return label
+  const prefix = `${publicID}-`
+  return label.startsWith(prefix) ? label.slice(prefix.length) : label
+}
+
 /** Searchable usage-log group filter backed by groups visible to the viewer. */
 export function UsageLogGroupFilter(props: UsageLogGroupFilterProps) {
   const { t } = useTranslation()
@@ -44,8 +50,9 @@ export function UsageLogGroupFilter(props: UsageLogGroupFilterProps) {
     retry: 1,
   })
   const options = (groupsQuery.data ?? []).map((group) => ({
-    value: group,
-    label: group,
+    value: group.value,
+    label: publicGroupLabel(group.label, group.public_id),
+    ...(group.public_id ? { meta: `ID ${group.public_id}` } : {}),
   }))
 
   return (

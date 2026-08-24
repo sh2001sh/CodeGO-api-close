@@ -65,7 +65,7 @@ function Rule(props: {
   const Icon = props.icon
   return (
     <div className='flex gap-3'>
-      <span className='bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-md'>
+      <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-8 shrink-0 items-center justify-center rounded-md'>
         <Icon className='size-4' />
       </span>
       <div>

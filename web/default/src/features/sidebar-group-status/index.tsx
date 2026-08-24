@@ -18,14 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Layers3,
-  RefreshCcw,
-  Rows3,
-  Search,
-} from 'lucide-react'
+import { Layers3, RefreshCcw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -242,41 +235,36 @@ function OverviewPanel(props: {
       label: '业务分组',
       value: String(props.summary.groups),
       hint: '当前可查看的分组数',
-      icon: Layers3,
       tone: 'text-muted-foreground',
     },
     {
       label: '稳定模型',
       value: String(props.summary.healthyModels),
       hint: '最新非空 30 分钟请求桶成功率 ≥ 90%',
-      icon: CheckCircle2,
       tone: 'text-success',
     },
     {
       label: '波动模型',
       value: String(props.summary.unstableModels),
       hint: '最新非空 30 分钟请求桶成功率 85%–90%',
-      icon: AlertTriangle,
       tone: 'text-warning',
     },
     {
       label: '异常模型',
       value: String(props.summary.failedModels),
       hint: '最新非空 30 分钟请求桶成功率低于 85%',
-      icon: AlertTriangle,
       tone: 'text-destructive',
     },
     {
       label: '暂无近期请求模型',
       value: String(props.summary.unknownModels),
       hint: '近 6 小时没有请求样本',
-      icon: Rows3,
       tone: 'text-muted-foreground',
     },
   ]
 
   return (
-    <Card className='border-border/70 from-background via-background to-primary/5 bg-gradient-to-br'>
+    <Card className='border-border/70'>
       <CardHeader className='border-border/70 border-b'>
         <CardTitle className='flex items-center gap-2'>
           <Layers3 className='text-primary size-4' />
@@ -287,43 +275,31 @@ function OverviewPanel(props: {
           90%，不代表每次请求都成功。
         </CardDescription>
       </CardHeader>
-      <CardContent className='grid gap-3 pt-4 md:grid-cols-2 xl:grid-cols-5'>
-        {metrics.map((metric) => {
-          const Icon = metric.icon
-
-          return (
-            <div
-              key={metric.label}
-              className='border-border/70 bg-background/88 dark:bg-background/70 rounded-2xl border px-4 py-3'
-            >
-              <div className='flex items-start justify-between gap-3'>
-                <div className='space-y-1'>
-                  <div className='text-muted-foreground text-xs font-medium'>
-                    {metric.label}
-                  </div>
-                  {props.loading ? (
-                    <Skeleton className='h-7 w-18 rounded-md' />
-                  ) : (
-                    <div className='text-2xl font-semibold tracking-tight tabular-nums'>
-                      {metric.value}
-                    </div>
-                  )}
-                  <div className='text-muted-foreground text-xs'>
-                    {metric.hint}
-                  </div>
-                </div>
+      <CardContent className='pt-4'>
+        <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
+          {metrics.map((metric) => (
+            <div key={metric.label} className='px-4 py-1 first:pl-0'>
+              <div className='text-muted-foreground text-xs font-medium'>
+                {metric.label}
+              </div>
+              {props.loading ? (
+                <Skeleton className='mt-1.5 h-7 w-16 rounded-md' />
+              ) : (
                 <div
                   className={cn(
-                    'bg-muted flex size-10 items-center justify-center rounded-2xl',
+                    'app-numeric mt-1.5 text-2xl font-semibold tracking-tight',
                     metric.tone
                   )}
                 >
-                  <Icon className='size-5' />
+                  {metric.value}
                 </div>
+              )}
+              <div className='text-muted-foreground mt-0.5 text-xs leading-5'>
+                {metric.hint}
               </div>
             </div>
-          )
-        })}
+          ))}
+        </div>
       </CardContent>
     </Card>
   )

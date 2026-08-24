@@ -84,7 +84,7 @@ export function PackagePlanCard(props: {
   return (
     <Card
       className={cn(
-        'border-border bg-card relative h-full overflow-hidden shadow-sm transition-all hover:shadow-md',
+        'border-border bg-card relative h-full overflow-hidden transition-colors duration-200 hover:border-primary/40',
         isRecommended && 'border-primary bg-primary/[0.035] border-2'
       )}
     >

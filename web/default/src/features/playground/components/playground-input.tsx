@@ -84,7 +84,11 @@ export function PlaygroundInput({
   const suggestions = [
     { icon: BarChartIcon, text: t('Analyze data'), color: 'var(--chart-1)' },
     { icon: BoxIcon, text: t('Surprise me'), color: 'var(--chart-2)' },
-    { icon: NotepadTextIcon, text: t('Summarize text'), color: 'var(--chart-3)' },
+    {
+      icon: NotepadTextIcon,
+      text: t('Summarize text'),
+      color: 'var(--chart-3)',
+    },
     { icon: CodeSquareIcon, text: t('Code'), color: 'var(--chart-4)' },
     { icon: GraduationCapIcon, text: t('Get advice'), color: 'var(--chart-1)' },
     { icon: null, text: t('More') },
@@ -111,8 +115,11 @@ export function PlaygroundInput({
   }
 
   return (
-    <div className='grid shrink-0 gap-4 px-1 md:pb-4'>
-      <PromptInput groupClassName='rounded-xl' onSubmit={handleSubmit}>
+    <div className='codego-playground-input grid shrink-0 gap-4 px-1 md:pb-4'>
+      <PromptInput
+        groupClassName='codego-prompt-shell rounded-xl'
+        onSubmit={handleSubmit}
+      >
         <PromptInputTextarea
           autoComplete='off'
           autoCorrect='off'
@@ -218,10 +225,10 @@ export function PlaygroundInput({
         </PromptInputFooter>
       </PromptInput>
 
-      <Suggestions>
+      <Suggestions className='codego-suggestions'>
         {suggestions.map(({ icon: Icon, text, color }) => (
           <Suggestion
-            className={`text-xs font-normal sm:text-sm ${
+            className={`codego-suggestion text-xs font-normal sm:text-sm ${
               text === t('More') ? 'hidden sm:flex' : ''
             }`}
             key={text}

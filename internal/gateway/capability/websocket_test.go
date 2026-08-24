@@ -80,7 +80,7 @@ func TestProbeWebSocketUsesStandardResponsesCreatePayload(t *testing.T) {
 			t.Errorf("decode probe message: %v", err)
 			return
 		}
-		if payload["stream_id"] != "capability-probe" || payload["store"] != false || payload["input"] == nil {
+		if _, exists := payload["stream_id"]; exists || payload["store"] != false || payload["input"] == nil {
 			t.Errorf("non-standard probe payload: %s", raw)
 			return
 		}
@@ -89,6 +89,39 @@ func TestProbeWebSocketUsesStandardResponsesCreatePayload(t *testing.T) {
 	defer server.Close()
 
 	state := probeWebSocket(context.Background(), server.URL, ProbeInput{APIKey: "key", Model: "gpt-5"}, gatewayschema.CapabilityProbeState{})
+	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.Status)
+	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.HandshakeStatus)
+	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.RequestStatus)
+}
+
+func TestProbeWebSocketUsesCodexCompatiblePayloadWithoutStreamID(t *testing.T) {
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		conn, err := upgrader.Upgrade(writer, request, nil)
+		if err != nil {
+			t.Errorf("upgrade websocket: %v", err)
+			return
+		}
+		defer conn.Close()
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			t.Errorf("read probe message: %v", err)
+			return
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Errorf("decode probe message: %v", err)
+			return
+		}
+		if _, exists := payload["stream_id"]; exists {
+			_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"error","error":{"type":"invalid_request_error","message":"Unsupported parameter: stream_id"}}`))
+			return
+		}
+		_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.completed"}`))
+	}))
+	defer server.Close()
+
+	state := probeWebSocket(context.Background(), server.URL, ProbeInput{APIKey: "key", Model: "gpt-5.4-mini"}, gatewayschema.CapabilityProbeState{})
 	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.Status)
 	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.HandshakeStatus)
 	require.Equal(t, gatewayschema.CapabilityStatusSupported, state.RequestStatus)

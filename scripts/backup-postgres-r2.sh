@@ -1,66 +1,75 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Daily encrypted PostgreSQL backup to Cloudflare R2 (S3-compatible).
-# Required: SQL_DSN, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET,
-# R2_ENDPOINT, and AGE_RECIPIENT. AWS_DEFAULT_REGION may remain "auto".
+# Encrypted logical backups for the CodeGo and Temporal PostgreSQL clusters.
+# The Temporal PostgreSQL container must expose its local socket on PGPORT 5433.
 
 umask 077
 
-: "${SQL_DSN:?SQL_DSN is required}"
-: "${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID is required}"
-: "${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY is required}"
-: "${R2_BUCKET:?R2_BUCKET is required}"
-: "${R2_ENDPOINT:?R2_ENDPOINT is required}"
-: "${AGE_RECIPIENT:?AGE_RECIPIENT is required}"
-
-BACKUP_PREFIX="${BACKUP_PREFIX:-codego/postgres}"
+BACKUP_PREFIX="${BACKUP_PREFIX:-codego/postgres-v2}"
 RETENTION_DAYS="${RETENTION_DAYS:-35}"
-TMP_DIR="${BACKUP_TMP_DIR:-/mnt/codego-data/postgres-backups/tmp}"
-AWS_REGION="${AWS_DEFAULT_REGION:-auto}"
+BACKUP_TMP_DIR="${BACKUP_TMP_DIR:-/var/lib/codego-backup/tmp}"
+R2_BUCKET="${R2_BUCKET:-codego}"
+AWS_PROFILE="${AWS_PROFILE:-codego-r2}"
+R2_ENDPOINT="${R2_ENDPOINT:-$(cat /etc/codego/r2-endpoint)}"
+AGE_RECIPIENT_FILE="${AGE_RECIPIENT_FILE:-/etc/codego/backup-age-recipient}"
+TEMPORAL_CONTAINER="${TEMPORAL_CONTAINER:-codego-temporal-postgres}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-BASE_NAME="${BACKUP_PREFIX%/}/codego-${STAMP}.dump.age"
 
-command -v pg_dump >/dev/null || { echo "pg_dump is required" >&2; exit 1; }
-command -v age >/dev/null || { echo "age is required" >&2; exit 1; }
-command -v aws >/dev/null || { echo "aws CLI is required" >&2; exit 1; }
+mkdir -p -- "$BACKUP_TMP_DIR"
+exec 9>"${BACKUP_TMP_DIR%/}/.backup.lock"
+flock -n 9 || { echo "another backup is already running" >&2; exit 0; }
+WORK_DIR="$(mktemp -d "${BACKUP_TMP_DIR%/}/run.XXXXXX")"
+trap 'rm -rf -- "$WORK_DIR"' EXIT
 
-mkdir -p -- "$TMP_DIR"
-if command -v flock >/dev/null; then
-  exec 9>"${TMP_DIR%/}/.backup.lock"
-  flock -n 9 || { echo "another backup is already running" >&2; exit 0; }
-fi
-WORK_DIR="$(mktemp -d "${TMP_DIR%/}/run.XXXXXX")"
-RAW_DUMP="${WORK_DIR}/codego-${STAMP}.dump"
-ENCRYPTED_DUMP="${WORK_DIR}/codego-${STAMP}.dump.age"
+AGE_RECIPIENT="$(head -n1 "$AGE_RECIPIENT_FILE")"
+test -n "$R2_ENDPOINT"
+test -n "$AGE_RECIPIENT"
+command -v age >/dev/null
+command -v aws >/dev/null
+command -v pg_dump >/dev/null
+command -v pg_dumpall >/dev/null
 
-cleanup() { rm -rf -- "$WORK_DIR"; }
-trap cleanup EXIT
+dump_and_upload() {
+  local name="$1" extension="$2"; shift 2
+  local raw="$WORK_DIR/${name}.${extension}"
+  local encrypted="$WORK_DIR/${name}.${extension}.age"
+  local object="${BACKUP_PREFIX%/}/${STAMP}/${name}.${extension}.age"
 
-pg_dump --format=custom --no-owner --no-acl "$SQL_DSN" > "$RAW_DUMP"
-test -s "$RAW_DUMP"
-age --recipient "$AGE_RECIPIENT" --output "$ENCRYPTED_DUMP" "$RAW_DUMP"
-test -s "$ENCRYPTED_DUMP"
+  "$@" > "$raw"
+  test -s "$raw"
+  age --recipient "$AGE_RECIPIENT" --output "$encrypted" "$raw"
+  test -s "$encrypted"
 
-export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-export AWS_DEFAULT_REGION="$AWS_REGION"
+  AWS_PROFILE="$AWS_PROFILE" aws --endpoint-url "$R2_ENDPOINT" s3 cp \
+    "$encrypted" "s3://${R2_BUCKET}/${object}" --only-show-errors
+  sha256sum "$encrypted" | awk -v object="$object" '{print $1 "  " object}' \
+    > "$WORK_DIR/${name}.sha256"
+  AWS_PROFILE="$AWS_PROFILE" aws --endpoint-url "$R2_ENDPOINT" s3 cp \
+    "$WORK_DIR/${name}.sha256" "s3://${R2_BUCKET}/${object}.sha256" --only-show-errors
 
-aws --endpoint-url "$R2_ENDPOINT" s3 cp "$ENCRYPTED_DUMP" "s3://${R2_BUCKET}/${BASE_NAME}" --only-show-errors
-CHECKSUM="$(sha256sum "$ENCRYPTED_DUMP" | cut -d' ' -f1)"
-printf '%s  %s\n' "$CHECKSUM" "$BASE_NAME" > "$WORK_DIR/checksum.txt"
-aws --endpoint-url "$R2_ENDPOINT" s3 cp "$WORK_DIR/checksum.txt" "s3://${R2_BUCKET}/${BASE_NAME}.sha256" --only-show-errors
+  printf '%s|%s|%s\n' "$name" "$object" "$(stat -c '%s' "$encrypted")"
+}
 
-# Keep the latest N daily files. Deletion is restricted to this backup prefix.
-KEEP="${RETENTION_DAYS}"
-mapfile -t OBJECTS < <(aws --endpoint-url "$R2_ENDPOINT" s3api list-objects-v2 \
-  --bucket "$R2_BUCKET" --prefix "${BACKUP_PREFIX%/}/codego-" \
-  --query 'Contents[?ends_with(Key, `.dump.age`)].Key' --output text | tr '\t' '\n' | sort -r)
-if (( ${#OBJECTS[@]} > KEEP )); then
-  for key in "${OBJECTS[@]:KEEP}"; do
-    aws --endpoint-url "$R2_ENDPOINT" s3 rm "s3://${R2_BUCKET}/${key}" --only-show-errors
-    aws --endpoint-url "$R2_ENDPOINT" s3 rm "s3://${R2_BUCKET}/${key}.sha256" --only-show-errors || true
+dump_and_upload main-neondb dump sudo -u postgres pg_dump --format=custom --dbname=neondb
+dump_and_upload main-roles sql sudo -u postgres pg_dumpall --globals-only
+dump_and_upload temporal dump sudo docker exec -e PGPORT=5433 "$TEMPORAL_CONTAINER" \
+  pg_dump -U temporal --format=custom --dbname=temporal
+dump_and_upload temporal-visibility dump sudo docker exec -e PGPORT=5433 "$TEMPORAL_CONTAINER" \
+  pg_dump -U temporal --format=custom --dbname=temporal_visibility
+dump_and_upload temporal-roles sql sudo docker exec -e PGPORT=5433 "$TEMPORAL_CONTAINER" \
+  pg_dumpall -U temporal --globals-only
+
+mapfile -t generations < <(
+  AWS_PROFILE="$AWS_PROFILE" aws --endpoint-url "$R2_ENDPOINT" \
+    s3 ls "s3://${R2_BUCKET}/${BACKUP_PREFIX%/}/" |
+    awk '$1 == "PRE" {gsub("/", "", $2); print $2}' | sort -r
+)
+if (( ${#generations[@]} > RETENTION_DAYS )); then
+  for generation in "${generations[@]:RETENTION_DAYS}"; do
+    AWS_PROFILE="$AWS_PROFILE" aws --endpoint-url "$R2_ENDPOINT" s3 rm \
+      "s3://${R2_BUCKET}/${BACKUP_PREFIX%/}/${generation}/" --recursive --only-show-errors
   done
 fi
 
-echo "backup uploaded: s3://${R2_BUCKET}/${BASE_NAME}"
+echo "backup uploaded: ${STAMP}"

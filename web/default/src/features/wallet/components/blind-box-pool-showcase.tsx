@@ -71,7 +71,7 @@ export function BlindBoxPoolShowcase(props: {
     <section className='app-page-shell overflow-hidden'>
       <div className='border-border/70 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5'>
         <div className='flex min-w-0 items-center gap-3'>
-          <span className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
+          <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-lg'>
             <Boxes className='size-4' aria-hidden='true' />
           </span>
           <div className='min-w-0'>

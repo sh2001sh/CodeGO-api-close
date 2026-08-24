@@ -5,6 +5,10 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  StaggerContainer,
+  StaggerItem,
+} from '@/components/page-transition'
+import {
   useMarketplaceAutoRoutePool,
   useMarketplaceAutoRoutePoolUpdate,
 } from '../hooks'
@@ -67,19 +71,22 @@ export function MarketplaceGroupList(props: {
 
   return (
     <div className='bg-muted/25 space-y-1.5 p-2'>
-      {props.groups.map((group) => (
-        <GroupMarketItem
-          key={group.id}
-          group={group}
-          open={expanded === group.id}
-          onToggle={() => toggle(group.id)}
-          routePoolSelected={selectedGroups.has(group.id)}
-          routePoolBusy={Boolean(addingGroupID) || autoPool.isLoading}
-          routePoolAdding={addingGroupID === group.id}
-          onAddToRoutePool={() => void addToRoutePool(group.id)}
-          showRoutePoolAction={props.routePoolEnabled !== false}
-        />
-      ))}
+      <StaggerContainer className='space-y-1.5'>
+        {props.groups.map((group) => (
+          <StaggerItem key={group.id}>
+            <GroupMarketItem
+              group={group}
+              open={expanded === group.id}
+              onToggle={() => toggle(group.id)}
+              routePoolSelected={selectedGroups.has(group.id)}
+              routePoolBusy={Boolean(addingGroupID) || autoPool.isLoading}
+              routePoolAdding={addingGroupID === group.id}
+              onAddToRoutePool={() => void addToRoutePool(group.id)}
+              showRoutePoolAction={props.routePoolEnabled !== false}
+            />
+          </StaggerItem>
+        ))}
+      </StaggerContainer>
     </div>
   )
 }
@@ -106,7 +113,7 @@ function GroupListEmpty() {
   const { t } = useTranslation()
   return (
     <div className='flex min-h-64 flex-col items-center justify-center px-4 text-center'>
-      <div className='bg-primary/10 text-primary flex size-12 items-center justify-center rounded-xl'>
+      <div className='border border-primary/30 text-primary bg-primary/[0.04] flex size-12 items-center justify-center rounded-xl'>
         <Sparkles className='size-5' />
       </div>
       <div className='mt-4 font-medium'>{t('等待首批公开渠道')}</div>

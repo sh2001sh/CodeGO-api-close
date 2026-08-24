@@ -32,7 +32,7 @@ function CompactSetupStrip(props: {
       <CardStaggerItem className='app-page-shell overflow-hidden shadow-none'>
         <div className='flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5'>
           <div className='flex min-w-0 items-center gap-3'>
-            <span className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-xl'>
+            <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-xl'>
               <ListChecks className='size-4' aria-hidden='true' />
             </span>
             <div className='min-w-0'>

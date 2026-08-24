@@ -32,7 +32,7 @@ func RunLedgerWorker() {
 }
 
 func startLedgerWorkerBackgroundTasks() {
-	marketplacesettlement.RegisterReleaseHook(billingapp.CreditClaudeWalletQuotaTx)
+	marketplacesettlement.RegisterReleaseHook(billingapp.CreditMarketplaceOwnerEarningsTx)
 	marketplacesettlement.StartReleaseWorker(context.Background())
 	startOptionSyncLoop()
 	billingapp.StartLedgerWorker(context.Background())

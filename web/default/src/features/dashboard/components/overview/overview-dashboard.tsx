@@ -47,12 +47,12 @@ export function OverviewDashboard() {
   return (
     <div className='flex flex-col gap-5'>
       <FadeIn>
-        <OverviewHeroPanel guide={setupGuide} />
+        <SummaryCards />
       </FadeIn>
 
       <CardStaggerContainer className='flex min-w-0 flex-col gap-5'>
         <CardStaggerItem>
-          <SummaryCards />
+          <OverviewHeroPanel guide={setupGuide} />
         </CardStaggerItem>
 
         <CardStaggerItem>

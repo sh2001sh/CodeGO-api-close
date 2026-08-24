@@ -61,7 +61,7 @@ func remoteCompactionRequirement(c *gin.Context) RemoteCompactionRequirement {
 }
 
 // remoteCompactionCapabilityRank returns -1 for a definitive incompatibility,
-// 0 for a confirmed capability, and 1 for an unknown or transient result.
+// 0 for a confirmed capability, and 1 for an unverified or transient result.
 // Unknown routes remain eligible as a last resort while confirmed support is
 // preferred, so a rolling backfill does not turn every request into a 503.
 func remoteCompactionCapabilityRank(c *gin.Context, channel *gatewayschema.Channel, modelName string) int {
@@ -87,7 +87,10 @@ func capabilityRank(state gatewayschema.CapabilityProbeState, modelName string) 
 	}
 	if strings.TrimSpace(state.Model) != "" && strings.TrimSpace(modelName) != "" &&
 		!strings.EqualFold(strings.TrimSpace(state.Model), strings.TrimSpace(modelName)) {
-		return -1
+		// The compact capability probe stops at the first successful model. A
+		// success for one model therefore provides no negative evidence for the
+		// other advertised models; keep them eligible as last-resort candidates.
+		return 1
 	}
 	return 0
 }

@@ -49,6 +49,9 @@ function getGroupLabel(params: {
   if (params.labelOverride) return params.labelOverride
   if (params.isEmptyGroup) return params.t('User Group')
   if (params.isAutoGroup) return params.t('Auto')
+  if (params.groupName?.toLowerCase().startsWith('market:')) {
+    return params.t('市场分组')
+  }
   return params.groupName ?? ''
 }
 
@@ -78,6 +81,7 @@ export function GroupBadge(props: GroupBadgeProps) {
     <StatusBadge
       {...badgeProps}
       copyable={copyable}
+      copyText={groupName}
       label={label}
       showDot={showDot ?? (isSpecialGroup ? false : undefined)}
       variant={isSpecialGroup ? 'neutral' : undefined}

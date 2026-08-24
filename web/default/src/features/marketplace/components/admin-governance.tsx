@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   useAdminMarketplaceChannels,
   useAdminOwnerIncome,
+  useAdminOwnerIncomeRelease,
   useMarketplaceFailedModelRemoval,
 } from '../hooks'
 import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
@@ -57,6 +58,7 @@ export function AdminGovernance() {
     startTimestamp: toTimestamp(incomeRange.start),
     endTimestamp: toTimestamp(incomeRange.end),
   })
+  const releaseIncome = useAdminOwnerIncomeRelease()
   const failedModelRemoval = useMarketplaceFailedModelRemoval(true)
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
   const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
@@ -83,6 +85,33 @@ export function AdminGovernance() {
         }}
         isFetching={query.isFetching || ownerIncomeQuery.isFetching}
         isError={ownerIncomeQuery.isError}
+        releasing={releaseIncome.isPending}
+        onRelease={() => {
+          if ((ownerIncomeQuery.data?.pending_income ?? 0) <= 0) return
+          if (!window.confirm(t('确定回收当前筛选范围内的待结算收益吗？')))
+            return
+          releaseIncome.mutate(
+            {
+              ownerSearch: deferredOwnerSearch,
+              startTimestamp: toTimestamp(incomeRange.start),
+              endTimestamp: toTimestamp(incomeRange.end),
+            },
+            {
+              onSuccess: (result) => {
+                toast.success(
+                  t('已回收 {{count}} 条收益，共 {{amount}}', {
+                    count: result.released_count,
+                    amount: formatQuota(result.released_amount),
+                  })
+                )
+              },
+              onError: (error) =>
+                toast.error(
+                  error instanceof Error ? error.message : t('收益回收失败')
+                ),
+            }
+          )
+        }}
       />
       <div className='border-border bg-muted/10 flex flex-wrap items-center gap-2 rounded-md border p-3'>
         <Input
@@ -222,7 +251,7 @@ export function AdminGovernance() {
                       {t('待结算')}: {formatQuota(channel.pending_income)}
                     </span>
                     <span>
-                      {t('已释放')}: {formatQuota(channel.released_income)}
+                      {t('已回收')}: {formatQuota(channel.released_income)}
                     </span>
                     <span>
                       {t('结算请求')}: {channel.request_count.toLocaleString()}

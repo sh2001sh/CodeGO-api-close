@@ -110,10 +110,9 @@ func probeWebSocketCandidate(ctx context.Context, _ *http.Client, endpoint strin
 
 func websocketProbeRequest(model string) map[string]any {
 	return map[string]any{
-		"type":      "response.create",
-		"stream_id": "capability-probe",
-		"model":     strings.TrimSpace(model),
-		"store":     false,
+		"type":  "response.create",
+		"model": strings.TrimSpace(model),
+		"store": false,
 		"input": []any{map[string]any{
 			"type": "message",
 			"role": "user",

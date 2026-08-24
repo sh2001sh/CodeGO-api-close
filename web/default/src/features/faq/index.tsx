@@ -73,7 +73,7 @@ export function FAQPage() {
             {faqs.map((item) => (
               <section
                 key={item.q}
-                className='border-border bg-card text-card-foreground rounded-3xl border p-6'
+                className='border-border bg-card text-card-foreground rounded-xl border p-6'
               >
                 <div className='text-foreground text-lg font-semibold'>
                   {item.q}
@@ -88,7 +88,7 @@ export function FAQPage() {
           <div className='mt-10 grid gap-4 md:grid-cols-2'>
             <Link
               to='/guide'
-              className='border-border bg-card hover:bg-muted/40 rounded-3xl border p-6 transition-colors'
+              className='border-border bg-card hover:bg-muted/40 rounded-xl border p-6 transition-colors'
             >
               <div className='flex items-center gap-2 text-sm font-semibold'>
                 <Code2 className='text-muted-foreground size-4' />
@@ -104,7 +104,7 @@ export function FAQPage() {
             </Link>
             <Link
               to='/about'
-              className='border-border bg-card hover:bg-muted/40 rounded-3xl border p-6 transition-colors'
+              className='border-border bg-card hover:bg-muted/40 rounded-xl border p-6 transition-colors'
             >
               <div className='flex items-center gap-2 text-sm font-semibold'>
                 <MessageSquareQuote className='text-muted-foreground size-4' />

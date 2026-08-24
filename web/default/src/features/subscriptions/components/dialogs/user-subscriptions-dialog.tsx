@@ -103,9 +103,10 @@ interface Props {
 function SubscriptionStatusBadge(props: {
   sub: UserSubscriptionRecord['subscription']
   t: (key: string) => string
+  now: number
 }) {
-  const now = Date.now() / 1000
-  const isExpired = (props.sub.end_time || 0) > 0 && props.sub.end_time < now
+  const isExpired =
+    (props.sub.end_time || 0) > 0 && props.sub.end_time < props.now
   const isActive = props.sub.status === 'active' && !isExpired
 
   if (isActive) {
@@ -139,6 +140,8 @@ function SubscriptionStatusBadge(props: {
 
 export function UserSubscriptionsDialog(props: Props) {
   const { t } = useTranslation()
+  const userId = props.user?.id
+  const [now] = useState(() => Date.now() / 1000)
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [plans, setPlans] = useState<PlanRecord[]>([])
@@ -172,13 +175,13 @@ export function UserSubscriptionsDialog(props: Props) {
   }, [plans])
 
   const loadData = useCallback(async () => {
-    if (!props.user?.id) return
+    if (!userId) return
 
     setLoading(true)
     try {
       const [plansRes, subsRes] = await Promise.all([
         getAdminPlans(),
-        getUserSubscriptions(props.user.id),
+        getUserSubscriptions(userId),
       ])
 
       if (plansRes.success) {
@@ -192,14 +195,16 @@ export function UserSubscriptionsDialog(props: Props) {
     } finally {
       setLoading(false)
     }
-  }, [props.user?.id, t])
+  }, [userId, t])
 
   useEffect(() => {
-    if (props.open && props.user?.id) {
-      setSelectedPlanId('')
-      loadData()
+    if (props.open && userId) {
+      queueMicrotask(() => {
+        setSelectedPlanId('')
+        void loadData()
+      })
     }
-  }, [props.open, props.user?.id, loadData])
+  }, [props.open, userId, loadData])
 
   const handleCreate = async () => {
     if (!props.user?.id || !selectedPlanId) {
@@ -388,7 +393,6 @@ export function UserSubscriptionsDialog(props: Props) {
                   ) : (
                     subs.map((record) => {
                       const sub = record.subscription
-                      const now = Date.now() / 1000
                       const isExpired =
                         (sub.end_time || 0) > 0 && sub.end_time < now
                       const isActive = sub.status === 'active' && !isExpired
@@ -409,7 +413,7 @@ export function UserSubscriptionsDialog(props: Props) {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <SubscriptionStatusBadge sub={sub} t={t} />
+                          <SubscriptionStatusBadge sub={sub} t={t} now={now} />
                           </TableCell>
                           <TableCell>
                             <div className='text-xs'>

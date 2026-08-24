@@ -38,7 +38,7 @@ export const Route = createFileRoute('/_authenticated/channels/')({
 
     if (!auth.user || auth.user.role < ROLE.ADMIN) {
       throw redirect({
-        to: '/403',
+        to: '/marketplace',
       })
     }
   },

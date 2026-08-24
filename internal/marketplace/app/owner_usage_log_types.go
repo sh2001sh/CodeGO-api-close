@@ -66,4 +66,6 @@ type OwnerUsageLogSummary struct {
 	FailedCount    int64 `json:"failed_count"`
 	ConsumerAmount int64 `json:"consumer_amount"`
 	OwnerIncome    int64 `json:"owner_income"`
+	PendingIncome  int64 `json:"pending_income"`
+	ReleasedIncome int64 `json:"released_income"`
 }

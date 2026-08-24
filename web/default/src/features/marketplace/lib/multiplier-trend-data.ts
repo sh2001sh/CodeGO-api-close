@@ -5,13 +5,15 @@ import type {
   MultiplierTrendMetric,
 } from '../types'
 
+// Dawn-brand categorical palette: copper leads, cool slate and sage give
+// adjacent series separation without leaving the homepage color world.
 export const SOURCE_COLORS = [
-  '#0284c7',
-  '#059669',
-  '#d97706',
-  '#dc2626',
-  '#7c3aed',
-  '#475569',
+  '#B8562E', // copper
+  '#5B7CA0', // slate blue
+  '#C9A227', // ochre
+  '#7D8471', // sage
+  '#8A6A4A', // walnut
+  '#A2547A', // dusk plum
 ] as const
 
 export const METRICS: Array<{ value: MultiplierTrendMetric; label: string }> = [

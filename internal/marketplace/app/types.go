@@ -170,6 +170,11 @@ type AdminOwnerIncomeQuery struct {
 	EndTimestamp   int64
 }
 
+type AdminOwnerIncomeReleaseResult struct {
+	ReleasedCount  int   `json:"released_count"`
+	ReleasedAmount int64 `json:"released_amount"`
+}
+
 type AdminOwnerIncomeItem struct {
 	OwnerUserID     int    `json:"owner_user_id"`
 	OwnerExternalID string `json:"owner_external_id"`

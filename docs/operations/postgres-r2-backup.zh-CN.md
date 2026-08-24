@@ -1,120 +1,75 @@
-# PostgreSQL 每日异地备份
+# PostgreSQL 每日 R2 加密备份
 
-## R2 配置
+生产备份脚本：`scripts/backup-postgres-r2.sh`。它会为每个备份代次生成五个 age 加密对象：
 
-用户提供的地址：
+- `main-neondb.dump.age`：CodeGo 主库，包含对象所有者和 ACL
+- `main-roles.sql.age`：主库角色、角色成员关系和全局权限
+- `temporal.dump.age`：Temporal 主库
+- `temporal-visibility.dump.age`：Temporal Visibility 库
+- `temporal-roles.sql.age`：Temporal 集群角色和全局权限
+
+每个对象都有独立的 `.sha256` 文件。默认保留最近 35 个完整代次，清理范围仅限 `codego/postgres-v2/`。
+
+## 服务器配置
+
+依赖：PostgreSQL 客户端、Docker CLI、AWS CLI、`age`、`flock`。
+
+R2 凭据使用 AWS profile `codego-r2`，文件权限必须为 `600`：
 
 ```text
-https://195820d9dc53137c78d42b45e78d3180.r2.cloudflarestorage.com/codego
+/root/.aws/credentials
+/root/.aws/config
+/etc/codego/r2-endpoint
 ```
 
-拆分为：
+age 私钥只用于恢复，生产数据库机只保留公钥：
 
 ```text
-R2_ENDPOINT=https://195820d9dc53137c78d42b45e78d3180.r2.cloudflarestorage.com
-R2_BUCKET=codego
-BACKUP_PREFIX=codego/postgres
-AWS_DEFAULT_REGION=auto
+/etc/codego/backup-age-recipient
 ```
 
-不要把 `/codego` 放进 `R2_ENDPOINT`，否则 AWS CLI 会把 bucket 重复拼接。
-
-## 服务器依赖
-
-在生产数据盘安装：
-
-- PostgreSQL 客户端（提供 `pg_dump`）
-- `aws` CLI
-- `age`
-
-生成一对只用于备份的 age 密钥，并把私钥离线保存。服务器只保存公钥：
-
-```bash
-age-keygen -o /root/.config/codego/backup-key.txt
-chmod 600 /root/.config/codego/backup-key.txt
-grep '^# public key:' /root/.config/codego/backup-key.txt
-```
+私钥必须保存在服务器之外，并限制为仅管理员可读。丢失私钥后无法恢复任何 R2 加密对象。
 
 ## 环境文件
 
-创建 `/etc/codego/postgres-r2-backup.env`，权限必须为 `600`：
+`/etc/codego/postgres-r2-backup.env`：
 
 ```dotenv
-SQL_DSN=postgresql://readonly_backup_user:REDACTED@127.0.0.1:5432/neondb?sslmode=disable
-R2_ENDPOINT=https://195820d9dc53137c78d42b45e78d3180.r2.cloudflarestorage.com
+AWS_PROFILE=codego-r2
 R2_BUCKET=codego
-BACKUP_PREFIX=codego/postgres
-R2_ACCESS_KEY_ID=REDACTED
-R2_SECRET_ACCESS_KEY=REDACTED
-AGE_RECIPIENT=age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+BACKUP_PREFIX=codego/postgres-v2
 RETENTION_DAYS=35
-BACKUP_TMP_DIR=/mnt/codego-data/postgres-backups/tmp
+BACKUP_TMP_DIR=/var/lib/codego-backup/tmp
 ```
 
-建议建立只读备份数据库用户，避免备份任务拥有写权限。R2 Token 只授予 `codego` bucket 的对象读写和删除权限，不授予账户管理权限。
+环境文件权限必须为 `600`。
 
-## 手动测试
+## systemd
+
+服务使用 `Type=oneshot`，依赖 PostgreSQL 14 和 Docker；建议设置低 CPU/I/O 优先级，避免备份扫描影响在线请求。定时器每天执行一次，并启用 `Persistent=true` 和随机延迟。
 
 ```bash
-set -a
-. /etc/codego/postgres-r2-backup.env
-set +a
-/opt/codego/scripts/backup-postgres-r2.sh
-```
-
-## 每日执行
-
-使用 systemd timer，避免依赖容器内部 cron：
-
-脚本会在临时目录创建 `.backup.lock`，同一时间只允许一个备份任务运行；重复触发会安全退出，不会覆盖正在生成的文件。
-
-`/etc/systemd/system/codego-postgres-backup.service`：
-
-```ini
-[Unit]
-Description=CodeGo encrypted PostgreSQL backup to Cloudflare R2
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/codego/postgres-r2-backup.env
-ExecStart=/opt/codego/scripts/backup-postgres-r2.sh
-```
-
-`/etc/systemd/system/codego-postgres-backup.timer`：
-
-```ini
-[Unit]
-Description=Daily CodeGo PostgreSQL backup
-
-[Timer]
-OnCalendar=*-*-* 04:20:00 UTC
-Persistent=true
-RandomizedDelaySec=900
-
-[Install]
-WantedBy=timers.target
-```
-
-启用：
-
-```bash
-systemctl daemon-reload
 systemctl enable --now codego-postgres-backup.timer
 systemctl start codego-postgres-backup.service
+systemctl status codego-postgres-backup.service
 systemctl list-timers codego-postgres-backup.timer
 ```
 
-## 恢复演练
+## 下载和恢复验证
 
-备份文件是 `age` 加密的 PostgreSQL custom dump。恢复时先在临时 PostgreSQL 实例执行：
+每个代次至少执行以下验证：
+
+1. 从 R2 下载所有五个对象及对应 `.sha256`
+2. 比较下载文件的 SHA-256
+3. 使用离线保存的 age 私钥解密
+4. 对三个 custom dump 执行 `pg_restore --list`
+5. 在隔离 PostgreSQL 实例先恢复角色，再恢复数据库并进行业务表计数
+
+custom dump 的基本可读性检查：
 
 ```bash
-age --decrypt -i /root/.config/codego/backup-key.txt codego-YYYYMMDDTHHMMSSZ.dump.age > codego.dump
-pg_restore --list codego.dump >/dev/null
-createdb codego_restore_check
-pg_restore --exit-on-error --no-owner --dbname=codego_restore_check codego.dump
+age --decrypt -i backup-key.txt main-neondb.dump.age > main-neondb.dump
+pg_restore --list main-neondb.dump >/dev/null
 ```
 
-每周至少执行一次恢复演练，并检查用户、订阅、账本、盲盒订单和路由配置数量。备份成功不等于可恢复，必须保留恢复验证记录。
+备份成功不等于可恢复；下载、解密和恢复验证必须保留执行记录。

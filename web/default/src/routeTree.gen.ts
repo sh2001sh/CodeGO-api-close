@@ -24,7 +24,6 @@ import { Route as DownloadIndexRouteImport } from './routes/download/index'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as TopicsSlugRouteImport } from './routes/topics/$slug'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
-import { Route as MiniappLandingRouteImport } from './routes/miniapp/landing'
 import { Route as DesktopAuthorizeRouteImport } from './routes/desktop/authorize'
 import { Route as ConsoleTopupRouteImport } from './routes/console/topup'
 import { Route as ConsoleLogRouteImport } from './routes/console/log'
@@ -158,11 +157,6 @@ const TopicsSlugRoute = TopicsSlugRouteImport.update({
 const OauthProviderRoute = OauthProviderRouteImport.update({
   id: '/oauth/$provider',
   path: '/oauth/$provider',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MiniappLandingRoute = MiniappLandingRouteImport.update({
-  id: '/miniapp/landing',
-  path: '/miniapp/landing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DesktopAuthorizeRoute = DesktopAuthorizeRouteImport.update({
@@ -534,7 +528,6 @@ export interface FileRoutesByFullPath {
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/desktop/authorize': typeof DesktopAuthorizeRoute
-  '/miniapp/landing': typeof MiniappLandingRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about/': typeof AboutIndexRoute
@@ -610,7 +603,6 @@ export interface FileRoutesByTo {
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/desktop/authorize': typeof DesktopAuthorizeRoute
-  '/miniapp/landing': typeof MiniappLandingRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about': typeof AboutIndexRoute
@@ -690,7 +682,6 @@ export interface FileRoutesById {
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/desktop/authorize': typeof DesktopAuthorizeRoute
-  '/miniapp/landing': typeof MiniappLandingRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about/': typeof AboutIndexRoute
@@ -769,7 +760,6 @@ export interface FileRouteTypes {
     | '/console/log'
     | '/console/topup'
     | '/desktop/authorize'
-    | '/miniapp/landing'
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about/'
@@ -845,7 +835,6 @@ export interface FileRouteTypes {
     | '/console/log'
     | '/console/topup'
     | '/desktop/authorize'
-    | '/miniapp/landing'
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about'
@@ -924,7 +913,6 @@ export interface FileRouteTypes {
     | '/console/log'
     | '/console/topup'
     | '/desktop/authorize'
-    | '/miniapp/landing'
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about/'
@@ -996,7 +984,6 @@ export interface RootRouteChildren {
   ConsoleLogRoute: typeof ConsoleLogRoute
   ConsoleTopupRoute: typeof ConsoleTopupRoute
   DesktopAuthorizeRoute: typeof DesktopAuthorizeRoute
-  MiniappLandingRoute: typeof MiniappLandingRoute
   OauthProviderRoute: typeof OauthProviderRoute
   TopicsSlugRoute: typeof TopicsSlugRoute
   AboutIndexRoute: typeof AboutIndexRoute
@@ -1113,13 +1100,6 @@ declare module '@tanstack/react-router' {
       path: '/oauth/$provider'
       fullPath: '/oauth/$provider'
       preLoaderRoute: typeof OauthProviderRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/miniapp/landing': {
-      id: '/miniapp/landing'
-      path: '/miniapp/landing'
-      fullPath: '/miniapp/landing'
-      preLoaderRoute: typeof MiniappLandingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/desktop/authorize': {
@@ -1722,7 +1702,6 @@ const rootRouteChildren: RootRouteChildren = {
   ConsoleLogRoute: ConsoleLogRoute,
   ConsoleTopupRoute: ConsoleTopupRoute,
   DesktopAuthorizeRoute: DesktopAuthorizeRoute,
-  MiniappLandingRoute: MiniappLandingRoute,
   OauthProviderRoute: OauthProviderRoute,
   TopicsSlugRoute: TopicsSlugRoute,
   AboutIndexRoute: AboutIndexRoute,

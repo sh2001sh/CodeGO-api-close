@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useDebounce } from '@/hooks'
-import {
-  BarChart3,
-  LineChart,
-  Plus,
-  ShieldCheck,
-  Store,
-  UploadCloud,
-} from 'lucide-react'
+import { BarChart3, Plus, ShieldCheck, Store, UploadCloud } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
@@ -18,8 +11,10 @@ import { acceptMarketplaceGroupInvite } from './api'
 import { AdminGovernance } from './components/admin-governance'
 import { ChannelWorkspace } from './components/channel-workspace'
 import { MarketSurface } from './components/market-surface'
+import { MarketplaceAudienceGuide } from './components/marketplace-audience-guide'
 import { MarketplaceMultiplierTrend } from './components/marketplace-multiplier-trend'
 import { MarketplaceOverview } from './components/marketplace-overview'
+import { RankingLeaderboard } from './components/ranking-leaderboard'
 import { TokenBindPanel } from './components/token-bind-panel'
 import { useMarketplaceGroups } from './hooks'
 import type { GroupFilters } from './types'
@@ -38,7 +33,7 @@ const defaultFilters: GroupFilters = {
   page_size: 20,
 }
 
-type MarketplaceTab = 'market' | 'ranking' | 'trend' | 'mine' | 'admin'
+type MarketplaceTab = 'market' | 'insights' | 'mine' | 'admin'
 
 export function MarketplacePage() {
   const { t } = useTranslation()
@@ -103,6 +98,11 @@ export function MarketplacePage() {
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>{t('分组市场')}</SectionPageLayout.Title>
+      <SectionPageLayout.Description>
+        {t(
+          '在公开分组中找到可靠的模型线路，也可以把自己的渠道接入市场并持续经营。'
+        )}
+      </SectionPageLayout.Description>
       <SectionPageLayout.Actions>
         {isAdmin && (
           <Button variant='outline' size='sm' onClick={() => setTab('admin')}>
@@ -131,11 +131,23 @@ export function MarketplacePage() {
               <TokenBindPanel groupId={acceptedInvite.groupId} compact />
             </section>
           )}
+          <MarketplaceAudienceGuide
+            onBrowse={() => {
+              setTab('market')
+              setShowChannelForm(false)
+            }}
+            onManage={() => {
+              setTab('mine')
+              setShowChannelForm(false)
+            }}
+          />
           <MarketplaceOverview
             total={groups.data?.total ?? 0}
             ranked={groups.data?.ranked_count ?? 0}
             multiplier={groups.data?.highlights.cheapest?.multiplier}
             updating={groups.isFetching}
+            onBrowse={() => setTab('market')}
+            onInsights={() => setTab('insights')}
           />
           <Tabs
             value={tab}
@@ -157,18 +169,11 @@ export function MarketplacePage() {
                 {t('市场分组')}
               </TabsTrigger>
               <TabsTrigger
-                value='ranking'
+                value='insights'
                 className='min-w-20 px-2 sm:min-w-24 sm:px-3'
               >
                 <BarChart3 />
-                {t('质量排行')}
-              </TabsTrigger>
-              <TabsTrigger
-                value='trend'
-                className='min-w-20 px-2 sm:min-w-24 sm:px-3'
-              >
-                <LineChart />
-                {t('价格走势')}
+                {t('排行与走势')}
               </TabsTrigger>
               <TabsTrigger
                 value='mine'
@@ -192,23 +197,24 @@ export function MarketplacePage() {
                 filters={filters}
                 updateFilters={updateFilters}
                 query={groups}
-                summary={`${t('共 {{total}} 个公开分组', { total: groups.data?.total ?? 0 })} · ${t('{{count}} 个达到正式排名门槛', { count: groups.data?.ranked_count ?? 0 })}`}
+                summary={`${t('共 {{total}} 个公开分组', { total: groups.data?.total ?? 0 })} · ${t('{{count}} 个达到正式排名门槛', { count: groups.data?.ranked_count ?? 0 })} · ${t('先看倍率、成功率和首字速度')}`}
               />
             </TabsContent>
-            <TabsContent value='ranking'>
-              <MarketSurface
-                ranking
-                filters={filters}
-                updateFilters={updateFilters}
-                query={groups}
-                summary={t('用统一口径比较可靠性、响应性能、吞吐与调用成本。')}
-              />
-            </TabsContent>
-            <TabsContent value='trend'>
-              <MarketplaceMultiplierTrend
-                model={filters.model}
-                onModelChange={(model) => updateFilters({ model, page: 1 })}
-              />
+            <TabsContent value='insights'>
+              <div className='space-y-4'>
+                <RankingLeaderboard
+                  groups={[...(groups.data?.items ?? [])].sort(
+                    (a, b) => (b.score ?? 0) - (a.score ?? 0)
+                  )}
+                  loading={groups.isLoading}
+                  error={groups.isError}
+                  onRetry={() => void groups.refetch()}
+                />
+                <MarketplaceMultiplierTrend
+                  model={filters.model}
+                  onModelChange={(model) => updateFilters({ model, page: 1 })}
+                />
+              </div>
             </TabsContent>
             <TabsContent value='mine'>
               <ChannelWorkspace

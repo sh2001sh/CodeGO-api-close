@@ -90,7 +90,7 @@ function TrendHeader(props: {
   return (
     <div className='flex flex-wrap items-start justify-between gap-4'>
       <div className='flex min-w-0 items-start gap-3'>
-        <span className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
+        <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-lg'>
           <TrendingDown className='size-4' />
         </span>
         <div>

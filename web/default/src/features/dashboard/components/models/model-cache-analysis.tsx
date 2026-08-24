@@ -1,10 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { VChart } from '@visactor/react-vchart'
 import { DatabaseZap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatCompactNumber, formatNumber } from '@/lib/format'
-import { VCHART_OPTION } from '@/lib/vchart'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
@@ -75,6 +73,7 @@ function CacheSummary(props: { summary: ReturnType<typeof summarize> }) {
 
 function CacheRateChart(props: { rows: CacheRow[] }) {
   const { t } = useTranslation()
+  const rows = useMemo(() => props.rows.slice(0, 12), [props.rows])
   return (
     <section className='overflow-hidden rounded-lg border'>
       <header className='flex items-center gap-2 border-b px-4 py-3'>
@@ -86,9 +85,34 @@ function CacheRateChart(props: { rows: CacheRow[] }) {
           </p>
         </div>
       </header>
-      <div className='h-[360px] p-2'>
-        <VChart spec={buildChartSpec(props.rows)} option={VCHART_OPTION} />
-      </div>
+      <ul className='divide-y'>
+        {rows.map((row, index) => (
+          <li
+            key={row.model}
+            className='grid grid-cols-[minmax(0,11rem)_1fr_3.5rem] items-center gap-3 px-4 py-2 sm:grid-cols-[minmax(0,13rem)_1fr_4rem]'
+          >
+            <span
+              className='truncate font-mono text-xs'
+              title={row.model}
+              aria-label={row.model}
+            >
+              {row.model}
+            </span>
+            <span className='bg-border/40 relative block h-1.5 overflow-hidden rounded-sm'>
+              <span
+                className='dawn-bar bg-primary/75 absolute inset-y-0 left-0 rounded-sm'
+                style={{
+                  width: `${Math.max(2, Math.min(100, row.cacheHitRate))}%`,
+                  animationDelay: `${index * 40}ms`,
+                }}
+              />
+            </span>
+            <span className='app-numeric text-right text-xs font-semibold tabular-nums'>
+              {row.cacheHitRate.toFixed(1)}%
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }
@@ -169,41 +193,6 @@ function CacheDetailsRow(props: { row: CacheRow }) {
       </td>
     </tr>
   )
-}
-
-function buildChartSpec(rows: CacheRow[]) {
-  const values = rows
-    .slice(0, 12)
-    .map((row) => ({ model: row.model, hitRate: row.cacheHitRate }))
-  return {
-    type: 'bar',
-    direction: 'horizontal',
-    data: [{ id: 'cache-rate', values }],
-    xField: 'hitRate',
-    yField: 'model',
-    bar: { style: { fill: '#B85834', cornerRadius: 3 } },
-    axes: [
-      {
-        orient: 'bottom',
-        min: 0,
-        max: 100,
-        label: { formatter: (value: string) => `${value}%` },
-      },
-      { orient: 'left', label: { maxLineWidth: 190 } },
-    ],
-    tooltip: {
-      mark: {
-        content: [
-          {
-            key: (datum: { model: string }) => datum.model,
-            value: (datum: { hitRate: number }) =>
-              `${datum.hitRate.toFixed(2)}%`,
-          },
-        ],
-      },
-    },
-    padding: { left: 10, right: 24, top: 8, bottom: 8 },
-  }
 }
 
 type CacheRow = {

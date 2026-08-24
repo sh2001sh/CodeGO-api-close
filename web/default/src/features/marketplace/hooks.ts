@@ -7,6 +7,7 @@ import {
   fetchMarketplaceModels,
   getAdminMarketplaceChannels,
   getAdminOwnerIncome,
+  releaseAdminOwnerIncome,
   getMarketplaceGroups,
   getMarketplaceMultiplierTrends,
   getMarketplaceAutoRoutePool,
@@ -221,6 +222,29 @@ export function useAdminOwnerIncome(filters: AdminMarketplaceChannelFilters) {
     queryKey: ['marketplace-owner-income', 'admin', filters],
     queryFn: () => getAdminOwnerIncome(filters),
     placeholderData: (previousData) => previousData,
+  })
+}
+
+export function useAdminOwnerIncomeRelease() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (
+      filters: Pick<
+        AdminMarketplaceChannelFilters,
+        'ownerSearch' | 'startTimestamp' | 'endTimestamp'
+      >
+    ) => releaseAdminOwnerIncome(filters),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['marketplace-owner-income', 'admin'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['marketplace-channels', 'admin'],
+        }),
+        queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] }),
+      ])
+    },
   })
 }
 

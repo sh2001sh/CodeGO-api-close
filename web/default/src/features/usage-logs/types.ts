@@ -55,6 +55,13 @@ export interface CommonLogFilters extends CommonFilters {
   upstreamRequestId?: string
 }
 
+export interface UsageLogGroupOption {
+  value: string
+  label: string
+  public_id?: string
+  marketplace_group_id?: string
+}
+
 /**
  * Task logs specific filters
  */

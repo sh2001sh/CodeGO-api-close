@@ -78,7 +78,7 @@ function AboutHero() {
 
 function SupportGroupCard() {
   return (
-    <div className='border-border bg-card text-card-foreground overflow-hidden rounded-3xl border shadow-sm'>
+    <div className='border-border bg-card text-card-foreground overflow-hidden rounded-xl border'>
       <div className='grid gap-6 p-6 md:grid-cols-[minmax(0,1fr)_240px] md:items-center'>
         <div className='space-y-3'>
           <div className='text-primary text-xs font-semibold tracking-[0.24em] uppercase'>
@@ -90,16 +90,16 @@ function SupportGroupCard() {
           <p className='text-muted-foreground text-sm leading-7'>
             注册、套餐、盲盒、宠物升级、脚本配置或控制台使用遇到问题时，可以直接进群处理。
           </p>
-          <div className='bg-muted/60 text-foreground rounded-2xl px-4 py-3 text-sm leading-7'>
+          <div className='bg-muted/60 text-foreground rounded-lg px-4 py-3 text-sm leading-7'>
             群号：<span className='font-semibold'>996040309</span>
           </div>
         </div>
 
-        <div className='border-border bg-background mx-auto w-full max-w-[220px] rounded-3xl border p-3'>
+        <div className='border-border bg-background mx-auto w-full max-w-[220px] rounded-xl border p-3'>
           <img
             src='/guide/16-support-qq-group.png'
             alt='Code Go 售后 QQ 群二维码'
-            className='h-auto w-full rounded-2xl'
+            className='h-auto w-full rounded-lg'
             loading='lazy'
           />
         </div>
@@ -144,7 +144,7 @@ export function About() {
         <div className='mx-auto max-w-6xl space-y-6 px-4 py-8'>
           <AboutHero />
           <SupportGroupCard />
-          <Markdown className='prose-neutral dark:prose-invert max-w-none'>
+          <Markdown className='codego-public-prose prose-neutral dark:prose-invert max-w-none'>
             {fallbackAboutMarkdown}
           </Markdown>
         </div>
@@ -196,7 +196,7 @@ export function About() {
             dangerouslySetInnerHTML={{ __html: rawContent }}
           />
         ) : (
-          <Markdown className='prose-neutral dark:prose-invert max-w-none'>
+          <Markdown className='codego-public-prose prose-neutral dark:prose-invert max-w-none'>
             {rawContent}
           </Markdown>
         )}

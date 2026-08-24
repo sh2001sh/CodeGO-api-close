@@ -130,7 +130,7 @@ function dedupeItems(items: ImageWorkspaceItem[]) {
 
 function InfoPill(props: { label: string; value: string }) {
   return (
-    <div className='border-border bg-muted/40 rounded-2xl border px-4 py-3'>
+    <div className='border-border bg-muted/40 rounded-lg border px-4 py-3'>
       <div className='text-muted-foreground text-xs'>{props.label}</div>
       <div className='text-foreground mt-1 text-sm font-semibold'>
         {props.value}
@@ -142,8 +142,8 @@ function InfoPill(props: { label: string; value: string }) {
 function ImageWorkspaceSkeleton() {
   return (
     <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]'>
-      <Skeleton className='h-[46rem] rounded-[32px]' />
-      <Skeleton className='h-[46rem] rounded-[32px]' />
+      <Skeleton className='h-[46rem] rounded-xl' />
+      <Skeleton className='h-[46rem] rounded-xl' />
     </div>
   )
 }
@@ -205,9 +205,11 @@ export function ImageWorkspace() {
       const preferredModel =
         models.find((item) => item.value === 'gpt-image-2')?.value ??
         models[0].value
-      setForm((prev) => ({ ...prev, model: preferredModel }))
+      queueMicrotask(() =>
+        setForm((prev) => ({ ...prev, model: preferredModel }))
+      )
     } else if (models.length === 0 && form.model) {
-      setForm((prev) => ({ ...prev, model: '' }))
+      queueMicrotask(() => setForm((prev) => ({ ...prev, model: '' })))
     }
   }, [form.model, modelsQuery.data])
 
@@ -217,7 +219,9 @@ export function ImageWorkspace() {
       const preferredGroup =
         groups.find((item) => item.value === 'default')?.value ??
         groups[0].value
-      setForm((prev) => ({ ...prev, group: preferredGroup }))
+      queueMicrotask(() =>
+        setForm((prev) => ({ ...prev, group: preferredGroup }))
+      )
     }
   }, [form.group, groupsQuery.data])
 
@@ -238,14 +242,16 @@ export function ImageWorkspace() {
     if (form.mode !== 'edit') return
     if (selectedSource) return
     if (readySourceItems.length > 0) {
-      setSelectedSourceId(readySourceItems[0].id)
+      queueMicrotask(() => setSelectedSourceId(readySourceItems[0].id))
     }
   }, [form.mode, readySourceItems, selectedSource])
 
   useEffect(() => {
     const nextSizeOptions = getSizeOptionsForModel(form.model)
     if (!nextSizeOptions.includes(form.size)) {
-      setForm((prev) => ({ ...prev, size: nextSizeOptions[0] }))
+      queueMicrotask(() =>
+        setForm((prev) => ({ ...prev, size: nextSizeOptions[0] }))
+      )
     }
   }, [form.model, form.size])
 
@@ -371,7 +377,7 @@ export function ImageWorkspace() {
 
   return (
     <>
-      <div className='min-h-full bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.16),transparent_26%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_22%),linear-gradient(180deg,rgba(15,23,42,0.03),transparent_30%),var(--background)] p-4 md:p-6'>
+      <div className='codego-image-workspace min-h-full p-4 md:p-6'>
         <div className='mx-auto max-w-[1580px] space-y-5'>
           {form.group && !modelsQuery.isLoading && models.length === 0 && (
             <Alert className='border-amber-500/40 bg-amber-500/5'>
@@ -416,7 +422,7 @@ export function ImageWorkspace() {
           </div>
 
           <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]'>
-            <div className='border-border bg-card rounded-[30px] border p-5 shadow-sm'>
+            <div className='border-border bg-card rounded-xl border p-5'>
               <div className='text-foreground flex items-center gap-2 text-base font-semibold'>
                 <Sparkles className='size-4' />
                 创作对话
@@ -452,7 +458,7 @@ export function ImageWorkspace() {
                       updateForm('prompt', event.target.value)
                     }
                     placeholder='例如：生成一张电影感的雨夜街头场景，主角撑着透明雨伞站在霓虹灯下，镜头低角度，反光地面细节丰富，整体偏青橙色调。'
-                    className='min-h-40 rounded-3xl'
+                    className='min-h-40 rounded-xl'
                   />
                   <div className='text-muted-foreground text-xs leading-6'>
                     写得越具体，结果越稳定。建议写清主体、环境、风格、镜头、构图和想保留的关键细节。
@@ -472,7 +478,7 @@ export function ImageWorkspace() {
                         updateForm('model', value ?? '')
                       }
                     >
-                      <SelectTrigger className='w-full rounded-2xl'>
+                      <SelectTrigger className='w-full rounded-lg'>
                         <SelectValue placeholder='选择模型' />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
@@ -499,7 +505,7 @@ export function ImageWorkspace() {
                         updateForm('group', value ?? '')
                       }
                     >
-                      <SelectTrigger className='w-full rounded-2xl'>
+                      <SelectTrigger className='w-full rounded-lg'>
                         <SelectValue placeholder='选择分组' />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
@@ -538,7 +544,7 @@ export function ImageWorkspace() {
                         updateForm('size', value ?? sizeOptions[0])
                       }
                     >
-                      <SelectTrigger className='w-full rounded-2xl'>
+                      <SelectTrigger className='w-full rounded-lg'>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
@@ -562,7 +568,7 @@ export function ImageWorkspace() {
                         updateForm('quality', value ?? QUALITY_OPTIONS[0].value)
                       }
                     >
-                      <SelectTrigger className='w-full rounded-2xl'>
+                      <SelectTrigger className='w-full rounded-lg'>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
@@ -606,7 +612,7 @@ export function ImageWorkspace() {
                 </div>
 
                 {form.mode === 'edit' && (
-                  <div className='border-border bg-muted/40 rounded-[28px] border p-4'>
+                  <div className='border-border bg-muted/40 rounded-lg border p-4'>
                     <div className='flex items-center justify-between gap-3'>
                       <div>
                         <div className='text-foreground text-sm font-semibold'>
@@ -727,7 +733,7 @@ export function ImageWorkspace() {
               </div>
             </div>
 
-            <div className='border-border bg-card rounded-[30px] border p-5 shadow-sm'>
+            <div className='border-border bg-card rounded-xl border p-5'>
               <div className='flex items-end justify-between gap-3'>
                 <div>
                   <div className='text-foreground flex items-center gap-2 text-base font-semibold'>
@@ -826,7 +832,7 @@ function ImageGrid(props: {
 }) {
   if (props.items.length === 0) {
     return (
-      <Empty className='min-h-72 rounded-[28px] border'>
+      <Empty className='min-h-72 rounded-xl border'>
         <EmptyHeader>
           <EmptyMedia variant='icon'>
             <Images className='size-4' />
@@ -847,7 +853,7 @@ function ImageGrid(props: {
         return (
           <div
             key={item.id}
-            className='border-border bg-muted/40 rounded-[28px] border p-4'
+            className='border-border bg-muted/40 rounded-lg border p-4'
           >
             <div className='flex gap-4'>
               {isReady ? (

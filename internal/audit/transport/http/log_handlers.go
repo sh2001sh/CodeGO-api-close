@@ -66,6 +66,33 @@ func GetUserLogGroups(c *gin.Context) {
 	httpapi.ApiSuccess(c, groups)
 }
 
+func GetAllLogGroupOptions(c *gin.Context) {
+	groups, err := auditapp.ListAdminLogGroups()
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	writeLogGroupOptions(c, groups)
+}
+
+func GetUserLogGroupOptions(c *gin.Context) {
+	groups, err := auditapp.ListUserLogGroups(c.GetInt("id"))
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	writeLogGroupOptions(c, groups)
+}
+
+func writeLogGroupOptions(c *gin.Context, groups []string) {
+	options, err := marketplaceapp.BuildUsageLogGroupOptions(groups)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, options)
+}
+
 func SearchAllLogs(c *gin.Context) {
 	c.JSON(stdhttp.StatusOK, gin.H{
 		"success": false,

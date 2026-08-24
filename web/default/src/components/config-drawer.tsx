@@ -33,8 +33,6 @@ import { IconThemeLight } from '@/assets/custom/icon-theme-light'
 import { IconThemeSystem } from '@/assets/custom/icon-theme-system'
 import {
   type ContentLayout,
-  THEME_PRESETS,
-  type ThemePreset,
   type ThemeRadius,
   type ThemeScale,
 } from '@/lib/theme-customization'
@@ -97,7 +95,6 @@ export function ConfigDrawer() {
         </SheetHeader>
         <div className='space-y-6 overflow-y-auto px-4'>
           <ThemeConfig />
-          <PresetConfig />
           <RadiusConfig />
           <ScaleConfig />
           <SidebarConfig />
@@ -233,68 +230,6 @@ function ThemeConfig() {
   )
 }
 
-function PresetConfig() {
-  const { t } = useTranslation()
-  const { defaults, customization, setPreset } = useThemeCustomization()
-  return (
-    <div>
-      <SectionTitle
-        title={t('Color preset')}
-        showReset={customization.preset !== defaults.preset}
-        onReset={() => setPreset(defaults.preset)}
-      />
-      <Radio
-        value={customization.preset}
-        onValueChange={(v) => setPreset(v as ThemePreset)}
-        className='grid w-full grid-cols-4 gap-3'
-        aria-label={t('Select color preset')}
-      >
-        {THEME_PRESETS.map((preset) => (
-          <Item
-            key={preset.value}
-            value={preset.value}
-            className='group flex flex-col items-stretch outline-none'
-            aria-label={t(`preset.${preset.value}`)}
-          >
-            <div
-              className={cn(
-                'ring-border relative h-12 rounded-md ring-[1px] transition',
-                'group-data-checked:ring-primary group-data-checked:shadow-md',
-                'group-focus-visible:ring-2',
-                'group-hover:ring-primary/60'
-              )}
-            >
-              <div
-                aria-hidden='true'
-                className='absolute inset-0 rounded-md'
-                style={
-                  preset.value === 'default'
-                    ? {
-                        background:
-                          'linear-gradient(135deg, var(--background) 0%, var(--muted) 50%, var(--foreground) 100%)',
-                      }
-                    : {
-                        background: `linear-gradient(135deg, ${preset.swatches[0]} 0%, ${preset.swatches[1] ?? preset.swatches[0]} 100%)`,
-                      }
-                }
-              />
-              <CircleCheck
-                className={cn(
-                  'fill-primary absolute top-0 right-0 z-10 size-5 translate-x-1/2 -translate-y-1/2 stroke-white',
-                  'group-data-unchecked:hidden'
-                )}
-                aria-hidden='true'
-              />
-            </div>
-            <div className='mt-1.5 truncate text-center text-xs'>
-              {t(`preset.${preset.value}`)}
-            </div>
-          </Item>
-        ))}
-      </Radio>
-    </div>
-  )
-}
 
 const RADIUS_OPTIONS: {
   value: ThemeRadius

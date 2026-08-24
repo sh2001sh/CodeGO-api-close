@@ -36,6 +36,10 @@ import type {
 } from '@/features/subscriptions/types'
 import { translatePlanTitle } from './lib/display'
 import { PackagePlanCard } from './package-plan-card'
+import {
+  StaggerContainer,
+  StaggerItem,
+} from '@/components/page-transition'
 
 type FuelConfig = { minimumQuota: number; quotaStep: number }
 
@@ -75,20 +79,21 @@ export function PlanZone(props: {
           ))}
         </div>
       ) : props.plans.length > 0 ? (
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+        <StaggerContainer className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
           {props.plans.map((record) => (
-            <PackagePlanCard
-              key={record.plan.id}
-              record={record}
-              purchaseCount={props.purchaseCountMap.get(record.plan.id) || 0}
-              onPurchase={(purchaseType) =>
-                props.onPurchase(record, purchaseType)
-              }
-              currentSubscription={props.currentSubscription}
-              onFuel={props.onFuel}
-            />
+            <StaggerItem key={record.plan.id}>
+              <PackagePlanCard
+                record={record}
+                purchaseCount={props.purchaseCountMap.get(record.plan.id) || 0}
+                onPurchase={(purchaseType) =>
+                  props.onPurchase(record, purchaseType)
+                }
+                currentSubscription={props.currentSubscription}
+                onFuel={props.onFuel}
+              />
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerContainer>
       ) : (
         <p className='text-muted-foreground border-border border-t pt-3 text-sm'>
           {t('No plans are currently available in this section.')}

@@ -36,7 +36,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
       <section className='border-border bg-card overflow-hidden rounded-lg border'>
         <header className='flex flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-5'>
           <div className='flex min-w-0 items-start gap-3'>
-            <span className='bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-md'>
+            <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-10 shrink-0 items-center justify-center rounded-md'>
               <WalletCards className='size-5' />
             </span>
             <div>
@@ -98,26 +98,46 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                       <MarketplaceStatusBadge
                         status={channel.lifecycle_status}
                       />
-                    </div>
-                    <div className='text-muted-foreground mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs'>
-                      <span className='tabular-nums'>ID {channel.id}</span>
-                      <span>{channel.provider_type}</span>
-                      <span>
-                        {channel.submitted_source_label} ·{' '}
-                        {channel.source_label_status === 'approved'
-                          ? t('来源已审核')
-                          : channel.source_label_status === 'rejected'
-                            ? t('来源未通过')
-                            : t('来源待审核')}
-                      </span>
-                      <span>Key ····{channel.credential_tail}</span>
-                      <span>
-                        {channel.declared_models.length} {t('个模型')}
-                      </span>
-                      <span className='text-foreground font-medium tabular-nums'>
+                      <span className='border-primary/25 bg-primary/[0.07] text-primary app-numeric ml-1 rounded-[4px] border px-1.5 py-0.5 text-xs font-semibold tabular-nums'>
                         {formatMultiplier(channel.multiplier)}x
                       </span>
                     </div>
+                    <dl className='text-muted-foreground mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3 xl:grid-cols-5'>
+                      <div className='flex min-w-0 items-baseline gap-1.5'>
+                        <dt className='shrink-0 opacity-80'>ID</dt>
+                        <dd className='truncate font-mono tabular-nums'>
+                          {channel.id}
+                        </dd>
+                      </div>
+                      <div className='flex min-w-0 items-baseline gap-1.5'>
+                        <dt className='shrink-0 opacity-80'>{t('协议')}</dt>
+                        <dd className='truncate'>{channel.provider_type}</dd>
+                      </div>
+                      <div className='flex min-w-0 items-baseline gap-1.5'>
+                        <dt className='shrink-0 opacity-80'>{t('来源')}</dt>
+                        <dd className='truncate'>
+                          {channel.submitted_source_label}
+                          {channel.source_label_status === 'approved'
+                            ? ` · ${t('已审核')}`
+                            : channel.source_label_status === 'rejected'
+                              ? ` · ${t('未通过')}`
+                              : ` · ${t('待审核')}`}
+                        </dd>
+                      </div>
+                      <div className='flex min-w-0 items-baseline gap-1.5'>
+                        <dt className='shrink-0 opacity-80'>{t('模型')}</dt>
+                        <dd className='tabular-nums'>
+                          {channel.declared_models.length} {t('个')}
+                        </dd>
+                      </div>
+                      <div className='flex min-w-0 items-baseline gap-1.5'>
+                        <dt className='shrink-0 opacity-80'>Key</dt>
+                        <dd className='truncate font-mono'>
+                          ····{channel.credential_tail}
+                        </dd>
+                      </div>
+                    </dl>
+                    <ReviewSteps channel={channel} />
                     {channel.last_review_reason && (
                       <p className='text-muted-foreground mt-1 text-xs'>
                         {channel.last_review_reason}
@@ -148,27 +168,32 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                       status={channel.auto_probe_last_status}
                       checkedAt={channel.auto_probe_last_at}
                     />
-                    <div className='mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
-                      <IncomeMetric
-                        icon={CircleDollarSign}
-                        label={t('累计收入')}
-                        value={formatQuota(channel.total_income)}
-                      />
-                      <IncomeMetric
-                        icon={Clock3}
-                        label={t('待结算')}
-                        value={formatQuota(channel.pending_income)}
-                      />
-                      <IncomeMetric
-                        icon={WalletCards}
-                        label={t('已到账')}
-                        value={formatQuota(channel.released_income)}
-                      />
-                      <IncomeMetric
-                        icon={Activity}
-                        label={t('结算请求')}
-                        value={String(channel.request_count)}
-                      />
+                    <div className='border-border/60 mt-4 border-t pt-3'>
+                      <div className='text-muted-foreground mb-2 text-[11px] font-medium tracking-[0.14em] uppercase'>
+                        {t('收入与结算')}
+                      </div>
+                      <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
+                        <IncomeMetric
+                          icon={CircleDollarSign}
+                          label={t('累计收入')}
+                          value={formatQuota(channel.total_income)}
+                        />
+                        <IncomeMetric
+                          icon={Clock3}
+                          label={t('待结算')}
+                          value={formatQuota(channel.pending_income)}
+                        />
+                        <IncomeMetric
+                          icon={WalletCards}
+                          label={t('已到账')}
+                          value={formatQuota(channel.released_income)}
+                        />
+                        <IncomeMetric
+                          icon={Activity}
+                          label={t('结算请求')}
+                          value={String(channel.request_count)}
+                        />
+                      </div>
                     </div>
                   </div>
                   <OwnerChannelActions
@@ -197,5 +222,68 @@ export function OwnerChannels(props: { onAdd: () => void }) {
         }}
       />
     </>
+  )
+}
+
+/** 审核进度：提交 → 连通检测 → 来源审核 → 上线 */
+function ReviewSteps(props: { channel: MarketplaceChannel }) {
+  const { t } = useTranslation()
+  const c = props.channel
+  const connectivity =
+    c.connectivity_test_status === 'passed'
+      ? 2
+      : c.connectivity_test_status === 'failed'
+        ? 1
+        : 0
+  const source =
+    c.source_label_status === 'approved'
+      ? 2
+      : c.source_label_status === 'rejected'
+        ? 1
+        : 0
+  const online =
+    c.lifecycle_status === 'active'
+      ? 2
+      : c.lifecycle_status === 'disabled' ||
+          c.lifecycle_status === 'suspended'
+        ? 1
+        : 0
+
+  const steps = [
+    { label: t('提交材料'), state: 2 },
+    { label: t('连通检测'), state: connectivity },
+    { label: t('来源审核'), state: source },
+    { label: t('上线服务'), state: online },
+  ]
+
+  return (
+    <ol className='mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
+      {steps.map((step, index) => (
+        <li key={step.label} className='flex items-center gap-1.5'>
+          {index > 0 && <span className='bg-border h-px w-4' aria-hidden />}
+          <span
+            className={
+              step.state === 2
+                ? 'text-primary flex items-center gap-1 font-medium'
+                : step.state === 1
+                  ? 'text-destructive flex items-center gap-1 font-medium'
+                  : 'text-muted-foreground flex items-center gap-1'
+            }
+          >
+            <span
+              className={
+                step.state === 2
+                  ? 'bg-primary size-1.5 rounded-full'
+                  : step.state === 1
+                    ? 'bg-destructive size-1.5 rounded-full'
+                    : 'bg-border size-1.5 rounded-full'
+              }
+              aria-hidden
+            />
+            {step.label}
+          </span>
+        </li>
+      ))}
+    </ol>
   )
 }

@@ -137,6 +137,55 @@ func CreditClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyK
 	})
 }
 
+// CreditMarketplaceOwnerEarningsTx credits the canonical unified wallet without
+// reconciling it downward to a stale legacy claude_quota projection. Marketplace
+// settlements are already held in a dedicated pending account, so releasing one
+// must transfer that amount to the owner's available balance and never consume
+// an unrelated existing wallet balance.
+func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
+	if tx == nil {
+		return errors.New("transaction is required")
+	}
+	if userID <= 0 || amount <= 0 || idempotencyKey == "" {
+		return errors.New("invalid marketplace owner credit")
+	}
+
+	legacyBalance, err := getUserClaudeWalletQuotaTx(tx, userID)
+	if err != nil {
+		return err
+	}
+	account, err := ensureMirroredUserAccountTx(tx, userID, billingAccountTypeClaudeWallet, legacyBalance)
+	if err != nil {
+		return err
+	}
+	entry, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+		AccountID:      account.AccountID,
+		Amount:         int64(amount),
+		IdempotencyKey: idempotencyKey,
+		ReasonCode:     defaultReasonCode(reasonCode, "marketplace_owner_release"),
+		ReferenceType:  "user",
+		ReferenceID:    fmt.Sprintf("%d", userID),
+		OperatorType:   "marketplace_settlement",
+		OperatorID:     idempotencyKey,
+	})
+	if err != nil {
+		return err
+	}
+	if err := recordFundingLotTx(tx, account.AccountID, int64(amount), idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
+		return err
+	}
+
+	// Keep the legacy projection aligned with the canonical snapshot after the
+	// transfer, so later wallet operations do not try to reconcile this credit
+	// back out of the ledger.
+	snapshot, err := loadBalanceSnapshotTx(tx, account.AccountID)
+	if err != nil {
+		return err
+	}
+	return tx.Model(&identityschema.User{}).Where("id = ?", userID).
+		Update("claude_quota", snapshot.AvailableBalance).Error
+}
+
 // CreditUnifiedWalletQuotaTx credits the canonical unified-credit wallet.
 //
 // The historical Claude wallet function remains available for migrations and

@@ -228,6 +228,14 @@ func ListAdminOwnerIncome(c *gin.Context) {
 	respond(c, result, err)
 }
 
+func ReleaseAdminOwnerIncome(c *gin.Context) {
+	result, err := marketplaceapp.ReleaseAdminOwnerIncome(marketplaceapp.AdminOwnerIncomeQuery{
+		OwnerSearch: c.Query("owner_search"), StartTimestamp: queryInt64(c, "start_timestamp"),
+		EndTimestamp: queryInt64(c, "end_timestamp"),
+	})
+	respond(c, result, err)
+}
+
 func UpdateAdminChannel(c *gin.Context) {
 	var req marketplaceapp.AdminUpdateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

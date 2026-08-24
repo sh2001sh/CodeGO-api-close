@@ -391,6 +391,8 @@ export interface MarketplaceOwnerUsageLogResult {
     failed_count: number
     consumer_amount: number
     owner_income: number
+    pending_income: number
+    released_income: number
   }
   total: number
   page: number

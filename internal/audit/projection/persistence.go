@@ -155,8 +155,10 @@ func perfMetricStartTime(hours int) int64 {
 }
 
 func groupColumnName() string {
-	if platformdb.UsingPostgreSQL {
-		return `"group"`
+	if platformdb.UsingMySQL {
+		return "`group`"
 	}
-	return "`group`"
+	// PostgreSQL and SQLite both use ANSI double quotes; a raw backtick here
+	// gets re-wrapped by the clause builder on SQLite and yields ``group``.
+	return `"group"`
 }

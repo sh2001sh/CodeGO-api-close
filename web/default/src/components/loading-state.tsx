@@ -16,9 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { CodeGoLoader } from '@/components/codego-loader'
 
 interface LoadingStateProps {
   className?: string
@@ -28,19 +28,19 @@ interface LoadingStateProps {
 }
 
 const sizeMap = {
-  sm: 'size-4',
-  md: 'size-6',
-  lg: 'size-8',
+  sm: 'h-3.5',
+  md: 'h-5',
+  lg: 'h-7',
 } as const
 
 export function LoadingState(props: LoadingStateProps) {
   const { t } = useTranslation()
-  const iconSize = sizeMap[props.size ?? 'md']
+  const loaderSize = sizeMap[props.size ?? 'md']
 
   if (props.inline) {
     return (
-      <span className={cn('inline-flex items-center gap-2', props.className)}>
-        <Loader2 className={cn(iconSize, 'animate-spin')} />
+      <span className={cn('inline-flex items-center gap-2.5', props.className)}>
+        <CodeGoLoader className={loaderSize} />
         {props.message != null && (
           <span className='text-muted-foreground text-sm'>{props.message}</span>
         )}
@@ -51,13 +51,11 @@ export function LoadingState(props: LoadingStateProps) {
   return (
     <div
       className={cn(
-        'flex min-h-[200px] flex-col items-center justify-center gap-3',
+        'flex min-h-[200px] flex-col items-center justify-center gap-4',
         props.className
       )}
     >
-      <div className='animate-spin'>
-        <Loader2 className={iconSize} />
-      </div>
+      <CodeGoLoader className='h-6' />
       <p className='text-muted-foreground text-sm'>
         {props.message ?? t('Loading...')}
       </p>

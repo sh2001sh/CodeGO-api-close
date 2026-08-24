@@ -33,6 +33,18 @@ type RecordParams struct {
 
 type ReleaseHook func(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error
 
+type ReleaseFilter struct {
+	OwnerUserIDs   []int
+	StartTimestamp int64
+	EndTimestamp   int64
+	Limit          int
+}
+
+type ReleaseResult struct {
+	Count  int
+	Amount int64
+}
+
 var (
 	releaseHook ReleaseHook
 	workerOnce  sync.Once
@@ -130,6 +142,42 @@ func ReleaseDue(limit int) error {
 		}
 	}
 	return nil
+}
+
+// ReleasePending releases pending owner earnings selected by an administrator.
+// The normal worker only releases records after AvailableAt; this explicit path
+// intentionally allows a reviewed time range or owner selection to be released
+// immediately while keeping the same idempotent ledger transaction.
+func ReleasePending(filter ReleaseFilter) (ReleaseResult, error) {
+	if releaseHook == nil {
+		return ReleaseResult{}, errors.New("marketplace settlement release hook is not registered")
+	}
+	if filter.Limit <= 0 {
+		filter.Limit = 5000
+	}
+	query := platformdb.DB.Where("status = ?", statusPending).Order("created_at asc").Limit(filter.Limit)
+	if len(filter.OwnerUserIDs) > 0 {
+		query = query.Where("owner_user_id IN ?", filter.OwnerUserIDs)
+	}
+	if filter.StartTimestamp > 0 {
+		query = query.Where("created_at >= ?", time.Unix(filter.StartTimestamp, 0))
+	}
+	if filter.EndTimestamp > 0 {
+		query = query.Where("created_at < ?", time.Unix(filter.EndTimestamp+1, 0))
+	}
+	var settlements []marketplaceschema.Settlement
+	if err := query.Find(&settlements).Error; err != nil {
+		return ReleaseResult{}, err
+	}
+	result := ReleaseResult{}
+	for index := range settlements {
+		if err := releaseOne(settlements[index].ID); err != nil {
+			return result, err
+		}
+		result.Count++
+		result.Amount += settlements[index].OwnerNetAmount
+	}
+	return result, nil
 }
 
 func releaseOne(settlementID string) error {

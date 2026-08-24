@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, WalletCards } from 'lucide-react'
+import { formatUsdAmount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { CountUp } from '@/components/count-up'
 import { formatSubscriptionQuotaAmount } from '@/features/subscriptions/lib'
 import { DataMetric } from './summary-card-parts'
 
@@ -11,6 +13,8 @@ export type MetricDef = {
   label: string
   value: string
   hint?: string
+  numeric?: number
+  format?: (value: number) => string
 }
 
 export type BalanceSegment = {
@@ -23,6 +27,7 @@ export type BalanceSegment = {
 
 export function BalanceWorkspace(props: {
   available: string
+  availableValue?: number
   segments: BalanceSegment[]
   metrics: MetricDef[]
 }) {
@@ -41,13 +46,17 @@ export function BalanceWorkspace(props: {
             <span className='text-muted-foreground text-[11px] font-medium tracking-[0.16em] uppercase'>
               可用总额度
             </span>
-            <span className='border-primary/30 bg-primary/10 text-primary ml-auto rounded-full border px-2.5 py-0.5 text-[11px] font-medium'>
+            <span className='border-primary/30 bg-primary/10 text-primary ml-auto rounded-[4px] border px-2.5 py-0.5 text-[11px] font-medium'>
               USD
             </span>
           </div>
 
-          <div className='text-foreground mt-3 text-5xl font-semibold tracking-tight xl:text-6xl'>
-            {props.available}
+          <div className='text-foreground app-numeric mt-3 text-5xl font-semibold tracking-tight xl:text-6xl'>
+            {props.availableValue != null ? (
+              <CountUp value={props.availableValue} format={formatUsdAmount} />
+            ) : (
+              props.available
+            )}
           </div>
 
           <div className='bg-border/50 mt-5 flex h-2.5 overflow-hidden rounded-full'>
@@ -79,7 +88,7 @@ export function BalanceWorkspace(props: {
           <div className='mt-5 grid gap-2.5 sm:grid-cols-3'>
             <Button
               variant='outline'
-              className='justify-between rounded-2xl'
+              className='justify-between rounded-lg'
               render={<Link to='/wallet' />}
             >
               <span>钱包</span>
@@ -87,14 +96,14 @@ export function BalanceWorkspace(props: {
             </Button>
             <Button
               variant='outline'
-              className='justify-between rounded-2xl'
+              className='justify-between rounded-lg'
               render={<Link to='/packages' />}
             >
               <span>套餐</span>
               <ArrowRight data-icon='inline-end' />
             </Button>
             <Button
-              className='justify-between rounded-2xl'
+              className='justify-between rounded-lg'
               render={<Link to='/blind-box' />}
             >
               <span>盲盒</span>
@@ -110,6 +119,8 @@ export function BalanceWorkspace(props: {
               label={metric.label}
               value={metric.value}
               hint={metric.hint}
+              numeric={metric.numeric}
+              format={metric.format}
             />
           ))}
         </div>
@@ -214,9 +225,11 @@ export function PackageStatusCard(props: {
 
       <Button
         className='mt-auto justify-between rounded-2xl'
-        render={<Link to='/wallet' />}
+        render={<Link to={props.hasSubscription ? '/wallet' : '/packages'} />}
       >
-        <span>进入套餐与扣费管理</span>
+        <span>
+          {props.hasSubscription ? '进入套餐与扣费管理' : '查看可用套餐'}
+        </span>
         <ArrowRight data-icon='inline-end' />
       </Button>
     </section>

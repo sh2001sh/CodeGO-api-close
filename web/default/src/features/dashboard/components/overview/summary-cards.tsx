@@ -133,21 +133,29 @@ export function SummaryCards() {
     {
       label: '24 小时消耗',
       value: formatUsdAmount(recentUsageUsd),
+      numeric: recentUsageUsd,
+      format: formatUsdAmount,
       hint: '滚动统计最近 24 小时的美元消耗',
     },
     {
       label: '历史累计',
       value: formatUsdAmount(usedQuotaUsd),
+      numeric: usedQuotaUsd,
+      format: formatUsdAmount,
       hint: '账户历史累计消耗（美元）',
     },
     {
       label: '请求次数',
       value: formatNumber(requestCount),
+      numeric: requestCount,
+      format: formatNumber,
       hint: '账户累计请求次数',
     },
     {
       label: '通用额度',
       value: formatUsdAmount(universalQuotaUsd),
+      numeric: universalQuotaUsd,
+      format: formatUsdAmount,
       hint: '用于通用模型与全部第三方市场分组',
     },
   ]
@@ -157,6 +165,7 @@ export function SummaryCards() {
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]'>
         <BalanceWorkspace
           available={formatUsdAmount(availableUsd)}
+          availableValue={availableUsd}
           segments={balanceSegments}
           metrics={heroMetrics}
         />

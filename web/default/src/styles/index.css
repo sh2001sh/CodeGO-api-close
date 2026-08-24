@@ -70,35 +70,92 @@ For commercial licensing, please contact support@quantumnous.com
 
 @layer components {
   /*
-   * Surface system — three tiers, no glassmorphism.
+   * Surface system — CodeGo dawn-brand, three tiers, no glassmorphism.
    * flat: no border/shadow, relies on spacing for separation.
    * elevated (app-page-shell / overview-glass-card / overview-soft-card / app-subtle-panel /
-   *   ios-floating-shell / public-entry-card / public-hero-shell): solid surface, 1px border, one soft shadow.
+   *   ios-floating-shell / public-entry-card / public-hero-shell): solid pearl surface,
+   *   one 1px technical line, no stacked shadow — geometry stays square-edged (≤12px).
+   * horizon (overview-hero-card): every console page header carries the brand anchor —
+   *   a low copper horizon glow rising from the bottom edge plus a thin orbit rule.
    * accent (public-icon-tile / ios-pill): primary-tinted, used sparingly.
    * Class names are kept stable across the app; only the visual treatment changed.
    */
   .app-page-shell {
-    @apply bg-card text-card-foreground border-border rounded-2xl border shadow-[0_1px_2px_rgba(24,20,16,0.04)];
+    @apply bg-card text-card-foreground border-border rounded-xl border;
   }
 
   .app-subtle-panel {
-    @apply bg-card text-card-foreground border-border/70 rounded-xl border;
+    @apply bg-card text-card-foreground border-border/70 rounded-lg border;
   }
 
   .app-section-kicker {
     @apply text-muted-foreground text-[11px] font-semibold tracking-[0.16em];
   }
 
+  .app-numeric {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
   .overview-glass-card {
-    @apply bg-card text-card-foreground border-border rounded-2xl border shadow-[0_1px_2px_rgba(24,20,16,0.04)];
+    @apply bg-card text-card-foreground border-border rounded-xl border;
   }
 
   .overview-soft-card {
-    @apply bg-card text-card-foreground border-border/70 rounded-xl border;
+    @apply bg-card text-card-foreground border-border/70 rounded-lg border;
   }
 
   .overview-hero-card {
-    @apply bg-card text-card-foreground border-border relative overflow-hidden rounded-2xl border shadow-[0_1px_2px_rgba(24,20,16,0.04)];
+    @apply text-card-foreground border-border relative overflow-hidden rounded-xl border;
+    background:
+      radial-gradient(
+        130% 110% at 50% 122%,
+        rgb(255 224 190 / 0.5) 0%,
+        rgb(201 135 103 / 0.2) 38%,
+        transparent 68%
+      ),
+      var(--card);
+  }
+
+  /* Thin orbit rule riding the horizon — the page-header brand anchor. */
+  .overview-hero-card::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(112 75 58 / 0.28) 16%,
+      rgb(184 86 46 / 0.45) 50%,
+      rgb(112 75 58 / 0.28) 84%,
+      transparent
+    );
+  }
+
+  .dark .overview-hero-card {
+    background:
+      radial-gradient(
+        130% 110% at 50% 122%,
+        rgb(224 138 82 / 0.16) 0%,
+        rgb(168 79 45 / 0.08) 42%,
+        transparent 68%
+      ),
+      var(--card);
+  }
+
+  .dark .overview-hero-card::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(224 138 82 / 0.22) 16%,
+      rgb(224 138 82 / 0.34) 50%,
+      rgb(224 138 82 / 0.22) 84%,
+      transparent
+    );
   }
 
   .overview-panel-backdrop {
@@ -643,8 +700,7 @@ For commercial licensing, please contact support@quantumnous.com
     --pointer-y: 0px;
     --hero-scroll: 0px;
     @apply relative min-h-[100svh] overflow-hidden text-white;
-    background:
-      linear-gradient(180deg, #eceef1 0%, #e7e4e2 46%, #c98767 100%);
+    background: linear-gradient(180deg, #eceef1 0%, #e7e4e2 46%, #c98767 100%);
   }
 
   .eclipse-public-header,
@@ -661,10 +717,10 @@ For commercial licensing, please contact support@quantumnous.com
   .eclipse-hero-art {
     @apply pointer-events-none absolute inset-x-0 bottom-0 h-[58%];
     transform: translate3d(
-        calc(var(--pointer-x) * -0.12),
-        calc(var(--pointer-y) * -0.1 + var(--hero-scroll)),
-        0
-      );
+      calc(var(--pointer-x) * -0.12),
+      calc(var(--pointer-y) * -0.1 + var(--hero-scroll)),
+      0
+    );
     transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
@@ -674,14 +730,26 @@ For commercial licensing, please contact support@quantumnous.com
     width: min(78vw, 1120px);
     height: min(18vw, 210px);
     border-radius: 50% 50% 0 0;
-    background: radial-gradient(ellipse at 50% 100%, rgb(255 224 190 / 0.9), rgb(218 116 69 / 0.34) 38%, transparent 72%);
+    background: radial-gradient(
+      ellipse at 50% 100%,
+      rgb(255 224 190 / 0.9),
+      rgb(218 116 69 / 0.34) 38%,
+      transparent 72%
+    );
     filter: blur(18px);
     opacity: 0.82;
   }
 
   .eclipse-horizon {
     @apply absolute inset-x-[4%] bottom-[18%] block h-px;
-    background: linear-gradient(90deg, transparent, rgb(104 70 57 / 0.2) 20%, rgb(104 70 57 / 0.3) 50%, rgb(104 70 57 / 0.2) 80%, transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(104 70 57 / 0.2) 20%,
+      rgb(104 70 57 / 0.3) 50%,
+      rgb(104 70 57 / 0.2) 80%,
+      transparent
+    );
   }
 
   .eclipse-light-line {
@@ -704,7 +772,13 @@ For commercial licensing, please contact support@quantumnous.com
 
   .eclipse-hero-vignette {
     @apply pointer-events-none absolute inset-0;
-    background: linear-gradient(90deg, rgb(255 255 255 / 0.16), transparent 24%, transparent 76%, rgb(93 58 43 / 0.08));
+    background: linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.16),
+      transparent 24%,
+      transparent 76%,
+      rgb(93 58 43 / 0.08)
+    );
   }
 
   .eclipse-technical-orbit {
@@ -779,13 +853,30 @@ For commercial licensing, please contact support@quantumnous.com
     @apply relative overflow-hidden px-5 py-20 md:px-10 md:py-28;
     min-height: 100svh;
     background:
-      linear-gradient(104deg, transparent 0 54%, rgb(255 245 236 / 0.34) 54.1% 54.25%, transparent 54.35%),
-      linear-gradient(180deg, #c98767 0%, #dca07f 24%, #eee1da 66%, #f5f4f2 100%);
+      linear-gradient(
+        104deg,
+        transparent 0 54%,
+        rgb(255 245 236 / 0.34) 54.1% 54.25%,
+        transparent 54.35%
+      ),
+      linear-gradient(
+        180deg,
+        #c98767 0%,
+        #dca07f 24%,
+        #eee1da 66%,
+        #f5f4f2 100%
+      );
   }
 
   .offer-story::after {
     @apply pointer-events-none absolute inset-x-0 top-[24%] h-px content-[''];
-    background: linear-gradient(90deg, transparent, rgb(92 57 43 / 0.18) 18%, rgb(92 57 43 / 0.18) 82%, transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(92 57 43 / 0.18) 18%,
+      rgb(92 57 43 / 0.18) 82%,
+      transparent
+    );
   }
 
   .offer-story-heading {
@@ -840,7 +931,12 @@ For commercial licensing, please contact support@quantumnous.com
   .site-orbit {
     @apply relative min-h-[100svh] overflow-hidden px-5 py-24 text-[#241f1c] md:px-10 md:py-32;
     background:
-      linear-gradient(112deg, transparent 0 64%, rgb(195 109 70 / 0.12) 64.1% 64.22%, transparent 64.32%),
+      linear-gradient(
+        112deg,
+        transparent 0 64%,
+        rgb(195 109 70 / 0.12) 64.1% 64.22%,
+        transparent 64.32%
+      ),
       linear-gradient(180deg, #f5f4f2 0%, #f1f0ed 58%, #e4ddd7 100%);
   }
 
@@ -1581,5 +1677,1164 @@ For commercial licensing, please contact support@quantumnous.com
   .terminal-demo-spin,
   .terminal-demo-pulse {
     animation: none !important;
+  }
+}
+
+/* ── CodeGo console shell: dawn horizon ────────────────────────────────
+ * The sidebar carries a low copper horizon glow at its foot, and the
+ * active nav item becomes a solid copper square tag — the same accent
+ * language as the public homepage. */
+@layer components {
+  [data-slot='sidebar-container'] {
+    position: relative;
+  }
+
+  [data-slot='sidebar-container']::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 170px;
+    pointer-events: none;
+    background: radial-gradient(
+      120% 100% at 50% 132%,
+      rgb(201 135 103 / 0.18) 0%,
+      rgb(255 224 190 / 0.1) 44%,
+      transparent 74%
+    );
+  }
+
+  .dark [data-slot='sidebar-container']::after {
+    background: radial-gradient(
+      120% 100% at 50% 132%,
+      rgb(224 138 82 / 0.09) 0%,
+      rgb(168 79 45 / 0.05) 46%,
+      transparent 74%
+    );
+  }
+
+  /* Fine orbit rule under the sticky app header. */
+  [data-slot='sidebar-inset'] > header::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(112 75 58 / 0.22) 20%,
+      rgb(184 86 46 / 0.3) 50%,
+      rgb(112 75 58 / 0.22) 80%,
+      transparent
+    );
+  }
+
+  .dark [data-slot='sidebar-inset'] > header::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(224 138 82 / 0.16) 20%,
+      rgb(224 138 82 / 0.24) 50%,
+      rgb(224 138 82 / 0.16) 80%,
+      transparent
+    );
+  }
+}
+
+@layer utilities {
+  [data-slot='sidebar-menu-button'][data-active],
+  [data-slot='sidebar-menu-sub-button'][data-active] {
+    background: var(--sidebar-primary);
+    color: var(--sidebar-primary-foreground);
+    border-radius: var(--radius-sm);
+  }
+
+  [data-slot='sidebar-menu-button'][data-active] svg,
+  [data-slot='sidebar-menu-sub-button'][data-active] svg {
+    color: var(--sidebar-primary-foreground);
+  }
+}
+
+/* ── Dawn motion materials ─────────────────────────────────────────────
+ * Bar-chart entrance: rise from the horizon, staggered per bar.
+ * Disabled under prefers-reduced-motion. */
+@keyframes dawn-bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.dawn-bar {
+  transform-origin: bottom;
+  animation: dawn-bar-rise 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dawn-bar {
+    animation: none;
+  }
+}
+
+/* ── Console geometry scope ────────────────────────────────────────────
+ * Inside the authenticated shell (sidebar inset) and floating layers,
+ * cap the card radius scale at ~11px per the dawn brand's square-edged
+ * geometry, regardless of which utility a page was written with.
+ * Public pages keep the fuller radius scale. */
+[data-slot='sidebar-inset'],
+[data-slot='dialog-content'],
+[data-slot='sheet-content'],
+[data-slot='popover-content'],
+[data-slot='dropdown-menu-content'] {
+  --radius-xl: calc(var(--radius) * 1.2);
+  --radius-2xl: calc(var(--radius) * 1.35);
+  --radius-3xl: calc(var(--radius) * 1.5);
+  --radius-4xl: calc(var(--radius) * 1.6);
+}
+
+/* ── Console dawn atmosphere ────────────────────────────────────────────
+ * The authenticated shell carries the homepage's quiet field: a pearl
+ * background with a restrained copper glow rising at the top edge and a
+ * slate counter-hint at the corner — light reads as first light, dark as
+ * night embers. Only background-image is set, so pages keep bg-background. */
+[data-slot='sidebar-inset'] {
+  background-image:
+    radial-gradient(
+      56% 20% at 50% -6%,
+      rgb(184 86 46 / 0.055) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      36% 14% at 8% 0%,
+      rgb(91 124 160 / 0.04) 0%,
+      transparent 70%
+    ),
+    linear-gradient(180deg, var(--background) 0%, var(--background) 100%);
+}
+
+.dark [data-slot='sidebar-inset'] {
+  background-image:
+    radial-gradient(
+      56% 20% at 50% -6%,
+      rgb(224 138 82 / 0.06) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      36% 14% at 92% 0%,
+      rgb(90 126 170 / 0.05) 0%,
+      transparent 70%
+    ),
+    linear-gradient(180deg, var(--background) 0%, var(--background) 100%);
+}
+
+/* ── Dawn skeleton sweep ────────────────────────────────────────────────
+ * Loading placeholders sweep with a warm highlight instead of a cold
+ * pulse, echoing the horizon light. Reduced motion falls back to pulse. */
+[data-slot='skeleton'] {
+  position: relative;
+  overflow: hidden;
+}
+
+[data-slot='skeleton']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 224 190 / 0.55),
+    transparent
+  );
+  animation: dawn-skeleton-sweep 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.dark [data-slot='skeleton']::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(224 138 82 / 0.16),
+    transparent
+  );
+}
+
+@keyframes dawn-skeleton-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='skeleton']::after {
+    animation: none;
+    content: none;
+  }
+}
+
+/* ── Dawn spinner ──────────────────────────────────────────────────────
+ * A copper arc rising around a hairline track. */
+.dawn-spinner-arc {
+  border: 1.5px solid transparent;
+  border-top-color: var(--primary);
+  border-right-color: color-mix(in oklab, var(--primary) 35%, transparent);
+  animation: dawn-spinner-rotate 900ms cubic-bezier(0.45, 0.05, 0.35, 1)
+    infinite;
+}
+
+@keyframes dawn-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dawn-spinner-arc {
+    animation-duration: 2400ms;
+  }
+}
+
+/* ── CodeGo line-draw loader ───────────────────────────────────────────
+ * The wordmark strokes itself in copper, holds, then fades — a nod to
+ * the homepage's hand-drawn orbit lines. */
+.codego-loader {
+  color: var(--primary);
+  overflow: visible;
+}
+
+.codego-loader-text {
+  font-family: 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 0.75;
+  stroke-linejoin: round;
+  stroke-dasharray: 240;
+  stroke-dashoffset: 240;
+  animation: codego-line-draw 2.6s cubic-bezier(0.55, 0.08, 0.3, 1) infinite;
+}
+
+@keyframes codego-line-draw {
+  0% {
+    stroke-dashoffset: 240;
+    opacity: 1;
+  }
+  52% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  78% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  90% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+  100% {
+    stroke-dashoffset: 240;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codego-loader-text {
+    animation: none;
+    stroke-dashoffset: 0;
+    opacity: 0.85;
+  }
+}
+
+/* ── Authenticated workspace composition ───────────────────────────────
+ * The public homepage stays untouched. This scope gives every signed-in
+ * surface the same quiet horizon, clear navigation rhythm, and copper focus
+ * language without forcing individual feature pages to carry brand CSS. */
+.codego-console-shell {
+  background: var(--background);
+}
+
+.codego-console-shell [data-slot='sidebar-inset'] {
+  isolation: isolate;
+}
+
+.codego-console-header {
+  background: color-mix(in oklab, var(--background) 94%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+}
+
+.codego-console-header > div {
+  max-width: 100%;
+}
+
+.codego-console-header [data-slot='sidebar-trigger'] {
+  color: var(--muted-foreground);
+}
+
+.codego-inline-brand {
+  margin-inline-start: 0.15rem;
+  padding-inline: 0;
+  letter-spacing: -0.01em;
+}
+
+.codego-inline-brand:hover {
+  background: transparent;
+  color: var(--primary);
+}
+
+.codego-inline-brand > div {
+  border: 1px solid color-mix(in oklab, var(--primary) 24%, transparent);
+  border-radius: 0.35rem;
+  box-shadow: 0 2px 6px rgb(184 86 46 / 0.1);
+}
+
+.codego-console-sidebar [data-slot='sidebar-inner'] {
+  border-right: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--sidebar) 92%, var(--accent)) 0%,
+      var(--sidebar) 42%
+    ),
+    var(--sidebar);
+}
+
+.codego-console-sidebar [data-slot='sidebar-content'] {
+  padding-top: 0.75rem;
+  padding-bottom: 1.25rem;
+}
+
+.codego-console-sidebar [data-slot='sidebar-group-label'] {
+  color: color-mix(in oklab, var(--sidebar-foreground) 54%, transparent);
+  letter-spacing: 0.01em;
+}
+
+.codego-console-sidebar [data-slot='sidebar-menu-button'],
+.codego-console-sidebar [data-slot='sidebar-menu-sub-button'] {
+  min-height: 2.25rem;
+  color: color-mix(in oklab, var(--sidebar-foreground) 82%, transparent);
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.codego-console-sidebar [data-slot='sidebar-menu-button']:hover,
+.codego-console-sidebar [data-slot='sidebar-menu-sub-button']:hover {
+  background: color-mix(in oklab, var(--sidebar-accent) 74%, transparent);
+  color: var(--sidebar-foreground);
+}
+
+.codego-console-sidebar [data-slot='sidebar-menu-button'][data-active],
+.codego-console-sidebar [data-slot='sidebar-menu-sub-button'][data-active] {
+  box-shadow: inset 2px 0 0 var(--sidebar-primary);
+  background: color-mix(in oklab, var(--sidebar-primary) 14%, var(--sidebar));
+  color: var(--sidebar-foreground);
+}
+
+.codego-console-sidebar [data-slot='sidebar-menu-button'][data-active] svg,
+.codego-console-sidebar [data-slot='sidebar-menu-sub-button'][data-active] svg {
+  color: var(--sidebar-primary);
+}
+
+/* ── Shared operation-page composition ────────────────────────────────
+ * Feature pages use this structure as their common reading frame: an open
+ * header field, one horizon rule, then content that can breathe instead of
+ * another nested card around the whole page. */
+.codego-section-page {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.codego-page-intro {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      72% 100% at 70% 120%,
+      rgb(201 135 103 / 0.18),
+      transparent 66%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--background) 92%, var(--card)) 0%,
+      var(--background) 100%
+    );
+}
+
+.codego-page-intro::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  content: '';
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(112 75 58 / 0.22) 16%,
+    rgb(184 86 46 / 0.46) 50%,
+    rgb(112 75 58 / 0.22) 84%,
+    transparent
+  );
+}
+
+.codego-page-intro::before {
+  position: absolute;
+  top: -3.5rem;
+  right: 7%;
+  width: min(34vw, 28rem);
+  height: 8rem;
+  pointer-events: none;
+  content: '';
+  border: 1px solid rgb(112 75 58 / 0.1);
+  border-radius: 999px;
+  transform: rotate(-9deg);
+}
+
+.dark .codego-page-intro {
+  background:
+    radial-gradient(
+      72% 100% at 70% 120%,
+      rgb(224 138 82 / 0.12),
+      transparent 66%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--background) 92%, var(--card)) 0%,
+      var(--background) 100%
+    );
+}
+
+.dark .codego-page-intro::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(224 138 82 / 0.16) 16%,
+    rgb(224 138 82 / 0.34) 50%,
+    rgb(224 138 82 / 0.16) 84%,
+    transparent
+  );
+}
+
+.codego-page-signal {
+  position: relative;
+  display: inline-flex;
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 5px rgb(184 86 46 / 0.1);
+}
+
+.codego-page-content {
+  scrollbar-gutter: stable;
+}
+
+.codego-page-content > * {
+  width: 100%;
+  max-width: 112rem;
+  margin-inline: auto;
+}
+
+.codego-image-workspace {
+  background:
+    radial-gradient(
+      56% 24% at 72% 0%,
+      rgb(201 135 103 / 0.12),
+      transparent 72%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--background) 94%, var(--card)) 0%,
+      var(--background) 100%
+    );
+}
+
+.dark .codego-image-workspace {
+  background:
+    radial-gradient(56% 24% at 72% 0%, rgb(224 138 82 / 0.08), transparent 72%),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--background) 94%, var(--card)) 0%,
+      var(--background) 100%
+    );
+}
+
+.codego-error-page {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      58% 42% at 50% 100%,
+      rgb(201 135 103 / 0.18),
+      transparent 74%
+    ),
+    linear-gradient(
+      180deg,
+      var(--background) 0%,
+      color-mix(in oklab, var(--background) 90%, var(--accent)) 100%
+    );
+}
+
+.codego-error-page::before,
+.codego-error-page::after {
+  position: absolute;
+  pointer-events: none;
+  content: '';
+  border: 1px solid rgb(112 75 58 / 0.12);
+  border-radius: 50%;
+}
+
+.codego-error-page::before {
+  width: min(68vw, 52rem);
+  height: min(68vw, 52rem);
+  right: -18vw;
+  bottom: -38vw;
+}
+
+.codego-error-page::after {
+  width: min(48vw, 38rem);
+  height: min(48vw, 38rem);
+  left: -19vw;
+  bottom: -30vw;
+}
+
+.codego-error-page > div {
+  position: relative;
+  z-index: 1;
+  padding-inline: 1.5rem;
+  text-align: center;
+}
+
+.codego-error-page h1 {
+  color: var(--foreground);
+  font-size: clamp(5rem, 14vw, 10rem);
+  font-weight: 650;
+  letter-spacing: -0.06em;
+  line-height: 0.9;
+}
+
+.codego-error-page h1::after {
+  display: block;
+  width: 4rem;
+  height: 0.2rem;
+  margin: 1.25rem auto 0;
+  content: '';
+  background: var(--primary);
+}
+
+.codego-page-actions button[data-slot='button'] {
+  min-height: 2.35rem;
+}
+
+.codego-page-actions button[data-slot='button'][data-variant='default'] {
+  box-shadow: 0 4px 10px rgb(184 86 46 / 0.14);
+}
+
+.codego-section-page [data-slot='tabs-list'][data-variant='default'] {
+  border: 1px solid color-mix(in oklab, var(--border) 88%, var(--primary));
+  background: color-mix(in oklab, var(--muted) 78%, var(--background));
+}
+
+.codego-section-page
+  [data-slot='tabs-list'][data-variant='default']
+  [data-slot='tabs-trigger'][data-active] {
+  box-shadow: 0 2px 8px rgb(37 29 25 / 0.06);
+}
+
+.codego-section-page [data-slot='table-container'] {
+  background: color-mix(in oklab, var(--card) 86%, var(--background));
+}
+
+.codego-section-page [data-slot='table-header'] [data-slot='table-row'] {
+  background: color-mix(in oklab, var(--accent) 28%, var(--card));
+}
+
+.codego-section-page [data-slot='table-head'] {
+  color: color-mix(in oklab, var(--foreground) 68%, transparent);
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
+}
+
+.codego-section-page [data-slot='table-row'] {
+  border-color: color-mix(in oklab, var(--border) 82%, transparent);
+}
+
+.codego-section-page [data-slot='table-body'] [data-slot='table-row']:hover {
+  background: color-mix(in oklab, var(--accent) 24%, var(--card));
+}
+
+.codego-section-page [data-slot='table-cell'] {
+  min-height: 3rem;
+  color: color-mix(in oklab, var(--foreground) 86%, transparent);
+}
+
+.codego-section-page input,
+.codego-section-page textarea,
+.codego-section-page [data-slot='select-trigger'] {
+  border-color: color-mix(in oklab, var(--border) 84%, var(--primary));
+  background: color-mix(in oklab, var(--card) 82%, var(--background));
+}
+
+.codego-section-page input:focus-visible,
+.codego-section-page textarea:focus-visible,
+.codego-section-page [data-slot='select-trigger']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgb(184 86 46 / 0.12);
+}
+
+.codego-playground-input {
+  position: relative;
+  padding-inline: clamp(0.75rem, 4vw, 2rem);
+}
+
+.codego-prompt-shell {
+  border-color: color-mix(in oklab, var(--primary) 24%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--card) 94%, var(--accent)) 0%,
+      var(--card) 100%
+    ),
+    var(--card);
+  box-shadow: 0 4px 14px rgb(37 29 25 / 0.06);
+}
+
+.codego-suggestions {
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.codego-suggestion {
+  border-color: color-mix(in oklab, var(--border) 86%, var(--primary));
+  background: color-mix(in oklab, var(--background) 82%, var(--card));
+  color: var(--muted-foreground);
+}
+
+.codego-suggestion:hover {
+  border-color: color-mix(in oklab, var(--primary) 44%, var(--border));
+  background: color-mix(in oklab, var(--accent) 58%, var(--card));
+  color: var(--foreground);
+}
+
+@media (max-width: 640px) {
+  .codego-page-intro {
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .codego-page-actions {
+    width: 100%;
+  }
+
+  .codego-page-actions > * {
+    flex: 1 1 auto;
+  }
+}
+
+.playground-empty-state {
+  animation: dawn-empty-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.playground-empty-mark {
+  box-shadow: 0 4px 10px rgb(184 86 46 / 0.12);
+}
+
+.playground-empty-mark span {
+  box-shadow: 0 0 0 5px rgb(184 86 46 / 0.08);
+}
+
+@keyframes dawn-empty-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .playground-empty-state {
+    animation: none;
+  }
+}
+
+/* Authentication and settings keep the same dawn/orbit language as the console. */
+.codego-auth-shell {
+  isolation: isolate;
+  background:
+    radial-gradient(
+      700px 360px at 12% 18%,
+      rgb(232 177 126 / 0.22),
+      transparent 70%
+    ),
+    radial-gradient(
+      620px 340px at 88% 84%,
+      rgb(186 112 76 / 0.15),
+      transparent 72%
+    ),
+    var(--background);
+}
+
+.codego-auth-shell::before,
+.codego-auth-shell::after {
+  position: absolute;
+  pointer-events: none;
+  content: '';
+  z-index: -1;
+  border: 1px solid rgb(145 90 60 / 0.16);
+  border-radius: 999px;
+  transform: rotate(-12deg);
+}
+
+.codego-auth-shell::before {
+  width: min(70vw, 760px);
+  height: min(30vw, 320px);
+  top: 10%;
+  left: -12%;
+}
+
+.codego-auth-shell::after {
+  width: min(60vw, 680px);
+  height: min(26vw, 280px);
+  right: -14%;
+  bottom: 6%;
+  transform: rotate(18deg);
+}
+
+.codego-auth-card {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  box-shadow: 0 24px 80px rgb(88 58 42 / 0.1);
+}
+
+.codego-auth-card::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(184 86 46 / 0.48),
+    transparent
+  );
+}
+
+.codego-auth-rail {
+  position: relative;
+  background:
+    linear-gradient(135deg, rgb(255 248 239 / 0.74), transparent 48%),
+    var(--muted);
+}
+
+.codego-auth-rail::after {
+  position: absolute;
+  right: 2.5rem;
+  bottom: 2.5rem;
+  left: 2.5rem;
+  height: 1px;
+  content: '';
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(184 86 46 / 0.56),
+    transparent
+  );
+}
+
+.codego-auth-form input:focus-visible,
+.codego-auth-form button:focus-visible,
+.codego-auth-form [role='button']:focus-visible {
+  outline-color: rgb(184 86 46 / 0.7);
+  box-shadow: 0 0 0 3px rgb(184 86 46 / 0.14);
+}
+
+.codego-settings-page {
+  --settings-line: rgb(145 90 60 / 0.2);
+}
+
+.codego-settings-content > *:not(.codego-settings-orbit) {
+  position: relative;
+}
+
+.codego-settings-content > *:not(.codego-settings-orbit)::before {
+  display: block;
+  width: 3.25rem;
+  height: 1px;
+  margin-bottom: 0.65rem;
+  content: '';
+  background: linear-gradient(90deg, rgb(184 86 46 / 0.7), transparent);
+}
+
+.codego-settings-content {
+  position: relative;
+}
+
+.codego-settings-orbit {
+  position: absolute;
+  top: -1.5rem;
+  right: 4%;
+  width: min(42vw, 34rem);
+  height: 7rem;
+  pointer-events: none;
+  border: 1px solid rgb(145 90 60 / 0.13);
+  border-radius: 999px;
+  transform: rotate(-8deg);
+}
+
+.codego-settings-orbit::after {
+  position: absolute;
+  right: 18%;
+  bottom: 0.4rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  content: '';
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgb(184 86 46 / 0.1);
+}
+
+.codego-public-prose {
+  max-width: 70ch;
+  margin-inline: auto;
+  padding: clamp(1.25rem, 3vw, 2.75rem) clamp(1rem, 4vw, 3.5rem);
+  border-top: 1px solid rgb(112 75 58 / 0.18);
+  border-bottom: 1px solid rgb(112 75 58 / 0.18);
+}
+
+.codego-public-prose :is(h2, h3) {
+  position: relative;
+  margin-top: 2.2em;
+  padding-top: 0.8em;
+  color: var(--foreground);
+}
+
+.codego-public-prose h2 {
+  font-size: clamp(1.35rem, 2.2vw, 1.75rem);
+  letter-spacing: -0.025em;
+}
+
+.codego-public-prose h3 {
+  font-size: 1.1rem;
+}
+
+.codego-public-prose :is(h2, h3)::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3.5rem;
+  height: 1px;
+  content: '';
+  background: linear-gradient(90deg, var(--primary), transparent);
+}
+
+.codego-public-prose p,
+.codego-public-prose li {
+  color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground));
+  line-height: 1.9;
+}
+
+.codego-public-prose strong {
+  color: var(--foreground);
+  font-weight: 650;
+}
+
+.codego-public-prose blockquote {
+  margin-block: 1.6rem;
+  border-inline-start: 0;
+  border-block: 1px solid rgb(184 86 46 / 0.22);
+  background: rgb(184 86 46 / 0.06);
+  padding: 1rem 1.1rem;
+  color: var(--foreground);
+}
+
+.codego-public-prose ul,
+.codego-public-prose ol {
+  padding-inline-start: 1.3rem;
+}
+
+.codego-public-prose li::marker {
+  color: var(--primary);
+}
+
+.codego-marketplace-audience {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(22rem, 1.35fr) auto;
+  gap: 1rem;
+  align-items: center;
+  overflow: hidden;
+  padding: 1rem 1.1rem;
+  border-top: 1px solid rgb(112 75 58 / 0.18);
+  border-bottom: 1px solid rgb(112 75 58 / 0.18);
+  background:
+    radial-gradient(
+      55% 140% at 72% 100%,
+      rgb(201 135 103 / 0.11),
+      transparent 72%
+    ),
+    color-mix(in srgb, var(--card) 76%, transparent);
+}
+
+.codego-marketplace-audience-line {
+  position: absolute;
+  right: 7%;
+  bottom: -3.5rem;
+  width: min(32vw, 26rem);
+  height: 7rem;
+  pointer-events: none;
+  border: 1px solid rgb(112 75 58 / 0.12);
+  border-radius: 999px;
+  transform: rotate(-8deg);
+}
+
+.codego-marketplace-audience-copy,
+.codego-marketplace-audience-actions,
+.codego-marketplace-audience > div:last-child {
+  position: relative;
+  z-index: 1;
+}
+
+.codego-marketplace-audience-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.codego-marketplace-audience-signal {
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: 0.25rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 5px rgb(184 86 46 / 0.1);
+}
+
+.codego-marketplace-audience-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.codego-marketplace-audience-actions button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+  justify-content: stretch;
+  height: auto;
+  min-height: 3.25rem;
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  border-color: rgb(112 75 58 / 0.18);
+  background: color-mix(in srgb, var(--background) 70%, transparent);
+}
+
+.codego-marketplace-audience-actions button > svg:first-child {
+  color: var(--primary);
+}
+
+.codego-marketplace-audience-actions strong,
+.codego-marketplace-audience-actions small {
+  display: block;
+}
+
+.codego-marketplace-audience-actions strong {
+  font-size: 0.75rem;
+  color: var(--foreground);
+}
+
+.codego-marketplace-audience-actions small {
+  margin-top: 0.15rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codego-marketplace-audience-actions button:hover {
+  border-color: rgb(184 86 46 / 0.42);
+  background: rgb(184 86 46 / 0.06);
+}
+
+.codego-marketplace-audience-arrow {
+  color: var(--muted-foreground);
+}
+
+.codego-marketplace-overview-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--muted-foreground);
+  transition: color 160ms ease;
+}
+
+.codego-marketplace-overview-link:hover {
+  color: var(--primary);
+}
+
+.codego-marketplace-metrics > div {
+  min-width: 0;
+}
+
+.codego-marketplace-model-preview {
+  display: flex;
+  min-width: 0;
+  max-width: min(34rem, 100%);
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  overflow: hidden;
+}
+
+.codego-marketplace-model-preview span {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 10rem;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgb(112 75 58 / 0.14);
+  border-radius: 0.3rem;
+  padding: 0.15rem 0.4rem;
+  background: color-mix(in srgb, var(--muted) 58%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codego-marketplace-model-preview span:last-child {
+  flex: 0 0 auto;
+  color: var(--foreground);
+}
+
+@media (min-width: 1280px) {
+  .codego-marketplace-metrics > div {
+    padding-inline: 0.7rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .codego-marketplace-audience {
+    grid-template-columns: 1fr;
+  }
+
+  .codego-marketplace-audience > div:last-child {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .codego-marketplace-audience-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.codego-wallet-tabs [data-slot='tabs-trigger'] {
+  min-height: 2.75rem;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  color: var(--muted-foreground);
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.codego-wallet-tabs [data-slot='tabs-trigger'][data-state='active'] {
+  border-color: rgb(184 86 46 / 0.7);
+  background: rgb(184 86 46 / 0.08);
+  color: var(--foreground);
+}
+
+/* Console-wide geometry pass: old feature pages inherit a calmer, flatter rhythm. */
+.codego-section-page .rounded-3xl,
+.codego-section-page .rounded-2xl {
+  border-radius: 0.75rem;
+}
+
+.codego-section-page .rounded-xl {
+  border-radius: 0.625rem;
+}
+
+.codego-section-page [data-slot='tabs-list'] {
+  width: fit-content;
+  min-height: 2.75rem;
+  padding: 0;
+  gap: 0.25rem;
+  border-bottom: 1px solid rgb(112 75 58 / 0.16);
+  border-radius: 0;
+  background: transparent;
+}
+
+.codego-section-page [data-slot='tabs-trigger'] {
+  min-height: 2.75rem;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  color: var(--muted-foreground);
+}
+
+.codego-section-page [data-slot='tabs-trigger'][data-state='active'] {
+  border-bottom-color: rgb(184 86 46 / 0.72);
+  background: rgb(184 86 46 / 0.07);
+  color: var(--foreground);
+}
+
+.codego-section-page [class*='bg-slate-100'] {
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+}
+
+.codego-section-page [class*='shadow-sm'] {
+  box-shadow: none;
+}
+
+.codego-section-page [data-slot='table-container'] {
+  overflow-x: auto;
+  border-color: rgb(112 75 58 / 0.18);
+}
+
+.codego-section-page [data-slot='table-header'] {
+  background: color-mix(in srgb, var(--muted) 52%, transparent);
+}
+
+.codego-section-page [data-slot='table-head'] {
+  color: var(--secondary-foreground);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 639px) {
+  .codego-section-page [data-slot='tabs-list'] {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .codego-section-page [data-slot='tabs-trigger'] {
+    flex: 1 0 auto;
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codego-wallet-tabs [data-slot='tabs-trigger'] {
+    transition: none;
   }
 }

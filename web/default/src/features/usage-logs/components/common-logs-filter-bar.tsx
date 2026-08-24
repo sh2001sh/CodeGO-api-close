@@ -235,7 +235,7 @@ export function CommonLogsFilterBar<TData>(
             onKeyDown={handleKeyDown}
             sensitiveVisible={sensitiveVisible}
             isAdmin={isAdmin}
-            className={inputClass}
+            className='w-full sm:w-[210px] lg:w-[240px]'
           />
           <Select
             items={[

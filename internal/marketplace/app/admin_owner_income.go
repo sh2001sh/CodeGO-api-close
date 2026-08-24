@@ -4,6 +4,7 @@ import (
 	"time"
 
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
 
@@ -56,4 +57,31 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		result.ReleasedIncome += item.ReleasedIncome
 	}
 	return result, nil
+}
+
+func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeReleaseResult, error) {
+	if input.StartTimestamp > 0 && input.EndTimestamp > 0 && input.StartTimestamp > input.EndTimestamp {
+		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
+	}
+	ownerIDs := []int(nil)
+	if normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch); normalizedSearch != "" {
+		var err error
+		ownerIDs, err = ownerUserIDsByExternalID(normalizedSearch)
+		if err != nil {
+			return nil, err
+		}
+		if len(ownerIDs) == 0 {
+			return &AdminOwnerIncomeReleaseResult{}, nil
+		}
+	}
+	result, err := marketplacesettlement.ReleasePending(marketplacesettlement.ReleaseFilter{
+		OwnerUserIDs: ownerIDs, StartTimestamp: input.StartTimestamp,
+		EndTimestamp: input.EndTimestamp,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &AdminOwnerIncomeReleaseResult{
+		ReleasedCount: result.Count, ReleasedAmount: result.Amount,
+	}, nil
 }

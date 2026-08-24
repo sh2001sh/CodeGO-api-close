@@ -1,4 +1,4 @@
-import { RefreshCcw, RotateCcw, Search } from 'lucide-react'
+import { RefreshCcw, RotateCcw, Search, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,8 @@ export function AdminIncomeFilter(props: {
   onRefresh: () => void
   isFetching: boolean
   isError: boolean
+  onRelease: () => void
+  releasing: boolean
 }) {
   const { t } = useTranslation()
   const report = props.report
@@ -41,7 +43,7 @@ export function AdminIncomeFilter(props: {
             value={formatQuota(report?.pending_income ?? 0)}
           />
           <IncomeValue
-            label={t('已释放')}
+            label={t('已回收')}
             value={formatQuota(report?.released_income ?? 0)}
           />
         </div>
@@ -79,11 +81,23 @@ export function AdminIncomeFilter(props: {
             variant='outline'
             size='icon'
             onClick={props.onRefresh}
-            disabled={props.isFetching}
+            disabled={props.isFetching || props.releasing}
             title={t('刷新收益')}
             aria-label={t('刷新收益')}
           >
             <RefreshCcw className={props.isFetching ? 'animate-spin' : ''} />
+          </Button>
+          <Button
+            onClick={props.onRelease}
+            disabled={
+              props.releasing ||
+              props.isFetching ||
+              (report?.pending_income ?? 0) <= 0
+            }
+            title={t('按当前用户和时间范围回收待结算收益')}
+          >
+            <WalletCards className={props.releasing ? 'animate-pulse' : ''} />
+            {props.releasing ? t('回收中') : t('一键回收待结算')}
           </Button>
         </div>
       </div>
@@ -111,7 +125,7 @@ export function AdminIncomeFilter(props: {
                 value={formatQuota(item.pending_income)}
               />
               <ReportValue
-                label={t('已释放')}
+                label={t('已回收')}
                 value={formatQuota(item.released_income)}
               />
               <ReportValue

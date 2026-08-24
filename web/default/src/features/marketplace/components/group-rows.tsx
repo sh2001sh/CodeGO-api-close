@@ -70,6 +70,7 @@ export function GroupMarketItem(props: {
                   {t('{{count}} 个模型', { count: group.models.length })}
                 </span>
               </div>
+              <ModelPreview models={group.models} />
             </div>
           </div>
           <div className='col-span-2 xl:col-span-1'>
@@ -144,6 +145,23 @@ export function GroupMarketItem(props: {
   )
 }
 
+function ModelPreview(props: { models: string[] }) {
+  const visibleModels = props.models.slice(0, 3)
+  const remaining = Math.max(0, props.models.length - visibleModels.length)
+  if (visibleModels.length === 0) return null
+
+  return (
+    <div className='codego-marketplace-model-preview' aria-label='可用模型'>
+      {visibleModels.map((model) => (
+        <span key={model} title={model}>
+          {model}
+        </span>
+      ))}
+      {remaining > 0 && <span>+{remaining}</span>}
+    </div>
+  )
+}
+
 function RemoteCompactionBadge(props: {
   support: MarketplaceGroup['remote_compaction_support']
 }) {
@@ -157,7 +175,7 @@ function RemoteCompactionBadge(props: {
         : t('远程压缩 · 仅 v2')
   return (
     <span
-      className='border-info/35 bg-info/10 text-info inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium'
+      className='border-border/70 text-muted-foreground inline-flex shrink-0 items-center gap-1 rounded-[4px] border px-1.5 py-0.5 text-[11px] font-medium'
       title={t('该分组已通过对应远程压缩协议探测')}
     >
       <Shrink className='size-3' aria-hidden='true' />
@@ -168,18 +186,18 @@ function RemoteCompactionBadge(props: {
 
 function RankBadge({ group }: { group: MarketplaceGroup }) {
   const rank = group.observing ? 0 : group.rank
+  const top3 = rank >= 1 && rank <= 3
   return (
     <span
       className={cn(
-        'inline-flex size-9 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums',
-        rank === 1 && 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-        rank === 2 && 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
-        rank === 3 && 'bg-orange-500/15 text-orange-700 dark:text-orange-300',
-        (rank === 0 || rank > 3) && 'bg-muted text-muted-foreground'
+        'inline-flex size-9 shrink-0 items-center justify-center rounded-[4px] border text-xs font-semibold tabular-nums transition-colors',
+        top3
+          ? 'border-primary/45 text-primary bg-primary/[0.06]'
+          : 'border-border/70 text-muted-foreground bg-transparent'
       )}
       aria-label={rank ? `#${rank}` : undefined}
     >
-      {rank ? `#${rank}` : <Radio className='size-4' />}
+      {rank ? `#${rank}` : <Radio className='size-3.5' />}
     </span>
   )
 }

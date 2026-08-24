@@ -41,7 +41,7 @@ function SimulationSetup(props: {
   return (
     <div className='border-primary/20 bg-primary/[0.035] rounded-lg border p-4 sm:p-5'>
       <div className='flex items-start gap-3'>
-        <div className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-md'>
+        <div className='border border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-md'>
           <Beaker className='size-4' />
         </div>
         <div className='min-w-0'>

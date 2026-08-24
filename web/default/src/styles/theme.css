@@ -112,7 +112,7 @@ For commercial licensing, please contact support@quantumnous.com
   --chart-3: #8a6a4a;
   --chart-4: #c9a227;
   --chart-5: #6b4a35;
-  --sidebar: #fdfcfb;
+  --sidebar: #f4efe9;
   --sidebar-foreground: #221f1c;
   --sidebar-primary: #b8562e;
   --sidebar-primary-foreground: #fff8f3;
@@ -122,6 +122,8 @@ For commercial licensing, please contact support@quantumnous.com
   --sidebar-ring: #b8562e;
   --skeleton-base: #ece5db;
   --skeleton-highlight: #fbf8f4;
+  --night-surface: #181210;
+  --night-foreground: #f3ede3;
 }
 
 .dark {
@@ -167,4 +169,6 @@ For commercial licensing, please contact support@quantumnous.com
   --sidebar-ring: #e08a52;
   --skeleton-base: #2f2925;
   --skeleton-highlight: #403832;
+  --night-surface: #181210;
+  --night-foreground: #f3ede3;
 }

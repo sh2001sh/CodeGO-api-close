@@ -170,22 +170,6 @@ export interface BindingItem {
   onBind: () => void
 }
 
-export interface MiniProgramBinding {
-  bound: boolean
-  status?: string
-  openid_masked?: string
-  account_masked?: string
-  username_masked?: string
-  bound_at?: number
-  last_seen_at?: number
-}
-
-export interface MiniProgramBindCodePayload {
-  code: string
-  expires_at: number
-  ttl_seconds: number
-}
-
 /**
  * Two-Factor Authentication Status
  */

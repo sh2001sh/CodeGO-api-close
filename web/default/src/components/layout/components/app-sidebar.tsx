@@ -62,7 +62,11 @@ export function AppSidebar() {
   }, [configFilteredNavGroups, userRole])
 
   return (
-    <Sidebar collapsible={collapsible} variant={variant}>
+    <Sidebar
+      collapsible={collapsible}
+      variant={variant}
+      className='codego-console-sidebar'
+    >
       <SidebarContent className='py-2'>
         {currentNavGroups.map((props) => {
           const key = props.id || props.title

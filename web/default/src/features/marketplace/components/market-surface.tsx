@@ -56,10 +56,12 @@ export function MarketSurface(props: {
         </div>
       </div>
       {props.ranking && (
-        <div className='border-border border-y bg-sky-500/[0.06] px-4 py-3 text-xs leading-5 text-sky-800 dark:text-sky-200'>
-          {t(
-            '榜单使用 Wilson 可靠性修正，并综合 TTFT、总延迟、TPS 与倍率；小样本渠道会继续观测，不参与正式名次。'
-          )}
+        <div className='border-border border-y bg-primary/[0.05] px-4 py-3 text-xs leading-5'>
+          <span className='text-foreground'>
+            {t(
+              '榜单使用 Wilson 可靠性修正，并综合 TTFT、总延迟、TPS 与倍率；小样本渠道会继续观测，不参与正式名次。'
+            )}
+          </span>
         </div>
       )}
       <div className='border-border border-b px-4 sm:px-5'>

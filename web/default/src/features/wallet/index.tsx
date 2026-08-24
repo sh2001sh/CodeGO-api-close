@@ -59,7 +59,7 @@ export function Wallet(props: WalletProps) {
                 setActiveSection(value as 'funding' | 'transfer' | 'billing')
               }
             >
-              <TabsList className='grid h-auto w-full grid-cols-3'>
+              <TabsList className='codego-wallet-tabs grid h-auto w-full grid-cols-3'>
                 <TabsTrigger value='funding'>
                   <CreditCard className='size-4' />
                   {t('Top up and redeem')}

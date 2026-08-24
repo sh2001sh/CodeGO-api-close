@@ -143,15 +143,13 @@ func (capabilities ResponsesCapabilities) SupportsRemoteCompactionV2For(model st
 }
 
 // AllowsRemoteCompactionV2For preserves compatibility with channels created
-// before compaction probing was introduced. Pending/unknown/error states are
-// allowed; only a definitive unsupported result suppresses the v2 header.
+// before compaction probing was introduced. A supported result for another
+// model or key is positive channel-level evidence, but not a definitive result
+// for this request. Only an explicit unsupported result suppresses v2.
 func (capabilities ResponsesCapabilities) AllowsRemoteCompactionV2For(model string, keyIndex int) bool {
 	state := capabilities.RemoteCompactionV2
 	if state.Status == CapabilityStatusUnsupported {
 		return false
-	}
-	if state.Status == CapabilityStatusSupported {
-		return capabilityStateSupports(state, model, keyIndex)
 	}
 	return true
 }
@@ -160,9 +158,6 @@ func (capabilities ResponsesCapabilities) AllowsRemoteCompactionV1For(model stri
 	state := capabilities.RemoteCompactionV1
 	if state.Status == CapabilityStatusUnsupported {
 		return false
-	}
-	if state.Status == CapabilityStatusSupported {
-		return capabilityStateSupports(state, model, keyIndex)
 	}
 	return true
 }

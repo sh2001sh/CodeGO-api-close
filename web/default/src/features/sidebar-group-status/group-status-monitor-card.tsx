@@ -38,19 +38,16 @@ export function GroupStatusMonitorCard(props: {
   return (
     <Card
       size='sm'
-      className={cn(
-        'group bg-card hover:bg-muted/20 overflow-hidden border py-0 transition-colors',
-        meta.border
-      )}
+      className='group bg-card hover:border-primary/30 overflow-hidden border py-0 transition-colors'
     >
       <CardContent className='px-4 py-3.5'>
         <div className='space-y-3'>
           {/* Header: Model name and status badge */}
           <div className='flex items-start justify-between gap-2'>
             <div className='flex min-w-0 flex-1 items-center gap-2'>
-              <div className={cn('size-2 shrink-0 rounded-full', meta.dot)} />
+              <div className={cn('size-1.5 shrink-0 rounded-full', meta.dot)} />
               <h4
-                className='text-foreground min-w-0 flex-1 truncate text-sm font-semibold'
+                className='text-foreground min-w-0 flex-1 truncate font-mono text-[13px] font-semibold'
                 title={props.item.model}
               >
                 {props.item.model}
@@ -58,7 +55,7 @@ export function GroupStatusMonitorCard(props: {
             </div>
             <div
               className={cn(
-                'shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase',
+                'shrink-0 rounded-[4px] px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase',
                 meta.accentText,
                 meta.badgeBg
               )}
@@ -67,7 +64,7 @@ export function GroupStatusMonitorCard(props: {
             </div>
           </div>
 
-          <div className='bg-muted/40 grid grid-cols-3 divide-x rounded-md py-2'>
+          <div className='divide-border/60 grid grid-cols-3 divide-x py-0.5'>
             <Metric label='成功率' value={props.item.success_rate} />
             <Metric label='缓存命中率' value={props.item.cache_hit_rate} />
             <RequestMetric
@@ -93,9 +90,9 @@ export function GroupStatusMonitorCard(props: {
 
 function Metric(props: { label: string; value?: number | null }) {
   return (
-    <div className='px-3 text-center'>
+    <div className='px-3 first:pl-0'>
       <div className='text-muted-foreground text-[11px]'>{props.label}</div>
-      <div className='mt-0.5 text-lg font-semibold tabular-nums'>
+      <div className='app-numeric mt-0.5 text-base font-semibold'>
         {props.value == null ? '--' : `${props.value.toFixed(1)}%`}
       </div>
     </div>
@@ -104,14 +101,14 @@ function Metric(props: { label: string; value?: number | null }) {
 
 function RequestMetric(props: { label: string; value?: number }) {
   return (
-    <div className='px-2 text-center'>
+    <div className='px-2 first:pl-0'>
       <div
         className='text-muted-foreground truncate text-[11px]'
         title={props.label}
       >
         {props.label}
       </div>
-      <div className='mt-0.5 text-lg font-semibold tabular-nums'>
+      <div className='app-numeric mt-0.5 text-base font-semibold'>
         {formatRequestCount(props.value)}
       </div>
     </div>

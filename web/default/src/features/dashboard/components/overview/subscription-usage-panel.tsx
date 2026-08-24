@@ -155,24 +155,31 @@ export function SubscriptionUsagePanel() {
   const [draftOrderIds, setDraftOrderIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
 
-  const activeSubscriptions = subscriptionData?.subscriptions ?? []
+  const activeSubscriptions = useMemo(
+    () => subscriptionData?.subscriptions ?? [],
+    [subscriptionData?.subscriptions]
+  )
   const hasActiveSubscriptions = activeSubscriptions.length > 0
   const dailyLuckyQuery = useDailyLuckyNumberSelf(hasActiveSubscriptions)
 
   useEffect(() => {
     if (!subscriptionData) return
-    setDraftFundingSourceOrder(
-      normalizeFundingSourceOrder(
-        subscriptionData.funding_source_order,
-        subscriptionData.billing_preference
+    queueMicrotask(() => {
+      setDraftFundingSourceOrder(
+        normalizeFundingSourceOrder(
+          subscriptionData.funding_source_order,
+          subscriptionData.billing_preference
+        )
       )
-    )
-    const fallbackIds = activeSubscriptions.map((item) => item.subscription.id)
-    setDraftOrderIds(
-      subscriptionData.subscription_order_ids?.length
-        ? subscriptionData.subscription_order_ids
-        : fallbackIds
-    )
+      const fallbackIds = activeSubscriptions.map(
+        (item) => item.subscription.id
+      )
+      setDraftOrderIds(
+        subscriptionData.subscription_order_ids?.length
+          ? subscriptionData.subscription_order_ids
+          : fallbackIds
+      )
+    })
   }, [activeSubscriptions, subscriptionData])
 
   const planMetaMap = useMemo(() => {
@@ -280,7 +287,7 @@ export function SubscriptionUsagePanel() {
     <div className='app-page-shell overflow-hidden shadow-none'>
       <div className='flex flex-wrap items-start justify-between gap-3 border-b p-4 sm:p-5'>
         <div className='flex min-w-0 items-start gap-3'>
-          <span className='bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl'>
+          <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-10 shrink-0 items-center justify-center rounded-xl'>
             <Crown className='size-4' aria-hidden='true' />
           </span>
           <div className='min-w-0'>

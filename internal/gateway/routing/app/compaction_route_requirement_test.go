@@ -32,7 +32,28 @@ func TestRemoteCompactionCapabilityRank(t *testing.T) {
 	require.Equal(t, 0, remoteCompactionCapabilityRank(ctx, supported, "gpt-5.6-sol"))
 	require.Equal(t, 1, remoteCompactionCapabilityRank(ctx, unknown, "gpt-5.6-sol"))
 	require.Equal(t, -1, remoteCompactionCapabilityRank(ctx, unsupported, "gpt-5.6-sol"))
-	require.Equal(t, -1, remoteCompactionCapabilityRank(ctx, supported, "gpt-5.5"))
+	require.Equal(t, 1, remoteCompactionCapabilityRank(ctx, supported, "gpt-5.5"))
+}
+
+func TestRemoteCompactionModelMismatchIsUnverifiedInsteadOfUnsupported(t *testing.T) {
+	capabilities := gatewayschema.ResponsesCapabilities{
+		RemoteCompactionV1: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusSupported,
+			Model:  "gpt-5.6-sol",
+		},
+		RemoteCompactionV2: gatewayschema.CapabilityProbeState{
+			Status: gatewayschema.CapabilityStatusSupported,
+			Model:  "gpt-5.6-sol",
+		},
+	}
+
+	require.True(t, capabilities.AllowsRemoteCompactionV1For("gpt-5.6-terra", 0))
+	require.True(t, capabilities.AllowsRemoteCompactionV2For("gpt-5.6-terra", 0))
+
+	capabilities.RemoteCompactionV1.Status = gatewayschema.CapabilityStatusUnsupported
+	capabilities.RemoteCompactionV2.Status = gatewayschema.CapabilityStatusUnsupported
+	require.False(t, capabilities.AllowsRemoteCompactionV1For("gpt-5.6-terra", 0))
+	require.False(t, capabilities.AllowsRemoteCompactionV2For("gpt-5.6-terra", 0))
 }
 
 func TestSetRemoteCompactionRouteRequirementDetectsV2Trigger(t *testing.T) {

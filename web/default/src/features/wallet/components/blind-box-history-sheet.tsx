@@ -51,8 +51,11 @@ export function BlindBoxHistorySheet(props: {
   useEffect(() => {
     if (!props.open) return
     let active = true
-    setLoading(true)
-    setError('')
+    queueMicrotask(() => {
+      if (!active) return
+      setLoading(true)
+      setError('')
+    })
     void getBlindBoxHistory(page, PAGE_SIZE)
       .then((response) => {
         if (!active) return
@@ -74,7 +77,7 @@ export function BlindBoxHistorySheet(props: {
   }, [page, props.open])
 
   useEffect(() => {
-    if (props.open) setPage(1)
+    if (props.open) queueMicrotask(() => setPage(1))
   }, [props.open])
 
   const totalPages = useMemo(
@@ -157,7 +160,6 @@ export function BlindBoxHistorySheet(props: {
 function HistoryRecord(props: { record: BlindBoxRecord }) {
   const record = props.record
   const detail = rewardDetail(record)
-  const Icon = rewardIcon(record)
 
   return (
     <div className='border-border/70 bg-background/50 rounded-xl border p-3.5'>
@@ -168,7 +170,7 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
             resolveRewardTone(record)
           )}
         >
-          <Icon className='size-4' />
+          <RewardIcon record={record} />
         </div>
         <div className='min-w-0 flex-1'>
           <div className='flex flex-wrap items-start justify-between gap-x-3 gap-y-1'>
@@ -197,6 +199,20 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
       </div>
     </div>
   )
+}
+
+function RewardIcon(props: { record: BlindBoxRecord }) {
+  const className = 'size-4'
+  if (props.record.reward_type === 'prop') {
+    return <TicketPercent className={className} />
+  }
+  if (props.record.reward_type === 'subscription') {
+    return <PackageCheck className={className} />
+  }
+  if (props.record.reward_type === 'claude_quota') {
+    return <Sparkles className={className} />
+  }
+  return <Gift className={className} />
 }
 
 function LuckyNumberHistory(props: { record: BlindBoxRecord }) {
@@ -258,13 +274,6 @@ function rewardDetail(record: BlindBoxRecord) {
     }
   }
   return { title: record.reward_title, description: '', type: '奖励' }
-}
-
-function rewardIcon(record: BlindBoxRecord) {
-  if (record.reward_type === 'prop') return TicketPercent
-  if (record.reward_type === 'subscription') return PackageCheck
-  if (record.reward_type === 'claude_quota') return Sparkles
-  return Gift
 }
 
 function propDescription(propType: string) {

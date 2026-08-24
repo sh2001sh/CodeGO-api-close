@@ -215,32 +215,38 @@ export function DailyLuckyNumberPage() {
             </Alert>
           ) : payload ? (
             <>
-              <DrawStage
-                payload={payload}
-                countdownSeconds={countdownSeconds}
-                onOpenRules={openRules}
-              />
-              <LuckyMatchBoard
-                subscriptions={payload.subscriptions}
-                blindBoxNumbers={payload.today_blind_box_numbers || []}
-                draw={payload.today_draw}
-                rewards={payload.recent_rewards}
-                rules={payload.rules}
-              />
-              <RewardLadder
-                rules={payload.rules}
-                tier={topTier}
-                matchedDigits={bestMatch}
-                onOpenRules={openRules}
-              />
-              <TodayWinnersPanel
-                records={todayPublicWinsQuery.data?.records}
-                drawDate={payload.today_draw?.draw_date}
-                timezone={payload.timezone}
-                loading={todayPublicWinsQuery.isLoading}
-                error={todayPublicWinsQuery.isError}
-                onRetry={() => void todayPublicWinsQuery.refetch()}
-              />
+              <div className='grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]'>
+                <div className='flex min-w-0 flex-col gap-5'>
+                  <DrawStage
+                    payload={payload}
+                    countdownSeconds={countdownSeconds}
+                    onOpenRules={openRules}
+                  />
+                  <LuckyMatchBoard
+                    subscriptions={payload.subscriptions}
+                    blindBoxNumbers={payload.today_blind_box_numbers || []}
+                    draw={payload.today_draw}
+                    rewards={payload.recent_rewards}
+                    rules={payload.rules}
+                  />
+                </div>
+                <div className='flex min-w-0 flex-col gap-5'>
+                  <RewardLadder
+                    rules={payload.rules}
+                    tier={topTier}
+                    matchedDigits={bestMatch}
+                    onOpenRules={openRules}
+                  />
+                  <TodayWinnersPanel
+                    records={todayPublicWinsQuery.data?.records}
+                    drawDate={payload.today_draw?.draw_date}
+                    timezone={payload.timezone}
+                    loading={todayPublicWinsQuery.isLoading}
+                    error={todayPublicWinsQuery.isError}
+                    onRetry={() => void todayPublicWinsQuery.refetch()}
+                  />
+                </div>
+              </div>
               <HistoryPanel
                 tab={historyTab}
                 onTabChange={setHistoryTab}

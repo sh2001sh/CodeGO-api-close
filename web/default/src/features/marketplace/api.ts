@@ -320,6 +320,24 @@ export async function getAdminOwnerIncome(
   return requireData(response.data)
 }
 
+export async function releaseAdminOwnerIncome(
+  filters: Pick<
+    AdminMarketplaceChannelFilters,
+    'ownerSearch' | 'startTimestamp' | 'endTimestamp'
+  >
+) {
+  const search = new URLSearchParams()
+  if (filters.ownerSearch) search.set('owner_search', filters.ownerSearch)
+  if (filters.startTimestamp)
+    search.set('start_timestamp', String(filters.startTimestamp))
+  if (filters.endTimestamp)
+    search.set('end_timestamp', String(filters.endTimestamp))
+  const response = await api.post<
+    ApiResponse<{ released_count: number; released_amount: number }>
+  >(`/api/marketplace/admin/owner-income/release?${search.toString()}`)
+  return requireData(response.data)
+}
+
 export async function reviewMarketplaceChannel(
   channelId: string,
   approved: boolean,

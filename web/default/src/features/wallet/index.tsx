@@ -138,7 +138,6 @@ export function Wallet(props: WalletProps) {
         calculating={workspace.calculating}
         processing={workspace.processing || workspace.pancakeProcessing}
         discountRate={workspace.getDiscountRate()}
-        usdExchangeRate={workspace.effectiveUsdExchangeRate}
       />
 
       <BillingHistoryDialog

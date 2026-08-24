@@ -268,7 +268,11 @@ function rewardDetail(record: BlindBoxRecord) {
   }
   if (record.reward_type === 'claude_quota' || record.reward_type === 'quota') {
     return {
-      title: record.reward_title || `$${record.reward_usd} 通用额度`,
+      title:
+        record.reward_title ||
+        (record.credit_amount > 0
+          ? `${formatQuota(record.credit_amount)} 通用额度`
+          : `${record.reward_usd} USD 通用额度`),
       description: `${formatQuota(record.credit_amount || 0)} 已进入通用额度钱包，永久有效。`,
       type: '通用额度',
     }

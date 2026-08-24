@@ -147,6 +147,18 @@ func ListAdminResources(request ListResourcesRequest) (*ResourceList, error) {
 	return listResources(request, func(query *gorm.DB) *gorm.DB { return query })
 }
 
+// DeleteResource permanently removes a community resource selected by an administrator.
+func DeleteResource(resourceID int64) error {
+	result := platformdb.DB.Delete(&communityschema.Resource{}, resourceID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrResourceNotFound
+	}
+	return nil
+}
+
 // ReviewResource publishes or rejects a submitted resource.
 func ReviewResource(resourceID int64, reviewerID int, request ReviewResourceRequest) (*ResourceView, error) {
 	status := strings.ToLower(strings.TrimSpace(request.Status))

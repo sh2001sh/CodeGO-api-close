@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, WalletCards } from 'lucide-react'
-import { formatUsdAmount } from '@/lib/format'
+import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -28,6 +28,7 @@ export type BalanceSegment = {
 export function BalanceWorkspace(props: {
   available: string
   availableValue?: number
+  currencyLabel: string
   segments: BalanceSegment[]
   metrics: MetricDef[]
 }) {
@@ -47,13 +48,13 @@ export function BalanceWorkspace(props: {
               可用总额度
             </span>
             <span className='border-primary/30 bg-primary/10 text-primary ml-auto rounded-[4px] border px-2.5 py-0.5 text-[11px] font-medium'>
-              USD
+              {props.currencyLabel}
             </span>
           </div>
 
           <div className='text-foreground app-numeric mt-3 text-5xl font-semibold tracking-tight xl:text-6xl'>
             {props.availableValue != null ? (
-              <CountUp value={props.availableValue} format={formatUsdAmount} />
+              <CountUp value={props.availableValue} format={formatQuota} />
             ) : (
               props.available
             )}

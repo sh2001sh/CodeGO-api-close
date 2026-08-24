@@ -8,6 +8,7 @@ import (
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -51,6 +52,7 @@ func TestMain(m *testing.M) {
 		&billingschema.BillingSettlement{},
 		&billingschema.BillingOutboxEvent{},
 		&billingschema.RequestEconomics{},
+		&marketplaceschema.Settlement{},
 		&commerceschema.SubscriptionPlan{},
 		&commerceschema.UserSubscription{},
 		&commerceschema.BlindBoxOpenRecord{},
@@ -78,6 +80,7 @@ func truncate(t *testing.T) {
 		platformdb.DB.Exec("DELETE FROM billing_balance_snapshots")
 		platformdb.DB.Exec("DELETE FROM billing_accounts")
 		platformdb.DB.Exec("DELETE FROM billing_request_economics")
+		platformdb.DB.Exec("DELETE FROM marketplace_settlements")
 		platformdb.DB.Exec("DELETE FROM subscription_plans")
 		platformdb.DB.Exec("DELETE FROM user_subscriptions")
 		platformdb.DB.Exec("DELETE FROM blind_box_open_records")

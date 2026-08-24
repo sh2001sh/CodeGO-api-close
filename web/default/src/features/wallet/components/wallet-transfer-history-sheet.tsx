@@ -8,7 +8,7 @@ import {
   Send,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
+import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -134,7 +134,7 @@ export function WalletTransferHistorySheet(props: {
                           }
                         >
                           {incoming ? '+' : '-'}
-                          {formatUsdAmount(quotaUnitsToUsd(item.amount_quota))}
+                          {formatQuota(item.amount_quota)}
                         </p>
                       </div>
                       <div className='text-muted-foreground mt-2 flex flex-wrap justify-between gap-2 text-xs'>
@@ -142,8 +142,7 @@ export function WalletTransferHistorySheet(props: {
                           {new Date(item.created_at * 1000).toLocaleString()}
                         </span>
                         <span>
-                          {t('Balance after')}{' '}
-                          {formatUsdAmount(quotaUnitsToUsd(item.balance_after))}
+                          {t('Balance after')} {formatQuota(item.balance_after)}
                         </span>
                       </div>
                     </div>

@@ -141,7 +141,7 @@ func SubmitRelayTask(c *gin.Context) {
 	}
 
 	if taskErr == nil {
-		if settleErr := relayInfo.Billing.Settle(result.Quota); settleErr != nil {
+		if settleErr := billingapp.SettleRelayBilling(c, relayInfo, result.Quota); settleErr != nil {
 			platformobservability.SysError("settle task billing error: " + settleErr.Error())
 		}
 		billingapp.LogTaskConsumption(c, relayInfo)
@@ -153,14 +153,15 @@ func SubmitRelayTask(c *gin.Context) {
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = relayInfo.TokenId
 		task.PrivateData.BillingContext = &workflowschema.TaskBillingContext{
-			ModelPrice:      relayInfo.PriceData.ModelPrice,
-			GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
-			ModelRatio:      relayInfo.PriceData.ModelRatio,
-			OtherRatios:     relayInfo.PriceData.OtherRatios,
-			OriginModelName: relayInfo.OriginModelName,
-			PerCallBilling:  platformtext.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+			ModelPrice:        relayInfo.PriceData.ModelPrice,
+			GroupRatio:        relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+			ModelRatio:        relayInfo.PriceData.ModelRatio,
+			OtherRatios:       relayInfo.PriceData.OtherRatios,
+			OriginModelName:   relayInfo.OriginModelName,
+			FundingQuotaScale: relayInfo.SubscriptionQuotaScale,
+			PerCallBilling:    platformtext.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
 		}
-		task.Quota = result.Quota
+		task.Quota = billingapp.BillingQuotaForLog(relayInfo, result.Quota)
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action
 		if insertErr := workflowdomain.InsertTask(task); insertErr != nil {

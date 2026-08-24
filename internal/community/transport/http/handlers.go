@@ -74,6 +74,19 @@ func reviewResource(c *gin.Context) {
 	httpapi.ApiSuccess(c, resource)
 }
 
+func deleteResource(c *gin.Context) {
+	resourceID, err := communityapp.ParseResourceID(c.Param("id"))
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	if err := communityapp.DeleteResource(resourceID); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{"id": resourceID})
+}
+
 func parseResourceListRequest(c *gin.Context) communityapp.ListResourcesRequest {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))

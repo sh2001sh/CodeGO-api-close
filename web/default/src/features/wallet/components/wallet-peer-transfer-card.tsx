@@ -2,11 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
+import { formatUsdAmount } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import {
-  SecureVerificationDialog,
-} from '@/features/auth/secure-verification'
+import { SecureVerificationDialog } from '@/features/auth/secure-verification'
 import {
   createWalletTransfer,
   getWalletTransfers,
@@ -14,10 +12,10 @@ import {
   lookupWalletTransferRecipient,
 } from '../api'
 import type { WalletTransferOverview, WalletTransferRecipient } from '../types'
+import { useWalletTransferPassword } from './use-wallet-transfer-password'
 import { WalletPeerTransferPanel } from './wallet-peer-transfer-panel'
 import { WalletTransferConfirmDialog } from './wallet-transfer-confirm-dialog'
 import { WalletTransferPasswordDialog } from './wallet-transfer-password-dialog'
-import { useWalletTransferPassword } from './use-wallet-transfer-password'
 
 export function WalletPeerTransferCard(props: {
   onUserRefresh?: () => Promise<void>
@@ -74,11 +72,11 @@ export function WalletPeerTransferCard(props: {
   const feeBPS = overview?.fee_bps ?? 100
   const feeQuota = Math.ceil((amountQuota * feeBPS) / 10_000)
   const totalDebitQuota = amountQuota + feeQuota
-  const balanceUSD = quotaUnitsToUsd(overview?.balance || 0)
-  const maxTransferUSD = quotaUnitsToUsd(
-    Math.floor(((overview?.balance || 0) * 10_000) / (10_000 + feeBPS))
-  )
-  const minimumUSD = quotaUnitsToUsd(overview?.min_quota || quotaPerUSD / 100)
+  const balanceUSD = (overview?.balance || 0) / quotaPerUSD
+  const maxTransferUSD =
+    Math.floor(((overview?.balance || 0) * 10_000) / (10_000 + feeBPS)) /
+    quotaPerUSD
+  const minimumUSD = (overview?.min_quota || quotaPerUSD / 100) / quotaPerUSD
   const locked = (overview?.security.locked_until || 0) > currentTimestamp
   const amountValid =
     Number.isFinite(amountUSD) &&
@@ -95,8 +93,8 @@ export function WalletPeerTransferCard(props: {
     () => formatUsdAmount(amountUSD || 0),
     [amountUSD]
   )
-  const feeLabel = formatUsdAmount(quotaUnitsToUsd(feeQuota))
-  const totalDebitLabel = formatUsdAmount(quotaUnitsToUsd(totalDebitQuota))
+  const feeLabel = formatUsdAmount(feeQuota / quotaPerUSD)
+  const totalDebitLabel = formatUsdAmount(totalDebitQuota / quotaPerUSD)
 
   const lookupRecipient = async () => {
     const normalized = recipientId.trim().toUpperCase()

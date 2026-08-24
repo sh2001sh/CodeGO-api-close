@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowRight, ChevronDown, Gift, Layers3, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { getCurrencyLabel } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -129,7 +130,7 @@ export function PackagePlanCard(props: {
         <div className='space-y-2'>
           <div className='flex items-center justify-between text-sm'>
             <span className='text-muted-foreground'>
-              {t('Base quota (USD)')}
+              {t('Base quota ({{currency}})', { currency: getCurrencyLabel() })}
             </span>
             <span className='text-foreground font-semibold'>
               {formatSubscriptionQuotaAmount(baseQuota)}

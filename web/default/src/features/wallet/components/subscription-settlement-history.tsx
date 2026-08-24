@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { quotaUnitsToUsd } from '@/lib/format'
+import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TitledCard } from '@/components/ui/titled-card'
@@ -109,7 +109,7 @@ export function SubscriptionSettlementHistory() {
                   />
                   <SettlementValue
                     label={t('Unified credit settled')}
-                    value={formatAmount(quotaUnitsToUsd(item.settlement_quota))}
+                    value={formatQuota(item.settlement_quota)}
                     strong
                   />
                 </div>
@@ -131,14 +131,8 @@ export function SubscriptionSettlementHistory() {
 function SettlementSummary(props: { data: UnifiedCreditMigrationDetail }) {
   const migration = props.data.migration
   const values = [
-    [
-      '原 GPT 额度折算',
-      quotaUnitsToUsd(migration?.converted_unified_quota || 0),
-    ],
-    [
-      '月卡清算到账',
-      quotaUnitsToUsd(migration?.subscription_unified_quota || 0),
-    ],
+    ['原 GPT 额度折算', formatQuota(migration?.converted_unified_quota || 0)],
+    ['月卡清算到账', formatQuota(migration?.subscription_unified_quota || 0)],
     ['清算记录', props.data.settlements.length],
   ] as const
   return (
@@ -154,7 +148,7 @@ function SettlementSummary(props: { data: UnifiedCreditMigrationDetail }) {
         >
           <div className='text-muted-foreground text-xs'>{label}</div>
           <div className='text-foreground mt-1 text-lg font-semibold tabular-nums'>
-            {label === '清算记录' ? `${value} 条` : formatAmount(value)}
+            {label === '清算记录' ? `${value} 条` : value}
           </div>
         </div>
       ))}

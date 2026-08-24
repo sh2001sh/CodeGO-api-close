@@ -1,6 +1,6 @@
 import { Activity, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
+import { formatQuota } from '@/lib/format'
 import { Skeleton } from '@/components/ui/skeleton'
 import type {
   PlanRecord,
@@ -53,7 +53,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
           {t('Wallet balance')}
         </div>
         <div className='text-foreground mt-3 font-mono text-3xl font-bold tracking-tight tabular-nums'>
-          {formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
+          {formatQuota(props.user?.quota ?? 0)}
         </div>
         <div className='text-muted-foreground mt-1 text-xs'>
           {t('通用额度')}
@@ -61,9 +61,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
         <div className='mt-4 grid gap-2'>
           <WalletStatItem
             label={t('Total spent')}
-            value={formatUsdAmount(
-              quotaUnitsToUsd(props.user?.used_quota ?? 0)
-            )}
+            value={formatQuota(props.user?.used_quota ?? 0)}
           />
           <WalletStatItem
             label={t('API requests')}

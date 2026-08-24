@@ -73,18 +73,12 @@ func SettleRelayBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actu
 			))
 		}
 
-		if err := relayInfo.Billing.Settle(actualQuota); err != nil {
-			return err
+		settleErr := relayInfo.Billing.Settle(actualQuota)
+		if settleErr != nil && !relayInfo.BillingSettled {
+			return settleErr
 		}
 		settledQuota := BillingQuotaForLog(relayInfo, actualQuota)
-		if err := RecordRequestEconomics(relayInfo, settledQuota); err != nil {
-			platformobservability.SysError("record request economics: " + err.Error())
-		}
-		if relayInfo.MarketplaceGroupID != "" && settledQuota > 0 {
-			if err := marketplacesettlement.Record(marketplaceSettlementParams(relayInfo, settledQuota)); err != nil {
-				platformobservability.SysError("record marketplace settlement: " + err.Error())
-			}
-		}
+		recordSettledUsage(relayInfo, settledQuota)
 		if session, ok := relayInfo.Billing.(*BillingSession); ok {
 			if funding, ok := session.funding.(settlementProjectionFunding); ok {
 				startRequestSettlementProjection(ctx, relayInfo, funding, actualQuota)
@@ -98,26 +92,66 @@ func SettleRelayBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actu
 				checkAndSendQuotaNotify(relayInfo, actualQuota-preConsumed, preConsumed)
 			}
 		}
-		return nil
+		return settleErr
 	}
 
 	quotaDelta := actualQuota - relayInfo.FinalPreConsumedQuota
 	if quotaDelta != 0 {
-		return PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
+		if err := PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true); err != nil {
+			return err
+		}
 	}
+	RecordUsageStats(relayInfo.UserId, relayChannelID(relayInfo), actualQuota)
+	recordBlindBoxUsage(relayInfo.UserId, actualQuota)
 	return nil
 }
 
-func marketplaceSettlementParams(relayInfo *relaycommon.RelayInfo, settlementGross int) marketplacesettlement.RecordParams {
+func recordSettledUsage(relayInfo *relaycommon.RelayInfo, settledQuota int) {
+	RecordUsageStats(relayInfo.UserId, relayChannelID(relayInfo), settledQuota)
+	recordBlindBoxUsage(relayInfo.UserId, settledQuota)
+	if err := RecordRequestEconomics(relayInfo, settledQuota); err != nil {
+		platformobservability.SysError("record request economics: " + err.Error())
+	}
+	if relayInfo.MarketplaceGroupID == "" || settledQuota <= 0 {
+		return
+	}
+	if err := marketplacesettlement.Record(marketplaceSettlementParams(relayInfo, settledQuota)); err != nil {
+		platformobservability.SysError("record marketplace settlement: " + err.Error())
+	}
+}
+
+func relayChannelID(relayInfo *relaycommon.RelayInfo) int {
+	if relayInfo == nil || relayInfo.ChannelMeta == nil {
+		return 0
+	}
+	return relayInfo.ChannelId
+}
+
+func marketplaceSettlementParams(relayInfo *relaycommon.RelayInfo, consumerDebit int) marketplacesettlement.RecordParams {
+	settlementGross := consumerDebit
+	if relayInfo.BillingSource == BillingSourceSubscription {
+		settlementGross = subscriptionSettlementGross(consumerDebit)
+	}
 	return marketplacesettlement.RecordParams{
 		RequestID: relayInfo.RequestId, GroupID: relayInfo.MarketplaceGroupID,
 		OwnerUserID: relayInfo.MarketplaceOwnerID, ConsumerUserID: relayInfo.UserId,
 		BillingSource:          relayInfo.BillingSource,
-		ConsumerDebitAmount:    int64(BillingQuotaForLog(relayInfo, settlementGross)),
+		ConsumerDebitAmount:    int64(consumerDebit),
 		SettlementGrossAmount:  int64(settlementGross),
 		WalletMultiplier:       relayInfo.MarketplaceMultiplier,
 		SubscriptionMultiplier: relayInfo.SubscriptionGroupMultiplier,
 	}
+}
+
+func subscriptionSettlementGross(consumerDebit int) int {
+	if consumerDebit <= 0 {
+		return 0
+	}
+	quotient, remainder := consumerDebit/10, consumerDebit%10
+	if remainder >= 5 {
+		quotient++
+	}
+	return quotient
 }
 
 type settlementProjectionFunding interface {

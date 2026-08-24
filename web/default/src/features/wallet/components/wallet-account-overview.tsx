@@ -7,7 +7,7 @@ import {
   Send,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
+import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -33,7 +33,7 @@ export function WalletAccountOverview(props: {
         <div className='min-w-0 lg:min-w-[28rem]'>
           <BalanceItem
             label={t('统一额度')}
-            value={formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
+            value={formatQuota(props.user?.quota ?? 0)}
             description={t('永久有效，可用于官方渠道与第三方市场分组')}
           />
         </div>
@@ -43,7 +43,7 @@ export function WalletAccountOverview(props: {
             <span>
               {t('Total spent')}:{' '}
               <strong className='text-foreground font-medium'>
-                {formatUsdAmount(quotaUnitsToUsd(props.user?.used_quota ?? 0))}
+                {formatQuota(props.user?.used_quota ?? 0)}
               </strong>
             </span>
             <span className='inline-flex items-center gap-1'>

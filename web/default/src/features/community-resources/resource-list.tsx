@@ -1,4 +1,12 @@
-import { Download, ExternalLink, Gift, PackageOpen } from 'lucide-react'
+import { useState } from 'react'
+import {
+  Download,
+  ExternalLink,
+  Gift,
+  Loader2,
+  PackageOpen,
+  Trash2,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { IconGithub } from '@/assets/brand-icons'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +19,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ResourceDeleteDialog } from './resource-delete-dialog'
 import type { CommunityResource, ResourceConfig } from './types'
 
 const statusVariants = {
@@ -24,14 +33,19 @@ export function CommunityResourceList(props: {
   loading: boolean
   admin: boolean
   reviewing: boolean
+  deletingId?: number
   config?: ResourceConfig
   onReview: (
     resource: CommunityResource,
     status: 'approved' | 'rejected',
     grantReward: boolean
   ) => void
+  onDelete: (resource: CommunityResource) => Promise<boolean>
 }) {
   const { t } = useTranslation()
+  const [deleteTarget, setDeleteTarget] = useState<CommunityResource | null>(
+    null
+  )
   if (props.loading) {
     return (
       <div className='divide-border overflow-hidden rounded-lg border'>
@@ -62,120 +76,151 @@ export function CommunityResourceList(props: {
   }
 
   return (
-    <div className='divide-border overflow-hidden rounded-lg border'>
-      {props.items.map((resource) => (
-        <article
-          key={resource.id}
-          className='bg-card/40 hover:bg-muted/25 p-4 transition-colors sm:p-5'
-        >
-          <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
-            <div className='min-w-0 flex-1'>
-              <div className='flex flex-wrap items-center gap-2'>
-                <h2 className='text-sm font-semibold sm:text-base'>
-                  {resource.title}
-                </h2>
-                <Badge variant='outline'>{t(resource.category)}</Badge>
-                {resource.status !== 'approved' || props.admin ? (
-                  <Badge variant={statusVariants[resource.status]}>
-                    {t(resource.status)}
-                  </Badge>
-                ) : null}
-                {resource.reward_quota > 0 ? (
-                  <Badge variant='secondary'>
-                    <Gift />
-                    {t('Rewarded')}
-                  </Badge>
-                ) : null}
-              </div>
-              <p className='text-muted-foreground mt-2 max-w-3xl text-sm leading-6'>
-                {resource.description}
-              </p>
-              <div className='text-muted-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
-                <span>
-                  {t('Submitted by {{name}}', {
-                    name: resource.submitter_name,
-                  })}
-                </span>
-                <span>
-                  {new Date(resource.created_at).toLocaleDateString()}
-                </span>
-                {resource.acknowledgement_url ? (
-                  <a
-                    className='text-primary inline-flex items-center gap-1 hover:underline'
-                    href={resource.acknowledgement_url}
-                    target='_blank'
-                    rel='noreferrer'
-                  >
-                    <Gift className='size-3' />
-                    {t('View shu26.cfd acknowledgement')}
-                  </a>
-                ) : null}
-              </div>
-              {resource.review_note ? (
-                <p className='text-destructive mt-2 text-xs'>
-                  {t('Review note: {{note}}', { note: resource.review_note })}
+    <>
+      <div className='divide-border overflow-hidden rounded-lg border'>
+        {props.items.map((resource) => (
+          <article
+            key={resource.id}
+            className='bg-card/40 hover:bg-muted/25 p-4 transition-colors sm:p-5'
+          >
+            <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
+              <div className='min-w-0 flex-1'>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <h2 className='text-sm font-semibold sm:text-base'>
+                    {resource.title}
+                  </h2>
+                  <Badge variant='outline'>{t(resource.category)}</Badge>
+                  {resource.status !== 'approved' || props.admin ? (
+                    <Badge variant={statusVariants[resource.status]}>
+                      {t(resource.status)}
+                    </Badge>
+                  ) : null}
+                  {resource.reward_quota > 0 ? (
+                    <Badge variant='secondary'>
+                      <Gift />
+                      {t('Rewarded')}
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className='text-muted-foreground mt-2 max-w-3xl text-sm leading-6'>
+                  {resource.description}
                 </p>
-              ) : null}
-            </div>
-            <div className='flex shrink-0 flex-wrap gap-2'>
-              <Button
-                variant='outline'
-                size='sm'
-                render={
-                  <a
-                    href={resource.github_url}
-                    target='_blank'
-                    rel='noreferrer'
-                  />
-                }
-              >
-                <IconGithub aria-hidden='true' focusable='false' />
-                {t('GitHub')}
-                <ExternalLink />
-              </Button>
-              {resource.status === 'approved' ? (
-                <Button size='sm' render={<a href={resource.download_url} />}>
-                  <Download />
-                  {t('Download')}
+                <div className='text-muted-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
+                  <span>
+                    {t('Submitted by {{name}}', {
+                      name: resource.submitter_name,
+                    })}
+                  </span>
+                  <span>
+                    {new Date(resource.created_at).toLocaleDateString()}
+                  </span>
+                  {resource.acknowledgement_url ? (
+                    <a
+                      className='text-primary inline-flex items-center gap-1 hover:underline'
+                      href={resource.acknowledgement_url}
+                      target='_blank'
+                      rel='noreferrer'
+                    >
+                      <Gift className='size-3' />
+                      {t('View shu26.cfd acknowledgement')}
+                    </a>
+                  ) : null}
+                </div>
+                {resource.review_note ? (
+                  <p className='text-destructive mt-2 text-xs'>
+                    {t('Review note: {{note}}', { note: resource.review_note })}
+                  </p>
+                ) : null}
+              </div>
+              <div className='flex shrink-0 flex-wrap gap-2'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  render={
+                    <a
+                      href={resource.github_url}
+                      target='_blank'
+                      rel='noreferrer'
+                    />
+                  }
+                >
+                  <IconGithub aria-hidden='true' focusable='false' />
+                  {t('GitHub')}
+                  <ExternalLink />
                 </Button>
-              ) : null}
-              {props.admin && resource.status === 'pending' ? (
-                <>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={props.reviewing}
-                    onClick={() => props.onReview(resource, 'rejected', false)}
-                  >
-                    {t('Reject')}
+                {resource.status === 'approved' ? (
+                  <Button size='sm' render={<a href={resource.download_url} />}>
+                    <Download />
+                    {t('Download')}
                   </Button>
-                  <Button
-                    size='sm'
-                    disabled={props.reviewing}
-                    onClick={() => props.onReview(resource, 'approved', false)}
-                  >
-                    {t('Approve')}
-                  </Button>
-                  {resource.acknowledgement_url &&
-                  props.config?.reward_enabled ? (
+                ) : null}
+                {props.admin && resource.status === 'pending' ? (
+                  <>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={props.reviewing}
+                      onClick={() =>
+                        props.onReview(resource, 'rejected', false)
+                      }
+                    >
+                      {t('Reject')}
+                    </Button>
                     <Button
                       size='sm'
-                      variant='secondary'
                       disabled={props.reviewing}
-                      onClick={() => props.onReview(resource, 'approved', true)}
+                      onClick={() =>
+                        props.onReview(resource, 'approved', false)
+                      }
                     >
-                      <Gift />
-                      {t('Approve + {{amount}} USD', {
-                        amount: props.config.reward_usd,
-                      })}
+                      {t('Approve')}
                     </Button>
-                  ) : null}
-                </>
-              ) : null}
+                    {resource.acknowledgement_url &&
+                    props.config?.reward_enabled ? (
+                      <Button
+                        size='sm'
+                        variant='secondary'
+                        disabled={props.reviewing}
+                        onClick={() =>
+                          props.onReview(resource, 'approved', true)
+                        }
+                      >
+                        <Gift />
+                        {t('Approve + {{amount}} USD', {
+                          amount: props.config.reward_usd,
+                        })}
+                      </Button>
+                    ) : null}
+                  </>
+                ) : null}
+                {props.admin ? (
+                  <Button
+                    variant='destructive'
+                    size='sm'
+                    disabled={props.deletingId != null}
+                    onClick={() => setDeleteTarget(resource)}
+                  >
+                    {props.deletingId === resource.id ? (
+                      <Loader2 className='animate-spin' />
+                    ) : (
+                      <Trash2 />
+                    )}
+                    {t('Delete')}
+                  </Button>
+                ) : null}
+              </div>
             </div>
-          </div>
-        </article>
-      ))}
-    </div>
+          </article>
+        ))}
+      </div>
+      <ResourceDeleteDialog
+        resource={deleteTarget}
+        deleting={props.deletingId != null}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() =>
+          deleteTarget ? props.onDelete(deleteTarget) : Promise.resolve(false)
+        }
+      />
+    </>
   )
 }

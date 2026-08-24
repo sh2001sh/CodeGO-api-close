@@ -52,11 +52,10 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
 		TokenName: tokenName,
-		Quota:     info.PriceData.Quota,
+		Quota:     BillingQuotaForLog(info, info.PriceData.Quota),
 		Content:   logContent,
 		TokenId:   info.TokenId,
 		Group:     info.UsingGroup,
 		Other:     other,
 	})
-	RecordUsageStats(info.UserId, info.ChannelId, info.PriceData.Quota)
 }

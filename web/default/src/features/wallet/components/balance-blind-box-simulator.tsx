@@ -6,7 +6,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
-import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
+import { formatQuota, formatUsdAmount } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,7 +41,7 @@ function SimulationSetup(props: {
   return (
     <div className='border-primary/20 bg-primary/[0.035] rounded-lg border p-4 sm:p-5'>
       <div className='flex items-start gap-3'>
-        <div className='border border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-md'>
+        <div className='border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-md border'>
           <Beaker className='size-4' />
         </div>
         <div className='min-w-0'>
@@ -239,12 +239,9 @@ function SimulationMetrics(props: {
 }) {
   const yieldRate = props.stats.yieldRate
   const metrics = [
-    [
-      '当前模拟余额',
-      formatUsdAmount(quotaUnitsToUsd(props.stats.balanceQuota)),
-    ],
-    ['累计投入', formatUsdAmount(quotaUnitsToUsd(props.stats.spentQuota))],
-    ['累计额度奖励', formatUsdAmount(quotaUnitsToUsd(props.stats.rewardQuota))],
+    ['当前模拟余额', formatQuota(props.stats.balanceQuota)],
+    ['累计投入', formatQuota(props.stats.spentQuota)],
+    ['累计额度奖励', formatQuota(props.stats.rewardQuota)],
     ['累计收益率', `${yieldRate >= 0 ? '+' : ''}${yieldRate.toFixed(2)}%`],
   ]
   return (

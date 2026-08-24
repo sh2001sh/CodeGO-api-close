@@ -1,4 +1,5 @@
 import { Trophy } from 'lucide-react'
+import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -82,13 +83,15 @@ export function summarizeOpenResult(records: BlindBoxRecord[]) {
   const creditRecords = records.filter((record) =>
     ['quota', 'claude_quota'].includes(record.reward_type)
   )
-  const creditTotal = creditRecords
-    .reduce((sum, record) => sum + (record.reward_usd || 0), 0)
+  const creditTotal = creditRecords.reduce(
+    (sum, record) => sum + (record.credit_amount || 0),
+    0
+  )
 
   const parts: string[] = []
   if (subscriptionHits > 0) parts.push(`${subscriptionHits} 个套餐`)
   if (creditRecords.length > 0) {
-    parts.push(`$${creditTotal.toFixed(0)} 通用额度`)
+    parts.push(`${formatQuota(creditTotal)} 通用额度`)
   }
   if (propHits > 0) parts.push(`${propHits} 个道具`)
   if (parts.length === 0) {

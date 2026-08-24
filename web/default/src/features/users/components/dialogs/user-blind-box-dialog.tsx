@@ -268,7 +268,9 @@ export function UserBlindBoxDialog(props: Props) {
                         <TableCell>
                           {record.reward_type === 'subscription'
                             ? t('Subscription')
-                            : `${Number(record.reward_usd || 0).toFixed(2)} USD`}
+                            : record.credit_amount > 0
+                              ? formatQuota(record.credit_amount)
+                              : `${Number(record.reward_usd || 0).toFixed(2)} USD`}
                         </TableCell>
                         <TableCell>{formatTime(record.create_time)}</TableCell>
                       </TableRow>

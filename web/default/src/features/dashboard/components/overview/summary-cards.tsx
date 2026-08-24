@@ -1,9 +1,13 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth-store'
-import { formatNumber, formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
-import { computeTimeRange } from '@/lib/time'
+import { getCurrencyLabel } from '@/lib/currency'
+import { formatNumber, formatQuota } from '@/lib/format'
 import { getUserQuotaDates } from '@/features/dashboard/api'
+import {
+  aggregateHourlyUsage,
+  getRolling24HourRange,
+} from '@/features/dashboard/lib/overview-usage'
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import {
   getOrderedSubscriptions,
@@ -11,6 +15,7 @@ import {
   isMonthlyCardPlan,
 } from '@/features/subscriptions/lib'
 import type { PlanRecord } from '@/features/subscriptions/types'
+import { getUserLogStats } from '@/features/usage-logs/api'
 import { UsageChart } from './summary-card-parts'
 import {
   BalanceWorkspace,
@@ -41,7 +46,15 @@ function formatUsageHourLabel(timestamp?: number) {
 export function SummaryCards() {
   const user = useAuthStore((state) => state.auth.user)
   const { subscriptionData, plans } = useOverviewSubscriptionData()
-  const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
+  const [clock, setClock] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const summaryTimeRange = useMemo(
+    () => getRolling24HourRange(Math.floor(clock / 1000)),
+    [clock]
+  )
   const remainQuota = Number(user?.quota ?? 0)
   const usedQuota = Number(user?.used_quota ?? 0)
   const requestCount = Number(user?.request_count ?? 0)
@@ -63,28 +76,38 @@ export function SummaryCards() {
     staleTime: 60 * 1000,
   })
 
+  const usageTotalQuery = useQuery({
+    queryKey: [
+      'dashboard',
+      'overview',
+      'rolling-24-hour-total',
+      summaryTimeRange.start_timestamp,
+      summaryTimeRange.end_timestamp,
+    ],
+    queryFn: () => getUserLogStats(summaryTimeRange),
+    staleTime: 60 * 1000,
+  })
+
   const usageRows = usageTrendQuery.data?.data ?? []
-  const chartValues = usageRows.map(
-    (item: QuotaDataItem) => Number(item.quota) || 0
-  )
-  const chartPoints = usageRows.slice(-12).map((item: QuotaDataItem) => ({
+  const chartPoints = aggregateHourlyUsage(
+    usageRows.map((item: QuotaDataItem) => ({
+      created_at: Number(item.created_at),
+      quota: Number(item.quota),
+    }))
+  ).map((item) => ({
     label: formatUsageHourLabel(item.created_at),
     value: Number(item.quota) || 0,
   }))
-  const recentUsage = chartValues.reduce(
-    (total: number, value: number) => total + value,
-    0
-  )
-  const universalQuotaUsd = quotaUnitsToUsd(remainQuota)
-  const availableUsd = universalQuotaUsd
-  const recentUsageUsd = quotaUnitsToUsd(recentUsage)
-  const usedQuotaUsd = quotaUnitsToUsd(usedQuota)
+  const recentUsage = usageTotalQuery.data?.success
+    ? Number(usageTotalQuery.data.data?.quota ?? 0)
+    : undefined
+  const currencyLabel = getCurrencyLabel()
 
   const balanceSegments: BalanceSegment[] = [
     {
       label: '通用额度',
-      display: formatUsdAmount(universalQuotaUsd),
-      value: universalQuotaUsd,
+      display: formatQuota(remainQuota),
+      value: remainQuota,
       dot: 'bg-primary',
       bar: 'bg-primary',
     },
@@ -132,17 +155,17 @@ export function SummaryCards() {
   const heroMetrics: MetricDef[] = [
     {
       label: '24 小时消耗',
-      value: formatUsdAmount(recentUsageUsd),
-      numeric: recentUsageUsd,
-      format: formatUsdAmount,
-      hint: '滚动统计最近 24 小时的美元消耗',
+      value: recentUsage == null ? '--' : formatQuota(recentUsage),
+      numeric: recentUsage,
+      format: formatQuota,
+      hint: `滚动统计最近 24 小时的消耗（${currencyLabel}）`,
     },
     {
       label: '历史累计',
-      value: formatUsdAmount(usedQuotaUsd),
-      numeric: usedQuotaUsd,
-      format: formatUsdAmount,
-      hint: '账户历史累计消耗（美元）',
+      value: formatQuota(usedQuota),
+      numeric: usedQuota,
+      format: formatQuota,
+      hint: `账户历史累计实际扣除（${currencyLabel}）`,
     },
     {
       label: '请求次数',
@@ -153,9 +176,9 @@ export function SummaryCards() {
     },
     {
       label: '通用额度',
-      value: formatUsdAmount(universalQuotaUsd),
-      numeric: universalQuotaUsd,
-      format: formatUsdAmount,
+      value: formatQuota(remainQuota),
+      numeric: remainQuota,
+      format: formatQuota,
       hint: '用于通用模型与全部第三方市场分组',
     },
   ]
@@ -164,8 +187,9 @@ export function SummaryCards() {
     <div className='flex flex-col gap-4'>
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]'>
         <BalanceWorkspace
-          available={formatUsdAmount(availableUsd)}
-          availableValue={availableUsd}
+          available={formatQuota(remainQuota)}
+          availableValue={remainQuota}
+          currencyLabel={currencyLabel}
           segments={balanceSegments}
           metrics={heroMetrics}
         />

@@ -35,8 +35,10 @@ export function buildPackageQuotaTiers(
   ] as const) {
     tiers.push({
       label: translateCollectiveTierLabel(count, t),
-      detail: t('Tier bonus: +{{amount}} USD', {
-        amount: Number(bonus || 0),
+      detail: t('Tier bonus: +{{amount}}', {
+        amount: formatSubscriptionQuotaAmount(
+          parseSubscriptionQuotaUSDToUnits(bonus || 0)
+        ),
       }),
       value: formatSubscriptionQuotaAmount(
         baseQuota + parseSubscriptionQuotaUSDToUnits(bonus || 0)

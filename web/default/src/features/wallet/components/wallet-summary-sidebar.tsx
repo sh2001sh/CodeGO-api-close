@@ -1,7 +1,7 @@
 import { Activity, WalletCards } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { formatUsdAmount, quotaUnitsToUsd } from '@/lib/format'
+import { formatQuota } from '@/lib/format'
 import { MOTION_TRANSITION } from '@/lib/motion'
 import type { UserWalletData } from '../types'
 import { WalletStatItem } from './wallet-panel-primitives'
@@ -33,16 +33,14 @@ export function WalletSummarySidebar(props: WalletSummarySidebarProps) {
               {t('通用额度')}
             </div>
             <div className='text-foreground mt-1.5 truncate font-mono text-xl font-bold tracking-tight tabular-nums'>
-              {formatUsdAmount(quotaUnitsToUsd(props.user?.quota ?? 0))}
+              {formatQuota(props.user?.quota ?? 0)}
             </div>
           </div>
         </div>
         <div className='mt-2 grid gap-2'>
           <WalletStatItem
             label={t('Total spent')}
-            value={formatUsdAmount(
-              quotaUnitsToUsd(props.user?.used_quota ?? 0)
-            )}
+            value={formatQuota(props.user?.used_quota ?? 0)}
           />
           <WalletStatItem
             label={t('API requests')}

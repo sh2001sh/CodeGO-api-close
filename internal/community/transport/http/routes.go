@@ -21,5 +21,6 @@ func RegisterCommunityRoutes(apiRouter *gin.RouterGroup) {
 		admin.GET("", listAdminResources)
 		admin.PUT("/config", middleware.CriticalRateLimit(), updateResourceConfig)
 		admin.PATCH("/:id", middleware.CriticalRateLimit(), reviewResource)
+		admin.DELETE("/:id", middleware.CriticalRateLimit(), deleteResource)
 	}
 }

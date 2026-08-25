@@ -16,17 +16,27 @@ func TestIsOpenAIResponseOnlyModel(t *testing.T) {
 func TestIsImageGenerationModel(t *testing.T) {
 	t.Parallel()
 
-	if !IsImageGenerationModel("gpt-image-1") {
-		t.Fatal("expected gpt-image-1 to be treated as image generation")
+	imageModels := []string{
+		"gpt-image-1",
+		"gpt-image-2-1k",
+		"imagen-3.0-generate",
+		"black-forest-labs/flux-1.1-pro",
+		"grok-imagine-image",
+		"grok-imagine-image-2.0",
+		"grok-imagine-image-quality-lite",
+		"grok-2-image-1212",
 	}
-	if !IsImageGenerationModel("gpt-image-2") {
-		t.Fatal("expected gpt-image-2 to be treated as image generation")
+	for _, model := range imageModels {
+		if !IsImageGenerationModel(model) {
+			t.Fatalf("expected %s to be treated as image generation", model)
+		}
 	}
-	if !IsImageGenerationModel("imagen-3.0-generate") {
-		t.Fatal("expected imagen prefix to be treated as image generation")
-	}
-	if IsImageGenerationModel("gpt-4o-mini") {
-		t.Fatal("did not expect gpt-4o-mini to be treated as image generation")
+
+	textModels := []string{"gpt-4o-mini", "grok-2-vision-1212", "grok-4.5"}
+	for _, model := range textModels {
+		if IsImageGenerationModel(model) {
+			t.Fatalf("did not expect %s to be treated as image generation", model)
+		}
 	}
 }
 

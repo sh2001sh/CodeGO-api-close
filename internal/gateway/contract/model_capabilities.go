@@ -8,14 +8,17 @@ var (
 		"o3-deep-research",
 		"o4-mini-deep-research",
 	}
-	imageGenerationModels = []string{
-		"dall-e-3",
-		"dall-e-2",
-		"gpt-image-1",
-		"gpt-image-2",
-		"prefix:imagen-",
+	imageGenerationModelPrefixes = []string{
+		"dall-e-",
+		"gpt-image-",
+		"imagen-",
+		"grok-imagine-image",
+		"grok-2-image",
+	}
+	imageGenerationModelFragments = []string{
 		"flux-",
 		"flux.1-",
+		"image-generation",
 	}
 	openAITextModels = []string{
 		"gpt-",
@@ -38,12 +41,14 @@ func IsOpenAIResponseOnlyModel(modelName string) bool {
 
 // IsImageGenerationModel reports whether a model should use the image-generation endpoint.
 func IsImageGenerationModel(modelName string) bool {
-	modelName = strings.ToLower(modelName)
-	for _, model := range imageGenerationModels {
-		if strings.Contains(modelName, model) {
+	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	for _, prefix := range imageGenerationModelPrefixes {
+		if strings.HasPrefix(modelName, prefix) {
 			return true
 		}
-		if strings.HasPrefix(model, "prefix:") && strings.HasPrefix(modelName, strings.TrimPrefix(model, "prefix:")) {
+	}
+	for _, fragment := range imageGenerationModelFragments {
+		if strings.Contains(modelName, fragment) {
 			return true
 		}
 	}

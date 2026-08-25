@@ -74,8 +74,16 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *RelayInfo) types.GroupRatioIn
 func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
 	modelPrice, usePrice := gatewaystore.GetModelPrice(info.OriginModelName, false)
 	groupRatioInfo := HandleGroupRatio(c, info)
+	marketplaceImagePrice, marketplaceImage, err := requiredMarketplaceImagePrice(c, info.OriginModelName)
+	if err != nil {
+		return types.PriceData{}, err
+	}
+	if marketplaceImage {
+		modelPrice = marketplaceImagePrice
+		usePrice = true
+	}
 
-	if gatewaystore.GetBillingMode(info.OriginModelName) == gatewaystore.BillingModeTieredExpr {
+	if !marketplaceImage && gatewaystore.GetBillingMode(info.OriginModelName) == gatewaystore.BillingModeTieredExpr {
 		return modelPriceHelperTiered(c, info, promptTokens, meta, groupRatioInfo)
 	}
 
@@ -214,6 +222,15 @@ func ModelPriceHelperPerCall(c *gin.Context, info *RelayInfo) (types.PriceData, 
 	modelPrice, success := gatewaystore.GetModelPrice(info.OriginModelName, true)
 	usePrice := success
 	var modelRatio float64
+	marketplaceImagePrice, marketplaceImage, err := requiredMarketplaceImagePrice(c, info.OriginModelName)
+	if err != nil {
+		return types.PriceData{}, err
+	}
+	if marketplaceImage {
+		modelPrice = marketplaceImagePrice
+		success = true
+		usePrice = true
+	}
 
 	if !success {
 		defaultPrice, ok := gatewaystore.GetDefaultModelPriceMap()[info.OriginModelName]

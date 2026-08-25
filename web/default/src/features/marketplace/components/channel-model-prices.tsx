@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import type { ChannelFormInput } from '../lib/channel-form'
 import { modelKey } from '../lib/channel-model-sync'
+import { isImageGenerationModel } from '../lib/model-capabilities'
 import type { ChannelModelPrice } from '../types'
 import { ChannelPriceEditor } from './channel-model-price-editor'
 
@@ -37,8 +38,9 @@ export function ChannelModelPrices(props: {
     ? []
     : props.selectedModels.filter(
         (model) =>
-          !sitePricedModels.has(modelKey(model)) &&
-          !channelPrices.has(modelKey(model))
+          !channelPrices.has(modelKey(model)) &&
+          (isImageGenerationModel(model) ||
+            !sitePricedModels.has(modelKey(model)))
       )
   const editableModels = props.selectedModels.filter(
     (model) =>
@@ -49,7 +51,8 @@ export function ChannelModelPrices(props: {
   const siteCoveredModels = props.selectedModels.filter(
     (model) =>
       sitePricedModels.has(modelKey(model)) &&
-      !channelPrices.has(modelKey(model))
+      !channelPrices.has(modelKey(model)) &&
+      !isImageGenerationModel(model)
   )
 
   return (
@@ -97,7 +100,7 @@ function PriceSectionHeader(props: {
       <div>
         <p className='text-sm font-medium'>{t('模型价格覆盖')}</p>
         <p className='text-muted-foreground mt-1 text-xs leading-5'>
-          {t('站点价格优先；缺价模型可在当前渠道单独补充输入、输出价格。')}
+          {t('文本模型缺价时可单独补充；生图模型必须设置当前渠道的按次价格。')}
         </p>
       </div>
       <div className='flex gap-3 text-xs tabular-nums'>
@@ -140,7 +143,17 @@ function ModelPriceRow(props: {
           {props.model}
         </p>
         <p className='mt-1 flex items-center gap-1.5 text-xs'>
-          {props.sitePriced ? (
+          {props.imageModel && props.price ? (
+            <>
+              <CircleDollarSign className='text-primary size-3.5' />
+              {t('使用当前渠道按次价格')}
+            </>
+          ) : props.imageModel ? (
+            <>
+              <AlertTriangle className='size-3.5 text-amber-600' />
+              {t('必须设置当前渠道按次价格')}
+            </>
+          ) : props.sitePriced ? (
             <>
               <Check className='size-3.5 text-emerald-600' />
               {t('站点价格已配置，渠道价格仅作备用')}
@@ -156,12 +169,12 @@ function ModelPriceRow(props: {
               {t('站点尚未配置价格')}
             </>
           )}
-          {props.imageModel && (
-            <span className='text-muted-foreground mt-1 block'>
-              {t('生图模型按次收费，无需连通性检测')}
-            </span>
-          )}
         </p>
+        {props.imageModel && (
+          <p className='text-muted-foreground mt-1 text-xs leading-5'>
+            {t('仅成功请求计费，无需连通性检测')}
+          </p>
+        )}
       </div>
       <ChannelPriceEditor
         key={`${props.model}:${JSON.stringify(props.price ?? null)}`}
@@ -171,14 +184,6 @@ function ModelPriceRow(props: {
         onRemove={props.onRemove}
       />
     </div>
-  )
-}
-
-function isImageGenerationModel(model: string): boolean {
-  const normalized = model.trim().toLowerCase()
-  return (
-    normalized.startsWith('gpt-image-') ||
-    normalized.includes('image-generation')
   )
 }
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   Activity,
+  ChevronDown,
   CircleDollarSign,
   Clock3,
   Plus,
@@ -30,13 +31,24 @@ export function OwnerChannels(props: { onAdd: () => void }) {
   const query = useMyMarketplaceChannels()
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
   const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
+  const [expandedChannelIDs, setExpandedChannelIDs] = useState<Set<number>>(
+    new Set()
+  )
   const channels = query.data ?? []
+  const toggleChannel = (channelID: number) => {
+    setExpandedChannelIDs((current) => {
+      const next = new Set(current)
+      if (next.has(channelID)) next.delete(channelID)
+      else next.add(channelID)
+      return next
+    })
+  }
   return (
     <>
       <section className='border-border bg-card overflow-hidden rounded-lg border'>
         <header className='flex flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-5'>
           <div className='flex min-w-0 items-start gap-3'>
-            <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-10 shrink-0 items-center justify-center rounded-md'>
+            <span className='border-primary/30 text-primary bg-primary/[0.04] flex size-10 shrink-0 items-center justify-center rounded-md border'>
               <WalletCards className='size-5' />
             </span>
             <div>
@@ -86,122 +98,155 @@ export function OwnerChannels(props: { onAdd: () => void }) {
           ) : (
             <div className='divide-border divide-y'>
               {channels.map((channel) => (
-                <div
+                <article
                   key={channel.id}
-                  className='hover:bg-muted/20 flex flex-col gap-4 px-4 py-4 transition-colors sm:px-5 lg:flex-row lg:items-start lg:justify-between'
+                  className='hover:bg-muted/20 px-4 py-4 transition-colors sm:px-5'
                 >
-                  <div className='min-w-0 flex-1'>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <span className='text-[15px] font-semibold'>
-                        {channel.system_display_name}
-                      </span>
-                      <MarketplaceStatusBadge
-                        status={channel.lifecycle_status}
-                      />
-                      <span className='border-primary/25 bg-primary/[0.07] text-primary app-numeric ml-1 rounded-[4px] border px-1.5 py-0.5 text-xs font-semibold tabular-nums'>
-                        {formatMultiplier(channel.multiplier)}x
-                      </span>
-                    </div>
-                    <dl className='text-muted-foreground mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3 xl:grid-cols-5'>
-                      <div className='flex min-w-0 items-baseline gap-1.5'>
-                        <dt className='shrink-0 opacity-80'>ID</dt>
-                        <dd className='truncate font-mono tabular-nums'>
-                          {channel.id}
-                        </dd>
+                  <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
+                    <div className='min-w-0 flex-1'>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <span className='text-[15px] font-semibold'>
+                          {channel.system_display_name}
+                        </span>
+                        <MarketplaceStatusBadge
+                          status={channel.lifecycle_status}
+                        />
+                        <span className='border-primary/25 bg-primary/[0.07] text-primary app-numeric ml-1 rounded-[4px] border px-1.5 py-0.5 text-xs font-semibold tabular-nums'>
+                          {formatMultiplier(channel.multiplier)}x
+                        </span>
                       </div>
-                      <div className='flex min-w-0 items-baseline gap-1.5'>
-                        <dt className='shrink-0 opacity-80'>{t('协议')}</dt>
-                        <dd className='truncate'>{channel.provider_type}</dd>
+                      <dl className='text-muted-foreground mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3 xl:grid-cols-5'>
+                        <div className='flex min-w-0 items-baseline gap-1.5'>
+                          <dt className='shrink-0 opacity-80'>ID</dt>
+                          <dd className='truncate font-mono tabular-nums'>
+                            {channel.id}
+                          </dd>
+                        </div>
+                        <div className='flex min-w-0 items-baseline gap-1.5'>
+                          <dt className='shrink-0 opacity-80'>{t('协议')}</dt>
+                          <dd className='truncate'>{channel.provider_type}</dd>
+                        </div>
+                        <div className='flex min-w-0 items-baseline gap-1.5'>
+                          <dt className='shrink-0 opacity-80'>{t('来源')}</dt>
+                          <dd className='truncate'>
+                            {channel.submitted_source_label}
+                            {channel.source_label_status === 'approved'
+                              ? ` · ${t('已审核')}`
+                              : channel.source_label_status === 'rejected'
+                                ? ` · ${t('未通过')}`
+                                : ` · ${t('待审核')}`}
+                          </dd>
+                        </div>
+                        <div className='flex min-w-0 items-baseline gap-1.5'>
+                          <dt className='shrink-0 opacity-80'>{t('模型')}</dt>
+                          <dd className='tabular-nums'>
+                            {channel.declared_models.length} {t('个')}
+                          </dd>
+                        </div>
+                        <div className='flex min-w-0 items-baseline gap-1.5'>
+                          <dt className='shrink-0 opacity-80'>Key</dt>
+                          <dd className='truncate font-mono'>
+                            ····{channel.credential_tail}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className='mt-3 flex flex-wrap items-center gap-2'>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          className='text-muted-foreground h-8 px-2'
+                          onClick={() => toggleChannel(channel.id)}
+                          aria-expanded={expandedChannelIDs.has(channel.id)}
+                          aria-controls={`owner-channel-details-${channel.id}`}
+                        >
+                          <ChevronDown
+                            className={`transition-transform motion-reduce:transition-none ${expandedChannelIDs.has(channel.id) ? 'rotate-180' : ''}`}
+                          />
+                          {expandedChannelIDs.has(channel.id)
+                            ? t('收起详情')
+                            : t('查看详情')}
+                        </Button>
+                        {!expandedChannelIDs.has(channel.id) && (
+                          <span className='text-muted-foreground text-xs'>
+                            {t('检测、模型与收入信息已折叠')}
+                          </span>
+                        )}
                       </div>
-                      <div className='flex min-w-0 items-baseline gap-1.5'>
-                        <dt className='shrink-0 opacity-80'>{t('来源')}</dt>
-                        <dd className='truncate'>
-                          {channel.submitted_source_label}
-                          {channel.source_label_status === 'approved'
-                            ? ` · ${t('已审核')}`
-                            : channel.source_label_status === 'rejected'
-                              ? ` · ${t('未通过')}`
-                              : ` · ${t('待审核')}`}
-                        </dd>
-                      </div>
-                      <div className='flex min-w-0 items-baseline gap-1.5'>
-                        <dt className='shrink-0 opacity-80'>{t('模型')}</dt>
-                        <dd className='tabular-nums'>
-                          {channel.declared_models.length} {t('个')}
-                        </dd>
-                      </div>
-                      <div className='flex min-w-0 items-baseline gap-1.5'>
-                        <dt className='shrink-0 opacity-80'>Key</dt>
-                        <dd className='truncate font-mono'>
-                          ····{channel.credential_tail}
-                        </dd>
-                      </div>
-                    </dl>
-                    <ReviewSteps channel={channel} />
-                    {channel.last_review_reason && (
-                      <p className='text-muted-foreground mt-1 text-xs'>
-                        {channel.last_review_reason}
-                      </p>
-                    )}
-                    {channel.source_label_review_reason &&
-                      channel.source_label_review_reason !==
-                        channel.last_review_reason && (
-                        <p className='text-muted-foreground mt-1 text-xs'>
-                          {channel.source_label_review_reason}
-                        </p>
+                      {expandedChannelIDs.has(channel.id) && (
+                        <div
+                          id={`owner-channel-details-${channel.id}`}
+                          className='mt-3'
+                        >
+                          <ReviewSteps channel={channel} />
+                          {channel.last_review_reason && (
+                            <p className='text-muted-foreground mt-1 text-xs'>
+                              {channel.last_review_reason}
+                            </p>
+                          )}
+                          {channel.source_label_review_reason &&
+                            channel.source_label_review_reason !==
+                              channel.last_review_reason && (
+                              <p className='text-muted-foreground mt-1 text-xs'>
+                                {channel.source_label_review_reason}
+                              </p>
+                            )}
+                          <ChannelVerificationStatus channel={channel} />
+                          <SensitiveWordPolicyControl channel={channel} />
+                          <GPT56MappingStatusView
+                            models={channel.declared_models}
+                            status={channel.gpt56_mapping_status}
+                            results={channel.gpt56_mapping_results}
+                            checkedAt={channel.gpt56_mapping_checked_at}
+                            level={channel.gpt56_mapping_level}
+                            trigger={channel.gpt56_mapping_trigger}
+                            history={channel.gpt56_mapping_history}
+                          />
+                          <AutoProbeStatusView
+                            enabled={channel.auto_probe_enabled}
+                            intervalMinutes={
+                              channel.auto_probe_interval_minutes
+                            }
+                            model={channel.auto_probe_model}
+                            status={channel.auto_probe_last_status}
+                            checkedAt={channel.auto_probe_last_at}
+                          />
+                          <div className='border-border/60 mt-4 border-t pt-3'>
+                            <div className='text-muted-foreground mb-2 text-[11px] font-medium tracking-[0.14em] uppercase'>
+                              {t('收入与结算')}
+                            </div>
+                            <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
+                              <IncomeMetric
+                                icon={CircleDollarSign}
+                                label={t('累计收入')}
+                                value={formatQuota(channel.total_income)}
+                              />
+                              <IncomeMetric
+                                icon={Clock3}
+                                label={t('待结算')}
+                                value={formatQuota(channel.pending_income)}
+                              />
+                              <IncomeMetric
+                                icon={WalletCards}
+                                label={t('已到账')}
+                                value={formatQuota(channel.released_income)}
+                              />
+                              <IncomeMetric
+                                icon={Activity}
+                                label={t('结算请求')}
+                                value={String(channel.request_count)}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       )}
-                    <ChannelVerificationStatus channel={channel} />
-                    <SensitiveWordPolicyControl channel={channel} />
-                    <GPT56MappingStatusView
-                      models={channel.declared_models}
-                      status={channel.gpt56_mapping_status}
-                      results={channel.gpt56_mapping_results}
-                      checkedAt={channel.gpt56_mapping_checked_at}
-                      level={channel.gpt56_mapping_level}
-                      trigger={channel.gpt56_mapping_trigger}
-                      history={channel.gpt56_mapping_history}
-                    />
-                    <AutoProbeStatusView
-                      enabled={channel.auto_probe_enabled}
-                      intervalMinutes={channel.auto_probe_interval_minutes}
-                      model={channel.auto_probe_model}
-                      status={channel.auto_probe_last_status}
-                      checkedAt={channel.auto_probe_last_at}
-                    />
-                    <div className='border-border/60 mt-4 border-t pt-3'>
-                      <div className='text-muted-foreground mb-2 text-[11px] font-medium tracking-[0.14em] uppercase'>
-                        {t('收入与结算')}
-                      </div>
-                      <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
-                        <IncomeMetric
-                          icon={CircleDollarSign}
-                          label={t('累计收入')}
-                          value={formatQuota(channel.total_income)}
-                        />
-                        <IncomeMetric
-                          icon={Clock3}
-                          label={t('待结算')}
-                          value={formatQuota(channel.pending_income)}
-                        />
-                        <IncomeMetric
-                          icon={WalletCards}
-                          label={t('已到账')}
-                          value={formatQuota(channel.released_income)}
-                        />
-                        <IncomeMetric
-                          icon={Activity}
-                          label={t('结算请求')}
-                          value={String(channel.request_count)}
-                        />
-                      </div>
                     </div>
+                    <OwnerChannelActions
+                      channel={channel}
+                      onEdit={() => setEditing(channel)}
+                      onDelete={() => setDeleting(channel)}
+                    />
                   </div>
-                  <OwnerChannelActions
-                    channel={channel}
-                    onEdit={() => setEditing(channel)}
-                    onDelete={() => setDeleting(channel)}
-                  />
-                </div>
+                </article>
               ))}
             </div>
           )}
@@ -244,8 +289,7 @@ function ReviewSteps(props: { channel: MarketplaceChannel }) {
   const online =
     c.lifecycle_status === 'active'
       ? 2
-      : c.lifecycle_status === 'disabled' ||
-          c.lifecycle_status === 'suspended'
+      : c.lifecycle_status === 'disabled' || c.lifecycle_status === 'suspended'
         ? 1
         : 0
 

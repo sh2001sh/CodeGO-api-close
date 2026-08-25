@@ -19,6 +19,22 @@ func TestLongContextGPTRequestClassification(t *testing.T) {
 	require.False(t, IsLongContextGPTRequest("claude-opus", VeryLongContextPromptTokens))
 }
 
+func TestLongContextStreamBudgetAllowsElevenMinuteUpstream(t *testing.T) {
+	previous := constant.StreamingLongContextMaxDuration
+	constant.StreamingLongContextMaxDuration = 0
+	t.Cleanup(func() { constant.StreamingLongContextMaxDuration = previous })
+
+	require.GreaterOrEqual(t, StreamMaxDuration("gpt-5.6-sol", LongContextPromptTokenThreshold), 11*time.Minute)
+}
+
+func TestGPTStreamFallbackBudgetAllowsLongOutput(t *testing.T) {
+	previous := constant.StreamingMaxDuration
+	constant.StreamingMaxDuration = 0
+	t.Cleanup(func() { constant.StreamingMaxDuration = previous })
+
+	require.GreaterOrEqual(t, StreamMaxDuration("gpt-5.6-sol", 1_000), 11*time.Minute)
+}
+
 func TestResponsesHistoryContinuationUsesLongContextPolicy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())

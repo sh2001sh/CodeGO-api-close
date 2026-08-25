@@ -125,6 +125,13 @@ func responsesReasoningSummary(outputs []dto.ResponsesOutput) string {
 				summary.WriteString(part.Text)
 			}
 		}
+		if summary.Len() == 0 {
+			for _, part := range output.Content {
+				if part.Text != "" {
+					summary.WriteString(part.Text)
+				}
+			}
+		}
 	}
 	return summary.String()
 }

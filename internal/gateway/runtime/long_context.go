@@ -23,12 +23,12 @@ func StreamMaxDuration(model string, promptTokens int) time.Duration {
 		if constant.StreamingLongContextMaxDuration > 0 {
 			return time.Duration(constant.StreamingLongContextMaxDuration) * time.Second
 		}
-		return 540 * time.Second
+		return 30 * time.Minute
 	}
 	if constant.StreamingMaxDuration > 0 {
 		return time.Duration(constant.StreamingMaxDuration) * time.Second
 	}
-	return 240 * time.Second
+	return 30 * time.Minute
 }
 
 // StreamMaxDurationForRequest applies the same tiering as StreamMaxDuration,

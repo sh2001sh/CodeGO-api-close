@@ -39,3 +39,30 @@ func TestOaiResponsesToChatStreamHandlerPreservesCacheWriteTokens(t *testing.T) 
 	require.Nil(t, err)
 	require.Equal(t, 20, usage.PromptTokensDetails.CachedCreationTokens)
 }
+
+func TestOaiResponsesToChatStreamHandlerMapsIncompleteResponseToLength(t *testing.T) {
+	oldMode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(oldMode) })
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","delta":"partial"}`,
+		``,
+		`data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reasoning":"max_output_tokens"}}}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	response := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.6-sol"}, RelayFormat: types.RelayFormatOpenAI, IsStream: true}
+
+	_, err := OaiResponsesToChatStreamHandler(ctx, info, response)
+	require.Nil(t, err)
+	require.Contains(t, recorder.Body.String(), `"finish_reason":"length"`)
+}

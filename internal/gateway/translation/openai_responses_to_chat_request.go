@@ -39,6 +39,12 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, nil, errors.New("model is required")
 	}
+	if req.Background != nil && *req.Background {
+		return nil, nil, errors.New("background responses requests cannot be represented by a synchronous chat completions upstream")
+	}
+	if hasResponsesJSONValue(req.Conversation) {
+		return nil, nil, errors.New("conversation state cannot be represented by a stateless chat completions upstream")
+	}
 	if strings.TrimSpace(req.PreviousResponseID) != "" {
 		return nil, nil, errors.New("previous_response_id cannot be represented by a stateless chat completions upstream")
 	}
@@ -56,9 +62,12 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 	if err != nil {
 		return nil, nil, err
 	}
-	toolChoice, err := responsesToolChoiceToChat(req.ToolChoice, meta)
-	if err != nil {
-		return nil, nil, err
+	var toolChoice any
+	if len(tools) > 0 {
+		toolChoice, err = responsesToolChoiceToChat(req.ToolChoice, meta)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	responseFormat, err := responsesTextFormatToChat(req.Text)
 	if err != nil {
@@ -67,6 +76,11 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 
 	chat := buildResponsesBridgeChatRequest(req, messages, tools, toolChoice, responseFormat)
 	return chat, meta, nil
+}
+
+func hasResponsesJSONValue(value json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(value))
+	return trimmed != "" && trimmed != "null" && trimmed != `""`
 }
 
 func buildResponsesBridgeChatRequest(
@@ -181,10 +195,7 @@ func (b *responsesChatMessageBuilder) addReasoning(text string) {
 }
 
 func (b *responsesChatMessageBuilder) addMessage(item map[string]json.RawMessage) error {
-	role := strings.TrimSpace(rawString(item["role"]))
-	if role == "" {
-		return errors.New("message role is required")
-	}
+	role := normalizeResponsesChatRole(rawString(item["role"]))
 	content, err := responsesContentToChat(item["content"])
 	if err != nil {
 		return err
@@ -200,6 +211,17 @@ func (b *responsesChatMessageBuilder) addMessage(item map[string]json.RawMessage
 	}
 	b.messages = append(b.messages, message)
 	return nil
+}
+
+func normalizeResponsesChatRole(raw string) string {
+	role := strings.ToLower(strings.TrimSpace(raw))
+	if role == "" {
+		return "user"
+	}
+	if role == "developer" {
+		return "system"
+	}
+	return role
 }
 
 func (b *responsesChatMessageBuilder) addToolCall(itemType string, item map[string]json.RawMessage) error {

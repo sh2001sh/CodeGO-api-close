@@ -217,6 +217,28 @@ func responseHeaderTimeoutForRequest(c *gin.Context, info *relaycommon.RelayInfo
 		}
 		return maxDuration(baseTimeout, imageTimeout)
 	}
+	// A long-lived Responses request may spend several minutes restoring
+	// upstream conversation state before sending response headers. The short
+	// first-attempt retry window is for ordinary requests only; applying it
+	// here would terminate a healthy single route before stream idle/total
+	// duration policies get a chance to observe progress.
+	if info.IsStream && info.RelayMode == gatewaycontract.RelayModeResponses {
+		if profile, found := relaycommon.RequestProfileFromContext(c); found &&
+			(profile.RequestType == relaycommon.RequestTypeChatLongStream ||
+				profile.RequestType == relaycommon.RequestTypeToolCallStream ||
+				profile.HasConversationState) {
+			if baseTimeout <= 0 {
+				return 0
+			}
+			return baseTimeout
+		}
+		if relaycommon.IsLongContextRequest(c) || relaycommon.IsLongContextGPTRequest(info.OriginModelName, info.GetEstimatePromptTokens()) {
+			if baseTimeout <= 0 {
+				return 0
+			}
+			return baseTimeout
+		}
+	}
 	if retryTimeout := relaycommon.RetryableResponsesAttemptTimeout(c); retryTimeout > 0 {
 		return minPositiveDuration(baseTimeout, retryTimeout)
 	}

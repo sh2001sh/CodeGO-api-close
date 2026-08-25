@@ -42,6 +42,54 @@ func TestResponsesRequestToChatCompletionsPreservesReasoningToolsAndMedia(t *tes
 	require.Equal(t, ResponsesNamespaceTool{Name: "send", Namespace: "gmail"}, meta.NamespaceTools["gmail__send"])
 }
 
+func TestResponsesRequestToChatCompletionsNormalizesDeveloperRoleAndEmptyRole(t *testing.T) {
+	request := &dto.OpenAIResponsesRequest{
+		Model: "gpt-5.6-sol",
+		Input: json.RawMessage(`[
+			{"type":"message","role":"developer","content":"follow policy"},
+			{"type":"message","role":"","content":"continue"}
+		]`),
+	}
+
+	chat, _, err := ResponsesRequestToChatCompletionsRequest(request)
+	require.NoError(t, err)
+	require.Len(t, chat.Messages, 2)
+	require.Equal(t, "system", chat.Messages[0].Role)
+	require.Equal(t, "user", chat.Messages[1].Role)
+}
+
+func TestResponsesRequestToChatCompletionsDropsServerToolsAndToolChoice(t *testing.T) {
+	request := &dto.OpenAIResponsesRequest{
+		Model:      "gpt-5.6-sol",
+		Input:      json.RawMessage(`"search"`),
+		Tools:      json.RawMessage(`[{"type":"web_search_preview"}]`),
+		ToolChoice: json.RawMessage(`"auto"`),
+	}
+
+	chat, _, err := ResponsesRequestToChatCompletionsRequest(request)
+	require.NoError(t, err)
+	require.Empty(t, chat.Tools)
+	require.Nil(t, chat.ToolChoice)
+}
+
+func TestResponsesRequestToChatCompletionsPreservesResponsesJSONSchemaShape(t *testing.T) {
+	request := &dto.OpenAIResponsesRequest{
+		Model: "gpt-5.6-sol",
+		Input: json.RawMessage(`"Return JSON"`),
+		Text:  json.RawMessage(`{"format":{"type":"json_schema","name":"answer","schema":{"type":"object"},"strict":true}}`),
+	}
+
+	chat, _, err := ResponsesRequestToChatCompletionsRequest(request)
+	require.NoError(t, err)
+	require.NotNil(t, chat.ResponseFormat)
+	require.Equal(t, "json_schema", chat.ResponseFormat.Type)
+	var schema map[string]any
+	require.NoError(t, json.Unmarshal(chat.ResponseFormat.JsonSchema, &schema))
+	_, hasType := schema["type"]
+	require.False(t, hasType)
+	require.Equal(t, "answer", schema["name"])
+}
+
 func TestResponsesRequestToChatCompletionsRejectsPreviousResponseID(t *testing.T) {
 	_, _, err := ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{
 		Model: "gpt-5.6-sol", PreviousResponseID: "resp_previous",

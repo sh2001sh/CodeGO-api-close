@@ -78,13 +78,14 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	model := info.UpstreamModelName
 
 	var (
-		usage       = &dto.Usage{}
-		outputText  strings.Builder
-		usageText   strings.Builder
-		sentStart   bool
-		sentStop    bool
-		sawToolCall bool
-		streamErr   *types.NewAPIError
+		usage        = &dto.Usage{}
+		outputText   strings.Builder
+		usageText    strings.Builder
+		sentStart    bool
+		sentStop     bool
+		sawToolCall  bool
+		finishReason = "stop"
+		streamErr    *types.NewAPIError
 	)
 
 	toolCallIndexByID := make(map[string]int)
@@ -295,6 +296,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				callID = itemID
 			}
 			if itemID != "" && callID != "" {
+				previous := toolCallCanonicalIDByItemID[itemID]
+				if previous != "" && previous != callID {
+					remapResponsesChatToolCall(previous, callID, toolCallIndexByID, toolCallNameByID, toolCallArgsByID, toolCallNameSent)
+				}
 				toolCallCanonicalIDByItemID[itemID] = callID
 			}
 			name := strings.TrimSpace(streamResp.Item.Name)
@@ -336,7 +341,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		case "response.custom_tool_call_input.delta":
 			// Custom tool input is wrapped as {"input": ...} once the item is done.
 			// Emitting raw freeform fragments here would create invalid Chat JSON.
-		case "response.completed":
+		case "response.completed", "response.incomplete":
 			if streamResp.Response != nil {
 				if streamResp.Response.Model != "" {
 					model = streamResp.Response.Model
@@ -369,6 +374,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					}
 				}
 			}
+			if streamResp.Type == "response.incomplete" {
+				finishReason = "length"
+			}
 			if !sendStartIfNeeded() {
 				sr.Stop(streamErr)
 				return
@@ -377,11 +385,11 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil {
 					info.ClaudeConvertInfo.Usage = usage
 				}
-				finishReason := "stop"
+				finalReason := finishReason
 				if sawToolCall {
-					finishReason = "tool_calls"
+					finalReason = "tool_calls"
 				}
-				stop := gatewaystream.GenerateStopResponse(responseID, createAt, model, finishReason)
+				stop := gatewaystream.GenerateStopResponse(responseID, createAt, model, finalReason)
 				if !sendChatChunk(stop) {
 					sr.Stop(streamErr)
 					return
@@ -418,11 +426,11 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil {
 			info.ClaudeConvertInfo.Usage = usage
 		}
-		finishReason := "stop"
+		finalReason := finishReason
 		if sawToolCall {
-			finishReason = "tool_calls"
+			finalReason = "tool_calls"
 		}
-		if !sendChatChunk(gatewaystream.GenerateStopResponse(responseID, createAt, model, finishReason)) {
+		if !sendChatChunk(gatewaystream.GenerateStopResponse(responseID, createAt, model, finalReason)) {
 			return nil, streamErr
 		}
 	}
@@ -437,6 +445,41 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		handleNonOpenAIFinalResponse(c, info, responseID, createAt, model, usage)
 	}
 	return usage, nil
+}
+
+func remapResponsesChatToolCall(
+	previous string,
+	current string,
+	indices map[string]int,
+	names map[string]string,
+	args map[string]string,
+	sentNames map[string]bool,
+) {
+	if previous == "" || current == "" || previous == current {
+		return
+	}
+	if index, ok := indices[previous]; ok {
+		if _, exists := indices[current]; !exists {
+			indices[current] = index
+		}
+		delete(indices, previous)
+	}
+	if value := names[previous]; value != "" {
+		if names[current] == "" {
+			names[current] = value
+		}
+		delete(names, previous)
+	}
+	if value := args[previous]; value != "" {
+		if args[current] == "" {
+			args[current] = value
+		}
+		delete(args, previous)
+	}
+	if sentNames[previous] {
+		sentNames[current] = true
+		delete(sentNames, previous)
+	}
 }
 
 func isResponsesChatToolCallType(itemType string) bool {

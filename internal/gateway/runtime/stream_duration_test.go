@@ -72,7 +72,7 @@ func TestRetryableResponsesFirstAttemptUsesShorterInitialWindow(t *testing.T) {
 	require.Equal(t, 60*time.Second, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 	require.Zero(t, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
-	require.Equal(t, 540*time.Second, StreamMaxDurationForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
+	require.Equal(t, 30*time.Minute, StreamMaxDurationForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
 }
 
 func TestRetryableShortResponsesUsesSemanticOutputWindow(t *testing.T) {

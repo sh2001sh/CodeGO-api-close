@@ -25,7 +25,7 @@ func responsesContentToChat(raw json.RawMessage) (any, error) {
 	for _, part := range parts {
 		partType := rawString(part["type"])
 		switch partType {
-		case "input_text", "output_text", "text":
+		case "", "input_text", "output_text", "text":
 			converted = append(converted, dto.MediaContent{Type: dto.ContentTypeText, Text: rawString(part["text"])})
 		case "input_image", "image_url":
 			imageURL := rawString(part["image_url"])
@@ -49,6 +49,20 @@ func responsesContentToChat(raw json.RawMessage) (any, error) {
 				return nil, errors.New("invalid input_audio content")
 			}
 			converted = append(converted, dto.MediaContent{Type: dto.ContentTypeInputAudio, InputAudio: audio})
+		case "input_video", "video_url":
+			video := rawString(part["video_url"])
+			if video == "" {
+				var videoObject map[string]json.RawMessage
+				_ = platformencoding.Unmarshal(part["video_url"], &videoObject)
+				video = rawString(videoObject["url"])
+			}
+			if video == "" {
+				return nil, errors.New("input_video requires video_url")
+			}
+			converted = append(converted, dto.MediaContent{
+				Type:     dto.ContentTypeVideoUrl,
+				VideoUrl: map[string]any{"url": video},
+			})
 		case "input_file", "file":
 			var file any
 			if value := part["file"]; len(value) > 0 {
@@ -98,6 +112,12 @@ func responsesToolToChat(rawTool json.RawMessage, namespace string, meta *Respon
 	if toolType == "namespace" {
 		return responsesNamespaceToolsToChat(tool, meta)
 	}
+	if isResponsesServerToolType(toolType) {
+		// These are server-side Responses tools. A Chat Completions upstream
+		// cannot execute them, so omit them and let the caller omit tool_choice
+		// when no client-executable tools remain.
+		return nil, nil
+	}
 	name := responsesToolNameFromMap(tool)
 	if name == "" {
 		return nil, fmt.Errorf("%s tool requires a name", toolType)
@@ -133,6 +153,15 @@ func responsesToolToChat(rawTool json.RawMessage, namespace string, meta *Respon
 		}}, nil
 	default:
 		return nil, fmt.Errorf("responses tool type %q cannot be represented by chat completions", toolType)
+	}
+}
+
+func isResponsesServerToolType(toolType string) bool {
+	switch toolType {
+	case "web_search", "web_search_preview", "file_search", "computer_use_preview", "image_generation", "code_interpreter", "local_shell", "mcp":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -219,6 +248,11 @@ func responsesTextFormatToChat(raw json.RawMessage) (*dto.ResponseFormat, error)
 	formatType := rawString(format["type"])
 	result := &dto.ResponseFormat{Type: formatType}
 	if formatType == "json_schema" {
+		for key := range format {
+			if key == "type" {
+				delete(format, key)
+			}
+		}
 		schema, err := platformencoding.Marshal(format)
 		if err != nil {
 			return nil, err

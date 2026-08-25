@@ -159,8 +159,11 @@ func initConstantEnv() {
 	constant.StreamingTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_TIMEOUT", 300)
 	constant.StreamingFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_FIRST_BYTE_TIMEOUT", 0)
 	constant.StreamingLongContextFirstByteTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_FIRST_BYTE_TIMEOUT", 0)
-	constant.StreamingMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_MAX_DURATION", 240)
-	constant.StreamingLongContextMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_MAX_DURATION", 540)
+	constant.StreamingMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_MAX_DURATION", 1800)
+	// Long Responses turns may legitimately stream past ten minutes. Keep the
+	// absolute budget separate from the idle/data-interval timeout and leave
+	// enough headroom for an upstream that is still making progress.
+	constant.StreamingLongContextMaxDuration = platformconfig.GetEnvOrDefaultInt("STREAMING_LONG_CONTEXT_MAX_DURATION", 1800)
 	constant.StreamingAdaptiveProgressTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_ADAPTIVE_PROGRESS_TIMEOUT", 45)
 	constant.StreamingAdaptiveInitialTimeout = platformconfig.GetEnvOrDefaultInt("STREAMING_ADAPTIVE_INITIAL_TIMEOUT", 120)
 	constant.DifyDebug = platformconfig.GetEnvOrDefaultBool("DIFY_DEBUG", true)

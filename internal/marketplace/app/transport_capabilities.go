@@ -254,16 +254,3 @@ func syncMarketplaceCapabilitiesToInternal(channel *marketplaceschema.Channel, c
 	internal.ChannelInfo.ResponsesCapabilities = capabilities
 	return gatewaystore.SaveChannelInfo(internal)
 }
-
-func marketplaceTransportFingerprint(channel *marketplaceschema.Channel) string {
-	if channel == nil {
-		return ""
-	}
-	return strings.Join([]string{
-		channel.ProviderType,
-		channel.BaseURLCiphertext,
-		channel.CredentialCiphertext,
-		channel.DeclaredModels,
-		channel.AutoProbeModel,
-	}, "\x00")
-}

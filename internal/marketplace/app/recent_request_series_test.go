@@ -43,6 +43,7 @@ func TestMarketplaceRecentRequestSeriesAggregatesAuditLogsIntoFixedWindow(t *tes
 	require.NoError(t, logDB.Create(&[]auditschema.Log{
 		{CreatedAt: previousBucketStart + 10, Type: auditschema.LogTypeConsume, Group: groupName, ModelName: "model-a"},
 		{CreatedAt: previousBucketStart + 20, Type: auditschema.LogTypeError, Group: groupName, ModelName: "model-a"},
+		{CreatedAt: previousBucketStart + 25, Type: auditschema.LogTypeError, Group: groupName, ModelName: "model-a", Other: `{"error_code":"sensitive_words_detected"}`},
 		{CreatedAt: previousBucketStart + 30, Type: auditschema.LogTypeError, Group: groupName, ModelName: "model-a", Other: `{"counted_in_success_rate":false}`},
 		{CreatedAt: currentBucketStart + 10, Type: auditschema.LogTypeConsume, Group: groupName, ModelName: "model-b"},
 	}).Error)

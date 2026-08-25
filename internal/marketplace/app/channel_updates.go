@@ -89,7 +89,6 @@ func applyChannelModelUpdate(channel *marketplaceschema.Channel, req UpdateChann
 }
 
 func applyChannelPresentationUpdate(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest) (bool, error) {
-	reverify := false
 	if req.Multiplier != nil {
 		if err := applyMultiplierChange(group, channel.ID, channel.SubmittedSourceLabel, *req.Multiplier); err != nil {
 			return false, err
@@ -112,10 +111,9 @@ func applyChannelPresentationUpdate(channel *marketplaceschema.Channel, group *m
 			channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
 			channel.SourceLabelReviewReason = ""
 			refreshInternalGroupName(group, channel.ID, label)
-			reverify = true
 		}
 	}
-	return reverify, nil
+	return false, nil
 }
 
 func applyAutoProbeUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) error {

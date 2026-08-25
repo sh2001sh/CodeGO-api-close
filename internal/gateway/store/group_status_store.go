@@ -229,9 +229,9 @@ func successRateLogFilter() string {
 }
 
 const (
-	postgresSuccessRateLogFilter = `COALESCE(substring(other from '"counted_in_success_rate"[[:space:]]*:[[:space:]]*(true|false)') <> 'false', true)`
-	mysqlSuccessRateLogFilter    = `CASE WHEN JSON_VALID(other) THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(other, '$.counted_in_success_rate')), 'true') <> 'false' ELSE true END`
-	sqliteSuccessRateLogFilter   = `CASE WHEN json_valid(other) THEN COALESCE(json_extract(other, '$.counted_in_success_rate'), 1) <> 0 ELSE 1 END`
+	postgresSuccessRateLogFilter = `COALESCE(substring(other from '"counted_in_success_rate"[[:space:]]*:[[:space:]]*(true|false)') <> 'false', true) AND COALESCE(substring(other from '"error_code"[[:space:]]*:[[:space:]]*"([^"]+)"'), '') <> 'sensitive_words_detected'`
+	mysqlSuccessRateLogFilter    = `CASE WHEN JSON_VALID(other) THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(other, '$.counted_in_success_rate')), 'true') <> 'false' AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(other, '$.error_code')), '') <> 'sensitive_words_detected' ELSE true END`
+	sqliteSuccessRateLogFilter   = `CASE WHEN json_valid(other) THEN COALESCE(json_extract(other, '$.counted_in_success_rate'), 1) <> 0 AND COALESCE(json_extract(other, '$.error_code'), '') <> 'sensitive_words_detected' ELSE 1 END`
 )
 
 func logGroupColumn() string {

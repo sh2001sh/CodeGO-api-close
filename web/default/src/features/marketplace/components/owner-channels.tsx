@@ -31,11 +31,11 @@ export function OwnerChannels(props: { onAdd: () => void }) {
   const query = useMyMarketplaceChannels()
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
   const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
-  const [expandedChannelIDs, setExpandedChannelIDs] = useState<Set<number>>(
+  const [expandedChannelIDs, setExpandedChannelIDs] = useState<Set<string>>(
     new Set()
   )
   const channels = query.data ?? []
-  const toggleChannel = (channelID: number) => {
+  const toggleChannel = (channelID: string) => {
     setExpandedChannelIDs((current) => {
       const next = new Set(current)
       if (next.has(channelID)) next.delete(channelID)
@@ -102,8 +102,8 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                   key={channel.id}
                   className='hover:bg-muted/20 px-4 py-4 transition-colors sm:px-5'
                 >
-                  <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
-                    <div className='min-w-0 flex-1'>
+                  <div>
+                    <div className='min-w-0'>
                       <div className='flex flex-wrap items-center gap-2'>
                         <span className='text-[15px] font-semibold'>
                           {channel.system_display_name}
@@ -177,6 +177,16 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                           id={`owner-channel-details-${channel.id}`}
                           className='mt-3'
                         >
+                          <div className='border-border/60 mb-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3'>
+                            <span className='text-muted-foreground text-xs'>
+                              {t('渠道操作')}
+                            </span>
+                            <OwnerChannelActions
+                              channel={channel}
+                              onEdit={() => setEditing(channel)}
+                              onDelete={() => setDeleting(channel)}
+                            />
+                          </div>
                           <ReviewSteps channel={channel} />
                           {channel.last_review_reason && (
                             <p className='text-muted-foreground mt-1 text-xs'>
@@ -240,11 +250,6 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                         </div>
                       )}
                     </div>
-                    <OwnerChannelActions
-                      channel={channel}
-                      onEdit={() => setEditing(channel)}
-                      onDelete={() => setDeleting(channel)}
-                    />
                   </div>
                 </article>
               ))}

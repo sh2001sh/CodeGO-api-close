@@ -175,9 +175,12 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	expires := now.Add(7 * 24 * time.Hour)
 	status := marketplacedomain.VerificationPassed
 	lifecycle := marketplacedomain.LifecycleDraft
-	passedModels, _ := selectVerifiedModels(results)
+	passedModels, rejectedModels := selectVerifiedModels(results)
 	if len(passedModels) == 0 && probeErr == nil {
 		probeErr = errors.New("没有模型通过连通性检测")
+	}
+	if len(rejectedModels) > 0 && probeErr == nil {
+		probeErr = fmt.Errorf("%d 个声明模型未通过连通性检测", len(rejectedModels))
 	}
 	if probeErr == nil && !isGPT56MappingEligible(channel) {
 		if channel.InternalChannelID == nil {

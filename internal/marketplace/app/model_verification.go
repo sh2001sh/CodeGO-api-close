@@ -108,6 +108,31 @@ func retainModelVerificationResults(declared []string, results []ModelVerificati
 	return retained
 }
 
+// pendingModelVerificationModels returns only declared models without any
+// persisted result. Existing failures are intentionally retained until the
+// owner explicitly retries failed models.
+func pendingModelVerificationModels(declared []string, results []ModelVerificationResult) []string {
+	byModel := modelVerificationResultsByModel(results)
+	pending := make([]string, 0)
+	for _, model := range normalizeModels(declared) {
+		if _, ok := byModel[strings.ToLower(model)]; !ok {
+			pending = append(pending, model)
+		}
+	}
+	return pending
+}
+
+func allModelsVerified(declared []string, results []ModelVerificationResult) bool {
+	byModel := modelVerificationResultsByModel(results)
+	for _, model := range normalizeModels(declared) {
+		result, ok := byModel[strings.ToLower(model)]
+		if !ok || !result.Listed || result.Status != marketplacedomain.ModelVerificationPassed {
+			return false
+		}
+	}
+	return true
+}
+
 func mergeModelVerificationResults(declared []string, previous, updates []ModelVerificationResult) []ModelVerificationResult {
 	byModel := modelVerificationResultsByModel(previous)
 	for _, result := range updates {

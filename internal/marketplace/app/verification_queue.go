@@ -3,10 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
-	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
@@ -26,7 +27,7 @@ func QueueRequiredVerification(channelID string) error {
 	if len(verifiableMarketplaceModels(decodeModels(channel.DeclaredModels))) == 0 {
 		return publishImageOnlyChannel(channel)
 	}
-	return QueueConnectivityTest(channelID)
+	return QueueIncrementalConnectivityTest(channelID)
 }
 
 func verifiableMarketplaceModels(models []string) []string {
@@ -55,18 +56,18 @@ func publishImageOnlyChannel(channel *marketplaceschema.Channel) error {
 	now := time.Now().UTC()
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(channel).Updates(map[string]any{
-			"status": marketplacedomain.LifecycleActive,
-			"connectivity_test_status": marketplacedomain.VerificationPassed,
+			"status":                       marketplacedomain.LifecycleActive,
+			"connectivity_test_status":     marketplacedomain.VerificationPassed,
 			"connectivity_test_checked_at": now,
 		}).Error; err != nil {
 			return err
 		}
 		return tx.Model(group).Updates(map[string]any{
-			"lifecycle_status": marketplacedomain.LifecycleActive,
-			"verification_status": marketplacedomain.VerificationPassed,
+			"lifecycle_status":     marketplacedomain.LifecycleActive,
+			"verification_status":  marketplacedomain.VerificationPassed,
 			"verification_summary": "仅包含生图模型，按次计费，免连通性检测",
-			"verification_due_at": now.Add(7 * 24 * time.Hour),
-			"published_at": now,
+			"verification_due_at":  now.Add(7 * 24 * time.Hour),
+			"published_at":         now,
 		}).Error
 	})
 }
@@ -108,6 +109,88 @@ func QueueConnectivityTest(channelID string) error {
 		return err
 	}
 	return queueConnectivityTest(channel, verifiableMarketplaceModels(decodeModels(channel.DeclaredModels)), nil)
+}
+
+// QueueIncrementalConnectivityTest probes only models without a persisted
+// result. This is the path used after channel edits.
+func QueueIncrementalConnectivityTest(channelID string) error {
+	channel, _, err := loadChannelGroup(channelID)
+	if err != nil {
+		return err
+	}
+	declared := verifiableMarketplaceModels(decodeModels(channel.DeclaredModels))
+	previous := decodeModelVerificationResults(channel.ModelVerificationResults)
+	pending := pendingModelVerificationModels(declared, previous)
+	if len(pending) == 0 {
+		if allModelsVerified(declared, previous) {
+			return publishVerifiedConnectivity(channel)
+		}
+		if err := persistUnchangedVerificationFailure(channel, previous); err != nil {
+			return err
+		}
+		return errors.New("已有失败模型，请使用“重试失败模型”")
+	}
+	retained := retainModelVerificationResults(declared, previous, pending)
+	return queueConnectivityTest(channel, pending, retained)
+}
+
+func persistUnchangedVerificationFailure(channel *marketplaceschema.Channel, results []ModelVerificationResult) error {
+	_, group, err := loadChannelGroup(channel.ID)
+	if err != nil {
+		return err
+	}
+	failed := len(failedModelVerificationModels(
+		verifiableMarketplaceModels(decodeModels(channel.DeclaredModels)), results,
+	))
+	if failed < 1 {
+		failed = 1
+	}
+	now := time.Now().UTC()
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(channel).Updates(map[string]any{
+			"status":                       marketplacedomain.LifecycleDraft,
+			"connectivity_test_status":     marketplacedomain.VerificationFailed,
+			"connectivity_test_checked_at": now,
+		}).Error; err != nil {
+			return err
+		}
+		return tx.Model(group).Updates(map[string]any{
+			"lifecycle_status":     marketplacedomain.LifecycleDraft,
+			"verification_status":  marketplacedomain.VerificationFailed,
+			"verification_due_at":  nil,
+			"verification_summary": fmt.Sprintf("%d 个模型检测未通过；请使用“重试失败模型”", failed),
+		}).Error
+	})
+}
+
+func publishVerifiedConnectivity(channel *marketplaceschema.Channel) error {
+	_, group, err := loadChannelGroup(channel.ID)
+	if err != nil {
+		return err
+	}
+	if channel.InternalChannelID == nil {
+		if err := createInternalChannel(channel, group); err != nil {
+			return err
+		}
+	} else if err := syncInternalChannel(channel, group); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(channel).Updates(map[string]any{
+			"status":                       marketplacedomain.LifecycleActive,
+			"connectivity_test_status":     marketplacedomain.VerificationPassed,
+			"connectivity_test_checked_at": now,
+		}).Error; err != nil {
+			return err
+		}
+		return tx.Model(group).Updates(map[string]any{
+			"lifecycle_status":    marketplacedomain.LifecycleActive,
+			"verification_status": marketplacedomain.VerificationPassed,
+			"verification_due_at": now.Add(7 * 24 * time.Hour),
+			"published_at":        now,
+		}).Error
+	})
 }
 
 // QueueFailedConnectivityTests retries only models that failed the latest run.

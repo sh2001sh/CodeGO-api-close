@@ -402,6 +402,14 @@ func shouldCountRelayFailureInSuccessRate(apiErr *types.NewAPIError) bool {
 	if apiErr == nil {
 		return false
 	}
+	// Local sensitive-word interception is a policy decision made before the
+	// upstream is contacted. Its status code is intentionally unset, so the
+	// generic status-code fallback would otherwise count it as a route failure.
+	// Keep this explicit error-code check shared by final logs and all callers
+	// that decide whether a failure should affect route health.
+	if apiErr.GetErrorCode() == types.ErrorCodeSensitiveWordsDetected {
+		return false
+	}
 	status := apiErr.StatusCode
 	if status == http.StatusBadRequest || status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status == http.StatusUnprocessableEntity {
 		return false

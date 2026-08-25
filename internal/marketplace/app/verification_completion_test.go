@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"testing"
 
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -50,7 +49,7 @@ func TestCompleteVerificationKeepsFailedModelsUntilExplicitRemoval(t *testing.T)
 		{Model: "good-model", Status: marketplacedomain.ModelVerificationPassed, Listed: true},
 		{Model: "bad-model", Status: marketplacedomain.ModelVerificationFailed, Listed: true},
 	}
-	completeVerification(&run, &channel, &group, results, errors.New("模型连通性检测失败: bad-model"))
+	completeVerification(&run, &channel, &group, results, nil)
 
 	require.NoError(t, db.First(&channel, "id = ?", channel.ID).Error)
 	require.Equal(t, []string{"good-model", "bad-model"}, decodeModels(channel.DeclaredModels))
@@ -62,7 +61,7 @@ func TestCompleteVerificationKeepsFailedModelsUntilExplicitRemoval(t *testing.T)
 
 	require.NoError(t, db.First(&run, "id = ?", run.ID).Error)
 	require.Equal(t, marketplacedomain.VerificationFailed, run.Status)
-	require.Contains(t, run.Summary, "模型连通性检测失败: bad-model")
+	require.Contains(t, run.Summary, "1 个声明模型未通过连通性检测")
 
 	require.NoError(t, db.First(&internal, internal.Id).Error)
 	require.Equal(t, "good-model,bad-model", internal.Models)

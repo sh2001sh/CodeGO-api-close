@@ -164,7 +164,11 @@ func UpdateAdminChannel(channelID string, req AdminUpdateChannelRequest) (*Chann
 }
 
 func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest, consistencyStatus *string) (*ChannelView, error) {
-	transportFingerprint := marketplaceTransportFingerprint(channel)
+	previousModels := decodeModels(channel.DeclaredModels)
+	previousResults := decodeModelVerificationResults(channel.ModelVerificationResults)
+	previousProvider := channel.ProviderType
+	previousBaseURL := channel.BaseURLCiphertext
+	previousCredential := channel.CredentialCiphertext
 	reverify, err := applyChannelUpdate(channel, group, req)
 	if err != nil {
 		return nil, err
@@ -174,12 +178,21 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 			return nil, err
 		}
 	}
-	transportChanged := transportFingerprint != marketplaceTransportFingerprint(channel)
-	if transportChanged {
+	modelsChanged := strings.Join(previousModels, "\x00") != strings.Join(decodeModels(channel.DeclaredModels), "\x00")
+	credentialTransportChanged := previousProvider != channel.ProviderType ||
+		previousBaseURL != channel.BaseURLCiphertext ||
+		previousCredential != channel.CredentialCiphertext
+	capabilitiesChanged := credentialTransportChanged || modelsChanged
+	if capabilitiesChanged {
 		markMarketplaceCapabilitiesPending(channel)
 	}
 	if reverify {
 		marketplaceVerificationTasks.cancelChannel(channel.ID)
+	}
+	if modelsChanged && !credentialTransportChanged {
+		channel.ModelVerificationResults = encodeModelVerificationResults(
+			mergeModelVerificationResults(decodeModels(channel.DeclaredModels), previousResults, nil),
+		)
 	}
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if reverify {
@@ -199,7 +212,7 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 			return nil, err
 		}
 	}
-	if transportChanged {
+	if capabilitiesChanged {
 		queueMarketplaceCapabilityProbe(channel.ID)
 	}
 	return channelView(channel, group), nil

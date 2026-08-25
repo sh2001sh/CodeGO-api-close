@@ -49,6 +49,17 @@ func TestRelayFailureSampleRequiresUpstreamAttempt(t *testing.T) {
 	require.False(t, shouldRecordRelayFailureSample(true, badRequest))
 }
 
+func TestSensitiveWordInterceptionNeverCountsAsRouteFailure(t *testing.T) {
+	sensitive := types.NewError(errors.New("sensitive words detected"), types.ErrorCodeSensitiveWordsDetected)
+
+	require.False(t, shouldCountRelayFailureInSuccessRate(sensitive))
+	require.False(t, shouldRecordRelayFailureSample(true, sensitive))
+	require.False(t, shouldRecordFinalRelayFailureLog(nil, sensitive))
+
+	upstreamUnauthorized := types.NewOpenAIError(errors.New("unauthorized"), types.ErrorCodeBadResponseStatusCode, http.StatusUnauthorized)
+	require.True(t, shouldCountRelayFailureInSuccessRate(upstreamUnauthorized))
+}
+
 func TestFinalRelayFailureLogRespectsNoRecordFlag(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

@@ -101,11 +101,11 @@ export function useSummaryCardsConfig(totals: {
     },
     {
       key: 'usage',
-      title: '累计消耗',
+      title: '账本累计消耗',
       value: totals.usedDisplay,
       description: totals.currencyEnabled
-        ? `账号历史累计消耗（${totals.currencyLabel}）`
-        : '账号历史累计消耗',
+        ? `账本累计已结算用量（${totals.currencyLabel}）`
+        : '账本累计已结算用量',
       icon: TrendingUp,
     },
     {

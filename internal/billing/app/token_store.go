@@ -63,9 +63,11 @@ func GetTokenByID(tokenID int) (*TokenSnapshot, error) {
 }
 
 func GetUserUsedQuota(userID int) (int, error) {
-	var quota int
-	err := platformdb.DB.Model(&identityschema.User{}).Where("id = ?", userID).Select("used_quota").Find(&quota).Error
-	return quota, err
+	var user identityschema.User
+	if err := platformdb.DB.Select("id", "used_quota").Where("id = ?", userID).First(&user).Error; err != nil {
+		return 0, err
+	}
+	return GetUserHistoricalUsedQuota(userID, user.UsedQuota)
 }
 
 func AdjustTokenQuota(tokenID int, tokenKey string, delta int) error {

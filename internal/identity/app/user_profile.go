@@ -52,6 +52,10 @@ func GetSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	historicalUsedQuota, err := billingapp.GetUserHistoricalUsedQuota(user.Id, user.UsedQuota)
+	if err != nil {
+		return nil, err
+	}
 
 	// Clear admin remarks before exposing the user payload.
 	user.Remark = ""
@@ -72,7 +76,7 @@ func GetSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 		TelegramId:      user.TelegramId,
 		Group:           user.Group,
 		Quota:           walletQuota,
-		UsedQuota:       user.UsedQuota,
+		UsedQuota:       historicalUsedQuota,
 		RequestCount:    user.RequestCount,
 		AffCode:         user.AffCode,
 		AffCount:        user.AffCount,

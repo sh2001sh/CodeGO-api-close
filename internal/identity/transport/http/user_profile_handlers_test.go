@@ -3,6 +3,7 @@ package http
 import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -38,6 +39,23 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 	if err := db.Create(user).Error; err != nil {
 		t.Fatalf("failed to seed user: %v", err)
 	}
+	if err := db.Create(&billingschema.BillingAccount{
+		AccountID:  "profile-history-wallet",
+		AccountType: "wallet",
+		OwnerType:  "user",
+		OwnerID:    int64(user.Id),
+		QuotaUnit:  "quota",
+		Status:     "active",
+	}).Error; err != nil {
+		t.Fatalf("failed to seed billing account: %v", err)
+	}
+	if err := db.Create(&billingschema.BillingBalanceSnapshot{
+		AccountID:       "profile-history-wallet",
+		ConsumedTotal:   9,
+		AvailableBalance: 1,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed billing snapshot: %v", err)
+	}
 
 	ctx, recorder := newAuthenticatedContext(t, "GET", "/api/user/self", nil, user.Id)
 	ctx.Set("role", constant.RoleAdminUser)
@@ -57,6 +75,7 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 		Permissions    map[string]any `json:"permissions"`
 		StripeCustomer string         `json:"stripe_customer"`
 		InviterId      int            `json:"inviter_id"`
+		UsedQuota      int            `json:"used_quota"`
 	}
 	if err := platformencoding.Unmarshal(response.Data, &payload); err != nil {
 		t.Fatalf("failed to decode self profile: %v", err)
@@ -73,6 +92,9 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 	}
 	if payload.StripeCustomer != user.StripeCustomer || payload.InviterId != user.InviterId {
 		t.Fatalf("expected persisted profile fields, got %#v", payload)
+	}
+	if payload.UsedQuota != 9 {
+		t.Fatalf("expected ledger-backed used quota 9, got %d", payload.UsedQuota)
 	}
 	if sidebarSettings, ok := payload.Permissions["sidebar_settings"].(bool); !ok || !sidebarSettings {
 		t.Fatalf("expected admin sidebar_settings permission, got %#v", payload.Permissions)

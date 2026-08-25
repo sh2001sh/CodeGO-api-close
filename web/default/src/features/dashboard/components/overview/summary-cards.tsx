@@ -55,6 +55,8 @@ export function SummaryCards() {
     () => getRolling24HourRange(Math.floor(clock / 1000)),
     [clock]
   )
+  const { start_timestamp: usageStart, end_timestamp: usageEnd } =
+    summaryTimeRange
   const remainQuota = Number(user?.quota ?? 0)
   const usedQuota = Number(user?.used_quota ?? 0)
   const requestCount = Number(user?.request_count ?? 0)
@@ -81,10 +83,14 @@ export function SummaryCards() {
       'dashboard',
       'overview',
       'rolling-24-hour-total',
-      summaryTimeRange.start_timestamp,
-      summaryTimeRange.end_timestamp,
+      usageStart,
+      usageEnd,
     ],
-    queryFn: () => getUserLogStats(summaryTimeRange),
+    queryFn: () =>
+      getUserLogStats({
+        start_timestamp: usageStart,
+        end_timestamp: usageEnd,
+      }),
     staleTime: 60 * 1000,
   })
 
@@ -161,11 +167,11 @@ export function SummaryCards() {
       hint: `滚动统计最近 24 小时的消耗（${currencyLabel}）`,
     },
     {
-      label: '历史累计',
+      label: '账本累计',
       value: formatQuota(usedQuota),
       numeric: usedQuota,
       format: formatQuota,
-      hint: `账户历史累计实际扣除（${currencyLabel}）`,
+      hint: `账本累计已结算用量（${currencyLabel}）`,
     },
     {
       label: '请求次数',

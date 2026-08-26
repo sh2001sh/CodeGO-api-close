@@ -56,17 +56,6 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		finalizeRelayError(c, relayFormat, ws, newAPIError, requestID)
 	}()
 
-	request, err := getAndValidateRequest(c, relayFormat)
-	if err != nil {
-		if platformhttpx.IsRequestBodyTooLargeError(err) || errors.Is(err, platformhttpx.ErrRequestBodyTooLarge) {
-			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
-		} else {
-			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest)
-		}
-		return
-	}
-	firstByteTrace.MarkRequestValidated()
-
 	releaseRelaySlot, admitted, admissionStats := platformconcurrency.TryAcquireRelaySlot()
 	if !admitted {
 		if admissionStats.Rejected == 1 || admissionStats.Rejected%100 == 0 {
@@ -83,6 +72,21 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 	defer releaseRelaySlot()
 	firstByteTrace.MarkAdmitted()
+
+	// Admission must happen before the request body is materialized and decoded.
+	// Long-context Responses requests create several short-lived body and token
+	// representations, so admitting after validation allows a burst to exhaust
+	// the host before the concurrency guard observes it.
+	request, err := getAndValidateRequest(c, relayFormat)
+	if err != nil {
+		if platformhttpx.IsRequestBodyTooLargeError(err) || errors.Is(err, platformhttpx.ErrRequestBodyTooLarge) {
+			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
+		} else {
+			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest)
+		}
+		return
+	}
+	firstByteTrace.MarkRequestValidated()
 
 	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {

@@ -46,6 +46,33 @@ func awardMonthlyPassPropTx(tx *gorm.DB, userID int, plan *commerceschema.Subscr
 	if duration <= 0 || commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) != commerceschema.SubscriptionPlanTypeMonthly {
 		return nil
 	}
+	return awardMonthlyPassDurationTx(tx, userID, duration, reference)
+}
+
+func awardMonthlyPassPurchasePropTx(
+	tx *gorm.DB,
+	userID int,
+	plan *commerceschema.SubscriptionPlan,
+	preview *commercedomain.SubscriptionPurchasePreview,
+	reference string,
+) error {
+	if preview == nil || preview.Action != commerceschema.SubscriptionPurchaseActionUpgrade {
+		return awardMonthlyPassPropTx(tx, userID, plan, reference)
+	}
+	if preview.CurrentPlan == nil || plan == nil {
+		return errors.New("invalid monthly pass upgrade grant")
+	}
+	duration := monthlyPassDurationSeconds(plan) - monthlyPassDurationSeconds(preview.CurrentPlan)
+	if duration <= 0 || commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) != commerceschema.SubscriptionPlanTypeMonthly {
+		return nil
+	}
+	return awardMonthlyPassDurationTx(tx, userID, duration, reference)
+}
+
+func awardMonthlyPassDurationTx(tx *gorm.DB, userID int, duration int64, reference string) error {
+	if tx == nil || userID <= 0 || duration <= 0 || strings.TrimSpace(reference) == "" {
+		return errors.New("invalid monthly pass duration grant")
+	}
 	var user identityschema.User
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", userID).First(&user).Error; err != nil {
 		return err

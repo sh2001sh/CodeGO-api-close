@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
@@ -249,6 +250,58 @@ func TestPaidSubscriptionOrderRequiresWorkflowFulfillment(t *testing.T) {
 	var afterCount int64
 	require.NoError(t, db.Model(&commerceschema.UserSubscription{}).Where("user_id = ?", paid.UserId).Count(&afterCount).Error)
 	assert.EqualValues(t, 1, afterCount)
+}
+
+func TestFulfillPaidSubscriptionUpgradeAddsMonthlyPassDurationDifference(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	const userID = 724
+	insertSubscriptionStoreTestUser(t, userID, nil)
+
+	lite := &commerceschema.SubscriptionPlan{
+		Id: 725, Title: "Lite月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierLite,
+		DurationUnit:   commerceschema.SubscriptionDurationMonth, DurationValue: 1,
+		PriceAmount: 49, TotalAmount: int64(platformruntime.QuotaPerUnit) * 350,
+	}
+	standard := &commerceschema.SubscriptionPlan{
+		Id: 726, Title: "Standard月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierStandard,
+		DurationUnit:   commerceschema.SubscriptionDurationMonth, DurationValue: 1,
+		PriceAmount: 89, TotalAmount: int64(platformruntime.QuotaPerUnit) * 650,
+	}
+	require.NoError(t, db.Create(lite).Error)
+	require.NoError(t, db.Create(standard).Error)
+
+	now := platformruntime.GetTimestamp()
+	require.NoError(t, db.Create(&commerceschema.UserSubscription{
+		Id: 727, UserId: userID, PlanId: lite.Id, AmountTotal: lite.TotalAmount,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}).Error)
+	require.NoError(t, db.Create(&commerceschema.BlindBoxProp{
+		UserId: userID, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		Title: monthlyPassTitle(15 * 60), Status: commerceschema.BlindBoxPropStatusAvailable,
+		Multiplier: 0.1, DurationSeconds: 15 * 60, RemainingSeconds: 15 * 60,
+		BenefitReference: "monthly-pass-order:previous",
+	}).Error)
+	order := &commerceschema.SubscriptionOrder{
+		UserId: userID, PlanId: standard.Id, Money: standard.PriceAmount,
+		TradeNo: "sub-upgrade-monthly-pass", Status: constant.TopUpStatusSuccess,
+		FulfillmentStatus: commerceschema.SubscriptionOrderFulfillmentPending,
+		PaymentMethod:     "test", PaymentProvider: "test", CreateTime: now, CompleteTime: now,
+	}
+	require.NoError(t, db.Create(order).Error)
+
+	require.NoError(t, FulfillPaidSubscriptionOrder(order.TradeNo))
+	require.NoError(t, FulfillPaidSubscriptionOrder(order.TradeNo))
+
+	var prop commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND prop_type = ?", userID, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).First(&prop).Error)
+	assert.EqualValues(t, 30*60, prop.RemainingSeconds)
+	assert.Equal(t, fmt.Sprintf("monthly-pass-order:previous|monthly-pass-order:%d", order.Id), prop.BenefitReference)
+
+	var fulfilled commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("id = ?", order.Id).First(&fulfilled).Error)
+	assert.Equal(t, commerceschema.SubscriptionOrderFulfillmentCompleted, fulfilled.FulfillmentStatus)
 }
 
 func TestExpireSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) {

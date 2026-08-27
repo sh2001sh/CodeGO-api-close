@@ -164,8 +164,8 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 		if preview != nil {
 			upgradeGroup = strings.TrimSpace(sub.UpgradeGroup)
 		}
-		if preview != nil && preview.Action != commerceschema.SubscriptionPurchaseActionUpgrade {
-			if err := awardMonthlyPassPropTx(tx, order.UserId, plan, fmt.Sprintf("monthly-pass-order:%d", order.Id)); err != nil {
+		if preview != nil {
+			if err := awardMonthlyPassPurchasePropTx(tx, order.UserId, plan, preview, fmt.Sprintf("monthly-pass-order:%d", order.Id)); err != nil {
 				return err
 			}
 		}

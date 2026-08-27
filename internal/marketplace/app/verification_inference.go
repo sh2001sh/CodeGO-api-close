@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	marketplaceTextProbeTimeout    = 30 * time.Second
+	marketplaceTextProbeTimeout    = 60 * time.Second
 	marketplaceMinimumImageTimeout = 180 * time.Second
+	marketplaceProbeOutputTokens   = 32
+	marketplaceProbeRetryDelay     = 250 * time.Millisecond
 )
 
 func probeMarketplaceInference(provider, baseURL, apiKey, model string) error {
@@ -42,12 +44,31 @@ func probeMarketplaceInferenceTimedContext(
 	if err != nil {
 		return 0, err
 	}
+	for attempt := 0; attempt < 2; attempt++ {
+		latencyMS, transient, probeErr := probeMarketplaceInferenceAttempt(
+			parent, provider, apiKey, model, endpoint, body,
+		)
+		if probeErr == nil || !transient || attempt == 1 || parent.Err() != nil {
+			return latencyMS, probeErr
+		}
+		if err := waitMarketplaceProbeRetry(parent); err != nil {
+			return latencyMS, err
+		}
+	}
+	return 0, errors.New("实际推理检测失败")
+}
+
+func probeMarketplaceInferenceAttempt(
+	parent context.Context,
+	provider, apiKey, model, endpoint string,
+	body []byte,
+) (int64, bool, error) {
 	timeout := marketplaceProbeTimeout(model)
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	setMarketplaceAuthHeaders(req, provider, apiKey)
@@ -55,34 +76,54 @@ func probeMarketplaceInferenceTimedContext(
 	response, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return 0, fmt.Errorf("%s探针等待 %s 后超时", marketplaceProbeKind(model), timeout)
+			return 0, true, fmt.Errorf("%s探针等待 %s 后超时", marketplaceProbeKind(model), timeout)
 		}
-		return 0, fmt.Errorf("实际推理请求失败: %w", err)
+		return 0, parent.Err() == nil, fmt.Errorf("实际推理请求失败: %w", err)
 	}
 	defer response.Body.Close()
 	latencyMS := time.Since(startedAt).Milliseconds()
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
 		responseBody, readErr := io.ReadAll(io.LimitReader(response.Body, 16<<20))
 		if readErr != nil {
-			return latencyMS, fmt.Errorf("读取上游响应失败: %w", readErr)
+			return latencyMS, true, fmt.Errorf("读取上游响应失败: %w", readErr)
 		}
-		if err := validateMarketplaceProbeResponse(provider, model, responseBody); err != nil {
-			return latencyMS, err
-		}
-		return latencyMS, nil
+		return latencyMS, false, validateMarketplaceProbeResponse(provider, model, responseBody)
 	}
 	detail, _ := io.ReadAll(io.LimitReader(response.Body, 512))
 	message := strings.TrimSpace(string(detail))
 	if message == "" {
 		message = response.Status
 	}
-	return latencyMS, fmt.Errorf("实际推理检测未通过（HTTP %d）: %s", response.StatusCode, message)
+	probeErr := fmt.Errorf("实际推理检测未通过（HTTP %d）: %s", response.StatusCode, message)
+	return latencyMS, isTransientMarketplaceProbeStatus(response.StatusCode), probeErr
+}
+
+func isTransientMarketplaceProbeStatus(status int) bool {
+	switch status {
+	case http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests,
+		http.StatusInternalServerError, http.StatusBadGateway,
+		http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+func waitMarketplaceProbeRetry(ctx context.Context) error {
+	timer := time.NewTimer(marketplaceProbeRetryDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func probeMarketplaceInferenceReportedModel(provider, baseURL, apiKey, model string) (int64, string, error) {
 	return probeMarketplaceInferenceReportedModelWithVariant(
 		provider, baseURL, apiKey, model, gpt56ProbeVariant{
-			Name: "default", Prompt: "Reply with OK.", MaxOutputTokens: 8,
+			Name: "default", Prompt: "Reply with OK.", MaxOutputTokens: marketplaceProbeOutputTokens,
 		},
 	)
 }
@@ -160,7 +201,7 @@ func probeMarketplaceInferenceReportedModelWithVariantContext(
 }
 
 func inferenceProbeRequest(provider, baseURL, model string) (string, map[string]any, error) {
-	return inferenceProbeRequestWithPrompt(provider, baseURL, model, "Reply with OK.", 8)
+	return inferenceProbeRequestWithPrompt(provider, baseURL, model, "Reply with OK.", marketplaceProbeOutputTokens)
 }
 
 func inferenceProbeRequestWithPrompt(

@@ -63,7 +63,42 @@ func validateTextProbePayload(provider string, value any) error {
 		}
 		return nil
 	}
+	if hasCompletedProbeEnvelope(provider, payload) {
+		return nil
+	}
 	return errors.New("上游推理响应缺少有效的模型输出")
+}
+
+func hasCompletedProbeEnvelope(provider string, payload map[string]any) bool {
+	switch provider {
+	case "codex":
+		status, _ := payload["status"].(string)
+		return strings.EqualFold(strings.TrimSpace(status), "completed")
+	case "anthropic":
+		stopReason, _ := payload["stop_reason"].(string)
+		return strings.TrimSpace(stopReason) != ""
+	case "gemini":
+		return arrayContainsCompletionMarker(payload["candidates"], "finishReason")
+	default:
+		return arrayContainsCompletionMarker(payload["choices"], "finish_reason")
+	}
+}
+
+func arrayContainsCompletionMarker(value any, marker string) bool {
+	items, ok := value.([]any)
+	if !ok || len(items) == 0 {
+		return false
+	}
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if completion, ok := entry[marker].(string); ok && strings.TrimSpace(completion) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func probeOutputText(value any) string {

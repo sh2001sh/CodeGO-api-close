@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"strings"
@@ -155,6 +156,7 @@ func claimMarketplaceAutoProbeLease(channelID string) (func(), bool) {
 
 func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 	status := marketplacedomain.VerificationFailed
+	var failure error
 	model := strings.TrimSpace(channel.AutoProbeModel)
 	models := decodeModels(channel.DeclaredModels)
 	if model == "" && len(models) > 0 {
@@ -162,11 +164,19 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 	}
 	baseURL, baseErr := platformsecurity.DecryptSecret(channel.BaseURLCiphertext)
 	credential, credentialErr := platformsecurity.DecryptSecret(channel.CredentialCiphertext)
-	if baseErr == nil && credentialErr == nil && containsFold(models, model) {
+	switch {
+	case baseErr != nil:
+		failure = baseErr
+	case credentialErr != nil:
+		failure = credentialErr
+	case !containsFold(models, model):
+		failure = fmt.Errorf("探针模型 %s 不在声明模型中", model)
+	default:
 		upstream, err := fetchUpstreamModels(channel.ProviderType, baseURL, credential)
-		if err == nil {
+		if err != nil {
+			failure = err
+		} else {
 			probeCtx, cancel := context.WithTimeout(context.Background(), autoProbeLeaseTTL)
-			defer cancel()
 			results, probeErr := probeDeclaredModels(
 				probeCtx,
 				channel.ProviderType,
@@ -176,10 +186,23 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 				upstream,
 				nil,
 			)
+			cancel()
 			if probeErr == nil && len(results) == 1 && results[0].Status == marketplacedomain.ModelVerificationPassed {
 				status = marketplacedomain.VerificationPassed
+			} else if probeErr != nil {
+				failure = probeErr
+			} else if len(results) == 1 && strings.TrimSpace(results[0].Error) != "" {
+				failure = errors.New(results[0].Error)
+			} else {
+				failure = errors.New("自动探针未返回通过结果")
 			}
 		}
+	}
+	if failure != nil {
+		platformobservability.SysLog(fmt.Sprintf(
+			"marketplace auto probe failed: channel_id=%s model=%s error=%v",
+			channel.ID, model, failure,
+		))
 	}
 	now := time.Now().UTC()
 	if err := platformdb.DB.Model(&marketplaceschema.Channel{}).Where("id = ?", channel.ID).Updates(map[string]any{

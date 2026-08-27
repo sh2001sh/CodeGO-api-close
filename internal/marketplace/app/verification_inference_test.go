@@ -27,6 +27,9 @@ func TestInferenceProbeRequestUsesProviderProtocol(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, strings.HasSuffix(endpoint, item.path), endpoint)
 		require.NotEmpty(t, payload)
+		if item.provider == "codex" {
+			require.Equal(t, marketplaceProbeOutputTokens, payload["max_output_tokens"])
+		}
 	}
 }
 
@@ -69,6 +72,47 @@ func TestTextProbeRequiresProtocolOutputAndRejectsFailureReply(t *testing.T) {
 		"openai_compatible", "gpt-5.6-sol",
 		[]byte(`{"choices":[{"message":{"content":"OK"}}]}`),
 	))
+	require.NoError(t, validateMarketplaceProbeResponse(
+		"openai_compatible", "gpt-5.6-sol",
+		[]byte(`{"choices":[{"message":{"content":null,"reasoning_content":"done"},"finish_reason":"length"}]}`),
+	))
+	require.NoError(t, validateMarketplaceProbeResponse(
+		"codex", "gpt-5.6-sol", []byte(`{"status":"completed","output":[]}`),
+	))
+}
+
+func TestInferenceProbeRetriesTransientHTTPFailure(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"OK"}}]}`))
+	}))
+	defer server.Close()
+
+	_, err := probeMarketplaceInferenceTimedContext(
+		context.Background(), "openai_compatible", server.URL, "test-key", "gpt-5.6-sol",
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, requests)
+}
+
+func TestInferenceProbeDoesNotRetryDeterministicHTTPFailure(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		http.Error(w, "invalid request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	_, err := probeMarketplaceInferenceTimedContext(
+		context.Background(), "openai_compatible", server.URL, "test-key", "gpt-5.6-sol",
+	)
+	require.ErrorContains(t, err, "HTTP 400")
+	require.Equal(t, 1, requests)
 }
 
 func TestInferenceProbeRejectsHTTP200ErrorPayload(t *testing.T) {
@@ -93,7 +137,7 @@ func TestReportedModelProbeRejectsHTTP200ErrorPayload(t *testing.T) {
 
 	_, reported, err := probeMarketplaceInferenceReportedModelWithVariantContext(
 		context.Background(), "openai_compatible", server.URL, "test-key", "gpt-5.6-sol",
-		gpt56ProbeVariant{Name: "error-payload", Prompt: "Reply with OK.", MaxOutputTokens: 8},
+		gpt56ProbeVariant{Name: "error-payload", Prompt: "Reply with OK.", MaxOutputTokens: marketplaceProbeOutputTokens},
 	)
 	require.Empty(t, reported)
 	require.EqualError(t, err, "上游返回失败内容: probe rejected")
@@ -136,7 +180,7 @@ func TestProbeDeclaredModelsTestsEveryModel(t *testing.T) {
 		func(results []ModelVerificationResult) { progressSnapshots = len(results) },
 	)
 	require.EqualError(t, err, "模型连通性检测失败: bad-model")
-	require.Equal(t, []string{"good-model", "bad-model"}, tested)
+	require.Equal(t, []string{"good-model", "bad-model", "bad-model"}, tested)
 	require.Len(t, results, 2)
 	require.Equal(t, marketplacedomain.ModelVerificationPassed, results[0].Status)
 	require.True(t, results[0].Listed)

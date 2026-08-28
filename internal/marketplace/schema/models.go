@@ -113,6 +113,16 @@ type GroupAccess struct {
 	CreatedAt       time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 }
 
+// ChannelUserBlock prevents a channel owner from serving a specific consumer.
+type ChannelUserBlock struct {
+	ID        uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	ChannelID string    `json:"channel_id" gorm:"column:channel_id;size:64;uniqueIndex:uq_marketplace_channel_user_block,priority:1;not null"`
+	UserID    int       `json:"user_id" gorm:"column:user_id;uniqueIndex:uq_marketplace_channel_user_block,priority:2;index;not null"`
+	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (ChannelUserBlock) TableName() string { return tableName("channel_user_blocks") }
+
 func (GroupAccess) TableName() string { return tableName("group_access") }
 
 type VerificationRun struct {
@@ -248,6 +258,8 @@ type Settlement struct {
 	PendingAccountID       string     `json:"-" gorm:"column:pending_account_id;size:64"`
 	AvailableAt            time.Time  `json:"available_at" gorm:"column:available_at;index"`
 	ReleasedAt             *time.Time `json:"released_at" gorm:"column:released_at"`
+	ReclaimedAt            *time.Time `json:"reclaimed_at" gorm:"column:reclaimed_at"`
+	ForfeitedAt            *time.Time `json:"forfeited_at" gorm:"column:forfeited_at"`
 	CreatedAt              time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 }
 

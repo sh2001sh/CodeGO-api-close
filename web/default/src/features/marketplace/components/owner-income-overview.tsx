@@ -68,6 +68,11 @@ export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
       label: t('筛选范围调用'),
       value: (query.data?.summary.request_count ?? 0).toLocaleString(),
     },
+    {
+      icon: CircleDollarSign,
+      label: t('已回收额度'),
+      value: formatQuota(query.data?.summary.reclaimed_income ?? 0),
+    },
   ]
 
   return (

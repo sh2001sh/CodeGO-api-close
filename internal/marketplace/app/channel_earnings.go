@@ -8,11 +8,13 @@ import (
 )
 
 type ownerChannelEarnings struct {
-	GroupID        string `gorm:"column:group_id"`
-	RequestCount   int64  `gorm:"column:request_count"`
-	TotalIncome    int64  `gorm:"column:total_income"`
-	PendingIncome  int64  `gorm:"column:pending_income"`
-	ReleasedIncome int64  `gorm:"column:released_income"`
+	GroupID         string `gorm:"column:group_id"`
+	RequestCount    int64  `gorm:"column:request_count"`
+	TotalIncome     int64  `gorm:"column:total_income"`
+	PendingIncome   int64  `gorm:"column:pending_income"`
+	ReleasedIncome  int64  `gorm:"column:released_income"`
+	ReclaimedIncome int64  `gorm:"column:reclaimed_income"`
+	ForfeitedIncome int64  `gorm:"column:forfeited_income"`
 }
 
 func earningsByGroupIDs(ids []string) (map[string]ownerChannelEarnings, error) {
@@ -30,7 +32,9 @@ func earningsByGroupIDsInRange(ids []string, startTimestamp, endTimestamp int64)
 			COUNT(*) AS request_count,
 			COALESCE(SUM(owner_net_amount), 0) AS total_income,
 			COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income,
-			COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount ELSE 0 END), 0) AS released_income`).
+			COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount ELSE 0 END), 0) AS released_income,
+			COALESCE(SUM(CASE WHEN status = 'reclaimed' THEN owner_net_amount ELSE 0 END), 0) AS reclaimed_income,
+			COALESCE(SUM(CASE WHEN status = 'forfeited' THEN owner_net_amount ELSE 0 END), 0) AS forfeited_income`).
 		Where("group_id IN ?", ids)
 	if startTimestamp > 0 {
 		query = query.Where("created_at >= ?", time.Unix(startTimestamp, 0))

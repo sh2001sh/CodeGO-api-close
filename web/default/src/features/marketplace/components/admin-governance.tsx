@@ -31,6 +31,7 @@ export function AdminGovernance() {
   const { t } = useTranslation()
   const [incomeRange, setIncomeRange] = useState<AdminIncomeRange>({})
   const [ownerSearch, setOwnerSearch] = useState('')
+  const [selectedOwnerIDs, setSelectedOwnerIDs] = useState<number[]>([])
   const [channelSearch, setChannelSearch] = useState('')
   const [channelStatus, setChannelStatus] = useState('')
   const [channelSource, setChannelSource] = useState('')
@@ -87,31 +88,35 @@ export function AdminGovernance() {
         isError={ownerIncomeQuery.isError}
         releasing={releaseIncome.isPending}
         onRelease={() => {
-          if ((ownerIncomeQuery.data?.pending_income ?? 0) <= 0) return
-          if (!window.confirm(t('确定立即结算当前筛选范围内的待结算收益吗？')))
+          if (selectedOwnerIDs.length === 0) return
+          if ((ownerIncomeQuery.data?.released_income ?? 0) <= 0) return
+          if (!window.confirm(t('确定立即回收当前筛选范围内已结算额度吗？')))
             return
           releaseIncome.mutate(
             {
               ownerSearch: deferredOwnerSearch,
+              ownerUserIds: selectedOwnerIDs,
               startTimestamp: toTimestamp(incomeRange.start),
               endTimestamp: toTimestamp(incomeRange.end),
             },
             {
               onSuccess: (result) => {
                 toast.success(
-                  t('已结算 {{count}} 条收益，共 {{amount}}', {
-                    count: result.released_count,
-                    amount: formatQuota(result.released_amount),
+                  t('已回收 {{count}} 条额度，共 {{amount}}', {
+                    count: result.reclaimed_count,
+                    amount: formatQuota(result.reclaimed_amount),
                   })
                 )
               },
               onError: (error) =>
                 toast.error(
-                  error instanceof Error ? error.message : t('收益结算失败')
+                  error instanceof Error ? error.message : t('额度回收失败')
                 ),
             }
           )
         }}
+        selectedOwnerIDs={selectedOwnerIDs}
+        onSelectedOwnerIDsChange={setSelectedOwnerIDs}
       />
       <div className='border-border bg-muted/10 flex flex-wrap items-center gap-2 rounded-md border p-3'>
         <Input
@@ -251,8 +256,10 @@ export function AdminGovernance() {
                       {t('待结算')}: {formatQuota(channel.pending_income)}
                     </span>
                     <span>
-                      {t('已到账收益')}:{' '}
-                      {formatQuota(channel.released_income)}
+                      {t('已到账收益')}: {formatQuota(channel.released_income)}
+                    </span>
+                    <span>
+                      {t('已回收额度')}: {formatQuota(channel.reclaimed_income)}
                     </span>
                     <span>
                       {t('结算请求')}: {channel.request_count.toLocaleString()}

@@ -36,11 +36,15 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 	if err != nil {
 		return nil, err
 	}
+	config := loadAutoRoutePoolConfig(ownerUserID)
 
 	items := make([]AutoRoutePoolItem, 0, len(groups))
 	selectedCount := 0
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
+		if channelUserBlocked(group.ChannelID, ownerUserID) {
+			continue
+		}
 		priority, isSelected := selected[group.ID]
 		if isSelected {
 			selectedCount++
@@ -91,8 +95,13 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 		return items[i].GroupID < items[j].GroupID
 	})
 	return &AutoRoutePoolView{
-		TokenGroup: gatewayroutingapp.AutoGroupName, SelectedCount: selectedCount, Items: items,
+		TokenGroup: gatewayroutingapp.AutoGroupName, SelectedCount: selectedCount, Items: items, Config: config,
 	}, nil
+}
+
+func channelUserBlocked(channelID string, userID int) bool {
+	var count int64
+	return platformdb.DB.Model(&marketplaceschema.ChannelUserBlock{}).Where("channel_id = ? AND user_id = ?", channelID, userID).Count(&count).Error == nil && count > 0
 }
 
 // ReplaceAutoRoutePool atomically replaces the current user's selected groups.
@@ -118,6 +127,7 @@ func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*Aut
 		}
 	}
 
+	config := normalizeAutoRoutePoolConfig(req.Config)
 	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("owner_user_id = ?", ownerUserID).Delete(&marketplaceschema.AutoRoutePoolMember{}).Error; err != nil {
 			return err
@@ -132,12 +142,48 @@ func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*Aut
 				return err
 			}
 		}
+		if tx.Migrator().HasTable(&marketplaceschema.AutoRoutePoolConfig{}) {
+			if err := tx.Save(&marketplaceschema.AutoRoutePoolConfig{OwnerUserID: ownerUserID, Strategy: config.Strategy, MaxAttempts: config.MaxAttempts, FailureCooldownSeconds: config.FailureCooldownSeconds, MaxMultiplier: config.MaxMultiplier}).Error; err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return ListAutoRoutePool(ownerUserID)
+}
+
+func loadAutoRoutePoolConfig(ownerUserID int) AutoRoutePoolConfig {
+	if !platformdb.DB.Migrator().HasTable(&marketplaceschema.AutoRoutePoolConfig{}) {
+		return normalizeAutoRoutePoolConfig(nil)
+	}
+	var config marketplaceschema.AutoRoutePoolConfig
+	if platformdb.DB.First(&config, "owner_user_id = ?", ownerUserID).Error != nil {
+		return normalizeAutoRoutePoolConfig(nil)
+	}
+	return AutoRoutePoolConfig{Strategy: config.Strategy, MaxAttempts: config.MaxAttempts, FailureCooldownSeconds: config.FailureCooldownSeconds, MaxMultiplier: config.MaxMultiplier}
+}
+
+func normalizeAutoRoutePoolConfig(config *AutoRoutePoolConfig) AutoRoutePoolConfig {
+	result := AutoRoutePoolConfig{Strategy: "priority", MaxAttempts: 3, FailureCooldownSeconds: 30}
+	if config != nil {
+		result = *config
+	}
+	if result.Strategy != "priority" && result.Strategy != "score" && result.Strategy != "cost" {
+		result.Strategy = "priority"
+	}
+	if result.MaxAttempts < 1 || result.MaxAttempts > 5 {
+		result.MaxAttempts = 3
+	}
+	if result.FailureCooldownSeconds < 5 || result.FailureCooldownSeconds > 3600 {
+		result.FailureCooldownSeconds = 30
+	}
+	if result.MaxMultiplier < 0 {
+		result.MaxMultiplier = 0
+	}
+	return result
 }
 
 // ResolveAutoRouteBindings returns model-compatible pool members in routing
@@ -157,6 +203,10 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit
 	}
 	if len(selected) == 0 {
 		return nil, errors.New("Auto 路由池为空，请先添加官方或第三方分组")
+	}
+	config := loadAutoRoutePoolConfig(ownerUserID)
+	if multiplierLimit <= 0 && config.MaxMultiplier > 0 {
+		multiplierLimit = config.MaxMultiplier
 	}
 	groups, channels, err := loadAutoRouteGroups(ownerUserID)
 	if err != nil {
@@ -220,8 +270,11 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit
 		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].priority != candidates[j].priority {
+		if config.Strategy == "priority" && candidates[i].priority != candidates[j].priority {
 			return candidates[i].priority < candidates[j].priority
+		}
+		if config.Strategy == "cost" && candidates[i].binding.Multiplier != candidates[j].binding.Multiplier {
+			return candidates[i].binding.Multiplier < candidates[j].binding.Multiplier
 		}
 		if candidates[i].score != candidates[j].score {
 			return candidates[i].score < candidates[j].score

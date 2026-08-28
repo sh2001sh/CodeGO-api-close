@@ -284,6 +284,18 @@ type AutoRoutePoolMember struct {
 
 func (AutoRoutePoolMember) TableName() string { return tableName("auto_route_pool_members") }
 
+// AutoRoutePoolConfig stores routing policy for a user's automatic pool.
+type AutoRoutePoolConfig struct {
+	OwnerUserID            int       `json:"owner_user_id" gorm:"column:owner_user_id;primaryKey"`
+	Strategy               string    `json:"strategy" gorm:"column:strategy;size:16;not null;default:priority"`
+	MaxAttempts            int       `json:"max_attempts" gorm:"column:max_attempts;not null;default:3"`
+	FailureCooldownSeconds int       `json:"failure_cooldown_seconds" gorm:"column:failure_cooldown_seconds;not null;default:30"`
+	MaxMultiplier          float64   `json:"max_multiplier" gorm:"column:max_multiplier;not null;default:0"`
+	UpdatedAt              time.Time `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+}
+
+func (AutoRoutePoolConfig) TableName() string { return tableName("auto_route_pool_configs") }
+
 func tableName(name string) string {
 	if platformdb.UsingPostgreSQL {
 		return "marketplace." + name

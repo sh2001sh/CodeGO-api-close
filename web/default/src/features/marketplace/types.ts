@@ -250,6 +250,7 @@ export interface MarketplaceChannel {
   total_income: number
   pending_income: number
   released_income: number
+  reclaimed_income: number
   created_at: string
   updated_at: string
 }
@@ -262,6 +263,7 @@ export interface AdminMarketplaceChannelFilters {
   verification?: string
   mappingStatus?: string
   ownerSearch?: string
+  ownerUserIds?: number[]
   startTimestamp?: number
   endTimestamp?: number
 }
@@ -273,6 +275,7 @@ export interface AdminOwnerIncomeItem {
   total_income: number
   pending_income: number
   released_income: number
+  reclaimed_income: number
 }
 
 export interface AdminOwnerIncomeResult {
@@ -282,6 +285,7 @@ export interface AdminOwnerIncomeResult {
   total_income: number
   pending_income: number
   released_income: number
+  reclaimed_income: number
 }
 
 export interface ChannelFormValues {
@@ -378,7 +382,7 @@ export interface MarketplaceOwnerUsageLog {
   owner_income: number
   platform_commission: number
   multiplier: number
-  income_status: 'pending' | 'released' | 'none'
+  income_status: 'pending' | 'released' | 'reclaimed' | 'none'
   available_at?: string | null
   released_at?: string | null
 }
@@ -393,6 +397,7 @@ export interface MarketplaceOwnerUsageLogResult {
     owner_income: number
     pending_income: number
     released_income: number
+    reclaimed_income: number
   }
   total: number
   page: number
@@ -439,4 +444,51 @@ export interface MarketplaceAutoRoutePool {
   token_group: 'auto'
   selected_count: number
   items: MarketplaceAutoRoutePoolItem[]
+  config: {
+    strategy: 'priority' | 'score' | 'cost'
+    max_attempts: number
+    failure_cooldown_seconds: number
+    max_multiplier: number
+  }
+}
+
+export interface MarketplaceBatchTestItem {
+  group_id: string
+  group_name: string
+  status: 'queued' | 'running' | 'passed' | 'failed'
+  latency_ms: number
+  error?: string
+  started_at?: string
+  ended_at?: string
+}
+
+export interface MarketplaceBatchTest {
+  id: string
+  model: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  items: MarketplaceBatchTestItem[]
+  created_at: string
+  updated_at: string
+}
+
+export interface MarketplaceObservabilityItem {
+  channel_id: string
+  group_id: string
+  channel_name: string
+  model: string
+  request_count: number
+  success_count: number
+  failed_count: number
+  success_rate: number
+  avg_latency_ms: number
+  p95_latency_ms: number
+  avg_ttft_ms: number
+  retry_count: number
+  consumer_amount: number
+}
+
+export interface MarketplaceObservability {
+  start_timestamp: number
+  end_timestamp: number
+  items: MarketplaceObservabilityItem[]
 }

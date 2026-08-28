@@ -21,9 +21,13 @@ import {
   reviewMarketplaceChannel,
   retryMarketplaceFailedConnectivity,
   setMarketplaceChannelPaused,
+  setMarketplaceChannelUserBlock,
+  setAdminMarketplaceChannelPaused,
   submitMarketplaceChannelFeedback,
   updateMarketplaceChannel,
   updateMarketplaceAutoRoutePool,
+  startMarketplaceBatchTest,
+  getMarketplaceBatchTest,
 } from './api'
 import type {
   AdminMarketplaceChannelFilters,
@@ -105,6 +109,22 @@ export function useMarketplaceAutoRoutePoolUpdate() {
   })
 }
 
+export function useMarketplaceBatchTest() {
+  return useMutation({ mutationFn: startMarketplaceBatchTest })
+}
+
+export function useMarketplaceBatchTestQuery(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ['marketplace-batch-test', id],
+    queryFn: () => getMarketplaceBatchTest(id),
+    enabled: Boolean(id) && enabled,
+    refetchInterval: (query) =>
+      ['queued', 'running'].includes(query.state.data?.status ?? '')
+        ? 1000
+        : false,
+  })
+}
+
 export function useMyMarketplaceChannels() {
   return useQuery({
     queryKey: ['marketplace-channels', 'mine'],
@@ -172,6 +192,15 @@ export function useMarketplaceMutations() {
         setMarketplaceChannelPaused(input.id, input.paused),
       onSuccess: invalidate,
     }),
+    userBlock: useMutation({
+      mutationFn: setMarketplaceChannelUserBlock,
+      onSuccess: invalidate,
+    }),
+    adminPause: useMutation({
+      mutationFn: (input: { id: string; paused: boolean }) =>
+        setAdminMarketplaceChannelPaused(input.id, input.paused),
+      onSuccess: invalidate,
+    }),
     bind: useMutation({
       mutationFn: (input: { groupId: string; tokenId: number }) =>
         bindMarketplaceToken(input.groupId, input.tokenId),
@@ -231,7 +260,7 @@ export function useAdminOwnerIncomeRelease() {
     mutationFn: (
       filters: Pick<
         AdminMarketplaceChannelFilters,
-        'ownerSearch' | 'startTimestamp' | 'endTimestamp'
+        'ownerSearch' | 'ownerUserIds' | 'startTimestamp' | 'endTimestamp'
       >
     ) => releaseAdminOwnerIncome(filters),
     onSuccess: async () => {

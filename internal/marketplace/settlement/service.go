@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	statusPending  = "pending"
-	statusReleased = "released"
+	statusPending   = "pending"
+	statusReleased  = "released"
+	statusReclaimed = "reclaimed"
+	statusForfeited = "forfeited"
 )
 
 type RecordParams struct {
@@ -32,6 +34,8 @@ type RecordParams struct {
 }
 
 type ReleaseHook func(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error
+type ReclaimHook func(tx *gorm.DB, ownerUserID int, adminUserID int, amount int, idempotencyKey string) error
+type ForfeitHook func(tx *gorm.DB, pendingAccountID string, adminUserID int, amount int, idempotencyKey string) error
 
 type ReleaseFilter struct {
 	OwnerUserIDs   []int
@@ -45,12 +49,21 @@ type ReleaseResult struct {
 	Amount int64
 }
 
+type ReclaimResult struct {
+	Count  int
+	Amount int64
+}
+
 var (
 	releaseHook ReleaseHook
+	reclaimHook ReclaimHook
+	forfeitHook ForfeitHook
 	workerOnce  sync.Once
 )
 
 func RegisterReleaseHook(hook ReleaseHook) { releaseHook = hook }
+func RegisterReclaimHook(hook ReclaimHook) { reclaimHook = hook }
+func RegisterForfeitHook(hook ForfeitHook) { forfeitHook = hook }
 
 func Record(params RecordParams) error {
 	if params.RequestID == "" || params.GroupID == "" || params.OwnerUserID <= 0 || params.SettlementGrossAmount <= 0 {
@@ -178,6 +191,131 @@ func ReleasePending(filter ReleaseFilter) (ReleaseResult, error) {
 		result.Amount += settlements[index].OwnerNetAmount
 	}
 	return result, nil
+}
+
+// ReclaimPending moves selected released owner earnings to administrator user 1.
+func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
+	if reclaimHook == nil {
+		return ReclaimResult{}, errors.New("marketplace settlement release hook is not registered")
+	}
+	if filter.Limit <= 0 {
+		filter.Limit = 5000
+	}
+	query := platformdb.DB.Where("status = ?", statusReleased).Order("created_at asc").Limit(filter.Limit)
+	if len(filter.OwnerUserIDs) > 0 {
+		query = query.Where("owner_user_id IN ?", filter.OwnerUserIDs)
+	}
+	if filter.StartTimestamp > 0 {
+		query = query.Where("created_at >= ?", time.Unix(filter.StartTimestamp, 0))
+	}
+	if filter.EndTimestamp > 0 {
+		query = query.Where("created_at < ?", time.Unix(filter.EndTimestamp+1, 0))
+	}
+	var settlements []marketplaceschema.Settlement
+	if err := query.Find(&settlements).Error; err != nil {
+		return ReclaimResult{}, err
+	}
+	result := ReclaimResult{}
+	for index := range settlements {
+		if err := reclaimOne(settlements[index].ID); err != nil {
+			return result, err
+		}
+		result.Count++
+		result.Amount += settlements[index].OwnerNetAmount
+	}
+	return result, nil
+}
+
+// ForfeitChannelPending clears frozen pending earnings when a channel is shut down.
+func ForfeitChannelPending(channelID string) (ReclaimResult, error) {
+	if forfeitHook == nil {
+		return ReclaimResult{}, errors.New("marketplace settlement forfeit hook is not registered")
+	}
+	var groupID string
+	if err := platformdb.DB.Model(&marketplaceschema.Group{}).Where("channel_id = ?", channelID).Pluck("id", &groupID).Error; err != nil {
+		return ReclaimResult{}, err
+	}
+	var settlements []marketplaceschema.Settlement
+	if err := platformdb.DB.Where("group_id = ? AND status = ?", groupID, statusPending).Find(&settlements).Error; err != nil {
+		return ReclaimResult{}, err
+	}
+	result := ReclaimResult{}
+	for _, item := range settlements {
+		if err := forfeitOne(item.ID); err != nil {
+			return result, err
+		}
+		result.Count++
+		result.Amount += item.OwnerNetAmount
+	}
+	return result, nil
+}
+
+func ForfeitChannelPendingTx(tx *gorm.DB, channelID string) (ReclaimResult, error) {
+	if forfeitHook == nil {
+		return ReclaimResult{}, errors.New("marketplace settlement forfeit hook is not registered")
+	}
+	var groupID string
+	if err := tx.Model(&marketplaceschema.Group{}).Where("channel_id = ?", channelID).Pluck("id", &groupID).Error; err != nil {
+		return ReclaimResult{}, err
+	}
+	var settlements []marketplaceschema.Settlement
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("group_id = ? AND status = ?", groupID, statusPending).Find(&settlements).Error; err != nil {
+		return ReclaimResult{}, err
+	}
+	result := ReclaimResult{}
+	for _, item := range settlements {
+		if err := forfeitOneTx(tx, &item); err != nil {
+			return result, err
+		}
+		result.Count++
+		result.Amount += item.OwnerNetAmount
+	}
+	return result, nil
+}
+
+func forfeitOne(settlementID string) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var item marketplaceschema.Settlement
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, "id = ?", settlementID).Error; err != nil {
+			return err
+		}
+		if item.Status != statusPending {
+			return nil
+		}
+		if err := forfeitHook(tx, item.PendingAccountID, 1, int(item.OwnerNetAmount), "marketplace-forfeit:"+item.ID); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		return tx.Model(&item).Updates(map[string]any{"status": statusForfeited, "forfeited_at": now}).Error
+	})
+}
+
+func forfeitOneTx(tx *gorm.DB, item *marketplaceschema.Settlement) error {
+	if item.Status != statusPending {
+		return nil
+	}
+	if err := forfeitHook(tx, item.PendingAccountID, 1, int(item.OwnerNetAmount), "marketplace-forfeit:"+item.ID); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	return tx.Model(item).Updates(map[string]any{"status": statusForfeited, "forfeited_at": now}).Error
+}
+
+func reclaimOne(settlementID string) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var item marketplaceschema.Settlement
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, "id = ?", settlementID).Error; err != nil {
+			return err
+		}
+		if item.Status != statusReleased {
+			return nil
+		}
+		if err := reclaimHook(tx, item.OwnerUserID, 1, int(item.OwnerNetAmount), "marketplace-reclaim:"+item.ID); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		return tx.Model(&item).Updates(map[string]any{"status": statusReclaimed, "reclaimed_at": now}).Error
+	})
 }
 
 func releaseOne(settlementID string) error {

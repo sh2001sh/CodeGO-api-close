@@ -62,6 +62,21 @@ func UpdateAutoRoutePool(c *gin.Context) {
 	respond(c, result, err)
 }
 
+func StartBatchTest(c *gin.Context) {
+	var req marketplaceapp.BatchTestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.StartBatchMarketplaceTest(c.GetInt("id"), req)
+	respond(c, result, err)
+}
+
+func GetBatchTest(c *gin.Context) {
+	result, err := marketplaceapp.GetBatchMarketplaceTest(c.GetInt("id"), c.Param("id"))
+	respond(c, result, err)
+}
+
 func CreateChannel(c *gin.Context) {
 	var req marketplaceapp.CreateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -101,6 +116,11 @@ func ListMyUsageLogs(c *gin.Context) {
 		Page:              queryInt(c, "page", 1),
 		PageSize:          queryInt(c, "page_size", 20),
 	})
+	respond(c, result, err)
+}
+
+func ListMyObservability(c *gin.Context) {
+	result, err := marketplaceapp.ListMarketplaceObservability(c.GetInt("id"), queryInt64(c, "start_timestamp"), queryInt64(c, "end_timestamp"))
 	respond(c, result, err)
 }
 
@@ -179,6 +199,18 @@ func ResumeChannel(c *gin.Context) {
 	respond(c, gin.H{"resumed": true}, marketplaceapp.PauseOwnerChannel(c.GetInt("id"), c.Param("id"), false))
 }
 
+func SetChannelUserBlock(c *gin.Context) {
+	var req struct {
+		UserID  int  `json:"user_id"`
+		Blocked bool `json:"blocked"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond(c, nil, err)
+		return
+	}
+	respond(c, gin.H{"blocked": req.Blocked}, marketplaceapp.SetChannelUserBlock(c.GetInt("id"), c.Param("id"), req.UserID, req.Blocked))
+}
+
 func BindToken(c *gin.Context) {
 	var req marketplaceapp.TokenBindingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -230,7 +262,7 @@ func ListAdminOwnerIncome(c *gin.Context) {
 
 func ReleaseAdminOwnerIncome(c *gin.Context) {
 	result, err := marketplaceapp.ReleaseAdminOwnerIncome(marketplaceapp.AdminOwnerIncomeQuery{
-		OwnerSearch: c.Query("owner_search"), StartTimestamp: queryInt64(c, "start_timestamp"),
+		OwnerSearch: c.Query("owner_search"), OwnerUserIDs: queryIntList(c, "owner_user_ids"), StartTimestamp: queryInt64(c, "start_timestamp"),
 		EndTimestamp: queryInt64(c, "end_timestamp"),
 	})
 	respond(c, result, err)
@@ -274,6 +306,13 @@ func RemoveFailedAdminChannelModel(c *gin.Context) {
 
 func PauseAdminChannelVerification(c *gin.Context) {
 	respond(c, gin.H{"paused": true}, marketplaceapp.PauseChannelVerification(c.Param("id")))
+}
+
+func PauseAdminChannel(c *gin.Context) {
+	respond(c, gin.H{"paused": true}, marketplaceapp.PauseAdminChannel(c.Param("id"), true))
+}
+func ResumeAdminChannel(c *gin.Context) {
+	respond(c, gin.H{"resumed": true}, marketplaceapp.PauseAdminChannel(c.Param("id"), false))
 }
 
 func queueAdminChannelAction(c *gin.Context, queue func(string) error) {
@@ -322,4 +361,15 @@ func queryFloat(c *gin.Context, name string) float64 {
 func queryInt64(c *gin.Context, name string) int64 {
 	value, _ := strconv.ParseInt(strings.TrimSpace(c.Query(name)), 10, 64)
 	return value
+}
+
+func queryIntList(c *gin.Context, name string) []int {
+	values := strings.Split(c.Query(name), ",")
+	result := make([]int, 0, len(values))
+	for _, value := range values {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && parsed > 0 {
+			result = append(result, parsed)
+		}
+	}
+	return result
 }

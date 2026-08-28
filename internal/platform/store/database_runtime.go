@@ -308,6 +308,7 @@ func migratePrimaryDB() error {
 		&marketplaceschema.Channel{},
 		&marketplaceschema.ChannelIDSequence{},
 		&marketplaceschema.Group{},
+		&marketplaceschema.ChannelUserBlock{},
 		&marketplaceschema.VerificationRun{},
 		&marketplaceschema.GPT56MappingRun{},
 		&marketplaceschema.RankingSnapshot{},
@@ -315,6 +316,7 @@ func migratePrimaryDB() error {
 		&marketplaceschema.ChannelFeedback{},
 		&marketplaceschema.Settlement{},
 		&marketplaceschema.AutoRoutePoolMember{},
+		&marketplaceschema.AutoRoutePoolConfig{},
 	)
 	if err != nil {
 		return err

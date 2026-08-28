@@ -186,6 +186,29 @@ func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int, idemp
 		Update("claude_quota", snapshot.AvailableBalance).Error
 }
 
+// ReclaimMarketplaceOwnerEarningsTx moves already released marketplace quota
+// from the channel owner to the administrator wallet in one transaction.
+func ReclaimMarketplaceOwnerEarningsTx(tx *gorm.DB, ownerUserID, adminUserID, amount int, operationID string) error {
+	if err := DebitClaudeWalletQuotaTxWithReason(tx, ownerUserID, amount, operationID+":debit", "marketplace_owner_reclaim"); err != nil {
+		return err
+	}
+	return CreditMarketplaceOwnerEarningsTx(tx, adminUserID, amount, operationID+":credit", "marketplace_owner_reclaim")
+}
+
+// ForfeitMarketplacePendingEarningsTx removes frozen funds from the pending
+// settlement account and credits the administrator wallet without crediting
+// the channel owner's wallet.
+func ForfeitMarketplacePendingEarningsTx(tx *gorm.DB, pendingAccountID string, adminUserID, amount int, operationID string) error {
+	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{AccountID: pendingAccountID, RequestID: "marketplace-forfeit:" + operationID, ReservedAmount: int64(amount), IdempotencyKey: operationID + ":reserve"})
+	if err != nil {
+		return err
+	}
+	if _, err = billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{ReservationID: reservation.ReservationID, ActualAmount: int64(amount), IdempotencyKey: operationID + ":settle"}); err != nil {
+		return err
+	}
+	return CreditMarketplaceOwnerEarningsTx(tx, adminUserID, amount, operationID+":credit", "marketplace_owner_forfeit")
+}
+
 // CreditUnifiedWalletQuotaTx credits the canonical unified-credit wallet.
 //
 // The historical Claude wallet function remains available for migrations and

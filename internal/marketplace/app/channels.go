@@ -9,10 +9,12 @@ import (
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var queueMarketplaceVerification = QueueRequiredVerification
@@ -141,6 +143,8 @@ func ListOwnerChannels(ownerUserID int) ([]ChannelView, error) {
 			view.TotalIncome = earnings[group.ID].TotalIncome
 			view.PendingIncome = earnings[group.ID].PendingIncome
 			view.ReleasedIncome = earnings[group.ID].ReleasedIncome
+			view.ReclaimedIncome = earnings[group.ID].ReclaimedIncome
+			view.ForfeitedIncome = earnings[group.ID].ForfeitedIncome
 			result = append(result, *view)
 		}
 	}
@@ -235,6 +239,45 @@ func PauseOwnerChannel(ownerUserID int, channelID string, paused bool) error {
 		}
 		return tx.Model(group).Update("lifecycle_status", status).Error
 	})
+}
+
+func PauseAdminChannel(channelID string, paused bool) error {
+	channel, group, err := loadChannelGroup(channelID)
+	if err != nil {
+		return err
+	}
+	status := marketplacedomain.LifecycleActive
+	if paused {
+		status = marketplacedomain.LifecycleSuspended
+	}
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if paused && channel.Status != marketplacedomain.LifecycleSuspended {
+			if _, err := marketplacesettlement.ForfeitChannelPendingTx(tx, channel.ID); err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(channel).Update("status", status).Error; err != nil {
+			return err
+		}
+		return tx.Model(group).Update("lifecycle_status", status).Error
+	})
+}
+
+func SetChannelUserBlock(ownerUserID int, channelID string, targetUserID int, blocked bool) error {
+	if ownerUserID <= 0 || targetUserID <= 0 || channelID == "" {
+		return errors.New("参数无效")
+	}
+	if ownerUserID == targetUserID {
+		return errors.New("不能拉黑自己")
+	}
+	var channel marketplaceschema.Channel
+	if err := platformdb.DB.Where("id = ? AND owner_user_id = ?", channelID, ownerUserID).First(&channel).Error; err != nil {
+		return err
+	}
+	if blocked {
+		return platformdb.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&marketplaceschema.ChannelUserBlock{ChannelID: channelID, UserID: targetUserID}).Error
+	}
+	return platformdb.DB.Where("channel_id = ? AND user_id = ?", channelID, targetUserID).Delete(&marketplaceschema.ChannelUserBlock{}).Error
 }
 
 func loadOwnedChannelGroup(ownerUserID int, channelID string) (*marketplaceschema.Channel, *marketplaceschema.Group, error) {

@@ -63,6 +63,12 @@ export function OwnerChannels(props: { onAdd: () => void }) {
             {t('添加渠道')}
           </Button>
         </header>
+        <div className='border-y border-amber-200/70 bg-amber-50/60 px-4 py-3 text-xs leading-5 text-amber-950 sm:px-5'>
+          <strong>{t('渠道关停与冻结额度规则')}</strong>：
+          {t(
+            '渠道被管理员关停后，仍处于冻结期的待结算额度会被直接清理并转入主管理员账户，不会结算到您的钱包；待结算收益不会因普通额度回收操作而变动。'
+          )}
+        </div>
         <OwnerIncomeOverview channels={channels} />
         <div>
           {query.isLoading ? (
@@ -239,6 +245,11 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                                 icon={WalletCards}
                                 label={t('已到账')}
                                 value={formatQuota(channel.released_income)}
+                              />
+                              <IncomeMetric
+                                icon={WalletCards}
+                                label={t('已回收额度')}
+                                value={formatQuota(channel.reclaimed_income)}
                               />
                               <IncomeMetric
                                 icon={Activity}

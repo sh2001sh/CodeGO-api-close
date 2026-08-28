@@ -40,6 +40,15 @@ func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBi
 	if !hasMarketplaceGroupAccessForGroup(&group, consumerUserID) {
 		return nil, errors.New("市场分组未公开或无权访问")
 	}
+	var blocked int64
+	if err := platformdb.DB.Model(&marketplaceschema.ChannelUserBlock{}).Where("channel_id = ? AND user_id = ?", group.ChannelID, consumerUserID).Count(&blocked).Error; err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "no such table") && !strings.Contains(strings.ToLower(err.Error()), "does not exist") {
+			return nil, err
+		}
+	}
+	if blocked > 0 {
+		return nil, errors.New("您已被该渠道主拉黑，无法使用此渠道")
+	}
 	var channel marketplaceschema.Channel
 	if err := platformdb.DB.Select("model_prices", "declared_models").First(&channel, "id = ?", group.ChannelID).Error; err != nil {
 		return nil, err

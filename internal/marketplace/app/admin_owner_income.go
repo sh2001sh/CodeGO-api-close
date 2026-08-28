@@ -18,7 +18,9 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 			COUNT(*) AS request_count,
 			COALESCE(SUM(owner_net_amount), 0) AS total_income,
 			COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income,
-			COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount ELSE 0 END), 0) AS released_income`)
+			COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount ELSE 0 END), 0) AS released_income,
+			COALESCE(SUM(CASE WHEN status = 'reclaimed' THEN owner_net_amount ELSE 0 END), 0) AS reclaimed_income,
+			COALESCE(SUM(CASE WHEN status = 'forfeited' THEN owner_net_amount ELSE 0 END), 0) AS forfeited_income`)
 	if normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch); normalizedSearch != "" {
 		ownerUserIDs, err := ownerUserIDsByExternalID(normalizedSearch)
 		if err != nil {
@@ -55,6 +57,8 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		result.TotalIncome += item.TotalIncome
 		result.PendingIncome += item.PendingIncome
 		result.ReleasedIncome += item.ReleasedIncome
+		result.ReclaimedIncome += item.ReclaimedIncome
+		result.ForfeitedIncome += item.ForfeitedIncome
 	}
 	return result, nil
 }
@@ -74,7 +78,10 @@ func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeRele
 			return &AdminOwnerIncomeReleaseResult{}, nil
 		}
 	}
-	result, err := marketplacesettlement.ReleasePending(marketplacesettlement.ReleaseFilter{
+	if len(input.OwnerUserIDs) > 0 {
+		ownerIDs = input.OwnerUserIDs
+	}
+	result, err := marketplacesettlement.ReclaimPending(marketplacesettlement.ReleaseFilter{
 		OwnerUserIDs: ownerIDs, StartTimestamp: input.StartTimestamp,
 		EndTimestamp: input.EndTimestamp,
 	})
@@ -82,6 +89,6 @@ func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeRele
 		return nil, err
 	}
 	return &AdminOwnerIncomeReleaseResult{
-		ReleasedCount: result.Count, ReleasedAmount: result.Amount,
+		ReclaimedCount: result.Count, ReclaimedAmount: result.Amount,
 	}, nil
 }

@@ -148,6 +148,8 @@ type ChannelView struct {
 	TotalIncome                      int64                        `json:"total_income"`
 	PendingIncome                    int64                        `json:"pending_income"`
 	ReleasedIncome                   int64                        `json:"released_income"`
+	ReclaimedIncome                  int64                        `json:"reclaimed_income"`
+	ForfeitedIncome                  int64                        `json:"forfeited_income"`
 	CreatedAt                        time.Time                    `json:"created_at"`
 	UpdatedAt                        time.Time                    `json:"updated_at"`
 }
@@ -166,13 +168,14 @@ type AdminChannelQuery struct {
 
 type AdminOwnerIncomeQuery struct {
 	OwnerSearch    string
+	OwnerUserIDs   []int
 	StartTimestamp int64
 	EndTimestamp   int64
 }
 
 type AdminOwnerIncomeReleaseResult struct {
-	ReleasedCount  int   `json:"released_count"`
-	ReleasedAmount int64 `json:"released_amount"`
+	ReclaimedCount  int   `json:"reclaimed_count"`
+	ReclaimedAmount int64 `json:"reclaimed_amount"`
 }
 
 type AdminOwnerIncomeItem struct {
@@ -182,15 +185,19 @@ type AdminOwnerIncomeItem struct {
 	TotalIncome     int64  `json:"total_income"`
 	PendingIncome   int64  `json:"pending_income"`
 	ReleasedIncome  int64  `json:"released_income"`
+	ReclaimedIncome int64  `json:"reclaimed_income"`
+	ForfeitedIncome int64  `json:"forfeited_income"`
 }
 
 type AdminOwnerIncomeResult struct {
-	Items          []AdminOwnerIncomeItem `json:"items"`
-	OwnerCount     int                    `json:"owner_count"`
-	RequestCount   int64                  `json:"request_count"`
-	TotalIncome    int64                  `json:"total_income"`
-	PendingIncome  int64                  `json:"pending_income"`
-	ReleasedIncome int64                  `json:"released_income"`
+	Items           []AdminOwnerIncomeItem `json:"items"`
+	OwnerCount      int                    `json:"owner_count"`
+	RequestCount    int64                  `json:"request_count"`
+	TotalIncome     int64                  `json:"total_income"`
+	PendingIncome   int64                  `json:"pending_income"`
+	ReleasedIncome  int64                  `json:"released_income"`
+	ReclaimedIncome int64                  `json:"reclaimed_income"`
+	ForfeitedIncome int64                  `json:"forfeited_income"`
 }
 
 type GroupQuery struct {
@@ -372,7 +379,15 @@ type RoutingBinding struct {
 }
 
 type AutoRoutePoolUpdateRequest struct {
-	GroupIDs []string `json:"group_ids"`
+	GroupIDs []string             `json:"group_ids"`
+	Config   *AutoRoutePoolConfig `json:"config,omitempty"`
+}
+
+type AutoRoutePoolConfig struct {
+	Strategy               string  `json:"strategy"`
+	MaxAttempts            int     `json:"max_attempts"`
+	FailureCooldownSeconds int     `json:"failure_cooldown_seconds"`
+	MaxMultiplier          float64 `json:"max_multiplier"`
 }
 
 type AutoRoutePoolItem struct {
@@ -401,4 +416,5 @@ type AutoRoutePoolView struct {
 	TokenGroup    string              `json:"token_group"`
 	SelectedCount int                 `json:"selected_count"`
 	Items         []AutoRoutePoolItem `json:"items"`
+	Config        AutoRoutePoolConfig `json:"config"`
 }

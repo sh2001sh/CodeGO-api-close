@@ -61,11 +61,12 @@ type OwnerUsageLogResult struct {
 }
 
 type OwnerUsageLogSummary struct {
-	RequestCount   int64 `json:"request_count"`
-	SuccessCount   int64 `json:"success_count"`
-	FailedCount    int64 `json:"failed_count"`
-	ConsumerAmount int64 `json:"consumer_amount"`
-	OwnerIncome    int64 `json:"owner_income"`
-	PendingIncome  int64 `json:"pending_income"`
-	ReleasedIncome int64 `json:"released_income"`
+	RequestCount    int64 `json:"request_count"`
+	SuccessCount    int64 `json:"success_count"`
+	FailedCount     int64 `json:"failed_count"`
+	ConsumerAmount  int64 `json:"consumer_amount"`
+	OwnerIncome     int64 `json:"owner_income"`
+	PendingIncome   int64 `json:"pending_income"`
+	ReleasedIncome  int64 `json:"released_income"`
+	ReclaimedIncome int64 `json:"reclaimed_income"`
 }

@@ -8,7 +8,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { useAdminMarketplaceVerification } from '../hooks'
+import {
+  useAdminMarketplaceVerification,
+  useMarketplaceMutations,
+} from '../hooks'
 import { failedConnectivityModels, hasGPT56Model } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
 
@@ -22,6 +25,7 @@ export function AdminChannelActions(props: {
   const connectivityTest = useAdminMarketplaceVerification('test')
   const connectivityRetry = useAdminMarketplaceVerification('retry-test')
   const verificationPause = useAdminMarketplaceVerification('pause')
+  const channelMutations = useMarketplaceMutations()
   const channel = props.channel
   const failedCount = failedConnectivityModels(
     channel.model_verification_results
@@ -100,6 +104,38 @@ export function AdminChannelActions(props: {
           {verificationPause.isPending ? t('正在暂停') : t('暂停检测')}
         </Button>
       )}
+      <Button
+        variant='outline'
+        size='sm'
+        disabled={channelMutations.adminPause.isPending}
+        onClick={() =>
+          channelMutations.adminPause.mutate(
+            {
+              id: channel.id,
+              paused: channel.lifecycle_status !== 'suspended',
+            },
+            {
+              onSuccess: () =>
+                toast.success(
+                  t(
+                    channel.lifecycle_status === 'suspended'
+                      ? '渠道已恢复'
+                      : '渠道已关停，冻结额度已清理'
+                  )
+                ),
+              onError: (error) =>
+                toast.error(
+                  error instanceof Error ? error.message : t('操作失败')
+                ),
+            }
+          )
+        }
+      >
+        <CirclePause />
+        {channel.lifecycle_status === 'suspended'
+          ? t('恢复渠道')
+          : t('关停并清理冻结额度')}
+      </Button>
       <Button variant='outline' size='sm' onClick={props.onEdit}>
         <Pencil />
         {t('编辑渠道')}

@@ -22,6 +22,8 @@ export function AdminIncomeFilter(props: {
   isError: boolean
   onRelease: () => void
   releasing: boolean
+  selectedOwnerIDs: number[]
+  onSelectedOwnerIDsChange: (ids: number[]) => void
 }) {
   const { t } = useTranslation()
   const report = props.report
@@ -45,6 +47,10 @@ export function AdminIncomeFilter(props: {
           <IncomeValue
             label={t('已到账收益')}
             value={formatQuota(report?.released_income ?? 0)}
+          />
+          <IncomeValue
+            label={t('已回收额度')}
+            value={formatQuota(report?.reclaimed_income ?? 0)}
           />
         </div>
         <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
@@ -92,12 +98,13 @@ export function AdminIncomeFilter(props: {
             disabled={
               props.releasing ||
               props.isFetching ||
-              (report?.pending_income ?? 0) <= 0
+              props.selectedOwnerIDs.length === 0 ||
+              (report?.released_income ?? 0) <= 0
             }
-            title={t('按当前用户和时间范围结算待结算收益')}
+            title={t('按选中用户和时间范围立即回收已结算额度')}
           >
             <WalletCards className={props.releasing ? 'animate-pulse' : ''} />
-            {props.releasing ? t('结算中') : t('立即结算待结算收益')}
+            {props.releasing ? t('回收中') : t('立即回收额度')}
           </Button>
         </div>
       </div>
@@ -108,14 +115,44 @@ export function AdminIncomeFilter(props: {
       )}
       {!props.isError && (report?.items.length ?? 0) > 0 && (
         <div className='border-border max-h-52 overflow-y-auto border-t'>
+          <label className='flex items-center gap-2 border-b px-4 py-2 text-xs'>
+            <input
+              type='checkbox'
+              checked={
+                report?.items.every((item) =>
+                  props.selectedOwnerIDs.includes(item.owner_user_id)
+                ) ?? false
+              }
+              onChange={(event) =>
+                props.onSelectedOwnerIDsChange(
+                  event.target.checked
+                    ? report!.items.map((item) => item.owner_user_id)
+                    : []
+                )
+              }
+            />
+            {t('选择全部渠道主')}
+          </label>
           {report?.items.map((item) => (
             <div
               key={item.owner_user_id}
               className='border-border grid grid-cols-2 gap-x-4 gap-y-1 border-b px-4 py-2.5 text-xs last:border-b-0 sm:grid-cols-[minmax(8rem,1fr)_repeat(4,minmax(6rem,auto))] sm:items-center'
             >
-              <span className='text-foreground font-medium tabular-nums'>
-                {t('渠道主 ID')}: {item.owner_external_id || '--'}
-              </span>
+              <label className='col-span-2 flex items-center gap-2 sm:col-span-1'>
+                <input
+                  type='checkbox'
+                  checked={props.selectedOwnerIDs.includes(item.owner_user_id)}
+                  onChange={(event) => {
+                    const next = new Set(props.selectedOwnerIDs)
+                    if (event.target.checked) next.add(item.owner_user_id)
+                    else next.delete(item.owner_user_id)
+                    props.onSelectedOwnerIDsChange(Array.from(next))
+                  }}
+                />
+                <span className='text-foreground font-medium tabular-nums'>
+                  {t('渠道主 ID')}: {item.owner_external_id || '--'}
+                </span>
+              </label>
               <ReportValue
                 label={t('收益')}
                 value={formatQuota(item.total_income)}
@@ -127,6 +164,10 @@ export function AdminIncomeFilter(props: {
               <ReportValue
                 label={t('已到账收益')}
                 value={formatQuota(item.released_income)}
+              />
+              <ReportValue
+                label={t('已回收额度')}
+                value={formatQuota(item.reclaimed_income)}
               />
               <ReportValue
                 label={t('请求')}

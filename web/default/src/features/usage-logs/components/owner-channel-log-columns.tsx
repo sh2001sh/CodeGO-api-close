@@ -154,6 +154,9 @@ function renderIncomeStatus(
   if (item.income_status === 'released') {
     return <Badge className='bg-success/10 text-success'>{t('已到账')}</Badge>
   }
+  if (item.income_status === 'reclaimed') {
+    return <Badge variant='secondary'>{t('已回收')}</Badge>
+  }
   if (item.income_status === 'pending') {
     return <Badge className='bg-warning/10 text-warning'>{t('待结算')}</Badge>
   }

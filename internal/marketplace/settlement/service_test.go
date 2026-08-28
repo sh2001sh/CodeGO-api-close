@@ -73,6 +73,32 @@ func TestRecordSelfConsumptionStillChargesCommission(t *testing.T) {
 	require.Equal(t, int64(95), item.OwnerNetAmount)
 }
 
+func TestReclaimPendingCreditsAdministratorAndMarksRecord(t *testing.T) {
+	db := openSettlementTestDB(t)
+	params := RecordParams{RequestID: "reclaim", GroupID: "group", OwnerUserID: 10, ConsumerUserID: 20, ConsumerDebitAmount: 100, SettlementGrossAmount: 100, WalletMultiplier: 1}
+	require.NoError(t, Record(params))
+	var recorded marketplaceschema.Settlement
+	require.NoError(t, db.First(&recorded, "request_id = ?", params.RequestID).Error)
+	require.NoError(t, db.Model(&recorded).Update("status", statusReleased).Error)
+	var creditedUser, creditedAmount int
+	RegisterReclaimHook(func(_ *gorm.DB, userID int, adminID int, amount int, _ string) error {
+		creditedUser, creditedAmount = userID, amount
+		require.Equal(t, 1, adminID)
+		return nil
+	})
+	t.Cleanup(func() { RegisterReclaimHook(nil) })
+	result, err := ReclaimPending(ReleaseFilter{})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Count)
+	require.EqualValues(t, 95, result.Amount)
+	require.Equal(t, 10, creditedUser)
+	require.Equal(t, 95, creditedAmount)
+	var item marketplaceschema.Settlement
+	require.NoError(t, db.First(&item, "request_id = ?", params.RequestID).Error)
+	require.Equal(t, statusReclaimed, item.Status)
+	require.NotNil(t, item.ReclaimedAt)
+}
+
 func TestRecordSubscriptionSettlementUsesWalletGrossForOwnerIncome(t *testing.T) {
 	db := openSettlementTestDB(t)
 	require.NoError(t, Record(RecordParams{

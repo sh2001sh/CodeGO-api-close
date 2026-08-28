@@ -85,6 +85,8 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 			view.TotalIncome = earnings[group.ID].TotalIncome
 			view.PendingIncome = earnings[group.ID].PendingIncome
 			view.ReleasedIncome = earnings[group.ID].ReleasedIncome
+			view.ReclaimedIncome = earnings[group.ID].ReclaimedIncome
+			view.ForfeitedIncome = earnings[group.ID].ForfeitedIncome
 			result = append(result, *view)
 		}
 	}

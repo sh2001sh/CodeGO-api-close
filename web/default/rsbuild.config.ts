@@ -11,7 +11,14 @@ export default defineConfig(({ envMode }) => {
   const serverUrl =
     process.env.VITE_REACT_APP_SERVER_URL ||
     env.rawPublicVars.VITE_REACT_APP_SERVER_URL ||
-    'http://localhost:3000'
+    'http://127.0.0.1:3000'
+
+  const backendPort = Number(new URL(serverUrl).port) || 3000
+  const requestedPort = Number(process.env.DEV_PORT) || 3001
+  // The Go control-api owns port 3000 in local development. Prevent an
+  // accidental frontend bind on the same port, which would make /api proxy
+  // requests loop back into Rsbuild until the client times out.
+  const frontendPort = requestedPort === backendPort ? backendPort + 1 : requestedPort
 
   const isProd = envMode === 'production'
   const devProxy = Object.fromEntries(
@@ -65,7 +72,7 @@ export default defineConfig(({ envMode }) => {
     },
     server: {
       host: '0.0.0.0',
-      port: Number(process.env.DEV_PORT) || undefined,
+      port: frontendPort,
       historyApiFallback: true,
       proxy: devProxy,
     },

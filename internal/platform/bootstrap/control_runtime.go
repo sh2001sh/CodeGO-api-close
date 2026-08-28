@@ -18,6 +18,8 @@ func startControlBackgroundTasks() {
 	// same idempotent wallet-credit hook used by the ledger worker so those
 	// actions work when the control plane is run independently.
 	marketplacesettlement.RegisterReleaseHook(billingapp.CreditMarketplaceOwnerEarningsTx)
+	marketplacesettlement.RegisterReclaimHook(billingapp.ReclaimMarketplaceOwnerEarningsTx)
+	marketplacesettlement.RegisterForfeitHook(billingapp.ForfeitMarketplacePendingEarningsTx)
 	marketplacesettlement.StartReleaseWorker(context.Background())
 
 	startOptionSyncLoop()

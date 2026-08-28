@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useDebounce } from '@/hooks'
-import { BarChart3, Plus, ShieldCheck, Store, UploadCloud } from 'lucide-react'
+import { Plus, Route, ShieldCheck, Store, UploadCloud } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
@@ -12,9 +12,8 @@ import { AdminGovernance } from './components/admin-governance'
 import { ChannelWorkspace } from './components/channel-workspace'
 import { MarketSurface } from './components/market-surface'
 import { MarketplaceAudienceGuide } from './components/marketplace-audience-guide'
-import { MarketplaceMultiplierTrend } from './components/marketplace-multiplier-trend'
 import { MarketplaceOverview } from './components/marketplace-overview'
-import { RankingLeaderboard } from './components/ranking-leaderboard'
+import { RoutePoolWorkspace } from './components/route-pool-workspace'
 import { TokenBindPanel } from './components/token-bind-panel'
 import { useMarketplaceGroups } from './hooks'
 import type { GroupFilters } from './types'
@@ -33,7 +32,7 @@ const defaultFilters: GroupFilters = {
   page_size: 20,
 }
 
-type MarketplaceTab = 'market' | 'insights' | 'mine' | 'admin'
+type MarketplaceTab = 'market' | 'routes' | 'mine' | 'admin'
 
 export function MarketplacePage() {
   const { t } = useTranslation()
@@ -147,7 +146,7 @@ export function MarketplacePage() {
             multiplier={groups.data?.highlights.cheapest?.multiplier}
             updating={groups.isFetching}
             onBrowse={() => setTab('market')}
-            onInsights={() => setTab('insights')}
+            onInsights={() => setTab('routes')}
           />
           <Tabs
             value={tab}
@@ -159,7 +158,7 @@ export function MarketplacePage() {
           >
             <TabsList
               variant='line'
-              className='border-border h-10 w-full justify-start gap-1 overflow-x-auto border-b px-1 sm:gap-2'
+              className='border-border flex h-auto min-h-10 w-full flex-wrap justify-start gap-1 border-b px-1 pb-1 sm:gap-2'
             >
               <TabsTrigger
                 value='market'
@@ -169,11 +168,11 @@ export function MarketplacePage() {
                 {t('市场分组')}
               </TabsTrigger>
               <TabsTrigger
-                value='insights'
+                value='routes'
                 className='min-w-20 px-2 sm:min-w-24 sm:px-3'
               >
-                <BarChart3 />
-                {t('排行与走势')}
+                <Route />
+                {t('路由池配置')}
               </TabsTrigger>
               <TabsTrigger
                 value='mine'
@@ -200,21 +199,8 @@ export function MarketplacePage() {
                 summary={`${t('共 {{total}} 个公开分组', { total: groups.data?.total ?? 0 })} · ${t('{{count}} 个达到正式排名门槛', { count: groups.data?.ranked_count ?? 0 })} · ${t('先看倍率、成功率和首字速度')}`}
               />
             </TabsContent>
-            <TabsContent value='insights'>
-              <div className='space-y-4'>
-                <RankingLeaderboard
-                  groups={[...(groups.data?.items ?? [])].sort(
-                    (a, b) => (b.score ?? 0) - (a.score ?? 0)
-                  )}
-                  loading={groups.isLoading}
-                  error={groups.isError}
-                  onRetry={() => void groups.refetch()}
-                />
-                <MarketplaceMultiplierTrend
-                  model={filters.model}
-                  onModelChange={(model) => updateFilters({ model, page: 1 })}
-                />
-              </div>
+            <TabsContent value='routes'>
+              <RoutePoolWorkspace />
             </TabsContent>
             <TabsContent value='mine'>
               <ChannelWorkspace

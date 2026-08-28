@@ -33,7 +33,7 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
       saving={update.isPending}
       onSave={async (groupIDs) => {
         try {
-          await update.mutateAsync(groupIDs)
+          await update.mutateAsync({ groupIds: groupIDs })
           toast.success(t('全局 Auto 路由池已保存'))
           return true
         } catch (error) {

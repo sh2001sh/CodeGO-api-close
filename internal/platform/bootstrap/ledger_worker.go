@@ -33,6 +33,8 @@ func RunLedgerWorker() {
 
 func startLedgerWorkerBackgroundTasks() {
 	marketplacesettlement.RegisterReleaseHook(billingapp.CreditMarketplaceOwnerEarningsTx)
+	marketplacesettlement.RegisterReclaimHook(billingapp.ReclaimMarketplaceOwnerEarningsTx)
+	marketplacesettlement.RegisterForfeitHook(billingapp.ForfeitMarketplacePendingEarningsTx)
 	marketplacesettlement.StartReleaseWorker(context.Background())
 	startOptionSyncLoop()
 	billingapp.StartLedgerWorker(context.Background())

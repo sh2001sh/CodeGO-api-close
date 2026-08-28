@@ -59,7 +59,7 @@ export function MarketplaceOverview(props: {
           className='codego-marketplace-overview-link'
           onClick={props.onInsights}
         >
-          {t('看走势')}
+          {t('看路由池')}
           <ArrowRight className='size-3' />
         </button>
         <span className='bg-border mx-1 h-3 w-px' />

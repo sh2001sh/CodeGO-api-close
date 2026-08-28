@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Store,
   RefreshCcw,
-  ReceiptText,
   ScrollText,
   Settings,
   Sparkles,

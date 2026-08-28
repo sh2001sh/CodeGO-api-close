@@ -56,7 +56,7 @@ export function MarketSurface(props: {
         </div>
       </div>
       {props.ranking && (
-        <div className='border-border border-y bg-primary/[0.05] px-4 py-3 text-xs leading-5'>
+        <div className='border-border bg-primary/[0.05] border-y px-4 py-3 text-xs leading-5'>
           <span className='text-foreground'>
             {t(
               '榜单使用 Wilson 可靠性修正，并综合 TTFT、总延迟、TPS 与倍率；小样本渠道会继续观测，不参与正式名次。'
@@ -64,6 +64,14 @@ export function MarketSurface(props: {
           </span>
         </div>
       )}
+      <div className='border-border bg-muted/35 border-b px-4 py-3 text-xs leading-5 sm:px-5'>
+        <div className='font-medium'>{t('第三方市场分组免责声明')}</div>
+        <p className='text-muted-foreground mt-1'>
+          {t(
+            '市场中的分组由用户提交并由平台提供路由管理，不代表官方服务或官方授权。平台不保证第三方分组的安全性、合法性、可用性、稳定性、模型能力或数据处理方式，请自行评估渠道来源、凭据风险和使用结果；因第三方分组导致的服务中断、数据或隐私风险、额度损失由使用者自行承担。'
+          )}
+        </p>
+      </div>
       <div className='border-border border-b px-4 sm:px-5'>
         <Tabs
           value={props.filters.source || 'all'}
@@ -103,6 +111,7 @@ export function MarketSurface(props: {
         loading={props.query.isLoading}
         error={props.query.isError}
         routePoolEnabled={!props.ranking}
+        model={props.filters.model}
         onRetry={() => void props.query.refetch()}
       />
       <div className='border-border bg-muted/15 flex items-center justify-between border-t px-4 py-3'>

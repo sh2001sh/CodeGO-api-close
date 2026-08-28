@@ -7,6 +7,7 @@ import {
   Pencil,
   Play,
   ShieldCheck,
+  ShieldBan,
   Trash2,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -89,11 +90,33 @@ export function OwnerChannelActions(props: {
     }
   }
 
+  const blockUser = () => {
+    const userId = Number(window.prompt(t('请输入要拉黑的用户 ID')))
+    if (!Number.isInteger(userId) || userId <= 0) return
+    mutations.userBlock.mutate(
+      { channelId: channel.id, userId, blocked: true },
+      {
+        onSuccess: () => toast.success(t('用户已被拉黑')),
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : t('拉黑失败')),
+      }
+    )
+  }
+
   return (
     <div className='flex shrink-0 flex-wrap items-center gap-2 lg:justify-end'>
       <Button variant='outline' size='sm' onClick={props.onEdit}>
         <Pencil />
         {t('编辑')}
+      </Button>
+      <Button
+        variant='outline'
+        size='sm'
+        onClick={blockUser}
+        disabled={mutations.userBlock.isPending}
+      >
+        <ShieldBan />
+        {t('拉黑用户')}
       </Button>
       <Button
         variant='outline'

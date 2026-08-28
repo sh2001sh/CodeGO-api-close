@@ -28,10 +28,13 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.POST("/groups/:id/feedback", middleware.CriticalRateLimit(), SubmitChannelFeedback)
 		marketplaceRoute.GET("/auto-route-pool", GetAutoRoutePool)
 		marketplaceRoute.PUT("/auto-route-pool", middleware.CriticalRateLimit(), UpdateAutoRoutePool)
+		marketplaceRoute.POST("/batch-tests", middleware.CriticalRateLimit(), StartBatchTest)
+		marketplaceRoute.GET("/batch-tests/:id", GetBatchTest)
 		marketplaceRoute.POST("/channels", middleware.CriticalRateLimit(), CreateChannel)
 		marketplaceRoute.POST("/channels/fetch-models", middleware.CriticalRateLimit(), FetchModels)
 		marketplaceRoute.GET("/channels/mine", ListMyChannels)
 		marketplaceRoute.GET("/channels/mine/logs", ListMyUsageLogs)
+		marketplaceRoute.GET("/channels/mine/observability", ListMyObservability)
 		marketplaceRoute.PATCH("/channels/:id", UpdateChannel)
 		marketplaceRoute.DELETE("/channels/:id", DeleteChannel)
 		marketplaceRoute.POST("/channels/:id/verify", middleware.CriticalRateLimit(), VerifyChannel)
@@ -42,6 +45,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.POST("/channels/:id/verification/pause", PauseChannelVerification)
 		marketplaceRoute.POST("/channels/:id/pause", PauseChannel)
 		marketplaceRoute.POST("/channels/:id/resume", ResumeChannel)
+		marketplaceRoute.POST("/channels/:id/user-block", SetChannelUserBlock)
 	}
 
 	adminRoute := apiRouter.Group("/marketplace/admin")
@@ -57,6 +61,8 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		adminRoute.POST("/channels/:id/test/failed", middleware.CriticalRateLimit(), RetryFailedAdminChannelConnectivity)
 		adminRoute.POST("/channels/:id/models/remove-failed", middleware.CriticalRateLimit(), RemoveFailedAdminChannelModel)
 		adminRoute.POST("/channels/:id/verification/pause", PauseAdminChannelVerification)
+		adminRoute.POST("/channels/:id/pause", PauseAdminChannel)
+		adminRoute.POST("/channels/:id/resume", ResumeAdminChannel)
 		adminRoute.DELETE("/channels/:id", DeleteAdminChannel)
 		adminRoute.POST("/channels/:id/review", middleware.CriticalRateLimit(), ReviewChannel)
 	}

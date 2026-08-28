@@ -34,6 +34,9 @@ export function GroupMarketItem(props: {
   routePoolAdding: boolean
   onAddToRoutePool: () => void
   showRoutePoolAction: boolean
+  selectable?: boolean
+  selected?: boolean
+  onSelect?: () => void
 }) {
   const { t } = useTranslation()
   const group = props.group
@@ -45,7 +48,20 @@ export function GroupMarketItem(props: {
       <div className='px-3 py-3 sm:px-4'>
         <header className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 xl:grid-cols-[minmax(280px,1.1fr)_minmax(420px,1fr)_auto]'>
           <div className='flex min-w-0 items-center gap-3'>
-            <RankBadge group={group} />
+            <div className='flex items-center gap-2'>
+              {props.selectable && (
+                <input
+                  type='checkbox'
+                  checked={props.selected}
+                  onChange={props.onSelect}
+                  aria-label={t('选择 {{name}} 进行批量测试', {
+                    name: group.system_display_name,
+                  })}
+                  className='accent-primary size-4 shrink-0'
+                />
+              )}
+              <RankBadge group={group} />
+            </div>
             <div className='min-w-0 flex-1'>
               <div className='flex min-w-0 items-center gap-2'>
                 <h4

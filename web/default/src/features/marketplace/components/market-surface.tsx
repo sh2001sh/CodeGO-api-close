@@ -111,7 +111,6 @@ export function MarketSurface(props: {
         loading={props.query.isLoading}
         error={props.query.isError}
         routePoolEnabled={!props.ranking}
-        model={props.filters.model}
         onRetry={() => void props.query.refetch()}
       />
       <div className='border-border bg-muted/15 flex items-center justify-between border-t px-4 py-3'>

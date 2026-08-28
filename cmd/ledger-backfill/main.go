@@ -19,6 +19,7 @@ import (
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -58,6 +59,7 @@ func main() {
 	normalizeNegativeWalletLegacy := flag.Bool("normalize-negative-wallet-legacy", false, "normalize strict negative legacy wallet quotas to the canonical zero ledger balance")
 	groupBuyID := flag.Int64("reconcile-group-buy-id", 0, "reconcile missing group-buy tier bonus for one group")
 	balanceBlindBoxLossBefore := flag.Int64("balance-blind-box-loss-compensation-before", 0, "compensate users whose balance blind-box rewards were below their total $15 draw cost before this Unix timestamp")
+	backfillMarketplaceSettlements := flag.Bool("backfill-marketplace-settlements", false, "backfill missing marketplace settlement rows from request logs")
 	flag.Parse()
 
 	platformconfig.IsMasterNode = true
@@ -118,6 +120,21 @@ func main() {
 			log.Fatalf("normalize negative legacy wallet quotas: %v", err)
 		}
 		fmt.Println("negative legacy wallet quota normalization completed")
+		return
+	}
+	if *backfillMarketplaceSettlements {
+		report, err := marketplaceapp.BackfillMissingSettlements(*limit, *apply)
+		if err != nil {
+			log.Fatalf("backfill marketplace settlements: %v", err)
+		}
+		fmt.Printf("marketplace settlements candidates: %d\n", report.Candidates)
+		fmt.Printf("marketplace settlements existing: %d\n", report.Existing)
+		fmt.Printf("marketplace settlements skipped: %d\n", report.Skipped)
+		fmt.Printf("marketplace settlements invalid: %d\n", report.Invalid)
+		fmt.Printf("marketplace settlements created: %d\n", report.Created)
+		if !*apply {
+			fmt.Println("dry-run only; rerun with --apply --backfill-marketplace-settlements to create missing settlements")
+		}
 		return
 	}
 

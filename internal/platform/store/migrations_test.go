@@ -77,6 +77,14 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	} {
 		require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, column), column)
 	}
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Settlement{}, "ReclaimedAt"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Settlement{}, "ForfeitedAt"))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.Settlement{}, "ReclaimedAt"))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.Settlement{}, "ForfeitedAt"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260828_marketplace_settlement_terminal_timestamps"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Settlement{}, "ReclaimedAt"))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.Settlement{}, "ForfeitedAt"))
 	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.RankingSnapshot{}, "AttemptTTFTP95Ms"))
 	require.True(t, appliedMigrationNeedsRepair(db, "20260819_marketplace_latency_metrics"))
 	require.NoError(t, ApplyV2Migrations(context.Background(), false))

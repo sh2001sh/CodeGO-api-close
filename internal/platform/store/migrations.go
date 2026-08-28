@@ -151,6 +151,7 @@ func V2MigrationIDs() []string {
 		"20260821_marketplace_group_invites",
 		"20260827_marketplace_channel_user_blocks",
 		"20260828_marketplace_auto_route_pool_config",
+		"20260828_marketplace_settlement_terminal_timestamps",
 		"20260817_marketplace_transport_capabilities",
 		"20260817_responses_background",
 		"20260818_multiplier_precision",
@@ -344,6 +345,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260828_marketplace_auto_route_pool_config", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.AutoRoutePoolConfig{})
 		}},
+		{ID: "20260828_marketplace_settlement_terminal_timestamps", Run: migrateMarketplaceSettlementTerminalTimestamps},
 		{ID: "20260817_marketplace_transport_capabilities", Run: migrateMarketplaceTransportCapabilities},
 		{ID: "20260817_responses_background", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{})
@@ -755,6 +757,10 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	case "20260821_marketplace_group_invites":
 		return !db.Migrator().HasTable(&marketplaceschema.GroupInvite{}) ||
 			!db.Migrator().HasTable(&marketplaceschema.GroupAccess{})
+	case "20260828_marketplace_settlement_terminal_timestamps":
+		return !db.Migrator().HasTable(&marketplaceschema.Settlement{}) ||
+			!db.Migrator().HasColumn(&marketplaceschema.Settlement{}, "ReclaimedAt") ||
+			!db.Migrator().HasColumn(&marketplaceschema.Settlement{}, "ForfeitedAt")
 	case "20260817_marketplace_transport_capabilities":
 		return db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "TransportCapabilities")
@@ -788,6 +794,25 @@ func migrateMarketplaceSubscriptionBilling(tx *gorm.DB) error {
 	return tx.Model(&marketplaceschema.Settlement{}).
 		Where("settlement_gross_amount = 0").
 		Update("settlement_gross_amount", gorm.Expr("consumer_amount")).Error
+}
+
+// migrateMarketplaceSettlementTerminalTimestamps repairs schemas created
+// before reclaimed/forfeited timestamps were added to marketplace settlements.
+// Keep the checks explicit so this remains safe on databases that already have
+// either column and on SQLite's limited ALTER TABLE implementation.
+func migrateMarketplaceSettlementTerminalTimestamps(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+		return tx.AutoMigrate(&marketplaceschema.Settlement{})
+	}
+	for _, field := range []string{"ReclaimedAt", "ForfeitedAt"} {
+		if tx.Migrator().HasColumn(&marketplaceschema.Settlement{}, field) {
+			continue
+		}
+		if err := tx.Migrator().AddColumn(&marketplaceschema.Settlement{}, field); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func marketplaceSubscriptionBillingNeedsRepair(db *gorm.DB) bool {

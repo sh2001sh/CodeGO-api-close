@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Clock3,
   LoaderCircle,
+  ListFilter,
   ShieldCheck,
   Sparkles,
   XCircle,
@@ -10,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Combobox } from '@/components/ui/combobox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StaggerContainer, StaggerItem } from '@/components/page-transition'
 import {
@@ -32,12 +34,12 @@ export function MarketplaceGroupList(props: {
   error: boolean
   routePoolEnabled?: boolean
   onRetry: () => void
-  model?: string
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState('')
   const [addingGroupID, setAddingGroupID] = useState('')
   const [selectedGroupIDs, setSelectedGroupIDs] = useState<string[]>([])
+  const [testModel, setTestModel] = useState('')
   const [testState, setTestState] = useState<'idle' | 'running' | 'done'>(
     'idle'
   )
@@ -64,6 +66,25 @@ export function MarketplaceGroupList(props: {
   const selectableGroups = props.groups.filter(
     (group) => group.lifecycle_status === 'active'
   )
+  const availableTestModels = useMemo(() => {
+    const groups = selectedGroupIDs
+      .map((id) => selectableGroups.find((group) => group.id === id))
+      .filter((group): group is MarketplaceGroup => Boolean(group))
+    if (groups.length === 0) return []
+    const supportedByAll = new Set(
+      groups
+        .slice(1)
+        .flatMap((group) => group.models.map((model) => model.toLowerCase()))
+    )
+    return groups[0].models.filter(
+      (model) => groups.length === 1 || supportedByAll.has(model.toLowerCase())
+    )
+  }, [selectedGroupIDs, selectableGroups])
+
+  useEffect(() => {
+    if (testModel && !availableTestModels.includes(testModel)) setTestModel('')
+  }, [availableTestModels, testModel])
+
   const toggleSelected = (groupID: string) => {
     setSelectedGroupIDs((current) =>
       current.includes(groupID)
@@ -74,20 +95,25 @@ export function MarketplaceGroupList(props: {
     )
   }
 
+  const resetBatchTest = () => {
+    setSelectedGroupIDs([])
+    setTestModel('')
+    setBatchID('')
+    setTestState('idle')
+    setTestResults({})
+    setResultSelectedGroupIDs([])
+  }
+
   const runBatchTest = async () => {
-    const targetGroupIDs =
-      selectedGroupIDs.length > 0
-        ? selectedGroupIDs
-        : selectableGroups.slice(0, 5).map((group) => group.id)
+    const targetGroupIDs = selectedGroupIDs
     const targetGroups = targetGroupIDs
       .map((id) => props.groups.find((group) => group.id === id))
       .filter((group): group is MarketplaceGroup => Boolean(group))
-    if (targetGroupIDs.length === 0)
-      return toast.error(t('当前没有可测试的可用分组'))
-    const model = props.model?.trim() || findSharedModel(targetGroups)
+    if (targetGroupIDs.length === 0) {
+      return toast.error(t('请先选择 1-5 个可用分组'))
+    }
+    const model = testModel.trim()
     if (!model) return toast.error(t('请选择一个模型'))
-    if (selectedGroupIDs.length === 0 && selectableGroups.length > 5)
-      toast.info(t('未选择分组，默认测试当前页前 5 个可用分组'))
     try {
       const task = await batchStart.mutateAsync({
         groupIds: targetGroupIDs,
@@ -182,38 +208,74 @@ export function MarketplaceGroupList(props: {
 
   return (
     <div className='bg-muted/25 space-y-1.5 p-2'>
-      <div className='border-border bg-card flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2'>
-        <div className='text-muted-foreground text-xs'>
-          <span className='text-foreground font-medium'>{t('批量测试')}</span>
-          <span className='ml-2'>
-            {t(
-              '可先直接测试当前页分组，再从结果中选择分组加入路由池；单次最多 5 个。'
-            )}
-          </span>
-        </div>
-        <div className='flex items-center gap-2'>
+      <div className='border-border bg-card rounded-md border px-3 py-3 sm:px-4'>
+        <div className='flex flex-wrap items-start justify-between gap-3'>
+          <div className='min-w-0'>
+            <div className='flex items-center gap-2 text-sm font-semibold'>
+              <ListFilter className='text-primary size-4' aria-hidden='true' />
+              {t('分组连通性测试')}
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs leading-5'>
+              {t(
+                '先勾选分组，再选择这些分组共同支持的模型；每次最多测试 5 个分组。'
+              )}
+            </p>
+          </div>
           <span className='text-muted-foreground text-xs tabular-nums'>
             {selectedGroupIDs.length > 0
-              ? t('已选 {{count}} 个测试对象', {
+              ? t('已选 {{count}} 个分组', { count: selectedGroupIDs.length })
+              : t('请选择测试分组')}
+          </span>
+        </div>
+        <div className='mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,22rem)_auto] sm:items-end'>
+          <div className='text-muted-foreground flex min-h-9 items-center rounded-md border border-dashed px-3 text-xs'>
+            {selectedGroupIDs.length > 0
+              ? t('将测试已勾选的 {{count}} 个分组', {
                   count: selectedGroupIDs.length,
                 })
-              : t('未选择时默认测试前 5 个')}
-          </span>
+              : t('在下方列表勾选至少一个可用分组')}
+          </div>
+          <label className='min-w-0'>
+            <span className='text-muted-foreground mb-1 block text-xs'>
+              {t('测试模型')}
+            </span>
+            <Combobox
+              options={availableTestModels.map((model) => ({
+                value: model,
+                label: model,
+              }))}
+              value={testModel}
+              onValueChange={(value) => setTestModel(value ?? '')}
+              placeholder={
+                selectedGroupIDs.length === 0
+                  ? t('先选择分组')
+                  : availableTestModels.length === 0
+                    ? t('所选分组没有共同模型')
+                    : t('搜索并选择模型')
+              }
+              searchPlaceholder={t('搜索模型')}
+              emptyText={t('没有匹配的共同模型')}
+              className='w-full'
+            />
+          </label>
           <Button
             size='sm'
             disabled={
-              (selectedGroupIDs.length === 0 &&
-                selectableGroups.length === 0) ||
+              selectedGroupIDs.length === 0 ||
+              !testModel ||
               testState === 'running'
             }
             onClick={() => void runBatchTest()}
           >
-            {testState === 'running'
-              ? t('测试中…')
-              : selectedGroupIDs.length > 0
-                ? t('开始批量测试')
-                : t('测试当前页分组')}
+            {testState === 'running' ? t('测试中…') : t('开始测试')}
           </Button>
+        </div>
+        {selectedGroupIDs.length > 0 && availableTestModels.length === 0 && (
+          <p className='text-destructive mt-2 text-xs'>
+            {t('当前选择的分组没有共同模型，请减少分组或重新选择。')}
+          </p>
+        )}
+        <div className='mt-2 flex justify-end'>
           {testState === 'done' && (
             <>
               <Button
@@ -252,7 +314,7 @@ export function MarketplaceGroupList(props: {
             variant='ghost'
             size='sm'
             disabled={selectedGroupIDs.length === 0 && testState === 'idle'}
-            onClick={() => setSelectedGroupIDs([])}
+            onClick={resetBatchTest}
           >
             {t('清空')}
           </Button>
@@ -266,6 +328,11 @@ export function MarketplaceGroupList(props: {
                 ? t('正在按分组执行测试')
                 : t('批量测试完成')}
             </div>
+            {batchQuery.data?.model && (
+              <span className='text-foreground font-mono'>
+                {t('模型 {{model}}', { model: batchQuery.data.model })}
+              </span>
+            )}
             <span className='text-muted-foreground'>
               {t(
                 '本次测试会按当前用户实际计费规则扣除额度，并写入普通用量日志'
@@ -378,6 +445,10 @@ export function MarketplaceGroupList(props: {
               showRoutePoolAction={props.routePoolEnabled !== false}
               selectable={selectableGroups.some((item) => item.id === group.id)}
               selected={selectedGroupIDs.includes(group.id)}
+              selectionDisabled={
+                selectedGroupIDs.length >= 5 &&
+                !selectedGroupIDs.includes(group.id)
+              }
               onSelect={() => toggleSelected(group.id)}
             />
           </StaggerItem>
@@ -417,17 +488,6 @@ function batchStatusPresentation(
     className: 'text-muted-foreground',
     label: t('等待'),
   }
-}
-
-function findSharedModel(groups: MarketplaceGroup[]): string {
-  const first = groups[0]?.models ?? []
-  if (groups.length <= 1) return first[0] ?? ''
-  const supportedByAll = new Set(
-    groups
-      .slice(1)
-      .flatMap((group) => group.models.map((model) => model.toLowerCase()))
-  )
-  return first.find((model) => supportedByAll.has(model.toLowerCase())) ?? ''
 }
 
 function GroupListError(props: { onRetry: () => void }) {

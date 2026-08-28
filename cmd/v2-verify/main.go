@@ -10,6 +10,7 @@ import (
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformstore "github.com/sh2001sh/new-api/internal/platform/store"
@@ -25,6 +26,7 @@ type verificationReport struct {
 	InconsistentLedgers                int
 	PendingOutboxEvents                int64
 	LegacyBlindBoxCredits              int64
+	MissingSettlementColumns           []string
 }
 
 func main() {
@@ -65,6 +67,13 @@ func verify(ctx context.Context) (verificationReport, error) {
 		}
 		if count == 0 {
 			report.MissingMigrations = append(report.MissingMigrations, id)
+		}
+	}
+	if platformdb.DB.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+		for _, column := range []string{"ReclaimedAt", "ForfeitedAt"} {
+			if !platformdb.DB.Migrator().HasColumn(&marketplaceschema.Settlement{}, column) {
+				report.MissingSettlementColumns = append(report.MissingSettlementColumns, column)
+			}
 		}
 	}
 
@@ -183,6 +192,7 @@ func countUnmaterializedAccounts[T any](ctx context.Context, model *T, ownerFor 
 
 func (report verificationReport) hasFailures(strict bool) bool {
 	return len(report.MissingMigrations) > 0 ||
+		len(report.MissingSettlementColumns) > 0 ||
 		report.InconsistentLedgers > 0 ||
 		(strict && (report.PendingOutboxEvents > 0 || report.LegacyBlindBoxCredits > 0))
 }
@@ -191,6 +201,10 @@ func printReport(report verificationReport) {
 	fmt.Printf("missing migrations: %d\n", len(report.MissingMigrations))
 	for _, id := range report.MissingMigrations {
 		fmt.Printf("  %s\n", id)
+	}
+	fmt.Printf("missing marketplace settlement columns: %d\n", len(report.MissingSettlementColumns))
+	for _, column := range report.MissingSettlementColumns {
+		fmt.Printf("  %s\n", column)
 	}
 	fmt.Printf("unmaterialized wallet accounts: %d\n", report.UnmaterializedWalletAccounts)
 	fmt.Printf("unmaterialized Claude wallet accounts: %d\n", report.UnmaterializedClaudeWalletAccounts)

@@ -36,6 +36,7 @@ export function GroupMarketItem(props: {
   showRoutePoolAction: boolean
   selectable?: boolean
   selected?: boolean
+  selectionDisabled?: boolean
   onSelect?: () => void
 }) {
   const { t } = useTranslation()
@@ -53,6 +54,12 @@ export function GroupMarketItem(props: {
                 <input
                   type='checkbox'
                   checked={props.selected}
+                  disabled={props.selectionDisabled}
+                  title={
+                    props.selectionDisabled
+                      ? t('单次最多选择 5 个分组')
+                      : undefined
+                  }
                   onChange={props.onSelect}
                   aria-label={t('选择 {{name}} 进行批量测试', {
                     name: group.system_display_name,

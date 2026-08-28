@@ -149,7 +149,6 @@ func V2MigrationIDs() []string {
 		"20260817_marketplace_multiplier_trends",
 		"20260817_marketplace_subscription_billing",
 		"20260821_marketplace_group_invites",
-		"20260827_marketplace_channel_user_blocks",
 		"20260817_marketplace_transport_capabilities",
 		"20260817_responses_background",
 		"20260818_multiplier_precision",
@@ -336,9 +335,6 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260817_marketplace_subscription_billing", Run: migrateMarketplaceSubscriptionBilling},
 		{ID: "20260821_marketplace_group_invites", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.GroupInvite{}, &marketplaceschema.GroupAccess{})
-		}},
-		{ID: "20260827_marketplace_channel_user_blocks", Run: func(tx *gorm.DB) error {
-			return tx.AutoMigrate(&marketplaceschema.ChannelUserBlock{})
 		}},
 		{ID: "20260817_marketplace_transport_capabilities", Run: migrateMarketplaceTransportCapabilities},
 		{ID: "20260817_responses_background", Run: func(tx *gorm.DB) error {

@@ -40,21 +40,37 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 		t.Fatalf("failed to seed user: %v", err)
 	}
 	if err := db.Create(&billingschema.BillingAccount{
-		AccountID:  "profile-history-wallet",
+		AccountID:   "profile-history-wallet",
 		AccountType: "wallet",
-		OwnerType:  "user",
-		OwnerID:    int64(user.Id),
-		QuotaUnit:  "quota",
-		Status:     "active",
+		OwnerType:   "user",
+		OwnerID:     int64(user.Id),
+		QuotaUnit:   "quota",
+		Status:      "active",
 	}).Error; err != nil {
 		t.Fatalf("failed to seed billing account: %v", err)
 	}
 	if err := db.Create(&billingschema.BillingBalanceSnapshot{
-		AccountID:       "profile-history-wallet",
-		ConsumedTotal:   9,
+		AccountID:        "profile-history-wallet",
+		ConsumedTotal:    9,
 		AvailableBalance: 1,
 	}).Error; err != nil {
 		t.Fatalf("failed to seed billing snapshot: %v", err)
+	}
+	if err := db.Create(&billingschema.BillingReservation{
+		ReservationID: "profile-history-reservation", RequestID: "profile-history-request",
+		AccountID: "profile-history-wallet", ReservedAmount: 9,
+		Status:         billingschema.BillingReservationStatusSettled,
+		IdempotencyKey: "profile-history-reservation-key",
+	}).Error; err != nil {
+		t.Fatalf("failed to seed billing reservation: %v", err)
+	}
+	if err := db.Create(&billingschema.BillingSettlement{
+		SettlementID: "profile-history-settlement", ReservationID: "profile-history-reservation",
+		UsageEvidenceID: "profile-history-evidence", ActualAmount: 9,
+		Status:         billingschema.BillingSettlementStatusCompleted,
+		IdempotencyKey: "profile-history-settlement-key",
+	}).Error; err != nil {
+		t.Fatalf("failed to seed billing settlement: %v", err)
 	}
 
 	ctx, recorder := newAuthenticatedContext(t, "GET", "/api/user/self", nil, user.Id)

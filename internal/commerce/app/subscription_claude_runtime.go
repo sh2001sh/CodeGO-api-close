@@ -361,10 +361,9 @@ func consumeMonthlyPassConversionQuotaTx(tx *gorm.DB, sub *commerceschema.UserSu
 		return err
 	}
 	_, err = billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{
-		ReservationID:   reservation.ReservationID,
-		UsageEvidenceID: requestID,
-		ActualAmount:    amount,
-		IdempotencyKey:  "monthly-pass-conversion:" + requestID + ":settle",
+		ReservationID:  reservation.ReservationID,
+		ActualAmount:   amount,
+		IdempotencyKey: "monthly-pass-conversion:" + requestID + ":settle",
 	})
 	return err
 }

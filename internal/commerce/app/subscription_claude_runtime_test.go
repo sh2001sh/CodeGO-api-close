@@ -51,6 +51,9 @@ func TestConvertMonthlyPassToUnifiedCreditPartialPercentage(t *testing.T) {
 	var snapshot billingschema.BillingBalanceSnapshot
 	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
 	assert.Equal(t, int64(platformruntime.QuotaPerUnit)*20, snapshot.AvailableBalance)
+	var settlement billingschema.BillingSettlement
+	require.NoError(t, db.Where("idempotency_key = ?", "monthly-pass-conversion:req-partial-60:settle").First(&settlement).Error)
+	assert.Empty(t, settlement.UsageEvidenceID)
 }
 
 func TestConvertMonthlyPassToUnifiedCreditAllRemainingEndsPass(t *testing.T) {

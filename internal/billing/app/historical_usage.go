@@ -7,8 +7,10 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
 
-// GetUserLedgerConsumedQuota returns the total settled usage represented by
-// the user's wallet and subscription billing accounts.
+// GetUserLedgerConsumedQuota returns request-backed settled usage from the
+// user's wallet and subscription billing accounts. Non-request balance moves
+// such as migrations, transfers, blind-box purchases, and conversions are not
+// user API consumption and are intentionally excluded.
 func GetUserLedgerConsumedQuota(userID int) (int64, error) {
 	if userID <= 0 {
 		return 0, fmt.Errorf("invalid user id")
@@ -37,17 +39,23 @@ func GetUserLedgerConsumedQuota(userID int) (int64, error) {
 		return 0, nil
 	}
 
+	settlementTable := billingschema.BillingSettlement{}.TableName()
+	reservationTable := billingschema.BillingReservation{}.TableName()
 	var consumed int64
-	if err := platformdb.DB.Model(&billingschema.BillingBalanceSnapshot{}).
-		Where("account_id IN ?", accountIDs).
-		Select("COALESCE(SUM(consumed_total), 0)").
+	if err := platformdb.DB.Model(&billingschema.BillingSettlement{}).
+		Joins("JOIN "+reservationTable+" AS usage_reservations ON usage_reservations.reservation_id = "+settlementTable+".reservation_id").
+		Where("usage_reservations.account_id IN ?", accountIDs).
+		Where(settlementTable+".status = ?", billingschema.BillingSettlementStatusCompleted).
+		Where(settlementTable+".usage_evidence_id <> ?", "").
+		Where(settlementTable+".idempotency_key NOT LIKE ?", "monthly-pass-conversion:%").
+		Select("COALESCE(SUM(" + settlementTable + ".actual_amount), 0)").
 		Scan(&consumed).Error; err != nil {
 		return 0, err
 	}
 	return consumed, nil
 }
 
-// GetUserHistoricalUsedQuota prefers the ledger balance projection and
+// GetUserHistoricalUsedQuota prefers request-backed ledger settlements and
 // falls back to the legacy counter for users without a complete ledger.
 // Taking the larger value avoids double counting while old and new billing
 // paths are being reconciled.

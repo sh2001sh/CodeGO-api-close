@@ -58,7 +58,7 @@ func BackfillMissingSettlements(limit int, apply bool) (SettlementBackfillReport
 		}
 		var logs []auditschema.Log
 		err := logDB.Model(&auditschema.Log{}).
-			Where("id > ? AND type = ? AND request_id <> '' AND other LIKE ?", lastID, auditschema.LogTypeConsume, "%\"marketplace_group_id\"%").
+			Where("id > ? AND type = ? AND request_id <> ''", lastID, auditschema.LogTypeConsume).
 			Order("id asc").Limit(batchLimit).Find(&logs).Error
 		if err != nil {
 			return report, err
@@ -79,6 +79,16 @@ func BackfillMissingSettlements(limit int, apply bool) (SettlementBackfillReport
 }
 
 func backfillSettlementBatch(logs []auditschema.Log, apply bool, report *SettlementBackfillReport) error {
+	candidates := make([]auditschema.Log, 0, len(logs))
+	for _, log := range logs {
+		if strings.Contains(log.Other, `"marketplace_group_id"`) {
+			candidates = append(candidates, log)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	logs = candidates
 	requestIDs := make([]string, 0, len(logs))
 	groupIDs := make([]string, 0, len(logs))
 	seenGroups := make(map[string]struct{}, len(logs))

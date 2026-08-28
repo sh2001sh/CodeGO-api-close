@@ -109,6 +109,9 @@ func Record(params RecordParams) error {
 		if err != nil {
 			return err
 		}
+		if commission <= 0 {
+			return nil
+		}
 		_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 			AccountID: platformAccount.AccountID, Amount: commission,
 			IdempotencyKey: "marketplace-platform:" + params.RequestID,

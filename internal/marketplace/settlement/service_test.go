@@ -118,6 +118,19 @@ func TestRecordSubscriptionSettlementUsesWalletGrossForOwnerIncome(t *testing.T)
 	require.Equal(t, 0.6, item.SubscriptionMultiplier)
 }
 
+func TestRecordAllowsZeroRoundedPlatformCommission(t *testing.T) {
+	db := openSettlementTestDB(t)
+	require.NoError(t, Record(RecordParams{
+		RequestID: "small", GroupID: "group", OwnerUserID: 10,
+		ConsumerUserID: 20, BillingSource: "wallet", ConsumerDebitAmount: 1,
+		SettlementGrossAmount: 1, WalletMultiplier: 1,
+	}))
+	var item marketplaceschema.Settlement
+	require.NoError(t, db.First(&item, "request_id = ?", "small").Error)
+	require.Zero(t, item.PlatformCommission)
+	require.Equal(t, int64(1), item.OwnerNetAmount)
+}
+
 func openSettlementTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	originalDB := platformdb.DB

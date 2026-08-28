@@ -152,6 +152,10 @@ func backfillSettlementBatch(logs []auditschema.Log, apply bool, report *Settlem
 			continue
 		}
 		gross := settlementBackfillGross(int64(log.Quota), payload.BillingSource)
+		if gross <= 0 {
+			report.Skipped++
+			continue
+		}
 		multiplier := payload.MarketplaceMultiplier
 		if multiplier <= 0 {
 			multiplier = group.Multiplier

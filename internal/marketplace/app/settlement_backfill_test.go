@@ -19,6 +19,7 @@ func TestSettlementBackfillGross(t *testing.T) {
 		{name: "wallet", quota: 1234, source: "wallet", want: 1234},
 		{name: "subscription rounds down", quota: 124, source: "subscription", want: 12},
 		{name: "subscription rounds half up", quota: 125, source: "subscription", want: 13},
+		{name: "small subscription has no gross", quota: 1, source: "subscription", want: 0},
 		{name: "non positive", quota: 0, source: "wallet", want: 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {

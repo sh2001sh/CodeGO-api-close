@@ -149,6 +149,7 @@ func V2MigrationIDs() []string {
 		"20260817_marketplace_multiplier_trends",
 		"20260817_marketplace_subscription_billing",
 		"20260821_marketplace_group_invites",
+		"20260827_marketplace_channel_user_blocks",
 		"20260817_marketplace_transport_capabilities",
 		"20260817_responses_background",
 		"20260818_multiplier_precision",
@@ -158,6 +159,7 @@ func V2MigrationIDs() []string {
 		"20260819_billing_outbox_published_cleanup",
 		"20260819_archive_retention_indexes",
 		"20260819_marketplace_latency_metrics",
+		"20260828_billing_request_usage_index",
 	}
 }
 
@@ -335,6 +337,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260821_marketplace_group_invites", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.GroupInvite{}, &marketplaceschema.GroupAccess{})
 		}},
+		{ID: "20260827_marketplace_channel_user_blocks", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.ChannelUserBlock{})
+		}},
 		{ID: "20260817_marketplace_transport_capabilities", Run: migrateMarketplaceTransportCapabilities},
 		{ID: "20260817_responses_background", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{})
@@ -364,6 +369,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			}
 			return tx.AutoMigrate(&channelLatencyHistogramMigration{}, &marketplaceschema.RankingSnapshot{})
 		}},
+		{ID: "20260828_billing_request_usage_index", RunOutsideTx: migrateBillingRequestUsageIndex},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -406,6 +412,49 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}
 	}
 	return nil
+}
+
+// migrateBillingRequestUsageIndex accelerates request-backed historical usage
+// aggregation without indexing balance moves that can never be user API usage.
+func migrateBillingRequestUsageIndex(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&billingschema.BillingSettlement{}) {
+		return nil
+	}
+	for _, statement := range billingRequestUsageIndexStatements(db.Dialector.Name()) {
+		if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return err
+		}
+	}
+	return nil
+}
+
+func billingRequestUsageIndexStatements(dialect string) []string {
+	switch strings.ToLower(strings.TrimSpace(dialect)) {
+	case "postgres":
+		return []string{`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_request_usage_settlements
+			ON billing.settlements (reservation_id)
+			INCLUDE (actual_amount)
+			WHERE status = 'completed'
+			  AND usage_evidence_id <> ''
+			  AND idempotency_key NOT LIKE 'monthly-pass-conversion:%'`,
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_request_usage_reservations
+			ON billing.reservations (account_id, reservation_id)
+			WHERE status = 'settled'`}
+	case "mysql":
+		return []string{`CREATE INDEX idx_billing_request_usage_settlements
+			ON billing_settlements (status, reservation_id, usage_evidence_id, idempotency_key, actual_amount)`,
+			`CREATE INDEX idx_billing_request_usage_reservations
+			ON billing_reservations (status, account_id, reservation_id)`}
+	default:
+		return []string{`CREATE INDEX IF NOT EXISTS idx_billing_request_usage_settlements
+			ON billing_settlements (reservation_id, actual_amount)
+			WHERE status = 'completed'
+			  AND usage_evidence_id <> ''
+			  AND idempotency_key NOT LIKE 'monthly-pass-conversion:%'`,
+			`CREATE INDEX IF NOT EXISTS idx_billing_request_usage_reservations
+			ON billing_reservations (account_id, reservation_id)
+			WHERE status = 'settled'`}
+	}
 }
 
 // migrateGroupStatusLogIndex adds the bounded time-window index used by the

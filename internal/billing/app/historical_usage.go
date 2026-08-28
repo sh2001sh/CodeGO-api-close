@@ -45,6 +45,7 @@ func GetUserLedgerConsumedQuota(userID int) (int64, error) {
 	if err := platformdb.DB.Model(&billingschema.BillingSettlement{}).
 		Joins("JOIN "+reservationTable+" AS usage_reservations ON usage_reservations.reservation_id = "+settlementTable+".reservation_id").
 		Where("usage_reservations.account_id IN ?", accountIDs).
+		Where("usage_reservations.status = ?", billingschema.BillingReservationStatusSettled).
 		Where(settlementTable+".status = ?", billingschema.BillingSettlementStatusCompleted).
 		Where(settlementTable+".usage_evidence_id <> ?", "").
 		Where(settlementTable+".idempotency_key NOT LIKE ?", "monthly-pass-conversion:%").

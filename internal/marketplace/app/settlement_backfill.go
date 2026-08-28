@@ -13,6 +13,8 @@ import (
 
 var ErrPrimaryDatabaseNotInitialized = errors.New("primary database is not initialized")
 
+const settlementBackfillBatchSize = 5000
+
 // SettlementBackfillReport describes successful marketplace usage logs that
 // were missing a marketplace settlement row and were inspected or repaired.
 type SettlementBackfillReport struct {
@@ -44,20 +46,39 @@ func BackfillMissingSettlements(limit int, apply bool) (SettlementBackfillReport
 		return report, ErrPrimaryDatabaseNotInitialized
 	}
 
-	query := logDB.Model(&auditschema.Log{}).
-		Where("type = ? AND request_id <> '' AND other LIKE ?", auditschema.LogTypeConsume, "%\"marketplace_group_id\"%").
-		Order("id asc")
-	if limit > 0 {
-		query = query.Limit(limit)
+	lastID := 0
+	inspected := 0
+	for {
+		batchLimit := settlementBackfillBatchSize
+		if limit > 0 && limit-inspected < batchLimit {
+			batchLimit = limit - inspected
+		}
+		if batchLimit <= 0 {
+			break
+		}
+		var logs []auditschema.Log
+		err := logDB.Model(&auditschema.Log{}).
+			Where("id > ? AND type = ? AND request_id <> '' AND other LIKE ?", lastID, auditschema.LogTypeConsume, "%\"marketplace_group_id\"%").
+			Order("id asc").Limit(batchLimit).Find(&logs).Error
+		if err != nil {
+			return report, err
+		}
+		if len(logs) == 0 {
+			break
+		}
+		lastID = logs[len(logs)-1].Id
+		inspected += len(logs)
+		if err := backfillSettlementBatch(logs, apply, &report); err != nil {
+			return report, err
+		}
+		if len(logs) < batchLimit {
+			break
+		}
 	}
-	var logs []auditschema.Log
-	if err := query.Find(&logs).Error; err != nil {
-		return report, err
-	}
-	if len(logs) == 0 {
-		return report, nil
-	}
+	return report, nil
+}
 
+func backfillSettlementBatch(logs []auditschema.Log, apply bool, report *SettlementBackfillReport) error {
 	requestIDs := make([]string, 0, len(logs))
 	groupIDs := make([]string, 0, len(logs))
 	seenGroups := make(map[string]struct{}, len(logs))
@@ -73,7 +94,7 @@ func BackfillMissingSettlements(limit int, apply bool) (SettlementBackfillReport
 	}
 	var existing []marketplaceschema.Settlement
 	if err := platformdb.DB.Where("request_id IN ?", requestIDs).Find(&existing).Error; err != nil {
-		return report, err
+		return err
 	}
 	existingByRequest := make(map[string]struct{}, len(existing))
 	for _, item := range existing {
@@ -81,7 +102,7 @@ func BackfillMissingSettlements(limit int, apply bool) (SettlementBackfillReport
 	}
 	var groups []marketplaceschema.Group
 	if err := platformdb.DB.Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
-		return report, err
+		return err
 	}
 	groupsByID := make(map[string]marketplaceschema.Group, len(groups))
 	channelIDs := make([]string, 0, len(groups))
@@ -92,7 +113,7 @@ func BackfillMissingSettlements(limit int, apply bool) (SettlementBackfillReport
 	var channels []marketplaceschema.Channel
 	if len(channelIDs) > 0 {
 		if err := platformdb.DB.Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
-			return report, err
+			return err
 		}
 	}
 	channelsByID := make(map[string]marketplaceschema.Channel, len(channels))
@@ -132,12 +153,12 @@ func BackfillMissingSettlements(limit int, apply bool) (SettlementBackfillReport
 			WalletMultiplier: multiplier, SubscriptionMultiplier: payload.SubscriptionMultiplier,
 		})
 		if err != nil {
-			return report, err
+			return err
 		}
 		report.Created++
 		existingByRequest[log.RequestId] = struct{}{}
 	}
-	return report, nil
+	return nil
 }
 
 func settlementBackfillGross(quota int64, billingSource string) int64 {

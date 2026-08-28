@@ -2,6 +2,13 @@ package app
 
 import "testing"
 
+func TestSettlementBackfillBatchFitsPostgresParameterLimit(t *testing.T) {
+	const postgresExtendedProtocolParameterLimit = 65535
+	if settlementBackfillBatchSize <= 0 || settlementBackfillBatchSize >= postgresExtendedProtocolParameterLimit {
+		t.Fatalf("settlement backfill batch size %d exceeds PostgreSQL protocol capacity", settlementBackfillBatchSize)
+	}
+}
+
 func TestSettlementBackfillGross(t *testing.T) {
 	for _, test := range []struct {
 		name   string

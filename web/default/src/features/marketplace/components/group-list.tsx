@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, Sparkles } from 'lucide-react'
+import {
+  CheckCircle2,
+  Clock3,
+  LoaderCircle,
+  ShieldCheck,
+  Sparkles,
+  XCircle,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -15,6 +22,7 @@ import {
   appendAutoRoutePoolGroup,
   selectedAutoRoutePoolGroupIDs,
 } from '../lib/auto-route-pool'
+import { formatDuration } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
 import { GroupMarketItem } from './group-rows'
 
@@ -36,6 +44,9 @@ export function MarketplaceGroupList(props: {
   const [testResults, setTestResults] = useState<
     Record<string, 'passed' | 'failed'>
   >({})
+  const [resultSelectedGroupIDs, setResultSelectedGroupIDs] = useState<
+    string[]
+  >([])
   const [routeAdding, setRouteAdding] = useState(false)
   const batchStart = useMarketplaceBatchTest()
   const [batchID, setBatchID] = useState('')
@@ -64,19 +75,28 @@ export function MarketplaceGroupList(props: {
   }
 
   const runBatchTest = async () => {
-    const model =
-      props.model ||
-      props.groups.find((group) => selectedGroupIDs.includes(group.id))
-        ?.models[0]
+    const targetGroupIDs =
+      selectedGroupIDs.length > 0
+        ? selectedGroupIDs
+        : selectableGroups.slice(0, 5).map((group) => group.id)
+    const targetGroups = targetGroupIDs
+      .map((id) => props.groups.find((group) => group.id === id))
+      .filter((group): group is MarketplaceGroup => Boolean(group))
+    if (targetGroupIDs.length === 0)
+      return toast.error(t('当前没有可测试的可用分组'))
+    const model = props.model?.trim() || findSharedModel(targetGroups)
     if (!model) return toast.error(t('请选择一个模型'))
+    if (selectedGroupIDs.length === 0 && selectableGroups.length > 5)
+      toast.info(t('未选择分组，默认测试当前页前 5 个可用分组'))
     try {
       const task = await batchStart.mutateAsync({
-        groupIds: selectedGroupIDs,
+        groupIds: targetGroupIDs,
         model,
       })
       setBatchID(task.id)
       setTestState('running')
       setTestResults({})
+      setResultSelectedGroupIDs([])
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t('批量测试启动失败')
@@ -92,6 +112,9 @@ export function MarketplaceGroupList(props: {
         next[item.group_id] = item.status
     })
     setTestResults(next)
+    setResultSelectedGroupIDs((current) =>
+      current.filter((groupID) => next[groupID] === 'passed')
+    )
     if (
       batchQuery.data.status === 'completed' ||
       batchQuery.data.status === 'failed'
@@ -100,7 +123,9 @@ export function MarketplaceGroupList(props: {
   }, [batchQuery.data])
 
   const addPassedToRoutePool = async () => {
-    const passed = selectedGroupIDs.filter((id) => testResults[id] === 'passed')
+    const passed = resultSelectedGroupIDs.filter(
+      (id) => testResults[id] === 'passed'
+    )
     if (passed.length === 0 || routeAdding) return
     setRouteAdding(true)
     try {
@@ -117,7 +142,7 @@ export function MarketplaceGroupList(props: {
         )
       await autoPoolUpdate.mutateAsync({ groupIds: next })
       toast.success(t('已将测试通过的分组加入路由池'))
-      setSelectedGroupIDs([])
+      setResultSelectedGroupIDs([])
       setTestState('idle')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('加入路由池失败'))
@@ -161,39 +186,72 @@ export function MarketplaceGroupList(props: {
         <div className='text-muted-foreground text-xs'>
           <span className='text-foreground font-medium'>{t('批量测试')}</span>
           <span className='ml-2'>
-            {t('选择多个可用分组后统一测试，单次最多 5 个。')}
+            {t(
+              '可先直接测试当前页分组，再从结果中选择分组加入路由池；单次最多 5 个。'
+            )}
           </span>
         </div>
         <div className='flex items-center gap-2'>
           <span className='text-muted-foreground text-xs tabular-nums'>
-            {t('已选 {{count}} 个', { count: selectedGroupIDs.length })}
+            {selectedGroupIDs.length > 0
+              ? t('已选 {{count}} 个测试对象', {
+                  count: selectedGroupIDs.length,
+                })
+              : t('未选择时默认测试前 5 个')}
           </span>
           <Button
             size='sm'
-            disabled={selectedGroupIDs.length === 0 || testState === 'running'}
+            disabled={
+              (selectedGroupIDs.length === 0 &&
+                selectableGroups.length === 0) ||
+              testState === 'running'
+            }
             onClick={() => void runBatchTest()}
           >
-            {testState === 'running' ? t('测试中…') : t('开始批量测试')}
+            {testState === 'running'
+              ? t('测试中…')
+              : selectedGroupIDs.length > 0
+                ? t('开始批量测试')
+                : t('测试当前页分组')}
           </Button>
           {testState === 'done' && (
-            <Button
-              size='sm'
-              variant='outline'
-              disabled={routeAdding}
-              onClick={() => void addPassedToRoutePool()}
-            >
-              {t('通过项加入路由池')} (
-              {
-                Object.values(testResults).filter((value) => value === 'passed')
-                  .length
-              }
-              )
-            </Button>
+            <>
+              <Button
+                size='sm'
+                variant='ghost'
+                disabled={
+                  routeAdding ||
+                  !Object.values(testResults).some(
+                    (status) => status === 'passed'
+                  )
+                }
+                onClick={() => {
+                  const passed = Object.entries(testResults)
+                    .filter(([, status]) => status === 'passed')
+                    .map(([groupID]) => groupID)
+                  setResultSelectedGroupIDs((current) =>
+                    current.length === passed.length ? [] : passed
+                  )
+                }}
+              >
+                {resultSelectedGroupIDs.length > 0
+                  ? t('取消选择通过项')
+                  : t('全选通过项')}
+              </Button>
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={routeAdding || resultSelectedGroupIDs.length === 0}
+                onClick={() => void addPassedToRoutePool()}
+              >
+                {t('加入路由池')} ({resultSelectedGroupIDs.length})
+              </Button>
+            </>
           )}
           <Button
             variant='ghost'
             size='sm'
-            disabled={selectedGroupIDs.length === 0}
+            disabled={selectedGroupIDs.length === 0 && testState === 'idle'}
             onClick={() => setSelectedGroupIDs([])}
           >
             {t('清空')}
@@ -201,25 +259,106 @@ export function MarketplaceGroupList(props: {
         </div>
       </div>
       {testState !== 'idle' && (
-        <div className='border-border bg-primary/[0.04] rounded-md border px-3 py-2 text-xs'>
-          <div className='font-medium'>
-            {testState === 'running'
-              ? t('正在按分组执行测试')
-              : t('批量测试完成')}
+        <div className='border-border bg-primary/[0.04] rounded-md border px-3 py-3 text-xs'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <div className='font-medium'>
+              {testState === 'running'
+                ? t('正在按分组执行测试')
+                : t('批量测试完成')}
+            </div>
+            <span className='text-muted-foreground'>
+              {t(
+                '本次测试会按当前用户实际计费规则扣除额度，并写入普通用量日志'
+              )}
+            </span>
           </div>
-          <div className='text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1'>
-            {selectedGroupIDs.map((id) => {
-              const group = props.groups.find((item) => item.id === id)
-              const result = testResults[id]
+          <div className='divide-border/60 mt-2 divide-y'>
+            {(
+              batchQuery.data?.items ??
+              selectedGroupIDs.map((id) => ({
+                group_id: id,
+                group_name:
+                  props.groups.find((item) => item.id === id)
+                    ?.system_display_name ?? id,
+                status: testResults[id] ?? 'queued',
+                latency_ms: 0,
+                quota_charged: 0,
+                log_created: false,
+              }))
+            ).map((item) => {
+              const status = batchStatusPresentation(item.status, t)
+              const StatusIcon = status.icon
               return (
-                <span key={id}>
-                  {group?.system_display_name ?? id}：
-                  {result === 'passed'
-                    ? t('通过')
-                    : result === 'failed'
-                      ? t('失败')
-                      : t('等待')}
-                </span>
+                <div
+                  key={item.group_id}
+                  className='flex flex-wrap items-center gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0'
+                >
+                  {item.status === 'passed' && (
+                    <input
+                      type='checkbox'
+                      checked={resultSelectedGroupIDs.includes(item.group_id)}
+                      onChange={() =>
+                        setResultSelectedGroupIDs((current) =>
+                          current.includes(item.group_id)
+                            ? current.filter((id) => id !== item.group_id)
+                            : [...current, item.group_id]
+                        )
+                      }
+                      aria-label={t('选择 {{name}} 加入路由池', {
+                        name: item.group_name || item.group_id,
+                      })}
+                      className='accent-primary size-4 shrink-0'
+                    />
+                  )}
+                  <span className='flex min-w-40 items-center gap-1.5 font-medium'>
+                    <StatusIcon
+                      className={status.className}
+                      aria-hidden='true'
+                    />
+                    {item.group_name || item.group_id}
+                  </span>
+                  <span className={status.className}>{status.label}</span>
+                  <span className='text-muted-foreground inline-flex items-center gap-1 tabular-nums'>
+                    <Clock3 className='size-3' aria-hidden='true' />
+                    {item.latency_ms > 0
+                      ? formatDuration(item.latency_ms)
+                      : t('等待中')}
+                  </span>
+                  {item.started_at && (
+                    <span className='text-muted-foreground'>
+                      {t('开始 {{time}}', {
+                        time: new Date(item.started_at).toLocaleString(),
+                      })}
+                    </span>
+                  )}
+                  {item.ended_at && (
+                    <span className='text-muted-foreground'>
+                      {t('完成 {{time}}', {
+                        time: new Date(item.ended_at).toLocaleString(),
+                      })}
+                    </span>
+                  )}
+                  {item.status === 'passed' && (
+                    <span className='text-muted-foreground'>
+                      {t('扣除 {{quota}}', { quota: item.quota_charged ?? 0 })}
+                    </span>
+                  )}
+                  {item.billing_source && (
+                    <span className='text-muted-foreground'>
+                      {t('来源 {{source}}', { source: item.billing_source })}
+                    </span>
+                  )}
+                  {item.request_id && (
+                    <span className='text-muted-foreground font-mono'>
+                      {t('请求 {{id}}', { id: item.request_id })}
+                    </span>
+                  )}
+                  {item.error && (
+                    <span className='text-destructive basis-full break-words sm:basis-auto'>
+                      {item.error}
+                    </span>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -246,6 +385,49 @@ export function MarketplaceGroupList(props: {
       </StaggerContainer>
     </div>
   )
+}
+
+function batchStatusPresentation(
+  status: 'queued' | 'running' | 'passed' | 'failed',
+  t: (key: string) => string
+) {
+  if (status === 'passed') {
+    return {
+      icon: CheckCircle2,
+      className: 'text-emerald-600 dark:text-emerald-400',
+      label: t('通过'),
+    }
+  }
+  if (status === 'failed') {
+    return {
+      icon: XCircle,
+      className: 'text-destructive',
+      label: t('失败'),
+    }
+  }
+  if (status === 'running') {
+    return {
+      icon: LoaderCircle,
+      className: 'text-primary animate-spin',
+      label: t('测试中'),
+    }
+  }
+  return {
+    icon: Clock3,
+    className: 'text-muted-foreground',
+    label: t('等待'),
+  }
+}
+
+function findSharedModel(groups: MarketplaceGroup[]): string {
+  const first = groups[0]?.models ?? []
+  if (groups.length <= 1) return first[0] ?? ''
+  const supportedByAll = new Set(
+    groups
+      .slice(1)
+      .flatMap((group) => group.models.map((model) => model.toLowerCase()))
+  )
+  return first.find((model) => supportedByAll.has(model.toLowerCase())) ?? ''
 }
 
 function GroupListError(props: { onRetry: () => void }) {

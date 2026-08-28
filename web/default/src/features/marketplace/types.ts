@@ -460,12 +460,19 @@ export interface MarketplaceBatchTestItem {
   error?: string
   started_at?: string
   ended_at?: string
+  quota_charged: number
+  log_created: boolean
+  request_id?: string
+  billing_source?: string
 }
 
 export interface MarketplaceBatchTest {
   id: string
   model: string
   status: 'queued' | 'running' | 'completed' | 'failed'
+  billing_mode: 'user_quota'
+  quota_charged: boolean
+  log_created: boolean
   items: MarketplaceBatchTestItem[]
   created_at: string
   updated_at: string

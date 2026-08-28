@@ -1,7 +1,6 @@
 package app
 
 import (
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"bytes"
 	"errors"
 	"fmt"
@@ -10,14 +9,19 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayproviders "github.com/sh2001sh/new-api/internal/gateway/execution/providers"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 	"io"
 	"net/http"
@@ -26,8 +30,59 @@ import (
 	"time"
 )
 
+type channelTestOptions struct {
+	UserID                 int
+	BillUser               bool
+	MarketplaceGroupID     string
+	InternalGroup          string
+	MarketplaceOwnerID     int
+	CreditPoolPolicy       string
+	MarketplaceMultiplier  float64
+	MarketplaceModelPrices map[string]marketplacedomain.ChannelModelPrice
+}
+
 func testChannel(channel *gatewayschema.Channel, testModel string, endpointType string, isStream bool) channelTestResult {
+	return testChannelWithOptions(channel, testModel, endpointType, isStream, channelTestOptions{UserID: 1})
+}
+
+func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, endpointType string, isStream bool, options channelTestOptions) (result channelTestResult) {
 	tik := time.Now()
+	writer := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(writer)
+	ctx.Request = &http.Request{Header: make(http.Header)}
+	result.context = ctx
+	if options.UserID <= 0 {
+		options.UserID = 1
+	}
+	recordUserTestError := func(testErr error) {
+		if !options.BillUser || testErr == nil || !constant.ErrorLogEnabled {
+			return
+		}
+		other := map[string]interface{}{
+			"status":          "failed",
+			"error_message":   testErr.Error(),
+			"is_channel_test": true,
+		}
+		channelID := 0
+		if channel != nil {
+			channelID = channel.Id
+			other["channel_id"] = channel.Id
+			other["channel_name"] = channel.Name
+		}
+		if ctx := result.context; ctx != nil {
+			if ctx.Request != nil && ctx.Request.URL != nil {
+				other["request_path"] = ctx.Request.URL.Path
+			}
+			other["total_duration_ms"] = time.Since(tik).Milliseconds()
+			auditapp.RecordErrorLog(ctx, options.UserID, channelID, testModel, "模型测试", testErr.Error(), 0,
+				int(time.Since(tik).Seconds()), isStream, ctx.GetString("group"), other)
+		}
+	}
+	defer func() {
+		if result.localErr != nil {
+			recordUserTestError(result.localErr)
+		}
+	}()
 
 	unsupportedTypes := []int{
 		constant.ChannelTypeSunoAPI,
@@ -43,9 +98,6 @@ func testChannel(channel *gatewayschema.Channel, testModel string, endpointType 
 		}
 	}
 
-	writer := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(writer)
-
 	testModel = normalizeChannelTestModel(channel, testModel)
 	endpointType = normalizeChannelTestEndpoint(channel, testModel, endpointType)
 	requestPath := resolveChannelTestRequestPath(channel, testModel, endpointType)
@@ -60,16 +112,31 @@ func testChannel(channel *gatewayschema.Channel, testModel string, endpointType 
 		Header: make(http.Header),
 	}
 
-	if err := writeGatewayUserCacheToContext(ctx, 1); err != nil {
+	if err := writeGatewayUserCacheToContext(ctx, options.UserID); err != nil {
 		return channelTestResult{localErr: err}
 	}
-	ctx.Set("id", 1)
+	httpctx.SetContextKey(ctx, constant.ContextKeyUserId, options.UserID)
+	ctx.Set("id", options.UserID)
+	ctx.Set("username", httpctx.GetContextKeyString(ctx, constant.ContextKeyUserName))
+	ctx.Set("token_name", "模型测试")
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Set("channel", channel.Type)
 	ctx.Set("base_url", channel.GetBaseURL())
 
-	group, _ := loadGatewayUserGroup(1, false)
-	ctx.Set("group", group)
+	if options.MarketplaceGroupID != "" {
+		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, options.MarketplaceGroupID)
+		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceOwnerID, options.MarketplaceOwnerID)
+		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceSourceType, marketplacedomain.SourceTypeMarketplaceUser)
+		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceCreditPolicy, options.CreditPoolPolicy)
+		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, options.MarketplaceMultiplier)
+		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceModelPrices, options.MarketplaceModelPrices)
+		httpctx.SetContextKey(ctx, constant.ContextKeyUsingGroup, options.InternalGroup)
+		httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, options.InternalGroup)
+		ctx.Set("group", options.InternalGroup)
+	} else {
+		group, _ := loadGatewayUserGroup(options.UserID, false)
+		ctx.Set("group", group)
+	}
 
 	newAPIError := SetupContextForSelectedChannel(ctx, channel, testModel)
 	if newAPIError != nil {
@@ -93,6 +160,7 @@ func testChannel(channel *gatewayschema.Channel, testModel string, endpointType 
 
 	info.IsChannelTest = true
 	info.InitChannelMeta(ctx)
+	ctx.Set(constant.RequestIdKey, info.RequestId)
 
 	if err = attachTestBillingRequestInput(info, request); err != nil {
 		return channelTestResult{
@@ -144,6 +212,22 @@ func testChannel(channel *gatewayschema.Channel, testModel string, endpointType 
 			newAPIError: types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest)),
 		}
 	}
+
+	billingReserved := false
+	billingSettled := false
+	if options.BillUser && !priceData.FreeModel {
+		if apiErr := billingapp.PreConsumeRelayBilling(ctx, priceData.QuotaToPreConsume, info); apiErr != nil {
+			return channelTestResult{context: ctx, localErr: apiErr, newAPIError: apiErr}
+		}
+		billingReserved = true
+	}
+	defer func() {
+		if options.BillUser && billingReserved && !billingSettled {
+			if refundErr := billingapp.RefundRelayBillingSync(ctx, info); refundErr != nil {
+				platformobservability.SysError(fmt.Sprintf("refund failed for marketplace channel test: %v", refundErr))
+			}
+		}
+	}()
 
 	adaptor.Init(info)
 	convertedRequest, convertErr := convertChannelTestRequest(ctx, info, adaptor, request)
@@ -233,8 +317,8 @@ func testChannel(channel *gatewayschema.Channel, testModel string, endpointType 
 		}
 	}
 
-	result := writer.Result()
-	respBody, err := readTestResponseBody(result.Body, isStream)
+	responseResult := writer.Result()
+	respBody, err := readTestResponseBody(responseResult.Body, isStream)
 	if err != nil {
 		return channelTestResult{
 			context:     ctx,
@@ -250,27 +334,62 @@ func testChannel(channel *gatewayschema.Channel, testModel string, endpointType 
 		}
 	}
 
-	info.SetEstimatePromptTokens(usage.PromptTokens)
-	quota, tieredResult := settleTestQuota(info, priceData, usage)
-	tok := time.Now()
-	milliseconds := tok.Sub(tik).Milliseconds()
-	consumedTime := float64(milliseconds) / 1000.0
-	other := buildTestLogOther(ctx, info, priceData, usage, tieredResult)
-	auditapp.RecordConsumeLog(ctx, 1, auditschema.RecordConsumeLogParams{
-		ChannelId:        channel.Id,
-		PromptTokens:     usage.PromptTokens,
-		CompletionTokens: usage.CompletionTokens,
-		ModelName:        info.OriginModelName,
-		TokenName:        "模型测试",
-		Quota:            quota,
-		Content:          "模型测试",
-		UseTimeSeconds:   int(consumedTime),
-		IsStream:         info.IsStream,
-		Group:            info.UsingGroup,
-		Other:            other,
-	})
+	if options.BillUser {
+		// Reuse the production text/image/embedding billing path so the selected
+		// wallet or subscription and marketplace settlement are identical to an
+		// ordinary request. It also writes the normal usage log with the user ID.
+		if info.PriceData.UsePrice &&
+			(info.RelayMode == gatewaycontract.RelayModeImagesGenerations || info.RelayMode == gatewaycontract.RelayModeImagesEdits) {
+			if imageRequest, ok := request.(*dto.ImageRequest); ok {
+				imageN := uint(1)
+				if imageRequest.N != nil && *imageRequest.N > 0 {
+					imageN = *imageRequest.N
+				}
+				if _, exists := info.PriceData.OtherRatios["n"]; !exists {
+					info.PriceData.AddOtherRatio("n", float64(imageN))
+				}
+			}
+		}
+		billingapp.PostTextConsumeQuota(ctx, info, usage, nil)
+		if info.Billing != nil && !info.BillingSettled {
+			err := errors.New("测试计费结算失败")
+			return channelTestResult{
+				context:     ctx,
+				localErr:    err,
+				newAPIError: types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry()),
+			}
+		}
+		billingSettled = info.Billing == nil || info.BillingSettled
+		result.report = ChannelTestReport{
+			QuotaCharged:  billingapp.BillingQuotaForLog(info, 0),
+			LogCreated:    platformconfig.LogConsumeEnabled,
+			RequestID:     info.RequestId,
+			BillingSource: info.BillingSource,
+		}
+	} else {
+		info.SetEstimatePromptTokens(usage.PromptTokens)
+		quota, tieredResult := settleTestQuota(info, priceData, usage)
+		tok := time.Now()
+		milliseconds := tok.Sub(tik).Milliseconds()
+		consumedTime := float64(milliseconds) / 1000.0
+		other := buildTestLogOther(ctx, info, priceData, usage, tieredResult)
+		// Automatic probes retain their historical non-billing audit record.
+		auditapp.RecordConsumeLog(ctx, options.UserID, auditschema.RecordConsumeLogParams{
+			ChannelId:        channel.Id,
+			PromptTokens:     usage.PromptTokens,
+			CompletionTokens: usage.CompletionTokens,
+			ModelName:        info.OriginModelName,
+			TokenName:        "模型测试",
+			Quota:            quota,
+			Content:          "模型测试",
+			UseTimeSeconds:   int(consumedTime),
+			IsStream:         info.IsStream,
+			Group:            info.UsingGroup,
+			Other:            other,
+		})
+	}
 	platformobservability.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
-	return channelTestResult{context: ctx}
+	return result
 }
 
 func convertChannelTestRequest(ctx *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, request dto.Request) (any, error) {

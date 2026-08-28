@@ -7,6 +7,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	"github.com/sh2001sh/new-api/internal/platform/notifyx"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -38,6 +39,48 @@ func TestChannelByID(channelID int, testModel string, endpointType string, isStr
 	milliseconds := time.Since(tik).Milliseconds()
 	go gatewaystore.UpdateChannelResponseTime(channel, milliseconds)
 	return float64(milliseconds) / 1000.0, result.newAPIError, nil
+}
+
+// MarketplaceChannelTestOptions binds a user test to the exact market group
+// selected in the UI. It is deliberately separate from automatic probes so a
+// background health check can never spend a user's balance.
+type MarketplaceChannelTestOptions struct {
+	UserID             int
+	MarketplaceGroupID string
+	InternalGroup      string
+	MarketplaceOwnerID int
+	CreditPoolPolicy   string
+	Multiplier         float64
+	ModelPrices        map[string]marketplacedomain.ChannelModelPrice
+}
+
+// TestMarketplaceChannelByID executes a real upstream request as a user and
+// settles it through the normal wallet/subscription billing pipeline.
+func TestMarketplaceChannelByID(channelID int, testModel string, endpointType string, isStream bool, options MarketplaceChannelTestOptions) (float64, ChannelTestReport, *types.NewAPIError, error) {
+	channel, err := getChannelForTest(channelID)
+	if err != nil {
+		return 0, ChannelTestReport{}, nil, err
+	}
+	if options.UserID <= 0 {
+		return 0, ChannelTestReport{}, nil, errors.New("用户 ID 无效")
+	}
+	tik := time.Now()
+	result := testChannelWithOptions(channel, testModel, endpointType, isStream, channelTestOptions{
+		UserID:                 options.UserID,
+		BillUser:               true,
+		MarketplaceGroupID:     options.MarketplaceGroupID,
+		InternalGroup:          options.InternalGroup,
+		MarketplaceOwnerID:     options.MarketplaceOwnerID,
+		CreditPoolPolicy:       options.CreditPoolPolicy,
+		MarketplaceMultiplier:  options.Multiplier,
+		MarketplaceModelPrices: options.ModelPrices,
+	})
+	if result.localErr != nil {
+		return 0, result.report, result.newAPIError, result.localErr
+	}
+	milliseconds := time.Since(tik).Milliseconds()
+	go gatewaystore.UpdateChannelResponseTime(channel, milliseconds)
+	return float64(milliseconds) / 1000.0, result.report, result.newAPIError, nil
 }
 
 // TestAllChannels starts the asynchronous full-channel test job.

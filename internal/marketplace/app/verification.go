@@ -36,7 +36,9 @@ func probeMarketplaceChannelModels(
 	reportStage func(string),
 	reportResults func([]ModelVerificationResult),
 ) ([]ModelVerificationResult, error) {
-	reportStage("basic_security")
+	if reportStage != nil {
+		reportStage("basic_security")
+	}
 	baseURL, err := platformsecurity.DecryptSecret(channel.BaseURLCiphertext)
 	if err != nil {
 		return nil, err
@@ -48,7 +50,9 @@ func probeMarketplaceChannelModels(
 	if err != nil {
 		return nil, err
 	}
-	reportStage("model_list")
+	if reportStage != nil {
+		reportStage("model_list")
+	}
 	models, err := fetchUpstreamModelsContext(ctx, channel.ProviderType, baseURL, credential)
 	if err != nil {
 		return nil, err
@@ -57,9 +61,13 @@ func probeMarketplaceChannelModels(
 	if len(declared) == 0 {
 		declared = decodeModels(channel.DeclaredModels)
 	}
-	reportStage("model_match")
+	if reportStage != nil {
+		reportStage("model_match")
+	}
 	modelListErr := verifyDeclaredModels(declared, models)
-	reportStage("inference")
+	if reportStage != nil {
+		reportStage("inference")
+	}
 	results, inferenceErr := probeDeclaredModels(
 		ctx, channel.ProviderType, baseURL, credential, declared, models, reportResults,
 	)

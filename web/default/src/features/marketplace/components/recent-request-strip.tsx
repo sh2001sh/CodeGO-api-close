@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
@@ -17,12 +18,27 @@ import {
 } from '../lib/recent-request-series'
 import type { MarketplaceGroup } from '../types'
 
-export function RecentRequestStrip(props: { group: MarketplaceGroup }) {
+export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
+  group: MarketplaceGroup
+}) {
   const { t, i18n } = useTranslation()
   const bucketSeconds = props.group.recent_request_bucket_seconds || 1800
-  const series = normalizeRecentRequestSeries(
-    props.group.recent_request_series,
-    bucketSeconds
+  const series = useMemo(
+    () =>
+      normalizeRecentRequestSeries(
+        props.group.recent_request_series,
+        bucketSeconds
+      ),
+    [bucketSeconds, props.group.recent_request_series]
+  )
+  const formatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.language, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
+    [i18n.language]
   )
   const latestStatus = resolveRecentRequestStatus(series)
   const threshold = t(
@@ -40,11 +56,7 @@ export function RecentRequestStrip(props: { group: MarketplaceGroup }) {
         aria-label={`${t('近 6 小时请求状态')}。${threshold}`}
       >
         {series.map((bucket, index) => {
-          const range = formatBucketRange(
-            bucket.ts,
-            bucketSeconds,
-            i18n.language
-          )
+          const range = formatBucketRange(bucket.ts, bucketSeconds, formatter)
           const summary = buildBucketSummary(bucket, t)
           return (
             <Tooltip key={`${bucket.ts}-${index}`}>
@@ -72,7 +84,7 @@ export function RecentRequestStrip(props: { group: MarketplaceGroup }) {
       </div>
     </div>
   )
-}
+})
 
 function RequestStatus(props: { status: RequestHealthStatus; t: TFunction }) {
   const label = props.t(getRequestHealthLabel(props.status))
@@ -121,12 +133,11 @@ function buildBucketSummary(
   })
 }
 
-function formatBucketRange(ts: number, bucketSeconds: number, locale: string) {
-  const formatter = new Intl.DateTimeFormat(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
+function formatBucketRange(
+  ts: number,
+  bucketSeconds: number,
+  formatter: Intl.DateTimeFormat
+) {
   return `${formatter.format(new Date(ts * 1000))} - ${formatter.format(
     new Date((ts + bucketSeconds) * 1000)
   )}`

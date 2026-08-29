@@ -111,50 +111,33 @@ export function LogStatCards(props: LogStatCardsProps) {
   }))
 
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
-        {items.map((it, idx) => {
-          const Icon = it.icon
-          return (
-            <div
-              key={it.title}
-              className={`px-3 py-2.5 sm:px-5 sm:py-4 ${idx === items.length - 1 && items.length % 2 !== 0 ? 'col-span-2 sm:col-span-1' : ''}`}
-            >
-              <div className='flex items-center gap-2'>
-                <Icon className='text-muted-foreground/60 size-3.5 shrink-0' />
-                <div className='text-muted-foreground truncate text-xs font-medium'>
-                  {it.title}
-                </div>
-              </div>
-
-              {loading ? (
-                <div className='mt-2 space-y-1.5'>
-                  <Skeleton className='h-7 w-20' />
-                  <Skeleton className='h-3.5 w-28' />
-                </div>
-              ) : error ? (
-                <>
-                  <div className='text-muted-foreground mt-1.5 font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                    --
-                  </div>
-                  <div className='text-muted-foreground/40 mt-1 hidden text-xs md:block'>
-                    {it.desc}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className='text-foreground mt-1.5 font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                    {it.value}
-                  </div>
-                  <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
-                    {it.desc}
-                  </div>
-                </>
-              )}
+    <div className='codego-fact-row grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'>
+      {items.map((it, idx) => {
+        const Icon = it.icon
+        return (
+          <div
+            key={it.title}
+            className={`min-w-0 px-4 py-4 sm:px-5 sm:py-5 ${idx === items.length - 1 && items.length % 2 !== 0 ? 'col-span-2 sm:col-span-1' : ''}`}
+          >
+            <div className='flex items-center gap-2'>
+              <Icon className='text-primary size-3.5 shrink-0' />
+              <div className='codego-stat-label truncate'>{it.title}</div>
             </div>
-          )
-        })}
-      </div>
+
+            {loading ? (
+              <Skeleton className='mt-3 h-8 w-24' />
+            ) : error ? (
+              <div className='text-muted-foreground mt-3 text-2xl leading-none font-semibold tabular-nums'>
+                --
+              </div>
+            ) : (
+              <div className='text-foreground mt-3 text-2xl leading-none font-semibold tabular-nums'>
+                {it.value}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -34,7 +34,7 @@ export function DrawStage(props: DrawStageProps) {
         reduced={reduced}
         onOpenRules={props.onOpenRules}
       />
-      <div className='grid lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.6fr)]'>
+      <div className='border-border/70 grid gap-0 border-t sm:grid-cols-2'>
         <DrawConsole
           payload={props.payload}
           status={status}
@@ -113,7 +113,7 @@ function DrawConsole(props: {
   }[props.status.phase]
 
   return (
-    <div className='lg:border-border/70 flex flex-col justify-between gap-6 px-4 py-5 sm:flex-row sm:items-center sm:px-6 sm:py-6 lg:border-r'>
+    <div className='flex flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6'>
       <div className='min-w-0'>
         <div className='text-info flex flex-wrap items-center gap-1.5 text-xs font-medium'>
           <Clock3 className='size-3.5' aria-hidden='true' />
@@ -134,14 +134,9 @@ function DrawConsole(props: {
             </span>
           ) : null}
         </div>
-        <h3 className='text-foreground mt-2 text-xl font-semibold tracking-tight text-balance sm:text-2xl'>
+        <h3 className='text-foreground mt-2 text-2xl leading-[1.1] font-semibold text-balance sm:text-3xl'>
           {title}
         </h3>
-        <p className='text-muted-foreground mt-1.5 max-w-xl text-sm leading-6'>
-          {props.status.phase === 'disabled'
-            ? '现有号码和历史记录不受影响，活动恢复后将继续自动开奖。'
-            : '系统从右向左连续比对月卡尾号和当天盲盒号码，命中后奖励自动进入钱包余额。'}
-        </p>
       </div>
       <div className='shrink-0'>
         <LuckyDigits
@@ -174,7 +169,7 @@ function JackpotSummary(props: {
       : 0
 
   return (
-    <aside className='border-border/70 bg-muted/20 border-t px-4 py-5 sm:px-6 lg:border-t-0'>
+    <aside className='border-border/70 border-t px-4 py-5 sm:border-t-0 sm:border-l sm:px-6'>
       <div className='flex items-center gap-2 text-sm font-semibold'>
         <Trophy className='text-primary size-4' aria-hidden='true' />
         本期累计奖池

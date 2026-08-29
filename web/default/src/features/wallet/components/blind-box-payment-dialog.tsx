@@ -35,7 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { BlindBoxPaymentState } from './blind-box-dialogs'
+import type { BlindBoxPaymentState } from './blind-box-dialog-data'
 
 const TIMEOUT_MS = 60000
 

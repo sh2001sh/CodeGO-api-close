@@ -31,11 +31,7 @@ export function WalletAccountOverview(props: {
     <section className='app-page-shell p-4 sm:p-5'>
       <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
         <div className='min-w-0 lg:min-w-[28rem]'>
-          <BalanceItem
-            label={t('统一额度')}
-            value={formatQuota(props.user?.quota ?? 0)}
-            description={t('永久有效，可用于官方渠道与第三方市场分组')}
-          />
+          <BalanceItem label={t('统一额度')} value={formatQuota(props.user?.quota ?? 0)} />
         </div>
 
         <div className='flex flex-col gap-3 lg:items-end'>
@@ -96,21 +92,12 @@ export function WalletAccountOverview(props: {
   )
 }
 
-function BalanceItem(props: {
-  label: string
-  value: string
-  description: string
-}) {
+function BalanceItem(props: { label: string; value: string }) {
   return (
     <div className='min-w-0'>
-      <div className='text-muted-foreground text-xs font-medium'>
-        {props.label}
-      </div>
-      <div className='text-foreground mt-1 truncate text-2xl font-semibold tracking-tight tabular-nums'>
+      <div className='codego-stat-label'>{props.label}</div>
+      <div className='codego-stat-value mt-3 truncate'>
         {props.value}
-      </div>
-      <div className='text-muted-foreground mt-0.5 text-xs'>
-        {props.description}
       </div>
     </div>
   )

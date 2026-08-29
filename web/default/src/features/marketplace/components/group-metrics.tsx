@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   formatDuration,
@@ -26,9 +27,11 @@ import {
 import type { MarketplaceGroup } from '../types'
 
 /** 分组卡核心指标：细线分隔的开放数据列，无线框无图标。 */
-export function GroupMetrics({ group }: { group: MarketplaceGroup }) {
+export const GroupMetrics = memo(function GroupMetrics(props: {
+  group: MarketplaceGroup
+}) {
   const { t } = useTranslation()
-  const recentRequests = group.recent_request_series.reduce(
+  const recentRequests = props.group.recent_request_series.reduce(
     (total, bucket) => total + bucket.request_count,
     0
   )
@@ -37,13 +40,13 @@ export function GroupMetrics({ group }: { group: MarketplaceGroup }) {
       <div className='min-w-0 px-3 first:pl-0'>
         <MetricLabel>{t('倍率')}</MetricLabel>
         <div className='text-primary app-numeric mt-0.5 text-base font-semibold'>
-          {formatMultiplier(group.multiplier)}x
+          {formatMultiplier(props.group.multiplier)}x
         </div>
       </div>
       <div className='min-w-0 px-3 first:pl-0'>
         <MetricLabel>{t('成功率')}</MetricLabel>
         <div className='app-numeric mt-0.5 text-sm font-semibold'>
-          {formatPercent(group.success_rate)}
+          {formatPercent(props.group.success_rate)}
         </div>
       </div>
       <div className='min-w-0 px-3 first:pl-0'>
@@ -57,12 +60,12 @@ export function GroupMetrics({ group }: { group: MarketplaceGroup }) {
         <div
           className='app-numeric mt-0.5 text-sm font-semibold'
           title={
-            group.attempt_ttft_p50_ms == null
+            props.group.attempt_ttft_p50_ms == null
               ? t('暂无足够样本，展开详情可查看完整检测状态')
               : undefined
           }
         >
-          {formatDuration(group.attempt_ttft_p50_ms)}
+          {formatDuration(props.group.attempt_ttft_p50_ms)}
         </div>
       </div>
       <div className='min-w-0 px-3 first:pl-0'>
@@ -76,12 +79,12 @@ export function GroupMetrics({ group }: { group: MarketplaceGroup }) {
       <div className='min-w-0 px-3 first:pl-0'>
         <MetricLabel title={t('近窗口缓存命中率')}>{t('缓存命中')}</MetricLabel>
         <div className='app-numeric mt-0.5 text-sm font-semibold'>
-          {formatCacheHitRate(group.cache_hit_rate)}
+          {formatCacheHitRate(props.group.cache_hit_rate)}
         </div>
       </div>
     </div>
   )
-}
+})
 
 function MetricLabel(props: { children: React.ReactNode; title?: string }) {
   return (

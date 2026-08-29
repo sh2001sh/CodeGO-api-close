@@ -21,9 +21,8 @@ import type { BlindBoxTier } from '../types'
 export type RewardRarity = 'legendary' | 'epic' | 'common'
 
 export const RARITY_RING: Record<RewardRarity, string> = {
-  legendary:
-    'border-primary/40 bg-primary/8 shadow-[0_0_16px_-4px_color-mix(in_oklch,var(--primary)_50%,transparent)]',
-  epic: 'border-violet-400/40 bg-gradient-to-br from-violet-500/10 to-transparent',
+  legendary: 'border-primary/45 bg-primary/[0.07]',
+  epic: 'border-primary/25 bg-primary/[0.03]',
   common: 'border-border/70 bg-background/72',
 }
 
@@ -33,11 +32,11 @@ export const RARITY_BADGE: Record<
 > = {
   legendary: {
     label: '稀有',
-    cls: 'border-primary/40 bg-primary/15 text-primary',
+    cls: 'border-primary/50 bg-primary text-primary-foreground',
   },
   epic: {
     label: '精品',
-    cls: 'border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-300',
+    cls: 'border-primary/40 bg-primary/10 text-primary',
   },
   common: null,
 }

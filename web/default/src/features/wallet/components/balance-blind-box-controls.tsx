@@ -21,7 +21,7 @@ export function BalanceBoxQuantityControl(props: {
           单次最多 {props.max}
         </span>
       </div>
-      <div className='mt-2.5 flex min-w-0 flex-wrap items-center gap-2'>
+      <div className='mt-2.5 flex min-w-0 flex-wrap items-center gap-1.5'>
         {[1, 5, 10, 20, 50, 100]
           .filter((value) => value <= props.max)
           .map((value) => (
@@ -31,13 +31,13 @@ export function BalanceBoxQuantityControl(props: {
               disabled={props.disabled}
               onClick={() => props.onChange(value)}
               className={cn(
-                'rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-50',
+                'border px-3 py-1.5 font-mono text-xs font-semibold transition-colors disabled:opacity-50',
                 props.count === value
-                  ? 'border-teal-600 bg-teal-600 text-white dark:border-teal-500 dark:bg-teal-500'
-                  : 'border-border bg-background/80 text-foreground hover:border-teal-500/70'
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background/80 text-muted-foreground hover:border-primary/45 hover:text-foreground'
               )}
             >
-              x{value}
+              ×{value}
             </button>
           ))}
         <Input
@@ -91,9 +91,9 @@ export function BalanceBoxModeButton(props: {
 
 export function BalanceBoxMetric(props: { label: string; value: string }) {
   return (
-    <div>
-      <div className='text-muted-foreground text-[11px]'>{props.label}</div>
-      <div className='text-foreground mt-1 font-mono text-sm font-semibold tabular-nums'>
+    <div className='min-w-0 px-4 py-3 sm:px-5 sm:py-4 first:pl-0'>
+      <div className='codego-stat-label'>{props.label}</div>
+      <div className='text-foreground mt-2 text-xl leading-none font-semibold tabular-nums'>
         {props.value}
       </div>
     </div>

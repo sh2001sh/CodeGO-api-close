@@ -69,7 +69,7 @@ export async function openBalanceBoxInventory(
         },
       })
     )
-    toast.success('统一盲盒已开启，奖励已发放')
+    // the prize dialog is the feedback; a toast here would spoil the reel
   } catch (error) {
     toast.error(error instanceof Error ? error.message : '统一盲盒开启失败')
   } finally {

@@ -152,12 +152,15 @@ export function ModelOperationsOverview({
           aria-labelledby='quota-ranking-title'
         >
           <header className='border-b px-4 py-3'>
-            <h2 id='quota-ranking-title' className='text-sm font-semibold'>
-              {t('Quota consumption ranking')}
-            </h2>
-            <p className='text-muted-foreground mt-0.5 text-xs'>
-              {t('Quickly identify the models driving total cost.')}
-            </p>
+            <div className='flex items-center gap-2.5'>
+              <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+              <h2
+                id='quota-ranking-title'
+                className='text-foreground text-[13px] font-semibold'
+              >
+                {t('Quota consumption ranking')}
+              </h2>
+            </div>
           </header>
           <div className='space-y-3 p-4'>
             {topRows.map((row, index) => (

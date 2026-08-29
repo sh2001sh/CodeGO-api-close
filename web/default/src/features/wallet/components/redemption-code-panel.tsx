@@ -1,4 +1,4 @@
-import { ExternalLink, Gift, Loader2 } from 'lucide-react'
+import { ExternalLink, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -22,16 +22,10 @@ export function RedemptionCodePanel(props: RedemptionCodePanelProps) {
   return (
     <div className={cn('app-page-shell p-4', props.className)}>
       <div className='flex flex-wrap items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
-            <Gift className='text-primary h-4 w-4' />
+        <div className='flex min-w-0 items-center gap-2.5'>
+          <span aria-hidden className='block h-3 w-[3px] shrink-0 bg-primary' />
+          <div className='text-foreground text-[13px] font-semibold'>
             {props.title || t('Redemption code')}
-          </div>
-          <div className='text-muted-foreground mt-1 max-w-2xl text-xs leading-5'>
-            {props.description ||
-              t(
-                'Enter a code issued by an administrator or purchased offline. Successful redemption immediately adds the associated balance, plan, or benefit.'
-              )}
           </div>
         </div>
         {props.topupLink ? (

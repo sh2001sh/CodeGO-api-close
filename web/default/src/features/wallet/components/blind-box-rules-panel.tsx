@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { CheckCircle2, Clock, ShieldCheck, Zap } from 'lucide-react'
+import { CheckCircle2, ShieldCheck, Zap } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import type { BalanceBlindBoxOverview } from '../types'
@@ -189,29 +189,31 @@ export function BlindBoxPropRules() {
   ]
 
   return (
-    <section className='app-subtle-panel p-4'>
-      <div className='flex items-center gap-2'>
-        <Clock className='text-muted-foreground size-4' aria-hidden='true' />
-        <h3 className='text-foreground text-sm font-semibold'>道具生效规则</h3>
+    <section className='codego-panel p-4 sm:p-5'>
+      <div className='flex items-center justify-between gap-3'>
+        <div className='flex items-center gap-2.5'>
+          <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+          <h3 className='text-foreground text-[13px] font-semibold'>
+            道具生效规则
+          </h3>
+        </div>
+        <span className='codego-stat-label'>RULES</span>
       </div>
-      <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+      <div className='mt-2'>
         {rules.map((rule) => (
           <div
             key={rule.title}
-            className='border-border/70 bg-background/60 rounded-lg border px-3 py-2'
+            className='grid gap-x-8 gap-y-0.5 border-b border-border/60 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]'
           >
-            <div className='text-foreground text-xs font-medium'>
+            <div className='text-foreground text-[13px] font-medium'>
               {rule.title}
             </div>
-            <div className='text-muted-foreground mt-0.5 text-[11px] leading-5'>
+            <div className='text-muted-foreground text-xs leading-5'>
               {rule.detail}
             </div>
           </div>
         ))}
       </div>
-      <p className='text-muted-foreground mt-3 text-xs leading-5'>
-        普通奖池为高波动结构；倍率卡在请求未命中官方渠道时不生效。
-      </p>
     </section>
   )
 }

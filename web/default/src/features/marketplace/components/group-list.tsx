@@ -1,493 +1,92 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  CheckCircle2,
-  Clock3,
-  LoaderCircle,
-  ListFilter,
-  ShieldCheck,
-  Sparkles,
-  XCircle,
-} from 'lucide-react'
+import { ShieldCheck, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Combobox } from '@/components/ui/combobox'
 import { Skeleton } from '@/components/ui/skeleton'
-import { StaggerContainer, StaggerItem } from '@/components/page-transition'
-import {
-  useMarketplaceAutoRoutePool,
-  useMarketplaceBatchTest,
-  useMarketplaceBatchTestQuery,
-  useMarketplaceAutoRoutePoolUpdate,
-} from '../hooks'
-import {
-  appendAutoRoutePoolGroup,
-  selectedAutoRoutePoolGroupIDs,
-} from '../lib/auto-route-pool'
-import { formatDuration } from '../lib/format'
 import type { MarketplaceGroup } from '../types'
+import { GroupBatchTestPanel } from './group-batch-test-panel'
 import { GroupMarketItem } from './group-rows'
+import { useGroupListController } from './use-group-list-controller'
 
-export function MarketplaceGroupList(props: {
+type MarketplaceGroupListProps = {
   groups: MarketplaceGroup[]
   loading: boolean
   error: boolean
   routePoolEnabled?: boolean
   onRetry: () => void
-}) {
-  const { t } = useTranslation()
-  const [expanded, setExpanded] = useState('')
-  const [addingGroupID, setAddingGroupID] = useState('')
-  const [selectedGroupIDs, setSelectedGroupIDs] = useState<string[]>([])
-  const [testModel, setTestModel] = useState('')
-  const [testState, setTestState] = useState<'idle' | 'running' | 'done'>(
-    'idle'
+}
+
+type GroupListController = ReturnType<typeof useGroupListController>
+
+/** Renders marketplace groups with batch testing and route pool controls. */
+export function MarketplaceGroupList(props: MarketplaceGroupListProps) {
+  const controller = useGroupListController(
+    props.groups,
+    props.routePoolEnabled
   )
-  const [testResults, setTestResults] = useState<
-    Record<string, 'passed' | 'failed'>
-  >({})
-  const [resultSelectedGroupIDs, setResultSelectedGroupIDs] = useState<
-    string[]
-  >([])
-  const [routeAdding, setRouteAdding] = useState(false)
-  const batchStart = useMarketplaceBatchTest()
-  const [batchID, setBatchID] = useState('')
-  const batchQuery = useMarketplaceBatchTestQuery(batchID)
-  const autoPool = useMarketplaceAutoRoutePool(props.routePoolEnabled)
-  const autoPoolUpdate = useMarketplaceAutoRoutePoolUpdate()
-  const routePoolGroupIDs = useMemo(
-    () => selectedAutoRoutePoolGroupIDs(autoPool.data?.items ?? []),
-    [autoPool.data?.items]
-  )
-  const selectedGroups = useMemo(
-    () => new Set(routePoolGroupIDs),
-    [routePoolGroupIDs]
-  )
-  const selectableGroups = props.groups.filter(
-    (group) => group.lifecycle_status === 'active'
-  )
-  const availableTestModels = useMemo(() => {
-    const groups = selectedGroupIDs
-      .map((id) => selectableGroups.find((group) => group.id === id))
-      .filter((group): group is MarketplaceGroup => Boolean(group))
-    if (groups.length === 0) return []
-    const supportedByAll = new Set(
-      groups
-        .slice(1)
-        .flatMap((group) => group.models.map((model) => model.toLowerCase()))
-    )
-    return groups[0].models.filter(
-      (model) => groups.length === 1 || supportedByAll.has(model.toLowerCase())
-    )
-  }, [selectedGroupIDs, selectableGroups])
-
-  useEffect(() => {
-    if (testModel && !availableTestModels.includes(testModel)) setTestModel('')
-  }, [availableTestModels, testModel])
-
-  const toggleSelected = (groupID: string) => {
-    setSelectedGroupIDs((current) =>
-      current.includes(groupID)
-        ? current.filter((id) => id !== groupID)
-        : current.length >= 5
-          ? current
-          : [...current, groupID]
-    )
-  }
-
-  const resetBatchTest = () => {
-    setSelectedGroupIDs([])
-    setTestModel('')
-    setBatchID('')
-    setTestState('idle')
-    setTestResults({})
-    setResultSelectedGroupIDs([])
-  }
-
-  const runBatchTest = async () => {
-    const targetGroupIDs = selectedGroupIDs
-    const targetGroups = targetGroupIDs
-      .map((id) => props.groups.find((group) => group.id === id))
-      .filter((group): group is MarketplaceGroup => Boolean(group))
-    if (targetGroupIDs.length === 0) {
-      return toast.error(t('请先选择 1-5 个可用分组'))
-    }
-    const model = testModel.trim()
-    if (!model) return toast.error(t('请选择一个模型'))
-    try {
-      const task = await batchStart.mutateAsync({
-        groupIds: targetGroupIDs,
-        model,
-      })
-      setBatchID(task.id)
-      setTestState('running')
-      setTestResults({})
-      setResultSelectedGroupIDs([])
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('批量测试启动失败')
-      )
-    }
-  }
-
-  useEffect(() => {
-    if (!batchQuery.data) return
-    const next: Record<string, 'passed' | 'failed'> = {}
-    batchQuery.data.items.forEach((item) => {
-      if (item.status === 'passed' || item.status === 'failed')
-        next[item.group_id] = item.status
-    })
-    setTestResults(next)
-    setResultSelectedGroupIDs((current) =>
-      current.filter((groupID) => next[groupID] === 'passed')
-    )
-    if (
-      batchQuery.data.status === 'completed' ||
-      batchQuery.data.status === 'failed'
-    )
-      setTestState('done')
-  }, [batchQuery.data])
-
-  const addPassedToRoutePool = async () => {
-    const passed = resultSelectedGroupIDs.filter(
-      (id) => testResults[id] === 'passed'
-    )
-    if (passed.length === 0 || routeAdding) return
-    setRouteAdding(true)
-    try {
-      const pool = autoPool.data ?? (await autoPool.refetch()).data
-      if (!pool) throw new Error(t('无法读取 Auto 路由池'))
-      let next = selectedAutoRoutePoolGroupIDs(pool.items)
-      for (const id of passed)
-        next = appendAutoRoutePoolGroup(
-          pool.items.map((item) => ({
-            ...item,
-            selected: next.includes(item.group_id),
-          })),
-          id
-        )
-      await autoPoolUpdate.mutateAsync({ groupIds: next })
-      toast.success(t('已将测试通过的分组加入路由池'))
-      setResultSelectedGroupIDs([])
-      setTestState('idle')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('加入路由池失败'))
-    } finally {
-      setRouteAdding(false)
-    }
-  }
 
   if (props.loading) return <GroupListSkeleton />
   if (props.error) return <GroupListError onRetry={props.onRetry} />
   if (props.groups.length === 0) return <GroupListEmpty />
-
-  const toggle = (groupID: string) =>
-    setExpanded((current) => (current === groupID ? '' : groupID))
-  const addToRoutePool = async (groupID: string) => {
-    if (addingGroupID || selectedGroups.has(groupID)) return
-    setAddingGroupID(groupID)
-    try {
-      const pool = autoPool.data ?? (await autoPool.refetch()).data
-      if (!pool) throw new Error(t('无法读取 Auto 路由池'))
-      if (
-        pool.items.some((item) => item.group_id === groupID && item.selected)
-      ) {
-        return
-      }
-      const nextGroupIDs = appendAutoRoutePoolGroup(pool.items, groupID)
-      await autoPoolUpdate.mutateAsync({ groupIds: nextGroupIDs })
-      toast.success(t('已添加到 Auto 路由池'))
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('添加到路由池失败')
-      )
-    } finally {
-      setAddingGroupID('')
-    }
-  }
-
-  return (
-    <div className='bg-muted/25 space-y-1.5 p-2'>
-      <div className='border-border bg-card rounded-md border px-3 py-3 sm:px-4'>
-        <div className='flex flex-wrap items-start justify-between gap-3'>
-          <div className='min-w-0'>
-            <div className='flex items-center gap-2 text-sm font-semibold'>
-              <ListFilter className='text-primary size-4' aria-hidden='true' />
-              {t('分组连通性测试')}
-            </div>
-            <p className='text-muted-foreground mt-1 text-xs leading-5'>
-              {t(
-                '先勾选分组，再选择这些分组共同支持的模型；每次最多测试 5 个分组。'
-              )}
-            </p>
-          </div>
-          <span className='text-muted-foreground text-xs tabular-nums'>
-            {selectedGroupIDs.length > 0
-              ? t('已选 {{count}} 个分组', { count: selectedGroupIDs.length })
-              : t('请选择测试分组')}
-          </span>
-        </div>
-        <div className='mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,22rem)_auto] sm:items-end'>
-          <div className='text-muted-foreground flex min-h-9 items-center rounded-md border border-dashed px-3 text-xs'>
-            {selectedGroupIDs.length > 0
-              ? t('将测试已勾选的 {{count}} 个分组', {
-                  count: selectedGroupIDs.length,
-                })
-              : t('在下方列表勾选至少一个可用分组')}
-          </div>
-          <label className='min-w-0'>
-            <span className='text-muted-foreground mb-1 block text-xs'>
-              {t('测试模型')}
-            </span>
-            <Combobox
-              options={availableTestModels.map((model) => ({
-                value: model,
-                label: model,
-              }))}
-              value={testModel}
-              onValueChange={(value) => setTestModel(value ?? '')}
-              placeholder={
-                selectedGroupIDs.length === 0
-                  ? t('先选择分组')
-                  : availableTestModels.length === 0
-                    ? t('所选分组没有共同模型')
-                    : t('搜索并选择模型')
-              }
-              searchPlaceholder={t('搜索模型')}
-              emptyText={t('没有匹配的共同模型')}
-              className='w-full'
-            />
-          </label>
-          <Button
-            size='sm'
-            disabled={
-              selectedGroupIDs.length === 0 ||
-              !testModel ||
-              testState === 'running'
-            }
-            onClick={() => void runBatchTest()}
-          >
-            {testState === 'running' ? t('测试中…') : t('开始测试')}
-          </Button>
-        </div>
-        {selectedGroupIDs.length > 0 && availableTestModels.length === 0 && (
-          <p className='text-destructive mt-2 text-xs'>
-            {t('当前选择的分组没有共同模型，请减少分组或重新选择。')}
-          </p>
-        )}
-        <div className='mt-2 flex justify-end'>
-          {testState === 'done' && (
-            <>
-              <Button
-                size='sm'
-                variant='ghost'
-                disabled={
-                  routeAdding ||
-                  !Object.values(testResults).some(
-                    (status) => status === 'passed'
-                  )
-                }
-                onClick={() => {
-                  const passed = Object.entries(testResults)
-                    .filter(([, status]) => status === 'passed')
-                    .map(([groupID]) => groupID)
-                  setResultSelectedGroupIDs((current) =>
-                    current.length === passed.length ? [] : passed
-                  )
-                }}
-              >
-                {resultSelectedGroupIDs.length > 0
-                  ? t('取消选择通过项')
-                  : t('全选通过项')}
-              </Button>
-              <Button
-                size='sm'
-                variant='outline'
-                disabled={routeAdding || resultSelectedGroupIDs.length === 0}
-                onClick={() => void addPassedToRoutePool()}
-              >
-                {t('加入路由池')} ({resultSelectedGroupIDs.length})
-              </Button>
-            </>
-          )}
-          <Button
-            variant='ghost'
-            size='sm'
-            disabled={selectedGroupIDs.length === 0 && testState === 'idle'}
-            onClick={resetBatchTest}
-          >
-            {t('清空')}
-          </Button>
-        </div>
-      </div>
-      {testState !== 'idle' && (
-        <div className='border-border bg-primary/[0.04] rounded-md border px-3 py-3 text-xs'>
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <div className='font-medium'>
-              {testState === 'running'
-                ? t('正在按分组执行测试')
-                : t('批量测试完成')}
-            </div>
-            {batchQuery.data?.model && (
-              <span className='text-foreground font-mono'>
-                {t('模型 {{model}}', { model: batchQuery.data.model })}
-              </span>
-            )}
-            <span className='text-muted-foreground'>
-              {t(
-                '本次测试会按当前用户实际计费规则扣除额度，并写入普通用量日志'
-              )}
-            </span>
-          </div>
-          <div className='divide-border/60 mt-2 divide-y'>
-            {(
-              batchQuery.data?.items ??
-              selectedGroupIDs.map((id) => ({
-                group_id: id,
-                group_name:
-                  props.groups.find((item) => item.id === id)
-                    ?.system_display_name ?? id,
-                status: testResults[id] ?? 'queued',
-                latency_ms: 0,
-                quota_charged: 0,
-                log_created: false,
-              }))
-            ).map((item) => {
-              const status = batchStatusPresentation(item.status, t)
-              const StatusIcon = status.icon
-              return (
-                <div
-                  key={item.group_id}
-                  className='flex flex-wrap items-center gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0'
-                >
-                  {item.status === 'passed' && (
-                    <input
-                      type='checkbox'
-                      checked={resultSelectedGroupIDs.includes(item.group_id)}
-                      onChange={() =>
-                        setResultSelectedGroupIDs((current) =>
-                          current.includes(item.group_id)
-                            ? current.filter((id) => id !== item.group_id)
-                            : [...current, item.group_id]
-                        )
-                      }
-                      aria-label={t('选择 {{name}} 加入路由池', {
-                        name: item.group_name || item.group_id,
-                      })}
-                      className='accent-primary size-4 shrink-0'
-                    />
-                  )}
-                  <span className='flex min-w-40 items-center gap-1.5 font-medium'>
-                    <StatusIcon
-                      className={status.className}
-                      aria-hidden='true'
-                    />
-                    {item.group_name || item.group_id}
-                  </span>
-                  <span className={status.className}>{status.label}</span>
-                  <span className='text-muted-foreground inline-flex items-center gap-1 tabular-nums'>
-                    <Clock3 className='size-3' aria-hidden='true' />
-                    {item.latency_ms > 0
-                      ? formatDuration(item.latency_ms)
-                      : t('等待中')}
-                  </span>
-                  {item.started_at && (
-                    <span className='text-muted-foreground'>
-                      {t('开始 {{time}}', {
-                        time: new Date(item.started_at).toLocaleString(),
-                      })}
-                    </span>
-                  )}
-                  {item.ended_at && (
-                    <span className='text-muted-foreground'>
-                      {t('完成 {{time}}', {
-                        time: new Date(item.ended_at).toLocaleString(),
-                      })}
-                    </span>
-                  )}
-                  {item.status === 'passed' && (
-                    <span className='text-muted-foreground'>
-                      {t('扣除 {{quota}}', { quota: item.quota_charged ?? 0 })}
-                    </span>
-                  )}
-                  {item.billing_source && (
-                    <span className='text-muted-foreground'>
-                      {t('来源 {{source}}', { source: item.billing_source })}
-                    </span>
-                  )}
-                  {item.request_id && (
-                    <span className='text-muted-foreground font-mono'>
-                      {t('请求 {{id}}', { id: item.request_id })}
-                    </span>
-                  )}
-                  {item.error && (
-                    <span className='text-destructive basis-full break-words sm:basis-auto'>
-                      {item.error}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-      <StaggerContainer className='space-y-1.5'>
-        {props.groups.map((group) => (
-          <StaggerItem key={group.id}>
-            <GroupMarketItem
-              group={group}
-              open={expanded === group.id}
-              onToggle={() => toggle(group.id)}
-              routePoolSelected={selectedGroups.has(group.id)}
-              routePoolBusy={Boolean(addingGroupID) || autoPool.isLoading}
-              routePoolAdding={addingGroupID === group.id}
-              onAddToRoutePool={() => void addToRoutePool(group.id)}
-              showRoutePoolAction={props.routePoolEnabled !== false}
-              selectable={selectableGroups.some((item) => item.id === group.id)}
-              selected={selectedGroupIDs.includes(group.id)}
-              selectionDisabled={
-                selectedGroupIDs.length >= 5 &&
-                !selectedGroupIDs.includes(group.id)
-              }
-              onSelect={() => toggleSelected(group.id)}
-            />
-          </StaggerItem>
-        ))}
-      </StaggerContainer>
-    </div>
-  )
+  return <ReadyGroupList props={props} controller={controller} />
 }
 
-function batchStatusPresentation(
-  status: 'queued' | 'running' | 'passed' | 'failed',
-  t: (key: string) => string
-) {
-  if (status === 'passed') {
-    return {
-      icon: CheckCircle2,
-      className: 'text-emerald-600 dark:text-emerald-400',
-      label: t('通过'),
-    }
-  }
-  if (status === 'failed') {
-    return {
-      icon: XCircle,
-      className: 'text-destructive',
-      label: t('失败'),
-    }
-  }
-  if (status === 'running') {
-    return {
-      icon: LoaderCircle,
-      className: 'text-primary animate-spin',
-      label: t('测试中'),
-    }
-  }
-  return {
-    icon: Clock3,
-    className: 'text-muted-foreground',
-    label: t('等待'),
-  }
+function ReadyGroupList(input: {
+  props: MarketplaceGroupListProps
+  controller: GroupListController
+}) {
+  const { props, controller } = input
+  return (
+    <div className='bg-muted/25 space-y-1.5 p-2'>
+      <GroupBatchTestPanel
+        selectedGroupIDs={controller.selection.selectedGroupIDs}
+        availableModels={controller.selection.availableModels}
+        selectedModel={controller.selection.selectedModel}
+        testState={controller.selection.testState}
+        testResults={controller.selection.testResults}
+        selectedResultGroupIDs={controller.selection.selectedResultGroupIDs}
+        routeAdding={controller.routePool.routeAdding}
+        batchModel={controller.selection.batchQuery.data?.model}
+        items={controller.selection.items}
+        onModelChange={controller.selection.setTestModel}
+        onRun={() => void controller.runBatchTest()}
+        onTogglePassed={controller.selectionActions.togglePassed}
+        onAddPassed={() => void controller.addPassedGroups()}
+        onReset={controller.selectionActions.reset}
+        onToggleResult={controller.selectionActions.toggleResult}
+      />
+      <div className='space-y-1.5'>
+        {props.groups.map((group) => (
+          <GroupMarketItem
+            key={group.id}
+            group={group}
+            open={controller.expanded === group.id}
+            onToggle={() => controller.toggleExpanded(group.id)}
+            routePoolSelected={controller.routePool.selectedGroups.has(
+              group.id
+            )}
+            routePoolBusy={
+              Boolean(controller.routePool.addingGroupID) ||
+              controller.routePool.query.isLoading
+            }
+            routePoolAdding={controller.routePool.addingGroupID === group.id}
+            onAddToRoutePool={() => void controller.addSingleGroup(group.id)}
+            showRoutePoolAction={props.routePoolEnabled !== false}
+            selectable={controller.selection.selectableGroups.some(
+              (item) => item.id === group.id
+            )}
+            selected={controller.selection.selectedGroupIDs.includes(group.id)}
+            selectionDisabled={
+              controller.selection.selectedGroupIDs.length >= 5 &&
+              !controller.selection.selectedGroupIDs.includes(group.id)
+            }
+            onSelect={() =>
+              controller.selectionActions.toggleSelected(group.id)
+            }
+          />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function GroupListError(props: { onRetry: () => void }) {
@@ -498,9 +97,6 @@ function GroupListError(props: { onRetry: () => void }) {
         <ShieldCheck className='size-5' />
       </div>
       <div className='font-medium'>{t('分组市场暂时不可用')}</div>
-      <p className='text-muted-foreground max-w-md text-sm leading-6'>
-        {t('无法加载市场数据，请稍后重试。')}
-      </p>
       <Button variant='outline' size='sm' onClick={props.onRetry}>
         {t('重新获取')}
       </Button>
@@ -516,11 +112,6 @@ function GroupListEmpty() {
         <Sparkles className='size-5' />
       </div>
       <div className='mt-4 font-medium'>{t('等待首批公开渠道')}</div>
-      <p className='text-muted-foreground mt-1 max-w-lg text-sm leading-6 text-pretty'>
-        {t(
-          '渠道完成检测与管理员审核后会出现在这里；你也可以在“我的渠道”提交自己的模型通道。'
-        )}
-      </p>
     </div>
   )
 }

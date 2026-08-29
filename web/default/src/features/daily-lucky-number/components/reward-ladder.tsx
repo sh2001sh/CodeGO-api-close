@@ -62,7 +62,7 @@ export function RewardLadder(props: {
         </div>
       </div>
 
-      <div className='border-border/70 bg-border/70 grid gap-px border-t sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='border-border/70 bg-border/70 grid grid-cols-2 gap-px border-t'>
         {steps.map((step, index) => (
           <LadderTile
             key={step.digits}
@@ -116,48 +116,35 @@ function LadderTile(props: {
         props.active && 'bg-primary/[0.05]'
       )}
     >
-      <div className='flex items-start justify-between gap-3'>
-        <div className='flex min-w-0 items-center gap-2.5'>
-          <span
-            className={cn(
-              'flex size-7 shrink-0 items-center justify-center rounded-lg border font-mono text-xs font-semibold tabular-nums',
-              props.reached
-                ? 'border-primary/40 bg-primary/12 text-primary'
-                : 'border-border bg-muted/50 text-muted-foreground'
-            )}
-          >
-            {props.step.digits}
-          </span>
-          <div className='min-w-0'>
-            <div className='text-foreground text-sm font-medium'>
-              命中 {props.step.digits} 位
-            </div>
-            <div className='text-muted-foreground text-[11px]'>
-              {props.step.example}
-            </div>
-          </div>
-        </div>
+      <div className='flex items-center justify-between gap-3'>
+        <span
+          className={cn(
+            'codego-stat-label',
+            props.reached && 'text-primary'
+          )}
+        >
+          命中 {props.step.digits} 位
+        </span>
         {props.active ? (
-          <span className='border-primary/30 bg-primary/10 text-primary shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold'>
-            本期命中
+          <span className='codego-stat-label border border-primary/30 px-1.5 py-0.5 text-primary'>
+            命中
           </span>
         ) : null}
       </div>
 
-      <div className='mt-4 flex items-end justify-between gap-3'>
-        <div className='text-foreground font-mono text-xl font-semibold tabular-nums'>
+      <div className='mt-3 flex items-baseline justify-between gap-2'>
+        <div className='text-foreground text-xl leading-none font-semibold tabular-nums'>
           {formatLuckyUsd(finalUsd)}
         </div>
-        <div className='text-muted-foreground text-right text-[11px] tabular-nums'>
-          基础 {formatLuckyUsd(props.step.baseUsd)} ×{' '}
-          {props.multiplier.toFixed(1)}
+        <div className='text-muted-foreground text-[10px] tabular-nums'>
+          ×{props.multiplier.toFixed(1)}
         </div>
       </div>
 
-      <div className='bg-muted mt-2.5 h-1 overflow-hidden rounded-full'>
+      <div className='bg-muted mt-3 h-[3px] overflow-hidden'>
         <motion.div
           className={cn(
-            'h-full rounded-full',
+            'h-full',
             props.reached ? 'bg-primary' : 'bg-muted-foreground/35'
           )}
           initial={props.reduced ? false : { width: 0 }}

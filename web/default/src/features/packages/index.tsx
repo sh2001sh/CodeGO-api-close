@@ -123,36 +123,12 @@ export function PackagesPage() {
     description: string
   }> = shouldPrioritizeMonthlyPlans
     ? [
-        {
-          id: 'monthly',
-          title: t('Monthly plans'),
-          description: t(
-            'Suitable for ongoing development and team usage, with clear quota and validity.'
-          ),
-        },
-        {
-          id: 'starter',
-          title: t('Starter plans'),
-          description: t(
-            'Low-barrier trial, limited to one purchase. Upgrade to a monthly plan within 72 hours for bonus quota.'
-          ),
-        },
+        { id: 'monthly', title: t('Monthly plans'), description: '' },
+        { id: 'starter', title: t('Starter plans'), description: '' },
       ]
     : [
-        {
-          id: 'starter',
-          title: t('Starter plans'),
-          description: t(
-            'Low-barrier trial, limited to one purchase. Upgrade to a monthly plan within 72 hours for bonus quota.'
-          ),
-        },
-        {
-          id: 'monthly',
-          title: t('Monthly plans'),
-          description: t(
-            'Suitable for ongoing development and team usage, with clear quota and validity.'
-          ),
-        },
+        { id: 'starter', title: t('Starter plans'), description: '' },
+        { id: 'monthly', title: t('Monthly plans'), description: '' },
       ]
 
   const openFuel = (
@@ -257,9 +233,7 @@ export function PackagesPage() {
                 {groupedPlans.shortterm.length > 0 && (
                   <PlanZone
                     title={t('Short-term quota packs')}
-                    description={t(
-                      'Useful for daily or weekly peaks. Weekly plans may join collective benefit, while day passes activate immediately and do not participate.'
-                    )}
+                    description=''
                     plans={groupedPlans.shortterm}
                     loading={workspace.publicPlansLoading}
                     onPurchase={openPurchase}

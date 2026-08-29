@@ -16,25 +16,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { Layers3, RefreshCcw, Search } from 'lucide-react'
+import { RefreshCcw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionPageLayout } from '@/components/layout'
 import { GroupStatusMonitorCard } from './group-status-monitor-card'
-import { sortItems, summarizeGroups } from './presentation'
+import {
+  collectModelOptions,
+  filterGroupStatusItems,
+  sortItems,
+  summarizeGroups,
+} from './presentation'
 import { useSidebarGroupStatus } from './use-sidebar-group-status'
 
 export function SidebarGroupStatusPage() {
@@ -46,30 +45,23 @@ export function SidebarGroupStatusPage() {
   const [search, setSearch] = useState('')
   const [modelFilter, setModelFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const allItems = sortItems(query.data?.data ?? [])
-  const normalizedSearch = search.trim().toLowerCase()
-  const items = allItems.filter((item) => {
-    const sourceMatches =
-      source === 'all' || (item.source_type ?? 'official') === source
-    const modelMatches =
-      !modelFilter || item.models.some((model) => model.model === modelFilter)
-    const statusMatches = !statusFilter || item.status === statusFilter
-    const searchMatches =
-      !normalizedSearch ||
-      [
-        item.group,
-        item.display_name ?? '',
-        ...item.models.map((model) => model.model),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(normalizedSearch)
-    return sourceMatches && modelMatches && statusMatches && searchMatches
-  })
-  const modelOptions = Array.from(
-    new Set(allItems.flatMap((item) => item.models.map((model) => model.model)))
-  ).sort()
-  const summary = summarizeGroups(allItems)
+  const deferredSearch = useDeferredValue(search)
+  const allItems = useMemo(
+    () => sortItems(query.data?.data ?? []),
+    [query.data?.data]
+  )
+  const items = useMemo(
+    () =>
+      filterGroupStatusItems(allItems, {
+        source,
+        model: modelFilter,
+        status: statusFilter,
+        search: deferredSearch,
+      }),
+    [allItems, deferredSearch, modelFilter, source, statusFilter]
+  )
+  const modelOptions = useMemo(() => collectModelOptions(allItems), [allItems])
+  const summary = useMemo(() => summarizeGroups(allItems), [allItems])
 
   return (
     <SectionPageLayout>
@@ -105,7 +97,7 @@ export function SidebarGroupStatusPage() {
 
           <div className='border-border flex flex-col gap-3 border-b pb-3'>
             <div
-              className='bg-muted flex w-fit rounded-md p-1'
+              className='border-border/70 flex w-fit items-center gap-4 border-b'
               aria-label='分组来源筛选'
             >
               {(
@@ -115,14 +107,18 @@ export function SidebarGroupStatusPage() {
                   ['marketplace_user', '第三方渠道'],
                 ] as const
               ).map(([value, label]) => (
-                <Button
+                <button
                   key={value}
-                  size='sm'
-                  variant={source === value ? 'secondary' : 'ghost'}
+                  type='button'
                   onClick={() => setSource(value)}
+                  className={`-mb-px border-b-2 pb-2.5 text-[13px] transition-colors ${
+                    source === value
+                      ? 'border-primary text-foreground font-semibold'
+                      : 'text-muted-foreground hover:text-foreground border-transparent'
+                  }`}
                 >
                   {label}
-                </Button>
+                </button>
               ))}
             </div>
             <div className='flex flex-col gap-2 xl:flex-row xl:items-center'>
@@ -162,9 +158,6 @@ export function SidebarGroupStatusPage() {
                 <option value='unknown'>暂无近期请求</option>
               </NativeSelect>
             </div>
-            <span className='text-muted-foreground text-xs'>
-              官方与第三方分组均可按来源、名称、模型和当前状态快速定位。
-            </span>
           </div>
 
           {query.isLoading ? (
@@ -176,7 +169,10 @@ export function SidebarGroupStatusPage() {
           ) : (
             <div className='flex flex-col gap-5'>
               {items.map((group) => (
-                <section key={group.group} className='app-page-shell p-4'>
+                <section
+                  key={group.group}
+                  className='group-status-render-section app-page-shell p-4'
+                >
                   <div className='mb-4 flex items-end justify-between gap-3'>
                     <div className='space-y-1'>
                       <h3 className='text-foreground text-xl font-semibold tracking-tight'>
@@ -204,8 +200,12 @@ export function SidebarGroupStatusPage() {
 
                   <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
                     {group.models.length === 0 ? (
-                      <div className='text-muted-foreground rounded-2xl border border-dashed px-4 py-6 text-sm'>
-                        当前分组下暂无可展示模型。
+                      <div className='codego-empty px-4 py-6'>
+                        <span
+                          aria-hidden
+                          className='bg-border block h-6 w-px'
+                        />
+                        NO MODELS
                       </div>
                     ) : (
                       group.models.map((model) => (
@@ -232,71 +232,65 @@ function OverviewPanel(props: {
 }) {
   const metrics = [
     {
-      label: '业务分组',
+      label: '分组',
       value: String(props.summary.groups),
-      hint: '当前可查看的分组数',
-      tone: 'text-muted-foreground',
+      tone: 'text-foreground',
     },
     {
-      label: '稳定模型',
+      label: '稳定',
       value: String(props.summary.healthyModels),
-      hint: '最新非空 30 分钟请求桶成功率 ≥ 90%',
       tone: 'text-success',
     },
     {
-      label: '波动模型',
+      label: '波动',
       value: String(props.summary.unstableModels),
-      hint: '最新非空 30 分钟请求桶成功率 85%–90%',
       tone: 'text-warning',
     },
     {
-      label: '异常模型',
+      label: '异常',
       value: String(props.summary.failedModels),
-      hint: '最新非空 30 分钟请求桶成功率低于 85%',
       tone: 'text-destructive',
     },
     {
-      label: '暂无近期请求模型',
+      label: '无请求',
       value: String(props.summary.unknownModels),
-      hint: '近 6 小时没有请求样本',
       tone: 'text-muted-foreground',
     },
   ]
 
   return (
-    <Card className='border-border/70'>
-      <CardHeader className='border-border/70 border-b'>
-        <CardTitle className='flex items-center gap-2'>
-          <Layers3 className='text-primary size-4' />
-          分组模型状态
-        </CardTitle>
-        <CardDescription className='max-w-[72ch] leading-6'>
-          三处状态统一取近 6 小时内最新非空的 30 分钟请求桶；绿色表示成功率至少
-          90%，不代表每次请求都成功。
-        </CardDescription>
+    <Card className='border-border py-0'>
+      <CardHeader className='border-border border-b py-4'>
+        <div className='flex items-center justify-between gap-3'>
+          <div className='flex items-center gap-2.5'>
+            <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+            <CardTitle className='text-[13px] font-semibold'>
+              分组模型状态
+            </CardTitle>
+          </div>
+          <span className='codego-stat-label'>6H WINDOW</span>
+        </div>
       </CardHeader>
-      <CardContent className='pt-4'>
-        <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
+      <CardContent className='py-0'>
+        <div className='codego-fact-row grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'>
           {metrics.map((metric) => (
-            <div key={metric.label} className='px-4 py-1 first:pl-0'>
-              <div className='text-muted-foreground text-xs font-medium'>
-                {metric.label}
-              </div>
+            <div
+              key={metric.label}
+              className='min-w-0 px-4 py-4 sm:px-5 sm:py-5'
+            >
+              <div className='codego-stat-label'>{metric.label}</div>
               {props.loading ? (
-                <Skeleton className='mt-1.5 h-7 w-16 rounded-md' />
+                <Skeleton className='mt-3 h-8 w-16' />
               ) : (
                 <div
                   className={cn(
-                    'app-numeric mt-1.5 text-2xl font-semibold tracking-tight',
+                    'mt-2.5 text-2xl leading-none font-semibold tabular-nums',
                     metric.tone
                   )}
                 >
                   {metric.value}
                 </div>
               )}
-              <div className='text-muted-foreground mt-0.5 text-xs leading-5'>
-                {metric.hint}
-              </div>
             </div>
           ))}
         </div>

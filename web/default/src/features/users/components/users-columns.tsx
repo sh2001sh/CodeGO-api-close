@@ -324,8 +324,8 @@ export function useUsersColumns(): ColumnDef<User>[] {
       cell: ({ row }) => {
         const ts = row.getValue('created_at') as number | undefined
         return (
-          <span className='text-muted-foreground text-sm'>
-            {ts ? formatTimestamp(ts) : '-'}
+          <span className='text-muted-foreground font-mono text-xs whitespace-nowrap tabular-nums'>
+            {ts ? formatTimestamp(ts).split(' ')[0] : '-'}
           </span>
         )
       },

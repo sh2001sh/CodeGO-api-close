@@ -23,7 +23,7 @@ import {
   EMPTY_PAYMENT_STATE,
   getBlindBoxMethodLabel,
   type BlindBoxPaymentState,
-} from './blind-box-dialogs'
+} from './blind-box-dialog-data'
 
 interface UseBlindBoxPaymentOptions {
   paymentResult?: 'success' | 'pending' | 'fail'

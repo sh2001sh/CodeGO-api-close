@@ -20,7 +20,6 @@ import { UsageChart } from './summary-card-parts'
 import {
   BalanceWorkspace,
   PackageStatusCard,
-  StatusInfoCard,
   type BalanceSegment,
   type MetricDef,
 } from './summary-sections'
@@ -160,32 +159,22 @@ export function SummaryCards() {
   const hasSubscription = Boolean(subscription)
   const heroMetrics: MetricDef[] = [
     {
-      label: '24 小时消耗',
+      label: '24H 消耗',
       value: recentUsage == null ? '--' : formatQuota(recentUsage),
       numeric: recentUsage,
       format: formatQuota,
-      hint: `滚动统计最近 24 小时的消耗（${currencyLabel}）`,
     },
     {
       label: '账本累计',
       value: formatQuota(usedQuota),
       numeric: usedQuota,
       format: formatQuota,
-      hint: `账本累计已结算用量（${currencyLabel}）`,
     },
     {
       label: '请求次数',
       value: formatNumber(requestCount),
       numeric: requestCount,
       format: formatNumber,
-      hint: '账户累计请求次数',
-    },
-    {
-      label: '通用额度',
-      value: formatQuota(remainQuota),
-      numeric: remainQuota,
-      format: formatQuota,
-      hint: '用于通用模型与全部第三方市场分组',
     },
   ]
 
@@ -205,36 +194,21 @@ export function SummaryCards() {
           title={
             hasSubscription
               ? primaryPlanMeta?.title || `套餐 #${subscription?.id}`
-              : '当前套餐状态'
+              : ''
           }
-          subtitle={
-            hasSubscription
-              ? primaryPlanMeta?.subtitle || '订阅额度'
-              : '购买后这里会显示额度进度'
-          }
+          subtitle=''
           remainingDays={getRemainingDays(subscription?.end_time)}
           totalUsed={totalUsed}
           totalAmount={totalAmount}
-          totalHint={`到期时间：${formatDateTime(subscription?.end_time)}`}
+          totalHint={`到期 ${formatDateTime(subscription?.end_time)}`}
           periodUsed={showPeriodQuota ? periodUsed : undefined}
           periodAmount={showPeriodQuota ? periodAmount : undefined}
           periodHint={
             showPeriodQuota
-              ? `下次重置：${formatDateTime(subscription?.next_reset_time)}`
+              ? `重置 ${formatDateTime(subscription?.next_reset_time)}`
               : undefined
           }
-        >
-          <StatusInfoCard
-            label='状态'
-            value={hasSubscription ? '正常' : '未订阅'}
-            hint='展示当前主套餐状态，完整排序与扣费规则在管理页查看。'
-          />
-          <StatusInfoCard
-            label='额度策略'
-            value={showPeriodQuota ? '周期管理' : '总量管理'}
-            hint='根据套餐类型展示总额度或周期额度。'
-          />
-        </PackageStatusCard>
+        />
       </div>
 
       <UsageChart points={chartPoints} />

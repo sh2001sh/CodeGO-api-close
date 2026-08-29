@@ -57,31 +57,23 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           <div className='codego-auth-card app-page-shell grid overflow-hidden lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]'>
             <div className='codego-auth-rail border-border bg-muted/40 hidden flex-col justify-between border-r p-10 lg:flex'>
               <div className='space-y-5'>
-                <div className='border-border text-muted-foreground inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.14em] uppercase'>
+                <div className='codego-kicker flex items-center gap-2.5'>
+                  <span aria-hidden className='bg-primary block h-2 w-2' />
                   {t('Developer workspace')}
                 </div>
                 <div className='space-y-3'>
-                  <h2 className='text-foreground max-w-[12ch] text-4xl font-semibold tracking-tight'>
+                  <h2 className='text-foreground max-w-[12ch] text-4xl leading-[1.12] font-semibold'>
                     {t('Manage your models, quota, and billing in one place')}
                   </h2>
-                  <p className='text-muted-foreground max-w-[44ch] text-sm leading-7'>
-                    {t(
-                      'Sign in to continue with API keys, subscriptions, usage tracking, and operational controls.'
-                    )}
-                  </p>
                 </div>
               </div>
 
-              <div className='grid gap-3'>
-                <div className='app-subtle-panel p-5'>
-                  <div className='text-foreground text-sm font-semibold'>
-                    {t('Reliable access')}
-                  </div>
-                  <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                    {t(
-                      'Keep quota, subscription status, and workspace controls within immediate reach during active development.'
-                    )}
-                  </p>
+              <div className='codego-fact-row grid grid-cols-1'>
+                <div className='flex items-center justify-between gap-3 py-4'>
+                  <span className='codego-stat-label'>{t('Reliable access')}</span>
+                  <span className='font-mono text-[10px] text-muted-foreground/70 uppercase'>
+                    SHU26.CFD
+                  </span>
                 </div>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Tooltip,
@@ -17,8 +18,14 @@ const SEGMENT_CLASS = {
   unknown: 'bg-muted',
 } as const
 
+const TIME_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
 export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
-  const segments = buildHealthSegments(props.item)
+  const segments = useMemo(() => buildHealthSegments(props.item), [props.item])
   const total = segments.length || 1
   const bucketSeconds =
     props.item.bucket_seconds ??
@@ -87,11 +94,7 @@ function formatBucketRange(ts: number, bucketSeconds: number) {
 }
 
 function formatTime(date: Date) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
+  return TIME_FORMATTER.format(date)
 }
 
 function buildBucketLabel(

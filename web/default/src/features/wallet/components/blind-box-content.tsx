@@ -83,7 +83,7 @@ export function BlindBoxContent(props: BlindBoxContentProps) {
           data={props.data}
           tiers={props.data?.inventory?.tiers || props.data?.tiers || []}
           title='统一盲盒奖池'
-          description='人民币与统一额度购买使用同一概率表。额度奖励按区间随机生成并永久有效，权益卡未启用前永久保存。'
+          description=''
           hideSubscription
         />
       </motion.div>

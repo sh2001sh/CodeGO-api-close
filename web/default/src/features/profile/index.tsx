@@ -50,11 +50,22 @@ export function Profile() {
     <Main>
       <SiteSeo
         title='个人资料'
-        description='管理账户信息、语言偏好、登录安全和侧边栏设置。'
+        description='个人资料'
         canonicalPath='/profile'
         robots='noindex,follow'
       />
-      <div className='min-h-0 flex-1 overflow-auto px-3 py-3 sm:px-4 sm:py-6'>
+      <div className='codego-page-intro shrink-0 px-4 pt-6 pb-6 sm:px-7 sm:pt-8 sm:pb-7'>
+        <div className='flex items-center gap-2.5'>
+          <span className='codego-page-signal' aria-hidden='true' />
+          <span className='codego-page-kicker'>
+            AI CODING GATEWAY · CONSOLE
+          </span>
+        </div>
+        <h2 className='codego-page-title text-foreground mt-3 text-3xl leading-[1.04] font-semibold text-balance sm:text-4xl'>
+          个人资料
+        </h2>
+      </div>
+      <div className='codego-page-content min-h-0 flex-1 overflow-auto px-4 pt-5 pb-6 sm:px-7 sm:pt-6 sm:pb-8'>
         <CardStaggerContainer className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-6'>
           <CardStaggerItem>
             <ProfileHeader profile={profile} loading={loading} />

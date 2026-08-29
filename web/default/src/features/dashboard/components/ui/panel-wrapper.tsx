@@ -40,18 +40,21 @@ function PanelHeader(props: {
   actions?: ReactNode
 }) {
   const heading = (
-    <div className='flex flex-col gap-1'>
-      <div className='text-sm font-semibold'>{props.title}</div>
-      {props.description != null && (
-        <div className='text-muted-foreground text-xs'>{props.description}</div>
-      )}
+    <div className='flex items-center gap-2.5'>
+      <span
+        aria-hidden='true'
+        className='block h-3 w-[3px] shrink-0 bg-primary'
+      />
+      <div className='text-foreground text-[13px] font-semibold'>
+        {props.title}
+      </div>
     </div>
   )
 
   return (
-    <div className='border-b border-border/70 px-4 py-3 sm:px-5'>
+    <div className='flex min-h-12 items-center border-b px-4 py-2.5 sm:px-5'>
       {props.actions != null ? (
-        <div className='flex items-start justify-between gap-2'>
+        <div className='flex w-full items-center justify-between gap-2'>
           {heading}
           {props.actions}
         </div>
@@ -67,7 +70,7 @@ export function PanelWrapper(props: PanelWrapperProps) {
   const resolvedEmptyMessage = props.emptyMessage ?? t('No data available')
   const height = props.height ?? 'h-64'
   const frameClassName = cn(
-    'overflow-hidden rounded-2xl border border-border bg-card shadow-none',
+    'codego-panel overflow-hidden',
     props.className
   )
 
@@ -88,7 +91,7 @@ export function PanelWrapper(props: PanelWrapperProps) {
         <PanelHeader title={props.title} description={props.description} />
         <div
           className={cn(
-            'text-muted-foreground flex items-center justify-center px-4 text-sm',
+            'codego-empty justify-center px-4',
             height,
             props.contentClassName
           )}

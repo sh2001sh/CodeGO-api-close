@@ -1,6 +1,6 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import type { BlindBoxRecord } from '../types'
-import type { PrizeDialogState } from './blind-box-dialogs'
+import type { PrizeDialogState } from './blind-box-dialog-data'
 
 export function useBlindBoxChangedEvent(
   setPrizeState: Dispatch<SetStateAction<PrizeDialogState>>,

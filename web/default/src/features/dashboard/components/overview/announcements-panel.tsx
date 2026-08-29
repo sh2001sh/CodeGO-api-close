@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { memo, useState } from 'react'
-import { Megaphone } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getAnnouncementColorClass } from '@/lib/colors'
 import { formatDateTimeObject } from '@/lib/time'
@@ -56,12 +55,7 @@ export function AnnouncementsPanel() {
 
   return (
     <PanelWrapper
-      title={
-        <span className='flex items-center gap-2'>
-          <Megaphone className='text-muted-foreground/60 size-4' />
-          {t('Announcements')}
-        </span>
-      }
+      title={t('Announcements')}
       description={t('Latest platform updates and notices')}
       loading={loading}
       empty={!list.length}

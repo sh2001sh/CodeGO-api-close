@@ -79,9 +79,6 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
         resetOpportunity={resetOpportunity}
         compact
         title={t('Plan quota reset')}
-        description={t(
-          'Invite a new user to make a first purchase to earn a reset opportunity. Your current status is shown here.'
-        )}
       />
     </aside>
   )

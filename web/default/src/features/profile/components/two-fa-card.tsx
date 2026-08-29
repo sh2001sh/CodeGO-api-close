@@ -70,7 +70,7 @@ export function TwoFACard({ loading: pageLoading }: TwoFACardProps) {
           <CardTitle className='text-lg tracking-tight sm:text-xl'>
             {t('Two-Factor Authentication')}
           </CardTitle>
-          <CardDescription className='text-xs sm:text-sm'>
+          <CardDescription className='sr-only'>
             {t('Add an extra layer of security to your account')}
           </CardDescription>
         </CardHeader>

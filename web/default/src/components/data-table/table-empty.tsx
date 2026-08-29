@@ -22,8 +22,6 @@ import {
   Empty,
   EmptyDescription,
   EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
 } from '@/components/ui/empty'
 import { TableRow, TableCell } from '@/components/ui/table'
 
@@ -73,11 +71,15 @@ export function TableEmpty({
       <TableCell colSpan={colSpan} className='h-[400px] p-0'>
         <Empty>
           <EmptyHeader>
-            <EmptyMedia variant='icon'>
-              {icon || <Database className='size-6' />}
-            </EmptyMedia>
-            <EmptyTitle>{resolvedTitle}</EmptyTitle>
-            <EmptyDescription>{resolvedDescription}</EmptyDescription>
+            <span
+              aria-hidden
+              className='mb-1 block h-10 w-px bg-border'
+            />
+            <span className='codego-empty'>
+              {icon || <Database className='size-4' />}
+              {resolvedTitle}
+            </span>
+            <EmptyDescription className='sr-only'>{resolvedDescription}</EmptyDescription>
           </EmptyHeader>
           {children}
         </Empty>

@@ -1,19 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useDebounce } from '@/hooks'
 import { Plus, Route, ShieldCheck, Store, UploadCloud } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { acceptMarketplaceGroupInvite } from './api'
-import { AdminGovernance } from './components/admin-governance'
-import { ChannelWorkspace } from './components/channel-workspace'
 import { MarketSurface } from './components/market-surface'
 import { MarketplaceAudienceGuide } from './components/marketplace-audience-guide'
 import { MarketplaceOverview } from './components/marketplace-overview'
-import { RoutePoolWorkspace } from './components/route-pool-workspace'
 import { TokenBindPanel } from './components/token-bind-panel'
 import { useMarketplaceGroups } from './hooks'
 import type { GroupFilters } from './types'
@@ -34,6 +32,20 @@ const defaultFilters: GroupFilters = {
 
 type MarketplaceTab = 'market' | 'routes' | 'mine' | 'admin'
 
+const loadRoutePoolWorkspace = () => import('./components/route-pool-workspace')
+const loadChannelWorkspace = () => import('./components/channel-workspace')
+const loadAdminGovernance = () => import('./components/admin-governance')
+
+const RoutePoolWorkspace = lazy(async () => ({
+  default: (await loadRoutePoolWorkspace()).RoutePoolWorkspace,
+}))
+const ChannelWorkspace = lazy(async () => ({
+  default: (await loadChannelWorkspace()).ChannelWorkspace,
+}))
+const AdminGovernance = lazy(async () => ({
+  default: (await loadAdminGovernance()).AdminGovernance,
+}))
+
 export function MarketplacePage() {
   const { t } = useTranslation()
   const role = useAuthStore((state) => state.auth.user?.role ?? 0)
@@ -41,7 +53,7 @@ export function MarketplacePage() {
   const [tab, setTab] = useState<MarketplaceTab>('market')
   const [showChannelForm, setShowChannelForm] = useState(false)
   const [filters, setFilters] = useState<GroupFilters>(defaultFilters)
-  const [inviteHandled, setInviteHandled] = useState(false)
+  const inviteHandledRef = useRef(false)
   const [acceptedInvite, setAcceptedInvite] = useState<{
     groupId: string
     groupName: string
@@ -58,12 +70,10 @@ export function MarketplacePage() {
   )
   const groups = useMarketplaceGroups(effectiveFilters)
   useEffect(() => {
-    if (inviteHandled) return
+    if (inviteHandledRef.current) return
+    inviteHandledRef.current = true
     const token = new URLSearchParams(window.location.search).get('invite')
-    if (!token) {
-      setInviteHandled(true)
-      return
-    }
+    if (!token) return
     const currentUrl = new URL(window.location.href)
     currentUrl.searchParams.delete('invite')
     window.history.replaceState(
@@ -71,7 +81,6 @@ export function MarketplacePage() {
       '',
       `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`
     )
-    setInviteHandled(true)
     void acceptMarketplaceGroupInvite(token)
       .then((result) => {
         setAcceptedInvite({
@@ -85,7 +94,7 @@ export function MarketplacePage() {
       .catch((error) => {
         toast.error(error instanceof Error ? error.message : t('邀请链接无效'))
       })
-  }, [inviteHandled, t])
+  }, [t])
   const updateFilters = (patch: Partial<GroupFilters>) =>
     setFilters((current) => ({ ...current, ...patch }))
 
@@ -170,6 +179,8 @@ export function MarketplacePage() {
               <TabsTrigger
                 value='routes'
                 className='min-w-20 px-2 sm:min-w-24 sm:px-3'
+                onPointerEnter={() => void loadRoutePoolWorkspace()}
+                onFocus={() => void loadRoutePoolWorkspace()}
               >
                 <Route />
                 {t('路由池配置')}
@@ -177,6 +188,8 @@ export function MarketplacePage() {
               <TabsTrigger
                 value='mine'
                 className='min-w-20 px-2 sm:min-w-24 sm:px-3'
+                onPointerEnter={() => void loadChannelWorkspace()}
+                onFocus={() => void loadChannelWorkspace()}
               >
                 <UploadCloud />
                 {t('我的渠道')}
@@ -185,6 +198,8 @@ export function MarketplacePage() {
                 <TabsTrigger
                   value='admin'
                   className='min-w-20 px-2 sm:min-w-24 sm:px-3'
+                  onPointerEnter={() => void loadAdminGovernance()}
+                  onFocus={() => void loadAdminGovernance()}
                 >
                   <ShieldCheck />
                   {t('渠道治理')}
@@ -196,27 +211,51 @@ export function MarketplacePage() {
                 filters={filters}
                 updateFilters={updateFilters}
                 query={groups}
-                summary={`${t('共 {{total}} 个公开分组', { total: groups.data?.total ?? 0 })} · ${t('{{count}} 个达到正式排名门槛', { count: groups.data?.ranked_count ?? 0 })} · ${t('先看倍率、成功率和首字速度')}`}
+                summary={`${t('共 {{total}} 个公开分组', { total: groups.data?.total ?? 0 })} · ${t('{{count}} 个达到正式排名门槛', { count: groups.data?.ranked_count ?? 0 })}`}
               />
             </TabsContent>
             <TabsContent value='routes'>
-              <RoutePoolWorkspace />
+              {tab === 'routes' && (
+                <Suspense fallback={<MarketplaceSectionSkeleton />}>
+                  <RoutePoolWorkspace />
+                </Suspense>
+              )}
             </TabsContent>
             <TabsContent value='mine'>
-              <ChannelWorkspace
-                showForm={showChannelForm}
-                onShowForm={() => setShowChannelForm(true)}
-                onHideForm={() => setShowChannelForm(false)}
-              />
+              {tab === 'mine' && (
+                <Suspense fallback={<MarketplaceSectionSkeleton />}>
+                  <ChannelWorkspace
+                    showForm={showChannelForm}
+                    onShowForm={() => setShowChannelForm(true)}
+                    onHideForm={() => setShowChannelForm(false)}
+                  />
+                </Suspense>
+              )}
             </TabsContent>
             {isAdmin && (
               <TabsContent value='admin'>
-                <AdminGovernance />
+                {tab === 'admin' && (
+                  <Suspense fallback={<MarketplaceSectionSkeleton />}>
+                    <AdminGovernance />
+                  </Suspense>
+                )}
               </TabsContent>
             )}
           </Tabs>
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>
+  )
+}
+
+function MarketplaceSectionSkeleton() {
+  return (
+    <div className='border-border bg-card space-y-4 rounded-lg border p-5'>
+      <div className='flex items-center justify-between gap-4'>
+        <Skeleton className='h-5 w-36' />
+        <Skeleton className='h-9 w-24' />
+      </div>
+      <Skeleton className='h-56 w-full' />
+    </div>
   )
 }

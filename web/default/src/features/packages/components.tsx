@@ -64,18 +64,17 @@ export function PlanZone(props: {
 
   return (
     <section className='space-y-3'>
-      <div>
-        <h3 className='text-foreground text-base font-semibold'>
+      <div className='flex items-center gap-2.5'>
+        <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+        <h3 className='text-foreground text-[13px] font-semibold'>
           {props.title}
         </h3>
-        <p className='text-muted-foreground mt-1 text-sm leading-6'>
-          {props.description}
-        </p>
+        <span className='codego-stat-label sr-only'>{props.description}</span>
       </div>
       {props.loading ? (
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
           {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className='h-[420px] rounded-xl' />
+            <Skeleton key={index} className='h-[420px]' />
           ))}
         </div>
       ) : props.plans.length > 0 ? (
@@ -148,10 +147,10 @@ export function CurrentPackagePanel(props: {
         <Skeleton className='h-8 w-full sm:w-96' />
       ) : current ? (
         <>
-          <div className='flex min-w-0 items-center gap-2'>
+          <div className='flex min-w-0 items-center gap-2.5'>
             <Crown className='text-primary size-4 shrink-0' />
             <span className='text-foreground truncate text-sm font-semibold'>
-              {t('Current')}: {currentTitle}
+              {currentTitle}
             </span>
           </div>
           <div className='text-muted-foreground text-sm tabular-nums'>
@@ -204,13 +203,11 @@ export function CurrentPackagePanel(props: {
               </Button>
             ) : null}
             {renewalBlocked ? (
-              <div className='flex max-w-64 flex-col items-end gap-1'>
+              <div className='flex flex-col items-end gap-1'>
                 <Button size='sm' variant='outline' disabled>
                   {t('Renewal unavailable')}
                 </Button>
-                <span className='text-muted-foreground text-right text-xs leading-4'>
-                  {renewalBlockedReason}
-                </span>
+                <span className='sr-only'>{renewalBlockedReason}</span>
               </div>
             ) : (
               <Button

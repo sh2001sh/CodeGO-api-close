@@ -272,8 +272,8 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         <DataTableColumnHeader column={column} title={t('Created')} />
       ),
       cell: ({ row }) => (
-        <span className='text-muted-foreground font-mono text-xs tabular-nums'>
-          {formatTimestampToDate(row.getValue('created_time'))}
+        <span className='text-muted-foreground font-mono text-xs whitespace-nowrap tabular-nums'>
+          {formatTimestampToDate(row.getValue('created_time')).split(' ')[0]}
         </span>
       ),
       meta: { label: t('Created'), mobileHidden: true },
@@ -292,8 +292,8 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
         return (
-          <span className='text-muted-foreground font-mono text-xs tabular-nums'>
-            {formatTimestampToDate(accessedTime)}
+          <span className='text-muted-foreground font-mono text-xs whitespace-nowrap tabular-nums'>
+            {formatTimestampToDate(accessedTime).split(' ')[0]}
           </span>
         )
       },

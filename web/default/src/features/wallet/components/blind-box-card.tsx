@@ -18,11 +18,11 @@ import type {
 } from '../types'
 import { BlindBoxContent } from './blind-box-content'
 import {
-  BlindBoxPrizeDialog,
   EMPTY_PAYMENT_STATE,
   EMPTY_PRIZE_STATE,
   type PrizeDialogState,
-} from './blind-box-dialogs'
+} from './blind-box-dialog-data'
+import { BlindBoxPrizeDialog } from './blind-box-dialogs'
 import { BlindBoxHistorySheet } from './blind-box-history-sheet'
 import { BlindBoxPaymentDialog } from './blind-box-payment-dialog'
 import { BlindBoxPropGiftDialog } from './blind-box-prop-gift-dialog'
@@ -313,6 +313,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
 
       <BlindBoxPrizeDialog
         state={prizeState}
+        tiers={data?.inventory?.tiers || data?.tiers || []}
         onOpenChange={(open) =>
           setPrizeState((current) => ({
             ...current,

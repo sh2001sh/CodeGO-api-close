@@ -36,6 +36,13 @@ type StatusMeta = {
   badgeBg: string
 }
 
+export type GroupStatusFilters = {
+  source: 'all' | 'official' | 'marketplace_user'
+  model: string
+  status: string
+  search: string
+}
+
 const STATUS_META: Record<SidebarGroupAvailabilityStatus, StatusMeta> = {
   failed: {
     label: getRequestHealthLabel('failed'),
@@ -141,6 +148,39 @@ export function summarizeGroups(items: SidebarGroupStatusItem[]) {
   }
 }
 
+export function collectModelOptions(items: SidebarGroupStatusItem[]) {
+  return Array.from(
+    new Set(items.flatMap((item) => item.models.map((model) => model.model)))
+  ).sort((left, right) => left.localeCompare(right, 'en'))
+}
+
+export function filterGroupStatusItems(
+  items: SidebarGroupStatusItem[],
+  filters: GroupStatusFilters
+) {
+  const normalizedSearch = filters.search.trim().toLowerCase()
+  return items.filter((item) => {
+    const sourceMatches =
+      filters.source === 'all' ||
+      (item.source_type ?? 'official') === filters.source
+    const modelMatches =
+      !filters.model ||
+      item.models.some((model) => model.model === filters.model)
+    const statusMatches = !filters.status || item.status === filters.status
+    const searchMatches =
+      !normalizedSearch ||
+      [
+        item.group,
+        item.display_name ?? '',
+        ...item.models.map((model) => model.model),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedSearch)
+    return sourceMatches && modelMatches && statusMatches && searchMatches
+  })
+}
+
 function bucketTone(bucket: SidebarGroupStatusBucket) {
   if (bucket.request_count <= 0 || bucket.success_rate == null) {
     return 'unknown' as const
@@ -162,7 +202,7 @@ export function formatRequestCount(value?: number) {
 }
 
 function buildFallbackSegments(item: SidebarGroupModelStatusItem) {
-  const total = 20
+  const total = 12
   const successRate = item.success_rate
   const bucketSeconds =
     item.bucket_seconds ??

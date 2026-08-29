@@ -1,10 +1,10 @@
-import { ArrowRight, Gift, History, Info, Wallet } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { BlindBoxProp, BlindBoxRecord, BlindBoxStatistics } from '../types'
-import { formatBlindBoxTimestamp } from './blind-box-dialogs'
+import { formatBlindBoxTimestamp } from './blind-box-dialog-data'
 import { BlindBoxStatsPanel } from './blind-box-notices'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
@@ -69,30 +69,32 @@ export function BlindBoxSidebar(props: {
       </motion.div>
 
       <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
-        <div className='app-subtle-panel p-4'>
-          <div className='flex items-start gap-3'>
-            <div className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
-              <History className='size-4' />
-            </div>
-            <div className='min-w-0 flex-1'>
-              <div className='text-foreground text-sm font-semibold'>
+        <div className='codego-panel p-4'>
+          <div className='flex items-center justify-between gap-2'>
+            <div className='flex items-center gap-2.5'>
+              <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+              <div className='text-foreground text-[13px] font-semibold'>
                 开奖历史
               </div>
-              {props.records[0] ? (
-                <div className='text-muted-foreground mt-1 text-xs leading-5'>
-                  最近获得
-                  <span className='text-foreground mx-1 font-medium'>
-                    {props.records[0].reward_title}
-                  </span>
-                  · {formatBlindBoxTimestamp(props.records[0].create_time)}
-                </div>
-              ) : (
-                <div className='text-muted-foreground mt-1 text-xs leading-5'>
-                  最近 30 天还没有抽取记录
-                </div>
-              )}
             </div>
+            <span className='codego-stat-label'>30D</span>
           </div>
+          {props.records[0] ? (
+            <div className='border-border/60 mt-3 border-t pt-3'>
+              <div className='codego-stat-label'>最近获得</div>
+              <div className='text-foreground mt-1.5 truncate text-sm font-medium'>
+                {props.records[0].reward_title}
+              </div>
+              <div className='text-muted-foreground mt-0.5 font-mono text-[10px] tabular-nums'>
+                {formatBlindBoxTimestamp(props.records[0].create_time)}
+              </div>
+            </div>
+          ) : (
+            <div className='codego-empty mt-3 justify-start py-4 text-left'>
+              <span aria-hidden className='bg-border block h-5 w-px' />
+              NO RECORDS
+            </div>
+          )}
           <Button
             type='button'
             variant='outline'
@@ -126,14 +128,16 @@ function PropsPreview(props: {
   const preview = (usable.length > 0 ? usable : props.props).slice(0, 3)
 
   return (
-    <div className='app-subtle-panel p-4'>
+    <div className='codego-panel p-4'>
       <div className='flex items-center justify-between gap-2'>
-        <div className='flex items-center gap-2'>
-          <Gift className='text-muted-foreground size-4' aria-hidden='true' />
-          <div className='text-foreground text-sm font-semibold'>我的道具</div>
+        <div className='flex items-center gap-2.5'>
+          <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+          <div className='text-foreground text-[13px] font-semibold'>
+            我的道具
+          </div>
         </div>
         {usable.length > 0 ? (
-          <span className='border-primary/30 bg-primary/10 text-primary rounded-full border px-2 py-0.5 text-[10px] font-semibold tabular-nums'>
+          <span className='codego-stat-label border-primary/30 text-primary border px-1.5 py-0.5'>
             可用 {usable.length}
           </span>
         ) : null}
@@ -144,7 +148,7 @@ function PropsPreview(props: {
           {preview.map((prop) => (
             <li
               key={prop.id}
-              className='border-border/70 bg-background/60 flex items-center justify-between gap-2 rounded-lg border px-3 py-2'
+              className='border-border/60 flex items-center justify-between gap-2 border-b py-2 last:border-b-0'
             >
               <span className='text-foreground min-w-0 truncate text-xs font-medium'>
                 {prop.title}
@@ -165,9 +169,10 @@ function PropsPreview(props: {
           ))}
         </ul>
       ) : (
-        <p className='text-muted-foreground mt-2 text-xs leading-5'>
-          还没有可管理的倍率卡；“再来一抽”会直接补发到盲盒库存。
-        </p>
+        <div className='codego-empty mt-2 justify-center py-6'>
+          <span aria-hidden className='bg-border block h-6 w-px' />
+          NO PROPS
+        </div>
       )}
 
       <Button
@@ -189,40 +194,45 @@ function AssetBoard(props: {
   pendingBoxes: number
 }) {
   return (
-    <div className='app-subtle-panel p-4'>
-      <div className='mb-3 flex items-center gap-2'>
-        <Wallet className='text-muted-foreground size-4' />
-        <div className='text-foreground text-sm font-semibold'>开奖状态</div>
+    <div className='codego-panel p-4'>
+      <div className='mb-1 flex items-center justify-between gap-2'>
+        <div className='flex items-center gap-2.5'>
+          <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+          <div className='text-foreground text-[13px] font-semibold'>
+            开奖状态
+          </div>
+        </div>
+        {props.availableBoxes > 0 ? (
+          <span className='codego-stat-label text-primary'>
+            {props.availableBoxes} 待开
+          </span>
+        ) : null}
       </div>
-      <div className='grid grid-cols-2 gap-2.5'>
-        <Tile label='通用额度' value={formatQuota(props.quota)} />
-        <Tile
+      <div>
+        <StatRow label='通用额度' value={formatQuota(props.quota)} />
+        <StatRow
           label='待开盲盒'
           value={String(props.availableBoxes)}
-          highlight={props.availableBoxes > 0}
+          tone={props.availableBoxes > 0 ? 'text-primary' : undefined}
         />
-        <Tile label='待结算' value={String(props.pendingBoxes)} />
+        <StatRow label='待结算' value={String(props.pendingBoxes)} />
       </div>
     </div>
   )
 }
 
-function Tile(props: { label: string; value: string; highlight?: boolean }) {
+function StatRow(props: { label: string; value: string; tone?: string }) {
   return (
-    <div
-      className={cn(
-        'rounded-xl border px-3 py-2.5',
-        props.highlight
-          ? 'border-primary/25 bg-primary/6'
-          : 'border-border/70 bg-background/60'
-      )}
-    >
-      <div className='text-muted-foreground text-[11px] font-medium'>
-        {props.label}
-      </div>
-      <div className='text-foreground mt-1 text-base font-semibold tabular-nums'>
+    <div className='border-border/60 flex items-baseline justify-between gap-3 border-b py-2.5 last:border-b-0'>
+      <span className='codego-stat-label'>{props.label}</span>
+      <span
+        className={cn(
+          'text-sm font-semibold tabular-nums',
+          props.tone || 'text-foreground'
+        )}
+      >
         {props.value}
-      </div>
+      </span>
     </div>
   )
 }
@@ -230,17 +240,23 @@ function Tile(props: { label: string; value: string; highlight?: boolean }) {
 function SettlementCard() {
   return (
     <div className='app-subtle-panel p-4'>
-      <div className='mb-3 flex items-center gap-2'>
-        <Info className='text-muted-foreground size-4' />
-        <div className='text-foreground text-sm font-semibold'>到账说明</div>
+      <div className='mb-3 flex items-center gap-2.5'>
+        <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+        <div className='text-foreground text-[13px] font-semibold'>
+          结算
+        </div>
       </div>
-      <div className='space-y-2 text-xs leading-5'>
-        <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
-          通用额度直接进入通用额度钱包，永久有效。
-        </div>
-        <div className='border-border/70 bg-background/60 rounded-xl border px-3 py-2.5'>
-          道具会在本页展示并按规则自动生效或手动启用。
-        </div>
+      <div className='codego-empty justify-start gap-2 py-1 text-left'>
+        <span className='codego-stat-label'>统一额度</span>
+        <span className='text-muted-foreground font-sans text-xs tracking-normal normal-case'>
+          永久有效
+        </span>
+      </div>
+      <div className='codego-empty mt-2 justify-start gap-2 py-1 text-left'>
+        <span className='codego-stat-label'>道具</span>
+        <span className='text-muted-foreground font-sans text-xs tracking-normal normal-case'>
+          自动生效或手动启用
+        </span>
       </div>
     </div>
   )

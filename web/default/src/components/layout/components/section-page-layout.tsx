@@ -69,7 +69,6 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
   )
 
   let title: ReactNode = null
-  let description: ReactNode = null
   let actions: ReactNode = null
   let content: ReactNode = null
   let breadcrumb: ReactNode = null
@@ -79,8 +78,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
     if (!isValidElement(node)) return
     const child = node as ReactElement<SlotProps>
     if (child.type === SectionPageLayoutTitle) title = child.props.children
-    else if (child.type === SectionPageLayoutDescription)
-      description = child.props.children
+    else if (child.type === SectionPageLayoutDescription) return
     else if (child.type === SectionPageLayoutActions)
       actions = child.props.children
     else if (child.type === SectionPageLayoutContent)
@@ -95,26 +93,21 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
       {auxiliaryChildren}
       <PageFooterProvider container={footerContainer}>
         <Main>
-          <div className='codego-page-intro shrink-0 px-4 pt-5 pb-5 sm:px-7 sm:pt-7 sm:pb-6'>
+          <div className='codego-page-intro shrink-0 px-4 pt-6 pb-6 sm:px-7 sm:pt-8 sm:pb-7'>
             {breadcrumb != null && (
               <div className='codego-page-breadcrumb mb-4'>{breadcrumb}</div>
             )}
             <div className='flex flex-wrap items-end justify-between gap-x-8 gap-y-5'>
               <div className='max-w-3xl min-w-0'>
-                <div className='codego-page-title-row mb-2 flex items-center gap-3'>
+                <div className='mb-3 flex items-center gap-2.5'>
                   <span className='codego-page-signal' aria-hidden='true' />
-                  <span className='text-muted-foreground text-xs font-medium'>
-                    Workspace
+                  <span className='codego-page-kicker'>
+                    AI CODING GATEWAY · CONSOLE
                   </span>
                 </div>
-                <h2 className='codego-page-title text-foreground text-2xl font-semibold tracking-[-0.03em] text-balance sm:text-3xl'>
+                <h2 className='codego-page-title text-foreground text-3xl leading-[1.04] font-semibold text-balance sm:text-4xl'>
                   {title}
                 </h2>
-                {description != null && (
-                  <p className='codego-page-description text-muted-foreground mt-2 max-w-2xl text-sm leading-6 sm:text-[15px]'>
-                    {description}
-                  </p>
-                )}
               </div>
               {actions != null && (
                 <div className='codego-page-actions flex shrink-0 flex-wrap items-center gap-2'>
@@ -124,9 +117,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
             </div>
           </div>
 
-          <div className={SECTION_PAGE_CONTENT_CLASS_NAME}>
-            {content}
-          </div>
+          <div className={SECTION_PAGE_CONTENT_CLASS_NAME}>{content}</div>
 
           <div
             ref={setFooterContainer}

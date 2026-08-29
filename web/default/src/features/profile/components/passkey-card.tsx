@@ -213,7 +213,7 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
           <CardTitle className='text-lg tracking-tight sm:text-xl'>
             {t('Passkey Login')}
           </CardTitle>
-          <CardDescription className='text-xs sm:text-sm'>
+          <CardDescription className='sr-only'>
             {t('Use Passkey to sign in without entering your password.')}
           </CardDescription>
         </CardHeader>

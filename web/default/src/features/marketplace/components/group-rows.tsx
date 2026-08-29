@@ -1,31 +1,21 @@
-import { useState } from 'react'
-import {
-  ChevronDown,
-  ChevronRight,
-  FileText,
-  Radio,
-  Shrink,
-} from 'lucide-react'
+import { lazy, Suspense } from 'react'
+import { ChevronDown, ChevronRight, Radio, Shrink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { MarketplaceGroup } from '../types'
 import { AddToRoutePoolButton } from './add-to-route-pool-button'
-import {
-  ChannelFeedbackButton,
-  ChannelFeedbackSummary,
-} from './channel-feedback'
-import { GroupDetails } from './group-details'
 import { GroupMetrics } from './group-metrics'
-import {
-  GroupModelResults,
-  GroupModelVerificationReport,
-} from './group-model-verification'
 import { RecentRequestStrip } from './recent-request-strip'
 import { MarketplaceStatusBadge } from './status-badge'
-import { TokenBindPanel } from './token-bind-panel'
 
-export function GroupMarketItem(props: {
+const loadGroupMarketItemDetails = () => import('./group-market-item-details')
+const GroupMarketItemDetails = lazy(async () => ({
+  default: (await loadGroupMarketItemDetails()).GroupMarketItemDetails,
+}))
+
+type GroupMarketItemProps = {
   group: MarketplaceGroup
   open: boolean
   onToggle: () => void
@@ -38,14 +28,14 @@ export function GroupMarketItem(props: {
   selected?: boolean
   selectionDisabled?: boolean
   onSelect?: () => void
-}) {
+}
+
+export function GroupMarketItem(props: GroupMarketItemProps) {
   const { t } = useTranslation()
   const group = props.group
-  const [reportOpen, setReportOpen] = useState(false)
-  const reportID = `model-report-${group.id}`
 
   return (
-    <article className='border-border bg-card hover:border-primary/35 rounded-md border transition-colors'>
+    <article className='marketplace-render-row border-border bg-card hover:border-primary/35 rounded-md border transition-colors'>
       <div className='px-3 py-3 sm:px-4'>
         <header className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 xl:grid-cols-[minmax(280px,1.1fr)_minmax(420px,1fr)_auto]'>
           <div className='flex min-w-0 items-center gap-3'>
@@ -114,6 +104,8 @@ export function GroupMarketItem(props: {
               size='sm'
               className='size-8 px-0 sm:w-auto sm:px-3'
               onClick={props.onToggle}
+              onPointerEnter={() => void loadGroupMarketItemDetails()}
+              onFocus={() => void loadGroupMarketItemDetails()}
               aria-label={props.open ? t('收起详情') : t('展开详情')}
               title={props.open ? t('收起详情') : t('展开详情')}
             >
@@ -127,44 +119,20 @@ export function GroupMarketItem(props: {
         <RecentRequestStrip group={group} />
       </div>
       {props.open && (
-        <div className='border-border bg-muted/15 border-t'>
-          <GroupDetails group={group} />
-          <div className='border-border border-t px-4 py-4 sm:px-5'>
-            <div className='flex flex-wrap items-start justify-between gap-3'>
-              <div>
-                <h5 className='text-sm font-semibold'>{t('可用模型')}</h5>
-                <p className='text-muted-foreground mt-0.5 text-xs'>
-                  {t('展开查看完整模型及检测结论。')}
-                </p>
-              </div>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => setReportOpen((current) => !current)}
-                aria-expanded={reportOpen}
-                aria-controls={reportID}
-              >
-                <FileText />
-                {reportOpen ? t('收起报告') : t('检测报告')}
-              </Button>
-            </div>
-            <GroupModelResults group={group} />
-            <div className='mt-4'>
-              <TokenBindPanel groupId={group.id} compact />
-            </div>
-            <div className='mt-3 flex flex-wrap items-center justify-between gap-2'>
-              <ChannelFeedbackSummary group={group} />
-              <ChannelFeedbackButton group={group} />
-            </div>
-          </div>
-          {reportOpen && (
-            <div id={reportID}>
-              <GroupModelVerificationReport group={group} />
-            </div>
-          )}
-        </div>
+        <Suspense fallback={<GroupDetailsSkeleton />}>
+          <GroupMarketItemDetails group={group} />
+        </Suspense>
       )}
     </article>
+  )
+}
+
+function GroupDetailsSkeleton() {
+  return (
+    <div className='border-border bg-muted/15 space-y-4 border-t px-4 py-5 sm:px-5'>
+      <Skeleton className='h-20 w-full' />
+      <Skeleton className='h-28 w-full' />
+    </div>
   )
 }
 

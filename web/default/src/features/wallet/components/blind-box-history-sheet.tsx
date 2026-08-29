@@ -24,7 +24,10 @@ import {
 import { getBlindBoxHistory, isApiSuccess } from '../api'
 import { blindBoxGuaranteeLabel } from '../lib/blind-box-guarantee'
 import type { BlindBoxHistoryPage, BlindBoxRecord } from '../types'
-import { formatBlindBoxTimestamp, resolveRewardTone } from './blind-box-dialogs'
+import {
+  formatBlindBoxTimestamp,
+  resolveRewardTone,
+} from './blind-box-dialog-data'
 
 const PAGE_SIZE = 20
 

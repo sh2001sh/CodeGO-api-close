@@ -1,36 +1,24 @@
 # Main Goal
-Improve production API latency and reliability across Nginx, application timing, edge/direct baselines, and PostgreSQL, then deploy and verify the complete local change set.
+
+优化 CodeGo 分组市场页与分组状态页的前端加载速度和交互响应。
 
 # Status
-- Production Nginx SSE/Upgrade, buffering, keepalive, TLS, HTTP/2, and detailed timing-log changes are live and validated.
-- Cloudflare HTTP/3 is enabled. Cloudflare and localhost-origin baselines exist; EdgeOne still needs an authorized test hostname.
-- Production PostgreSQL memory, WAL, autovacuum, I/O timing, pg_stat_statements, and index changes are live.
-- Local code adds failed-request phase timing, transport/retry/URL fixes, group-status caching/index migration, ledger reconciliation throttling, and 72-hour published-outbox cleanup.
-- Full Go tests and the frontend production build pass.
 
-# Key Context
-- Production still runs `sha-6a56770`. The two 20260819 migrations and ledger backfill are now applied, but container replacement stopped because the old N+1 verifier produced false ledger inconsistencies under concurrent writes.
-- Preserve all user changes in blind-box, routing, provider, workflow, HTTP client, database, and frontend files.
-- Do not commit the generated `.backend-live.out.log` change.
-- Production PostgreSQL retains the existing unique indexes; duplicate GORM-created indexes have been removed and schema tags now reuse the surviving names.
-- About 1.26 million published outbox rows are eligible for 72-hour cleanup. The query uses the existing `published_at` index and deletes 5,000 rows per minute.
-- Converting the active 2-3 GB logs/outbox tables to native partitions requires an online shadow-table/backfill/cutover project; it is not part of this no-downtime release.
-- Source ports remain restricted to Cloudflare IPs; do not expose them only for a direct public benchmark.
-
-# Verification
-- `go test ./... -count=1` passed.
-- `npm run build:check` in `web/default` passed.
-- Focused billing, gateway, and store tests passed after fixing ledger worker test database isolation.
-- `git diff --check` passed.
-- Docker daemon is unavailable locally; CI must perform the final container build.
-- The migration fix now derives SQL syntax from `LogDB.Dialector.Name()` and has PostgreSQL/MySQL/SQLite regression coverage; the full Go suite passes again.
-- A single-statement ledger consistency query now replaces the N+1 verifier, uses one MVCC snapshot, detects missing snapshots, and passes SQLite plus full-suite tests. Production was independently checked with the equivalent set query and has zero real inconsistencies.
+- 分组市场的路由池、渠道管理、管理员治理与分组详情已按交互拆为异步模块，并在悬停/聚焦时预取。
+- 市场首屏异步块由约 147 KB 降至约 51 KB，减少约 66%；路由池独立块约 5.7 KB。
+- 市场列表移除逐行 Motion 入场，时间格式化与状态指标完成 memo 化，屏幕外行使用 `content-visibility`。
+- 批量测试展示与 controller 已按职责拆分，列表入口文件降至约 110 行，行为保持不变。
+- 分组状态搜索使用 `useDeferredValue`，筛选、排序、汇总、模型选项与时间序列均完成 memo 化；屏幕外 section 使用 `content-visibility`。
+- Playwright 以 30 组、每组 8 模型、每模型 12 时间桶完成压力验证：状态页 30 组就绪约 2.0 秒，搜索约 228 ms；桌面与 390px 移动端无页面级横向溢出，控制台零错误。
+- 浏览器复验通过分组勾选、测试区状态更新、路由池预取与页签切换。
+- `pnpm exec eslint . --quiet`、`pnpm exec tsc --noEmit`、5 项 Bun 回归测试、`git diff --check`、`pnpm run build` 均通过；生产构建 2.31 秒。
+- 工作树仍包含用户此前约 60 个前端修改文件，本轮未回退或覆盖无关改动。
+- 本轮仅完成本地实现与验证，未提交、未推送、未发布生产。
 
 # Next Actions
-- Commit and push the set-based ledger verification fix, excluding `.backend-live.out.log`.
-- Wait for replacement multi-architecture images and manifests, then rerun the backed-up deployment flow.
-- Verify schema migrations, tables/columns/indexes, service health, timing logs, outbox cleanup, pg_stat_statements load, and disk headroom.
-- Capture post-deploy Cloudflare and origin baselines and document the EdgeOne and partition-migration prerequisites.
+
+- 若进入发布流程，按仓库现有 GitHub 自动构建与生产发布流程提交本轮及用户已有修改。
 
 # Blockers
-- EdgeOne cannot be benchmarked truthfully until a test hostname is routed through an authorized EdgeOne property.
+
+- 无。

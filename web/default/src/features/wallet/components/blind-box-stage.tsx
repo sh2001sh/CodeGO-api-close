@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { PaymentMethod } from '../types'
-import { getBlindBoxMethodLabel } from './blind-box-dialogs'
+import { getBlindBoxMethodLabel } from './blind-box-dialog-data'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
 

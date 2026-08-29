@@ -43,20 +43,15 @@ export function CodeGoDesktopEntryPanel() {
   const actions = buildCodeGoDesktopQuickActions()
 
   return (
-    <section className='overview-glass-card flex flex-col gap-4 p-5 sm:p-6'>
+    <section className='codego-panel flex flex-col gap-4 p-5 sm:p-6'>
       <div className='flex items-start justify-between gap-3'>
-        <div>
-          <div className='text-muted-foreground text-[11px] font-medium tracking-[0.16em] uppercase'>
+        <div className='min-w-0'>
+          <span className='codego-kicker'>DESKTOP</span>
+          <div className='text-foreground mt-1.5 text-lg font-semibold'>
             Code Go Desktop
           </div>
-          <div className='text-foreground mt-1 text-xl font-semibold tracking-tight'>
-            从控制台进入桌面端
-          </div>
-          <div className='text-muted-foreground mt-2 text-sm leading-6'>
-            下载桌面应用、导入 Token，并继续查看设备绑定与本地配置状态。
-          </div>
         </div>
-        <div className='border-primary/25 bg-primary/10 text-primary rounded-full border px-2.5 py-1 text-xs font-medium'>
+        <div className='codego-stat-label shrink-0 border border-primary/30 px-2 py-1 text-primary'>
           已联动
         </div>
       </div>
@@ -67,19 +62,15 @@ export function CodeGoDesktopEntryPanel() {
           return (
             <div
               key={item.label}
-              className='overview-soft-card flex items-start gap-3 px-3 py-3'
+              className='flex items-center justify-between gap-3 border-t border-border/70 py-3 first:border-t-0 first:pt-0'
             >
-              <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-8 shrink-0 items-center justify-center rounded-xl'>
-                <Icon className='size-3.5' aria-hidden='true' />
-              </span>
-              <div className='min-w-0'>
-                <div className='text-foreground text-sm font-medium'>
-                  {item.label}
-                </div>
-                <div className='text-muted-foreground mt-1 text-xs leading-5'>
-                  {item.value}
-                </div>
+              <div className='text-foreground text-sm font-medium'>
+                {item.label}
               </div>
+              <Icon
+                className='text-primary size-4 shrink-0'
+                aria-hidden='true'
+              />
             </div>
           )
         })}
@@ -90,7 +81,7 @@ export function CodeGoDesktopEntryPanel() {
           <Button
             key={action.href}
             variant={action.variant}
-            className='justify-between rounded-2xl'
+            className='justify-between'
             render={<Link to={action.href} />}
           >
             <span>{action.label}</span>

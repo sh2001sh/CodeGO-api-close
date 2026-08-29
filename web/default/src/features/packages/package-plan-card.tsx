@@ -66,6 +66,7 @@ export function PackagePlanCard(props: {
   const blockedReason =
     translateDisabledReason(props.record.disabled_reason, t) ||
     t('A higher active plan with remaining quota prevents downgrading.')
+  // surfaced to screen readers; visual chrome stays clean
   const tierRows = buildPackageQuotaTiers(plan, t)
   const isCurrentPlan =
     props.currentSubscription?.subscription.plan_id === plan.id
@@ -170,11 +171,6 @@ export function PackagePlanCard(props: {
                 <span className='text-muted-foreground text-[11px]'>
                   {t('Final quota by tier')}
                 </span>
-              </div>
-              <div className='text-primary text-xs leading-relaxed'>
-                {t(
-                  'Payment automatically joins the current collective benefit queue.'
-                )}
               </div>
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-muted-foreground'>
@@ -289,9 +285,7 @@ export function PackagePlanCard(props: {
             </div>
           )}
           {props.record.action === 'disabled' && (
-            <div className='text-muted-foreground text-center text-xs leading-relaxed'>
-              {blockedReason}
-            </div>
+            <div className='sr-only'>{blockedReason}</div>
           )}
         </div>
       </CardContent>

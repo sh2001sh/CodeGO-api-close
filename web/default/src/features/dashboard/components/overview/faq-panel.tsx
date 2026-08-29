@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { HelpCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   Accordion,
@@ -36,13 +35,7 @@ export function FAQPanel() {
 
   return (
     <PanelWrapper
-      title={
-        <span className='flex items-center gap-2'>
-          <HelpCircle className='text-muted-foreground/60 size-4' />
-          {t('FAQ')}
-        </span>
-      }
-      description={t('Answers for common access and billing questions')}
+      title={t('FAQ')}
       loading={loading}
       empty={!list.length}
       emptyMessage={t('No FAQ entries available')}

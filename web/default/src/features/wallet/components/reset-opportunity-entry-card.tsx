@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { ArrowRight, RotateCcw } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -27,16 +27,10 @@ export function ResetOpportunityEntryCard(
   return (
     <div className={cn('app-subtle-panel p-4', props.className)}>
       <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
-            <RotateCcw className='text-warning h-4 w-4' />
+        <div className='flex min-w-0 items-center gap-2.5'>
+          <span aria-hidden className='bg-primary block h-3 w-[3px] shrink-0' />
+          <div className='text-foreground truncate text-[13px] font-semibold'>
             {props.title || t('Quota reset opportunity')}
-          </div>
-          <div className='text-muted-foreground mt-1 text-xs leading-5'>
-            {props.description ||
-              t(
-                'Earned when an invited new user purchases a monthly plan; used to clear quota consumed by the current subscription.'
-              )}
           </div>
         </div>
         <div className='border-warning/20 bg-background/80 text-foreground rounded-full border px-3 py-1 text-xs font-semibold'>

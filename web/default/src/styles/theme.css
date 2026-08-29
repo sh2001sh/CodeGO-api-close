@@ -20,6 +20,9 @@ For commercial licensing, please contact support@quantumnous.com
 
 @theme inline {
   --font-sans: 'Public Sans', sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', 'Roboto Mono',
+    monospace;
   --font-inter:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
     'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
@@ -80,6 +83,9 @@ For commercial licensing, please contact support@quantumnous.com
 :root {
   --radius: 0.5rem;
   --app-header-height: 3rem;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', 'Roboto Mono',
+    monospace;
   --background: #faf7f3;
   --foreground: #221f1c;
   --card: #fdfcfb;

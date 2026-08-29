@@ -64,9 +64,11 @@ export function MarketSurface(props: {
           </span>
         </div>
       )}
-      <div className='border-border bg-muted/35 border-b px-4 py-3 text-xs leading-5 sm:px-5'>
-        <div className='font-medium'>{t('第三方市场分组免责声明')}</div>
-        <p className='text-muted-foreground mt-1'>
+      <div className='border-border bg-muted/25 border-b px-4 py-2 sm:px-5'>
+        <p className='text-muted-foreground/75 text-[11px] leading-5'>
+          <span className='text-muted-foreground font-medium'>
+            {t('第三方市场分组免责声明')}
+          </span>
           {t(
             '市场中的分组由用户提交并由平台提供路由管理，不代表官方服务或官方授权。平台不保证第三方分组的安全性、合法性、可用性、稳定性、模型能力或数据处理方式，请自行评估渠道来源、凭据风险和使用结果；因第三方分组导致的服务中断、数据或隐私风险、额度损失由使用者自行承担。'
           )}

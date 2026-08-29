@@ -30,58 +30,45 @@ export function UsageChart(props: { points: UsagePoint[] }) {
   const displayPoint = hoveredIndex !== null ? props.points[hoveredIndex] : props.points.at(-1)
 
   return (
-    <div className='overview-glass-card overview-panel-backdrop p-5 sm:p-6'>
+    <div className='codego-panel overview-panel-backdrop p-5 sm:p-6'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <div className='min-w-0 flex-1'>
-          <div className='text-muted-foreground text-[11px] font-medium tracking-[0.14em] uppercase'>
-            用量概览
-          </div>
-          <div className='text-foreground mt-1 text-xl font-semibold tracking-tight'>
-            最近 12 小时用量走势
+          <span className='codego-kicker'>USAGE · ROLLING 12H</span>
+          <div className='text-foreground mt-1.5 text-lg font-semibold'>
+            用量走势
           </div>
         </div>
-        <div className='border-border/70 bg-background/80 text-muted-foreground rounded-full border px-3 py-1.5 text-xs font-medium'>
-          按小时统计
-        </div>
+        <span className='codego-stat-label'>HOURLY</span>
       </div>
 
-      <div className='mt-5 grid gap-4 sm:grid-cols-3'>
-        <div className='overview-soft-card px-4 py-3.5'>
-          <div className='text-muted-foreground mb-1 text-xs font-medium'>
-            {hoveredIndex !== null ? '悬停时段' : '当前时段'}
-          </div>
-          <div className='text-foreground text-2xl font-semibold tabular-nums'>
-            {formatQuota(displayPoint?.value ?? 0)}
-          </div>
-          {displayPoint && (
-            <div className='text-muted-foreground mt-1 text-xs'>
-              {displayPoint.label}
-            </div>
-          )}
-        </div>
+      <div className='codego-fact-row mt-5 grid grid-cols-3'>
         <DataMetric
-          label='峰值时段'
+          label={hoveredIndex !== null ? '悬停时段' : '当前时段'}
+          value={formatQuota(displayPoint?.value ?? 0)}
+          hint={displayPoint?.label}
+        />
+        <DataMetric
+          label='峰值'
           value={formatQuota(peakPoint?.value ?? 0)}
           hint={peakPoint?.label}
         />
         <DataMetric
-          label='平均消耗'
+          label='均值'
           value={formatQuota(averageValue)}
-          hint='12 小时平均'
         />
       </div>
 
       {props.points.length > 0 ? (
         <div
-          className='overview-soft-card relative mt-5 p-5'
+          className='relative mt-6'
           onMouseLeave={() => setHoveredIndex(null)}
         >
-          <div className='grid h-[200px] grid-cols-12 items-end gap-2.5 sm:gap-3'>
+          <div className='grid h-[180px] grid-cols-12 items-end gap-2 sm:gap-2.5'>
             {props.points.map((point, index) => {
               const isPeak = peakPoint?.label === point.label && peakPoint.value === point.value
               const isCurrent = index === props.points.length - 1
               const isHovered = hoveredIndex === index
-              const height = Math.max(8, Math.round((point.value / maxValue) * 100))
+              const height = Math.max(4, Math.round((point.value / maxValue) * 100))
 
               return (
                 <div
@@ -91,13 +78,13 @@ export function UsageChart(props: { points: UsagePoint[] }) {
                 >
                   <div
                     className={`
-                      dawn-bar relative rounded-t-md transition-colors duration-200
+                      dawn-bar relative rounded-none transition-[opacity,background-color] duration-200
                       ${isHovered ? 'opacity-80' : ''}
                       ${isPeak
                         ? 'bg-primary'
                         : isCurrent
-                          ? 'bg-muted-foreground/60'
-                          : 'bg-muted-foreground/20'
+                          ? 'bg-primary/45'
+                          : 'bg-foreground/16'
                       }
                     `}
                     style={{
@@ -106,27 +93,40 @@ export function UsageChart(props: { points: UsagePoint[] }) {
                     }}
                   >
                     {isHovered && (
-                      <div className='absolute -top-14 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg'>
-                        <div className='text-popover-foreground font-semibold'>
+                      <div className='bg-popover border-border absolute -top-14 left-1/2 z-10 -translate-x-1/2 border px-3 py-2 whitespace-nowrap'>
+                        <div className='text-popover-foreground text-xs font-semibold tabular-nums'>
                           {formatQuota(point.value)}
                         </div>
-                        <div className='text-muted-foreground mt-0.5 text-[11px]'>
+                        <div className='text-muted-foreground mt-0.5 font-mono text-[10px]'>
                           {point.label}
                         </div>
                       </div>
                     )}
                   </div>
-                  <div className='text-muted-foreground mt-2 text-center text-[10px] font-medium'>
-                    {point.label}
-                  </div>
                 </div>
               )
             })}
           </div>
+          <div className='bg-border/70 mt-0 h-px w-full' />
+          <div className='mt-2 grid grid-cols-12 gap-2 sm:gap-2.5'>
+            {props.points.map((point, index) => (
+              <div
+                key={`label-${point.label}-${index}`}
+                className={`text-center font-mono text-[9px] tabular-nums ${
+                  index === props.points.length - 1
+                    ? 'text-primary'
+                    : 'text-muted-foreground/60'
+                }`}
+              >
+                {point.label}
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
-        <div className='border-border text-muted-foreground mt-5 flex min-h-[240px] items-center justify-center rounded-2xl border border-dashed bg-background/70 px-4 py-8 text-center text-sm'>
-          最近 12 小时还没有可展示的用量数据。
+        <div className='codego-empty mt-6 min-h-[180px] justify-center'>
+          <span aria-hidden className='block h-8 w-px bg-border' />
+          NO USAGE DATA · LAST 12H
         </div>
       )}
     </div>
@@ -141,11 +141,9 @@ export function DataMetric(props: {
   format?: (value: number) => string
 }) {
   return (
-    <div className='overview-soft-card px-3 py-3'>
-      <div className='text-muted-foreground text-[11px] font-medium'>
-        {props.label}
-      </div>
-      <div className='text-foreground app-numeric mt-1 text-lg font-semibold'>
+    <div className='min-w-0 sm:px-5 sm:first:pl-0 sm:last:pr-0'>
+      <div className='codego-stat-label'>{props.label}</div>
+      <div className='text-foreground mt-2 text-2xl leading-none font-semibold tabular-nums'>
         {props.numeric != null && props.format ? (
           <CountUp value={props.numeric} format={props.format} />
         ) : (
@@ -153,7 +151,7 @@ export function DataMetric(props: {
         )}
       </div>
       {props.hint ? (
-        <div className='text-muted-foreground mt-1 text-xs'>
+        <div className='text-muted-foreground mt-1.5 font-mono text-[10px] tabular-nums'>
           {props.hint}
         </div>
       ) : null}
@@ -172,19 +170,17 @@ export function ProgressBlock(props: {
   const percent = clampPercent(props.used, props.total)
 
   return (
-    <div className='app-subtle-panel p-3'>
+    <div className='p-3'>
       <div className='flex items-center justify-between gap-3 text-sm'>
-        <div className='text-foreground font-medium'>
-          {props.label}
-        </div>
-        <div className='text-muted-foreground text-xs'>
+        <div className='text-foreground font-medium'>{props.label}</div>
+        <div className='text-muted-foreground text-xs tabular-nums'>
           {props.remainingLabel}
         </div>
       </div>
       <div className='mt-3'>
         <Progress className={props.className} value={percent} />
       </div>
-      <div className='text-muted-foreground mt-2 text-xs'>
+      <div className='text-muted-foreground mt-2 text-xs tabular-nums'>
         {props.hint}
       </div>
     </div>

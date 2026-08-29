@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { AlertCircle, BarChart3 } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import type { BlindBoxStatistics } from '../types'
 
@@ -84,30 +84,36 @@ export function BlindBoxStatsPanel(props: { statistics?: BlindBoxStatistics }) {
   ]
 
   return (
-    <div className='app-subtle-panel p-4'>
-      <div className='flex items-center gap-2'>
-        <BarChart3
-          className='text-muted-foreground size-4'
-          aria-hidden='true'
-        />
-        <div className='text-foreground text-sm font-semibold'>我的战绩</div>
-      </div>
-      <div className='text-foreground mt-2 text-sm font-semibold tabular-nums'>
-        累计 {props.statistics?.total_opened || 0} 次
-        <span className='text-muted-foreground font-normal'>
-          {props.statistics?.pity_wins
-            ? ` · 保底 ${props.statistics.pity_wins} 次`
-            : ''}
+    <div className='codego-panel p-4'>
+      <div className='flex items-center justify-between gap-2'>
+        <div className='flex items-center gap-2.5'>
+          <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+          <div className='text-foreground text-[13px] font-semibold'>
+            我的战绩
+          </div>
+        </div>
+        <span className='codego-stat-label'>
+          保底 {props.statistics?.pity_wins || 0}
         </span>
       </div>
-      <dl className='mt-3 space-y-1.5'>
+      <div className='mt-3 flex items-baseline justify-between gap-3 border-t border-border/60 py-2.5'>
+        <span className='codego-stat-label'>累计开启</span>
+        <span className='text-foreground text-xl leading-none font-semibold tabular-nums'>
+          {props.statistics?.total_opened || 0}
+          <span className='text-muted-foreground text-xs font-normal'>
+            {' '}
+            次
+          </span>
+        </span>
+      </div>
+      <dl>
         {rows.map((row) => (
           <div
             key={row.label}
-            className='flex items-baseline justify-between gap-2 text-xs'
+            className='flex items-baseline justify-between gap-3 border-b border-border/60 py-2 last:border-b-0'
           >
-            <dt className='text-muted-foreground'>{row.label}</dt>
-            <dd className='text-foreground font-mono font-medium tabular-nums'>
+            <dt className='codego-stat-label'>{row.label}</dt>
+            <dd className='text-foreground font-mono text-xs font-medium tabular-nums'>
               {row.value}
             </dd>
           </div>

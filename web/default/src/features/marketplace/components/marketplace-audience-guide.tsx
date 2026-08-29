@@ -1,12 +1,23 @@
-import {
-  ArrowRight,
-  Compass,
-  LineChart,
-  Route,
-  WalletCards,
-} from 'lucide-react'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { ArrowUpRight, Compass, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
 
 export function MarketplaceAudienceGuide(props: {
   onBrowse: () => void
@@ -16,48 +27,35 @@ export function MarketplaceAudienceGuide(props: {
 
   return (
     <section
-      className='codego-marketplace-audience'
+      className='codego-fact-row grid grid-cols-1 sm:grid-cols-2'
       aria-label={t('分组市场使用路径')}
     >
-      <div className='codego-marketplace-audience-line' aria-hidden='true' />
-      <div className='codego-marketplace-audience-copy'>
-        <span
-          className='codego-marketplace-audience-signal'
-          aria-hidden='true'
-        />
-        <div>
-          <p className='text-muted-foreground text-xs font-medium'>
-            {t('同一个市场，两条清晰路径')}
-          </p>
-          <h3 className='mt-1 text-base font-semibold tracking-tight'>
-            {t('先找到合适的分组，再决定如何长期使用')}
-          </h3>
-        </div>
-      </div>
-      <div className='codego-marketplace-audience-actions'>
-        <Button variant='outline' size='sm' onClick={props.onBrowse}>
-          <Compass />
-          <span>
-            <strong>{t('我是使用者')}</strong>
-            <small>{t('比较倍率、速度和稳定性')}</small>
+      <button
+        type='button'
+        onClick={props.onBrowse}
+        className='group flex items-center justify-between gap-4 px-0 py-4 text-left sm:px-5 sm:first:pl-0'
+      >
+        <span className='flex min-w-0 items-center gap-3'>
+          <Compass className='text-primary size-4 shrink-0' />
+          <span className='text-foreground text-sm font-semibold'>
+            {t('我是使用者')}
           </span>
-          <ArrowRight className='codego-marketplace-audience-arrow' />
-        </Button>
-        <Button variant='outline' size='sm' onClick={props.onManage}>
-          <WalletCards />
-          <span>
-            <strong>{t('我是渠道主')}</strong>
-            <small>{t('查看收入、审核和服务健康')}</small>
+        </span>
+        <ArrowUpRight className='text-muted-foreground size-4 shrink-0 transition-colors group-hover:text-primary' />
+      </button>
+      <button
+        type='button'
+        onClick={props.onManage}
+        className='group flex items-center justify-between gap-4 px-0 py-4 text-left sm:px-5'
+      >
+        <span className='flex min-w-0 items-center gap-3'>
+          <WalletCards className='text-primary size-4 shrink-0' />
+          <span className='text-foreground text-sm font-semibold'>
+            {t('我是渠道主')}
           </span>
-          <ArrowRight className='codego-marketplace-audience-arrow' />
-        </Button>
-      </div>
-      <div className='text-muted-foreground hidden items-center gap-2 text-[11px] xl:flex'>
-        <Route className='text-primary size-3.5' />
-        <span>{t('市场数据每 30 秒自动更新')}</span>
-        <LineChart className='text-primary ml-2 size-3.5' />
-        <span>{t('排名基于实际观测样本')}</span>
-      </div>
+        </span>
+        <ArrowUpRight className='text-muted-foreground size-4 shrink-0 transition-colors group-hover:text-primary' />
+      </button>
     </section>
   )
 }

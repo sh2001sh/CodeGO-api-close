@@ -222,13 +222,8 @@ export function RechargeFormCard({
                 <Label className={sectionLabelClassName}>
                   {t('Recharge wallet')}
                 </Label>
-                <div className='border-border/70 bg-muted/30 rounded-lg border px-3 py-2.5'>
-                  <div className='text-sm font-semibold'>{t('统一额度')}</div>
-                  <div className='text-muted-foreground mt-0.5 text-xs leading-5'>
-                    {t(
-                      '充值后进入统一额度账户，永久有效，可用于全部可用模型分组。'
-                    )}
-                  </div>
+                <div className='border-border/70 bg-muted/30 rounded-lg border px-3 py-2.5 text-sm font-semibold'>
+                  {t('统一额度')}
                 </div>
               </div>
 
@@ -476,13 +471,10 @@ export function RechargeFormCard({
           )}
         </div>
       ) : (
-        <Alert>
-          <AlertDescription>
-            {t(
-              'Online topup is not enabled. Please use redemption code or contact administrator.'
-            )}
-          </AlertDescription>
-        </Alert>
+        <div className='codego-empty justify-center py-5'>
+          <span aria-hidden className='bg-border block h-5 w-px' />
+          ONLINE TOPUP OFFLINE · REDEEM BELOW
+        </div>
       )}
 
       {/* Creem Products Section */}

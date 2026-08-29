@@ -16,22 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  Boxes,
-  Crown,
-  PackageOpen,
-  Sparkles,
-  type LucideIcon,
-} from 'lucide-react'
+
 import { motion, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
-import {
-  RARITY_BADGE,
-  RARITY_RING,
-  classifyTier,
-  formatTierAmount,
-  groupTiersByRewardType,
-} from '../lib/blind-box-rarity'
+import { RARITY_BADGE, classifyTier, formatTierAmount, groupTiersByRewardType, type RARITY_RING } from '../lib/blind-box-rarity'
 import type { BlindBoxSelfData, BlindBoxTier } from '../types'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
@@ -68,64 +56,41 @@ export function BlindBoxPoolShowcase(props: {
   const hiddenTitle = props.data?.subscription_plan_title || 'Lite 月卡'
 
   return (
-    <section className='app-page-shell overflow-hidden'>
-      <div className='border-border/70 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5'>
-        <div className='flex min-w-0 items-center gap-3'>
-          <span className='border border-primary/30 text-primary bg-primary/[0.04] flex size-9 shrink-0 items-center justify-center rounded-lg'>
-            <Boxes className='size-4' aria-hidden='true' />
-          </span>
-          <div className='min-w-0'>
-            <h2 className='text-foreground text-base font-semibold'>
-              {props.title || '奖池一览'}
-            </h2>
-            <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-              {props.description || '每次抽取都从下面所有奖励中按概率开出一项'}
-            </p>
-          </div>
+    <section className='codego-panel overflow-hidden'>
+      <div className='flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5'>
+        <div className='flex items-center gap-2.5'>
+          <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+          <h2 className='text-foreground text-[13px] font-semibold'>
+            {props.title || '奖池一览'}
+          </h2>
         </div>
-        <span className='text-muted-foreground text-xs'>概率已公开</span>
+        <span className='codego-stat-label'>概率已公开</span>
       </div>
 
-      <div className='space-y-5 px-4 py-4 sm:px-5 sm:py-5'>
+      <div className='px-4 py-2 sm:px-5'>
         {!props.hideSubscription ? (
-          <PoolGroup
-            icon={Crown}
-            title='隐藏款'
-            hint='最稀有的一档，抽中直接获得月卡'
-            reduced={reduced}
-          >
-            <PoolCell
+          <PoolGroup title='隐藏款'>
+            <PoolRow
               label={hiddenTitle}
               probability={hiddenProbability}
               rarity='legendary'
-              note='直接发放一张月卡，享受对应档位权益'
               reduced={reduced}
             />
           </PoolGroup>
         ) : null}
 
         {grouped.credit.length > 0 ? (
-          <PoolGroup
-            icon={Sparkles}
-            title='通用额度'
-            hint='直接进入通用额度钱包，永久有效'
-            reduced={reduced}
-          >
+          <PoolGroup title='通用额度'>
             {grouped.credit.map((tier) => (
-              <TierCell key={tier.name} tier={tier} reduced={reduced} />
+              <TierRow key={tier.name} tier={tier} reduced={reduced} />
             ))}
           </PoolGroup>
         ) : null}
 
         {grouped.props.length > 0 ? (
-          <PoolGroup
-            icon={PackageOpen}
-            title='道具'
-            hint='折扣卡自动抵扣，倍率卡需手动启用'
-            reduced={reduced}
-          >
+          <PoolGroup title='道具'>
             {grouped.props.map((tier) => (
-              <TierCell key={tier.name} tier={tier} reduced={reduced} />
+              <TierRow key={tier.name} tier={tier} reduced={reduced} />
             ))}
           </PoolGroup>
         ) : null}
@@ -134,27 +99,12 @@ export function BlindBoxPoolShowcase(props: {
   )
 }
 
-function PoolGroup(props: {
-  icon: LucideIcon
-  title: string
-  hint: string
-  reduced: boolean
-  children: React.ReactNode
-}) {
+function PoolGroup(props: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div className='flex flex-wrap items-baseline gap-x-2 gap-y-0.5'>
-        <span className='text-foreground inline-flex items-center gap-1.5 text-sm font-semibold'>
-          <props.icon
-            className='text-muted-foreground size-3.5'
-            aria-hidden='true'
-          />
-          {props.title}
-        </span>
-        <span className='text-muted-foreground text-xs'>{props.hint}</span>
-      </div>
+    <div className='border-border/60 border-b py-4 last:border-b-0'>
+      <span className='codego-kicker'>{props.title}</span>
       <motion.div
-        className='mt-2.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3'
+        className='mt-2'
         variants={GRID}
         initial='initial'
         animate='animate'
@@ -165,9 +115,9 @@ function PoolGroup(props: {
   )
 }
 
-function TierCell(props: { tier: BlindBoxTier; reduced: boolean }) {
+function TierRow(props: { tier: BlindBoxTier; reduced: boolean }) {
   return (
-    <PoolCell
+    <PoolRow
       label={formatTierAmount(props.tier)}
       probability={props.tier.probability}
       rarity={classifyTier(props.tier)}
@@ -177,7 +127,7 @@ function TierCell(props: { tier: BlindBoxTier; reduced: boolean }) {
   )
 }
 
-function PoolCell(props: {
+function PoolRow(props: {
   label: string
   probability: number
   rarity: keyof typeof RARITY_RING
@@ -189,42 +139,56 @@ function PoolCell(props: {
   return (
     <motion.div
       variants={props.reduced ? REDUCED_CELL : CELL}
-      whileHover={props.reduced ? undefined : { y: -3 }}
-      transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
-      className={cn('rounded-xl border p-3', RARITY_RING[props.rarity])}
+      className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 border-b border-border/50 py-2.5 last:border-b-0'
     >
-      <div className='flex items-start justify-between gap-2'>
-        <div className='text-foreground min-w-0 text-sm font-medium'>
-          {props.label}
+      <div className='flex min-w-0 items-center gap-2.5'>
+        <span
+          className={cn(
+            'block h-[2px] shrink-0 bg-primary',
+            props.rarity === 'legendary'
+              ? 'w-8'
+              : props.rarity === 'epic'
+                ? 'w-5 opacity-70'
+                : 'w-2.5 opacity-35'
+          )}
+          aria-hidden
+        />
+        <div className='min-w-0'>
+          <div className='text-foreground truncate text-[13px] font-medium'>
+            {props.label}
+          </div>
+          {props.note && props.note !== props.label ? (
+            <div className='text-muted-foreground/70 mt-0.5 truncate font-mono text-[10px] uppercase'>
+              {props.note}
+            </div>
+          ) : null}
         </div>
+      </div>
+      <div className='flex shrink-0 items-center gap-4'>
         {badge ? (
           <span
             className={cn(
-              'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+              'border px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase',
               badge.cls
             )}
           >
             {badge.label}
           </span>
         ) : null}
-      </div>
-      {props.note && props.note !== props.label ? (
-        <div className='text-muted-foreground mt-1 truncate text-[11px]'>
-          {props.note}
-        </div>
-      ) : null}
-      <div className='mt-2.5 flex items-center gap-2'>
-        <div className='bg-muted h-1 flex-1 overflow-hidden rounded-full'>
+        <div className='hidden h-[3px] w-24 overflow-hidden bg-muted sm:block'>
           <motion.div
-            className='bg-primary/70 h-full rounded-full'
+            className={cn(
+              'h-full',
+              props.rarity === 'common' ? 'bg-foreground/25' : 'bg-primary'
+            )}
             initial={props.reduced ? false : { width: 0 }}
             animate={{
-              width: `${Math.min(100, Math.max(3, props.probability * 100))}%`,
+              width: `${Math.min(100, Math.max(2, props.probability * 100))}%`,
             }}
             transition={{ duration: 0.6, ease: EASE_OUT_QUINT }}
           />
         </div>
-        <span className='text-muted-foreground shrink-0 font-mono text-xs font-medium tabular-nums'>
+        <span className='w-20 text-right font-mono text-xs font-medium text-muted-foreground tabular-nums'>
           {formatProbability(props.probability)}
         </span>
       </div>

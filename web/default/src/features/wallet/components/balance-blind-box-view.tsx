@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from 'lucide-react'
-import { useReducedMotion } from 'motion/react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type {
@@ -22,8 +22,8 @@ import {
 import { BalanceBoxGiftConfirm } from './balance-blind-box-gift-confirm'
 import { BalanceBoxPurchaseWorkspace } from './balance-blind-box-purchase'
 import { BalanceBlindBoxSimulator } from './balance-blind-box-simulator'
+import { EditorialBoxGlyph } from './blind-box-editorial-glyph'
 import { BlindBoxPityTrack } from './blind-box-rules-panel'
-import { BoxFigure } from './blind-box-stage'
 
 export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulation' | 'pity'
 
@@ -67,10 +67,12 @@ export function BalanceBoxPanelView(props: BalanceBoxPanelViewProps) {
         opening={props.busy && props.mode === 'open'}
         busy={props.busy}
         onOpenCount={props.onOpenCount}
+        mode={props.mode}
+        onModeChange={props.onModeChange}
       />
-      <div className='space-y-5 px-4 py-4 sm:px-6 sm:py-5'>
+      <div className='px-4 py-4 sm:px-6 sm:py-5'>
         <BalanceBoxPurchaseWorkspace {...props} />
-        <BalanceBoxSecondaryActions {...props} />
+        <BalanceBoxSecondaryPanel {...props} />
       </div>
       <BalanceBoxGiftConfirm {...props} count={props.inventoryActionCount} />
     </section>
@@ -82,42 +84,33 @@ function BalanceBoxHeader(props: {
   opening: boolean
   busy: boolean
   onOpenCount: (count: number) => void
+  mode: ActionMode
+  onModeChange: (mode: ActionMode) => void
 }) {
-  const reduced = Boolean(useReducedMotion())
   const inventoryCount = props.balance?.inventory_count || 0
   return (
-    <div className='border-primary/20 bg-primary/[0.045] border-b px-4 py-5 sm:px-6'>
-      <div className='relative grid grid-cols-[96px_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-5 lg:grid-cols-[150px_minmax(0,1fr)_minmax(220px,280px)]'>
-        <div className='flex h-28 items-center justify-center sm:h-auto'>
-          <div className='scale-75 sm:scale-100'>
-            <BoxFigure
-              reduced={reduced}
-              pending={inventoryCount > 0}
-              opening={props.opening}
-              tone='primary'
-              onOpen={
-                inventoryCount > 0 && !props.busy
-                  ? () => props.onOpenCount(1)
-                  : undefined
-              }
-            />
+    <div className='relative overflow-hidden border-b px-4 py-5 sm:px-6 sm:py-6'>
+      <span
+        aria-hidden
+        className='border-primary/[0.08] pointer-events-none absolute -top-28 -right-20 size-64 rounded-full border'
+      />
+      <div className='relative grid gap-7 sm:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(0,1fr)_minmax(220px,264px)] lg:items-end'>
+        <EditorialBoxGlyph
+          pending={inventoryCount > 0}
+          opening={props.opening}
+          busy={props.busy}
+          onOpen={() => props.onOpenCount(1)}
+        />
+        <div className='min-w-0'>
+          <div className='flex items-center gap-2.5'>
+            <span aria-hidden className='bg-primary block h-2 w-2' />
+            <span className='codego-kicker'>
+              统一盲盒 · {(props.balance?.price_usd || 2.5).toFixed(2)} / 个
+            </span>
           </div>
-        </div>
-        <div className='min-w-0 text-left'>
-          <div className='text-primary text-xs font-semibold'>
-            统一盲盒 · {(props.balance?.price_usd || 2.5).toFixed(2)} / 个
-          </div>
-          <h2 className='text-foreground mt-1 text-lg font-semibold tracking-tight sm:text-xl'>
-            {inventoryCount > 0
-              ? `你有 ${inventoryCount} 个统一盲盒待开启`
-              : '购买可持有、可转赠的统一盲盒'}
+          <h2 className='text-foreground mt-3 text-2xl leading-[1.06] font-semibold text-balance sm:text-3xl'>
+            {inventoryCount > 0 ? `${inventoryCount} 个盲盒待开启` : '统一盲盒'}
           </h2>
-          <p className='text-muted-foreground mt-1.5 text-xs leading-5'>
-            人民币与统一额度购买进入同一库存、同一奖池。奖励在开启时抽取，购买和转赠不会提前推进保底。
-          </p>
-          <p className='text-primary/90 mt-1 text-[11px] leading-5'>
-            普通池采用高波动结构；抽中“再来一抽”会立即补发 1 个待开启盲盒。
-          </p>
           <BalanceBoxHeaderMetrics balance={props.balance} />
         </div>
         <BalanceBoxOpenActions
@@ -125,6 +118,8 @@ function BalanceBoxHeader(props: {
           busy={props.busy}
           opening={props.opening}
           onOpenCount={props.onOpenCount}
+          mode={props.mode}
+          onModeChange={props.onModeChange}
         />
       </div>
     </div>
@@ -133,7 +128,7 @@ function BalanceBoxHeader(props: {
 
 function BalanceBoxHeaderMetrics(props: { balance?: BalanceBlindBoxOverview }) {
   return (
-    <div className='mt-4 grid w-full max-w-lg grid-cols-3 gap-3 border-t border-teal-500/15 pt-3 text-center lg:text-left'>
+    <div className='codego-fact-row mt-6 grid max-w-md grid-cols-3'>
       <BalanceBoxMetric
         label='库存'
         value={`${props.balance?.inventory_count || 0} 个`}
@@ -155,102 +150,137 @@ function BalanceBoxOpenActions(props: {
   busy: boolean
   opening: boolean
   onOpenCount: (count: number) => void
+  mode: ActionMode
+  onModeChange: (mode: ActionMode) => void
 }) {
+  const ops = [
+    { mode: 'simulation' as ActionMode, icon: FlaskConical, label: '模拟抽盒' },
+    { mode: 'pity' as ActionMode, icon: ShieldCheck, label: '保底进度' },
+    { mode: 'gift' as ActionMode, icon: Gift, label: '赠送库存' },
+  ]
+
   if (props.inventoryCount <= 0) {
     return (
-      <div className='border-border/70 bg-background/55 col-span-2 rounded-lg border px-4 py-3 text-center text-sm lg:col-span-1 lg:text-left'>
-        <div className='font-medium'>库存为空</div>
-        <div className='text-muted-foreground mt-1 text-xs leading-5'>
-          在下方购买后，无需切换即可直接开启。
+      <div className='space-y-3'>
+        <div className='codego-stat-label'>库存操作</div>
+        <div className='grid grid-cols-3 gap-1.5'>
+          {ops.map((op) => (
+            <InventoryOpButton
+              key={op.mode}
+              {...op}
+              active={props.mode === op.mode}
+              disabled={props.busy}
+              onClick={() =>
+                props.onModeChange(
+                  props.mode === op.mode ? 'purchase' : op.mode
+                )
+              }
+            />
+          ))}
         </div>
       </div>
     )
   }
   const openAllCount = Math.min(100, props.inventoryCount)
   return (
-    <div className='border-primary/20 bg-background/70 col-span-2 space-y-2 rounded-lg border p-3 lg:col-span-1'>
-      <div className='text-sm font-semibold'>直接开启库存</div>
-      <Button
-        className='w-full'
-        disabled={props.busy}
-        onClick={() => props.onOpenCount(1)}
-      >
-        {props.opening ? (
-          <Loader2 className='size-4 animate-spin' />
-        ) : (
-          <PackageOpen className='size-4' />
-        )}
-        {props.opening ? '开启中…' : '开启 1 个'}
-      </Button>
-      {openAllCount > 1 ? (
+    <div className='space-y-3'>
+      <div className='codego-stat-label'>直接开启</div>
+      <div className='grid grid-cols-2 gap-2'>
+        <Button
+          className='h-11 flex-1 px-2.5'
+          disabled={props.busy}
+          onClick={() => props.onOpenCount(1)}
+        >
+          {props.opening ? (
+            <Loader2 className='size-4 animate-spin' />
+          ) : (
+            <PackageOpen className='size-4' />
+          )}
+          开启 1 个
+        </Button>
         <Button
           variant='outline'
-          className='w-full'
+          className='h-11 flex-1 px-2.5'
           disabled={props.busy}
           onClick={() => props.onOpenCount(openAllCount)}
         >
-          全部开启 {openAllCount} 个
+          全部 {openAllCount} 个
         </Button>
-      ) : null}
+      </div>
+      <div className='codego-stat-label border-border/60 border-t pt-3'>
+        库存操作
+      </div>
+      <div className='grid grid-cols-3 gap-1.5'>
+        {ops.map((op) => (
+          <InventoryOpButton
+            key={op.mode}
+            {...op}
+            active={props.mode === op.mode}
+            disabled={props.busy}
+            onClick={() =>
+              props.onModeChange(props.mode === op.mode ? 'purchase' : op.mode)
+            }
+          />
+        ))}
+      </div>
     </div>
   )
 }
 
-function BalanceBoxSecondaryActions(props: BalanceBoxPanelViewProps) {
-  const expanded = ['simulation', 'gift', 'pity'].includes(props.mode)
+function InventoryOpButton(props: {
+  mode: ActionMode
+  icon: LucideIcon
+  label: string
+  active: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
+  const Icon = props.icon
   return (
-    <div className='border-border/70 border-t pt-4'>
-      <div className='flex flex-wrap items-center gap-2'>
-        <span className='text-muted-foreground mr-auto text-xs'>更多操作</span>
-        <Button
-          size='sm'
-          variant={props.mode === 'simulation' ? 'secondary' : 'outline'}
-          onClick={() =>
-            props.onModeChange(
-              props.mode === 'simulation' ? 'purchase' : 'simulation'
-            )
-          }
-        >
-          <FlaskConical className='size-4' />
-          模拟抽盒
-        </Button>
-        <Button
-          size='sm'
-          variant={props.mode === 'pity' ? 'secondary' : 'outline'}
-          onClick={() =>
-            props.onModeChange(props.mode === 'pity' ? 'purchase' : 'pity')
-          }
-        >
-          <ShieldCheck className='size-4' />
-          保底进度
-        </Button>
-        <Button
-          size='sm'
-          variant={props.mode === 'gift' ? 'secondary' : 'outline'}
-          onClick={() =>
-            props.onModeChange(props.mode === 'gift' ? 'purchase' : 'gift')
-          }
-        >
-          <Gift className='size-4' />
-          赠送库存
-        </Button>
-      </div>
-      {expanded ? (
-        <div className='mt-4'>
-          {props.mode === 'simulation' ? (
-            <BalanceBlindBoxSimulator balance={props.balance} />
-          ) : props.mode === 'pity' ? (
-            <BlindBoxPityTrack balance={props.balance} />
-          ) : (
-            <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
-              <BalanceBoxRecipientFields {...props} />
-              <BalanceBoxActionControls {...props} />
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
+    <button
+      type='button'
+      onClick={props.onClick}
+      disabled={props.disabled}
+      aria-pressed={props.active}
+      className={cn(
+        'flex min-w-0 items-center justify-center gap-1.5 border px-1.5 py-2 text-xs transition-colors disabled:opacity-50',
+        props.active
+          ? 'border-primary bg-primary text-primary-foreground font-semibold'
+          : 'border-border bg-background/70 text-muted-foreground hover:border-primary/45 hover:text-foreground'
+      )}
+    >
+      <Icon className='size-3.5 shrink-0' />
+      <span className='truncate'>{props.label}</span>
+    </button>
   )
+}
+
+function BalanceBoxSecondaryPanel(props: BalanceBoxPanelViewProps) {
+  if (props.mode === 'simulation') {
+    return (
+      <div className='border-border/70 mt-4 border-t pt-4'>
+        <BalanceBlindBoxSimulator balance={props.balance} />
+      </div>
+    )
+  }
+  if (props.mode === 'pity') {
+    return (
+      <div className='border-border/70 mt-4 border-t pt-4'>
+        <BlindBoxPityTrack balance={props.balance} />
+      </div>
+    )
+  }
+  if (props.mode === 'gift') {
+    return (
+      <div className='border-border/70 mt-4 border-t pt-4'>
+        <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
+          <BalanceBoxRecipientFields {...props} />
+          <BalanceBoxActionControls {...props} />
+        </div>
+      </div>
+    )
+  }
+  return null
 }
 
 function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {

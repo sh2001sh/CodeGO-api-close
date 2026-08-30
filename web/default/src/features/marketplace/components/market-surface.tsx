@@ -111,7 +111,7 @@ export function MarketSurface(props: {
       <MarketplaceGroupList
         groups={props.query.data?.items ?? []}
         loading={props.query.isLoading}
-        error={props.query.isError}
+        error={props.query.isError && !props.query.data}
         routePoolEnabled={!props.ranking}
         onRetry={() => void props.query.refetch()}
       />

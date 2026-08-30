@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionPageLayout } from '@/components/layout'
-import { GroupStatusMonitorCard } from './group-status-monitor-card'
+import { GroupStatusSection } from './group-status-section'
 import {
   collectModelOptions,
   filterGroupStatusItems,
@@ -45,6 +45,9 @@ export function SidebarGroupStatusPage() {
   const [search, setSearch] = useState('')
   const [modelFilter, setModelFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set()
+  )
   const deferredSearch = useDeferredValue(search)
   const allItems = useMemo(
     () => sortItems(query.data?.data ?? []),
@@ -62,6 +65,14 @@ export function SidebarGroupStatusPage() {
   )
   const modelOptions = useMemo(() => collectModelOptions(allItems), [allItems])
   const summary = useMemo(() => summarizeGroups(allItems), [allItems])
+  const toggleGroup = (group: string) => {
+    setExpandedGroups((current) => {
+      const next = new Set(current)
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
+      return next
+    })
+  }
 
   return (
     <SectionPageLayout>
@@ -162,61 +173,19 @@ export function SidebarGroupStatusPage() {
 
           {query.isLoading ? (
             <BoardSkeleton />
-          ) : query.isError ? (
+          ) : query.isError && !query.data ? (
             <ErrorPanel onRetry={() => void query.refetch()} />
           ) : items.length === 0 ? (
             <EmptyPanel />
           ) : (
             <div className='flex flex-col gap-5'>
               {items.map((group) => (
-                <section
+                <GroupStatusSection
                   key={group.group}
-                  className='group-status-render-section app-page-shell p-4'
-                >
-                  <div className='mb-4 flex items-end justify-between gap-3'>
-                    <div className='space-y-1'>
-                      <h3 className='text-foreground text-xl font-semibold tracking-tight'>
-                        {group.display_name || group.group}
-                      </h3>
-                      <p className='text-muted-foreground text-sm'>
-                        {(group.source_type ?? 'official') ===
-                        'marketplace_user'
-                          ? '第三方渠道 · 套餐与余额'
-                          : '官方渠道'}{' '}
-                        · {group.models.length} 个模型
-                      </p>
-                    </div>
-                    <div className='shrink-0 text-right'>
-                      <div className='text-muted-foreground text-xs'>
-                        缓存命中率
-                      </div>
-                      <div className='mt-0.5 text-lg font-semibold tabular-nums'>
-                        {group.cache_hit_rate == null
-                          ? '--'
-                          : `${group.cache_hit_rate.toFixed(1)}%`}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'>
-                    {group.models.length === 0 ? (
-                      <div className='codego-empty px-4 py-6'>
-                        <span
-                          aria-hidden
-                          className='bg-border block h-6 w-px'
-                        />
-                        NO MODELS
-                      </div>
-                    ) : (
-                      group.models.map((model) => (
-                        <GroupStatusMonitorCard
-                          key={`${group.group}-${model.model}`}
-                          item={model}
-                        />
-                      ))
-                    )}
-                  </div>
-                </section>
+                  group={group}
+                  expanded={expandedGroups.has(group.group)}
+                  onToggle={() => toggleGroup(group.group)}
+                />
               ))}
             </div>
           )}

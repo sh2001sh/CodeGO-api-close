@@ -90,6 +90,24 @@ func TestRequestSpecificResponseHeaderTimeoutUsesDedicatedSharedClient(t *testin
 	assertSpecificClientResponseHeaderTimeout(t, adaptive, 90*time.Second)
 }
 
+func TestRequestSpecificResponseHeaderTimeoutSharesFiveSecondBuckets(t *testing.T) {
+	previousHeaderTimeout := platformconfig.RelayResponseHeaderTimeout
+	t.Cleanup(func() {
+		platformconfig.RelayResponseHeaderTimeout = previousHeaderTimeout
+		ResetProxyClientCache()
+		InitHTTPClient()
+	})
+
+	platformconfig.RelayResponseHeaderTimeout = 45
+	ResetProxyClientCache()
+	InitHTTPClient()
+
+	first := GetHTTPClientWithResponseHeaderTimeout(21 * time.Second)
+	second := GetHTTPClientWithResponseHeaderTimeout(24 * time.Second)
+	require.Same(t, first, second)
+	assertSpecificClientResponseHeaderTimeout(t, first, 25*time.Second)
+}
+
 func TestDisabledResponseHeaderTimeoutKeepsConnectionDeadline(t *testing.T) {
 	previousHeaderTimeout := platformconfig.RelayResponseHeaderTimeout
 	t.Cleanup(func() {

@@ -127,6 +127,57 @@ func TestCriticalRateLimitScopesAuthenticatedRequestsToUser(t *testing.T) {
 	require.True(t, limited.IsAborted())
 }
 
+func TestAuthenticatedRateLimitReturnsRetryMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalRedisEnabled := platformcache.RedisEnabled
+	originalEnabled := platformconfig.GlobalApiRateLimitEnable
+	originalLimit := platformconfig.GlobalApiRateLimitNum
+	originalDuration := platformconfig.GlobalApiRateLimitDuration
+	platformcache.RedisEnabled = false
+	platformconfig.GlobalApiRateLimitEnable = true
+	platformconfig.GlobalApiRateLimitNum = 1
+	platformconfig.GlobalApiRateLimitDuration = 600
+	t.Cleanup(func() {
+		platformcache.RedisEnabled = originalRedisEnabled
+		platformconfig.GlobalApiRateLimitEnable = originalEnabled
+		platformconfig.GlobalApiRateLimitNum = originalLimit
+		platformconfig.GlobalApiRateLimitDuration = originalDuration
+	})
+
+	first := newRateLimitContext(http.MethodGet, "/api/desktop/account/summary", "198.51.100.90", "")
+	first.Set("desktop_device_id", 99001)
+	require.True(t, enforceGlobalAuthenticatedAPIRateLimit(first))
+
+	recorder := httptest.NewRecorder()
+	limited, _ := gin.CreateTestContext(recorder)
+	limited.Request = httptest.NewRequest(http.MethodGet, "/api/desktop/account/summary", nil)
+	limited.Set("desktop_device_id", 99001)
+	require.False(t, enforceGlobalAuthenticatedAPIRateLimit(limited))
+	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+	require.Equal(t, "1", recorder.Header().Get("Retry-After"))
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "RATE_LIMITED", response["code"])
+	require.Equal(t, float64(1), response["retry_after"])
+}
+
+func TestDesktopAuthenticatedRateLimitUsesIndependentReadScopes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	paths := map[string]string{
+		"/api/desktop/account/summary": "account",
+		"/api/desktop/usage/trends":    "usage",
+		"/api/desktop/pricing":         "routing",
+		"/api/desktop/group-status":    "routing",
+		"/api/desktop/tokens":          "configuration",
+	}
+	for path, scope := range paths {
+		context := newRateLimitContext(http.MethodGet, path, "198.51.100.91", "")
+		context.Set("desktop_device_id", 99002)
+		require.Equal(t, "desktop:99002:"+scope, globalAuthenticatedRateLimitKey(context))
+	}
+}
+
 func configureMemoryLoginRateLimit(t *testing.T, ipLimit int, accountLimit int, duration int64) func() {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

@@ -3,6 +3,11 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/glebarez/sqlite"
 	auditdomain "github.com/sh2001sh/new-api/internal/audit/domain"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
@@ -18,13 +23,10 @@ import (
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformschema "github.com/sh2001sh/new-api/internal/platform/schema"
 	workflowschema "github.com/sh2001sh/new-api/internal/workflow/schema"
-
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"os"
-	"strings"
-	"time"
+	"gorm.io/gorm/logger"
 )
 
 const (
@@ -191,7 +193,7 @@ func openDatabase(envName string, isLog bool) (*gorm.DB, error) {
 			return gorm.Open(postgres.New(postgres.Config{
 				DSN:                  dsn,
 				PreferSimpleProtocol: true,
-			}), &gorm.Config{PrepareStmt: true})
+			}), databaseGORMConfig())
 		}
 
 		if strings.HasPrefix(dsn, "local") {
@@ -203,7 +205,7 @@ func openDatabase(envName string, isLog bool) (*gorm.DB, error) {
 			} else {
 				platformdb.LogSQLType = platformdb.DatabaseTypeSQLite
 			}
-			return gorm.Open(sqlite.Open(platformdb.SQLitePath), &gorm.Config{PrepareStmt: true})
+			return gorm.Open(sqlite.Open(platformdb.SQLitePath), databaseGORMConfig())
 		}
 
 		platformobservability.SysLog("using MySQL as database")
@@ -221,7 +223,7 @@ func openDatabase(envName string, isLog bool) (*gorm.DB, error) {
 		} else {
 			platformdb.LogSQLType = platformdb.DatabaseTypeMySQL
 		}
-		return gorm.Open(mysql.Open(dsn), &gorm.Config{PrepareStmt: true})
+		return gorm.Open(mysql.Open(dsn), databaseGORMConfig())
 	}
 
 	platformobservability.SysLog("SQL_DSN not set, using SQLite as database")
@@ -232,7 +234,19 @@ func openDatabase(envName string, isLog bool) (*gorm.DB, error) {
 	} else {
 		platformdb.LogSQLType = platformdb.DatabaseTypeSQLite
 	}
-	return gorm.Open(sqlite.Open(platformdb.SQLitePath), &gorm.Config{PrepareStmt: true})
+	return gorm.Open(sqlite.Open(platformdb.SQLitePath), databaseGORMConfig())
+}
+
+func databaseGORMConfig() *gorm.Config {
+	return &gorm.Config{
+		PrepareStmt: true,
+		Logger: logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  logger.Warn,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		}),
+	}
 }
 
 func migratePrimaryDB() error {

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -873,6 +874,13 @@ func RemoveDisabledFields(jsonData []byte, channelOtherSettings dto.ChannelOther
 	if gatewaystore.GetGlobalSettings().PassThroughRequestEnabled || channelPassThroughEnabled {
 		return jsonData, nil
 	}
+	// Most requests do not contain any of the optional fields controlled by
+	// channel settings. Avoid decoding and re-encoding large message bodies in
+	// that common case. This is an intentionally conservative hint: a match may
+	// still be a nested value and will be checked by the JSON path below.
+	if !requestMayContainDisabledFields(jsonData, channelOtherSettings) {
+		return jsonData, nil
+	}
 
 	var data map[string]interface{}
 	if err := platformencoding.Unmarshal(jsonData, &data); err != nil {
@@ -937,6 +945,31 @@ func RemoveDisabledFields(jsonData []byte, channelOtherSettings dto.ChannelOther
 		return jsonData, nil
 	}
 	return jsonDataAfter, nil
+}
+
+func requestMayContainDisabledFields(jsonData []byte, settings dto.ChannelOtherSettings) bool {
+	// Escaped JSON keys (for example, "\\u0073ervice_tier") are semantically
+	// equivalent to their plain spelling but cannot be found reliably with a
+	// byte hint. Fall back to the decoder whenever Unicode escapes are present.
+	if bytes.Contains(jsonData, []byte(`\u`)) {
+		return true
+	}
+	if !settings.AllowServiceTier && bytes.Contains(jsonData, []byte(`"service_tier"`)) {
+		return true
+	}
+	if !settings.AllowInferenceGeo && bytes.Contains(jsonData, []byte(`"inference_geo"`)) {
+		return true
+	}
+	if !settings.AllowSpeed && bytes.Contains(jsonData, []byte(`"speed"`)) {
+		return true
+	}
+	if settings.DisableStore && bytes.Contains(jsonData, []byte(`"store"`)) {
+		return true
+	}
+	if !settings.AllowSafetyIdentifier && bytes.Contains(jsonData, []byte(`"safety_identifier"`)) {
+		return true
+	}
+	return !settings.AllowIncludeObfuscation && bytes.Contains(jsonData, []byte(`"include_obfuscation"`))
 }
 
 // RemoveGeminiDisabledFields removes disabled fields from Gemini request JSON data

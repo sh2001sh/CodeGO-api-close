@@ -30,6 +30,12 @@ type RequestBodySnapshot struct {
 	Raw                []byte          `json:"-"`
 	Model              string          `json:"model"`
 	Stream             *bool           `json:"stream"`
+	StreamOptions      json.RawMessage `json:"stream_options"`
+	ServiceTier        json.RawMessage `json:"service_tier"`
+	Store              json.RawMessage `json:"store"`
+	SafetyIdentifier   json.RawMessage `json:"safety_identifier"`
+	InferenceGeo       json.RawMessage `json:"inference_geo"`
+	Speed              json.RawMessage `json:"speed"`
 	Tools              json.RawMessage `json:"tools"`
 	Functions          json.RawMessage `json:"functions"`
 	PromptCacheKey     json.RawMessage `json:"prompt_cache_key"`

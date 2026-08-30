@@ -17,6 +17,8 @@ import (
 const maxAutoRoutePoolMembers = 50
 const officialAutoRoutePrefix = "official:"
 
+var ErrAutoRouteModelUnavailable = errors.New("Auto 路由池没有支持该模型的可用分组")
+
 // ListAutoRoutePool returns every eligible official and marketplace group and
 // marks the groups currently selected by the user.
 func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
@@ -289,7 +291,7 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit
 		if overLimitCount > 0 {
 			return nil, multiplierLimitExceededError(multiplierLimit)
 		}
-		return nil, errors.New("Auto 路由池没有支持该模型的可用分组")
+		return nil, ErrAutoRouteModelUnavailable
 	}
 	return bindings, nil
 }

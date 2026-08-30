@@ -30,10 +30,13 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		return types.NewErrorWithStatusCode(fmt.Errorf("invalid request type, expected dto.GeneralOpenAIRequest, got %T", info.Request), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 
-	request, err := platformcopy.DeepCopy(textReq)
-	if err != nil {
-		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
-	}
+	// Keep the routing phase allocation-light. Model mapping and stream option
+	// normalization only replace top-level fields; defer the deep copy until a
+	// provider conversion is actually required so large message arrays are not
+	// duplicated on native pass-through requests.
+	requestCopy := *textReq
+	request := &requestCopy
+	var err error
 
 	if request.WebSearchOptions != nil {
 		c.Set("chat_completion_web_search_context_size", request.WebSearchOptions.SearchContextSize)
@@ -64,7 +67,18 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		shouldBridgeBeforeNative(info, bridgeChatToResponses) {
+		request, err = platformcopy.DeepCopy(request)
+		if err != nil {
+			return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+		}
 		return executeChatToResponsesBridge(c, info, adaptor, request)
+	}
+	originalBodyFastPath := false
+	if !passThroughGlobal && !info.ChannelSetting.PassThroughBodyEnabled {
+		originalBodyFastPath, err = tryChatCompletionsOriginalBodyFastPath(c, info, textReq, request)
+		if err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
 	}
 
 	var requestBody io.Reader
@@ -79,7 +93,22 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			}
 		}
 		requestBody = platformhttpx.ReaderOnly(storage)
+	} else if originalBodyFastPath {
+		storage, storageErr := platformhttpx.GetBodyStorage(c)
+		if storageErr != nil {
+			return types.NewErrorWithStatusCode(storageErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		requestBody = platformhttpx.ReaderOnly(storage)
+		info.UpstreamRequestBodySize = storage.Size()
+		info.ReasoningEffort = request.ReasoningEffort
+		if info.FirstByteTrace != nil {
+			info.FirstByteTrace.MarkRequestBodyFastPath()
+		}
 	} else {
+		request, err = platformcopy.DeepCopy(request)
+		if err != nil {
+			return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+		}
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, info, request)
 		if err != nil {
 			if info.RelayMode == gatewaycontract.RelayModeChatCompletions &&

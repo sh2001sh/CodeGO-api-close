@@ -25,6 +25,19 @@ var (
 
 const outboundConnectionTimeout = 10 * time.Second
 
+const responseHeaderTimeoutBucket = 5 * time.Second
+
+// bucketResponseHeaderTimeout keeps adaptive first-byte budgets from creating
+// one HTTP transport per percentile value. The request context remains the
+// authoritative overall deadline, so rounding up only affects the transport's
+// header wait and never extends the request budget.
+func bucketResponseHeaderTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 || responseHeaderTimeoutBucket <= 0 {
+		return timeout
+	}
+	return ((timeout + responseHeaderTimeoutBucket - 1) / responseHeaderTimeoutBucket) * responseHeaderTimeoutBucket
+}
+
 func relayResponseHeaderTimeout() time.Duration {
 	if platformconfig.RelayResponseHeaderTimeout <= 0 {
 		return 0
@@ -114,6 +127,7 @@ func sharedHTTPClientOrDefault() *http.Client {
 // GetHTTPClientWithResponseHeaderTimeout returns a shared client for a
 // request-specific first-byte budget. The global client remains unchanged.
 func GetHTTPClientWithResponseHeaderTimeout(responseHeaderTimeout time.Duration) *http.Client {
+	responseHeaderTimeout = bucketResponseHeaderTimeout(responseHeaderTimeout)
 	// The request-specific timeout may be lower than the global relay budget
 	// (for example, the 20s GPT first-byte budget). Reuse the global client
 	// only when the budgets are identical; otherwise its transport would
@@ -167,6 +181,7 @@ func NewProxyHTTPClient(proxyURL string) (*http.Client, error) {
 // NewProxyHTTPClientWithResponseHeaderTimeout applies a request-specific
 // first-byte budget while retaining proxy connection reuse.
 func NewProxyHTTPClientWithResponseHeaderTimeout(proxyURL string, responseHeaderTimeout time.Duration) (*http.Client, error) {
+	responseHeaderTimeout = bucketResponseHeaderTimeout(responseHeaderTimeout)
 	if responseHeaderTimeout <= 0 || responseHeaderTimeout == relayResponseHeaderTimeout() {
 		return NewProxyHTTPClient(proxyURL)
 	}

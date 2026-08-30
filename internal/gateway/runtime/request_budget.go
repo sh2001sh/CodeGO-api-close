@@ -17,6 +17,7 @@ const (
 	responsesShortAttemptDefault     = 30 * time.Second
 	responsesShortAttemptMin         = 15 * time.Second
 	responsesShortAttemptMax         = 30 * time.Second
+	responsesShortAttemptBucket      = 5 * time.Second
 	responsesAdaptiveTTFTMinSamples  = 10
 )
 
@@ -91,7 +92,14 @@ func RetryableResponsesAttemptTimeout(c *gin.Context) time.Duration {
 	if timeout > responsesShortAttemptMax {
 		return responsesShortAttemptMax
 	}
-	return timeout
+	return ceilDuration(timeout, responsesShortAttemptBucket)
+}
+
+func ceilDuration(value, bucket time.Duration) time.Duration {
+	if value <= 0 || bucket <= 0 {
+		return value
+	}
+	return ((value + bucket - 1) / bucket) * bucket
 }
 
 func RequestBudgetFromContext(c *gin.Context) *RequestBudget {

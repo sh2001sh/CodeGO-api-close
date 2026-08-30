@@ -156,6 +156,7 @@ func V2MigrationIDs() []string {
 		"20260817_responses_background",
 		"20260818_multiplier_precision",
 		"20260819_group_status_log_index",
+		"20260830_logs_channel_window_index",
 		"20260819_redundant_write_indexes",
 		"20260819_perf_metrics_cache_columns",
 		"20260819_billing_outbox_published_cleanup",
@@ -353,6 +354,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260818_multiplier_precision", Run: migrateMultiplierPrecision},
 		{ID: "20260818_commerce_invoice_request_items", Run: migrateCommerceInvoiceRequestItems},
 		{ID: "20260819_group_status_log_index", RunOutsideTx: migrateGroupStatusLogIndex},
+		{ID: "20260830_logs_channel_window_index", RunOutsideTx: migrateChannelWindowLogIndex},
 		{ID: "20260819_redundant_write_indexes", RunOutsideTx: migrateRedundantWriteIndexes},
 		{ID: "20260819_perf_metrics_cache_columns", Run: func(tx *gorm.DB) error {
 			if tx.Migrator().HasTable("perf_metrics") {
@@ -489,6 +491,34 @@ func groupStatusLogIndexStatement(dialect string) string {
 		return "CREATE INDEX idx_logs_group_status_window ON logs (created_at, type, `group`, model_name)"
 	default:
 		return "CREATE INDEX IF NOT EXISTS idx_logs_group_status_window ON logs (created_at, type, `group`, model_name)"
+	}
+}
+
+// migrateChannelWindowLogIndex bounds channel-owner log summaries and recent
+// latency reads by channel and time instead of scanning the full log table.
+func migrateChannelWindowLogIndex(_ *gorm.DB) error {
+	db := platformdb.LogDB
+	if db == nil {
+		db = platformdb.DB
+	}
+	if db == nil || !db.Migrator().HasTable("logs") {
+		return nil
+	}
+	statement := channelWindowLogIndexStatement(db.Dialector.Name())
+	if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		return err
+	}
+	return nil
+}
+
+func channelWindowLogIndexStatement(dialect string) string {
+	switch dialect {
+	case "postgres":
+		return fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_channel_window ON logs (channel_id, created_at DESC, id DESC) WHERE type IN (%d, %d)`, auditschema.LogTypeConsume, auditschema.LogTypeError)
+	case "mysql":
+		return "CREATE INDEX idx_logs_channel_window ON logs (channel_id, type, created_at, id)"
+	default:
+		return "CREATE INDEX IF NOT EXISTS idx_logs_channel_window ON logs (channel_id, type, created_at, id)"
 	}
 }
 

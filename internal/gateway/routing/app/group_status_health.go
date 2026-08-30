@@ -35,11 +35,6 @@ func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segment
 	now := time.Now().Unix()
 	windowStart, windowEnd, alignedSegments := buildAlignedStatusWindow(now, windowSeconds, requestedBucketSeconds)
 
-	if shouldPreferLogHealth(windowSeconds, requestedBucketSeconds) &&
-		fillGroupModelLogHealth(rates, seriesByModel, requestCounts, windowStart, windowEnd, requestedBucketSeconds, alignedSegments, groupNames) {
-		return rates, seriesByModel, requestCounts, sampleWindowHours, requestedBucketSeconds
-	}
-
 	if actualBucketSeconds, ok := fillGroupModelPerfHealth(
 		rates,
 		seriesByModel,
@@ -55,10 +50,6 @@ func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segment
 
 	fillGroupModelLogHealth(rates, seriesByModel, requestCounts, windowStart, windowEnd, requestedBucketSeconds, alignedSegments, groupNames)
 	return rates, seriesByModel, requestCounts, sampleWindowHours, requestedBucketSeconds
-}
-
-func shouldPreferLogHealth(windowSeconds, bucketSeconds int64) bool {
-	return windowSeconds <= 6*3600 && bucketSeconds <= 30*60
 }
 
 func fillGroupModelPerfHealth(

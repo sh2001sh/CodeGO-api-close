@@ -32,6 +32,7 @@ import { normalizeLogoUrl, normalizeSystemName } from '@/lib/branding'
 import '@/lib/dayjs'
 import { applyFaviconToDom } from '@/lib/dom-utils'
 import { handleServerError } from '@/lib/handle-server-error'
+import { queryRetryDelay, shouldRetryQuery } from '@/lib/query-retry'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
@@ -56,16 +57,12 @@ const queryClient = new QueryClient({
           }
         }
 
-        if (failureCount >= 0 && import.meta.env.DEV) return false
-        if (failureCount > 3 && import.meta.env.PROD) return false
-
-        return !(
-          error instanceof AxiosError &&
-          [401, 403].includes(error.response?.status ?? 0)
-        )
+        if (import.meta.env.DEV) return false
+        return shouldRetryQuery(failureCount, error)
       },
-      refetchOnWindowFocus: import.meta.env.PROD,
-      staleTime: 10 * 1000, // 10s
+      retryDelay: queryRetryDelay,
+      refetchOnWindowFocus: false,
+      staleTime: 30 * 1000,
     },
     mutations: {
       onError: (error) => {
@@ -87,10 +84,6 @@ const queryClient = new QueryClient({
           useAuthStore.getState().auth.reset()
           const redirect = `${router.history.location.href}`
           router.navigate({ to: '/sign-in', search: { redirect } })
-        }
-        if (error.response?.status === 500) {
-          toast.error(i18next.t('Internal Server Error!'))
-          router.navigate({ to: '/500' })
         }
       }
     },

@@ -38,3 +38,17 @@ func TestBillingRequestUsageIndexStatementUsesDialect(t *testing.T) {
 		t.Fatalf("unexpected sqlite statement: %s", sqlite)
 	}
 }
+
+func TestChannelWindowLogIndexStatementUsesDialect(t *testing.T) {
+	postgres := channelWindowLogIndexStatement("postgres")
+	require.Contains(t, postgres, "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
+	require.Contains(t, postgres, "(channel_id, created_at DESC, id DESC)")
+	require.Contains(t, postgres, "WHERE type IN")
+
+	mysql := channelWindowLogIndexStatement("mysql")
+	require.Contains(t, mysql, "(channel_id, type, created_at, id)")
+	require.NotContains(t, mysql, "CONCURRENTLY")
+
+	sqlite := channelWindowLogIndexStatement("sqlite")
+	require.Contains(t, sqlite, "CREATE INDEX IF NOT EXISTS")
+}

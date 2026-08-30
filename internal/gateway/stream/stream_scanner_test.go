@@ -427,3 +427,29 @@ func TestScanResponseInterruptsBlockedScannerWhenHandlerStops(t *testing.T) {
 	require.Less(t, time.Since(started), time.Second)
 	require.Equal(t, gatewaycontract.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
 }
+
+func TestStreamReadWasLocallyInterruptedClassifiesClosedHTTP2Body(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ginContext, _ := gin.CreateTestContext(httptest.NewRecorder())
+	requestContext, cancel := contextWithCancel(context.Background())
+	ginContext.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(requestContext)
+	stop := make(chan struct{})
+
+	require.False(t, streamReadWasLocallyInterrupted(ginContext, stop))
+	close(stop)
+	require.True(t, streamReadWasLocallyInterrupted(ginContext, stop))
+
+	otherStop := make(chan struct{})
+	cancel()
+	require.True(t, streamReadWasLocallyInterrupted(ginContext, otherStop))
+}
+
+func TestExpectedClosedBodyAfterLocalStopSuppressesScannerNoise(t *testing.T) {
+	status := gatewaycontract.NewStreamStatus()
+	status.SetEndReason(gatewaycontract.StreamEndReasonTimeout, errors.New("semantic timeout"))
+
+	require.True(t, expectedClosedBodyAfterLocalStop(errors.New("http2: response body closed"), status))
+	require.False(t, expectedClosedBodyAfterLocalStop(errors.New("unexpected EOF"), status))
+	completed := gatewaycontract.NewStreamStatus()
+	require.False(t, expectedClosedBodyAfterLocalStop(errors.New("http2: response body closed"), completed))
+}

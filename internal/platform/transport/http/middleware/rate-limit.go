@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -139,16 +141,14 @@ func enforceGlobalAuthenticatedAPIRateLimit(c *gin.Context) bool {
 			return true
 		}
 		if !allowed {
-			c.Status(http.StatusTooManyRequests)
-			c.Abort()
+			abortAuthenticatedRateLimited(c)
 			return false
 		}
 		return true
 	}
 
 	if !inMemoryRateLimiter.Request("GA:"+key, platformconfig.GlobalApiRateLimitNum, platformconfig.GlobalApiRateLimitDuration) {
-		c.Status(http.StatusTooManyRequests)
-		c.Abort()
+		abortAuthenticatedRateLimited(c)
 		return false
 	}
 	return true
@@ -161,14 +161,43 @@ func globalAPIRatePerSecond() float64 {
 	return float64(platformconfig.GlobalApiRateLimitNum) / float64(platformconfig.GlobalApiRateLimitDuration)
 }
 
+func abortAuthenticatedRateLimited(c *gin.Context) {
+	const retryAfterSeconds = 1
+	c.Header("Retry-After", strconv.Itoa(retryAfterSeconds))
+	c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+		"success":     false,
+		"code":        "RATE_LIMITED",
+		"message":     "Too many requests",
+		"retry_after": retryAfterSeconds,
+	})
+}
+
 func globalAuthenticatedRateLimitKey(c *gin.Context) string {
 	if desktopDeviceID := c.GetInt("desktop_device_id"); desktopDeviceID > 0 {
-		return fmt.Sprintf("desktop:%d", desktopDeviceID)
+		return fmt.Sprintf("desktop:%d:%s", desktopDeviceID, desktopRateLimitScope(c.Request.Method, c.Request.URL.Path))
 	}
 	if userID := c.GetInt("id"); userID > 0 {
 		return fmt.Sprintf("user:%d", userID)
 	}
 	return ""
+}
+
+func desktopRateLimitScope(method, path string) string {
+	if method != http.MethodGet && method != http.MethodHead {
+		return "write"
+	}
+	switch {
+	case strings.HasPrefix(path, "/api/desktop/usage/"):
+		return "usage"
+	case path == "/api/desktop/pricing" || path == "/api/desktop/groups" || path == "/api/desktop/group-status":
+		return "routing"
+	case strings.HasPrefix(path, "/api/desktop/tokens") || strings.HasPrefix(path, "/api/desktop/config"):
+		return "configuration"
+	case path == "/api/desktop/account/summary" || path == "/api/desktop/service/status" || path == "/api/desktop/authorized-devices":
+		return "account"
+	default:
+		return "other"
+	}
 }
 
 func CriticalRateLimit() func(c *gin.Context) {

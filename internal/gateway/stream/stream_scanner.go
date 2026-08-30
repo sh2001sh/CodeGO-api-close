@@ -278,6 +278,9 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 		}
 
 		if err := scanner.Err(); err != nil {
+			if streamReadWasLocallyInterrupted(c, stopChan) || expectedClosedBodyAfterLocalStop(err, info.StreamStatus) {
+				return
+			}
 			if err != io.EOF {
 				logger.LogError(c, "scanner error: "+err.Error())
 				info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonScannerErr, err)
@@ -380,6 +383,26 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	} else {
 		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
 	}
+}
+
+func streamReadWasLocallyInterrupted(c *gin.Context, stop <-chan struct{}) bool {
+	if c != nil && c.Request != nil && c.Request.Context().Err() != nil {
+		return true
+	}
+	select {
+	case <-stop:
+		return true
+	default:
+		return false
+	}
+}
+
+func expectedClosedBodyAfterLocalStop(err error, status *gatewaycontract.StreamStatus) bool {
+	if err == nil || status == nil || status.EndReason == gatewaycontract.StreamEndReasonNone {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "response body closed") || strings.Contains(message, "body closed")
 }
 
 func resetStreamTimer(timer *time.Timer, timeout time.Duration) {

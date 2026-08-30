@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
+import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth-store'
 import { getSidebarGroupStatus } from './api'
 
@@ -28,18 +28,17 @@ export function useSidebarGroupStatus() {
     queryKey: ['sidebar-group-status', userId],
     queryFn: getSidebarGroupStatus,
     enabled: userId > 0,
-    staleTime: 60 * 1000,
-    refetchInterval: 60 * 1000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    placeholderData: (previousData) => previousData,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
     retry: (failureCount, error) => {
-      if (failureCount >= 2) return false
+      if (failureCount >= 1) return false
       if (!axios.isAxiosError(error)) return true
       const status = error.response?.status
       // Authentication and validation errors should be shown immediately;
       // retry only network failures and transient upstream/control errors.
       return status == null || status === 408 || status === 429 || status >= 500
     },
-    retryDelay: (attemptIndex) => Math.min(500 * 2 ** attemptIndex, 2000),
+    retryDelay: (attemptIndex) => Math.min(800 * 2 ** attemptIndex, 2000),
   })
 }

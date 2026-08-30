@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
@@ -26,7 +26,6 @@ import { SiteSeo } from '@/components/seo'
 import { useMarketplaceGroups } from '@/features/marketplace/hooks'
 import {
   LoadingSkeleton,
-  ModelDetailsDrawer,
   OfficialModelDirectory,
   PricingSourceNavigation,
   SearchBar,
@@ -40,6 +39,10 @@ import {
   buildThirdPartyPricingModels,
   buildThirdPartyVendors,
 } from './lib/third-party-models'
+
+const ModelDetailsDrawer = lazy(async () => ({
+  default: (await import('./components/model-details')).ModelDetailsDrawer,
+}))
 
 const pricingSeo = getPublicPageSeoEntry('/pricing')
 
@@ -67,7 +70,9 @@ export function Pricing() {
     }),
     []
   )
-  const marketplaceQuery = useMarketplaceGroups(marketplaceFilters)
+  const marketplaceQuery = useMarketplaceGroups(marketplaceFilters, {
+    enabled: sourceView === 'third_party',
+  })
   const thirdPartyGroups = useMemo(
     () =>
       (marketplaceQuery.data?.items ?? []).filter(
@@ -221,43 +226,49 @@ export function Pricing() {
               />
             </TabsContent>
             <TabsContent value='third_party'>
-              <OfficialModelDirectory
-                models={thirdPartyModels}
-                vendors={thirdPartyVendors}
-                availableGroups={Array.from(
-                  new Set(
-                    thirdPartyModels.flatMap((model) => model.enable_groups)
-                  )
-                )}
-                groupRatio={Object.assign(
-                  {},
-                  ...thirdPartyModels.map((model) => model.group_ratio ?? {})
-                )}
-                totalFreeModels={thirdPartyFreeModels}
-                visibleFreeModels={visibleThirdPartyFreeModels}
-                priceRate={pricing.priceRate}
-                usdExchangeRate={pricing.usdExchangeRate}
-                filters={thirdPartyFilters}
-                onModelClick={handleModelClick}
-              />
+              {marketplaceQuery.isLoading ? (
+                <LoadingSkeleton viewMode={thirdPartyFilters.viewMode} />
+              ) : (
+                <OfficialModelDirectory
+                  models={thirdPartyModels}
+                  vendors={thirdPartyVendors}
+                  availableGroups={Array.from(
+                    new Set(
+                      thirdPartyModels.flatMap((model) => model.enable_groups)
+                    )
+                  )}
+                  groupRatio={Object.assign(
+                    {},
+                    ...thirdPartyModels.map((model) => model.group_ratio ?? {})
+                  )}
+                  totalFreeModels={thirdPartyFreeModels}
+                  visibleFreeModels={visibleThirdPartyFreeModels}
+                  priceRate={pricing.priceRate}
+                  usdExchangeRate={pricing.usdExchangeRate}
+                  filters={thirdPartyFilters}
+                  onModelClick={handleModelClick}
+                />
+              )}
             </TabsContent>
           </Tabs>
         </div>
 
         {selectedModel && (
-          <ModelDetailsDrawer
-            open
-            onOpenChange={(open) => !open && setSelectedModelName(null)}
-            model={selectedModel}
-            groupRatio={pricing.groupRatio}
-            usableGroup={pricing.usableGroup}
-            endpointMap={pricing.endpointMap}
-            autoGroups={pricing.autoGroups}
-            priceRate={pricing.priceRate}
-            usdExchangeRate={pricing.usdExchangeRate}
-            tokenUnit={filters.tokenUnit}
-            showRechargePrice={filters.showRechargePrice}
-          />
+          <Suspense fallback={null}>
+            <ModelDetailsDrawer
+              open
+              onOpenChange={(open) => !open && setSelectedModelName(null)}
+              model={selectedModel}
+              groupRatio={pricing.groupRatio}
+              usableGroup={pricing.usableGroup}
+              endpointMap={pricing.endpointMap}
+              autoGroups={pricing.autoGroups}
+              priceRate={pricing.priceRate}
+              usdExchangeRate={pricing.usdExchangeRate}
+              tokenUnit={filters.tokenUnit}
+              showRechargePrice={filters.showRechargePrice}
+            />
+          </Suspense>
         )}
       </PageTransition>
     </PublicLayout>

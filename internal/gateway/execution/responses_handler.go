@@ -63,10 +63,13 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		)
 	}
 
-	request, err := platformcopy.DeepCopy(responsesReq)
-	if err != nil {
-		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
-	}
+	// Routing and native Responses pass-through only replace top-level fields.
+	// Defer the deep copy until conversion or a protocol bridge needs an
+	// isolated mutable request; large input histories otherwise get duplicated
+	// before they are sent unchanged upstream.
+	requestCopy := *responsesReq
+	request := &requestCopy
+	var err error
 	if err := relaycommon.ModelMappedHelper(c, info, request); err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
@@ -97,6 +100,10 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		shouldBridgeBeforeNative(info, bridgeResponsesToChat) {
+		request, err = platformcopy.DeepCopy(request)
+		if err != nil {
+			return types.NewError(fmt.Errorf("failed to copy request to OpenAIResponsesRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+		}
 		return executeResponsesToChatBridge(c, info, adaptor, request)
 	}
 
@@ -135,6 +142,10 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			info.FirstByteTrace.MarkRequestBodyFastPath()
 		}
 	} else {
+		request, err = platformcopy.DeepCopy(request)
+		if err != nil {
+			return types.NewError(fmt.Errorf("failed to copy request to OpenAIResponsesRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+		}
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
 			if info.RelayMode == gatewaycontract.RelayModeResponses &&
@@ -290,29 +301,10 @@ func tryResponsesOriginalBodyFastPath(c *gin.Context, info *relaycommon.RelayInf
 	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) && hasRemoteCompactionTrigger(json.RawMessage(body)) {
 		return nil, false, nil
 	}
-	if shouldNormalizeResponsesCompatibilityBody(body) || responsesBodyContainsDisabledFields(body, info.ChannelOtherSettings) {
+	if shouldNormalizeResponsesCompatibilityBody(body) || requestBodyContainsDisabledFields(body, info.ChannelOtherSettings) {
 		return nil, false, nil
 	}
 	return body, true, nil
-}
-
-func responsesBodyContainsDisabledFields(body []byte, settings dto.ChannelOtherSettings) bool {
-	if !settings.AllowServiceTier && bytes.Contains(body, []byte(`"service_tier"`)) {
-		return true
-	}
-	if !settings.AllowInferenceGeo && bytes.Contains(body, []byte(`"inference_geo"`)) {
-		return true
-	}
-	if !settings.AllowSpeed && bytes.Contains(body, []byte(`"speed"`)) {
-		return true
-	}
-	if settings.DisableStore && bytes.Contains(body, []byte(`"store"`)) {
-		return true
-	}
-	if !settings.AllowSafetyIdentifier && bytes.Contains(body, []byte(`"safety_identifier"`)) {
-		return true
-	}
-	return !settings.AllowIncludeObfuscation && bytes.Contains(body, []byte(`"include_obfuscation"`))
 }
 
 func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, requestBody io.Reader, jsonBody []byte) (*http.Response, *types.NewAPIError) {

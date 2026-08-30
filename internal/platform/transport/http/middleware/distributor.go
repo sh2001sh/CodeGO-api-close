@@ -14,6 +14,7 @@ import (
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -136,6 +137,10 @@ func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 				if autoChannel, autoGroup, managed, autoErr := selectMarketplaceAutoChannel(c, usingGroup, modelRequest.Model); managed {
 					if autoErr != nil {
 						logger.LogError(c, "第三方 Auto 路由失败: "+autoErr.Error())
+						if errors.Is(autoErr, marketplaceapp.ErrAutoRouteModelUnavailable) {
+							abortWithOpenAiMessage(c, http.StatusNotFound, autoErr.Error(), types.ErrorCodeModelNotFound)
+							return
+						}
 						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, platformtext.UpstreamQuotaGenericMessage, types.ErrorCodeModelNotFound)
 						return
 					}

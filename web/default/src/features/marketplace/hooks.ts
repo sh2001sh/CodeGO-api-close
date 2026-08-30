@@ -50,7 +50,7 @@ function verificationRefetchInterval(
       ['queued', 'running'].includes(channel.gpt56_mapping_status ?? '') ||
       ['queued', 'running'].includes(channel.connectivity_test_status ?? '')
   )
-    ? 1000
+    ? 2000
     : false
 }
 
@@ -64,14 +64,16 @@ export function useMarketplaceChannelFeedback() {
   })
 }
 
-export function useMarketplaceGroups(filters: GroupFilters) {
+export function useMarketplaceGroups(
+  filters: GroupFilters,
+  options: { enabled?: boolean } = {}
+) {
   return useQuery({
     queryKey: ['marketplace-groups', filters],
     queryFn: () => getMarketplaceGroups(filters),
+    enabled: options.enabled ?? true,
     placeholderData: (previousData) => previousData,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
+    staleTime: 2 * 60_000,
     refetchOnWindowFocus: false,
   })
 }
@@ -153,53 +155,52 @@ export function useMarketplaceTokens() {
 
 export function useMarketplaceMutations() {
   const queryClient = useQueryClient()
-  const invalidate = async () => {
+  const invalidateChannels = () =>
+    queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] })
+  const invalidateAvailability = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] }),
-      queryClient.invalidateQueries({
-        queryKey: ['marketplace-multiplier-trends'],
-      }),
-      queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] }),
+      invalidateChannels(),
     ])
   }
   return {
     create: useMutation({
       mutationFn: createMarketplaceChannel,
-      onSuccess: invalidate,
+      onSuccess: invalidateChannels,
     }),
     fetchModels: useMutation({ mutationFn: fetchMarketplaceModels }),
     detect: useMutation({
       mutationFn: (channelId: string) => queueMarketplaceDetection(channelId),
-      onSuccess: invalidate,
+      onSuccess: invalidateChannels,
     }),
     testConnectivity: useMutation({
       mutationFn: (channelId: string) =>
         queueMarketplaceConnectivityTest(channelId),
-      onSuccess: invalidate,
+      onSuccess: invalidateChannels,
     }),
     retryConnectivity: useMutation({
       mutationFn: (channelId: string) =>
         retryMarketplaceFailedConnectivity(channelId),
-      onSuccess: invalidate,
+      onSuccess: invalidateChannels,
     }),
     pauseVerification: useMutation({
       mutationFn: (channelId: string) =>
         pauseMarketplaceVerification(channelId),
-      onSuccess: invalidate,
+      onSuccess: invalidateChannels,
     }),
     pause: useMutation({
       mutationFn: (input: { id: string; paused: boolean }) =>
         setMarketplaceChannelPaused(input.id, input.paused),
-      onSuccess: invalidate,
+      onSuccess: invalidateAvailability,
     }),
     userBlock: useMutation({
       mutationFn: setMarketplaceChannelUserBlock,
-      onSuccess: invalidate,
+      onSuccess: invalidateAvailability,
     }),
     adminPause: useMutation({
       mutationFn: (input: { id: string; paused: boolean }) =>
         setAdminMarketplaceChannelPaused(input.id, input.paused),
-      onSuccess: invalidate,
+      onSuccess: invalidateAvailability,
     }),
     bind: useMutation({
       mutationFn: (input: { groupId: string; tokenId: number }) =>
@@ -224,9 +225,6 @@ export function useMarketplaceFailedModelRemoval(admin = false) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] }),
         queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] }),
-        queryClient.invalidateQueries({
-          queryKey: ['marketplace-multiplier-trends'],
-        }),
       ])
     },
   })
@@ -287,9 +285,6 @@ export function useAdminMarketplaceReview() {
         queryKey: ['marketplace-channels'],
       })
       await queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] })
-      await queryClient.invalidateQueries({
-        queryKey: ['marketplace-multiplier-trends'],
-      })
     },
   })
 }

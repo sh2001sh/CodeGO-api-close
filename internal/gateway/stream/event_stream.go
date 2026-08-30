@@ -13,7 +13,9 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
+	"io"
 	"net/http"
+	"strings"
 )
 
 func markResponseBodyDelivered(c *gin.Context) {
@@ -84,6 +86,27 @@ func FlushHeaders(c *gin.Context) (err error) {
 	return nil
 }
 
+// writeSSEParts writes an SSE event in one downstream write. Keeping the
+// existing CustomEvent framing rules here avoids two Render calls per token
+// while preserving carriage-return escaping and data-frame termination.
+func writeSSEParts(c *gin.Context, parts ...string) error {
+	if c == nil || c.Writer == nil {
+		return errors.New("context or writer is nil")
+	}
+	CustomEvent{}.WriteContentType(c.Writer)
+	var payload strings.Builder
+	for _, part := range parts {
+		customEventDataReplacer.WriteString(&payload, part)
+		if strings.HasPrefix(part, "data") {
+			payload.WriteString("\n\n")
+		}
+	}
+	if _, err := io.WriteString(c.Writer, payload.String()); err != nil {
+		return fmt.Errorf("write SSE data failed: %w", err)
+	}
+	return FlushWriter(c)
+}
+
 func SetEventStreamHeaders(c *gin.Context) {
 	if _, exists := c.Get("event_stream_headers_set"); exists {
 		return
@@ -118,10 +141,8 @@ func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
 	}
 	jsonData, err := platformencoding.Marshal(resp)
 	if err == nil {
-		c.Render(-1, CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-		c.Render(-1, CustomEvent{Data: "data: " + string(jsonData)})
+		err = writeSSEParts(c, fmt.Sprintf("event: %s\n", resp.Type), "data: "+string(jsonData))
 	}
-	err = FlushWriter(c)
 	if err == nil {
 		markResponseBodyDelivered(c)
 	}
@@ -132,9 +153,7 @@ func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) error
 	if IsClientGone(c) {
 		return fmt.Errorf("request context done")
 	}
-	c.Render(-1, CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, CustomEvent{Data: fmt.Sprintf("data: %s\n", data)})
-	err := FlushWriter(c)
+	err := writeSSEParts(c, fmt.Sprintf("event: %s\n", resp.Type), fmt.Sprintf("data: %s\n", data))
 	if err == nil {
 		markResponseBodyDelivered(c)
 	}
@@ -145,9 +164,7 @@ func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data st
 	if IsClientGone(c) {
 		return fmt.Errorf("request context done")
 	}
-	c.Render(-1, CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, CustomEvent{Data: fmt.Sprintf("data: %s", data)})
-	err := FlushWriter(c)
+	err := writeSSEParts(c, fmt.Sprintf("event: %s\n", resp.Type), fmt.Sprintf("data: %s", data))
 	if err != nil && IsClientGone(c) {
 		return err
 	}
@@ -164,8 +181,7 @@ func StringData(c *gin.Context, str string) error {
 	if c.Request != nil && c.Request.Context().Err() != nil {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
-	c.Render(-1, CustomEvent{Data: "data: " + str})
-	err := FlushWriter(c)
+	err := writeSSEParts(c, "data: "+str)
 	if err == nil && str != "[DONE]" {
 		markResponseBodyDelivered(c)
 	}

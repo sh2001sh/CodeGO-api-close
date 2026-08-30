@@ -26,9 +26,11 @@ const multiplierDurations = [
 ] as const
 
 const multiplierRules = [
-  ['扣月卡额度', '倍率 ×0.1'],
-  ['扣通用余额', '原倍率'],
-  ['剩余时长', '自动合并'],
+  ['生效条件', '实际扣月卡额度'],
+  ['月卡扣费', '分组套餐倍率 × 0.1'],
+  ['余额扣费', '分组余额倍率不变'],
+  ['计时方式', '仅计算启用时间 · 可暂停'],
+  ['多卡时长', '剩余时长自动合并'],
 ] as const
 
 const comparisonRows = [
@@ -82,14 +84,16 @@ export function MonthlyPlanRules() {
 
       <div className='grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
         <div className='border-b px-4 py-5 sm:px-5 lg:border-r lg:border-b-0'>
-          <span className='codego-kicker'>MULTIPLIER CARD</span>
+          <span className='codego-kicker'>{t('0.1 倍率卡有效时长')}</span>
           <dl className='mt-4 grid grid-cols-2 gap-x-8'>
             {multiplierDurations.map(([tier, duration]) => (
               <div
                 key={tier}
                 className='border-border/70 flex items-baseline justify-between gap-3 border-t py-2.5 first:border-t-0 first:pt-0'
               >
-                <dt className='codego-stat-label'>{tier}</dt>
+                <dt className='codego-stat-label'>
+                  {t('{{tier}} 月卡', { tier })}
+                </dt>
                 <dd className='text-foreground text-sm font-semibold tabular-nums'>
                   {t(duration)}
                 </dd>
@@ -99,7 +103,7 @@ export function MonthlyPlanRules() {
         </div>
 
         <div className='px-4 py-5 sm:px-5'>
-          <span className='codego-kicker'>BILLING</span>
+          <span className='codego-kicker'>{t('0.1 倍率卡计费规则')}</span>
           <dl className='mt-4'>
             {multiplierRules.map(([label, value]) => (
               <div

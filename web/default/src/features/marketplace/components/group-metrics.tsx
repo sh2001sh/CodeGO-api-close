@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import {
   formatDuration,
   formatMultiplier,
@@ -36,67 +37,84 @@ export const GroupMetrics = memo(function GroupMetrics(props: {
     0
   )
   return (
-    <div className='codego-marketplace-metrics border-border/60 divide-border/50 grid grid-cols-2 divide-x sm:grid-cols-5'>
-      <div className='min-w-0 px-3 first:pl-0'>
-        <MetricLabel>{t('倍率')}</MetricLabel>
-        <div className='text-primary app-numeric mt-0.5 text-base font-semibold'>
-          {formatMultiplier(props.group.multiplier)}x
-        </div>
-      </div>
-      <div className='min-w-0 px-3 first:pl-0'>
-        <MetricLabel>{t('成功率')}</MetricLabel>
-        <div className='app-numeric mt-0.5 text-sm font-semibold'>
-          {formatPercent(props.group.success_rate)}
-        </div>
-      </div>
-      <div className='min-w-0 px-3 first:pl-0'>
-        <MetricLabel
-          title={t(
-            '从近窗口原始请求日志中的首字延迟样本按最近邻秩计算，不包含前序失败重试；没有可用日志时才回退到指标桶估算。P95 与端到端耗时可在详情中查看。'
-          )}
-        >
-          {t('首字 P50')}
-        </MetricLabel>
-        <div
-          className='app-numeric mt-0.5 text-sm font-semibold'
-          title={
-            props.group.attempt_ttft_p50_ms == null
-              ? t('暂无足够样本，展开详情可查看完整检测状态')
-              : undefined
-          }
-        >
-          {formatDuration(props.group.attempt_ttft_p50_ms)}
-        </div>
-      </div>
-      <div className='min-w-0 px-3 first:pl-0'>
-        <MetricLabel title={t('近 6 小时实际请求数量')}>
-          {t('近期请求')}
-        </MetricLabel>
-        <div className='app-numeric mt-0.5 text-sm font-semibold'>
-          {recentRequests > 0 ? formatNumber(recentRequests) : t('暂无请求')}
-        </div>
-      </div>
-      <div className='min-w-0 px-3 first:pl-0'>
-        <MetricLabel title={t('近窗口缓存命中率')}>{t('缓存命中')}</MetricLabel>
-        <div className='app-numeric mt-0.5 text-sm font-semibold'>
-          {formatCacheHitRate(props.group.cache_hit_rate)}
-        </div>
-      </div>
+    <div className='codego-marketplace-metrics flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-1'>
+      <Metric
+        label={t('倍率')}
+        value={`${formatMultiplier(props.group.multiplier)}x`}
+        tone='text-primary text-base font-semibold'
+      />
+      <Metric
+        label={t('成功率')}
+        value={formatPercent(props.group.success_rate)}
+      />
+      <Metric
+        label={t('首字 P50')}
+        value={formatDuration(props.group.attempt_ttft_p50_ms)}
+        title={
+          props.group.attempt_ttft_p50_ms == null
+            ? t('暂无足够样本，展开详情可查看完整检测状态')
+            : undefined
+        }
+      />
+      <Metric
+        label={t('近期请求')}
+        value={
+          recentRequests > 0 ? formatNumber(recentRequests) : t('暂无请求')
+        }
+        muted={recentRequests <= 0}
+      />
+      <Metric
+        label={t('并发')}
+        value={`${formatNumber(props.group.current_concurrency)} / ${formatConcurrencyLimit(props.group.max_concurrency, t('不限'))}`}
+        danger={
+          props.group.max_concurrency > 0 &&
+          props.group.current_concurrency >= props.group.max_concurrency
+        }
+      />
+      <Metric
+        label={t('缓存命中')}
+        value={formatCacheHitRate(props.group.cache_hit_rate)}
+        muted={props.group.cache_hit_rate == null}
+      />
     </div>
   )
 })
 
-function MetricLabel(props: { children: React.ReactNode; title?: string }) {
+function Metric(props: {
+  label: string
+  value: string
+  title?: string
+  tone?: string
+  muted?: boolean
+  danger?: boolean
+}) {
   return (
-    <div
-      className='text-muted-foreground truncate text-[11px]'
+    <span
+      className='flex min-w-0 items-baseline gap-1.5 whitespace-nowrap'
       title={props.title}
     >
-      {props.children}
-    </div>
+      <span className='codego-stat-label'>{props.label}</span>
+      <span
+        className={cn(
+          'text-sm font-semibold tabular-nums',
+          props.tone ||
+            (props.danger
+              ? 'text-destructive'
+              : props.muted
+                ? 'text-muted-foreground/70'
+                : 'text-foreground')
+        )}
+      >
+        {props.value}
+      </span>
+    </span>
   )
 }
 
 function formatCacheHitRate(value: number | undefined) {
   return value == null ? '--' : `${value.toFixed(2)}%`
+}
+
+function formatConcurrencyLimit(value: number, fallback: string) {
+  return value > 0 ? formatNumber(value) : fallback
 }

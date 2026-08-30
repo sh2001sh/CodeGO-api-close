@@ -7,7 +7,6 @@ import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
 import type { GroupFilters } from '../types'
 import { MarketplaceGroupList } from './group-list'
 import { MarketplaceFilters } from './marketplace-filters'
-import { MarketplaceHighlights } from './marketplace-highlights'
 
 export function MarketSurface(props: {
   filters: GroupFilters
@@ -86,7 +85,7 @@ export function MarketSurface(props: {
         >
           <TabsList
             variant='line'
-            className='h-9 max-w-full justify-start overflow-x-auto'
+            className='h-auto max-w-full flex-wrap justify-start gap-x-1'
           >
             <TabsTrigger value='all' className='shrink-0 px-3'>
               {t('全部来源')}
@@ -107,7 +106,6 @@ export function MarketSurface(props: {
         filters={props.filters}
         onChange={props.updateFilters}
       />
-      <MarketplaceHighlights highlights={props.query.data?.highlights} />
       <MarketplaceGroupList
         groups={props.query.data?.items ?? []}
         loading={props.query.isLoading}

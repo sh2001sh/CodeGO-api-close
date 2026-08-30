@@ -41,6 +41,8 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
     [i18n.language]
   )
   const latestStatus = resolveRecentRequestStatus(series)
+  const hasRecentTraffic = series.some((bucket) => bucket.request_count > 0)
+  if (!hasRecentTraffic) return null
   const threshold = t(
     '每个色块代表 30 分钟：90%（含）以上稳定，85%（含）至 90%（不含）波动，低于 85% 异常，灰色表示无请求'
   )

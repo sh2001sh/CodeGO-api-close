@@ -45,7 +45,8 @@ export function SidebarGroupStatusPage() {
   const [search, setSearch] = useState('')
   const [modelFilter, setModelFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+  // groups render expanded by default; this set only tracks explicit collapses
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set()
   )
   const deferredSearch = useDeferredValue(search)
@@ -66,7 +67,7 @@ export function SidebarGroupStatusPage() {
   const modelOptions = useMemo(() => collectModelOptions(allItems), [allItems])
   const summary = useMemo(() => summarizeGroups(allItems), [allItems])
   const toggleGroup = (group: string) => {
-    setExpandedGroups((current) => {
+    setCollapsedGroups((current) => {
       const next = new Set(current)
       if (next.has(group)) next.delete(group)
       else next.add(group)
@@ -183,7 +184,7 @@ export function SidebarGroupStatusPage() {
                 <GroupStatusSection
                   key={group.group}
                   group={group}
-                  expanded={expandedGroups.has(group.group)}
+                  expanded={!collapsedGroups.has(group.group)}
                   onToggle={() => toggleGroup(group.group)}
                 />
               ))}

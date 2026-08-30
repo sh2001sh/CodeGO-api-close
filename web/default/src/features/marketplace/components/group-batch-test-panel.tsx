@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Clock3,
   LoaderCircle,
   ListFilter,
@@ -44,29 +47,45 @@ export function GroupBatchTestPanel(props: GroupBatchTestPanelProps) {
 function BatchTestControls(props: GroupBatchTestPanelProps) {
   const { t } = useTranslation()
   const hasSelection = props.selectedGroupIDs.length > 0
+  const [open, setOpen] = useState(() => props.selectedGroupIDs.length > 0)
+  const expanded = open || hasSelection
 
   return (
-    <div className='border-border bg-card rounded-md border px-3 py-3 sm:px-4'>
-      <div className='flex flex-wrap items-start justify-between gap-3'>
-        <div className='flex items-center gap-2 text-sm font-semibold'>
+    <div className='border-border bg-card rounded-md border px-3 py-2.5 sm:px-4'>
+      <button
+        type='button'
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={expanded}
+        className='flex w-full flex-wrap items-center justify-between gap-3 text-left'
+      >
+        <span className='flex items-center gap-2 text-sm font-semibold'>
           <ListFilter className='text-primary size-4' aria-hidden='true' />
           {t('分组连通性测试')}
-        </div>
-        <span className='text-muted-foreground text-xs tabular-nums'>
+        </span>
+        <span className='text-muted-foreground flex items-center gap-2 text-xs tabular-nums'>
           {hasSelection
             ? t('已选 {{count}} 个分组', {
                 count: props.selectedGroupIDs.length,
               })
             : t('请选择测试分组')}
+          {expanded ? (
+            <ChevronDown className='size-3.5' />
+          ) : (
+            <ChevronRight className='size-3.5' />
+          )}
         </span>
-      </div>
-      <BatchTestModelControls {...props} />
-      {hasSelection && props.availableModels.length === 0 && (
-        <p className='text-destructive mt-2 text-xs'>
-          {t('当前选择的分组没有共同模型，请减少分组或重新选择。')}
-        </p>
-      )}
-      <BatchTestActions {...props} />
+      </button>
+      {expanded ? (
+        <div className='mt-3'>
+          <BatchTestModelControls {...props} />
+          {hasSelection && props.availableModels.length === 0 && (
+            <p className='text-destructive mt-2 text-xs'>
+              {t('当前选择的分组没有共同模型，请减少分组或重新选择。')}
+            </p>
+          )}
+          <BatchTestActions {...props} />
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -93,19 +93,19 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
       {auxiliaryChildren}
       <PageFooterProvider container={footerContainer}>
         <Main>
-          <div className='codego-page-intro shrink-0 px-4 pt-6 pb-6 sm:px-7 sm:pt-8 sm:pb-7'>
+          <div className='codego-page-intro shrink-0 px-4 pt-4 pb-4 sm:px-7 sm:pt-5 sm:pb-5'>
             {breadcrumb != null && (
-              <div className='codego-page-breadcrumb mb-4'>{breadcrumb}</div>
+              <div className='codego-page-breadcrumb mb-3'>{breadcrumb}</div>
             )}
-            <div className='flex flex-wrap items-end justify-between gap-x-8 gap-y-5'>
-              <div className='max-w-3xl min-w-0'>
-                <div className='mb-3 flex items-center gap-2.5'>
+            <div className='flex flex-wrap items-center justify-between gap-x-8 gap-y-3'>
+              <div className='flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5'>
+                <span className='flex shrink-0 items-center gap-2.5'>
                   <span className='codego-page-signal' aria-hidden='true' />
                   <span className='codego-page-kicker'>
                     AI CODING GATEWAY · CONSOLE
                   </span>
-                </div>
-                <h2 className='codego-page-title text-foreground text-3xl leading-[1.04] font-semibold text-balance sm:text-4xl'>
+                </span>
+                <h2 className='codego-page-title text-foreground max-w-full min-w-0 truncate text-[clamp(1.45rem,2.3vw,2.1rem)] leading-[1.1] font-semibold tracking-[-0.04em]'>
                   {title}
                 </h2>
               </div>

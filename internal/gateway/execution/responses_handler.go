@@ -196,6 +196,15 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				outboundJSON = normalized
 			}
 		}
+		if request.Background != nil && !*request.Background {
+			normalized, changed, err := normalizeResponsesBackgroundFalse(outboundJSON)
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			if changed {
+				outboundJSON = normalized
+			}
+		}
 		logger.LogDebug(c, "requestBody: %s", outboundJSON)
 		requestBody = bytes.NewReader(outboundJSON)
 	}

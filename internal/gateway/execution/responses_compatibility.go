@@ -63,6 +63,33 @@ func normalizeResponsesCompatibilityBody(body []byte) ([]byte, bool, error) {
 	return normalized, true, err
 }
 
+// normalizeResponsesBackgroundFalse removes an explicit false Background
+// flag. Omitting the field is the only portable representation for providers
+// that do not implement the parameter at all.
+func normalizeResponsesBackgroundFalse(body []byte) ([]byte, bool, error) {
+	if !bytes.Contains(body, []byte(`"background"`)) {
+		return body, false, nil
+	}
+	var payload map[string]json.RawMessage
+	if err := platformencoding.Unmarshal(body, &payload); err != nil {
+		return nil, false, err
+	}
+	raw, ok := payload["background"]
+	if !ok {
+		return body, false, nil
+	}
+	var background bool
+	if err := platformencoding.Unmarshal(raw, &background); err != nil || background {
+		return body, false, nil
+	}
+	delete(payload, "background")
+	normalized, err := platformencoding.Marshal(payload)
+	if err != nil {
+		return nil, false, err
+	}
+	return normalized, true, nil
+}
+
 func normalizeResponsesInclude(raw json.RawMessage) (json.RawMessage, bool) {
 	var values []string
 	if platformencoding.Unmarshal(raw, &values) != nil {

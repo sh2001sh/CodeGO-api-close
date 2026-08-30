@@ -39,6 +39,26 @@ func TestShouldNormalizeResponsesCompatibilityBodyFastRejectsOrdinaryBody(t *tes
 	require.True(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","include":["usage"]}`)))
 }
 
+func TestNormalizeResponsesBackgroundFalseOmitsUnsupportedField(t *testing.T) {
+	body := []byte(`{"model":"gpt-5","input":"hello","background":false,"stream":true}`)
+
+	normalized, changed, err := normalizeResponsesBackgroundFalse(body)
+
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{"model":"gpt-5","input":"hello","stream":true}`, string(normalized))
+}
+
+func TestNormalizeResponsesBackgroundTruePreservesNativeField(t *testing.T) {
+	body := []byte(`{"model":"gpt-5","input":"hello","background":true,"stream":true}`)
+
+	normalized, changed, err := normalizeResponsesBackgroundFalse(body)
+
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, body, normalized)
+}
+
 func TestNormalizeResponsesCompatibilityBodyPreservesContinuationOutput(t *testing.T) {
 	body := []byte(`{
       "model":"gpt-5.6-sol",

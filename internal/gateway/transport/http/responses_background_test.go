@@ -63,7 +63,8 @@ func TestResponsesBackgroundCreatePersistsEncryptedPinnedJob(t *testing.T) {
 	require.NoError(t, err)
 	var execution map[string]any
 	require.NoError(t, platformencoding.Unmarshal([]byte(raw), &execution))
-	require.Equal(t, false, execution["background"])
+	_, hasBackground := execution["background"]
+	require.False(t, hasBackground)
 	require.Equal(t, true, execution["stream"])
 
 	var count int64

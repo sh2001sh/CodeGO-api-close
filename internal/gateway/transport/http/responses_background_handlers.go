@@ -258,7 +258,14 @@ func normalizeBackgroundExecutionRequest(raw []byte, previousResponseID string, 
 	if err := platformencoding.Unmarshal(raw, &request); err != nil {
 		return nil, err
 	}
-	request["background"] = native
+	if native {
+		request["background"] = true
+	} else {
+		// Providers without native Background support may reject the field even
+		// when it is explicitly set to false. Local background execution is
+		// already represented by the persisted job, so omit it upstream.
+		delete(request, "background")
+	}
 	request["stream"] = true
 	if previousResponseID != "" {
 		request["previous_response_id"] = previousResponseID

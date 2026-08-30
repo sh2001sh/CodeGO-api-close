@@ -93,33 +93,37 @@ jobs:
           PRODUCTION_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
           PRODUCTION_DEPLOY_SERVICE: ${{ secrets.PRODUCTION_DEPLOY_SERVICE }}
           PRODUCTION_DEPLOY_POST_COMMAND: ${{ secrets.PRODUCTION_DEPLOY_POST_COMMAND }}
+          DEPLOY_COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           port="${PRODUCTION_DEPLOY_PORT:-22}"
           ssh_key="$HOME/.ssh/new-api-production"
           ssh_target="${PRODUCTION_DEPLOY_USER}@${PRODUCTION_DEPLOY_HOST}"
+          deploy_version="sha-${DEPLOY_COMMIT_SHA:0:7}"
           service="${PRODUCTION_DEPLOY_SERVICE:-}"
           post_command="${PRODUCTION_DEPLOY_POST_COMMAND:-}"
 
           printf -v q_path '%q' "$PRODUCTION_DEPLOY_PATH"
+          printf -v q_version '%q' "$deploy_version"
           printf -v q_service '%q' "$service"
           printf -v q_post '%q' "$post_command"
 
           ssh -i "$ssh_key" -p "$port" "$ssh_target" \
-            "DEPLOY_PATH=$q_path DEPLOY_SERVICE=$q_service POST_COMMAND=$q_post bash -s" <<'EOF'
+            "DEPLOY_PATH=$q_path DEPLOY_VERSION=$q_version DEPLOY_SERVICE=$q_service POST_COMMAND=$q_post bash -s" <<'EOF'
           set -euo pipefail
           cd "$DEPLOY_PATH"
+          compose_env=(env "NEW_API_VERSION=$DEPLOY_VERSION")
 
           if [ -n "$DEPLOY_SERVICE" ]; then
-            docker compose pull "$DEPLOY_SERVICE"
-            docker compose up -d "$DEPLOY_SERVICE"
+            "${compose_env[@]}" docker compose pull "$DEPLOY_SERVICE"
+            "${compose_env[@]}" docker compose up -d "$DEPLOY_SERVICE"
           else
-            docker compose pull
-            docker compose up -d
+            "${compose_env[@]}" docker compose pull
+            "${compose_env[@]}" docker compose up -d
           fi
 
           if [ -z "$DEPLOY_SERVICE" ]; then
-            docker compose ps --format json > /tmp/codego-v2-compose-status.json
+            "${compose_env[@]}" docker compose ps --format json > /tmp/codego-v2-compose-status.json
             for runtime_service in control-api gateway-api workflow-worker ledger-worker; do
               if ! grep -Eq "\"Service\":\"${runtime_service}\"" /tmp/codego-v2-compose-status.json; then
                 echo "CodeGo v2 runtime service '${runtime_service}' is not present in docker compose status" >&2
@@ -130,7 +134,7 @@ jobs:
 
             verify_success=0
             for _ in $(seq 1 24); do
-              if docker compose --profile verify run --rm v2-verify --strict; then
+              if "${compose_env[@]}" docker compose --profile verify run --rm v2-verify --strict; then
                 verify_success=1
                 break
               fi
@@ -152,19 +156,25 @@ jobs:
         shell: bash
         env:
           PRODUCTION_PUBLIC_BASE_URL: ${{ secrets.PRODUCTION_PUBLIC_BASE_URL }}
+          DEPLOY_COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           base_url="${PRODUCTION_PUBLIC_BASE_URL:-https://shu26.cfd}"
           base_url="${base_url%/}"
+          expected_version="sha-${DEPLOY_COMMIT_SHA:0:7}"
 
           success=0
           for _ in $(seq 1 24); do
-            if curl --fail --silent --show-error "${base_url}/api/status" >/tmp/new-api-status.json; then
-              if grep -Eq '"success"[[:space:]]*:[[:space:]]*true' /tmp/new-api-status.json; then
+            response_headers=$(mktemp)
+            if curl --fail --silent --show-error -D "$response_headers" "${base_url}/api/status" >/tmp/new-api-status.json; then
+              deployed_version=$(awk 'BEGIN { IGNORECASE=1 } /^x-new-api-version:/ { sub(/^[^:]*:[[:space:]]*/, ""); gsub(/[[:space:]]+$/, ""); print; exit }' "$response_headers")
+              if grep -Eq '"success"[[:space:]]*:[[:space:]]*true' /tmp/new-api-status.json && [ "$deployed_version" = "$expected_version" ]; then
                 success=1
+                rm -f "$response_headers"
                 break
               fi
             fi
+            rm -f "$response_headers"
             sleep 5
           done
 

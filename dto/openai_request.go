@@ -388,7 +388,13 @@ func (m *MediaContent) ToFileSource() types.FileSource {
 		return types.NewFileSourceFromData(audio.Data, mimeType)
 	case ContentTypeFile:
 		file := m.GetFile()
-		if file == nil || file.FileData == "" {
+		if file == nil {
+			return nil
+		}
+		if types.IsLocalFileID(file.FileId) {
+			return types.NewFileIDSource(file.FileId)
+		}
+		if file.FileData == "" {
 			return nil
 		}
 		mimeType := ""
@@ -916,7 +922,9 @@ func (r *OpenAIResponsesRequest) GetTokenCountMeta() *types.TokenCountMeta {
 		inputs := r.ParseInput()
 		for _, input := range inputs {
 			if input.Type == "input_image" {
-				if input.ImageUrl != "" {
+				if input.FileID != "" {
+					fileMeta = append(fileMeta, &types.FileMeta{FileType: types.FileTypeImage, Source: types.NewFileIDSource(input.FileID), Detail: input.Detail})
+				} else if input.ImageUrl != "" {
 					fileMeta = append(fileMeta, &types.FileMeta{
 						FileType: types.FileTypeImage,
 						Source:   types.NewFileSourceFromData(input.ImageUrl, ""),
@@ -924,7 +932,9 @@ func (r *OpenAIResponsesRequest) GetTokenCountMeta() *types.TokenCountMeta {
 					})
 				}
 			} else if input.Type == "input_file" {
-				if input.FileUrl != "" {
+				if input.FileID != "" {
+					fileMeta = append(fileMeta, &types.FileMeta{FileType: types.FileTypeFile, Source: types.NewFileIDSource(input.FileID)})
+				} else if input.FileUrl != "" {
 					fileMeta = append(fileMeta, &types.FileMeta{
 						FileType: types.FileTypeFile,
 						Source:   types.NewFileSourceFromData(input.FileUrl, ""),
@@ -1000,6 +1010,7 @@ type MediaInput struct {
 	Type     string `json:"type"`
 	Text     string `json:"text,omitempty"`
 	FileUrl  string `json:"file_url,omitempty"`
+	FileID   string `json:"file_id,omitempty"`
 	ImageUrl string `json:"image_url,omitempty"`
 	Detail   string `json:"detail,omitempty"` // 仅 input_image 有效
 }
@@ -1060,6 +1071,11 @@ func (r *OpenAIResponsesRequest) ParseInput() []MediaInput {
 						text, _ := item["text"].(string)
 						mediaInputs = append(mediaInputs, MediaInput{Type: "input_text", Text: text})
 					case "input_image":
+						if fileID, ok := item["file_id"].(string); ok && fileID != "" {
+							detail, _ := item["detail"].(string)
+							mediaInputs = append(mediaInputs, MediaInput{Type: "input_image", FileID: fileID, Detail: detail})
+							continue
+						}
 						// image_url may be string or object with url field
 						var imageUrl string
 						switch v := item["image_url"].(type) {
@@ -1070,8 +1086,13 @@ func (r *OpenAIResponsesRequest) ParseInput() []MediaInput {
 								imageUrl = url
 							}
 						}
-						mediaInputs = append(mediaInputs, MediaInput{Type: "input_image", ImageUrl: imageUrl})
+						detail, _ := item["detail"].(string)
+						mediaInputs = append(mediaInputs, MediaInput{Type: "input_image", ImageUrl: imageUrl, Detail: detail})
 					case "input_file":
+						if fileID, ok := item["file_id"].(string); ok && fileID != "" {
+							mediaInputs = append(mediaInputs, MediaInput{Type: "input_file", FileID: fileID})
+							continue
+						}
 						// file_url may be string or object with url field
 						var fileUrl string
 						switch v := item["file_url"].(type) {

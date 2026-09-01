@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
@@ -168,10 +169,32 @@ func RecordConsumeLog(c *gin.Context, userID int, params auditschema.RecordConsu
 		logger.LogError(c, "failed to record log: "+err.Error())
 		return
 	}
+	if cacheTokens, ok := numericOtherValue(params.Other, "cache_tokens"); ok {
+		gatewayruntime.RecordChannelCacheObservation(params.ChannelId, params.ModelName, params.PromptTokens, int(cacheTokens))
+	}
 	if platformconfig.DataExportEnabled {
 		gopool.Go(func() {
 			LogQuotaData(userID, username, params.ModelName, params.Quota, platformruntime.GetTimestamp(), params.PromptTokens+params.CompletionTokens)
 		})
+	}
+}
+
+func numericOtherValue(values map[string]interface{}, key string) (float64, bool) {
+	value, found := values[key]
+	if !found {
+		return 0, false
+	}
+	switch typed := value.(type) {
+	case int:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case float64:
+		return typed, true
+	case float32:
+		return float64(typed), true
+	default:
+		return 0, false
 	}
 }
 

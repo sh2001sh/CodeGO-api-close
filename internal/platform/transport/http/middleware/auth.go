@@ -438,6 +438,24 @@ func TokenAuth() func(c *gin.Context) {
 		httpctx.SetContextKey(c, constant.ContextKeyMonthlyPassActive, monthlyPassActive)
 		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelFallback, false)
 		zeroHourActive := tokenGroup == commerceapp.ZeroHourGroup
+		if !zeroHourActive && !legacyMonthlyPassGroup &&
+			!marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) &&
+			!marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) {
+			if _, directGroup := gatewayroutingapp.GetUserUsableGroups(userGroup)[tokenGroup]; !directGroup {
+				resolvedGroup, found, resolveErr := gatewayroutingapp.ResolveUserGroupAlias(tokenGroup)
+				if resolveErr != nil {
+					abortWithOpenAiMessage(c, http.StatusInternalServerError, resolveErr.Error())
+					return
+				}
+				if found {
+					if _, ok := gatewayroutingapp.GetUserUsableGroups(userGroup)[resolvedGroup]; !ok || !gatewaystore.ContainsGroupRatio(resolvedGroup) {
+						abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用或无权访问", resolvedGroup))
+						return
+					}
+					tokenGroup = resolvedGroup
+				}
+			}
+		}
 		if zeroHourActive {
 			if !commerceapp.IsZeroHourGroupActive(token.UserId) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "0 倍率卡已结束，请切回 default 分组")
@@ -489,6 +507,9 @@ func TokenAuth() func(c *gin.Context) {
 		err = SetupContextForToken(c, token, parts...)
 		if err != nil {
 			return
+		}
+		if tokenGroup != gatewayroutingapp.NormalizeTokenGroup(token.Group) {
+			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, tokenGroup)
 		}
 		if zeroHourActive {
 			httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, commerceapp.MultiplierCardRouteGroup())

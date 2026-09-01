@@ -110,3 +110,83 @@ func (evidence *UsageEvidence) BeforeCreate(_ *gorm.DB) error {
 	}
 	return nil
 }
+
+const (
+	RequestAuditStatusInFlight  = "in_flight"
+	RequestAuditStatusSucceeded = "succeeded"
+	RequestAuditStatusFailed    = "failed"
+	RequestAuditStatusRejected  = "rejected"
+	RequestAuditStatusCancelled = "cancelled"
+)
+
+// RequestAudit is the canonical one-row-per-client-request record. It is
+// intentionally separate from RequestExecution, which is the durable billing
+// settlement projection and only exists for requests with a reservation.
+type RequestAudit struct {
+	RequestID            string    `gorm:"column:request_id;primaryKey;size:64"`
+	TraceID              string    `gorm:"column:trace_id;size:64;index"`
+	UserID               int       `gorm:"column:user_id;index"`
+	TokenID              int       `gorm:"column:token_id;index"`
+	ModelName            string    `gorm:"column:model_name;size:128;index"`
+	Group                string    `gorm:"column:group_name;size:128;index"`
+	Protocol             string    `gorm:"column:protocol;size:32"`
+	RequestType          string    `gorm:"column:request_type;size:32"`
+	Status               string    `gorm:"column:status;size:32;index"`
+	CountedInSuccessRate bool      `gorm:"column:counted_in_success_rate;default:true"`
+	Billable             bool      `gorm:"column:billable;default:false"`
+	Quota                int64     `gorm:"column:quota;default:0"`
+	PromptTokens         int64     `gorm:"column:prompt_tokens;default:0"`
+	CompletionTokens     int64     `gorm:"column:completion_tokens;default:0"`
+	FinalChannelID       int       `gorm:"column:final_channel_id;index"`
+	AttemptsCount        int       `gorm:"column:attempts_count;default:0"`
+	RetryCount           int       `gorm:"column:retry_count;default:0"`
+	StatusCode           int       `gorm:"column:status_code;default:0"`
+	ErrorCode            string    `gorm:"column:error_code;size:128"`
+	StartedAt            time.Time `gorm:"column:started_at;index"`
+	CompletedAt          time.Time `gorm:"column:completed_at;index"`
+	CreatedAt            time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt            time.Time `gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (RequestAudit) TableName() string {
+	if platformdb.UsingPostgreSQL {
+		return "gateway.request_audits"
+	}
+	return "gateway_request_audits"
+}
+
+// RequestAttemptAudit stores one row for every upstream channel attempt,
+// including attempts that were later hidden by a successful retry.
+type RequestAttemptAudit struct {
+	AttemptID    string    `gorm:"column:attempt_id;primaryKey;size:128"`
+	RequestID    string    `gorm:"column:request_id;size:64;index:idx_request_attempt_audit_request"`
+	AttemptNo    int       `gorm:"column:attempt_no"`
+	RetryIndex   int       `gorm:"column:retry_index"`
+	ChannelID    int       `gorm:"column:channel_id;index"`
+	ModelName    string    `gorm:"column:model_name;size:128;index"`
+	FaultDomain  string    `gorm:"column:fault_domain;size:128"`
+	RequestType  string    `gorm:"column:request_type;size:32"`
+	Status       string    `gorm:"column:status;size:32;index"`
+	Success      bool      `gorm:"column:success;default:false"`
+	StatusCode   int       `gorm:"column:status_code;default:0"`
+	FailureClass string    `gorm:"column:failure_class;size:128"`
+	Stage        string    `gorm:"column:stage;size:64"`
+	StartedAt    time.Time `gorm:"column:started_at;index"`
+	CompletedAt  time.Time `gorm:"column:completed_at;index"`
+	DurationMS   int64     `gorm:"column:duration_ms;default:0"`
+	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (RequestAttemptAudit) TableName() string {
+	if platformdb.UsingPostgreSQL {
+		return "gateway.request_attempt_audits"
+	}
+	return "gateway_request_attempt_audits"
+}
+
+func (attempt *RequestAttemptAudit) BeforeCreate(_ *gorm.DB) error {
+	if strings.TrimSpace(attempt.AttemptID) == "" {
+		attempt.AttemptID = platformruntime.GetUUID()
+	}
+	return nil
+}

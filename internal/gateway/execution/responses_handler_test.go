@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
@@ -59,6 +60,17 @@ func TestTryResponsesOriginalBodyFastPathRejectsRewriteCases(t *testing.T) {
 			require.False(t, ok)
 		})
 	}
+}
+
+func TestTryResponsesOriginalBodyFastPathRejectsResolvedFileBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/responses", bytes.NewReader([]byte(`{"model":"gpt-5","stream":true}`)))
+	ctx.Set(string(constant.ContextKeyResolvedFileReferences), true)
+	info := &relaycommon.RelayInfo{RelayMode: gatewaycontract.RelayModeResponses, OriginModelName: "gpt-5", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5"}}
+	_, ok, err := tryResponsesOriginalBodyFastPath(ctx, info)
+	require.NoError(t, err)
+	require.False(t, ok)
 }
 
 func TestForceResponsesStreamBodyAddsStreamTrue(t *testing.T) {

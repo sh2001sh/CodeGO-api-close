@@ -27,6 +27,7 @@ func initResources() error {
 
 	initEnvironment()
 	platformconcurrency.ConfigureRelayAdmission(platformconfig.RelayMaxConcurrentRequests)
+	platformconcurrency.ConfigureRelayUploadAdmission(platformconfig.RelayMaxConcurrentUploads)
 	platformcache.ConfigureRedisRuntime(platformcache.RedisRuntimeConfig{
 		DebugEnabled:  platformconfig.DebugEnabled,
 		SyncFrequency: platformconfig.SyncFrequency,

@@ -122,6 +122,11 @@ func ListUserModelsForGroup(userID int, requestedGroup string) ([]string, error)
 		}
 	} else {
 		requestedGroup = gatewayroutingapp.NormalizeTokenGroup(requestedGroup)
+		if resolvedGroup, found, resolveErr := gatewayroutingapp.ResolveUserGroupAlias(requestedGroup); resolveErr != nil {
+			return nil, resolveErr
+		} else if found {
+			requestedGroup = resolvedGroup
+		}
 		if requestedGroup == gatewayroutingapp.AutoGroupName {
 			groupNames = gatewayroutingapp.GetUserAutoGroup(user.Group)
 		} else {

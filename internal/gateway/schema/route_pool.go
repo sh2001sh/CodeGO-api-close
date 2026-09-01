@@ -4,15 +4,20 @@ import "gorm.io/gorm"
 
 // RoutePool is a root-managed, group-scoped automatic routing pool.
 type RoutePool struct {
-	ID      int64  `json:"id" gorm:"primaryKey"`
-	Name    string `json:"name" gorm:"size:128;not null"`
-	Group   string `json:"group" gorm:"size:64;not null;uniqueIndex:uq_route_pool_group_deleted"`
-	Enabled bool   `json:"enabled" gorm:"not null;default:true;index"`
+	ID               int64  `json:"id" gorm:"primaryKey"`
+	Name             string `json:"name" gorm:"size:128;not null"`
+	Group            string `json:"group" gorm:"size:64;not null;index"`
+	Enabled          bool   `json:"enabled" gorm:"not null;default:true;index"`
+	ModelScope       string `json:"model_scope" gorm:"size:128;not null;default:''"`
+	MultiplierWeight int    `json:"multiplier_weight" gorm:"not null;default:35"`
+	TTFTWeight       int    `json:"ttft_weight" gorm:"not null;default:25"`
+	CacheWeight      int    `json:"cache_weight" gorm:"not null;default:15"`
+	SuccessWeight    int    `json:"success_weight" gorm:"not null;default:25"`
 	// AutoDiscover keeps the pool aligned with channels already assigned to its
 	// group. Existing pools remain opt-in until an administrator saves them in
 	// the consolidated channel view.
 	AutoDiscover bool           `json:"auto_discover" gorm:"not null;default:false"`
-	DeletedAt    gorm.DeletedAt `json:"-" gorm:"uniqueIndex:uq_route_pool_group_deleted"`
+	DeletedAt    gorm.DeletedAt `json:"-"`
 }
 
 // RoutePoolMember supplies a channel's private procurement cost to a pool.

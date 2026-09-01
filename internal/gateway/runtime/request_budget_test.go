@@ -48,6 +48,17 @@ func TestStartRequestBudgetReusesContextBudgetAcrossRetries(t *testing.T) {
 	require.Equal(t, startedAt, reused.StartedAt)
 }
 
+func TestRequestBudgetStartTimeExcludesLargeUpload(t *testing.T) {
+	requestStarted := time.Unix(100, 0)
+	validated := requestStarted.Add(90 * time.Second)
+	if got := RequestBudgetStartTime(requestStarted, validated, (8<<20)-1); !got.Equal(requestStarted) {
+		t.Fatalf("small body should retain request start: got %v", got)
+	}
+	if got := RequestBudgetStartTime(requestStarted, validated, 8<<20); !got.Equal(validated) {
+		t.Fatalf("large body should start budget after validation: got %v", got)
+	}
+}
+
 func TestResponsesStreamBudgetKeepsOneRecoveryAttemptAvailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())

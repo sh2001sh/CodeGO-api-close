@@ -308,6 +308,9 @@ func attachBlindBoxPropStateTx(tx *gorm.DB, records []commerceschema.BlindBoxOpe
 	if tx == nil || len(records) == 0 {
 		return nil
 	}
+	if err := ensureBlindBoxPropSchema(tx); err != nil {
+		return err
+	}
 	openRecordIDs := make([]int, 0, len(records))
 	indexByOpenRecordID := make(map[int]int, len(records))
 	for index := range records {

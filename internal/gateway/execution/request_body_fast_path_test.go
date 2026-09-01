@@ -101,6 +101,18 @@ func TestTryChatCompletionsOriginalBodyFastPathRejectsBodyRewrites(t *testing.T)
 	}
 }
 
+func TestTryChatCompletionsOriginalBodyFastPathRejectsResolvedFileBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"gpt-4.1","stream":true}`))
+	context.Set(string(constant.ContextKeyResolvedFileReferences), true)
+	stream := true
+	request := &dto.GeneralOpenAIRequest{Model: "gpt-4.1", Stream: &stream}
+	ok, err := tryChatCompletionsOriginalBodyFastPath(context, nativeChatFastPathInfo("gpt-4.1"), request, request)
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
 func nativeChatFastPathInfo(model string) *relaycommon.RelayInfo {
 	return &relaycommon.RelayInfo{
 		RelayMode:       gatewaycontract.RelayModeChatCompletions,

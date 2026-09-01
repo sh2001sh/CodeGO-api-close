@@ -1,12 +1,15 @@
 package http
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	gatewayfiles "github.com/sh2001sh/new-api/internal/gateway/files"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
@@ -156,6 +159,9 @@ func getAndValidateResponsesRequest(c *gin.Context) (*dto.OpenAIResponsesRequest
 	if err := platformhttpx.UnmarshalBodyReusable(c, request); err != nil {
 		return nil, err
 	}
+	if err := resolveLocalFileIDs(c, request); err != nil {
+		return nil, err
+	}
 	if request.Model == "" {
 		return nil, errors.New("model is required")
 	}
@@ -180,6 +186,9 @@ func getAndValidateResponsesRequest(c *gin.Context) (*dto.OpenAIResponsesRequest
 func getAndValidateResponsesCompactionRequest(c *gin.Context) (*dto.OpenAIResponsesCompactionRequest, error) {
 	request := &dto.OpenAIResponsesCompactionRequest{}
 	if err := platformhttpx.UnmarshalBodyReusable(c, request); err != nil {
+		return nil, err
+	}
+	if err := resolveLocalFileIDs(c, request); err != nil {
 		return nil, err
 	}
 	if request.Model == "" {
@@ -298,6 +307,9 @@ func getAndValidateTextRequest(c *gin.Context, relayMode int) (*dto.GeneralOpenA
 	if err := platformhttpx.UnmarshalBodyReusable(c, textRequest); err != nil {
 		return nil, err
 	}
+	if err := resolveLocalFileIDs(c, textRequest); err != nil {
+		return nil, err
+	}
 	if relayMode == gatewaycontract.RelayModeModerations && textRequest.Model == "" {
 		textRequest.Model = "text-moderation-latest"
 	}
@@ -351,6 +363,26 @@ func getAndValidateTextRequest(c *gin.Context, relayMode int) (*dto.GeneralOpenA
 		}
 	}
 	return textRequest, nil
+}
+
+func resolveLocalFileIDs(c *gin.Context, target any) error {
+	_ = target
+	storage, err := platformhttpx.GetBodyStorage(c)
+	if err != nil {
+		return err
+	}
+	raw, err := storage.Bytes()
+	if err != nil || !bytes.Contains(raw, []byte(types.LocalFileIDPrefix)) {
+		return err
+	}
+	found, err := gatewayfiles.ValidateFileIDsJSON(raw, c.GetInt("id"), c.GetInt("role") >= constant.RoleAdminUser)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+	}
+	if found {
+		c.Set(string(constant.ContextKeyResolvedFileReferences), true)
+	}
+	return nil
 }
 
 func getAndValidateGeminiRequest(c *gin.Context) (*dto.GeminiChatRequest, error) {

@@ -1,10 +1,11 @@
 package bootstrap
 
 import (
-	gatewayhttp "github.com/sh2001sh/new-api/internal/gateway/transport/http"
-	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"time"
 
+	gatewayfiles "github.com/sh2001sh/new-api/internal/gateway/files"
+	gatewayhttp "github.com/sh2001sh/new-api/internal/gateway/transport/http"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformhttp "github.com/sh2001sh/new-api/internal/platform/transport/http"
 )
 
@@ -33,6 +34,7 @@ func RunGatewayAPI() {
 
 func startGatewayBackgroundTasks() error {
 	startOptionSyncLoop()
+	gatewayfiles.StartCleanupWorker()
 	gatewayhttp.StartResponsesBackgroundWorker()
 	return applyRuntimeWiring("gateway-api")
 }

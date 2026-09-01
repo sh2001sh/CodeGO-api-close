@@ -57,6 +57,8 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	platformdb.UsingSQLite = true
 	platformdb.UsingPostgreSQL = false
 	require.NoError(t, db.AutoMigrate(&gatewayschema.Channel{}))
+	require.NoError(t, db.AutoMigrate(&commerceschema.BlindBoxProp{}))
+	require.NoError(t, db.Migrator().DropColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds"))
 	for _, tableName := range []string{
 		"user_companion_pets",
 		"daily_mission_rewards",
@@ -72,6 +74,7 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.NoError(t, db.Model(&schemaMigration{}).Count(&migrationCount).Error)
 	require.Equal(t, int64(len(V2MigrationIDs())), migrationCount)
 	require.True(t, db.Migrator().HasTable(&channelLatencyHistogramMigration{}))
+	require.True(t, db.Migrator().HasColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds"))
 	for _, column := range []string{
 		"AttemptTTFTP50Ms", "AttemptTTFTP95Ms", "E2ETTFTP50Ms", "E2ETTFTP95Ms", "LatencySampleCount",
 	} {

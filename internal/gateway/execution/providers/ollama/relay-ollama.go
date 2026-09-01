@@ -88,6 +88,20 @@ func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*Ollam
 		chatReq.Tools = tools
 	}
 	chatReq.Messages = make([]OllamaChatMessage, 0, len(r.Messages))
+	var mediaSources []types.FileSource
+	for _, message := range r.Messages {
+		if message.IsStringContent() {
+			continue
+		}
+		for _, part := range message.ParseContent() {
+			if part.Type == dto.ContentTypeImageURL {
+				if source := part.ToFileSource(); source != nil {
+					mediaSources = append(mediaSources, source)
+				}
+			}
+		}
+	}
+	platformfilex.PrefetchFileSources(c, mediaSources, "fetch image for ollama chat")
 	for _, m := range r.Messages {
 		var textBuilder strings.Builder
 		var images []string

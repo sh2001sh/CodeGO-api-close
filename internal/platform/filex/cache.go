@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
@@ -16,6 +17,8 @@ import (
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	"github.com/sh2001sh/new-api/types"
 )
+
+var cleanupRegistryMu sync.Mutex
 
 func getContextCacheKey(url string) string {
 	return fmt.Sprintf("file_cache_%s", platformsecurity.GenerateHMAC(url))
@@ -104,6 +107,8 @@ func LoadFileSource(c *gin.Context, source types.FileSource, reason ...string) (
 }
 
 func registerSourceForCleanup(c *gin.Context, source types.FileSource) {
+	cleanupRegistryMu.Lock()
+	defer cleanupRegistryMu.Unlock()
 	if source.IsRegistered() {
 		return
 	}

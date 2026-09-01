@@ -18,6 +18,20 @@ func NormalizeTokenGroup(group string) string {
 	return group
 }
 
+// ResolveUserGroupAlias keeps route-pool names usable anywhere a token group
+// is accepted while preserving the concrete group for billing and routing.
+func ResolveUserGroupAlias(group string) (string, bool, error) {
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return AutoGroupName, false, nil
+	}
+	resolved, found, err := gatewaystore.ResolveEnabledRoutePoolAlias(group)
+	if err != nil || !found {
+		return group, false, err
+	}
+	return resolved, true, nil
+}
+
 func GetUserUsableGroups(userGroup string) map[string]string {
 	groupsCopy := gatewaygroups.GetUserUsableGroupsCopy()
 	if userGroup != "" {

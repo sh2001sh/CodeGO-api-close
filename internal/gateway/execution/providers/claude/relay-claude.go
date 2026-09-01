@@ -282,6 +282,21 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 	claudeMessages := make([]dto.ClaudeMessage, 0)
 	isFirstMessage := true
 	var systemMessages []dto.ClaudeMediaMessage
+	// Image URLs in long conversations are expensive to fetch one by one while
+	// constructing the Claude payload. Warm the request cache with bounded
+	// concurrency so the conversion loop below only performs cache lookups.
+	var mediaSources []types.FileSource
+	for _, message := range formatMessages {
+		if message.IsStringContent() {
+			continue
+		}
+		for _, mediaMessage := range message.ParseContent() {
+			if source := mediaMessage.ToFileSource(); source != nil {
+				mediaSources = append(mediaSources, source)
+			}
+		}
+	}
+	platformfilex.PrefetchFileSources(c, mediaSources, "formatting file for Claude")
 
 	for _, message := range formatMessages {
 		if message.Role == "system" {

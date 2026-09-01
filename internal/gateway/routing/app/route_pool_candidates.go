@@ -1,10 +1,12 @@
 package app
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 )
 
@@ -22,13 +24,17 @@ func buildRoutePoolCandidateSets(
 	candidates []gatewaystore.RoutePoolCandidate,
 	modelName string,
 	requestType gatewayruntime.RequestType,
-	now time.Time,
+	now time.Time, pools ...gatewayschema.RoutePool,
 ) (healthy, probes, lastResort []scoredRoutePoolCandidate) {
 	healthy = make([]scoredRoutePoolCandidate, 0, len(candidates))
 	probes = make([]scoredRoutePoolCandidate, 0, len(candidates))
 	lastResort = make([]scoredRoutePoolCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		scored, class := classifyRoutePoolCandidate(c, candidate, modelName, requestType, now)
+		var pool *gatewayschema.RoutePool
+		if len(pools) > 0 {
+			pool = &pools[0]
+		}
+		scored, class := classifyRoutePoolCandidate(c, candidate, modelName, requestType, now, pool)
 		switch class {
 		case routePoolCandidateHealthy:
 			healthy = append(healthy, scored)
@@ -75,8 +81,11 @@ func classifyRoutePoolCandidate(
 	candidate gatewaystore.RoutePoolCandidate,
 	modelName string,
 	requestType gatewayruntime.RequestType,
-	now time.Time,
+	now time.Time, pool *gatewayschema.RoutePool,
 ) (scoredRoutePoolCandidate, routePoolCandidateClass) {
+	if pool != nil && strings.TrimSpace(pool.ModelScope) != "" && !strings.EqualFold(strings.TrimSpace(pool.ModelScope), strings.TrimSpace(modelName)) {
+		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
+	}
 	if channelExcludedByScope(c, candidate.Channel) {
 		gatewayruntime.ExcludeRouteDecisionCandidate(c, "non_official_channel")
 		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
@@ -103,7 +112,7 @@ func classifyRoutePoolCandidate(
 	domainHealth, domainFound := routePoolFaultDomainHealth(c, faultDomain, modelName, requestType)
 	channelCooling := activeRoutePoolCircuit(health, found, now)
 	domainCooling := activeRoutePoolCircuit(domainHealth, domainFound, now)
-	score := effectiveRoutePoolCost(candidate.Member, modelName, health)
+	score := effectiveRoutePoolCostForPool(candidate.Member, modelName, health, pool)
 	if compactionRank > 0 {
 		score += routePoolUnknownCompactionPenalty
 	}

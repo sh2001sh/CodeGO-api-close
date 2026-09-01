@@ -16,7 +16,15 @@ func ValidateSettings(channel *gatewayschema.Channel) error {
 		return nil
 	}
 	channelParams := &dto.ChannelSettings{}
-	return platformencoding.Unmarshal([]byte(*channel.Setting), channelParams)
+	if err := platformencoding.Unmarshal([]byte(*channel.Setting), channelParams); err != nil {
+		return err
+	}
+	switch channelParams.FileInputMode {
+	case "", "auto", "native", "signed_url", "base64":
+		return nil
+	default:
+		return fmt.Errorf("invalid file_input_mode %q", channelParams.FileInputMode)
+	}
 }
 
 func GetSettings(channel *gatewayschema.Channel) dto.ChannelSettings {

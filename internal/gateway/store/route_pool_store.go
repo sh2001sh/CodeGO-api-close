@@ -22,6 +22,15 @@ type RoutePoolDetail struct {
 	Members []gatewayschema.RoutePoolMember `json:"members"`
 }
 
+// SelectableRoutePool is the redacted view exposed to authenticated users when
+// choosing a saved pool for a token. It omits channel IDs and routing weights.
+type SelectableRoutePool struct {
+	Name        string `json:"name"`
+	Group       string `json:"group"`
+	ModelScope  string `json:"model_scope"`
+	MemberCount int    `json:"member_count"`
+}
+
 const routePoolCacheTTL = 15 * time.Second
 
 type routePoolCacheEntry struct {
@@ -37,6 +46,9 @@ var routePoolCache struct {
 func ListRoutePools() ([]RoutePoolDetail, error) {
 	var pools []gatewayschema.RoutePool
 	if err := platformdb.DB.Order("id asc").Find(&pools).Error; err != nil {
+		if isRoutePoolTableMissing(err) {
+			return []RoutePoolDetail{}, nil
+		}
 		return nil, err
 	}
 	details := make([]RoutePoolDetail, 0, len(pools))
@@ -48,6 +60,44 @@ func ListRoutePools() ([]RoutePoolDetail, error) {
 		details = append(details, RoutePoolDetail{Pool: pool, Members: members})
 	}
 	return details, nil
+}
+
+func ListSelectableRoutePools() ([]SelectableRoutePool, error) {
+	var pools []gatewayschema.RoutePool
+	if err := platformdb.DB.Where("enabled = ?", true).Order("name asc").Find(&pools).Error; err != nil {
+		if isRoutePoolTableMissing(err) {
+			return []SelectableRoutePool{}, nil
+		}
+		return nil, err
+	}
+	if len(pools) == 0 {
+		return []SelectableRoutePool{}, nil
+	}
+	var counts []struct {
+		RoutePoolID int64 `gorm:"column:route_pool_id"`
+		Count       int   `gorm:"column:count"`
+	}
+	if err := platformdb.DB.Model(&gatewayschema.RoutePoolMember{}).
+		Select("route_pool_id, count(*) as count").
+		Where("enabled = ?", true).
+		Group("route_pool_id").
+		Scan(&counts).Error; err != nil {
+		return nil, err
+	}
+	countByPool := make(map[int64]int, len(counts))
+	for _, item := range counts {
+		countByPool[item.RoutePoolID] = item.Count
+	}
+	items := make([]SelectableRoutePool, 0, len(pools))
+	for _, pool := range pools {
+		items = append(items, SelectableRoutePool{
+			Name:        pool.Name,
+			Group:       pool.Group,
+			ModelScope:  pool.ModelScope,
+			MemberCount: countByPool[pool.ID],
+		})
+	}
+	return items, nil
 }
 
 func LoadEnabledRoutePool(group string) (*RoutePoolDetail, error) {
@@ -64,8 +114,11 @@ func LoadEnabledRoutePool(group string) (*RoutePoolDetail, error) {
 	}
 
 	var pool gatewayschema.RoutePool
-	err := platformdb.DB.Where(routePoolGroupColumn()+" = ? AND enabled = ?", group, true).First(&pool).Error
+	err := platformdb.DB.Where(routePoolGroupColumn()+" = ? AND enabled = ?", group, true).Order("id desc").First(&pool).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if isRoutePoolTableMissing(err) {
 		return nil, nil
 	}
 	if err != nil {
@@ -88,12 +141,36 @@ func LoadEnabledRoutePool(group string) (*RoutePoolDetail, error) {
 	return cloneRoutePoolDetail(detail), nil
 }
 
+// ResolveEnabledRoutePoolAlias resolves a user-facing route-pool name to its
+// concrete gateway group. Disabled pools are intentionally hidden so a token
+// cannot keep routing through a pool that has been turned off.
+func ResolveEnabledRoutePoolAlias(name string) (string, bool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || platformdb.DB == nil {
+		return "", false, nil
+	}
+	var pool gatewayschema.RoutePool
+	err := platformdb.DB.Where("name = ? AND enabled = ?", name, true).Order("id desc").First(&pool).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", false, nil
+	}
+	if isRoutePoolTableMissing(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return strings.TrimSpace(pool.Group), true, nil
+}
+
 func SaveRoutePool(pool *gatewayschema.RoutePool, members []gatewayschema.RoutePoolMember) (*RoutePoolDetail, error) {
 	if pool == nil {
 		return nil, errors.New("route pool is required")
 	}
 	pool.Name = strings.TrimSpace(pool.Name)
 	pool.Group = strings.TrimSpace(pool.Group)
+	pool.ModelScope = strings.TrimSpace(pool.ModelScope)
+	pool.MultiplierWeight, pool.TTFTWeight, pool.CacheWeight, pool.SuccessWeight = normalizeRoutePoolWeights(pool.MultiplierWeight, pool.TTFTWeight, pool.CacheWeight, pool.SuccessWeight)
 	if pool.Name == "" || pool.Group == "" {
 		return nil, errors.New("route pool name and group are required")
 	}
@@ -101,24 +178,34 @@ func SaveRoutePool(pool *gatewayschema.RoutePool, members []gatewayschema.RouteP
 		return nil, err
 	}
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		var existing int64
-		query := tx.Model(&gatewayschema.RoutePool{}).Where(routePoolGroupColumn()+" = ?", pool.Group)
+		var duplicateNames int64
+		nameQuery := tx.Model(&gatewayschema.RoutePool{}).Where("name = ?", pool.Name)
 		if pool.ID > 0 {
-			query = query.Where("id <> ?", pool.ID)
+			nameQuery = nameQuery.Where("id <> ?", pool.ID)
 		}
-		if err := query.Count(&existing).Error; err != nil {
+		if err := nameQuery.Count(&duplicateNames).Error; err != nil {
 			return err
 		}
-		if existing > 0 {
-			return errors.New("only one route pool may be configured for a group")
+		if duplicateNames > 0 {
+			return errors.New("route pool name already exists")
 		}
 		if pool.ID == 0 {
-			if err := tx.Select("Name", "Group", "Enabled", "AutoDiscover").Create(pool).Error; err != nil {
+			if err := tx.Select("Name", "Group", "Enabled", "AutoDiscover", "ModelScope", "MultiplierWeight", "TTFTWeight", "CacheWeight", "SuccessWeight").Create(pool).Error; err != nil {
 				return err
 			}
 		} else if err := tx.Model(&gatewayschema.RoutePool{}).Where("id = ?", pool.ID).
-			Updates(map[string]any{"name": pool.Name, "group": pool.Group, "enabled": pool.Enabled, "auto_discover": pool.AutoDiscover}).Error; err != nil {
+			Updates(map[string]any{"name": pool.Name, "group": pool.Group, "enabled": pool.Enabled, "auto_discover": pool.AutoDiscover, "model_scope": pool.ModelScope, "multiplier_weight": pool.MultiplierWeight, "ttft_weight": pool.TTFTWeight, "cache_weight": pool.CacheWeight, "success_weight": pool.SuccessWeight}).Error; err != nil {
 			return err
+		}
+		if pool.Enabled {
+			query := tx.Model(&gatewayschema.RoutePool{}).
+				Where(routePoolGroupColumn()+" = ? AND enabled = ?", pool.Group, true)
+			if pool.ID > 0 {
+				query = query.Where("id <> ?", pool.ID)
+			}
+			if err := query.Update("enabled", false).Error; err != nil {
+				return err
+			}
 		}
 		// Members are replaced as a complete set. The database-level uniqueness
 		// constraint intentionally remains in force for soft-deleted rows, so a
@@ -283,6 +370,9 @@ func UpdateRoutePoolMemberFaultDomains(updates map[int]string) (int, []int, erro
 func listRoutePoolMembers(poolID int64) ([]gatewayschema.RoutePoolMember, error) {
 	var members []gatewayschema.RoutePoolMember
 	err := platformdb.DB.Where("route_pool_id = ?", poolID).Order("id asc").Find(&members).Error
+	if isRoutePoolTableMissing(err) {
+		return []gatewayschema.RoutePoolMember{}, nil
+	}
 	return members, err
 }
 
@@ -433,4 +523,36 @@ func routePoolGroupColumn() string {
 		return `"group"`
 	}
 	return "`group`"
+}
+
+func isRoutePoolTableMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	if !strings.Contains(message, "route_pool") {
+		return false
+	}
+	return strings.Contains(message, "no such table") ||
+		strings.Contains(message, "does not exist") ||
+		strings.Contains(message, "doesn't exist")
+}
+
+func normalizeRoutePoolWeights(multiplier, ttft, cache, success int) (int, int, int, int) {
+	values := []int{multiplier, ttft, cache, success}
+	total := 0
+	for i, value := range values {
+		if value < 0 {
+			value = 0
+		}
+		if value > 100 {
+			value = 100
+		}
+		values[i] = value
+		total += value
+	}
+	if total == 0 {
+		return 35, 25, 15, 25
+	}
+	return values[0], values[1], values[2], values[3]
 }

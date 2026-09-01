@@ -19,6 +19,7 @@ const (
 	responsesShortAttemptMax         = 30 * time.Second
 	responsesShortAttemptBucket      = 5 * time.Second
 	responsesAdaptiveTTFTMinSamples  = 10
+	largeRequestBodyBudgetThreshold  = 8 << 20
 )
 
 type RequestBudget struct {
@@ -54,6 +55,17 @@ func StartRequestBudget(c *gin.Context, profile RequestProfile, startedAt time.T
 		UpdateRouteDecisionBudget(c, budget)
 	}
 	return budget
+}
+
+// RequestBudgetStartTime keeps slow client uploads from consuming the retry
+// budget reserved for upstream processing. Only genuinely large bodies use
+// the post-validation start; small requests retain the original end-to-end
+// deadline semantics.
+func RequestBudgetStartTime(requestStartedAt, validatedAt time.Time, bodySize int64) time.Time {
+	if bodySize >= largeRequestBodyBudgetThreshold && !validatedAt.IsZero() {
+		return validatedAt
+	}
+	return requestStartedAt
 }
 
 // RetryableResponsesAttemptTimeout returns the first-attempt wait cap only

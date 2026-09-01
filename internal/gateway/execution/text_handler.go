@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
@@ -37,6 +38,15 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	requestCopy := *textReq
 	request := &requestCopy
 	var err error
+	adaptor := NewSyncAdaptor(info.ApiType)
+	if adaptor == nil {
+		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
+	}
+	adaptor.Init(info)
+	request, err = prepareTextFileReferences(c, info, adaptor, request)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
 
 	if request.WebSearchOptions != nil {
 		c.Set("chat_completion_web_search_context_size", request.WebSearchOptions.SearchContextSize)
@@ -55,12 +65,6 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		request.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
 	}
 	info.ShouldIncludeUsage = includeUsage
-
-	adaptor := NewSyncAdaptor(info.ApiType)
-	if adaptor == nil {
-		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
-	}
-	adaptor.Init(info)
 
 	passThroughGlobal := gatewaystore.GetGlobalSettings().PassThroughRequestEnabled
 	if info.RelayMode == gatewaycontract.RelayModeChatCompletions &&
@@ -83,16 +87,25 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 
 	var requestBody io.Reader
 	if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled {
-		storage, err := platformhttpx.GetBodyStorage(c)
-		if err != nil {
-			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-		}
-		if platformconfig.DebugEnabled {
-			if debugBytes, bodyErr := storage.Bytes(); bodyErr == nil {
-				println("requestBody: ", string(debugBytes))
+		if hasResolvedFileReferences(c) {
+			resolvedBody, marshalErr := platformencoding.Marshal(request)
+			if marshalErr != nil {
+				return types.NewError(marshalErr, types.ErrorCodeJsonMarshalFailed, types.ErrOptionWithSkipRetry())
 			}
+			requestBody = bytes.NewReader(resolvedBody)
+			info.UpstreamRequestBodySize = int64(len(resolvedBody))
+		} else {
+			storage, err := platformhttpx.GetBodyStorage(c)
+			if err != nil {
+				return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+			if platformconfig.DebugEnabled {
+				if debugBytes, bodyErr := storage.Bytes(); bodyErr == nil {
+					println("requestBody: ", string(debugBytes))
+				}
+			}
+			requestBody = platformhttpx.ReaderOnly(storage)
 		}
-		requestBody = platformhttpx.ReaderOnly(storage)
 	} else if originalBodyFastPath {
 		storage, storageErr := platformhttpx.GetBodyStorage(c)
 		if storageErr != nil {

@@ -14,6 +14,7 @@ import (
 // discovered from channel assignments, rather than entered separately.
 type RoutePoolGroup struct {
 	Group           string                  `json:"group"`
+	PoolName        string                  `json:"pool_name"`
 	PoolID          int64                   `json:"pool_id"`
 	Enabled         bool                    `json:"enabled"`
 	AlgorithmActive bool                    `json:"algorithm_active"`
@@ -71,7 +72,11 @@ func ListRoutePoolGroups() ([]RoutePoolGroup, error) {
 	}
 	poolByGroup := make(map[string]gatewaystore.RoutePoolDetail, len(pools))
 	for _, detail := range pools {
-		poolByGroup[detail.Pool.Group] = detail
+		current, found := poolByGroup[detail.Pool.Group]
+		if !found || (detail.Pool.Enabled && !current.Pool.Enabled) ||
+			(detail.Pool.Enabled == current.Pool.Enabled && detail.Pool.ID > current.Pool.ID) {
+			poolByGroup[detail.Pool.Group] = detail
+		}
 	}
 	groups := make(map[string]*RoutePoolGroup)
 	for _, channel := range channels {
@@ -84,6 +89,7 @@ func ListRoutePoolGroups() ([]RoutePoolGroup, error) {
 			if view == nil {
 				view = &RoutePoolGroup{Group: group, Channels: make([]RoutePoolGroupChannel, 0)}
 				if detail, found := poolByGroup[group]; found {
+					view.PoolName = detail.Pool.Name
 					view.PoolID = detail.Pool.ID
 					view.Enabled = detail.Pool.Enabled
 					view.AlgorithmActive = detail.Pool.Enabled
@@ -235,7 +241,7 @@ func GetRoutePoolMetrics(poolID int64, modelName string) (*RoutePoolMetrics, err
 		}
 		metrics.Members = append(metrics.Members, metric)
 		if metric.Eligible {
-			scored = append(scored, scoredRoutePoolCandidate{channel: channel, score: effectiveRoutePoolCost(member, modelName, metric.Health)})
+			scored = append(scored, scoredRoutePoolCandidate{channel: channel, score: effectiveRoutePoolCostForPool(member, modelName, metric.Health, &detail.Pool)})
 			memberIndexes = append(memberIndexes, len(metrics.Members)-1)
 		}
 	}

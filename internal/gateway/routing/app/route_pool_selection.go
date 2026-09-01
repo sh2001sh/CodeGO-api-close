@@ -61,13 +61,16 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 	if err != nil || detail == nil {
 		return nil, detail != nil, err
 	}
+	if scope := strings.TrimSpace(detail.Pool.ModelScope); scope != "" && !strings.EqualFold(scope, strings.TrimSpace(modelName)) {
+		return nil, false, nil
+	}
 	candidates, err := gatewaystore.LoadRoutePoolCandidates(group, modelName, detail)
 	if err != nil {
 		return nil, true, err
 	}
 	now := time.Now()
 	requestType := gatewayruntime.RequestTypeFromContext(c)
-	healthy, probes, lastResortProbes := buildRoutePoolCandidateSets(c, candidates, modelName, requestType, now)
+	healthy, probes, lastResortProbes := buildRoutePoolCandidateSets(c, candidates, modelName, requestType, now, detail.Pool)
 	healthy, probes, lastResortProbes = preferRemoteCompactionCandidates(healthy, probes, lastResortProbes)
 
 	applyRoutePoolTTFTPenalty(healthy, modelName, requestType)

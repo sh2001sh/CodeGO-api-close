@@ -39,6 +39,8 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 
 	ws, err := upgradeRelayWebsocket(c, relayFormat)
 	if err != nil {
+		newAPIError = types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		relaycommon.FinalizeRequestAudit(c, nil, newAPIError, false, false)
 		return
 	}
 	if ws != nil {
@@ -50,11 +52,36 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		relaycommon.ReleaseAllCoolingFallbacks(c)
 		attachFinalRelayTiming(c, firstByteTrace)
 		newAPIError = refundRelayBillingIfNeeded(c, relayInfo, newAPIError)
+		countedInSuccessRate := newAPIError == nil || shouldCountRelayFailureInSuccessRate(newAPIError)
+		relaycommon.FinalizeRequestAudit(c, relayInfo, newAPIError, upstreamStarted, countedInSuccessRate)
 		if shouldRecordRelayFailureSample(upstreamStarted, newAPIError) {
 			recordRelayFailure(relayInfo)
 		}
 		finalizeRelayError(c, relayFormat, ws, newAPIError, requestID)
 	}()
+
+	releaseUploadSlot, uploadAdmitted, uploadStats := platformconcurrency.TryAcquireRelayUploadSlot()
+	if !uploadAdmitted {
+		if uploadStats.Rejected == 1 || uploadStats.Rejected%100 == 0 {
+			logger.LogWarn(c, fmt.Sprintf("relay upload admission rejected: active=%d capacity=%d rejected=%d", uploadStats.Active, uploadStats.Capacity, uploadStats.Rejected))
+		}
+		c.Header("Retry-After", "1")
+		newAPIError = types.NewErrorWithStatusCode(errors.New(types.ServiceBusyMessage), types.ErrorCodeServiceBusy, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+		return
+	}
+
+	// Upload admission is released as soon as the request body is materialized;
+	// only then does the request compete for the upstream relay capacity.
+	request, err := getAndValidateRequest(c, relayFormat)
+	releaseUploadSlot()
+	if err != nil {
+		if platformhttpx.IsRequestBodyTooLargeError(err) || errors.Is(err, platformhttpx.ErrRequestBodyTooLarge) {
+			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
+		} else {
+			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest)
+		}
+		return
+	}
 
 	releaseRelaySlot, admitted, admissionStats := platformconcurrency.TryAcquireRelaySlot()
 	if !admitted {
@@ -73,19 +100,6 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	defer releaseRelaySlot()
 	firstByteTrace.MarkAdmitted()
 
-	// Admission must happen before the request body is materialized and decoded.
-	// Long-context Responses requests create several short-lived body and token
-	// representations, so admitting after validation allows a burst to exhaust
-	// the host before the concurrency guard observes it.
-	request, err := getAndValidateRequest(c, relayFormat)
-	if err != nil {
-		if platformhttpx.IsRequestBodyTooLargeError(err) || errors.Is(err, platformhttpx.ErrRequestBodyTooLarge) {
-			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
-		} else {
-			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest)
-		}
-		return
-	}
 	firstByteTrace.MarkRequestValidated()
 
 	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
@@ -93,6 +107,13 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
+	// Direct-channel and compatibility routes may bypass the distributor's
+	// route-decision initializer; initialize it after RelayInfo is available so
+	// their attempts and terminal outcome use the same audit path.
+	if _, found := relaycommon.GetRouteDecision(c); !found {
+		relaycommon.StartRouteDecision(c, relayInfo.OriginModelName, relayInfo.UsingGroup)
+	}
+	relaycommon.StartRequestAudit(c, relayInfo.OriginModelName, relayInfo.UsingGroup)
 	relayInfo.FirstByteTrace = firstByteTrace
 	if err := bindResponsesWebsocketRoute(c); err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
@@ -130,10 +151,14 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.SetEstimatePromptTokens(tokens)
 	relaycommon.MarkLongContextRequestWithContinuation(c, relayInfo.OriginModelName, tokens, relaycommon.IsResponsesConversationRequest(request))
 	requestProfile := relaycommon.RefineRequestProfile(c, relayFormat, request, tokens)
+	requestBudgetStart := httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+	if bodyStorage, bodyErr := platformhttpx.GetBodyStorage(c); bodyErr == nil {
+		requestBudgetStart = relaycommon.RequestBudgetStartTime(requestBudgetStart, time.Now(), bodyStorage.Size())
+	}
 	requestBudget := relaycommon.StartRequestBudget(
 		c,
 		requestProfile,
-		httpctx.GetContextKeyTime(c, constant.ContextKeyRequestStartTime),
+		requestBudgetStart,
 	)
 
 	priceData, err := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)

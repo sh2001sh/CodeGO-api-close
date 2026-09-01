@@ -5,6 +5,7 @@ import (
 	"time"
 
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
 
@@ -50,41 +51,63 @@ func ListMarketplaceObservability(ownerUserID int, startTimestamp, endTimestamp 
 		ids = append(ids, channel.InternalChannelID)
 		byID[channel.InternalChannelID] = channel
 	}
-	var logs []auditschema.Log
-	if err := platformdb.LogDB.Where("channel_id IN ? AND type IN ? AND created_at BETWEEN ? AND ?", ids, []int{auditschema.LogTypeConsume, auditschema.LogTypeError}, startTimestamp, endTimestamp).Find(&logs).Error; err != nil {
-		return nil, err
-	}
 	type aggregate struct {
 		item      MarketplaceObservabilityItem
 		latencies []int64
 	}
 	aggregates := map[string]*aggregate{}
-	for _, log := range logs {
-		channel := byID[log.ChannelId]
-		key := channel.ChannelID + "\x00" + log.ModelName
+	add := func(channelID int, model string, success bool, latency int64, ttft int64, retryCount int64) {
+		channel := byID[channelID]
+		if channel.InternalChannelID <= 0 || model == "" {
+			return
+		}
+		key := channel.ChannelID + "\x00" + model
 		agg := aggregates[key]
 		if agg == nil {
-			agg = &aggregate{item: MarketplaceObservabilityItem{ChannelID: channel.ChannelID, GroupID: channel.GroupID, ChannelName: channel.Name, Model: log.ModelName}}
+			agg = &aggregate{item: MarketplaceObservabilityItem{ChannelID: channel.ChannelID, GroupID: channel.GroupID, ChannelName: channel.Name, Model: model}}
 			aggregates[key] = agg
 		}
 		agg.item.RequestCount++
-		if log.Type == auditschema.LogTypeConsume {
+		if success {
 			agg.item.SuccessCount++
 		} else {
 			agg.item.FailedCount++
 		}
-		var other map[string]any
-		_ = json.Unmarshal([]byte(log.Other), &other)
-		latency := int64FromAny(other["total_duration_ms"])
-		if latency <= 0 {
-			latency = int64(log.UseTime) * 1000
-		}
 		if latency > 0 {
 			agg.latencies = append(agg.latencies, latency)
 		}
-		agg.item.RetryCount += int64FromAny(other["retry_count"])
+		agg.item.RetryCount += retryCount
 		agg.item.AvgLatencyMS += float64(latency)
-		agg.item.AvgTTFTMS += float64(int64FromAny(other["attempt_ttft_ms"]))
+		agg.item.AvgTTFTMS += float64(ttft)
+	}
+
+	// Channel-owner observability uses attempt-level data when available so a
+	// failed channel is not hidden by a later successful retry. Historical rows
+	// fall back to the legacy final-request logs until attempts are backfilled.
+	var attempts []gatewayschema.RequestAttemptAudit
+	attemptsLoaded := false
+	if platformdb.DB != nil {
+		if err := platformdb.DB.Where("channel_id IN ? AND started_at BETWEEN ? AND ?", ids, time.Unix(startTimestamp, 0), time.Unix(endTimestamp, 0)).Find(&attempts).Error; err == nil && len(attempts) > 0 {
+			attemptsLoaded = true
+			for _, attempt := range attempts {
+				add(attempt.ChannelID, attempt.ModelName, attempt.Success, attempt.DurationMS, 0, int64(attempt.RetryIndex))
+			}
+		}
+	}
+	if !attemptsLoaded {
+		var logs []auditschema.Log
+		if err := platformdb.LogDB.Where("channel_id IN ? AND type IN ? AND created_at BETWEEN ? AND ?", ids, []int{auditschema.LogTypeConsume, auditschema.LogTypeError}, startTimestamp, endTimestamp).Find(&logs).Error; err != nil {
+			return nil, err
+		}
+		for _, log := range logs {
+			var other map[string]any
+			_ = json.Unmarshal([]byte(log.Other), &other)
+			latency := int64FromAny(other["total_duration_ms"])
+			if latency <= 0 {
+				latency = int64(log.UseTime) * 1000
+			}
+			add(log.ChannelId, log.ModelName, log.Type == auditschema.LogTypeConsume, latency, int64FromAny(other["attempt_ttft_ms"]), int64FromAny(other["retry_count"]))
+		}
 	}
 	items := make([]MarketplaceObservabilityItem, 0, len(aggregates))
 	for _, agg := range aggregates {

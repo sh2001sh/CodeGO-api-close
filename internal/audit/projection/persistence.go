@@ -108,7 +108,7 @@ func getPerfMetricsSummaryByGroups(startTs int64, endTs int64, groups []string) 
 	if len(groups) > 0 {
 		query = query.Where(groupColumnName()+" IN ?", groups)
 	}
-	err := query.Group(groupColumnName()).
+	err := query.Clauses(clause.GroupBy{Columns: []clause.Column{{Name: "group"}}}).
 		Having("SUM(request_count) > 0").
 		Find(&summaries).Error
 	return summaries, err
@@ -122,7 +122,7 @@ func getPerfMetricsSummaryByGroupModels(startTs int64, endTs int64, groups []str
 	if len(groups) > 0 {
 		query = query.Where(groupColumnName()+" IN ?", groups)
 	}
-	err := query.Group(groupColumnName() + ", model_name").
+	err := query.Clauses(clause.GroupBy{Columns: []clause.Column{{Name: "group"}, {Name: "model_name"}}}).
 		Having("SUM(request_count) > 0").
 		Find(&summaries).Error
 	return summaries, err

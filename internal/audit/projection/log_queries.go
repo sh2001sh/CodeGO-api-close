@@ -150,10 +150,16 @@ func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {
 		platformobservability.SysError("failed to query log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
+	var realtimeStat struct {
+		Rpm int `gorm:"column:rpm"`
+		Tpm int `gorm:"column:tpm"`
+	}
+	if err := rpmTpmQuery.Scan(&realtimeStat).Error; err != nil {
 		platformobservability.SysError("failed to query rpm/tpm stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
+	stat.Rpm = realtimeStat.Rpm
+	stat.Tpm = realtimeStat.Tpm
 	return stat, nil
 }
 

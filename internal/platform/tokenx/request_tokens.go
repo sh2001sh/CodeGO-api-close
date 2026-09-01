@@ -219,6 +219,18 @@ func EstimateRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *rela
 	if !constant.GetMediaTokenNotStream && !info.IsStream {
 		shouldFetchFiles = false
 	}
+	// Long-context Codex/Responses requests can carry many historical images.
+	// Warm distinct sources concurrently so MIME and dimension inspection below
+	// does not serialize one remote download per image.
+	if shouldFetchFiles {
+		sources := make([]types.FileSource, 0, len(meta.Files))
+		for _, file := range meta.Files {
+			if file.Source != nil && file.Source.IsURL() {
+				sources = append(sources, file.Source)
+			}
+		}
+		filex.PrefetchFileSources(c, sources, "token_counter")
+	}
 
 	for _, file := range meta.Files {
 		if file.Source == nil {

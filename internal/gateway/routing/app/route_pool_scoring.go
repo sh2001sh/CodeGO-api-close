@@ -30,6 +30,47 @@ func effectiveRoutePoolCost(member gatewayschema.RoutePoolMember, modelName stri
 	return cost
 }
 
+func effectiveRoutePoolCostForPool(member gatewayschema.RoutePoolMember, modelName string, health gatewayruntime.ChannelHealth, pool *gatewayschema.RoutePool) float64 {
+	base := effectiveRoutePoolCost(member, modelName, health)
+	if pool == nil {
+		return base
+	}
+	mw, tw, cw, sw := normalizeRoutePoolWeights(pool.MultiplierWeight, pool.TTFTWeight, pool.CacheWeight, pool.SuccessWeight)
+	cost := routePoolModelCost(member, modelName)
+	if cost <= 0 {
+		cost = 1
+	}
+	factor := 1 + (cost-1)*float64(mw)/100
+	if health.TTFTP95Milliseconds > 0 {
+		factor *= 1 + math.Min(4, health.TTFTP95Milliseconds/500)*float64(tw)/100
+	}
+	rate := routePoolConservativeSuccessRate(health)
+	if rate > 0 {
+		factor *= 1 + ((100-rate)/100)*float64(sw)/100*2
+	}
+	if health.CacheHitRate5m > 0 {
+		factor *= 1 - (health.CacheHitRate5m/100)*float64(cw)/100*0.35
+	}
+	return math.Max(0.01, base*factor)
+}
+
+func normalizeRoutePoolWeights(multiplier, ttft, cache, success int) (int, int, int, int) {
+	values := []int{multiplier, ttft, cache, success}
+	for i, value := range values {
+		if value < 0 {
+			value = 0
+		}
+		if value > 100 {
+			value = 100
+		}
+		values[i] = value
+	}
+	if values[0]+values[1]+values[2]+values[3] == 0 {
+		return 35, 25, 15, 25
+	}
+	return values[0], values[1], values[2], values[3]
+}
+
 func routePoolReliabilityPenalty(rate float64) float64 {
 	switch {
 	case rate >= 98:

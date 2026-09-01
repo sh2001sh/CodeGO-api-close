@@ -20,11 +20,28 @@ func ListUserBlindBoxProps(userID int) ([]commerceschema.BlindBoxProp, error) {
 	}
 	var props []commerceschema.BlindBoxProp
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := ensureBlindBoxPropSchema(tx); err != nil {
+			return err
+		}
 		var err error
 		props, err = listUserBlindBoxPropsTx(tx, userID)
 		return err
 	})
 	return props, err
+}
+
+// ensureBlindBoxPropSchema keeps the user-facing blind-box endpoint resilient
+// while an older deployment is being upgraded. The migration command remains
+// the preferred path; this narrow check prevents a missing countdown column
+// from turning the overview request into a 500.
+func ensureBlindBoxPropSchema(tx *gorm.DB) error {
+	if tx == nil || !tx.Migrator().HasTable(&commerceschema.BlindBoxProp{}) {
+		return nil
+	}
+	if tx.Migrator().HasColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds") {
+		return nil
+	}
+	return tx.Migrator().AddColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds")
 }
 
 // ActivateBlindBoxProp activates a manually usable blind-box prop for the user.
@@ -34,6 +51,9 @@ func ActivateBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp,
 	}
 	var prop commerceschema.BlindBoxProp
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := ensureBlindBoxPropSchema(tx); err != nil {
+			return err
+		}
 		now := platformruntime.GetTimestamp()
 		if err := expireUserBlindBoxPropsTx(tx, userID, now); err != nil {
 			return err
@@ -91,6 +111,9 @@ func PauseBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp, er
 	}
 	var prop commerceschema.BlindBoxProp
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := ensureBlindBoxPropSchema(tx); err != nil {
+			return err
+		}
 		now := platformruntime.GetTimestamp()
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
 			return err
@@ -149,6 +172,9 @@ func ConvertBlindBoxDiscountProp(userID int, propID int, targetType string) (*co
 	}
 	var prop commerceschema.BlindBoxProp
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := ensureBlindBoxPropSchema(tx); err != nil {
+			return err
+		}
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
 			return err
 		}
@@ -294,6 +320,9 @@ func expireBlindBoxPropIfNeededTx(tx *gorm.DB, prop *commerceschema.BlindBoxProp
 func expireUserBlindBoxPropsTx(tx *gorm.DB, userID int, now int64) error {
 	if tx == nil || userID <= 0 {
 		return nil
+	}
+	if err := ensureBlindBoxPropSchema(tx); err != nil {
+		return err
 	}
 	return tx.Model(&commerceschema.BlindBoxProp{}).
 		Where("user_id = ? AND status = ? AND expires_at > 0 AND expires_at <= ?", userID, commerceschema.BlindBoxPropStatusActive, now).

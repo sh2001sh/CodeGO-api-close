@@ -18,6 +18,7 @@ type UserSetting struct {
 	FundingSourceOrder               []string `json:"funding_source_order,omitempty"`
 	SubscriptionOrderIds             []int    `json:"subscription_order_ids,omitempty"`
 	Language                         string   `json:"language,omitempty"`
+	FavoriteModelIDs                 []int    `json:"favorite_model_ids,omitempty"`
 }
 
 var (

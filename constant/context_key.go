@@ -82,6 +82,9 @@ const (
 
 	// ContextKeyFileSourcesToCleanup stores file sources that need cleanup when request ends
 	ContextKeyFileSourcesToCleanup ContextKey = "file_sources_to_cleanup"
+	// ContextKeyResolvedFileReferences marks requests containing validated local
+	// file_id references. Their upstream representation is selected per attempt.
+	ContextKeyResolvedFileReferences ContextKey = "resolved_file_references"
 
 	// ContextKeyAdminRejectReason stores an admin-only reject/block reason extracted from upstream responses.
 	// It is not returned to end users, but can be persisted into consume/error logs for debugging.

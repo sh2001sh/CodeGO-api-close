@@ -60,7 +60,7 @@ func ShouldMigrateAutomaticPoolAffinity(c *gin.Context, group, modelName string,
 		}
 		scored := scoredRoutePoolCandidate{
 			channel: candidate.Channel, faultDomain: domain,
-			score: effectiveRoutePoolCost(candidate.Member, modelName, health),
+			score: effectiveRoutePoolCostForPool(candidate.Member, modelName, health, &detail.Pool),
 			cost:  routePoolModelCost(candidate.Member, modelName),
 		}
 		healthy = append(healthy, scored)

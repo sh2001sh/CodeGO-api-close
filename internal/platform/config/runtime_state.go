@@ -47,4 +47,8 @@ var RelayIdleConnTimeoutSeconds int
 var RelayTLSHandshakeTimeoutSeconds int
 var GroupStatusCacheSeconds int
 var RelayMaxConcurrentRequests int
+
+// RelayMaxConcurrentUploads limits requests whose bodies are still being read.
+// Keeping this separate prevents slow clients from occupying upstream slots.
+var RelayMaxConcurrentUploads int
 var TrustedProxies []string

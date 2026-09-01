@@ -49,6 +49,32 @@ func RecordChannelSuccess(channelID int, model string, ttft time.Duration, reque
 	})
 }
 
+// RecordChannelCacheObservation updates the short-window cache hit ratio used
+// by weighted route pools.
+func RecordChannelCacheObservation(channelID int, model string, promptTokens, cachedTokens int, requestTypes ...RequestType) {
+	if channelID <= 0 || model == "" || promptTokens <= 0 {
+		return
+	}
+	if cachedTokens < 0 {
+		cachedTokens = 0
+	}
+	if cachedTokens > promptTokens {
+		cachedTokens = promptTokens
+	}
+	lock := channelHealthLock(channelID)
+	lock.Lock()
+	defer lock.Unlock()
+	_ = getChannelHealthCache().UpdateWithTTL(channelHealthKey(channelID, model, requestTypes...), channelHealthTTL, func(state ChannelHealth, _ bool) (ChannelHealth, error) {
+		rate := float64(cachedTokens) / float64(promptTokens) * 100
+		if state.CacheHitRate5m <= 0 {
+			state.CacheHitRate5m = rate
+		} else {
+			state.CacheHitRate5m = state.CacheHitRate5m*0.8 + rate*0.2
+		}
+		return state, nil
+	})
+}
+
 func resetChannelHealthForTest() error {
 	if channelHealthCache != nil {
 		if err := channelHealthCache.Purge(); err != nil {

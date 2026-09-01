@@ -36,9 +36,18 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			)
 		}
 	}
+	adaptor := NewSyncAdaptor(info.ApiType)
+	if adaptor == nil {
+		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
+	}
+	adaptor.Init(info)
+	preparedRequest, err := prepareResponsesFileReferences(c, info, adaptor, info.Request)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
 
 	var responsesReq *dto.OpenAIResponsesRequest
-	switch req := info.Request.(type) {
+	switch req := preparedRequest.(type) {
 	case *dto.OpenAIResponsesRequest:
 		responsesReq = req
 	case *dto.OpenAIResponsesCompactionRequest:
@@ -69,7 +78,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	// before they are sent unchanged upstream.
 	requestCopy := *responsesReq
 	request := &requestCopy
-	var err error
+	err = nil
 	if err := relaycommon.ModelMappedHelper(c, info, request); err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
@@ -80,11 +89,6 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return types.NewErrorWithStatusCode(fmt.Errorf("remote Responses compaction v2 is unsupported by channel %d", info.ChannelId), types.ErrorCodeDoRequestFailed, http.StatusServiceUnavailable)
 	}
 
-	adaptor := NewSyncAdaptor(info.ApiType)
-	if adaptor == nil {
-		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
-	}
-	adaptor.Init(info)
 	passThroughGlobal := gatewaystore.GetGlobalSettings().PassThroughRequestEnabled
 	originalBodyFastPath := false
 	var originalBody []byte
@@ -132,6 +136,18 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		storage, err := platformhttpx.GetBodyStorage(c)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+		}
+		if hasResolvedFileReferences(c) {
+			resolvedBody, marshalErr := platformencoding.Marshal(request)
+			if marshalErr != nil {
+				return types.NewError(marshalErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			resolvedStorage, storageErr := platformhttpx.CreateBodyStorage(resolvedBody)
+			if storageErr != nil {
+				return types.NewError(storageErr, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+			}
+			defer resolvedStorage.Close()
+			storage = resolvedStorage
 		}
 		jsonData, fastPath, err := forceResponsesStreamBody(storage)
 		if err != nil {
@@ -278,6 +294,9 @@ func normalizedCompactionParallelToolCalls(raw json.RawMessage) json.RawMessage 
 // remains in use.
 func tryResponsesOriginalBodyFastPath(c *gin.Context, info *relaycommon.RelayInfo) ([]byte, bool, error) {
 	if c == nil || c.Request == nil || info == nil || info.ChannelMeta == nil || info.RelayMode != gatewaycontract.RelayModeResponses || info.IsModelMapped || len(info.ParamOverride) > 0 {
+		return nil, false, nil
+	}
+	if hasResolvedFileReferences(c) {
 		return nil, false, nil
 	}
 	if shouldBridgeBeforeNative(info, bridgeResponsesToChat) {

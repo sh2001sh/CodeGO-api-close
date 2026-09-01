@@ -133,6 +133,7 @@ func StartRouteDecisionAttempt(c *gin.Context, retryIndex, channelID int, faultD
 }
 
 func FinishRouteDecisionAttempt(c *gin.Context, success bool, statusCode int, failureClass, stage string) {
+	var finished RouteAttempt
 	updateRouteDecision(c, func(decision *RouteDecision) {
 		if len(decision.Attempts) == 0 {
 			return
@@ -143,6 +144,7 @@ func FinishRouteDecisionAttempt(c *gin.Context, success bool, statusCode int, fa
 		attempt.FailureClass = strings.TrimSpace(failureClass)
 		attempt.Stage = strings.TrimSpace(stage)
 		attempt.DurationMS = time.Since(attempt.StartedAt).Milliseconds()
+		finished = *attempt
 		for index := range decision.Candidates {
 			if decision.Candidates[index].ChannelID != attempt.ChannelID || decision.Candidates[index].Status != "attempted" {
 				continue
@@ -156,6 +158,9 @@ func FinishRouteDecisionAttempt(c *gin.Context, success bool, statusCode int, fa
 			break
 		}
 	})
+	if finished.AttemptID != "" {
+		persistRequestAttempt(c, finished)
+	}
 }
 
 func UpdateRouteDecisionCandidates(c *gin.Context, count int) {

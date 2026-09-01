@@ -23,6 +23,9 @@ func tryChatCompletionsOriginalBodyFastPath(
 	if c == nil || c.Request == nil || info == nil || info.ChannelMeta == nil || original == nil || prepared == nil {
 		return false, nil
 	}
+	if hasResolvedFileReferences(c) {
+		return false, nil
+	}
 	if info.RelayMode != gatewaycontract.RelayModeChatCompletions ||
 		info.ApiType != constant.APITypeOpenAI ||
 		info.ChannelType != constant.ChannelTypeOpenAI ||
@@ -50,6 +53,13 @@ func tryChatCompletionsOriginalBodyFastPath(
 		return false, nil
 	}
 	return true, nil
+}
+
+func hasResolvedFileReferences(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	return c.GetBool(string(constant.ContextKeyResolvedFileReferences))
 }
 
 func sameStreamOptions(left, right *dto.StreamOptions) bool {

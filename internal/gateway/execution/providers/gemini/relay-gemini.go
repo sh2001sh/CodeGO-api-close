@@ -452,6 +452,18 @@ func CovertOpenAI2Gemini(c *gin.Context, textRequest dto.GeneralOpenAIRequest, i
 	}
 	tool_call_ids := make(map[string]string)
 	var system_content []string
+	var mediaSources []types.FileSource
+	for _, message := range textRequest.Messages {
+		if message.IsStringContent() {
+			continue
+		}
+		for _, part := range message.ParseContent() {
+			if source := part.ToFileSource(); source != nil {
+				mediaSources = append(mediaSources, source)
+			}
+		}
+	}
+	platformfilex.PrefetchFileSources(c, mediaSources, "formatting image for Gemini")
 	//shouldAddDummyModelMessage := false
 	for _, message := range textRequest.Messages {
 		if message.Role == "system" || message.Role == "developer" {

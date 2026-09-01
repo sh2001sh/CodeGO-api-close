@@ -30,6 +30,10 @@ func AttachRouteLogInfo(c *gin.Context, other map[string]interface{}) {
 	}
 	decision, hasDecision := GetRouteDecision(c)
 	if hasDecision {
+		// Keep retry visibility consistent across user logs without exposing
+		// channel identifiers. Detailed per-channel attempts remain admin-only.
+		other["attempt_count"] = len(decision.Attempts)
+		other["retry_count"] = decision.RetryCount
 		adminInfo, _ := other[adminInfoLogKey].(map[string]interface{})
 		if adminInfo == nil {
 			adminInfo = make(map[string]interface{})

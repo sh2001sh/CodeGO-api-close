@@ -7,22 +7,37 @@ import (
 	"github.com/gin-gonic/gin"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 )
 
 type saveRoutePoolRequest struct {
-	ID           int64                           `json:"id"`
-	Name         string                          `json:"name"`
-	Group        string                          `json:"group"`
-	Enabled      bool                            `json:"enabled"`
-	AutoDiscover bool                            `json:"auto_discover"`
-	Members      []gatewayschema.RoutePoolMember `json:"members"`
+	ID               int64                           `json:"id"`
+	Name             string                          `json:"name"`
+	Group            string                          `json:"group"`
+	Enabled          bool                            `json:"enabled"`
+	AutoDiscover     bool                            `json:"auto_discover"`
+	ModelScope       string                          `json:"model_scope"`
+	MultiplierWeight int                             `json:"multiplier_weight"`
+	TTFTWeight       int                             `json:"ttft_weight"`
+	CacheWeight      int                             `json:"cache_weight"`
+	SuccessWeight    int                             `json:"success_weight"`
+	Members          []gatewayschema.RoutePoolMember `json:"members"`
 }
 
 type saveRoutePoolGroupRequest struct {
 	Group   string                          `json:"group"`
 	Enabled bool                            `json:"enabled"`
 	Members []gatewayschema.RoutePoolMember `json:"members"`
+}
+
+func ListSelectableRoutePools(c *gin.Context) {
+	pools, err := gatewaystore.ListSelectableRoutePools()
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{"items": pools})
 }
 
 func ListRoutePoolGroups(c *gin.Context) {
@@ -65,6 +80,8 @@ func SaveRoutePool(c *gin.Context) {
 	}
 	pool, err := gatewayroutingapp.SaveRoutePool(gatewayschema.RoutePool{
 		ID: request.ID, Name: request.Name, Group: request.Group, Enabled: request.Enabled, AutoDiscover: request.AutoDiscover,
+		ModelScope: request.ModelScope, MultiplierWeight: request.MultiplierWeight, TTFTWeight: request.TTFTWeight,
+		CacheWeight: request.CacheWeight, SuccessWeight: request.SuccessWeight,
 	}, request.Members)
 	if err != nil {
 		httpapi.ApiError(c, err)

@@ -6,6 +6,12 @@ import (
 )
 
 func RegisterGatewayRoutes(apiRouter *gin.RouterGroup) {
+	selectableRoutePoolRoute := apiRouter.Group("/route-pools")
+	selectableRoutePoolRoute.Use(middleware.UserAuth())
+	{
+		selectableRoutePoolRoute.GET("/selectable", ListSelectableRoutePools)
+	}
+
 	promptAuditRoute := apiRouter.Group("/prompt-audit")
 	promptAuditRoute.Use(middleware.RootAuth())
 	{
@@ -87,5 +93,11 @@ func RegisterGatewayRoutes(apiRouter *gin.RouterGroup) {
 		modelsRoute.POST("/", CreateModelMeta)
 		modelsRoute.PUT("/", UpdateModelMeta)
 		modelsRoute.DELETE("/:id", DeleteModelMeta)
+	}
+	favoriteModelsRoute := apiRouter.Group("/models/favorites")
+	favoriteModelsRoute.Use(middleware.UserAuth())
+	{
+		favoriteModelsRoute.GET("/", GetFavoriteModels)
+		favoriteModelsRoute.PUT("/", SetFavoriteModel)
 	}
 }

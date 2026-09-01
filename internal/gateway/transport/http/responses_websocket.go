@@ -155,8 +155,8 @@ func cloneResponsesWebsocketTurnHeaders(source http.Header) http.Header {
 	return headers
 }
 
-func cloneGinContextKeys(source map[string]any) map[string]any {
-	cloned := make(map[string]any, len(source))
+func cloneGinContextKeys(source map[any]any) map[any]any {
+	cloned := make(map[any]any, len(source))
 	for key, value := range source {
 		cloned[key] = value
 	}

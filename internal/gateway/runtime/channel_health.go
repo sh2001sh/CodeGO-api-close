@@ -56,6 +56,7 @@ type ChannelHealth struct {
 	TTFTSamples                  int                  `json:"ttft_samples"`
 	TTFTP50Milliseconds          float64              `json:"ttft_p50_ms"`
 	TTFTP95Milliseconds          float64              `json:"ttft_p95_ms"`
+	CacheHitRate5m               float64              `json:"cache_hit_rate_5m"`
 	TTFTRecentMilliseconds       []int64              `json:"ttft_recent_ms"`
 	LastSuccessAt                time.Time            `json:"last_success_at"`
 	LastFailureAt                time.Time            `json:"last_failure_at"`

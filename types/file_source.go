@@ -8,6 +8,11 @@ import (
 	"sync"
 )
 
+const LocalFileIDPrefix = "file-codego-"
+
+// IsLocalFileID reports whether an ID belongs to the local Files API.
+func IsLocalFileID(id string) bool { return strings.HasPrefix(id, LocalFileIDPrefix) }
+
 // FileSource 统一的文件来源抽象接口
 // 支持 URL 和 base64 两种来源，提供懒加载和缓存机制
 type FileSource interface {
@@ -99,6 +104,18 @@ type Base64Source struct {
 	MimeType   string
 }
 
+// FileIDSource references a file uploaded through the local Files API.
+// It is resolved lazily by the gateway file loader using the authenticated user.
+type FileIDSource struct {
+	baseFileSource
+	FileID string
+}
+
+func (f *FileIDSource) IsURL() bool           { return false }
+func (f *FileIDSource) GetIdentifier() string { return "file_id:" + f.FileID }
+func (f *FileIDSource) GetRawData() string    { return f.FileID }
+func (f *FileIDSource) ClearRawData()         {}
+
 func (b *Base64Source) IsURL() bool { return false }
 
 func (b *Base64Source) GetIdentifier() string {
@@ -130,6 +147,9 @@ func NewBase64FileSource(base64Data string, mimeType string) *Base64Source {
 		MimeType:   mimeType,
 	}
 }
+
+// NewFileIDSource creates a lazily resolved local file reference.
+func NewFileIDSource(fileID string) *FileIDSource { return &FileIDSource{FileID: fileID} }
 
 func NewFileSourceFromData(data string, mimeType string) FileSource {
 	if strings.HasPrefix(data, "http://") || strings.HasPrefix(data, "https://") {

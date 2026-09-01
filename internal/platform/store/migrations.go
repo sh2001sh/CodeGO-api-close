@@ -163,6 +163,12 @@ func V2MigrationIDs() []string {
 		"20260819_archive_retention_indexes",
 		"20260819_marketplace_latency_metrics",
 		"20260828_billing_request_usage_index",
+		"20260831_gateway_request_audit",
+		"20260831_gateway_files",
+		"20260831_gateway_file_last_used",
+		"20260831_gateway_upstream_files",
+		"20260901_gateway_route_pool_multi_pool",
+		"20260901_blind_box_remaining_seconds",
 	}
 }
 
@@ -378,6 +384,20 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&channelLatencyHistogramMigration{}, &marketplaceschema.RankingSnapshot{})
 		}},
 		{ID: "20260828_billing_request_usage_index", RunOutsideTx: migrateBillingRequestUsageIndex},
+		{ID: "20260831_gateway_request_audit", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.RequestAudit{}, &gatewayschema.RequestAttemptAudit{})
+		}},
+		{ID: "20260831_gateway_files", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.UserFile{})
+		}},
+		{ID: "20260831_gateway_file_last_used", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.UserFile{})
+		}},
+		{ID: "20260831_gateway_upstream_files", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.UpstreamFileMapping{})
+		}},
+		{ID: "20260901_gateway_route_pool_multi_pool", Run: migrateGatewayRoutePoolMultiPool},
+		{ID: "20260901_blind_box_remaining_seconds", Run: migrateBlindBoxRemainingSeconds},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -420,6 +440,29 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}
 	}
 	return nil
+}
+
+func migrateGatewayRoutePoolMultiPool(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&gatewayschema.RoutePool{}) {
+		return nil
+	}
+	if tx.Migrator().HasIndex(&gatewayschema.RoutePool{}, "uq_route_pool_group_deleted") {
+		if err := tx.Migrator().DropIndex(&gatewayschema.RoutePool{}, "uq_route_pool_group_deleted"); err != nil {
+			return err
+		}
+	}
+	return tx.AutoMigrate(&gatewayschema.RoutePool{})
+}
+
+// migrateBlindBoxRemainingSeconds repairs databases created before the runtime
+// countdown field was added to blind-box props. The check keeps this safe for
+// fresh databases and for deployments that already have the column.
+func migrateBlindBoxRemainingSeconds(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.BlindBoxProp{}) ||
+		tx.Migrator().HasColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds") {
+		return nil
+	}
+	return tx.Migrator().AddColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds")
 }
 
 // migrateBillingRequestUsageIndex accelerates request-backed historical usage
@@ -723,6 +766,8 @@ func migrateDailyLuckyUnifiedCreditRewards(tx *gorm.DB) error {
 
 func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	switch migrationID {
+	case "20260831_gateway_upstream_files":
+		return !db.Migrator().HasTable(&gatewayschema.UpstreamFileMapping{})
 	case "20260715_blind_box_admin_grants":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxOrder{}) ||
 			!db.Migrator().HasTable(&commerceschema.BlindBoxGrant{})

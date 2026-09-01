@@ -178,6 +178,14 @@ func ValidateDesktopGroupForUser(user *identityschema.User, requested string) (s
 		}
 		return group, nil
 	}
+	if resolvedGroup, found, err := gatewayroutingapp.ResolveUserGroupAlias(group); err != nil {
+		return "", err
+	} else if found {
+		if _, ok := gatewayroutingapp.GetUserUsableGroups(userGroup)[resolvedGroup]; !ok || !gatewaystore.ContainsGroupRatio(resolvedGroup) {
+			return "", errors.New("route pool group is not available for current user")
+		}
+		return group, nil
+	}
 	if _, ok := gatewayroutingapp.GetUserUsableGroups(userGroup)[group]; !ok {
 		return "", errors.New("group is not available for current user")
 	}
@@ -201,6 +209,9 @@ func ListDesktopAvailableModelsForTokenGroup(userGroup string, tokenGroup string
 		userGroup = "default"
 	}
 	tokenGroup = gatewayroutingapp.NormalizeTokenGroup(tokenGroup)
+	if resolvedGroup, found, err := gatewayroutingapp.ResolveUserGroupAlias(tokenGroup); err == nil && found {
+		tokenGroup = resolvedGroup
+	}
 	if tokenGroup == gatewayroutingapp.AutoGroupName {
 		autoGroups := gatewayroutingapp.GetUserAutoGroup(userGroup)
 		if len(autoGroups) > 0 {
@@ -218,6 +229,16 @@ func ListDesktopGroups(user *identityschema.User) DesktopGroupsResponse {
 	}
 
 	usableGroups := gatewayroutingapp.GetUserUsableGroups(currentGroup)
+	if pools, err := gatewaystore.ListRoutePools(); err == nil {
+		for _, detail := range pools {
+			pool := detail.Pool
+			if pool.Enabled && strings.TrimSpace(pool.Name) != "" {
+				if desc, ok := usableGroups[pool.Group]; ok {
+					usableGroups[pool.Name] = "路由池 · " + desc
+				}
+			}
+		}
+	}
 	groupNames := make([]string, 0, len(usableGroups))
 	for groupName := range usableGroups {
 		groupNames = append(groupNames, groupName)

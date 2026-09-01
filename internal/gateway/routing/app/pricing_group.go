@@ -257,6 +257,22 @@ func BuildUserGroupsPayload(userID int) map[string]map[string]any {
 			}
 		}
 	}
+	if pools, err := gatewaystore.ListRoutePools(); err == nil {
+		for _, detail := range pools {
+			pool := detail.Pool
+			if !pool.Enabled || strings.TrimSpace(pool.Name) == "" {
+				continue
+			}
+			if desc, ok := userUsableGroups[pool.Group]; ok {
+				usableGroups[pool.Name] = map[string]any{
+					"ratio":            GetUserGroupRatio(userGroup, pool.Group),
+					"desc":             "路由池 · " + desc,
+					"route_pool":       true,
+					"route_pool_group": pool.Group,
+				}
+			}
+		}
+	}
 
 	if _, ok := userUsableGroups["auto"]; ok {
 		usableGroups["auto"] = map[string]any{

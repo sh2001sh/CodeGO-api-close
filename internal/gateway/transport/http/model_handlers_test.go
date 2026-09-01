@@ -7,10 +7,13 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -52,7 +55,13 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	platformdb.DB = db
 	platformdb.LogDB = db
 
-	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &identityschema.Token{}, &auditschema.Log{}, &gatewayschema.Channel{}, &gatewayschema.Ability{}, &gatewayschema.Model{}, &gatewayschema.Vendor{}))
+	require.NoError(t, db.AutoMigrate(
+		&identityschema.User{}, &identityschema.Token{}, &auditschema.Log{},
+		&gatewayschema.Channel{}, &gatewayschema.Ability{}, &gatewayschema.Model{},
+		&gatewayschema.Vendor{}, &billingschema.BillingAccount{},
+		&commerceschema.UserSubscription{},
+		&marketplaceschema.AutoRoutePoolMember{},
+	))
 
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()

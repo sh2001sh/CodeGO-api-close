@@ -50,6 +50,25 @@ func TestActivateBlindBoxProp_AppliesConsumptionDiscount(t *testing.T) {
 	assert.Equal(t, commerceschema.BlindBoxPropStatusActive, props[0].Status)
 }
 
+func TestListUserBlindBoxPropsRepairsMissingRemainingSecondsColumn(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8821, Username: "blind_box_legacy_schema_user", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	var prop *commerceschema.BlindBoxProp
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		prop, err = createBlindBoxPropTx(tx, user.Id, 9201, "0.9 倍率卡")
+		return err
+	}))
+	require.NoError(t, db.Migrator().DropColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds"))
+
+	props, err := ListUserBlindBoxProps(user.Id)
+	require.NoError(t, err)
+	require.Len(t, props, 1)
+	require.Equal(t, prop.Id, props[0].Id)
+	require.True(t, db.Migrator().HasColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds"))
+}
+
 func TestConvertBlindBoxDiscountPropBothDirections(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	user := &identityschema.User{Id: 8809, Username: "blind_box_prop_conversion_user", Status: constant.UserStatusEnabled}

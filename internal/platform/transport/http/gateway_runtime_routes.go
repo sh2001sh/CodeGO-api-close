@@ -127,6 +127,22 @@ func registerRelayCoreRoutes(router *gin.Engine) {
 		responsesWebsocketRouter.GET("/responses/:id", gatewayhttp.GetResponsesBackground)
 		responsesWebsocketRouter.POST("/responses/:id/cancel", gatewayhttp.CancelResponsesBackground)
 	}
+	fileDeliveryRouter := router.Group("/v1/files")
+	fileDeliveryRouter.Use(middleware.RouteTag("relay"))
+	{
+		fileDeliveryRouter.GET("/:id/delivery", gatewayhttp.DeliverFile)
+	}
+	filesRouter := router.Group("/v1")
+	filesRouter.Use(middleware.RouteTag("relay"))
+	filesRouter.Use(middleware.SystemPerformanceCheck())
+	filesRouter.Use(middleware.TokenAuth())
+	{
+		filesRouter.GET("/files", gatewayhttp.ListFiles)
+		filesRouter.POST("/files", gatewayhttp.CreateFile)
+		filesRouter.DELETE("/files/:id", gatewayhttp.DeleteFile)
+		filesRouter.GET("/files/:id", gatewayhttp.GetFile)
+		filesRouter.GET("/files/:id/content", gatewayhttp.GetFileContent)
+	}
 
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(middleware.RouteTag("relay"))
@@ -161,11 +177,6 @@ func registerRelayCoreRoutes(router *gin.Engine) {
 		httpRouter.POST("/moderations", gatewayhttp.RelayWithFormat(types.RelayFormatOpenAI))
 
 		httpRouter.POST("/images/variations", gatewayhttp.RelayNotImplemented)
-		httpRouter.GET("/files", gatewayhttp.RelayNotImplemented)
-		httpRouter.POST("/files", gatewayhttp.RelayNotImplemented)
-		httpRouter.DELETE("/files/:id", gatewayhttp.RelayNotImplemented)
-		httpRouter.GET("/files/:id", gatewayhttp.RelayNotImplemented)
-		httpRouter.GET("/files/:id/content", gatewayhttp.RelayNotImplemented)
 		httpRouter.POST("/fine-tunes", gatewayhttp.RelayNotImplemented)
 		httpRouter.GET("/fine-tunes", gatewayhttp.RelayNotImplemented)
 		httpRouter.GET("/fine-tunes/:id", gatewayhttp.RelayNotImplemented)

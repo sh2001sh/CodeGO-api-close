@@ -48,6 +48,98 @@ func TestSaveRoutePool_ReplacesExistingMemberWithoutUniqueConflict(t *testing.T)
 	require.False(t, members[0].Enabled)
 }
 
+func TestResolveEnabledRoutePoolAliasReturnsConcreteGroupOnlyWhenEnabled(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.RoutePool{}))
+
+	originalDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		InvalidateRoutePoolCache()
+	})
+
+	require.NoError(t, db.Create(&gatewayschema.RoutePool{
+		Name: "路由池1", Group: "default", Enabled: true,
+	}).Error)
+	var disabledPool gatewayschema.RoutePool
+	disabledPool = gatewayschema.RoutePool{Name: "已停用池", Group: "default"}
+	require.NoError(t, db.Create(&disabledPool).Error)
+	require.NoError(t, db.Model(&gatewayschema.RoutePool{}).Where("id = ?", disabledPool.ID).Update("enabled", false).Error)
+
+	group, found, err := ResolveEnabledRoutePoolAlias("路由池1")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, "default", group)
+
+	group, found, err = ResolveEnabledRoutePoolAlias("已停用池")
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Empty(t, group)
+}
+
+func TestListSelectableRoutePoolsReturnsOnlyEnabledRedactedRows(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.RoutePool{}, &gatewayschema.RoutePoolMember{}))
+	originalDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() { platformdb.DB = originalDB })
+
+	enabled := gatewayschema.RoutePool{Name: "路由池1", Group: "default", Enabled: true, ModelScope: "gpt-test"}
+	disabled := gatewayschema.RoutePool{Name: "停用池", Group: "backup", Enabled: false}
+	require.NoError(t, db.Create(&enabled).Error)
+	require.NoError(t, db.Create(&disabled).Error)
+	require.NoError(t, db.Model(&gatewayschema.RoutePool{}).Where("id = ?", disabled.ID).Update("enabled", false).Error)
+	require.NoError(t, db.Create(&gatewayschema.RoutePoolMember{
+		RoutePoolID: enabled.ID, ChannelID: 7, CostMultiplier: 1, Enabled: true,
+	}).Error)
+	require.NoError(t, db.Create(&gatewayschema.RoutePoolMember{
+		RoutePoolID: enabled.ID, ChannelID: 8, CostMultiplier: 1, Enabled: false,
+	}).Error)
+	require.NoError(t, db.Model(&gatewayschema.RoutePoolMember{}).
+		Where("route_pool_id = ? AND channel_id = ?", enabled.ID, 8).
+		Update("enabled", false).Error)
+
+	items, err := ListSelectableRoutePools()
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, SelectableRoutePool{Name: "路由池1", Group: "default", ModelScope: "gpt-test", MemberCount: 1}, items[0])
+}
+
+func TestListRoutePoolsTreatsMissingLegacyTableAsEmpty(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() { platformdb.DB = originalDB })
+
+	items, err := ListRoutePools()
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
+func TestSaveRoutePoolRejectsDuplicateNames(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.RoutePool{}, &gatewayschema.RoutePoolMember{}))
+
+	originalDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		InvalidateRoutePoolCache()
+	})
+
+	first := gatewayschema.RoutePool{Name: "route-pool", Group: "default", Enabled: true}
+	_, err = SaveRoutePool(&first, nil)
+	require.NoError(t, err)
+
+	_, err = SaveRoutePool(&gatewayschema.RoutePool{Name: "route-pool", Group: "backup", Enabled: true}, nil)
+	require.EqualError(t, err, "route pool name already exists")
+}
+
 func TestUpdateRoutePoolMemberCostMultipliers_UpdatesEveryPoolMembership(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)

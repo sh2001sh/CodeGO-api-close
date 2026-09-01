@@ -83,6 +83,13 @@ services:
       NODE_TYPE: slave
       GATEWAY_PORT: "3001"
       NODE_NAME: ${GATEWAY_NODE_NAME:-gateway-api-1}
+      FILE_STORAGE_PATH: /var/lib/new-api/files
+      FILE_STORAGE_USER_LIMIT_MB: ${FILE_STORAGE_USER_LIMIT_MB:-1024}
+      FILE_STORAGE_RETENTION_DAYS: ${FILE_STORAGE_RETENTION_DAYS:-30}
+      FILE_STORAGE_CLEANUP_INTERVAL_MINUTES: ${FILE_STORAGE_CLEANUP_INTERVAL_MINUTES:-60}
+      FILE_DELIVERY_BASE_URL: ${FILE_DELIVERY_BASE_URL:-}
+      FILE_DELIVERY_SIGNING_SECRET: ${FILE_DELIVERY_SIGNING_SECRET:-}
+      FILE_DELIVERY_TTL_MINUTES: ${FILE_DELIVERY_TTL_MINUTES:-15}
       # Keep the Go heap below the host-wide 90% protection threshold. The
       # gateway shares an 8 GiB host with Control, Temporal and Docker.
       GOMEMLIMIT: ${GATEWAY_GOMEMLIMIT:-2600MiB}
@@ -108,6 +115,8 @@ services:
       PROMPT_AUDIT_ENDPOINTS_JSON: ${PROMPT_AUDIT_ENDPOINTS_JSON:-}
     ports:
       - "${GATEWAY_PORT:-3001}:3001"
+    volumes:
+      - ${FILE_STORAGE_HOST_PATH:-/mnt/codego-data/files}:/var/lib/new-api/files
     depends_on: *runtime-depends-on
     restart: unless-stopped
 

@@ -50,8 +50,17 @@ services:
       <<: *runtime-environment
       NODE_TYPE: slave
       GATEWAY_PORT: "3001"
+      FILE_STORAGE_PATH: /var/lib/new-api/files
+      FILE_STORAGE_USER_LIMIT_MB: ${FILE_STORAGE_USER_LIMIT_MB:-1024}
+      FILE_STORAGE_RETENTION_DAYS: ${FILE_STORAGE_RETENTION_DAYS:-30}
+      FILE_STORAGE_CLEANUP_INTERVAL_MINUTES: ${FILE_STORAGE_CLEANUP_INTERVAL_MINUTES:-60}
+      FILE_DELIVERY_BASE_URL: ${FILE_DELIVERY_BASE_URL:-}
+      FILE_DELIVERY_SIGNING_SECRET: ${FILE_DELIVERY_SIGNING_SECRET:-}
+      FILE_DELIVERY_TTL_MINUTES: ${FILE_DELIVERY_TTL_MINUTES:-15}
     ports:
       - "3001:3001"
+    volumes:
+      - ${FILE_STORAGE_HOST_PATH:-/mnt/codego-data/files}:/var/lib/new-api/files
     depends_on: *runtime-depends-on
     restart: unless-stopped
 

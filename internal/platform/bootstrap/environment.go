@@ -100,6 +100,11 @@ func initEnvironment() {
 	platformconfig.RelayTLSHandshakeTimeoutSeconds = platformconfig.GetEnvOrDefaultInt("RELAY_TLS_HANDSHAKE_TIMEOUT_SECONDS", 10)
 	platformconfig.GroupStatusCacheSeconds = platformconfig.GetEnvOrDefaultInt("GROUP_STATUS_CACHE_SECONDS", 60)
 	platformconfig.RelayMaxConcurrentRequests = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONCURRENT_REQUESTS", 400)
+	defaultUploadConcurrency := platformconfig.RelayMaxConcurrentRequests / 4
+	if defaultUploadConcurrency < 8 {
+		defaultUploadConcurrency = 8
+	}
+	platformconfig.RelayMaxConcurrentUploads = platformconfig.GetEnvOrDefaultInt("RELAY_MAX_CONCURRENT_UPLOADS", defaultUploadConcurrency)
 	platformconfig.GeminiSafetySetting = platformconfig.GetEnvOrDefaultString("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 	platformconfig.CohereSafetySetting = platformconfig.GetEnvOrDefaultString("COHERE_SAFETY_SETTING", "NONE")
 

@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
-  useMarketplaceAutoRoutePool,
-  useMarketplaceAutoRoutePoolUpdate,
+  useMarketplaceRoutePool,
+  useMarketplaceRoutePoolUpdate,
+  useMarketplaceRoutePools,
   useMarketplaceBatchTest,
   useMarketplaceBatchTestQuery,
 } from '../hooks'
@@ -146,11 +147,13 @@ function useBatchSelectionActions(selection: BatchSelection) {
   return { toggleSelected, reset, togglePassed, toggleResult }
 }
 
-function useRoutePoolState(enabled?: boolean) {
+function useRoutePoolState(enabled?: boolean, selectedPoolID?: string) {
   const [addingGroupID, setAddingGroupID] = useState('')
   const [routeAdding, setRouteAdding] = useState(false)
-  const query = useMarketplaceAutoRoutePool(enabled)
-  const update = useMarketplaceAutoRoutePoolUpdate()
+  const pools = useMarketplaceRoutePools()
+  const poolID = selectedPoolID || pools.data?.[0]?.id || ''
+  const query = useMarketplaceRoutePool(enabled ? poolID : '')
+  const update = useMarketplaceRoutePoolUpdate()
   const selectedGroups = useMemo(
     () => new Set(selectedAutoRoutePoolGroupIDs(query.data?.items ?? [])),
     [query.data?.items]
@@ -162,6 +165,7 @@ function useRoutePoolState(enabled?: boolean) {
     setRouteAdding,
     query,
     update,
+    poolID,
     selectedGroups,
   }
 }
@@ -204,7 +208,7 @@ function useAddPassedGroups(
     try {
       const pool =
         routePool.query.data ?? (await routePool.query.refetch()).data
-      if (!pool) throw new Error(t('无法读取 Auto 路由池'))
+      if (!pool || !routePool.poolID) throw new Error(t('请先创建路由池'))
       let next = selectedAutoRoutePoolGroupIDs(pool.items)
       for (const id of passed) {
         const items = pool.items.map((item) => ({
@@ -213,7 +217,7 @@ function useAddPassedGroups(
         }))
         next = appendAutoRoutePoolGroup(items, id)
       }
-      await routePool.update.mutateAsync({ groupIds: next })
+      await routePool.update.mutateAsync({ id: routePool.poolID, groupIds: next })
       toast.success(t('已将测试通过的分组加入路由池'))
       selection.setResultGroupIDs([])
       selection.setBatchID('')
@@ -233,15 +237,15 @@ function useAddSingleGroup(routePool: RoutePoolState) {
     try {
       const pool =
         routePool.query.data ?? (await routePool.query.refetch()).data
-      if (!pool) throw new Error(t('无法读取 Auto 路由池'))
+      if (!pool || !routePool.poolID) throw new Error(t('请先创建路由池'))
       if (
         pool.items.some((item) => item.group_id === groupID && item.selected)
       ) {
         return
       }
       const groupIDs = appendAutoRoutePoolGroup(pool.items, groupID)
-      await routePool.update.mutateAsync({ groupIds: groupIDs })
-      toast.success(t('已添加到 Auto 路由池'))
+      await routePool.update.mutateAsync({ id: routePool.poolID, groupIds: groupIDs })
+      toast.success(t('已添加到路由池'))
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t('添加到路由池失败')
@@ -255,12 +259,13 @@ function useAddSingleGroup(routePool: RoutePoolState) {
 /** Coordinates list expansion, batch testing, and Auto route pool actions. */
 export function useGroupListController(
   groups: MarketplaceGroup[],
-  routePoolEnabled?: boolean
+  routePoolEnabled?: boolean,
+  routePoolID?: string
 ) {
   const [expanded, setExpanded] = useState('')
   const selection = useBatchSelection(groups)
   const selectionActions = useBatchSelectionActions(selection)
-  const routePool = useRoutePoolState(routePoolEnabled)
+  const routePool = useRoutePoolState(routePoolEnabled, routePoolID)
   const runBatchTest = useRunBatchTest(selection)
   const addPassedGroups = useAddPassedGroups(selection, routePool)
   const addSingleGroup = useAddSingleGroup(routePool)

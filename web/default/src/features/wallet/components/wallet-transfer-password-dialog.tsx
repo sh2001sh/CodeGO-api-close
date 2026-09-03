@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, Loader2, MailCheck, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/dialog'
 import type { ConfigureWalletTransferPasswordRequest } from '../types'
 import {
-  EmailBindingRequired,
   PasswordField,
   PaymentPasswordVerification,
   type VerificationMethod,
@@ -144,24 +143,20 @@ function PasswordDialogBody(
   return (
     <div className='space-y-4 py-2'>
       <PasswordIdentityVerification {...props} />
-      {props.emailBound ? (
-        <>
-          <PasswordField
-            id='new-payment-password'
-            label={t('New payment password')}
-            value={props.newPaymentPassword}
-            visible={props.visible}
-            onChange={props.setNewPaymentPassword}
-          />
-          <PasswordField
-            id='confirm-payment-password'
-            label={t('Confirm payment password')}
-            value={props.confirmPassword}
-            visible={props.visible}
-            onChange={props.setConfirmPassword}
-          />
-        </>
-      ) : null}
+      <PasswordField
+        id='new-payment-password'
+        label={t('New payment password')}
+        value={props.newPaymentPassword}
+        visible={props.visible}
+        onChange={props.setNewPaymentPassword}
+      />
+      <PasswordField
+        id='confirm-payment-password'
+        label={t('Confirm payment password')}
+        value={props.confirmPassword}
+        visible={props.visible}
+        onChange={props.setConfirmPassword}
+      />
       <PasswordVisibilityHint {...props} />
     </div>
   )
@@ -171,7 +166,6 @@ function PasswordIdentityVerification(
   props: WalletTransferPasswordDialogProps & PasswordDialogFormState
 ) {
   const { t } = useTranslation()
-  if (!props.emailBound) return <EmailBindingRequired />
   if (props.passwordSet) {
     return (
       <PaymentPasswordVerification
@@ -182,6 +176,7 @@ function PasswordIdentityVerification(
         emailSending={props.emailSending}
         emailSecondsLeft={props.emailSecondsLeft}
         emailCountdownActive={props.emailCountdownActive}
+        emailBound={props.emailBound}
         visible={props.visible}
         onMethodChange={props.setVerificationMethod}
         onOldPaymentPasswordChange={props.setOldPaymentPassword}
@@ -204,7 +199,7 @@ function PasswordIdentityVerification(
   return (
     <div className='border-border bg-muted/35 rounded-md border px-3 py-2 text-xs leading-5'>
       {t(
-        'Your account uses passwordless sign-in. A 2FA or Passkey verification will be requested.'
+        'Your account uses passwordless sign-in. You can set a payment password directly.'
       )}
     </div>
   )
@@ -239,16 +234,6 @@ function PasswordDialogActions(
   props: WalletTransferPasswordDialogProps & PasswordDialogFormState
 ) {
   const { t } = useTranslation()
-  if (!props.emailBound) {
-    return (
-      <DialogFooter>
-        <Button type='button' onClick={props.onBindEmail}>
-          <MailCheck className='size-4' />
-          前往绑定邮箱
-        </Button>
-      </DialogFooter>
-    )
-  }
   return (
     <DialogFooter>
       <Button

@@ -19,6 +19,7 @@ func TestMarketplaceRoutesRequireAuthentication(t *testing.T) {
 
 	for _, target := range []string{
 		"/api/marketplace/auto-route-pool",
+		"/api/marketplace/route-pools",
 		"/api/marketplace/channels/mine",
 		"/api/marketplace/channels/mine/logs",
 		"/api/marketplace/admin/channels",
@@ -42,6 +43,11 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 		"GET /api/marketplace/multiplier-trends":           false,
 		"GET /api/marketplace/auto-route-pool":             false,
 		"PUT /api/marketplace/auto-route-pool":             false,
+		"GET /api/marketplace/route-pools":                 false,
+		"POST /api/marketplace/route-pools":                false,
+		"GET /api/marketplace/route-pools/:id":             false,
+		"PUT /api/marketplace/route-pools/:id":             false,
+		"DELETE /api/marketplace/route-pools/:id":          false,
 		"POST /api/marketplace/batch-tests":                false,
 		"GET /api/marketplace/batch-tests/:id":             false,
 		"POST /api/marketplace/groups/:id/bind-token":      false,

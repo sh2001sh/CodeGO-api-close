@@ -429,6 +429,7 @@ export interface MarketplaceAutoRoutePoolItem {
   availability: number
   success_rate: number
   cache_hit_rate: number
+  avg_ttft_ms: number
   avg_latency_ms: number
   latest_request_status: string
   metrics_available: boolean
@@ -450,6 +451,22 @@ export interface MarketplaceAutoRoutePool {
     failure_cooldown_seconds: number
     max_multiplier: number
   }
+}
+
+export type MarketplaceAutoRoutePoolConfig = MarketplaceAutoRoutePool['config']
+
+export interface MarketplaceRoutePoolSummary {
+  id: string
+  name: string
+  token_group: string
+  member_count: number
+  models: string[]
+}
+
+export interface MarketplaceRoutePool extends Omit<MarketplaceAutoRoutePool, 'token_group'> {
+  id: string
+  name: string
+  token_group: string
 }
 
 export interface MarketplaceBatchTestItem {
@@ -499,3 +516,30 @@ export interface MarketplaceObservability {
   end_timestamp: number
   items: MarketplaceObservabilityItem[]
 }
+
+export interface MarketplaceBargainRequest {
+  id: string
+  group_id: string
+  group_name: string
+  user_id: number
+  user_external_id: string
+  proposed_multiplier: number
+  current_multiplier: number
+  status: 'pending' | 'approved' | 'rejected'
+  reason: string
+  resolution_note?: string
+  created_at: string
+  resolved_at?: string
+}
+
+export interface MarketplaceBargainRequestList { items: MarketplaceBargainRequest[]; total: number; page: number; page_size: number }
+
+export interface MarketplaceOwnerUsageItem {
+  user_id: string; external_user_id: string; channel_id: string; channel_name: string; group_id: string
+  request_count: number; success_count: number; failed_count: number; success_rate: number; total_tokens: number
+  total_consumer_amount: number; user_multiplier?: number; last_request_at: string
+}
+
+export interface MarketplaceOwnerUsageResult { items: MarketplaceOwnerUsageItem[]; total: number; page: number; page_size: number }
+
+export interface MarketplaceTimeRangeMultiplier { id: string; channel_id: string; start_timestamp: number; end_timestamp: number; multiplier: number; label: string }

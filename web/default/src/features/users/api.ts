@@ -204,3 +204,11 @@ export async function grantUserBlindBoxes(
   )
   return res.data
 }
+
+export async function revokeUserBlindBoxes(
+  userId: number,
+  payload: { quantity: number; reason: string }
+): Promise<ApiResponse> {
+  const res = await api.post(`/api/blind-box/admin/users/${userId}/revoke`, payload)
+  return res.data
+}

@@ -6,20 +6,6 @@ import { Label } from '@/components/ui/label'
 
 export type VerificationMethod = 'payment_password' | 'email'
 
-export function EmailBindingRequired() {
-  return (
-    <div className='border-border bg-muted/35 flex items-start gap-3 rounded-md border p-3 text-xs leading-5'>
-      <MailCheck className='text-primary mt-0.5 size-4 shrink-0' />
-      <div>
-        <p className='font-medium'>请先绑定邮箱</p>
-        <p className='text-muted-foreground'>
-          支付密码保护额度转账，账户必须先绑定可接收安全验证码的邮箱。
-        </p>
-      </div>
-    </div>
-  )
-}
-
 export function PaymentPasswordVerification(props: {
   method: VerificationMethod
   oldPaymentPassword: string
@@ -28,6 +14,7 @@ export function PaymentPasswordVerification(props: {
   emailSending: boolean
   emailSecondsLeft: number
   emailCountdownActive: boolean
+  emailBound: boolean
   visible: boolean
   onMethodChange: (method: VerificationMethod) => void
   onOldPaymentPasswordChange: (value: string) => void
@@ -39,19 +26,14 @@ export function PaymentPasswordVerification(props: {
     <div className='space-y-3'>
       <div>
         <Label>{t('Verification method')}</Label>
-        <div className='bg-muted mt-2 grid grid-cols-2 rounded-lg p-1'>
+        <div className={`bg-muted mt-2 grid rounded-lg p-1 ${props.emailBound ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <VerificationMethodButton
             active={props.method === 'payment_password'}
             icon={KeyRound}
             label={t('Payment password')}
             onClick={() => props.onMethodChange('payment_password')}
           />
-          <VerificationMethodButton
-            active={props.method === 'email'}
-            icon={MailCheck}
-            label={t('Email verification')}
-            onClick={() => props.onMethodChange('email')}
-          />
+          {props.emailBound && <VerificationMethodButton active={props.method === 'email'} icon={MailCheck} label={t('Email verification')} onClick={() => props.onMethodChange('email')} />}
         </div>
         <p className='text-muted-foreground mt-2 text-xs leading-5'>
           {t(

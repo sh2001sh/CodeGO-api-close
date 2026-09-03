@@ -26,7 +26,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import type { BlindBoxSelfData } from '@/features/wallet/types'
-import { getUserBlindBoxOverview, grantUserBlindBoxes } from '../../api'
+import { getUserBlindBoxOverview, grantUserBlindBoxes, revokeUserBlindBoxes } from '../../api'
 
 function formatTime(timestamp?: number): string {
   if (!timestamp) return '-'
@@ -48,6 +48,10 @@ export function UserBlindBoxDialog(props: Props) {
   const [granting, setGranting] = useState(false)
   const [grantConfirmOpen, setGrantConfirmOpen] = useState(false)
   const [grantIdempotencyKey, setGrantIdempotencyKey] = useState('')
+  const [revokeQuantity, setRevokeQuantity] = useState('1')
+  const [revokeReason, setRevokeReason] = useState('')
+  const [revoking, setRevoking] = useState(false)
+  const [revokeConfirmOpen, setRevokeConfirmOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     if (!props.user?.id) return
@@ -111,6 +115,20 @@ export function UserBlindBoxDialog(props: Props) {
     } finally {
       setGranting(false)
     }
+  }
+
+  const handleRevoke = async () => {
+    if (!props.user?.id) return
+    const quantity = Number(revokeQuantity)
+    if (!Number.isInteger(quantity) || quantity < 1 || !revokeReason.trim()) return
+    setRevoking(true)
+    try {
+      const response = await revokeUserBlindBoxes(props.user.id, { quantity, reason: revokeReason.trim() })
+      if (!response.success) { toast.error(response.message || t('Revoke blind boxes failed')); return }
+      toast.success(t('Blind boxes revoked successfully'))
+      setRevokeQuantity('1'); setRevokeReason(''); setRevokeConfirmOpen(false)
+      await loadData()
+    } catch { toast.error(t('Revoke blind boxes failed')) } finally { setRevoking(false) }
   }
 
   return (
@@ -191,6 +209,15 @@ export function UserBlindBoxDialog(props: Props) {
             >
               {t('Grant blind boxes')}
             </Button>
+          </div>
+          <div className='border-destructive/30 rounded-lg border p-4'>
+            <div className='text-sm font-medium'>{t('Revoke available blind boxes')}</div>
+            <p className='text-muted-foreground mt-1 text-sm'>{t('Only unopened available boxes can be revoked. This action cannot be undone.')}</p>
+            <div className='mt-4 grid gap-4 sm:grid-cols-[140px_minmax(0,1fr)]'>
+              <div className='space-y-2'><Label htmlFor='blind-box-revoke-quantity'>{t('Quantity')}</Label><Input id='blind-box-revoke-quantity' type='number' min={1} value={revokeQuantity} onChange={(event) => setRevokeQuantity(event.target.value)} /></div>
+              <div className='space-y-2'><Label htmlFor='blind-box-revoke-reason'>{t('Reason')}</Label><Input id='blind-box-revoke-reason' value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} /></div>
+            </div>
+            <Button variant='destructive' className='mt-4' disabled={!revokeReason.trim() || Number(revokeQuantity) < 1} onClick={() => setRevokeConfirmOpen(true)}>{t('Revoke blind boxes')}</Button>
           </div>
 
           <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
@@ -364,6 +391,7 @@ export function UserBlindBoxDialog(props: Props) {
             </div>
           </div>
         </div>
+        <ConfirmDialog open={revokeConfirmOpen} onOpenChange={setRevokeConfirmOpen} title={t('Confirm blind box revocation')} desc={t('This will revoke {{count}} available blind boxes and cannot be undone.', { count: revokeQuantity })} handleConfirm={() => void handleRevoke()} confirmText={t('Revoke')} destructive isLoading={revoking} />
       </SheetContent>
       <ConfirmDialog
         open={grantConfirmOpen}

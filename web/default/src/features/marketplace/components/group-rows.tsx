@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { ChevronDown, ChevronRight, Radio, Shrink } from 'lucide-react'
+import { lazy, Suspense, useState } from 'react'
+import { ChevronDown, ChevronRight, Percent, Radio, Shrink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { AddToRoutePoolButton } from './add-to-route-pool-button'
 import { GroupMetrics } from './group-metrics'
 import { RecentRequestStrip } from './recent-request-strip'
 import { MarketplaceStatusBadge } from './status-badge'
+import { BargainProposalDialog } from './bargain-proposal-dialog'
 
 const loadGroupMarketItemDetails = () => import('./group-market-item-details')
 const GroupMarketItemDetails = lazy(async () => ({
@@ -33,6 +34,7 @@ type GroupMarketItemProps = {
 export function GroupMarketItem(props: GroupMarketItemProps) {
   const { t } = useTranslation()
   const group = props.group
+  const [bargainOpen, setBargainOpen] = useState(false)
 
   return (
     <article className='marketplace-render-row border-border bg-card hover:border-primary/35 rounded-md border transition-colors'>
@@ -99,6 +101,7 @@ export function GroupMarketItem(props: GroupMarketItemProps) {
                 onAdd={props.onAddToRoutePool}
               />
             )}
+            <Button variant='ghost' size='icon' title={t('申请倍率议价')} onClick={() => setBargainOpen(true)}><Percent /></Button>
             <Button
               variant='ghost'
               size='sm'
@@ -123,6 +126,7 @@ export function GroupMarketItem(props: GroupMarketItemProps) {
           <GroupMarketItemDetails group={group} />
         </Suspense>
       )}
+      <BargainProposalDialog group={group} open={bargainOpen} onOpenChange={setBargainOpen} />
     </article>
   )
 }

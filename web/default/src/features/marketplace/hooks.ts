@@ -11,6 +11,12 @@ import {
   getMarketplaceGroups,
   getMarketplaceMultiplierTrends,
   getMarketplaceAutoRoutePool,
+
+  getMarketplaceRoutePools,
+  getMarketplaceRoutePool,
+  createMarketplaceRoutePool,
+  updateMarketplaceRoutePool,
+  deleteMarketplaceRoutePool,
   getMyMarketplaceChannels,
   getMyMarketplaceUsageLogs,
   getTokenOptions,
@@ -109,6 +115,39 @@ export function useMarketplaceAutoRoutePoolUpdate() {
       })
     },
   })
+}
+
+export function useMarketplaceRoutePools() {
+  return useQuery({ queryKey: ['marketplace-route-pools'], queryFn: getMarketplaceRoutePools })
+}
+
+export function useMarketplaceRoutePool(id: string) {
+  return useQuery({ queryKey: ['marketplace-route-pools', id], queryFn: () => getMarketplaceRoutePool(id), enabled: Boolean(id) })
+}
+
+function useRoutePoolInvalidation() {
+  const queryClient = useQueryClient()
+  return async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['marketplace-route-pools'] }),
+      queryClient.invalidateQueries({ queryKey: ['api-key-marketplace-route-pools'] }),
+    ])
+  }
+}
+
+export function useMarketplaceRoutePoolCreate() {
+  const invalidate = useRoutePoolInvalidation()
+  return useMutation({ mutationFn: createMarketplaceRoutePool, onSuccess: invalidate })
+}
+
+export function useMarketplaceRoutePoolUpdate() {
+  const invalidate = useRoutePoolInvalidation()
+  return useMutation({ mutationFn: updateMarketplaceRoutePool, onSuccess: invalidate })
+}
+
+export function useMarketplaceRoutePoolDelete() {
+  const invalidate = useRoutePoolInvalidation()
+  return useMutation({ mutationFn: deleteMarketplaceRoutePool, onSuccess: invalidate })
 }
 
 export function useMarketplaceBatchTest() {

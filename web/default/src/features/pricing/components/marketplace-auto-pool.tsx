@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { Check, LoaderCircle, Route, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +9,10 @@ import {
   useMarketplaceAutoRoutePool,
   useMarketplaceAutoRoutePoolUpdate,
 } from '@/features/marketplace/hooks'
-import type { MarketplaceAutoRoutePoolItem } from '@/features/marketplace/types'
+import type { MarketplaceAutoRoutePoolConfig, MarketplaceAutoRoutePoolItem } from '@/features/marketplace/types'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AutoPoolFilters } from './marketplace-auto-pool-filters'
 import { AutoPoolRow, AutoPoolSkeleton } from './marketplace-auto-pool-parts'
 import { AutoPoolSourceTabs } from './marketplace-auto-pool-source-tabs'
@@ -30,10 +34,11 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
   return (
     <AutoPoolEditor
       items={query.data.items}
+      config={query.data.config}
       saving={update.isPending}
-      onSave={async (groupIDs) => {
+      onSave={async (groupIDs, config) => {
         try {
-          await update.mutateAsync({ groupIds: groupIDs })
+          await update.mutateAsync({ groupIds: groupIDs, config })
           toast.success(t('全局 Auto 路由池已保存'))
           return true
         } catch (error) {
@@ -49,11 +54,13 @@ export function MarketplaceAutoPool(props: { authenticated: boolean }) {
 
 function AutoPoolEditor(props: {
   items: MarketplaceAutoRoutePoolItem[]
+  config: MarketplaceAutoRoutePoolConfig
   saving: boolean
-  onSave: (groupIDs: string[]) => Promise<boolean>
+  onSave: (groupIDs: string[], config: MarketplaceAutoRoutePoolConfig) => Promise<boolean>
 }) {
   const { t } = useTranslation()
   const selection = useAutoPoolSelection(props.items)
+  const [config, setConfig] = useState(props.config)
   const candidates = useAutoPoolCandidates(selection.unselected, props.items, {
     official: t('CodeGo 官方'),
     other: t('其他来源'),
@@ -76,12 +83,13 @@ function AutoPoolEditor(props: {
     selection.setDraft(next)
   }
   const save = async () => {
-    if (await props.onSave(selection.order)) selection.setDraft(null)
+    if (await props.onSave(selection.order, config)) selection.setDraft(null)
   }
 
   return (
     <section className='border-border overflow-hidden rounded-lg border'>
       <AutoPoolHeader selectedCount={selection.selected.size} />
+      <AutoPoolStrategy config={config} onChange={setConfig} />
       <SelectedRoutes
         routes={selection.routes}
         changed={selection.changed}
@@ -98,6 +106,24 @@ function AutoPoolEditor(props: {
       />
     </section>
   )
+}
+
+function AutoPoolStrategy(props: { config: MarketplaceAutoRoutePoolConfig; onChange: (config: MarketplaceAutoRoutePoolConfig) => void }) {
+  const { t } = useTranslation()
+  const updateNumber = (key: Exclude<keyof MarketplaceAutoRoutePoolConfig, 'strategy'>, value: string) => {
+    const number = Number(value)
+    if (Number.isFinite(number)) props.onChange({ ...props.config, [key]: number })
+  }
+  return <div className='grid gap-3 border-b px-4 py-4 sm:grid-cols-2 lg:grid-cols-4 lg:px-5'>
+    <div className='space-y-2'><Label>{t('路由策略')}</Label><Select value={props.config.strategy} onValueChange={(strategy) => props.onChange({ ...props.config, strategy: strategy as MarketplaceAutoRoutePoolConfig['strategy'] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value='priority'>{t('优先级顺序')}</SelectItem><SelectItem value='score'>{t('综合评分')}</SelectItem><SelectItem value='cost'>{t('低价优先')}</SelectItem></SelectContent></Select></div>
+    <NumberSetting label={t('最大尝试次数')} value={props.config.max_attempts} min={1} max={5} onChange={(value) => updateNumber('max_attempts', value)} />
+    <NumberSetting label={t('失败冷却（秒）')} value={props.config.failure_cooldown_seconds} min={5} max={3600} onChange={(value) => updateNumber('failure_cooldown_seconds', value)} />
+    <NumberSetting label={t('最大倍率（0 为不限）')} value={props.config.max_multiplier} min={0} onChange={(value) => updateNumber('max_multiplier', value)} />
+  </div>
+}
+
+function NumberSetting(props: { label: string; value: number; min: number; max?: number; onChange: (value: string) => void }) {
+  return <div className='space-y-2'><Label>{props.label}</Label><Input type='number' min={props.min} max={props.max} value={props.value} onChange={(event) => props.onChange(event.target.value)} /></div>
 }
 
 function AutoPoolHeader(props: { selectedCount: number }) {

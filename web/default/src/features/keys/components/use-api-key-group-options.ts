@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getUserGroups } from '@/lib/api'
-import { getMarketplaceAutoRoutePool } from '@/features/marketplace/api'
+import { getMarketplaceRoutePools } from '@/features/marketplace/api'
 import { getSelectableMarketplaceGroups } from '../api'
 import { getSidebarGroupStatus } from '@/features/sidebar-group-status/api'
 import type { ApiKeyGroupOption } from './api-key-group-combobox'
@@ -17,9 +17,9 @@ export function useApiKeyGroupOptions() {
     queryFn: getSelectableMarketplaceGroups,
     staleTime: 60 * 1000,
   })
-  const { data: autoPool } = useQuery({
-    queryKey: ['api-key-marketplace-auto-pool'],
-    queryFn: getMarketplaceAutoRoutePool,
+  const { data: routePools = [] } = useQuery({
+    queryKey: ['api-key-marketplace-route-pools'],
+    queryFn: getMarketplaceRoutePools,
     staleTime: 60 * 1000,
   })
   const { data: groupStatus } = useQuery({
@@ -42,23 +42,12 @@ export function useApiKeyGroupOptions() {
         successRate: groupStatus?.data?.find((item) => item.group === key)?.success_rate,
         requestCount: groupStatus?.data?.find((item) => item.group === key)?.request_count,
       }))
-    const autoOption: ApiKeyGroupOption = {
-      value: 'auto',
-      label: 'Auto',
-      desc:
-        autoPool && autoPool.selected_count > 0
-          ? `从全局路由池中的 ${autoPool.selected_count} 个分组自动选择`
-          : '保留系统 Auto 策略，或配置全局路由池以指定官方与第三方分组',
-      ratio: '动态',
-      category: 'marketplace_auto',
-      models: Array.from(
-        new Set(
-          (autoPool?.items ?? [])
-            .filter((item) => item.selected)
-            .flatMap((item) => item.models)
-        )
-      ).sort((left, right) => left.localeCompare(right)),
-    }
-    return [autoOption, ...officialGroups, ...marketplaceGroups]
-  }, [autoPool, groupStatus?.data, groupsData?.data, marketplaceGroups])
+    const poolOptions: ApiKeyGroupOption[] = routePools.map((pool) => ({
+      value: pool.token_group,
+      label: pool.name,
+      desc: `${pool.member_count} 个分组 · ${pool.models.length} 个模型`,
+      ratio: '动态', category: 'marketplace_pool', models: pool.models,
+    }))
+    return [...poolOptions, ...officialGroups, ...marketplaceGroups]
+  }, [groupStatus?.data, groupsData?.data, marketplaceGroups, routePools])
 }

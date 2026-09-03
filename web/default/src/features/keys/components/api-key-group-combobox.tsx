@@ -45,7 +45,7 @@ export type ApiKeyGroupOption = {
   subscriptionRatio?: number
   successRate?: number | null
   requestCount?: number
-  category?: 'official' | 'marketplace' | 'marketplace_auto'
+  category?: 'official' | 'marketplace' | 'marketplace_auto' | 'marketplace_pool'
   disabled?: boolean
   models?: string[]
   mappingStatus?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
@@ -185,8 +185,8 @@ export function ApiKeyGroupCombobox({
   const officialOptions = filteredOptions.filter(
     (option) => option.category === undefined || option.category === 'official'
   )
-  const marketplaceAutoOptions = filteredOptions.filter(
-    (option) => option.category === 'marketplace_auto'
+  const marketplacePoolOptions = filteredOptions.filter(
+    (option) => option.category === 'marketplace_pool'
   )
   const marketplaceOptions = filteredOptions.filter(
     (option) => option.category === 'marketplace'
@@ -236,8 +236,8 @@ export function ApiKeyGroupCombobox({
           <CommandList className='max-h-[360px]'>
             <CommandEmpty>{t('No group found.')}</CommandEmpty>
             <GroupOptions
-              heading={t('全局 Auto')}
-              options={marketplaceAutoOptions}
+              heading={t('我的路由池')}
+              options={marketplacePoolOptions}
               value={value}
               onSelect={handleSelect}
             />

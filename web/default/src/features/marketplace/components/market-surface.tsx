@@ -1,4 +1,5 @@
 import { RefreshCcw } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -7,6 +8,7 @@ import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
 import type { GroupFilters } from '../types'
 import { MarketplaceGroupList } from './group-list'
 import { MarketplaceFilters } from './marketplace-filters'
+import { RoutePoolWorkspace } from './route-pool-workspace'
 
 export function MarketSurface(props: {
   filters: GroupFilters
@@ -16,6 +18,7 @@ export function MarketSurface(props: {
   ranking?: boolean
 }) {
   const { t } = useTranslation()
+  const [activePoolID, setActivePoolID] = useState('')
   const totalPages = Math.max(
     1,
     Math.ceil((props.query.data?.total ?? 0) / props.filters.page_size)
@@ -106,11 +109,13 @@ export function MarketSurface(props: {
         filters={props.filters}
         onChange={props.updateFilters}
       />
+      {!props.ranking && <RoutePoolWorkspace compact activePoolID={activePoolID} onActivePoolChange={setActivePoolID} />}
       <MarketplaceGroupList
         groups={props.query.data?.items ?? []}
         loading={props.query.isLoading}
         error={props.query.isError && !props.query.data}
         routePoolEnabled={!props.ranking}
+        routePoolID={activePoolID}
         onRetry={() => void props.query.refetch()}
       />
       <div className='border-border bg-muted/15 flex items-center justify-between border-t px-4 py-3'>

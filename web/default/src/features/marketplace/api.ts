@@ -6,6 +6,9 @@ import type {
   GroupFilters,
   MarketplaceChannel,
   MarketplaceAutoRoutePool,
+  MarketplaceAutoRoutePoolConfig,
+  MarketplaceRoutePool,
+  MarketplaceRoutePoolSummary,
   MarketplaceGroupList,
   MarketplaceOwnerUsageLogResult,
   MarketplaceOwnerUsageLogFilters,
@@ -16,12 +19,74 @@ import type {
   TokenOption,
   MarketplaceBatchTest,
   MarketplaceObservability,
+  MarketplaceBargainRequestList,
+  MarketplaceOwnerUsageResult,
+  MarketplaceTimeRangeMultiplier,
 } from './types'
 
 interface ApiResponse<T = unknown> {
   success: boolean
   message?: string
   data?: T
+}
+
+export async function createMarketplaceBargainRequest(input: { groupId: string; proposedMultiplier: number; reason: string }) {
+  const response = await api.post<ApiResponse>(`/api/marketplace/groups/${input.groupId}/bargain-requests`, { proposed_multiplier: input.proposedMultiplier, reason: input.reason })
+  return requireData(response.data)
+}
+
+export async function getMyMarketplaceBargainRequests(status = '') {
+  const response = await api.get<ApiResponse<MarketplaceBargainRequestList>>(`/api/marketplace/channels/mine/bargain-requests?status=${encodeURIComponent(status)}`)
+  return requireData(response.data)
+}
+
+export async function resolveMarketplaceBargainRequest(input: { id: string; action: 'approve' | 'reject'; resolutionNote: string }) {
+  const response = await api.post<ApiResponse>(`/api/marketplace/channels/mine/bargain-requests/${input.id}/resolve`, { action: input.action, resolution_note: input.resolutionNote })
+  return requireData(response.data)
+}
+
+export async function getMyMarketplaceUserUsage() {
+  const response = await api.get<ApiResponse<MarketplaceOwnerUsageResult>>('/api/marketplace/channels/mine/user-usage')
+  return requireData(response.data)
+}
+
+export async function setMarketplaceUserMultiplier(input: { channelId: string; userId: number; multiplier: number | null }) {
+  const response = await api.post<ApiResponse>(`/api/marketplace/channels/${input.channelId}/user-multiplier`, { user_id: input.userId, multiplier: input.multiplier })
+  return requireData(response.data)
+}
+
+export async function getMarketplaceTimeRangeMultipliers(channelId: string) {
+  const response = await api.get<ApiResponse<MarketplaceTimeRangeMultiplier[]>>(`/api/marketplace/channels/${channelId}/time-range-multipliers`)
+  return requireData(response.data)
+}
+
+export async function createMarketplaceTimeRangeMultiplier(input: { channelId: string; startTimestamp: number; endTimestamp: number; multiplier: number; label: string }) {
+  const response = await api.post<ApiResponse<MarketplaceTimeRangeMultiplier>>(`/api/marketplace/channels/${input.channelId}/time-range-multipliers`, { start_timestamp: input.startTimestamp, end_timestamp: input.endTimestamp, multiplier: input.multiplier, label: input.label })
+  return requireData(response.data)
+}
+
+export async function deleteMarketplaceTimeRangeMultiplier(input: { channelId: string; ruleId: string }) {
+  const response = await api.delete<ApiResponse>(`/api/marketplace/channels/${input.channelId}/time-range-multipliers/${input.ruleId}`)
+  return requireData(response.data)
+}
+
+export interface MarketplaceBatchWelfareResult {
+  success_count: number
+  failed_count: number
+  details: Array<{ user_id: string; status: 'success' | 'failed'; error?: string }>
+}
+
+export async function sendMarketplaceBatchWelfare(input: {
+  channelId: string
+  userIds: string[]
+  type: 'transfer' | 'blind_box'
+  amount: number
+}) {
+  const response = await api.post<ApiResponse<MarketplaceBatchWelfareResult>>(
+    `/api/marketplace/channels/${input.channelId}/batch-welfare`,
+    { user_ids: input.userIds, type: input.type, amount: input.amount }
+  )
+  return requireData(response.data)
 }
 
 export async function submitMarketplaceChannelFeedback(input: {
@@ -133,7 +198,7 @@ export async function getMarketplaceAutoRoutePool() {
 
 export async function updateMarketplaceAutoRoutePool(input: {
   groupIds: string[]
-  config?: MarketplaceAutoRoutePool['config']
+  config?: Partial<MarketplaceAutoRoutePoolConfig>
 }) {
   try {
     const response = await api.put<ApiResponse<MarketplaceAutoRoutePool>>(
@@ -179,6 +244,47 @@ export async function updateMarketplaceAutoRoutePool(input: {
       },
     }
   }
+}
+
+export async function getMarketplaceRoutePools() {
+  const response = await api.get<ApiResponse<MarketplaceRoutePoolSummary[]>>(
+    '/api/marketplace/route-pools'
+  )
+  return requireData(response.data)
+}
+
+export async function createMarketplaceRoutePool(name: string) {
+  const response = await api.post<ApiResponse<MarketplaceRoutePool>>(
+    '/api/marketplace/route-pools', { name }
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceRoutePool(id: string) {
+  const response = await api.get<ApiResponse<MarketplaceRoutePool>>(
+    `/api/marketplace/route-pools/${encodeURIComponent(id)}`
+  )
+  return requireData(response.data)
+}
+
+export async function updateMarketplaceRoutePool(input: {
+  id: string
+  name?: string
+  groupIds: string[]
+  config?: Partial<MarketplaceAutoRoutePoolConfig>
+}) {
+  const response = await api.put<ApiResponse<MarketplaceRoutePool>>(
+    `/api/marketplace/route-pools/${encodeURIComponent(input.id)}`,
+    { name: input.name, group_ids: input.groupIds, config: input.config }
+  )
+  return requireData(response.data)
+}
+
+export async function deleteMarketplaceRoutePool(id: string) {
+  const response = await api.delete<ApiResponse>(
+    `/api/marketplace/route-pools/${encodeURIComponent(id)}`
+  )
+  if (!response.data.success) throw new Error(response.data.message || '删除路由池失败')
 }
 
 export async function startMarketplaceBatchTest(input: {

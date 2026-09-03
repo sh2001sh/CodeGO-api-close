@@ -12,6 +12,7 @@ type MarketplaceGroupListProps = {
   loading: boolean
   error: boolean
   routePoolEnabled?: boolean
+  routePoolID?: string
   onRetry: () => void
 }
 
@@ -21,7 +22,8 @@ type GroupListController = ReturnType<typeof useGroupListController>
 export function MarketplaceGroupList(props: MarketplaceGroupListProps) {
   const controller = useGroupListController(
     props.groups,
-    props.routePoolEnabled
+    props.routePoolEnabled,
+    props.routePoolID
   )
 
   if (props.loading) return <GroupListSkeleton />

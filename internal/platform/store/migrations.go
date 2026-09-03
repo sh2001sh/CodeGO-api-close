@@ -449,7 +449,10 @@ func migrateGatewayRoutePoolMultiPool(tx *gorm.DB) error {
 		return nil
 	}
 	if tx.Migrator().HasIndex(&gatewayschema.RoutePool{}, "uq_route_pool_group_deleted") {
-		if err := tx.Migrator().DropIndex(&gatewayschema.RoutePool{}, "uq_route_pool_group_deleted"); err != nil {
+		// GORM's PostgreSQL DropIndex renderer can emit CURRENT_SCHEMA() as an
+		// identifier, which PostgreSQL rejects. Keep the index name quoted and
+		// let PostgreSQL resolve it in the active schema.
+		if err := tx.Exec(`DROP INDEX IF EXISTS "uq_route_pool_group_deleted"`).Error; err != nil {
 			return err
 		}
 	}

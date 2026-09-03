@@ -21,6 +21,7 @@ type SelfProfileResponse struct {
 	Role            int            `json:"role"`
 	Status          int            `json:"status"`
 	Email           string         `json:"email"`
+	PasswordSet     bool           `json:"password_set"`
 	GitHubId        string         `json:"github_id"`
 	DiscordId       string         `json:"discord_id"`
 	OidcId          string         `json:"oidc_id"`
@@ -69,6 +70,7 @@ func GetSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 		Role:            user.Role,
 		Status:          user.Status,
 		Email:           user.Email,
+		PasswordSet:     user.Password != "",
 		GitHubId:        user.GitHubId,
 		DiscordId:       user.DiscordId,
 		OidcId:          user.OidcId,

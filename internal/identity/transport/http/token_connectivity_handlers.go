@@ -67,6 +67,9 @@ func TestTokenConnectivity(c *gin.Context) {
 
 func tokenTestModels(token *identityschema.Token) ([]string, error) {
 	group := gatewayroutingapp.NormalizeTokenGroup(token.Group)
+	if marketplaceapp.IsMarketplaceRoutePoolTokenGroup(group) {
+		return marketplaceapp.ListRoutePoolModels(token.UserId, marketplaceapp.RoutePoolIDFromTokenGroup(group))
+	}
 	if marketplaceapp.IsMarketplaceTokenGroup(group) && !marketplaceapp.IsMarketplaceAutoTokenGroup(group) {
 		binding, err := marketplaceapp.ResolveTokenGroupBinding(group, token.UserId)
 		if err != nil {
@@ -99,6 +102,18 @@ func tokenTestModels(token *identityschema.Token) ([]string, error) {
 
 func resolveTokenTestChannel(c *gin.Context, token *identityschema.Token, modelName string) (int, string, error) {
 	tokenGroup := gatewayroutingapp.NormalizeTokenGroup(token.Group)
+	if marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup) {
+		bindings, err := marketplaceapp.ResolveRoutePoolBindings(token.UserId, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup), modelName, token.MarketplaceMultiplierLimit)
+		if err != nil {
+			return 0, "", err
+		}
+		for _, binding := range bindings {
+			if channelID, groupName, selectErr := selectTokenTestChannel(c, binding.InternalGroup, modelName); selectErr == nil {
+				return channelID, groupName, nil
+			}
+		}
+		return 0, "", fmt.Errorf("路由池当前没有可用于测试的渠道")
+	}
 	if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) && !marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
 		binding, err := marketplaceapp.ResolveTokenGroupBinding(tokenGroup, token.UserId)
 		if err != nil {

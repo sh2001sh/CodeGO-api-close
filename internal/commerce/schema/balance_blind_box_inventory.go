@@ -8,6 +8,7 @@ import (
 const (
 	BalanceBlindBoxItemStatusAvailable = "available"
 	BalanceBlindBoxItemStatusOpened    = "opened"
+	BalanceBlindBoxItemStatusRevoked   = "revoked"
 	BalanceBlindBoxPurchaseCompleted   = "completed"
 	BalanceBlindBoxGiftCompleted       = "completed"
 )

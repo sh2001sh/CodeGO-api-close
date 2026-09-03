@@ -70,6 +70,28 @@ func adminGrantBlindBoxes(c *gin.Context) {
 	})
 }
 
+func adminRevokeBlindBoxes(c *gin.Context) {
+	userID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || userID <= 0 {
+		httpapi.ApiErrorMsg(c, "invalid user id")
+		return
+	}
+	var req struct {
+		Quantity int    `json:"quantity"`
+		Reason   string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "invalid request")
+		return
+	}
+	count, err := commerceapp.RevokeBlindBoxes(userID, c.GetInt("id"), req.Quantity, req.Reason)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, gin.H{"revoked": count})
+}
+
 func useBlindBoxProp(c *gin.Context) {
 	propID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || propID <= 0 {

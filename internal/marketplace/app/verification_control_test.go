@@ -135,8 +135,8 @@ func TestEditingChannelCancelsAndReleasesRunningVerification(t *testing.T) {
 	originalQueue := queueMarketplaceCapabilityProbe
 	queueMarketplaceCapabilityProbe = func(string) {}
 	t.Cleanup(func() { queueMarketplaceCapabilityProbe = originalQueue })
-	models := []string{"gpt-5.6-sol", "gpt-5.6-pro"}
-	_, err := UpdateOwnerChannel(channel.OwnerUserID, channel.ID, UpdateChannelRequest{DeclaredModels: &models})
+	provider := "openai_compatible"
+	_, err := UpdateOwnerChannel(channel.OwnerUserID, channel.ID, UpdateChannelRequest{ProviderType: &provider})
 	require.NoError(t, err)
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
 	require.False(t, marketplaceVerificationTasks.active(channel.ID, verificationTaskGPT56Mapping))

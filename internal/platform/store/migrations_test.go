@@ -74,6 +74,8 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.NoError(t, db.Model(&schemaMigration{}).Count(&migrationCount).Error)
 	require.Equal(t, int64(len(V2MigrationIDs())), migrationCount)
 	require.True(t, db.Migrator().HasTable(&channelLatencyHistogramMigration{}))
+	require.True(t, db.Migrator().HasTable(&marketplaceschema.RoutePool{}))
+	require.True(t, db.Migrator().HasTable(&marketplaceschema.RoutePoolMember{}))
 	require.True(t, db.Migrator().HasColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds"))
 	for _, column := range []string{
 		"AttemptTTFTP50Ms", "AttemptTTFTP95Ms", "E2ETTFTP50Ms", "E2ETTFTP95Ms", "LatencySampleCount",

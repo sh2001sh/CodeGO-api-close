@@ -3,9 +3,15 @@ package http
 import (
 	"strconv"
 	"strings"
+	"time"
 
+	"fmt"
 	"github.com/gin-gonic/gin"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
+	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 )
 
@@ -60,6 +66,40 @@ func UpdateAutoRoutePool(c *gin.Context) {
 	}
 	result, err := marketplaceapp.ReplaceAutoRoutePool(c.GetInt("id"), req)
 	respond(c, result, err)
+}
+
+func ListRoutePools(c *gin.Context) {
+	result, err := marketplaceapp.ListRoutePools(c.GetInt("id"))
+	respond(c, result, err)
+}
+
+func CreateRoutePool(c *gin.Context) {
+	var req marketplaceapp.RoutePoolCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.CreateRoutePool(c.GetInt("id"), req)
+	respond(c, result, err)
+}
+
+func GetRoutePool(c *gin.Context) {
+	result, err := marketplaceapp.ListRoutePool(c.GetInt("id"), c.Param("id"))
+	respond(c, result, err)
+}
+
+func UpdateRoutePool(c *gin.Context) {
+	var req marketplaceapp.RoutePoolUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.UpdateRoutePool(c.GetInt("id"), c.Param("id"), req)
+	respond(c, result, err)
+}
+
+func DeleteRoutePool(c *gin.Context) {
+	respond(c, nil, marketplaceapp.DeleteRoutePool(c.GetInt("id"), c.Param("id")))
 }
 
 func StartBatchTest(c *gin.Context) {
@@ -122,6 +162,133 @@ func ListMyUsageLogs(c *gin.Context) {
 func ListMyObservability(c *gin.Context) {
 	result, err := marketplaceapp.ListMarketplaceObservability(c.GetInt("id"), queryInt64(c, "start_timestamp"), queryInt64(c, "end_timestamp"))
 	respond(c, result, err)
+}
+func ListMyChannelUserUsage(c *gin.Context) {
+	r, e := marketplaceapp.ListOwnerChannelUserUsage(c.GetInt("id"), marketplaceapp.OwnerUserUsageQuery{ChannelID: c.Query("channel_id"), Page: queryInt(c, "page", 1), PageSize: queryInt(c, "page_size", 20)})
+	respond(c, r, e)
+}
+func SetUserMultiplier(c *gin.Context) {
+	var r struct {
+		UserID     int      `json:"user_id"`
+		Multiplier *float64 `json:"multiplier"`
+	}
+	if e := c.ShouldBindJSON(&r); e != nil {
+		respond(c, nil, e)
+		return
+	}
+	if e := marketplaceapp.EnsureOwnerChannel(c.GetInt("id"), c.Param("id")); e != nil {
+		respond(c, nil, e)
+		return
+	}
+	e := marketplaceapp.SetUserMultiplier(c.GetInt("id"), c.Param("id"), r.UserID, r.Multiplier)
+	respond(c, gin.H{"multiplier": r.Multiplier}, e)
+}
+func GetUserUsageTimeSeries(c *gin.Context) {
+	r, e := marketplaceapp.UserUsageTimeSeries(c.GetInt("id"), c.Param("id"), c.Param("userId"), queryInt(c, "range_hours", 24))
+	respond(c, r, e)
+}
+func BatchWelfare(c *gin.Context) {
+	if e := marketplaceapp.EnsureOwnerChannel(c.GetInt("id"), c.Param("id")); e != nil {
+		respond(c, nil, e)
+		return
+	}
+	var r struct {
+		UserIDs []string `json:"user_ids"`
+		Type    string   `json:"type"`
+		Amount  int64    `json:"amount"`
+	}
+	if e := c.ShouldBindJSON(&r); e != nil {
+		respond(c, nil, e)
+		return
+	}
+	if r.Type == "blind_box" {
+		d := make([]any, 0, len(r.UserIDs))
+		success := 0
+		for _, externalID := range r.UserIDs {
+			var u identityschema.User
+			e := platformdb.DB.Where("external_id = ?", strings.ToUpper(strings.TrimSpace(externalID))).First(&u).Error
+			if e == nil {
+				_, e = commerceapp.GrantBlindBoxes(u.Id, c.GetInt("id"), commerceapp.AdminBlindBoxGrantRequest{Quantity: 1, Reason: "marketplace welfare: " + externalID, IdempotencyKey: fmt.Sprintf("marketplace-welfare-blindbox:%s:%d", c.Param("id"), u.Id)})
+			}
+			if e != nil {
+				d = append(d, gin.H{"user_id": externalID, "status": "failed", "error": e.Error()})
+			} else {
+				success++
+				d = append(d, gin.H{"user_id": externalID, "status": "success"})
+			}
+		}
+		respond(c, gin.H{"success_count": success, "failed_count": len(d) - success, "details": d}, nil)
+		return
+	}
+	if r.Type != "transfer" || r.Amount <= 0 {
+		respond(c, nil, fmt.Errorf("仅支持有效额度转账"))
+		return
+	}
+	d := make([]any, 0, len(r.UserIDs))
+	success := 0
+	for _, id := range r.UserIDs {
+		uid, e := strconv.Atoi(id)
+		if e != nil || uid <= 0 {
+			d = append(d, gin.H{"user_id": id, "status": "failed", "error": "invalid user id"})
+			continue
+		}
+		_, e = billingapp.GrantBonusWalletQuotaTx(nil, uid, r.Amount, "marketplace_welfare", c.Param("id"), fmt.Sprintf("marketplace-welfare:%s:%d:%d", c.Param("id"), uid, time.Now().UnixNano()))
+		if e != nil {
+			d = append(d, gin.H{"user_id": id, "status": "failed", "error": e.Error()})
+		} else {
+			success++
+			d = append(d, gin.H{"user_id": id, "status": "success"})
+		}
+	}
+	respond(c, gin.H{"success_count": success, "failed_count": len(d) - success, "details": d}, nil)
+}
+func ListTimeRangeMultipliers(c *gin.Context) {
+	r, e := marketplaceapp.ListTimeRangeMultipliers(c.GetInt("id"), c.Param("id"))
+	respond(c, r, e)
+}
+func CreateTimeRangeMultiplier(c *gin.Context) {
+	var x struct {
+		StartTimestamp, EndTimestamp int64
+		Multiplier                   float64
+		Label                        string
+	}
+	if e := c.ShouldBindJSON(&x); e != nil {
+		respond(c, nil, e)
+		return
+	}
+	r, e := marketplaceapp.CreateTimeRangeMultiplier(c.GetInt("id"), c.Param("id"), x.StartTimestamp, x.EndTimestamp, x.Multiplier, x.Label)
+	respond(c, r, e)
+}
+func DeleteTimeRangeMultiplier(c *gin.Context) {
+	respond(c, gin.H{"success": true}, marketplaceapp.DeleteTimeRangeMultiplier(c.GetInt("id"), c.Param("id"), c.Param("ruleId")))
+}
+func CreateBargainRequest(c *gin.Context) {
+	var x struct {
+		ProposedMultiplier float64 `json:"proposed_multiplier"`
+		Reason             string  `json:"reason"`
+	}
+	if e := c.ShouldBindJSON(&x); e != nil {
+		respond(c, nil, e)
+		return
+	}
+	r, e := marketplaceapp.CreateBargainRequest(c.GetInt("id"), c.Param("id"), x.ProposedMultiplier, x.Reason)
+	respond(c, r, e)
+}
+func ListMyBargainRequests(c *gin.Context) {
+	r, e := marketplaceapp.ListOwnerBargainRequests(c.GetInt("id"), map[string]string{"status": c.Query("status"), "group_id": c.Query("group_id")}, queryInt(c, "page", 1), queryInt(c, "page_size", 20))
+	respond(c, r, e)
+}
+func ResolveMyBargainRequest(c *gin.Context) {
+	var x struct {
+		Action         string `json:"action"`
+		ResolutionNote string `json:"resolution_note"`
+	}
+	if e := c.ShouldBindJSON(&x); e != nil {
+		respond(c, nil, e)
+		return
+	}
+	r, e := marketplaceapp.ResolveOwnerBargainRequest(c.GetInt("id"), c.Param("id"), x.Action, x.ResolutionNote)
+	respond(c, r, e)
 }
 
 func UpdateChannel(c *gin.Context) {

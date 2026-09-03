@@ -21,6 +21,15 @@ func GetUserSelf(c *gin.Context) {
 
 func GetUserModels(c *gin.Context) {
 	group := strings.TrimSpace(c.Query("group"))
+	if marketplaceapp.IsMarketplaceRoutePoolTokenGroup(group) {
+		models, err := marketplaceapp.ListRoutePoolModels(c.GetInt("id"), marketplaceapp.RoutePoolIDFromTokenGroup(group))
+		if err != nil {
+			httpapi.ApiError(c, err)
+			return
+		}
+		httpapi.ApiSuccess(c, models)
+		return
+	}
 	if marketplaceapp.IsMarketplaceTokenGroup(group) && !marketplaceapp.IsMarketplaceAutoTokenGroup(group) {
 		binding, err := marketplaceapp.ResolveTokenGroupBinding(group, c.GetInt("id"))
 		if err != nil {

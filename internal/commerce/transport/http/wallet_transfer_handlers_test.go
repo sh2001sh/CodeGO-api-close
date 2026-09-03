@@ -121,7 +121,7 @@ func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *test
 	}
 }
 
-func TestWalletTransferPasswordSetupRequiresBoundEmail(t *testing.T) {
+func TestWalletTransferPasswordSetupDoesNotRequireBoundEmail(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 	hash, err := platformsecurity.Password2Hash("Loginpass123")
 	if err != nil {
@@ -138,7 +138,24 @@ func TestWalletTransferPasswordSetupRequiresBoundEmail(t *testing.T) {
 		"current_password": "Loginpass123", "new_payment_password": "Paypass123", "confirm_password": "Paypass123",
 	}, user.Id)
 	configureWalletTransferPassword(ctx)
-	if response := decodeCommerceResponse(t, recorder); response.Success {
-		t.Fatal("expected setup without a bound email to be rejected")
+	if response := decodeCommerceResponse(t, recorder); !response.Success {
+		t.Fatalf("expected setup without a bound email to succeed, got %#v", response)
+	}
+}
+
+func TestWalletTransferPasswordlessSetupDoesNotRequireTwoFAOrEmail(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	user := &identityschema.User{
+		Id: 9944, ExternalId: "HTP004", Username: "transfer-passwordless", AffCode: "HTP004", Status: constant.UserStatusEnabled,
+	}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("failed to seed user: %v", err)
+	}
+	ctx, recorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
+		"new_payment_password": "Paypass123", "confirm_password": "Paypass123",
+	}, user.Id)
+	configureWalletTransferPassword(ctx)
+	if response := decodeCommerceResponse(t, recorder); !response.Success {
+		t.Fatalf("expected passwordless setup without 2FA or email to succeed, got %#v", response)
 	}
 }

@@ -90,11 +90,11 @@ func TestOwnerCanDisableSensitiveWordInterception(t *testing.T) {
 	require.False(t, *saved.SensitiveWordInterceptionEnabled)
 }
 
-func TestEditingChannelInformationInvalidatesVerificationState(t *testing.T) {
+func TestAddingChannelModelPreservesExistingVerificationState(t *testing.T) {
 	channel := &marketplaceschema.Channel{
 		ID: "edit-without-verification", ProviderType: "openai_compatible",
 		DeclaredModels: `["gpt-4.1"]`, Status: marketplacedomain.LifecycleActive,
-		ModelVerificationResults: `[{}]`, ConnectivityTestStatus: marketplacedomain.VerificationPassed,
+		ModelVerificationResults: `[{"model":"gpt-4.1","status":"passed","listed":true}]`, ConnectivityTestStatus: marketplacedomain.VerificationPassed,
 		GPT56MappingResults: `[{}]`, GPT56MappingStatus: GPT56MappingStatusMatched,
 	}
 	group := &marketplaceschema.Group{
@@ -107,14 +107,13 @@ func TestEditingChannelInformationInvalidatesVerificationState(t *testing.T) {
 	requiresManualVerification, err := applyChannelUpdate(channel, group, UpdateChannelRequest{DeclaredModels: &models})
 
 	require.NoError(t, err)
-	require.True(t, requiresManualVerification)
-	require.Equal(t, marketplacedomain.LifecycleDraft, channel.Status)
-	require.Equal(t, marketplacedomain.LifecycleDraft, group.LifecycleStatus)
-	require.Equal(t, marketplacedomain.VerificationQueued, group.VerificationStatus)
-	require.Equal(t, "[]", channel.ModelVerificationResults)
-	require.Empty(t, channel.ConnectivityTestStatus)
-	require.Equal(t, "[]", channel.GPT56MappingResults)
-	require.Empty(t, channel.GPT56MappingStatus)
+	require.False(t, requiresManualVerification)
+	require.Equal(t, marketplacedomain.LifecycleActive, channel.Status)
+	require.Equal(t, marketplacedomain.LifecycleActive, group.LifecycleStatus)
+	require.Equal(t, marketplacedomain.VerificationPassed, group.VerificationStatus)
+	require.Equal(t, marketplacedomain.VerificationPassed, channel.ConnectivityTestStatus)
+	require.Contains(t, channel.ModelVerificationResults, "gpt-4.1")
+	require.Equal(t, GPT56MappingStatusMatched, channel.GPT56MappingStatus)
 }
 
 func TestReplacingChannelModelsDropsStalePricesAndReassignsProbe(t *testing.T) {

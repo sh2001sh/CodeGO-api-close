@@ -291,10 +291,79 @@ type AutoRoutePoolConfig struct {
 	MaxAttempts            int       `json:"max_attempts" gorm:"column:max_attempts;not null;default:3"`
 	FailureCooldownSeconds int       `json:"failure_cooldown_seconds" gorm:"column:failure_cooldown_seconds;not null;default:30"`
 	MaxMultiplier          float64   `json:"max_multiplier" gorm:"column:max_multiplier;not null;default:0"`
+	MultiplierWeight       int       `json:"multiplier_weight" gorm:"column:multiplier_weight;not null;default:35"`
+	SuccessWeight          int       `json:"success_weight" gorm:"column:success_weight;not null;default:25"`
+	CacheWeight            int       `json:"cache_weight" gorm:"column:cache_weight;not null;default:15"`
+	TTFTWeight             int       `json:"ttft_weight" gorm:"column:ttft_weight;not null;default:25"`
 	UpdatedAt              time.Time `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
 }
 
+type UserMultiplier struct {
+	ID         uint64  `gorm:"primaryKey"`
+	ChannelID  string  `gorm:"column:channel_id;uniqueIndex:uq_um,priority:1"`
+	UserID     int     `gorm:"column:user_id;uniqueIndex:uq_um,priority:2"`
+	Multiplier float64 `gorm:"column:multiplier"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+func (UserMultiplier) TableName() string { return tableName("user_multipliers") }
+
+type TimeRangeMultiplier struct {
+	ID             string    `json:"id" gorm:"primaryKey;size:64"`
+	ChannelID      string    `json:"channel_id" gorm:"column:channel_id;index"`
+	StartTimestamp int64     `json:"start_timestamp" gorm:"column:start_timestamp"`
+	EndTimestamp   int64     `json:"end_timestamp" gorm:"column:end_timestamp"`
+	Multiplier     float64   `json:"multiplier"`
+	Label          string    `json:"label,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+func (TimeRangeMultiplier) TableName() string { return tableName("time_range_multipliers") }
+
+type BargainRequest struct {
+	ID                 string     `json:"id" gorm:"primaryKey;size:64"`
+	GroupID            string     `json:"group_id" gorm:"column:group_id;index"`
+	UserID             int        `json:"user_id" gorm:"column:user_id;index"`
+	ProposedMultiplier float64    `json:"proposed_multiplier" gorm:"column:proposed_multiplier"`
+	CurrentMultiplier  float64    `json:"current_multiplier" gorm:"column:current_multiplier"`
+	Status             string     `json:"status" gorm:"column:status;index"`
+	Reason             string     `json:"reason,omitempty"`
+	ResolutionNote     string     `json:"resolution_note,omitempty" gorm:"column:admin_note"`
+	CreatedAt          time.Time  `json:"created_at"`
+	ResolvedAt         *time.Time `json:"resolved_at,omitempty"`
+}
+
+func (BargainRequest) TableName() string { return tableName("bargain_requests") }
+
 func (AutoRoutePoolConfig) TableName() string { return tableName("auto_route_pool_configs") }
+
+// RoutePool is a named, user-owned collection of marketplace routes. It is
+// intentionally separate from the legacy Auto pool so existing Auto keys keep
+// their current behavior while newly created keys bind to an explicit pool.
+type RoutePool struct {
+	ID                     string    `json:"id" gorm:"primaryKey;size:64"`
+	OwnerUserID            int       `json:"owner_user_id" gorm:"not null;index;uniqueIndex:uq_marketplace_route_pool_name,priority:1"`
+	Name                   string    `json:"name" gorm:"size:64;not null;uniqueIndex:uq_marketplace_route_pool_name,priority:2"`
+	Strategy               string    `json:"strategy" gorm:"size:16;not null;default:priority"`
+	MaxAttempts            int       `json:"max_attempts;not null;default:3"`
+	FailureCooldownSeconds int       `json:"failure_cooldown_seconds;not null;default:30"`
+	MaxMultiplier          float64   `json:"max_multiplier;not null;default:0"`
+	CreatedAt              time.Time `json:"created_at;autoCreateTime"`
+	UpdatedAt              time.Time `json:"updated_at;autoUpdateTime"`
+}
+
+func (RoutePool) TableName() string { return tableName("route_pools") }
+
+type RoutePoolMember struct {
+	ID        uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	PoolID    string    `json:"pool_id" gorm:"size:64;not null;uniqueIndex:uq_marketplace_route_pool_member,priority:1;index"`
+	GroupID   string    `json:"group_id" gorm:"size:128;not null;uniqueIndex:uq_marketplace_route_pool_member,priority:2;index"`
+	Priority  int       `json:"priority;not null;default:0"`
+	CreatedAt time.Time `json:"created_at;autoCreateTime"`
+}
+
+func (RoutePoolMember) TableName() string { return tableName("route_pool_members") }
 
 func tableName(name string) string {
 	if platformdb.UsingPostgreSQL {

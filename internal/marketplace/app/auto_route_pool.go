@@ -51,7 +51,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 		if isSelected {
 			selectedCount++
 		}
-		availability, score := autoRouteMetrics(group, snapshots[group.ID])
+		availability, score := autoRouteMetrics(group, snapshots[group.ID], config)
 		snapshot := snapshots[group.ID]
 		channelID := 0
 		if channel.InternalChannelID != nil {
@@ -66,6 +66,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 			Availability:        round2(availability * 100),
 			SuccessRate:         round2(snapshot.RawSuccessRate),
 			CacheHitRate:        round2(snapshot.CacheHitRate),
+			AvgTTFTMs:           round2(snapshot.AvgTTFTMs),
 			AvgLatencyMS:        round2(snapshot.AvgLatencyMs),
 			LatestRequestStatus: latestRequestStatus(recentSeries[channelID]),
 			MetricsAvailable:    snapshot.RequestCount > 0,
@@ -145,7 +146,7 @@ func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*Aut
 			}
 		}
 		if tx.Migrator().HasTable(&marketplaceschema.AutoRoutePoolConfig{}) {
-			if err := tx.Save(&marketplaceschema.AutoRoutePoolConfig{OwnerUserID: ownerUserID, Strategy: config.Strategy, MaxAttempts: config.MaxAttempts, FailureCooldownSeconds: config.FailureCooldownSeconds, MaxMultiplier: config.MaxMultiplier}).Error; err != nil {
+			if err := tx.Save(&marketplaceschema.AutoRoutePoolConfig{OwnerUserID: ownerUserID, Strategy: config.Strategy, MaxAttempts: config.MaxAttempts, FailureCooldownSeconds: config.FailureCooldownSeconds, MaxMultiplier: config.MaxMultiplier, MultiplierWeight: config.MultiplierWeight, SuccessWeight: config.SuccessWeight, CacheWeight: config.CacheWeight, TTFTWeight: config.TTFTWeight}).Error; err != nil {
 				return err
 			}
 		}
@@ -165,11 +166,11 @@ func loadAutoRoutePoolConfig(ownerUserID int) AutoRoutePoolConfig {
 	if platformdb.DB.First(&config, "owner_user_id = ?", ownerUserID).Error != nil {
 		return normalizeAutoRoutePoolConfig(nil)
 	}
-	return AutoRoutePoolConfig{Strategy: config.Strategy, MaxAttempts: config.MaxAttempts, FailureCooldownSeconds: config.FailureCooldownSeconds, MaxMultiplier: config.MaxMultiplier}
+	return normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{Strategy: config.Strategy, MaxAttempts: config.MaxAttempts, FailureCooldownSeconds: config.FailureCooldownSeconds, MaxMultiplier: config.MaxMultiplier, MultiplierWeight: config.MultiplierWeight, SuccessWeight: config.SuccessWeight, CacheWeight: config.CacheWeight, TTFTWeight: config.TTFTWeight})
 }
 
 func normalizeAutoRoutePoolConfig(config *AutoRoutePoolConfig) AutoRoutePoolConfig {
-	result := AutoRoutePoolConfig{Strategy: "priority", MaxAttempts: 3, FailureCooldownSeconds: 30}
+	result := AutoRoutePoolConfig{Strategy: "priority", MaxAttempts: 3, FailureCooldownSeconds: 30, MultiplierWeight: 35, SuccessWeight: 25, CacheWeight: 15, TTFTWeight: 25}
 	if config != nil {
 		result = *config
 	}
@@ -185,6 +186,21 @@ func normalizeAutoRoutePoolConfig(config *AutoRoutePoolConfig) AutoRoutePoolConf
 	if result.MaxMultiplier < 0 {
 		result.MaxMultiplier = 0
 	}
+	if result.MultiplierWeight < 0 {
+		result.MultiplierWeight = 0
+	}
+	if result.SuccessWeight < 0 {
+		result.SuccessWeight = 0
+	}
+	if result.CacheWeight < 0 {
+		result.CacheWeight = 0
+	}
+	if result.TTFTWeight < 0 {
+		result.TTFTWeight = 0
+	}
+	if result.MultiplierWeight+result.SuccessWeight+result.CacheWeight+result.TTFTWeight == 0 {
+		result.MultiplierWeight, result.SuccessWeight, result.CacheWeight, result.TTFTWeight = 35, 25, 15, 25
+	}
 	return result
 }
 
@@ -192,21 +208,24 @@ func normalizeAutoRoutePoolConfig(config *AutoRoutePoolConfig) AutoRoutePoolConf
 // order. The distributor tries them in order and falls through when a group
 // has no currently healthy channel.
 func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit float64) ([]RoutingBinding, error) {
+	selected, err := loadAutoRoutePoolSelection(ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return resolveRoutePoolBindings(ownerUserID, selected, loadAutoRoutePoolConfig(ownerUserID), modelName, multiplierLimit)
+}
+
+func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config AutoRoutePoolConfig, modelName string, multiplierLimit float64) ([]RoutingBinding, error) {
 	if err := ValidateMultiplierLimitValue(multiplierLimit); err != nil {
 		return nil, err
 	}
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
-		return nil, errors.New("全局 Auto 路由需要模型名称")
-	}
-	selected, err := loadAutoRoutePoolSelection(ownerUserID)
-	if err != nil {
-		return nil, err
+		return nil, errors.New("路由池需要模型名称")
 	}
 	if len(selected) == 0 {
 		return nil, errors.New("Auto 路由池为空，请先添加官方或第三方分组")
 	}
-	config := loadAutoRoutePoolConfig(ownerUserID)
 	if multiplierLimit <= 0 && config.MaxMultiplier > 0 {
 		multiplierLimit = config.MaxMultiplier
 	}
@@ -238,7 +257,7 @@ func ResolveAutoRouteBindings(ownerUserID int, modelName string, multiplierLimit
 			overLimitCount++
 			continue
 		}
-		_, score := autoRouteMetrics(group, snapshots[group.ID])
+		_, score := autoRouteMetrics(group, snapshots[group.ID], config)
 		candidates = append(candidates, scoredBinding{
 			binding: RoutingBinding{
 				RouteKey: group.ID,
@@ -434,7 +453,7 @@ func normalizeAutoRouteGroupIDs(values []string) []string {
 	return result
 }
 
-func autoRouteMetrics(group marketplaceschema.Group, snapshot marketplaceschema.RankingSnapshot) (float64, float64) {
+func autoRouteMetrics(group marketplaceschema.Group, snapshot marketplaceschema.RankingSnapshot, config AutoRoutePoolConfig) (float64, float64) {
 	availability := snapshot.WilsonSuccessRate / 100
 	if snapshot.RequestCount == 0 {
 		availability = 0.85
@@ -444,5 +463,14 @@ func autoRouteMetrics(group marketplaceschema.Group, snapshot marketplaceschema.
 	}
 	availability = math.Max(0.2, math.Min(availability, 1))
 	multiplier := math.Max(group.Multiplier, 0.000001)
-	return availability, multiplier / (availability * availability)
+	weights := float64(config.MultiplierWeight + config.SuccessWeight + config.CacheWeight + config.TTFTWeight)
+	if weights <= 0 {
+		weights = 100
+	}
+	multiplierScore := 1 / math.Max(multiplier, 0.1)
+	successScore := math.Max(0, math.Min(snapshot.WilsonSuccessRate/100, 1))
+	cacheScore := math.Max(0, math.Min(snapshot.CacheHitRate/100, 1))
+	latencyScore := 1 / (1 + math.Max(snapshot.AvgTTFTMs, 0)/1000)
+	quality := (multiplierScore*float64(config.MultiplierWeight) + successScore*float64(config.SuccessWeight) + cacheScore*float64(config.CacheWeight) + latencyScore*float64(config.TTFTWeight)) / weights
+	return availability, 1 / math.Max(quality, 0.001)
 }

@@ -12,7 +12,7 @@ $env:GOSUMDB = 'sum.golang.org'
 $env:GOMODCACHE = 'E:\sh\Coding\cpa_bussiness\new-api\.tmp\gomodcache'
 $env:GOCACHE = 'E:\sh\Coding\cpa_bussiness\new-api\.tmp\gocache'
 $env:GOTMPDIR = 'E:\sh\Coding\cpa_bussiness\new-api\.tmp\gotmp'
-$env:SQLITE_PATH = 'E:\sh\Coding\cpa_bussiness\new-api\.tmp\local.db?_busy_timeout=30000'
+$env:SQLITE_PATH = 'E:\sh\Coding\cpa_bussiness\new-api\one-api.db?_busy_timeout=30000'
 $env:SESSION_STORE = 'cookie'
 $env:SESSION_SECRET = 'local-development-session-secret-3000'
 
@@ -25,4 +25,4 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-go run ./cmd/control-api --port 3000 *>> '.backend-live.out.log'
+& '.\control-api.new.exe' --port 3000 *>> '.backend-live.out.log'

@@ -142,6 +142,8 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	{
 		blindBoxAdminRoute.GET("/users/:id/overview", adminGetBlindBoxUserOverview)
 		blindBoxAdminRoute.POST("/users/:id/grants", adminGrantBlindBoxes)
+		blindBoxAdminRoute.POST("/users/:id/revoke", adminRevokeBlindBoxes)
+		blindBoxAdminRoute.DELETE("/users/:id/grants", adminRevokeBlindBoxes)
 	}
 
 	apiRouter.POST("/blind-box/epay/notify", anonymousRequestBodyLimit, blindBoxEpayNotify)

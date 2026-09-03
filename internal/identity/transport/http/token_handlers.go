@@ -344,6 +344,12 @@ func normalizeTokenGroupSelection(userID int, group string, crossGroupRetry bool
 	if marketplaceapp.IsMarketplaceAutoTokenGroup(group) {
 		return group, false, nil
 	}
+	if marketplaceapp.IsMarketplaceRoutePoolTokenGroup(group) {
+		if !marketplaceapp.HasRoutePool(userID, marketplaceapp.RoutePoolIDFromTokenGroup(group)) {
+			return "", false, fmt.Errorf("路由池不存在或无权访问")
+		}
+		return group, false, nil
+	}
 	if !marketplaceapp.IsMarketplaceTokenGroup(group) {
 		return group, crossGroupRetry, nil
 	}

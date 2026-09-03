@@ -59,7 +59,9 @@ func applyChannelModelUpdate(channel *marketplaceschema.Channel, req UpdateChann
 			return false, err
 		}
 		encodedModels, _ := json.Marshal(models)
-		reverify = reverify || channel.DeclaredModels != string(encodedModels)
+		// Model list edits are incremental. Existing model evidence remains valid;
+		// only newly added models will be picked up by the next connectivity test.
+		// A transport/provider change still requires a fresh verification run.
 		channel.DeclaredModels = string(encodedModels)
 		prices := decodeChannelModelPrices(channel.ModelPrices)
 		if req.ModelPrices != nil {

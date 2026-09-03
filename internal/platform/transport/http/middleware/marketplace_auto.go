@@ -17,8 +17,9 @@ import (
 // the request model is known. It returns managed=false for every normal group.
 func selectMarketplaceAutoChannel(c *gin.Context, tokenGroup, modelName string) (*gatewayschema.Channel, string, bool, error) {
 	isLegacyMarketplaceAuto := marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup)
+	isNamedMarketplacePool := marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup)
 	isGlobalAuto := tokenGroup == gatewayroutingapp.AutoGroupName
-	if !isLegacyMarketplaceAuto && !isGlobalAuto {
+	if !isLegacyMarketplaceAuto && !isNamedMarketplacePool && !isGlobalAuto {
 		return nil, tokenGroup, false, nil
 	}
 	gatewayruntime.MarkAutoRouteRequest(c)
@@ -27,7 +28,13 @@ func selectMarketplaceAutoChannel(c *gin.Context, tokenGroup, modelName string) 
 		return nil, tokenGroup, false, nil
 	}
 	multiplierLimit := httpctx.GetContextKeyFloat64(c, constant.ContextKeyTokenMarketplaceMultiplierLimit)
-	bindings, err := marketplaceapp.ResolveAutoRouteBindings(userID, modelName, multiplierLimit)
+	var bindings []marketplaceapp.RoutingBinding
+	var err error
+	if isNamedMarketplacePool {
+		bindings, err = marketplaceapp.ResolveRoutePoolBindings(userID, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup), modelName, multiplierLimit)
+	} else {
+		bindings, err = marketplaceapp.ResolveAutoRouteBindings(userID, modelName, multiplierLimit)
+	}
 	if err != nil {
 		return nil, tokenGroup, true, err
 	}

@@ -9,7 +9,6 @@ import (
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
-	"github.com/sh2001sh/new-api/internal/identity/sessionstate"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
@@ -68,11 +67,8 @@ func configureWalletTransferPassword(c *gin.Context) {
 		httpapi.ApiError(c, err)
 		return
 	}
-	if !security.EmailBound {
-		httpapi.ApiError(c, commerceschema.ErrWalletTransferEmailRequired)
-		return
-	}
-	if !security.PasswordSet && !authorizeFirstWalletTransferPassword(c, user.Password, req.CurrentPassword) {
+	if !security.PasswordSet && !authorizeFirstWalletTransferPassword(user.Password, req.CurrentPassword) {
+		httpapi.ApiError(c, commerceschema.ErrWalletTransferAccountPassword)
 		return
 	}
 	usedEmailCode := false
@@ -143,21 +139,11 @@ func createWalletTransfer(c *gin.Context) {
 	httpapi.ApiSuccess(c, transfer)
 }
 
-func authorizeFirstWalletTransferPassword(c *gin.Context, accountPasswordHash, currentPassword string) bool {
+func authorizeFirstWalletTransferPassword(accountPasswordHash, currentPassword string) bool {
 	if accountPasswordHash != "" {
-		if platformsecurity.ValidatePasswordAndHash(currentPassword, accountPasswordHash) {
-			return true
-		}
-		httpapi.ApiError(c, commerceschema.ErrWalletTransferAccountPassword)
-		return false
+		return platformsecurity.ValidatePasswordAndHash(currentPassword, accountPasswordHash)
 	}
-	if err := sessionstate.RequireSecureVerification(c); err != nil {
-		c.JSON(stdhttp.StatusForbidden, gin.H{
-			"success": false,
-			"message": "请先完成 2FA 或 Passkey 安全验证",
-			"code":    "VERIFICATION_REQUIRED",
-		})
-		return false
-	}
+	// Passwordless/OAuth sessions are already authenticated. The dedicated
+	// payment password is the credential required for subsequent transfers.
 	return true
 }

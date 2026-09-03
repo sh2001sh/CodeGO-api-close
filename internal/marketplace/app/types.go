@@ -388,6 +388,10 @@ type AutoRoutePoolConfig struct {
 	MaxAttempts            int     `json:"max_attempts"`
 	FailureCooldownSeconds int     `json:"failure_cooldown_seconds"`
 	MaxMultiplier          float64 `json:"max_multiplier"`
+	MultiplierWeight       int     `json:"multiplier_weight"`
+	SuccessWeight          int     `json:"success_weight"`
+	CacheWeight            int     `json:"cache_weight"`
+	TTFTWeight             int     `json:"ttft_weight"`
 }
 
 type AutoRoutePoolItem struct {
@@ -401,6 +405,7 @@ type AutoRoutePoolItem struct {
 	Availability        float64  `json:"availability"`
 	SuccessRate         float64  `json:"success_rate"`
 	CacheHitRate        float64  `json:"cache_hit_rate"`
+	AvgTTFTMs           float64  `json:"avg_ttft_ms"`
 	AvgLatencyMS        float64  `json:"avg_latency_ms"`
 	LatestRequestStatus string   `json:"latest_request_status"`
 	MetricsAvailable    bool     `json:"metrics_available"`
@@ -413,6 +418,33 @@ type AutoRoutePoolItem struct {
 }
 
 type AutoRoutePoolView struct {
+	TokenGroup    string              `json:"token_group"`
+	SelectedCount int                 `json:"selected_count"`
+	Items         []AutoRoutePoolItem `json:"items"`
+	Config        AutoRoutePoolConfig `json:"config"`
+}
+
+type RoutePoolCreateRequest struct {
+	Name string `json:"name"`
+}
+
+type RoutePoolUpdateRequest struct {
+	Name     string               `json:"name"`
+	GroupIDs []string             `json:"group_ids"`
+	Config   *AutoRoutePoolConfig `json:"config,omitempty"`
+}
+
+type RoutePoolSummary struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	TokenGroup  string   `json:"token_group"`
+	MemberCount int      `json:"member_count"`
+	Models      []string `json:"models"`
+}
+
+type RoutePoolView struct {
+	ID            string              `json:"id"`
+	Name          string              `json:"name"`
 	TokenGroup    string              `json:"token_group"`
 	SelectedCount int                 `json:"selected_count"`
 	Items         []AutoRoutePoolItem `json:"items"`

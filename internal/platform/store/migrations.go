@@ -170,6 +170,7 @@ func V2MigrationIDs() []string {
 		"20260901_gateway_route_pool_multi_pool",
 		"20260901_blind_box_remaining_seconds",
 		"20260903_marketplace_named_route_pools",
+		"20260903_marketplace_owner_operations",
 	}
 }
 
@@ -320,6 +321,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260815_marketplace_model_verification", Run: migrateMarketplaceModelVerification},
 		{ID: "20260815_marketplace_auto_route_pool", Run: migrateMarketplaceAutoRoutePool},
 		{ID: "20260903_marketplace_named_route_pools", Run: migrateMarketplaceNamedRoutePools},
+		{ID: "20260903_marketplace_owner_operations", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{})
+		}},
 		{ID: "20260815_marketplace_soft_delete", Run: migrateMarketplaceSoftDelete},
 		{ID: "20260815_marketplace_numeric_channel_ids", Run: migrateMarketplaceNumericChannelIDs},
 		{ID: "20260816_wallet_transfer_fee_fields", Run: migrateWalletTransferFeeFields},

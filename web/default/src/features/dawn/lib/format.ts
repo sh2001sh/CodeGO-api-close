@@ -24,6 +24,14 @@ export function pct(value: number | null | undefined, digits = 1): string {
   return `${scaled.toFixed(digits)}`
 }
 
+/** Normalize API success rates, which may be returned as either 0–1 or 0–100. */
+export function successRatePercent(
+  value: number | null | undefined
+): number | null {
+  if (value == null || !Number.isFinite(value)) return null
+  return value <= 1 ? value * 100 : value
+}
+
 /** 毫秒 → 秒文本。 */
 export function sec(ms: number | null | undefined, digits = 2): string {
   if (ms == null || !Number.isFinite(ms)) return '—'
@@ -34,8 +42,10 @@ export function sec(ms: number | null | undefined, digits = 2): string {
 export function compactCount(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—'
   if (value === 0) return '0'
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
+  if (value >= 1_000_000)
+    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
+  if (value >= 1_000)
+    return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
   return String(Math.round(value))
 }
 
@@ -44,7 +54,10 @@ export function fmtInt(value: number | null | undefined): string {
   return value.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
 }
 
-export function fmtMoney(value: number | null | undefined, prefix = '$'): string {
+export function fmtMoney(
+  value: number | null | undefined,
+  prefix = '$'
+): string {
   if (value == null || !Number.isFinite(value)) return '—'
   return `${prefix}${value.toLocaleString('zh-CN', {
     minimumFractionDigits: 2,
@@ -52,12 +65,18 @@ export function fmtMoney(value: number | null | undefined, prefix = '$'): string
   })}`
 }
 
-export function dash<T>(value: T | null | undefined, render: (value: T) => string): string {
+export function dash<T>(
+  value: T | null | undefined,
+  render: (value: T) => string
+): string {
   return value == null ? '—' : render(value)
 }
 
 /** 时段倍率窗口文本。 */
-export function windowLabel(startTimestamp: number, endTimestamp: number): string {
+export function windowLabel(
+  startTimestamp: number,
+  endTimestamp: number
+): string {
   const fmt = (ts: number) => {
     const date = new Date(ts < 1e12 ? ts * 1000 : ts)
     return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
@@ -73,7 +92,8 @@ export function healthState(input: {
   successRate: number | null
 }): HealthState {
   if (!input.requestCount || input.successRate == null) return 'idle'
-  const rate = input.successRate <= 1 ? input.successRate * 100 : input.successRate
+  const rate =
+    input.successRate <= 1 ? input.successRate * 100 : input.successRate
   if (rate >= 99) return 'ok'
   if (rate >= 98) return 'warn'
   return 'bad'

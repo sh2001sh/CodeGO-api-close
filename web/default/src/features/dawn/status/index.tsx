@@ -30,7 +30,12 @@ import { useMarketplaceGroups } from '@/features/marketplace/hooks'
 import type { MarketplaceGroup } from '@/features/marketplace/types'
 import { DawnNav } from '../components/dawn-nav'
 import { DawnQueryError } from '../components/query-error'
-import { healthState, pct, type HealthState } from '../lib/format'
+import {
+  healthState,
+  pct,
+  successRatePercent,
+  type HealthState,
+} from '../lib/format'
 
 const STATUS_FILTERS = {
   search: '',
@@ -381,9 +386,9 @@ function RecentStrip({ group }: { group: MarketplaceGroup }) {
   return (
     <>
       {series.map((point) => {
-        const rate = point.success_rate * 100
+        const rate = successRatePercent(point.success_rate)
         const cls =
-          point.request_count === 0
+          point.request_count === 0 || rate == null
             ? ''
             : rate >= 99
               ? ''
@@ -394,7 +399,7 @@ function RecentStrip({ group }: { group: MarketplaceGroup }) {
           <i
             key={point.ts}
             className={cls}
-            title={`${pct(point.success_rate)}% · ${point.request_count} 次`}
+            title={`${rate == null ? '—' : rate.toFixed(1)}% · ${point.request_count} 次`}
           />
         )
       })}

@@ -221,6 +221,17 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				outboundJSON = normalized
 			}
 		}
+		if info.RelayMode == gatewaycontract.RelayModeResponses &&
+			(info.ApiType == appconstant.APITypeOpenAI || info.ApiType == appconstant.APITypeCodex) {
+			optimized, fallback, applied, optimizeErr := relaycommon.PrepareResponsesConversationWindow(c, info, outboundJSON)
+			if optimizeErr != nil {
+				return types.NewError(optimizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			if applied {
+				outboundJSON = optimized
+				c.Set("responses_conversation_window_fallback", fallback)
+			}
+		}
 		logger.LogDebug(c, "requestBody: %s", outboundJSON)
 		requestBody = bytes.NewReader(outboundJSON)
 	}
@@ -346,6 +357,11 @@ func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 	apiErr := platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
 	if retryJSON, ok := normalizePreviousResponseIDRetry(jsonBody, apiErr); ok {
+		if original, found := c.Get("responses_conversation_window_fallback"); found {
+			if fullBody, valid := original.([]byte); valid && len(fullBody) > 0 {
+				retryJSON = fullBody
+			}
+		}
 		logger.LogInfo(c, "retrying Responses request without stale previous_response_id")
 		resp, err = doResponsesRequest(c, info, adaptor, bytes.NewReader(retryJSON), retryJSON)
 		if err != nil {

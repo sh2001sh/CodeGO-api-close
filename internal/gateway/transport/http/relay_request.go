@@ -372,10 +372,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) {
 				relaycommon.ClearUserStreamFailureCircuit(c, relayInfo.OriginModelName)
 			}
-			ttft := relayInfo.FirstResponseTime.Sub(relayInfo.StartTime)
-			if !relayInfo.HasSendResponse() {
-				ttft = 0
-			}
+			ttft, _ := relayInfo.EndToEndTTFT()
 			relaycommon.RecordChannelSuccess(channel.Id, relayInfo.OriginModelName, ttft, requestProfile.RequestType)
 			relaycommon.RecordChannelCredentialSuccess(channel.Id)
 			relaycommon.RecordFaultDomainSuccess(c.GetString("channel_fault_domain"), relayInfo.OriginModelName, requestProfile.RequestType)

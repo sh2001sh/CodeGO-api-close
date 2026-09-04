@@ -58,6 +58,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 
 	// 写入新的 response body
 	info.ConversationResponseText = responsesOutputText(&responsesResponse)
+	relaycommon.RecordResponsesConversationWindow(c, info, responseBody)
 	platformhttpx.IOCopyBytesGracefully(c, resp, responseBody)
 
 	// compute usage
@@ -150,6 +151,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sr.Error(err)
 			return
 		}
+		relaycommon.RecordResponsesConversationWindow(c, info, []byte(data))
 		if turnState := responsesTurnStateFromEvent(streamResponse.Headers); turnState != "" {
 			c.Writer.Header().Set("x-codex-turn-state", turnState)
 		}

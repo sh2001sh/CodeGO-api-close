@@ -65,8 +65,20 @@ func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
 	return &FirstByteTrace{startedAt: startedAt}
 }
 
-func (t *FirstByteTrace) MarkBodyReadStarted()   { t.mark(&t.bodyReadStartAt) }
-func (t *FirstByteTrace) MarkBodyReadDone()      { t.mark(&t.bodyReadDoneAt) }
+func (t *FirstByteTrace) MarkBodyReadStarted() { t.mark(&t.bodyReadStartAt) }
+func (t *FirstByteTrace) MarkBodyReadDone()    { t.mark(&t.bodyReadDoneAt) }
+
+// BodyReadDoneTime returns the instant the client request body was fully
+// materialized by the gateway. It is used as the origin for latency metrics
+// that should exclude downstream upload time.
+func (t *FirstByteTrace) BodyReadDoneTime() time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.bodyReadDoneAt
+}
 func (t *FirstByteTrace) MarkJSONDecodeStarted() { t.mark(&t.jsonDecodeStartAt) }
 func (t *FirstByteTrace) MarkJSONDecodeDone()    { t.mark(&t.jsonDecodeDoneAt) }
 func (t *FirstByteTrace) MarkHeadersFlush()      { t.mark(&t.firstHeadersFlushAt) }

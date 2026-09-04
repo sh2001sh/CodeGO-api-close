@@ -175,6 +175,7 @@ func initConstantEnv() {
 	constant.MaxFileDownloadMB = platformconfig.GetEnvOrDefaultInt("MAX_FILE_DOWNLOAD_MB", 64)
 	constant.StreamScannerMaxBufferMB = platformconfig.GetEnvOrDefaultInt("STREAM_SCANNER_MAX_BUFFER_MB", 128)
 	constant.MaxRequestBodyMB = platformconfig.GetEnvOrDefaultInt("MAX_REQUEST_BODY_MB", 128)
+	constant.ResponsesConversationWindowSeconds = platformconfig.GetEnvOrDefaultInt("RESPONSES_CONVERSATION_WINDOW_SECONDS", 600)
 	constant.AnonymousRequestBodyLimitKB = platformconfig.GetEnvOrDefaultInt("ANONYMOUS_REQUEST_BODY_LIMIT_KB", 512)
 	constant.ForceStreamOption = platformconfig.GetEnvOrDefaultBool("FORCE_STREAM_OPTION", true)
 	constant.CountToken = platformconfig.GetEnvOrDefaultBool("CountToken", true)

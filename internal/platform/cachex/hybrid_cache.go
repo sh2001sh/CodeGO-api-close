@@ -78,6 +78,12 @@ func (c *HybridCache[V]) memCache() *hot.HotCache[string, V] {
 }
 
 func (c *HybridCache[V]) Get(key string) (value V, found bool, err error) {
+	return c.GetWithTimeout(key, defaultRedisOpTimeout)
+}
+
+// GetWithTimeout reads a value with a caller-specific Redis latency budget.
+// The memory fallback is unaffected by the timeout.
+func (c *HybridCache[V]) GetWithTimeout(key string, timeout time.Duration) (value V, found bool, err error) {
 	full := c.ns.FullKey(key)
 	if full == "" {
 		var zero V
@@ -85,7 +91,10 @@ func (c *HybridCache[V]) Get(key string) (value V, found bool, err error) {
 	}
 
 	if c.redisOn() {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultRedisOpTimeout)
+		if timeout <= 0 {
+			timeout = defaultRedisOpTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		raw, e := c.redis.Get(ctx, full).Result()

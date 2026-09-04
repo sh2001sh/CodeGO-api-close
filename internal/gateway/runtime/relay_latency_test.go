@@ -24,6 +24,23 @@ func TestRelayLatencySeparatesAttemptAndEndToEndTTFT(t *testing.T) {
 	require.Equal(t, 11*time.Second, e2e)
 }
 
+func TestEndToEndTTFTExcludesClientUpload(t *testing.T) {
+	requestStart := time.Now().Add(-12 * time.Second)
+	bodyDone := requestStart.Add(4 * time.Second)
+	responseAt := requestStart.Add(11 * time.Second)
+	trace := NewFirstByteTrace(requestStart)
+	trace.bodyReadDoneAt = bodyDone
+	info := &RelayInfo{
+		StartTime:         requestStart,
+		FirstResponseTime: responseAt,
+		FirstByteTrace:    trace,
+	}
+
+	ttft, ok := info.EndToEndTTFT()
+	require.True(t, ok)
+	require.Equal(t, 7*time.Second, ttft)
+}
+
 func TestRelayLatencyRejectsMissingResponse(t *testing.T) {
 	startedAt := time.Now()
 	info := &RelayInfo{

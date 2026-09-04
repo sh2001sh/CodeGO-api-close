@@ -89,7 +89,7 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
           const symbol =
             plan.currency === 'CNY' ? '¥' : plan.currency === 'EUR' ? '€' : '$'
           return (
-            <span className='font-semibold text-emerald-600'>
+            <span className='font-semibold text-success'>
               {symbol}
               {Number(plan.price_amount || 0).toFixed(2)}
             </span>

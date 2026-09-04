@@ -234,10 +234,7 @@ export function RechargeFormCard({
                   </Label>
                   <div
                     className={cn(
-                      'grid gap-1.5 sm:gap-3',
-                      compact
-                        ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-5'
-                        : 'grid-cols-2 md:grid-cols-4'
+                      'grid grid-cols-2 gap-1.5 sm:gap-3 md:grid-cols-3 xl:grid-cols-6'
                     )}
                   >
                     {presetAmounts.map((preset, index) => {

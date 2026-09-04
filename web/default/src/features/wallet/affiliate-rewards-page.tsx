@@ -200,7 +200,7 @@ export function AffiliateRewardsPage() {
   }
 
   return (
-    <SectionPageLayout>
+    <SectionPageLayout kicker='C·05 · INVITES'>
       <SiteSeo
         title='邀请与刷新'
         description='分享邀请链接，获得套餐额度刷新机会并查看奖励记录。'
@@ -235,21 +235,14 @@ export function AffiliateRewardsPage() {
                   <div className='mt-2 text-2xl font-semibold tracking-tight sm:text-3xl'>
                     邀请新用户首购月卡，给你 1 次额度刷新机会
                   </div>
-                  <div className='text-muted-foreground mt-2 max-w-2xl text-sm leading-6'>
-                    通过你的邀请链接注册的新用户，首次购买月卡成功后， 你会获得
-                    1
-                    次可长期保留的额度刷新机会。刷新机会可直接清空当前订阅的已用额度，
-                    适合高频使用时做一次完整恢复。
-                  </div>
-
                   <div className='mt-4 grid gap-3 sm:grid-cols-3'>
                     <div className='app-subtle-panel px-4 py-4'>
                       <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
                         <Users className='text-primary h-4 w-4' />
                         1. 分享专属链接
                       </div>
-                      <div className='text-muted-foreground mt-2 text-sm leading-6'>
-                        新用户必须通过你的专属链接完成首次注册。
+                      <div className='text-muted-foreground mt-1 text-xs'>
+                        仅统计专属链接注册
                       </div>
                     </div>
                     <div className='app-subtle-panel px-4 py-4'>
@@ -257,8 +250,8 @@ export function AffiliateRewardsPage() {
                         <Gift className='text-primary h-4 w-4' />
                         2. 好友首购月卡
                       </div>
-                      <div className='text-muted-foreground mt-2 text-sm leading-6'>
-                        新用户注册后可获得少量积分，首购月卡才触发你的奖励。
+                      <div className='text-muted-foreground mt-1 text-xs'>
+                        首购月卡触发奖励
                       </div>
                     </div>
                     <div className='app-subtle-panel px-4 py-4'>
@@ -266,9 +259,8 @@ export function AffiliateRewardsPage() {
                         <RotateCcw className='text-primary h-4 w-4' />
                         3. 获得刷新机会
                       </div>
-                      <div className='text-muted-foreground mt-2 text-sm leading-6'>
-                        你增加 1 次额度刷新机会，可长期保留，但每月最多使用 1
-                        次。
+                      <div className='text-muted-foreground mt-1 text-xs'>
+                        每月最多使用 1 次
                       </div>
                     </div>
                   </div>

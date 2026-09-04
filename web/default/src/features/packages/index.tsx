@@ -173,7 +173,7 @@ export function PackagesPage() {
         title={t('Plans')}
         canonicalPath='/packages'
         framedMain={false}
-        kicker='C·01 · PACKAGES'
+        kicker='C·03 · PACKAGES'
         main={
           <CardStaggerContainer className='space-y-4'>
             <CardStaggerItem>

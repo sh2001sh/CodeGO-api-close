@@ -102,7 +102,7 @@ For commercial licensing, please contact support@quantumnous.com
   --accent-foreground: #6b4326;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.596 0.145 163.225);
+  --success: oklch(0.487 0.075 155);
   --success-foreground: oklch(0.985 0 0);
   --warning: #c68a2e;
   --warning-foreground: oklch(0.145 0 0);
@@ -149,7 +149,7 @@ For commercial licensing, please contact support@quantumnous.com
   --accent-foreground: #f0d9bd;
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.696 0.17 162.48);
+  --success: oklch(0.62 0.1 155);
   --success-foreground: oklch(0.145 0 0);
   --warning: #e0a94f;
   --warning-foreground: oklch(0.145 0 0);

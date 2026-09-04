@@ -263,7 +263,7 @@ export function RechargeFormCard({
                               ? 'hover:border-foreground flex min-h-14 flex-col items-start rounded-lg px-3 py-2.5 text-left whitespace-normal sm:min-h-16'
                               : 'hover:border-foreground flex min-h-16 flex-col items-start rounded-lg px-3 py-2.5 text-left whitespace-normal sm:min-h-[72px] sm:p-4',
                             selectedPreset === preset.value
-                              ? 'border-foreground bg-foreground/5'
+                              ? 'border-primary bg-primary/[0.06]'
                               : 'border-muted'
                           )}
                           onClick={() => onSelectPreset(preset)}
@@ -370,12 +370,14 @@ export function RechargeFormCard({
                           {paymentLoading === method.type ? (
                             <Loader2 className='h-4 w-4 animate-spin' />
                           ) : (
-                            getPaymentIcon(
-                              method.type,
-                              'h-4 w-4',
-                              method.icon,
-                              method.name
-                            )
+                            <span className='bg-background border-border/60 grid size-5 shrink-0 place-items-center rounded-md border'>
+                              {getPaymentIcon(
+                                method.type,
+                                'h-3.5 w-3.5',
+                                method.icon,
+                                method.name
+                              )}
+                            </span>
                           )}
                           <span className='truncate'>{method.name}</span>
                         </Button>

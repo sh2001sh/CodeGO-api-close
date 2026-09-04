@@ -69,7 +69,6 @@ export function OverviewDashboard() {
               <RedemptionCodePanel
                 compact
                 title='兑换码'
-                description='充值码、套餐码或活动码可直接在这里兑换。'
                 topupLink={topupInfo?.topup_link}
                 redemptionCode={redemptionCode}
                 onRedemptionCodeChange={setRedemptionCode}

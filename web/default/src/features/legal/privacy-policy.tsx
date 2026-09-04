@@ -39,7 +39,7 @@ export function PrivacyPolicy() {
       )}
       fallbackContent={t(`# Code Go 隐私政策
 
-Code Go 是一个围绕 AI Coding 工作流构建的平台。我们的目标不是收集尽可能多的数据，而是只保留支撑账号、计费、风控和服务稳定所必需的信息。
+Code Go 是一个围绕 AI Coding 工作流构建的平台。我们的目标并非收集尽可能多的数据，而是只保留支撑账号、计费、风控和服务稳定所必需的信息。
 
 ## 我们收集什么
 

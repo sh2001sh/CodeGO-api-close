@@ -20,6 +20,7 @@ import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
+import { DawnOverviewDashboard } from '@/features/dashboard/components/overview/dawn-overview-dashboard'
 import { ROLE } from '@/lib/roles'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -30,7 +31,6 @@ import { ModelCacheAnalysis } from './components/models/model-cache-analysis'
 import { ModelOperationsOverview } from './components/models/model-operations-overview'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
-import { OverviewDashboard } from './components/overview/overview-dashboard'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
@@ -129,19 +129,16 @@ function PerformanceOverviewFallback() {
 
 const SECTION_META: Record<
   DashboardSectionId,
-  { titleKey: string; descriptionKey: string }
+  { titleKey: string }
 > = {
   overview: {
     titleKey: 'Overview',
-    descriptionKey: 'View dashboard overview and statistics',
   },
   models: {
     titleKey: 'Model Call Analytics',
-    descriptionKey: 'View model call count analytics and charts',
   },
   users: {
     titleKey: 'User Analytics',
-    descriptionKey: 'View user consumption statistics and charts',
   },
 }
 
@@ -225,106 +222,106 @@ export function Dashboard() {
     ) : null
 
   return (
-    <SectionPageLayout>
-      <SiteSeo
-        title={t(meta.titleKey)}
-        description={t(meta.descriptionKey)}
-        canonicalPath={`/dashboard/${activeSection}`}
-        robots='noindex,follow'
-      />
-      <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
-      <SectionPageLayout.Description>
-        {t(meta.descriptionKey)}
-      </SectionPageLayout.Description>
-      <SectionPageLayout.Content>
-        <div className='space-y-3 sm:space-y-4'>
-          {activeSection !== 'overview' && (
-            <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
-              {showSectionTabs ? (
-                <Tabs value={activeSection} onValueChange={handleSectionChange}>
-                  <TabsList className='h-auto max-w-full flex-wrap justify-start'>
-                    {visibleSections.map((section) => (
-                      <TabsTrigger key={section} value={section}>
-                        {t(SECTION_META[section].titleKey)}
+    <>
+      {activeSection === 'overview' ? (
+        <DawnOverviewDashboard />
+      ) : (
+        <SectionPageLayout>
+          <SiteSeo
+            title={t(meta.titleKey)}
+            description={t(meta.titleKey)}
+            canonicalPath={`/dashboard/${activeSection}`}
+            robots='noindex,follow'
+          />
+          <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
+          <SectionPageLayout.Content>
+            <div className='space-y-3 sm:space-y-4'>
+              <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
+                {showSectionTabs ? (
+                  <Tabs value={activeSection} onValueChange={handleSectionChange}>
+                    <TabsList className='h-auto max-w-full flex-wrap justify-start'>
+                      {visibleSections.map((section) => (
+                        <TabsTrigger key={section} value={section}>
+                          {t(SECTION_META[section].titleKey)}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                ) : (
+                  <div />
+                )}
+                {modelActions != null && (
+                  <div className='flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2'>
+                    {modelActions}
+                  </div>
+                )}
+              </div>
+              {activeSection === 'models' && (
+                <>
+                  <FadeIn>
+                    <Suspense fallback={<LogStatCardsFallback />}>
+                      <LazyLogStatCards
+                        filters={modelFilters}
+                        onDataUpdate={handleDataUpdate}
+                      />
+                    </Suspense>
+                  </FadeIn>
+                  <Tabs
+                    value={modelView}
+                    onValueChange={(value) =>
+                      setModelView(value as 'overview' | 'trend' | 'cache')
+                    }
+                  >
+                    <TabsList>
+                      <TabsTrigger value='overview'>
+                        {t('Operations overview')}
                       </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              ) : (
-                <div />
-              )}
-              {modelActions != null && (
-                <div className='flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2'>
-                  {modelActions}
-                </div>
-              )}
-            </div>
-          )}
-          {activeSection === 'overview' && <OverviewDashboard />}
-          {activeSection === 'models' && (
-            <>
-              <FadeIn>
-                <Suspense fallback={<LogStatCardsFallback />}>
-                  <LazyLogStatCards
-                    filters={modelFilters}
-                    onDataUpdate={handleDataUpdate}
-                  />
-                </Suspense>
-              </FadeIn>
-              <Tabs
-                value={modelView}
-                onValueChange={(value) =>
-                  setModelView(value as 'overview' | 'trend' | 'cache')
-                }
-              >
-                <TabsList>
-                  <TabsTrigger value='overview'>
-                    {t('Operations overview')}
-                  </TabsTrigger>
-                  <TabsTrigger value='trend'>{t('Trend analysis')}</TabsTrigger>
-                  <TabsTrigger value='cache'>{t('缓存分析')}</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              {modelView === 'overview' && (
-                <ModelOperationsOverview
-                  data={modelData}
-                  loading={dataLoading}
-                />
-              )}
-              {modelView === 'cache' && <ModelCacheAnalysis />}
-              {modelView === 'trend' && isAdmin && (
-                <FadeIn delay={0.05}>
-                  <Suspense fallback={<PerformanceOverviewFallback />}>
-                    <LazyPerformanceOverview />
-                  </Suspense>
-                </FadeIn>
-              )}
-              {modelView === 'trend' && (
-                <FadeIn delay={0.15}>
-                  <Suspense fallback={<ModelChartsFallback />}>
-                    <LazyModelCharts
+                      <TabsTrigger value='trend'>{t('Trend analysis')}</TabsTrigger>
+                      <TabsTrigger value='cache'>{t('缓存分析')}</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  {modelView === 'overview' && (
+                    <ModelOperationsOverview
                       data={modelData}
                       loading={dataLoading}
-                      defaultChartTab={chartPreferences.modelAnalyticsChart}
-                      timeGranularity={
-                        modelFilters.time_granularity ||
-                        DEFAULT_TIME_GRANULARITY
-                      }
                     />
+                  )}
+                  {modelView === 'cache' && <ModelCacheAnalysis />}
+                  {modelView === 'trend' && isAdmin && (
+                    <FadeIn delay={0.05}>
+                      <Suspense fallback={<PerformanceOverviewFallback />}>
+                        <LazyPerformanceOverview />
+                      </Suspense>
+                    </FadeIn>
+                  )}
+                  {modelView === 'trend' && (
+                    <FadeIn delay={0.15}>
+                      <Suspense fallback={<ModelChartsFallback />}>
+                        <LazyModelCharts
+                          data={modelData}
+                          loading={dataLoading}
+                          defaultChartTab={chartPreferences.modelAnalyticsChart}
+                          timeGranularity={
+                            modelFilters.time_granularity ||
+                            DEFAULT_TIME_GRANULARITY
+                          }
+                        />
+                      </Suspense>
+                    </FadeIn>
+                  )}
+                </>
+              )}
+              {activeSection === 'users' && (
+                <FadeIn>
+                  <Suspense fallback={<ModelChartsFallback />}>
+                    <LazyUserCharts />
                   </Suspense>
                 </FadeIn>
               )}
-            </>
-          )}
-          {activeSection === 'users' && (
-            <FadeIn>
-              <Suspense fallback={<ModelChartsFallback />}>
-                <LazyUserCharts />
-              </Suspense>
-            </FadeIn>
-          )}
-        </div>
-      </SectionPageLayout.Content>
-    </SectionPageLayout>
+            </div>
+          </SectionPageLayout.Content>
+        </SectionPageLayout>
+      )}
+    </>
   )
 }

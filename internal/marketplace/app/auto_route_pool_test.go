@@ -130,6 +130,69 @@ func TestAutoRoutePoolAllowsInvitedPrivateGroup(t *testing.T) {
 	require.Equal(t, group.ID, view.Items[0].GroupID)
 }
 
+func TestUpdateRoutePoolWithoutConfigPreservesExistingStrategy(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.RoutePool{},
+		&marketplaceschema.RoutePoolMember{},
+		&marketplaceschema.RankingSnapshot{},
+	))
+	channelID := 401
+	require.NoError(t, db.Create(&marketplaceschema.Channel{
+		ID: "pool-channel", OwnerUserID: 11, ProviderType: "openai",
+		DeclaredModels: `["gpt-5"]`, InternalChannelID: &channelID,
+		Status: marketplacedomain.LifecycleActive,
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{
+		ID: "pool-group", ChannelID: "pool-channel", OwnerUserID: 11,
+		PublicSlug: "pool-group", SystemDisplayName: "pool-group",
+		InternalGroupName: "market-pool-group", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 1,
+		LifecycleStatus:    marketplacedomain.LifecycleActive,
+		VerificationStatus: marketplacedomain.VerificationPassed,
+		Visibility:         marketplacedomain.VisibilityPublic,
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePool{
+		ID: "pool-1", OwnerUserID: 20, Name: "pool", Strategy: "score",
+		MaxAttempts: 3, FailureCooldownSeconds: 30,
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePoolMember{PoolID: "pool-1", GroupID: "pool-group", Priority: 1}).Error)
+
+	view, err := UpdateRoutePool(20, "pool-1", RoutePoolUpdateRequest{
+		Name: "renamed", GroupIDs: []string{"pool-group"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "renamed", view.Name)
+	require.Equal(t, "score", view.Config.Strategy)
+}
+
+func TestListRoutePoolModelsReturnsSortedCaseInsensitiveUnion(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
+		&marketplaceschema.RoutePool{}, &marketplaceschema.RoutePoolMember{},
+		&marketplaceschema.RankingSnapshot{},
+	))
+	channelA, channelB := 402, 403
+	require.NoError(t, db.Create([]marketplaceschema.Channel{
+		{ID: "models-a", OwnerUserID: 11, ProviderType: "openai", DeclaredModels: `["gpt-5","claude-3-7-sonnet"]`, InternalChannelID: &channelA, Status: marketplacedomain.LifecycleActive},
+		{ID: "models-b", OwnerUserID: 12, ProviderType: "google", DeclaredModels: `["GPT-5","gemini-2.5"]`, InternalChannelID: &channelB, Status: marketplacedomain.LifecycleActive},
+	}).Error)
+	groups := []marketplaceschema.Group{
+		{ID: "models-group-a", ChannelID: "models-a", OwnerUserID: 11, PublicSlug: "models-a", SystemDisplayName: "models-a", InternalGroupName: "market-models-a", SourceType: marketplacedomain.SourceTypeMarketplaceUser, CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 1, LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed, Visibility: marketplacedomain.VisibilityPublic},
+		{ID: "models-group-b", ChannelID: "models-b", OwnerUserID: 12, PublicSlug: "models-b", SystemDisplayName: "models-b", InternalGroupName: "market-models-b", SourceType: marketplacedomain.SourceTypeMarketplaceUser, CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 1, LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed, Visibility: marketplacedomain.VisibilityPublic},
+	}
+	require.NoError(t, db.Create(&groups).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePool{ID: "models-pool", OwnerUserID: 20, Name: "models", Strategy: "priority", MaxAttempts: 3, FailureCooldownSeconds: 30}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.RoutePoolMember{{PoolID: "models-pool", GroupID: groups[0].ID, Priority: 1}, {PoolID: "models-pool", GroupID: groups[1].ID, Priority: 2}}).Error)
+
+	models, err := ListRoutePoolModels(20, "models-pool")
+	require.NoError(t, err)
+	require.Equal(t, []string{"GPT-5", "claude-3-7-sonnet", "gemini-2.5"}, models)
+}
+
 func TestMarketplaceAutoTokenGroupIsReserved(t *testing.T) {
 	require.True(t, IsMarketplaceAutoTokenGroup("market:auto"))
 	_, err := ResolveTokenGroupBinding("market:auto", 20)

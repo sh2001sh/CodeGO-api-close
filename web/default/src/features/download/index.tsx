@@ -102,24 +102,9 @@ export function DownloadPage() {
     ]
   )
   const setupSteps = [
-    [
-      t('Install Code Go'),
-      t(
-        'Download the build for your platform and finish the standard installation.'
-      ),
-    ],
-    [
-      t('Authorize in browser'),
-      t(
-        'Sign in through the website and approve this desktop device without sharing your password with the app.'
-      ),
-    ],
-    [
-      t('Apply your tools'),
-      t(
-        'Import a token, preview the changes, and configure your local AI coding tools in one place.'
-      ),
-    ],
+    [t('Install Code Go')],
+    [t('Authorize in browser')],
+    [t('Apply your tools')],
   ]
 
   return (
@@ -133,17 +118,9 @@ export function DownloadPage() {
           transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         >
           <header className='mx-auto max-w-3xl text-center'>
-            <p className='text-primary text-sm font-medium'>
-              {t('Code Go Desktop')}
-            </p>
             <h1 className='mt-3 text-4xl font-semibold tracking-tight text-balance md:text-5xl'>
               {t('Your AI tools, configured locally.')}
             </h1>
-            <p className='text-muted-foreground mx-auto mt-4 max-w-2xl text-base leading-7 md:text-lg'>
-              {t(
-                'Securely import your Code Go token and configure Codex, Claude Code, Gemini CLI, and more from one desktop app.'
-              )}
-            </p>
           </header>
 
           <div className='mt-10'>
@@ -170,9 +147,6 @@ export function DownloadPage() {
           <section className='mt-16'>
             <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
               <div>
-                <p className='text-primary text-sm font-medium'>
-                  {t('Three steps')}
-                </p>
                 <h2 className='mt-2 text-2xl font-semibold tracking-tight'>
                   {t('Ready in a few minutes')}
                 </h2>
@@ -186,7 +160,7 @@ export function DownloadPage() {
               </Button>
             </div>
             <ol className='border-border mt-6 grid border-y sm:grid-cols-3'>
-              {setupSteps.map(([title, description], index) => (
+              {setupSteps.map(([title], index) => (
                 <li
                   key={title}
                   className='border-border py-6 max-sm:border-t max-sm:first:border-t-0 sm:border-l sm:px-6 sm:first:border-l-0 sm:first:pl-0 sm:last:pr-0'
@@ -195,9 +169,6 @@ export function DownloadPage() {
                     0{index + 1}
                   </span>
                   <h3 className='mt-3 font-semibold'>{title}</h3>
-                  <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                    {description}
-                  </p>
                 </li>
               ))}
             </ol>

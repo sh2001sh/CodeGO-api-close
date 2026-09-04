@@ -94,9 +94,6 @@ export function StartStepItem(props: {
               </span>
               <span className='truncate'>{props.step.title}</span>
             </span>
-            <span className='text-muted-foreground line-clamp-1 text-xs'>
-              {props.step.description}
-            </span>
           </span>
         </span>
         <ArrowRight
@@ -123,9 +120,6 @@ export function QuickActionItem(props: { action: QuickAction }) {
       <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
         <span className='truncate text-sm font-medium'>
           {props.action.title}
-        </span>
-        <span className='text-muted-foreground line-clamp-2 text-xs leading-relaxed'>
-          {props.action.description}
         </span>
       </span>
     </Button>

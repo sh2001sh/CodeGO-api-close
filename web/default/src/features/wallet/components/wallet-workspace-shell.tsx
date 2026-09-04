@@ -9,11 +9,12 @@ interface WalletWorkspaceShellProps {
   main: ReactNode
   sidebar?: ReactNode
   framedMain?: boolean
+  kicker?: string
 }
 
 export function WalletWorkspaceShell(props: WalletWorkspaceShellProps) {
   return (
-    <SectionPageLayout>
+    <SectionPageLayout kicker={props.kicker}>
       <SiteSeo
         title={props.title}
         description={props.description || props.title}
@@ -30,8 +31,8 @@ export function WalletWorkspaceShell(props: WalletWorkspaceShellProps) {
         <div
           className={
             props.sidebar
-              ? 'mx-auto grid w-full max-w-[1600px] items-start gap-5 min-[1200px]:grid-cols-[minmax(0,1fr)_288px] 2xl:grid-cols-[minmax(0,1fr)_320px]'
-              : 'mx-auto w-full max-w-[1360px]'
+              ? 'codego-asset-workspace mx-auto grid w-full max-w-[1600px] items-start gap-5 min-[1200px]:grid-cols-[minmax(0,1fr)_288px] 2xl:grid-cols-[minmax(0,1fr)_320px]'
+              : 'codego-asset-workspace mx-auto w-full max-w-[1360px]'
           }
         >
           {props.framedMain === false ? (

@@ -139,7 +139,9 @@ export function useUsersColumns(): ColumnDef<User>[] {
 
         return (
           <Tooltip>
-            <TooltipTrigger render={<div className='cursor-help' />}>
+            <TooltipTrigger
+              render={<button type='button' className='cursor-help' />}
+            >
               <StatusBadge
                 label={t(statusConfig.labelKey)}
                 variant={statusConfig.variant}
@@ -264,7 +266,12 @@ export function useUsersColumns(): ColumnDef<User>[] {
             />
             <Tooltip>
               <TooltipTrigger
-                render={<span className='text-muted-foreground cursor-help' />}
+                render={
+                  <button
+                    type='button'
+                    className='text-muted-foreground cursor-help'
+                  />
+                }
               >
                 {t('Invited')}: {affCount}
               </TooltipTrigger>
@@ -275,7 +282,12 @@ export function useUsersColumns(): ColumnDef<User>[] {
             <span className='text-muted-foreground/30'>·</span>
             <Tooltip>
               <TooltipTrigger
-                render={<span className='text-muted-foreground cursor-help' />}
+                render={
+                  <button
+                    type='button'
+                    className='text-muted-foreground cursor-help'
+                  />
+                }
               >
                 {t('Revenue')}: {formatQuota(affHistoryQuota)}
               </TooltipTrigger>
@@ -289,7 +301,10 @@ export function useUsersColumns(): ColumnDef<User>[] {
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <span className='text-muted-foreground cursor-help' />
+                      <button
+                        type='button'
+                        className='text-muted-foreground cursor-help'
+                      />
                     }
                   >
                     {t('Inviter')}: {inviterLabel}

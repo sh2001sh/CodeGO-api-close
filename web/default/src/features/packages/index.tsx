@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
-import { Crown, RefreshCw } from 'lucide-react'
+import { BookOpenText, ChevronDown, Crown, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -166,11 +166,9 @@ export function PackagesPage() {
     <>
       <WalletWorkspaceShell
         title={t('Plans')}
-        description={t(
-          'Choose a plan based on your usage rhythm. Eligible plans automatically join the Collective Benefit Program and unlock additional quota by participation tier.'
-        )}
         canonicalPath='/packages'
         framedMain={false}
+        kicker='C·01 · PACKAGES'
         main={
           <CardStaggerContainer className='space-y-4'>
             <CardStaggerItem>
@@ -185,9 +183,6 @@ export function PackagesPage() {
             <CardStaggerItem>
               <TitledCard
                 title={t('Plan purchase')}
-                description={t(
-                  'Compare the price, base quota, and validity first. Plans marked for collective benefit automatically join the queue after payment and show the final quota available at each participation tier.'
-                )}
                 icon={<Crown className='h-4 w-4' />}
                 action={
                   <Button
@@ -207,8 +202,22 @@ export function PackagesPage() {
                 }
                 contentClassName='space-y-5'
               >
-                <MonthlyPlanRules />
-                <PackageModelScopeNotice />
+                <details className='codego-package-rules group rounded-lg border'>
+                  <summary className='flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3'>
+                    <span className='text-foreground flex items-center gap-2 text-[13px] font-semibold'>
+                      <BookOpenText className='text-primary h-4 w-4' />
+                      {t('规格与规则')}
+                    </span>
+                    <span className='text-muted-foreground text-xs transition-transform group-open:rotate-180'>
+                      <ChevronDown className='h-4 w-4' />
+                    </span>
+                  </summary>
+                  <div className='space-y-4 border-t px-4 py-4 sm:px-5'>
+                    <MonthlyPlanRules />
+                    <PackageModelScopeNotice />
+                  </div>
+                </details>
+
                 {primaryPlanZones.map((zone) => {
                   if (
                     zone.id === 'monthly' &&

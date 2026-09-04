@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import type { useFilters } from '../hooks/use-filters'
 import type { PricingModel, PricingVendor, TokenUnit } from '../types'
 import { EmptyState } from './empty-state'
@@ -23,7 +22,6 @@ export function OfficialModelDirectory(props: {
   filters: PricingFilters
   onModelClick: (modelName: string) => void
 }) {
-  const { t } = useTranslation()
   const filters = props.filters
   const renderContent = () => {
     if (filters.filteredModels.length === 0) {
@@ -124,7 +122,6 @@ export function OfficialModelDirectory(props: {
             onClearFilters={filters.clearFilters}
           />
           {renderContent()}
-          <p className='sr-only'>{t('CodeGo 官方模型目录')}</p>
         </main>
       </div>
     </div>

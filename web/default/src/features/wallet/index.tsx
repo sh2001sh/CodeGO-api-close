@@ -37,8 +37,8 @@ export function Wallet(props: WalletProps) {
     <>
       <WalletWorkspaceShell
         title={t('Wallet')}
-        description={t('在一个页面管理统一额度充值、安全转账和扣费优先级。')}
         canonicalPath='/wallet'
+        kicker='C·02 · WALLET'
         framedMain={false}
         main={
           <div className='flex min-w-0 flex-col gap-4'>

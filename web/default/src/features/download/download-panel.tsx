@@ -132,9 +132,6 @@ export function DownloadPanel({
                 </p>
               </div>
             </div>
-            <p className='text-muted-foreground text-sm leading-6'>
-              {selectedCard.description}
-            </p>
             {selectedCard.platform === 'macos' && macCards.length > 1 ? (
               <div
                 className='flex flex-wrap gap-2'

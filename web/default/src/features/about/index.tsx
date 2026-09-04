@@ -61,16 +61,10 @@ Code Go 让 AI 编程更适合长期使用。
 function AboutHero() {
   return (
     <div className='space-y-4'>
-      <div className='border-primary/20 bg-primary/8 text-primary inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold'>
-        {aboutSeo.eyebrow}
-      </div>
       <div className='space-y-3'>
         <h1 className='text-foreground text-4xl font-semibold tracking-tight md:text-5xl'>
           {aboutSeo.h1}
         </h1>
-        <p className='text-muted-foreground max-w-3xl text-base leading-8 md:text-lg'>
-          {aboutSeo.intro}
-        </p>
       </div>
     </div>
   )
@@ -87,9 +81,6 @@ function SupportGroupCard() {
           <h2 className='text-foreground text-2xl font-semibold tracking-tight'>
             售后 QQ 群
           </h2>
-          <p className='text-muted-foreground text-sm leading-7'>
-            注册、套餐、盲盒、宠物升级、脚本配置或控制台使用遇到问题时，可以直接进群处理。
-          </p>
           <div className='bg-muted/60 text-foreground rounded-lg px-4 py-3 text-sm leading-7'>
             群号：<span className='font-semibold'>996040309</span>
           </div>
@@ -165,9 +156,6 @@ export function About() {
           <div className='mx-auto max-w-6xl space-y-6'>
             <AboutHero />
             <SupportGroupCard />
-            <p className='text-muted-foreground max-w-3xl text-sm leading-7'>
-              当前关于内容由外部地址承载。为了保持公开页结构稳定，这里会保留统一标题、说明和支持入口，再跳转到外部内容容器展示。
-            </p>
           </div>
           <iframe
             src={rawContent}

@@ -13,8 +13,8 @@ export function BlindBoxPage(props: BlindBoxPageProps) {
     <>
       <WalletWorkspaceShell
         title='抽奖盲盒'
-        description='每盒附赠一个当日幸运号，奖励即时到账'
         canonicalPath='/blind-box'
+        kicker='C·03 · BLIND BOX'
         main={
           <BlindBoxCard
             onSubscriptionRefresh={workspace.fetchSubscriptionData}

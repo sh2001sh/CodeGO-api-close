@@ -56,7 +56,6 @@ export function AnnouncementsPanel() {
   return (
     <PanelWrapper
       title={t('Announcements')}
-      description={t('Latest platform updates and notices')}
       loading={loading}
       empty={!list.length}
       emptyMessage={t('No announcements at this time')}

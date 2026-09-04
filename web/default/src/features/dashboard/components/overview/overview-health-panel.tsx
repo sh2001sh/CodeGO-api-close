@@ -118,12 +118,6 @@ function HealthPanelHeader(props: { status: OverviewModelStatus }) {
         <div className='text-muted-foreground text-[11px] font-medium tracking-[0.16em] uppercase'>
           模型健康概览
         </div>
-        <div className='text-foreground mt-1 text-xl font-semibold tracking-tight'>
-          今天的主要状态
-        </div>
-        <div className='text-muted-foreground mt-1 text-xs'>
-          近 6 小时最新非空 30 分钟请求桶，按请求量展示主要模型
-        </div>
       </div>
       <div className='flex flex-col items-end gap-2 text-xs'>
         <div className='flex items-center gap-2'>

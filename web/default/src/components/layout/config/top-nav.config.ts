@@ -28,10 +28,9 @@ import { type TopNavLink } from '../types'
  * If you need fallback links, add them here.
  */
 export const defaultTopNavLinks: TopNavLink[] = [
-  { title: 'Brand', href: '/brand' },
-  { title: 'Guide', href: '/guide' },
-  { title: 'Download', href: '/download' },
-  { title: 'Topics', href: '/topics' },
-  { title: 'About', href: '/about' },
-  { title: 'FAQ', href: '/faq' },
+  { title: '主页', href: '/' },
+  { title: '市场', href: '/market' },
+  { title: '模型', href: '/pricing' },
+  { title: '控制台', href: '/dashboard', requiresAuth: true },
+  { title: '状态', href: '/status' },
 ]

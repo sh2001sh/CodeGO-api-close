@@ -28,7 +28,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/copy-button'
 import type { SetupGuideState } from './setup-guide/use-setup-guide'
-import { EditorialStepRow } from './summary-sections'
 
 function EndpointRow(props: {
   label: string
@@ -67,10 +66,7 @@ export function OverviewHeroPanel(props: { guide: SetupGuideState }) {
       <div className='grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(360px,400px)] xl:items-start'>
         <div className='flex min-w-0 flex-col gap-6'>
           <div>
-            <span className='codego-kicker'>QUICKSTART</span>
-            <h2 className='text-foreground mt-2 max-w-xl text-2xl leading-[1.1] font-semibold text-balance sm:text-3xl'>
-              先完成一次调用，再管理额度
-            </h2>
+            <h2 className='codego-kicker'>WORKSPACE</h2>
           </div>
 
           <div className='flex flex-wrap items-center gap-2'>
@@ -89,16 +85,6 @@ export function OverviewHeroPanel(props: { guide: SetupGuideState }) {
             </Button>
           </div>
 
-          <div>
-            {guide.startSteps.map((step, index) => (
-              <EditorialStepRow
-                key={step.title}
-                index={index}
-                title={step.title}
-                completed={step.completed}
-              />
-            ))}
-          </div>
         </div>
 
         <div className='flex min-w-0 flex-col gap-5'>

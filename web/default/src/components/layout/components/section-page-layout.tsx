@@ -55,6 +55,8 @@ SectionPageLayoutBreadcrumb.displayName = 'SectionPageLayout.Breadcrumb'
 
 export type SectionPageLayoutProps = {
   children: ReactNode
+  /** 页头记号：编号 + 区域名，如 'C·01 · PACKAGES'。 */
+  kicker?: string
 }
 
 export const SECTION_PAGE_LAYOUT_CLASS_NAME =
@@ -73,6 +75,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
   let content: ReactNode = null
   let breadcrumb: ReactNode = null
   const auxiliaryChildren: ReactNode[] = []
+  const kicker = props.kicker ?? 'AI CODING GATEWAY · CONSOLE'
 
   Children.forEach(props.children, (node) => {
     if (!isValidElement(node)) return
@@ -101,9 +104,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
               <div className='flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5'>
                 <span className='flex shrink-0 items-center gap-2.5'>
                   <span className='codego-page-signal' aria-hidden='true' />
-                  <span className='codego-page-kicker'>
-                    AI CODING GATEWAY · CONSOLE
-                  </span>
+                  <span className='codego-page-kicker'>{kicker}</span>
                 </span>
                 <h2 className='codego-page-title text-foreground max-w-full min-w-0 truncate text-[clamp(1.45rem,2.3vw,2.1rem)] leading-[1.1] font-semibold tracking-[-0.04em]'>
                   {title}

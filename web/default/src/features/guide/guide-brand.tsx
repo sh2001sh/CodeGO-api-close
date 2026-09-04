@@ -8,7 +8,7 @@ import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 const sections = [
   {
     title: 'Codex 路线',
-    text: '适合想把 AI Coding 变成可持续习惯的人。重点不是炫技，而是流程、记录和持续进步。',
+    text: '适合想把 AI Coding 变成可持续习惯的人。重点并非炫技，而是流程、记录和持续进步。',
   },
   {
     title: 'Claude Code 路线',
@@ -41,9 +41,6 @@ export function GuideBrand() {
             <h1 className='text-foreground text-4xl font-semibold tracking-tight'>
               把 AI Coding 讲成一件会持续累积的事
             </h1>
-            <p className='text-base leading-8 text-muted-foreground'>
-              这页的目标很简单：让用户一眼知道 Code Go 在做什么，以及为什么它和 Codex / Claude Code 的语境是连着的。
-            </p>
           </div>
 
           <div className='grid gap-4 md:grid-cols-3'>
@@ -53,9 +50,6 @@ export function GuideBrand() {
                   <Code2 className='text-muted-foreground size-4' />
                   {item.title}
                 </div>
-                <p className='mt-3 text-sm leading-7 text-muted-foreground'>
-                  {item.text}
-                </p>
               </div>
             ))}
           </div>
@@ -77,9 +71,6 @@ export function GuideBrand() {
                 <ArrowRight className='text-muted-foreground size-4' />
                 推广动作
               </div>
-              <p className='mt-4 text-sm leading-7 text-muted-foreground'>
-                在首页、社媒简介、产品介绍、FAQ 和教程标题中，都保持同一句核心表达，先统一认知，再放大流量。
-              </p>
               <Button className='mt-5' render={<Link to='/faq' />}>
                 看 FAQ
               </Button>

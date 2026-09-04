@@ -14,14 +14,20 @@ export function aggregateHourlyUsage(
   rows: Array<{ created_at: number; quota: number }>,
   limit = 12
 ) {
+  return aggregateUsageByBucket(rows, 60 * 60, limit)
+}
+
+export function aggregateUsageByBucket(
+  rows: Array<{ created_at: number; quota: number }>,
+  bucketSeconds: number,
+  limit: number
+) {
   const buckets = new Map<number, number>()
   for (const row of rows) {
     const timestamp = Number(row.created_at)
     if (!Number.isFinite(timestamp)) continue
-    buckets.set(
-      timestamp,
-      (buckets.get(timestamp) ?? 0) + (Number(row.quota) || 0)
-    )
+    const bucket = Math.floor(timestamp / bucketSeconds) * bucketSeconds
+    buckets.set(bucket, (buckets.get(bucket) ?? 0) + (Number(row.quota) || 0))
   }
   return Array.from(buckets, ([created_at, quota]) => ({ created_at, quota }))
     .sort((left, right) => left.created_at - right.created_at)

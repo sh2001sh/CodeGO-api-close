@@ -141,11 +141,6 @@ export function Pricing() {
   const handleModelClick = useCallback((modelName: string) => {
     setSelectedModelName(modelName)
   }, [])
-  const sourceDescription = {
-    official: t('浏览 CodeGo 官方维护的模型、价格和可用分组。'),
-    third_party: t('比较第三方渠道的模型覆盖、倍率和真实可用率。'),
-  }[sourceView]
-
   if (pricing.isLoading) {
     return (
       <PublicLayout showMainContainer={false}>
@@ -157,7 +152,7 @@ export function Pricing() {
   }
 
   return (
-    <PublicLayout showMainContainer={false}>
+    <PublicLayout showMainContainer={false} headerProps={{ className: 'demo-reference-header' }}>
       <SiteSeo
         title={pricingSeo.title}
         description={pricingSeo.description}
@@ -165,19 +160,12 @@ export function Pricing() {
         canonicalPath={pricingSeo.path}
         ogType='website'
       />
-      <PageTransition className='public-topbar-spacer mx-auto w-full max-w-[1800px] px-3 pb-8 sm:px-6 sm:pb-10 xl:px-8'>
-        <div className='mx-auto max-w-7xl space-y-4 sm:space-y-5'>
-          <header className='border-border bg-card grid gap-5 rounded-lg border p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end'>
+      <PageTransition className='demo-models-page'>
+        <div className='wrap'>
+          <header className='mhead'>
             <div>
-              <p className='text-muted-foreground mb-3 text-sm font-medium'>
-                {t('模型目录与路由')}
-              </p>
-              <h1 className='text-foreground max-w-3xl text-4xl leading-tight font-semibold tracking-[0] sm:text-5xl'>
-                {t('Model Square')}
-              </h1>
-              <p className='text-muted-foreground mt-4 max-w-2xl text-base leading-7'>
-                {sourceDescription}
-              </p>
+              <div className='kick'><span>D·01</span> MODEL PLAZA</div>
+              <h1>模型广场，<em>皆有价签</em>。</h1>
               <SearchBar
                 value={filters.searchInput}
                 onChange={filters.setSearchInput}
@@ -187,10 +175,10 @@ export function Pricing() {
                     ? t('搜索模型名称、供应商、端点或标签')
                     : t('搜索第三方模型、来源或分组')
                 }
-                className='mt-6 max-w-2xl'
+                className='model-search'
               />
             </div>
-            <div className='border-border/70 bg-background grid grid-cols-2 gap-2 rounded-lg border p-3'>
+            <div className='sum'>
               <HeaderMetric
                 value={pricing.models.length}
                 label={t('官方模型')}

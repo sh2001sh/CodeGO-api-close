@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { RefreshCcw, Search } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,7 +36,6 @@ import {
 import { useSidebarGroupStatus } from './use-sidebar-group-status'
 
 export function SidebarGroupStatusPage() {
-  const { t } = useTranslation()
   const query = useSidebarGroupStatus()
   const [source, setSource] = useState<'all' | 'official' | 'marketplace_user'>(
     'all'
@@ -76,20 +74,20 @@ export function SidebarGroupStatusPage() {
   }
 
   return (
+    <div className='demo-status-page'>
     <SectionPageLayout>
-      <SectionPageLayout.Title>{t('Group status')}</SectionPageLayout.Title>
-      <SectionPageLayout.Description>
-        查看各分组下模型的可用状态、最近请求成功率和对应时间段表现。
-      </SectionPageLayout.Description>
+      <SectionPageLayout.Title>
+        <span className='demo-status-title'>分组状态，<em>实时</em>。</span>
+      </SectionPageLayout.Title>
       <SectionPageLayout.Actions>
         <Button
           variant='outline'
           size='sm'
           render={
-            <Link to='/dashboard/$section' params={{ section: 'overview' }} />
+            <Link to='/marketplace' />
           }
         >
-          概览
+          前往分组市场
         </Button>
         <Button
           variant='outline'
@@ -193,6 +191,7 @@ export function SidebarGroupStatusPage() {
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>
+    </div>
   )
 }
 

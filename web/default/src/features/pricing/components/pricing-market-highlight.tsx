@@ -1,4 +1,3 @@
-import { Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
@@ -13,18 +12,14 @@ export interface PricingMarketHighlightProps {
 function TinyMetric(props: {
   label: string
   value: string
-  hint: string
 }) {
   return (
-    <div className='rounded-[18px] border border-border/70 bg-background/75 p-4'>
+    <div className='rounded-md border border-border/70 bg-background/75 p-4'>
       <div className='text-[11px] font-semibold tracking-[0.14em] text-muted-foreground'>
         {props.label}
       </div>
       <div className='mt-2 text-2xl font-semibold tabular-nums text-foreground'>
         {props.value}
-      </div>
-      <div className='mt-1 text-xs leading-5 text-muted-foreground'>
-        {props.hint}
       </div>
     </div>
   )
@@ -45,7 +40,6 @@ export function PricingMarketHighlight(props: PricingMarketHighlightProps) {
     >
       <div className='flex flex-wrap items-center gap-2'>
         <Badge className='gap-1.5 rounded-full bg-primary/12 px-2.5 text-primary hover:bg-primary/12'>
-          <Sparkles className='size-3.5' />
           当前分组概览
         </Badge>
         {props.activeGroupLabel && (
@@ -59,23 +53,16 @@ export function PricingMarketHighlight(props: PricingMarketHighlightProps) {
         <TinyMetric
           label='当前可用'
           value={props.totalCount.toString()}
-          hint='当前公开模型广场中可查看的模型数量。'
         />
         <TinyMetric
           label='免费模型'
           value={props.freeCount.toString()}
-          hint='按当前分组倍率为 0 的规则自动识别。'
         />
         <TinyMetric
           label='筛选后免费'
-          value={props.visibleFreeCount.toString()}
-          hint='应用当前筛选和搜索后仍可直接使用的免费模型。'
+          value={`${props.visibleFreeCount} · 免费率 ${freeRatio}%`}
         />
       </div>
-
-      <p className='text-muted-foreground text-sm leading-7'>
-        当前分组下，免费可用模型约占公开模型目录的 {freeRatio}%。
-      </p>
     </section>
   )
 }

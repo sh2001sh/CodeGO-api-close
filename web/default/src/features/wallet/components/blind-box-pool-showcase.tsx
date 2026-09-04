@@ -54,6 +54,11 @@ export function BlindBoxPoolShowcase(props: {
   const grouped = groupTiersByRewardType(props.tiers || props.data?.tiers || [])
   const hiddenProbability = props.data?.subscription_prize_probability || 0
   const hiddenTitle = props.data?.subscription_plan_title || 'Lite 月卡'
+  const maxProbability = Math.max(
+    hiddenProbability,
+    ...(props.tiers || props.data?.tiers || []).map((tier) => tier.probability),
+    0.0001
+  )
 
   return (
     <section className='codego-panel overflow-hidden'>
@@ -73,6 +78,7 @@ export function BlindBoxPoolShowcase(props: {
             <PoolRow
               label={hiddenTitle}
               probability={hiddenProbability}
+              maxProbability={maxProbability}
               rarity='legendary'
               reduced={reduced}
             />
@@ -82,7 +88,12 @@ export function BlindBoxPoolShowcase(props: {
         {grouped.credit.length > 0 ? (
           <PoolGroup title='通用额度'>
             {grouped.credit.map((tier) => (
-              <TierRow key={tier.name} tier={tier} reduced={reduced} />
+              <TierRow
+                key={tier.name}
+                tier={tier}
+                maxProbability={maxProbability}
+                reduced={reduced}
+              />
             ))}
           </PoolGroup>
         ) : null}
@@ -90,7 +101,12 @@ export function BlindBoxPoolShowcase(props: {
         {grouped.props.length > 0 ? (
           <PoolGroup title='道具'>
             {grouped.props.map((tier) => (
-              <TierRow key={tier.name} tier={tier} reduced={reduced} />
+              <TierRow
+                key={tier.name}
+                tier={tier}
+                maxProbability={maxProbability}
+                reduced={reduced}
+              />
             ))}
           </PoolGroup>
         ) : null}
@@ -115,11 +131,12 @@ function PoolGroup(props: { title: string; children: React.ReactNode }) {
   )
 }
 
-function TierRow(props: { tier: BlindBoxTier; reduced: boolean }) {
+function TierRow(props: { tier: BlindBoxTier; maxProbability: number; reduced: boolean }) {
   return (
     <PoolRow
       label={formatTierAmount(props.tier)}
       probability={props.tier.probability}
+      maxProbability={props.maxProbability}
       rarity={classifyTier(props.tier)}
       note={props.tier.name}
       reduced={props.reduced}
@@ -130,11 +147,16 @@ function TierRow(props: { tier: BlindBoxTier; reduced: boolean }) {
 function PoolRow(props: {
   label: string
   probability: number
+  maxProbability: number
   rarity: keyof typeof RARITY_RING
   note?: string
   reduced: boolean
 }) {
   const badge = RARITY_BADGE[props.rarity]
+  const barWidth = Math.max(
+    2,
+    Math.min(100, (props.probability / props.maxProbability) * 100)
+  )
 
   return (
     <motion.div
@@ -175,16 +197,18 @@ function PoolRow(props: {
             {badge.label}
           </span>
         ) : null}
-        <div className='hidden h-[3px] w-24 overflow-hidden bg-muted sm:block'>
+        <div className='hidden h-[4px] w-28 overflow-hidden rounded-full bg-muted sm:block'>
           <motion.div
             className={cn(
-              'h-full',
-              props.rarity === 'common' ? 'bg-foreground/25' : 'bg-primary'
+              'h-full rounded-full',
+              props.rarity === 'legendary'
+                ? 'bg-warning'
+                : props.rarity === 'epic'
+                  ? 'bg-primary'
+                  : 'bg-foreground/25'
             )}
             initial={props.reduced ? false : { width: 0 }}
-            animate={{
-              width: `${Math.min(100, Math.max(2, props.probability * 100))}%`,
-            }}
+            animate={{ width: `${barWidth}%` }}
             transition={{ duration: 0.6, ease: EASE_OUT_QUINT }}
           />
         </div>

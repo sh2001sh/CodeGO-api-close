@@ -128,9 +128,6 @@ function TopicNavCard(props: {
         <div className='text-foreground text-sm font-semibold'>
           {props.title}
         </div>
-        <div className='text-muted-foreground mt-1 text-sm leading-6'>
-          {props.description}
-        </div>
       </a>
     )
   }
@@ -139,9 +136,6 @@ function TopicNavCard(props: {
     <Link to={props.href} className={className}>
       <div className='text-foreground text-sm font-semibold'>
         {props.title}
-      </div>
-      <div className='text-muted-foreground mt-1 text-sm leading-6'>
-        {props.description}
       </div>
     </Link>
   )
@@ -157,9 +151,6 @@ function TopicSlugCard(props: {
     <>
       <div className='text-foreground text-sm font-semibold'>
         {props.title}
-      </div>
-      <div className='text-muted-foreground mt-1 text-sm leading-6'>
-        {props.description}
       </div>
     </>
   )
@@ -200,9 +191,6 @@ function TopicHero(props: {
       <h1 className='text-foreground mt-5 max-w-5xl text-[2.25rem] font-semibold tracking-[-0.03em] sm:text-5xl'>
         {props.title}
       </h1>
-      <p className='text-muted-foreground mt-4 max-w-4xl text-[15px] leading-8'>
-        {props.description}
-      </p>
       {props.meta && props.meta.length > 0 && (
         <div className='mt-5 flex flex-wrap gap-2'>
           {props.meta.map((item) => (
@@ -237,11 +225,6 @@ function SectionHeading(props: { kicker: string; title: string; description?: st
       <h2 className='text-foreground mt-3 text-[1.85rem] font-semibold tracking-[-0.02em]'>
         {props.title}
       </h2>
-      {props.description ? (
-        <p className='text-muted-foreground mt-3 max-w-[72ch] text-[15px] leading-8'>
-          {props.description}
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -259,9 +242,6 @@ function TopicSidebar(props: {
         <div className='text-foreground mt-3 text-base font-semibold'>
           {props.navTitle}
         </div>
-        <div className='text-muted-foreground mt-2 text-[13px] leading-6'>
-          {props.navDescription}
-        </div>
         <div className='mt-4 space-y-2'>{props.navItems}</div>
         {props.extraItems ? (
           <div className='border-border/70 mt-5 border-t pt-5'>
@@ -275,21 +255,6 @@ function TopicSidebar(props: {
 
 function TopicRightRail(props: { children: React.ReactNode }) {
   return <aside className='space-y-5'>{props.children}</aside>
-}
-
-function TopicBulletList(props: { items: string[] }) {
-  return (
-    <ul className='mt-4 space-y-3'>
-      {props.items.map((item) => (
-        <li
-          key={item}
-          className='text-muted-foreground relative pl-4 text-sm leading-7 before:absolute before:top-2.5 before:left-0 before:size-1.5 before:rounded-full before:bg-primary'
-        >
-          {item}
-        </li>
-      ))}
-    </ul>
-  )
 }
 
 export function SearchPage(props: { slug: string }) {
@@ -464,7 +429,7 @@ export function SearchPage(props: { slug: string }) {
           <TopicSurface id='overview'>
             <SectionHeading
               kicker='阅读方式'
-              title='这是专题页，不是只给搜索引擎看的占位页'
+              title='这是专题页，并非只给搜索引擎看的占位页'
               description='这一页会先解释“为什么有人会搜这个词”，再把模型、价格路径、教程入口和常见判断逻辑整理清楚。你可以先看总览，再按目录直接跳到最关心的章节。'
             />
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
@@ -473,27 +438,18 @@ export function SearchPage(props: { slug: string }) {
                 <div className='text-foreground mt-3 text-base font-semibold'>
                   先判断你要解决什么问题
                 </div>
-                <p className='text-muted-foreground mt-2 text-sm leading-7'>
-                  是找模型入口、看接入教程，还是正在比较稳定性、成本和错误处理。
-                </p>
               </div>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>02</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
                   再看这个词和 Code Go 的关系
                 </div>
-                <p className='text-muted-foreground mt-2 text-sm leading-7'>
-                  看清它对应的模型、路由方式和最短使用路径，不在关键词里绕圈。
-                </p>
               </div>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>03</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
                   最后回到模型页或教程页
                 </div>
-                <p className='text-muted-foreground mt-2 text-sm leading-7'>
-                  专题页负责解释和分流，真正下决策还是回到模型广场与教程入口。
-                </p>
               </div>
             </div>
           </TopicSurface>
@@ -513,9 +469,6 @@ export function SearchPage(props: { slug: string }) {
                   <div className='text-foreground mt-2 text-sm font-semibold'>
                     {section.heading}
                   </div>
-                  <p className='text-muted-foreground mt-1 text-sm leading-6'>
-                    {section.paragraphs[0] || page.intro}
-                  </p>
                 </a>
               ))}
             </div>
@@ -580,17 +533,6 @@ export function SearchPage(props: { slug: string }) {
                 href='/topics'
               />
             </div>
-          </TopicSurface>
-
-          <TopicSurface>
-            <div className='text-primary text-[12px] font-semibold'>本页定位</div>
-            <TopicBulletList
-              items={[
-                '承接搜索进入后的第一轮解释，而不是只做标题占位。',
-                '帮助你快速判断这个词在实际接入流程里的位置。',
-                '把首页、模型页、教程页和专题页串成同一条阅读链路。',
-              ]}
-            />
           </TopicSurface>
 
           <TopicSurface>
@@ -689,7 +631,7 @@ export function SearchTopicsIndex() {
             <SectionHeading
               kicker='总览'
               title='先把词义、模型和下一步路径理顺'
-              description='这个入口页的目标不是堆满 SEO 关键词，而是让从搜索直接进入的用户先看懂：这些词各自代表什么、适合去哪一页继续看，以及怎么最快完成配置与选择。'
+              description='这个入口页的目标并非堆满 SEO 关键词，而是让从搜索直接进入的用户先看懂：这些词各自代表什么、适合去哪一页继续看，以及怎么最快完成配置与选择。'
             />
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
               <div className='app-subtle-panel p-5'>
@@ -697,27 +639,18 @@ export function SearchTopicsIndex() {
                 <div className='text-foreground mt-3 text-base font-semibold'>
                   先看核心入口专题
                 </div>
-                <p className='text-muted-foreground mt-2 text-sm leading-7'>
-                  如果你搜的是 Codex API、Claude Code API、Codex 中转、Claude 中转，先从核心入口看起。
-                </p>
               </div>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>02</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
                   再按教程或排障分流
                 </div>
-                <p className='text-muted-foreground mt-2 text-sm leading-7'>
-                  需要接入、配置、怎么用，就去教程；需要比较和排查，就去比较与排障。
-                </p>
               </div>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>03</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
                   最后回到模型页或教程页
                 </div>
-                <p className='text-muted-foreground mt-2 text-sm leading-7'>
-                  专题页负责解释搜索词，真正做模型选择和接入时还是回到模型广场与指南页。
-                </p>
               </div>
             </div>
           </TopicSurface>
@@ -725,7 +658,7 @@ export function SearchTopicsIndex() {
           <TopicSurface id='path'>
             <SectionHeading
               kicker='进入路径'
-              title='按搜索意图进入，而不是逐个点开试'
+              title='按搜索意图进入，而并非逐个点开试'
             />
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
               <a
@@ -736,9 +669,6 @@ export function SearchTopicsIndex() {
                 <div className='text-foreground mt-2 text-sm font-semibold'>
                   核心入口
                 </div>
-                <p className='text-muted-foreground mt-1 text-sm leading-6'>
-                  先看主搜索词和对应的产品入口，适合第一次判断模型与路由方式。
-                </p>
               </a>
               <a
                 href='#group-2'
@@ -748,9 +678,6 @@ export function SearchTopicsIndex() {
                 <div className='text-foreground mt-2 text-sm font-semibold'>
                   接入教程
                 </div>
-                <p className='text-muted-foreground mt-1 text-sm leading-6'>
-                  看怎么接、怎么配、怎么用，把接入流程一次理顺。
-                </p>
               </a>
               <a
                 href='#group-3'
@@ -760,9 +687,6 @@ export function SearchTopicsIndex() {
                 <div className='text-foreground mt-2 text-sm font-semibold'>
                   比较与排障
                 </div>
-                <p className='text-muted-foreground mt-1 text-sm leading-6'>
-                  如果你正在比较、排错或判断稳定性，直接去问题导向专题。
-                </p>
               </a>
             </div>
           </TopicSurface>
@@ -785,9 +709,6 @@ export function SearchTopicsIndex() {
                     <div className='text-foreground text-base font-semibold'>
                       {item.title}
                     </div>
-                    <p className='text-muted-foreground mt-2 text-sm leading-7'>
-                      {item.description}
-                    </p>
                   </Link>
                 ))}
               </div>
@@ -815,17 +736,6 @@ export function SearchTopicsIndex() {
                 href='/'
               />
             </div>
-          </TopicSurface>
-
-          <TopicSurface>
-            <div className='text-primary text-[12px] font-semibold'>为什么先看专题页</div>
-            <TopicBulletList
-              items={[
-                '把零散搜索词整理成可阅读的入口结构。',
-                '让用户在模型、教程、排障之间快速分流。',
-                '避免进入首页后还要重新判断该点哪里。',
-              ]}
-            />
           </TopicSurface>
 
           <TopicSurface>

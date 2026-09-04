@@ -1,27 +1,42 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import {
-  Activity,
-  BadgeCheck,
   Box,
-  Command,
+  Cable,
+  Clover,
   Egg,
-  FileText,
-  Images,
-  Gem,
-  MessageSquare,
+  FlaskConical,
+  Gauge,
+  Gift,
+  KeyRound,
   Package,
-  Radio,
-  ShieldCheck,
-  Store,
-  RefreshCcw,
+  ReceiptText,
   ScrollText,
   Settings,
-  Sparkles,
+  ShieldCheck,
+  Store,
   Ticket,
   User,
+  UserPlus,
   Users,
-  LibraryBig,
-  ReceiptText,
-  ChartNoAxesCombined,
+  UsersRound,
+  Wallet,
 } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -34,76 +49,45 @@ export function buildSidebarData(t: TFunction): SidebarData {
       {
         id: WORKSPACE_IDS.DEFAULT,
         name: '',
-        logo: Command,
+        logo: Gauge,
         plan: '',
       },
     ],
     navGroups: [
       {
-        id: 'chat',
-        title: t('Chat'),
-        items: [
-          {
-            title: t('AI chat'),
-            url: '/playground',
-            icon: MessageSquare,
-          },
-          {
-            title: t('Image workspace'),
-            url: '/images',
-            icon: Images,
-          },
-          {
-            title: t('Presets'),
-            icon: FileText,
-            type: 'chat-presets',
-          },
-        ],
-      },
-      {
-        id: 'general',
-        title: t('General'),
+        id: 'use',
+        title: t('使用'),
         items: [
           {
             title: t('Overview'),
             url: '/dashboard/overview',
-            icon: Activity,
-          },
-          {
-            title: t('分组状态'),
-            url: '/group-status',
-            icon: ChartNoAxesCombined,
-          },
-          {
-            title: t('分组市场'),
-            url: '/marketplace',
-            icon: Store,
-          },
-          {
-            title: t('Model analytics'),
-            url: '/dashboard/models',
-            icon: Activity,
+            icon: Gauge,
           },
           {
             title: t('API keys'),
             url: '/keys',
-            icon: BadgeCheck,
+            icon: KeyRound,
           },
           {
             title: t('Usage logs'),
             url: '/usage-logs/common',
-            icon: FileText,
+            icon: ScrollText,
+          },
+          {
+            title: t('调试'),
+            url: '/playground',
+            icon: FlaskConical,
           },
         ],
       },
       {
-        id: 'personal',
-        title: t('Personal'),
+        id: 'assets',
+        title: t('资产'),
         items: [
           {
-            title: t('Blind box'),
-            url: '/blind-box',
-            icon: Ticket,
+            title: t('Wallet'),
+            url: '/wallet',
+            icon: Wallet,
           },
           {
             title: t('Plans'),
@@ -111,43 +95,55 @@ export function buildSidebarData(t: TFunction): SidebarData {
             icon: Package,
           },
           {
-            title: t('Wallet'),
-            url: '/wallet',
-            icon: Gem,
+            title: t('Blind box'),
+            url: '/blind-box',
+            icon: Gift,
           },
+        ],
+      },
+      {
+        id: 'personal',
+        title: t('个人'),
+        items: [
           {
             title: t('Profile'),
             url: '/profile',
             icon: User,
           },
+        ],
+      },
+      {
+        id: 'more',
+        title: t('更多'),
+        items: [
           {
-            title: t('额度与权益'),
-            icon: Gem,
+            title: t('更多'),
+            icon: UserPlus,
             items: [
-              {
-                title: '电子发票',
-                url: '/invoices',
-                icon: ReceiptText,
-              },
-              {
-                title: t('Collective benefit plan'),
-                url: '/group-buy',
-                icon: Users,
-              },
               {
                 title: t('Daily Lucky Number'),
                 url: '/daily-lucky-number',
-                icon: Sparkles,
-              },
-              {
-                title: t('Invites'),
-                url: '/invite-rewards',
-                icon: RefreshCcw,
+                icon: Clover,
               },
               {
                 title: t('Community resources'),
                 url: '/community-resources',
-                icon: LibraryBig,
+                icon: Users,
+              },
+              {
+                title: t('Invites'),
+                url: '/invite-rewards',
+                icon: UserPlus,
+              },
+              {
+                title: t('Collective benefit plan'),
+                url: '/group-buy',
+                icon: UsersRound,
+              },
+              {
+                title: '电子发票',
+                url: '/invoices',
+                icon: ReceiptText,
               },
             ],
           },
@@ -160,7 +156,12 @@ export function buildSidebarData(t: TFunction): SidebarData {
           {
             title: t('Channels'),
             url: '/channels',
-            icon: Radio,
+            icon: Cable,
+          },
+          {
+            title: t('分组市场'),
+            url: '/marketplace',
+            icon: Store,
           },
           {
             title: t('管理工具'),
@@ -198,7 +199,7 @@ export function buildSidebarData(t: TFunction): SidebarData {
                 url: '/subscriptions#daily-lucky-admin',
                 activeUrls: ['/subscriptions'],
                 configUrls: ['/daily-lucky-admin'],
-                icon: Sparkles,
+                icon: Clover,
               },
               {
                 title: t('System settings'),

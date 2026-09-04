@@ -64,7 +64,12 @@ export function createUserQuotaColumns(t: TFunction): ColumnDef<User>[] {
         return (
           <Tooltip>
             <TooltipTrigger
-              render={<div className='w-[150px] cursor-help space-y-1' />}
+              render={
+                <button
+                  type='button'
+                  className='w-[150px] cursor-help space-y-1 text-left'
+                />
+              }
             >
               <div className='flex justify-between text-xs'>
                 <span className='font-medium tabular-nums'>

@@ -110,7 +110,10 @@ func UpdateRoutePool(ownerUserID int, poolID string, req RoutePoolUpdateRequest)
 			return nil, errors.New("路由池包含不可用或无权访问的分组")
 		}
 	}
-	config := normalizeAutoRoutePoolConfig(req.Config)
+	config := routePoolConfig(pool)
+	if req.Config != nil {
+		config = normalizeAutoRoutePoolConfig(req.Config)
+	}
 	name := strings.TrimSpace(req.Name)
 	if name != "" {
 		if len([]rune(name)) > 64 {

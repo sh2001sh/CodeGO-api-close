@@ -1,11 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import {
-  ArrowRight,
-  BookOpenText,
-  Compass,
-  FolderKanban,
-  ShieldAlert,
-} from 'lucide-react'
+import { ArrowRight, Compass } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
 import { MOTION_TRANSITION } from '@/lib/motion'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
@@ -71,9 +65,6 @@ function GuideSectionBlock(props: { section: (typeof guideSections)[number] }) {
             <h2 className='text-foreground text-2xl font-semibold tracking-tight'>
               {section.title}
             </h2>
-            <p className='text-muted-foreground text-sm leading-7'>
-              {section.summary}
-            </p>
           </div>
 
           {section.steps && section.steps.length > 0 ? (
@@ -99,19 +90,6 @@ function GuideSectionBlock(props: { section: (typeof guideSections)[number] }) {
             />
           ) : null}
 
-          {section.notes && section.notes.length > 0 ? (
-            <div className='border-primary/20 bg-primary/6 rounded-xl border px-5 py-4'>
-              <div className='text-primary mb-3 flex items-center gap-2 text-sm font-semibold'>
-                <ShieldAlert className='size-4' />
-                说明
-              </div>
-              <ul className='text-foreground/80 space-y-2 text-sm leading-7'>
-                {section.notes.map((note, index) => (
-                  <li key={`${section.id}-note-${index}`}>{note}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </div>
 
         <div className='space-y-5'>
@@ -125,9 +103,6 @@ function GuideSectionBlock(props: { section: (typeof guideSections)[number] }) {
                   loading='lazy'
                 />
               </div>
-              <figcaption className='text-muted-foreground text-sm leading-6'>
-                {image.caption}
-              </figcaption>
             </figure>
           ))}
         </div>
@@ -150,17 +125,10 @@ export function Guide() {
           <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,color-mix(in_oklch,var(--primary)_10%,transparent),transparent)]' />
           <div className='mx-auto flex max-w-7xl flex-col gap-8 lg:flex-row lg:items-end lg:justify-between'>
             <div className='max-w-3xl space-y-4'>
-              <div className='border-primary/20 bg-primary/8 text-primary inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold'>
-                <BookOpenText className='size-3.5' />
-                {guideSeo.eyebrow}
-              </div>
               <div className='space-y-3'>
                 <h1 className='text-foreground text-4xl font-semibold tracking-tight md:text-5xl'>
                   {guideSeo.h1}
                 </h1>
-                <p className='text-muted-foreground max-w-2xl text-base leading-8 md:text-lg'>
-                  {guideSeo.intro}
-                </p>
               </div>
             </div>
 
@@ -171,22 +139,6 @@ export function Guide() {
                 </div>
                 <div className='mt-2 text-2xl font-semibold'>
                   {guideSections.length}
-                </div>
-              </div>
-              <div className='overview-soft-card px-4 py-4'>
-                <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  说明范围
-                </div>
-                <div className='mt-2 text-sm leading-6 font-medium'>
-                  从首页到钱包
-                </div>
-              </div>
-              <div className='overview-soft-card px-4 py-4'>
-                <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  玩法文档
-                </div>
-                <div className='mt-2 text-sm leading-6 font-medium'>
-                  宠物、盲盒、套餐
                 </div>
               </div>
             </div>
@@ -219,16 +171,6 @@ export function Guide() {
                     ))}
                   </ul>
                 </nav>
-
-                <div className='border-border/60 border-t pt-4 text-sm leading-6'>
-                  <div className='mb-2 flex items-center gap-2 font-medium'>
-                    <FolderKanban className='size-4' />
-                    你会看到什么
-                  </div>
-                  <p className='text-muted-foreground'>
-                    这里把套餐、盲盒、宠物和钱包入口分别说明，方便你直接开始使用。
-                  </p>
-                </div>
 
                 <div className='flex flex-col gap-2 pt-1'>
                   <Button className='w-full' render={<Link to='/sign-up' />}>

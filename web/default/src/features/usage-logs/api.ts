@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import type { UsageLog } from './data/schema'
 import { buildQueryParams } from './lib/utils'
 import type {
   GetLogsParams,
@@ -75,6 +76,31 @@ export const getAllLogs = (params: GetLogsParams = {}) =>
 export const getUserLogs = (
   params: Omit<GetLogsParams, 'username' | 'channel'> = {}
 ) => fetchLogs('/api/log', params, false)
+
+export async function getAllUserLogs(
+  params: Omit<GetLogsParams, 'username' | 'channel' | 'p' | 'page_size'> = {}
+): Promise<UsageLog[]> {
+  const pageSize = 100
+  const first = await getUserLogs({ ...params, p: 1, page_size: pageSize })
+  if (!first.success || !first.data) {
+    throw new Error(first.message || '用量记录加载失败')
+  }
+
+  const items = [...(first.data.items as UsageLog[])]
+  const pageCount = Math.ceil(first.data.total / pageSize)
+  for (let page = 2; page <= pageCount; page += 1) {
+    const response = await getUserLogs({
+      ...params,
+      p: page,
+      page_size: pageSize,
+    })
+    if (!response.success || !response.data) {
+      throw new Error(response.message || `用量记录第 ${page} 页加载失败`)
+    }
+    items.push(...(response.data.items as UsageLog[]))
+  }
+  return items
+}
 
 export const getLogStats = (params: GetLogStatsParams = {}) =>
   fetchLogStats('/api/log', params, true)

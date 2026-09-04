@@ -27,8 +27,8 @@ export function MarketSurface(props: {
     ? new Date(props.query.dataUpdatedAt).toLocaleTimeString()
     : '--'
   return (
-    <section className='border-border bg-card overflow-hidden rounded-lg border'>
-      <div className='flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5'>
+    <section className='demo-market-surface'>
+      <div className='market-headline'>
         <div>
           <h3 className='text-sm font-semibold'>
             {props.ranking ? t('质量排行榜') : t('渠道目录')}
@@ -57,26 +57,7 @@ export function MarketSurface(props: {
           </Button>
         </div>
       </div>
-      {props.ranking && (
-        <div className='border-border bg-primary/[0.05] border-y px-4 py-3 text-xs leading-5'>
-          <span className='text-foreground'>
-            {t(
-              '榜单使用 Wilson 可靠性修正，并综合 TTFT、总延迟、TPS 与倍率；小样本渠道会继续观测，不参与正式名次。'
-            )}
-          </span>
-        </div>
-      )}
-      <div className='border-border bg-muted/25 border-b px-4 py-2 sm:px-5'>
-        <p className='text-muted-foreground/75 text-[11px] leading-5'>
-          <span className='text-muted-foreground font-medium'>
-            {t('第三方市场分组免责声明')}
-          </span>
-          {t(
-            '市场中的分组由用户提交并由平台提供路由管理，不代表官方服务或官方授权。平台不保证第三方分组的安全性、合法性、可用性、稳定性、模型能力或数据处理方式，请自行评估渠道来源、凭据风险和使用结果；因第三方分组导致的服务中断、数据或隐私风险、额度损失由使用者自行承担。'
-          )}
-        </p>
-      </div>
-      <div className='border-border border-b px-4 sm:px-5'>
+      <div className='market-source-tabs'>
         <Tabs
           value={props.filters.source || 'all'}
           onValueChange={(value) =>
@@ -109,15 +90,25 @@ export function MarketSurface(props: {
         filters={props.filters}
         onChange={props.updateFilters}
       />
-      {!props.ranking && <RoutePoolWorkspace compact activePoolID={activePoolID} onActivePoolChange={setActivePoolID} />}
-      <MarketplaceGroupList
-        groups={props.query.data?.items ?? []}
-        loading={props.query.isLoading}
-        error={props.query.isError && !props.query.data}
-        routePoolEnabled={!props.ranking}
-        routePoolID={activePoolID}
-        onRetry={() => void props.query.refetch()}
-      />
+      <div className='cols'>
+        <MarketplaceGroupList
+          groups={props.query.data?.items ?? []}
+          loading={props.query.isLoading}
+          error={props.query.isError && !props.query.data}
+          routePoolEnabled={!props.ranking}
+          routePoolID={activePoolID}
+          onRetry={() => void props.query.refetch()}
+        />
+        {!props.ranking && (
+          <aside className='poolpanel'>
+            <RoutePoolWorkspace
+              compact
+              activePoolID={activePoolID}
+              onActivePoolChange={setActivePoolID}
+            />
+          </aside>
+        )}
+      </div>
       <div className='border-border bg-muted/15 flex items-center justify-between border-t px-4 py-3'>
         <span className='text-muted-foreground text-xs'>
           {t('第 {{page}} / {{pages}} 页', {

@@ -249,9 +249,6 @@ export function PricingSidebar(props: PricingSidebarProps) {
       <div className='mb-2.5 flex items-center justify-between gap-2'>
         <div>
           <h2 className='text-foreground text-sm font-semibold'>{t('Filter')}</h2>
-          <p className='text-muted-foreground mt-1 text-xs leading-5'>
-            {t('Refine models by provider, group, type, and tags.')}
-          </p>
         </div>
         <Button
           type='button'

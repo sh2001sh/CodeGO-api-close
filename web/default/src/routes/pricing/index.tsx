@@ -21,7 +21,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
 import { getModuleAccess, getModuleAccessFromStatus } from '@/lib/nav-modules'
 import { statusQueryOptions } from '@/hooks/use-status'
-import { Pricing } from '@/features/pricing'
+import { DawnPlaza } from '@/features/dawn/plaza'
 
 const pricingSearchSchema = z.object({
   search: z.string().optional(),
@@ -61,5 +61,5 @@ export const Route = createFileRoute('/pricing/')({
       }
     }
   },
-  component: Pricing,
+  component: DawnPlaza,
 })

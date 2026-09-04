@@ -173,8 +173,7 @@ export function SubscriptionClaudeConversionCard(
         </div>
       ) : (
         <>
-          <div className='grid gap-2 sm:grid-cols-2'>
-            {eligibleSubscriptions.map((item) => {
+          <div className='grid gap-2 sm:grid-cols-2'>            {eligibleSubscriptions.map((item) => {
               const itemPreview = item.subscription.conversion_preview
               const meta = props.planTitles?.[item.subscription.plan_id]
               const selectedItem = item.subscription.id === selectedId
@@ -293,22 +292,24 @@ export function SubscriptionClaudeConversionCard(
         </>
       )}
 
-      <Button
-        type='button'
-        className='w-full'
-        disabled={!selected || submitting}
-        onClick={() => setConfirmOpen(true)}
-      >
-        {submitting ? <Loader2 className='animate-spin' /> : <ArrowRightLeft />}
-        {convertsAllRemaining
-          ? t('Convert all remaining, receive {{amount}}', {
-              amount: formatQuota(estimatedQuota),
-            })
-          : t('Convert {{percent}}%, receive {{amount}}', {
-              percent: selectedConversionPercent,
-              amount: formatQuota(estimatedQuota),
-            })}
-      </Button>
+      {eligibleSubscriptions.length > 0 && (
+        <Button
+          type='button'
+          className='w-full'
+          disabled={!selected || submitting}
+          onClick={() => setConfirmOpen(true)}
+        >
+          {submitting ? <Loader2 className='animate-spin' /> : <ArrowRightLeft />}
+          {convertsAllRemaining
+            ? t('Convert all remaining, receive {{amount}}', {
+                amount: formatQuota(estimatedQuota),
+              })
+            : t('Convert {{percent}}%, receive {{amount}}', {
+                percent: selectedConversionPercent,
+                amount: formatQuota(estimatedQuota),
+              })}
+        </Button>
+      )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

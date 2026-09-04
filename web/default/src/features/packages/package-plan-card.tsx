@@ -86,7 +86,7 @@ export function PackagePlanCard(props: {
   return (
     <Card
       className={cn(
-        'border-border bg-card relative h-full overflow-hidden transition-colors duration-200 hover:border-primary/40',
+        'border-border bg-card hover:border-primary/40 relative h-full overflow-hidden transition-colors duration-200',
         isRecommended && 'border-primary bg-primary/[0.035] border-2'
       )}
     >
@@ -152,11 +152,6 @@ export function PackagePlanCard(props: {
                 </div>
                 <div className='text-primary mt-0.5 font-medium'>
                   {t(monthlyPassBenefit)}
-                </div>
-                <div className='text-muted-foreground mt-0.5 leading-relaxed'>
-                  {t(
-                    '无需切换分组；实际扣月卡额度时额外乘 0.1，余额扣费仍按原倍率。'
-                  )}
                 </div>
               </div>
             </div>
@@ -229,6 +224,13 @@ export function PackagePlanCard(props: {
                 </div>
               ))}
             </div>
+            {monthlyPassBenefit && (
+              <div className='text-muted-foreground text-xs leading-relaxed'>
+                {t(
+                  '无需切换分组；实际扣月卡额度时额外乘 0.1，余额扣费仍按原倍率。'
+                )}
+              </div>
+            )}
             <div className='text-muted-foreground text-xs leading-relaxed'>
               {groupBuyEnabled
                 ? t(
@@ -241,9 +243,13 @@ export function PackagePlanCard(props: {
           </div>
         )}
 
-        <button
+        <Button
+          type='button'
+          variant='outline'
+          size='sm'
           onClick={() => setShowDetails(!showDetails)}
-          className='text-primary hover:text-primary/80 -mx-4 flex items-center justify-center gap-1 py-1 text-xs font-medium transition-colors'
+          className='w-full'
+          aria-expanded={showDetails}
         >
           {t(showDetails ? 'Hide details' : 'View details')}
           <ChevronDown
@@ -252,7 +258,7 @@ export function PackagePlanCard(props: {
               showDetails && 'rotate-180'
             )}
           />
-        </button>
+        </Button>
 
         <div className='mt-auto space-y-2'>
           {canFuel && props.currentSubscription && props.onFuel && (

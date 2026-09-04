@@ -77,10 +77,10 @@ export function BalanceBoxModeButton(props: {
       aria-selected={props.active}
       onClick={props.onClick}
       className={cn(
-        'focus-visible:ring-ring flex min-h-10 items-center justify-center gap-2 rounded-md px-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
+        'focus-visible:ring-ring flex min-h-10 items-center justify-center gap-2 rounded-md border px-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
         props.active
-          ? 'bg-background text-teal-700 shadow-sm dark:text-teal-300'
-          : 'text-muted-foreground hover:text-foreground'
+          ? 'border-primary bg-primary/10 text-primary'
+          : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
       )}
     >
       <Icon className='size-4' />
@@ -91,7 +91,7 @@ export function BalanceBoxModeButton(props: {
 
 export function BalanceBoxMetric(props: { label: string; value: string }) {
   return (
-    <div className='min-w-0 px-4 py-3 sm:px-5 sm:py-4 first:pl-0'>
+    <div className='min-w-0 px-4 py-3 first:pl-0 sm:px-5 sm:py-4'>
       <div className='codego-stat-label'>{props.label}</div>
       <div className='text-foreground mt-2 text-xl leading-none font-semibold tabular-nums'>
         {props.value}

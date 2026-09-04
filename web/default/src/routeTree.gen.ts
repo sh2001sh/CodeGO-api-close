@@ -17,8 +17,10 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TopicsIndexRouteImport } from './routes/topics/index'
+import { Route as StatusIndexRouteImport } from './routes/status/index'
 import { Route as SetupIndexRouteImport } from './routes/setup/index'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
+import { Route as MarketIndexRouteImport } from './routes/market/index'
 import { Route as GuideIndexRouteImport } from './routes/guide/index'
 import { Route as DownloadIndexRouteImport } from './routes/download/index'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
@@ -124,6 +126,11 @@ const TopicsIndexRoute = TopicsIndexRouteImport.update({
   path: '/topics/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatusIndexRoute = StatusIndexRouteImport.update({
+  id: '/status/',
+  path: '/status/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SetupIndexRoute = SetupIndexRouteImport.update({
   id: '/setup/',
   path: '/setup/',
@@ -132,6 +139,11 @@ const SetupIndexRoute = SetupIndexRouteImport.update({
 const PricingIndexRoute = PricingIndexRouteImport.update({
   id: '/pricing/',
   path: '/pricing/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarketIndexRoute = MarketIndexRouteImport.update({
+  id: '/market/',
+  path: '/market/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GuideIndexRoute = GuideIndexRouteImport.update({
@@ -533,8 +545,10 @@ export interface FileRoutesByFullPath {
   '/about/': typeof AboutIndexRoute
   '/download/': typeof DownloadIndexRoute
   '/guide/': typeof GuideIndexRoute
+  '/market/': typeof MarketIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/setup/': typeof SetupIndexRoute
+  '/status/': typeof StatusIndexRoute
   '/topics/': typeof TopicsIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
@@ -608,8 +622,10 @@ export interface FileRoutesByTo {
   '/about': typeof AboutIndexRoute
   '/download': typeof DownloadIndexRoute
   '/guide': typeof GuideIndexRoute
+  '/market': typeof MarketIndexRoute
   '/pricing': typeof PricingIndexRoute
   '/setup': typeof SetupIndexRoute
+  '/status': typeof StatusIndexRoute
   '/topics': typeof TopicsIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
@@ -687,8 +703,10 @@ export interface FileRoutesById {
   '/about/': typeof AboutIndexRoute
   '/download/': typeof DownloadIndexRoute
   '/guide/': typeof GuideIndexRoute
+  '/market/': typeof MarketIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/setup/': typeof SetupIndexRoute
+  '/status/': typeof StatusIndexRoute
   '/topics/': typeof TopicsIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
@@ -765,8 +783,10 @@ export interface FileRouteTypes {
     | '/about/'
     | '/download/'
     | '/guide/'
+    | '/market/'
     | '/pricing/'
     | '/setup/'
+    | '/status/'
     | '/topics/'
     | '/user/reset'
     | '/chat/$chatId'
@@ -840,8 +860,10 @@ export interface FileRouteTypes {
     | '/about'
     | '/download'
     | '/guide'
+    | '/market'
     | '/pricing'
     | '/setup'
+    | '/status'
     | '/topics'
     | '/user/reset'
     | '/chat/$chatId'
@@ -918,8 +940,10 @@ export interface FileRouteTypes {
     | '/about/'
     | '/download/'
     | '/guide/'
+    | '/market/'
     | '/pricing/'
     | '/setup/'
+    | '/status/'
     | '/topics/'
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
@@ -989,8 +1013,10 @@ export interface RootRouteChildren {
   AboutIndexRoute: typeof AboutIndexRoute
   DownloadIndexRoute: typeof DownloadIndexRoute
   GuideIndexRoute: typeof GuideIndexRoute
+  MarketIndexRoute: typeof MarketIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
   SetupIndexRoute: typeof SetupIndexRoute
+  StatusIndexRoute: typeof StatusIndexRoute
   TopicsIndexRoute: typeof TopicsIndexRoute
   PricingModelIdIndexRoute: typeof PricingModelIdIndexRoute
 }
@@ -1053,6 +1079,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TopicsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/status/': {
+      id: '/status/'
+      path: '/status'
+      fullPath: '/status/'
+      preLoaderRoute: typeof StatusIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/setup/': {
       id: '/setup/'
       path: '/setup'
@@ -1065,6 +1098,13 @@ declare module '@tanstack/react-router' {
       path: '/pricing'
       fullPath: '/pricing/'
       preLoaderRoute: typeof PricingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/market/': {
+      id: '/market/'
+      path: '/market'
+      fullPath: '/market/'
+      preLoaderRoute: typeof MarketIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/guide/': {
@@ -1707,8 +1747,10 @@ const rootRouteChildren: RootRouteChildren = {
   AboutIndexRoute: AboutIndexRoute,
   DownloadIndexRoute: DownloadIndexRoute,
   GuideIndexRoute: GuideIndexRoute,
+  MarketIndexRoute: MarketIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   SetupIndexRoute: SetupIndexRoute,
+  StatusIndexRoute: StatusIndexRoute,
   TopicsIndexRoute: TopicsIndexRoute,
   PricingModelIdIndexRoute: PricingModelIdIndexRoute,
 }

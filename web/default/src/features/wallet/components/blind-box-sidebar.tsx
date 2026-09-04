@@ -92,7 +92,7 @@ export function BlindBoxSidebar(props: {
           ) : (
             <div className='codego-empty mt-3 justify-start py-4 text-left'>
               <span aria-hidden className='bg-border block h-5 w-px' />
-              NO RECORDS
+              暂无记录
             </div>
           )}
           <Button
@@ -171,7 +171,7 @@ function PropsPreview(props: {
       ) : (
         <div className='codego-empty mt-2 justify-center py-6'>
           <span aria-hidden className='bg-border block h-6 w-px' />
-          NO PROPS
+          暂无道具
         </div>
       )}
 

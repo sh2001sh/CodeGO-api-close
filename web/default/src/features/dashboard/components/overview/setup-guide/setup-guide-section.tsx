@@ -45,7 +45,7 @@ function CompactSetupStrip(props: {
                 </span>
               </div>
               <div className='text-muted-foreground mt-1 text-sm'>
-                下一步：{props.nextStep.title}。{props.nextStep.description}
+                下一步：{props.nextStep.title}
               </div>
             </div>
           </div>
@@ -78,16 +78,9 @@ function ExpandedSetupGuide(props: { guide: SetupGuideState }) {
             <div className='flex min-w-0 flex-col gap-5'>
               <div className='flex flex-wrap items-start justify-between gap-3'>
                 <div className='flex max-w-2xl flex-col gap-1'>
-                  <div className='text-muted-foreground flex items-center gap-2 text-xs font-medium'>
-                    <ListChecks className='size-3.5' aria-hidden='true' />
-                    快速接入
-                  </div>
                   <h3 className='text-xl font-semibold tracking-tight sm:text-2xl'>
-                    三步跑通调用，剩下的交给概览页帮你管理
+                    接入流程
                   </h3>
-                  <p className='text-muted-foreground max-w-xl text-sm leading-relaxed'>
-                    这里保留完整接入引导，但默认不再占据首页主体。你可以随时展开查看。
-                  </p>
                 </div>
                 <div className='flex flex-wrap items-center gap-2'>
                   <Button
@@ -128,11 +121,8 @@ function ExpandedSetupGuide(props: { guide: SetupGuideState }) {
       <CardStaggerItem className='app-page-shell h-full p-4 shadow-none sm:p-5'>
         <div className='flex h-full flex-col gap-4'>
           <div className='flex flex-col gap-1'>
-            <div className='text-muted-foreground text-xs font-medium'>
-              常用入口
-            </div>
             <h3 className='text-lg font-semibold tracking-tight'>
-              从这里快速进入高频操作
+              常用入口
             </h3>
           </div>
           <div className='grid gap-2'>

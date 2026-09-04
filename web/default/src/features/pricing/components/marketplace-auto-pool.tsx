@@ -134,11 +134,6 @@ function AutoPoolHeader(props: { selectedCount: number }) {
         <Route className='text-primary size-5' />
         <h2 className='font-semibold'>{t('我的全局 Auto 路由池')}</h2>
       </div>
-      <p className='text-muted-foreground mt-2 max-w-2xl text-sm leading-6'>
-        {t(
-          '在你选择的官方与第三方分组中路由，并按保存的优先级依次尝试；初始推荐顺序综合倍率与保守可用率。'
-        )}
-      </p>
       <div className='mt-4 flex flex-wrap gap-2'>
         <Badge variant='outline'>
           {t('分组')}: {props.selectedCount}
@@ -169,9 +164,6 @@ function SelectedRoutes(props: {
             <h3 className='text-sm font-semibold'>{t('已选择路由')}</h3>
             <Badge variant='secondary'>{props.routes.length}</Badge>
           </div>
-          <p className='text-muted-foreground mt-1 text-xs'>
-            {t('请求按以下顺序尝试；使用箭头调整优先级。')}
-          </p>
         </div>
         <SavePoolButton {...props} />
       </div>
@@ -250,9 +242,6 @@ function CandidateRoutes(props: {
             <h3 className='text-sm font-semibold'>{t('待选择项')}</h3>
             <Badge variant='outline'>{state.visible.length}</Badge>
           </div>
-          <p className='text-muted-foreground mt-1 text-xs'>
-            {t('按来源浏览分组；选择后会追加到上方路由列表末尾。')}
-          </p>
         </div>
         <AutoPoolSourceTabs
           value={state.source}

@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute } from '@tanstack/react-router'
-import { BrandHome } from '@/features/brand/brand-home'
+import { DawnHome } from '@/features/dawn/home'
 
 export const Route = createFileRoute('/')({
-  component: BrandHome,
+  component: DawnHome,
 })

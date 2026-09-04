@@ -14,14 +14,12 @@ export function PricingSourceNavigation(props: {
       value: 'official',
       icon: Building2,
       label: t('CodeGo 官方'),
-      description: t('官方维护的模型与分组'),
       count: props.officialCount,
     },
     {
       value: 'third_party',
       icon: Network,
       label: t('第三方分组'),
-      description: t('由渠道主提供，使用通用额度'),
       count: props.thirdPartyCount,
     },
   ] as const
@@ -45,9 +43,6 @@ export function PricingSourceNavigation(props: {
                 <span className='text-muted-foreground text-xs tabular-nums'>
                   {item.count}
                 </span>
-              </span>
-              <span className='text-muted-foreground mt-0.5 block truncate text-xs font-normal'>
-                {item.description}
               </span>
             </span>
           </TabsTrigger>

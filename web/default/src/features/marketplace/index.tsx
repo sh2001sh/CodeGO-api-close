@@ -10,8 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { acceptMarketplaceGroupInvite } from './api'
 import { MarketSurface } from './components/market-surface'
-import { MarketplaceAudienceGuide } from './components/marketplace-audience-guide'
-import { MarketplaceOverview } from './components/marketplace-overview'
 import { TokenBindPanel } from './components/token-bind-panel'
 import { useMarketplaceGroups } from './hooks'
 import type { GroupFilters } from './types'
@@ -104,13 +102,9 @@ export function MarketplacePage() {
   }
 
   return (
+    <div className='demo-market-page'>
     <SectionPageLayout>
       <SectionPageLayout.Title>{t('分组市场')}</SectionPageLayout.Title>
-      <SectionPageLayout.Description>
-        {t(
-          '在公开分组中找到可靠的模型线路，也可以把自己的渠道接入市场并持续经营。'
-        )}
-      </SectionPageLayout.Description>
       <SectionPageLayout.Actions>
         {isAdmin && (
           <Button variant='outline' size='sm' onClick={() => setTab('admin')}>
@@ -139,24 +133,6 @@ export function MarketplacePage() {
               <TokenBindPanel groupId={acceptedInvite.groupId} compact />
             </section>
           )}
-          <MarketplaceAudienceGuide
-            onBrowse={() => {
-              setTab('market')
-              setShowChannelForm(false)
-            }}
-            onManage={() => {
-              setTab('mine')
-              setShowChannelForm(false)
-            }}
-          />
-          <MarketplaceOverview
-            total={groups.data?.total ?? 0}
-            ranked={groups.data?.ranked_count ?? 0}
-            multiplier={groups.data?.highlights.cheapest?.multiplier}
-            updating={groups.isFetching}
-            onBrowse={() => setTab('market')}
-            onInsights={() => setTab('routes')}
-          />
           <Tabs
             value={tab}
             onValueChange={(value) => {
@@ -245,6 +221,7 @@ export function MarketplacePage() {
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>
+    </div>
   )
 }
 

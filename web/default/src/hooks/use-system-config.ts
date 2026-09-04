@@ -108,6 +108,9 @@ async function fetchSystemConfig(): Promise<Partial<SystemConfig>> {
   return mapStatusDataToConfig(data)
 }
 
+/** 并发 autoLoad 去重：同一次页面加载只请求一次 /api/status。 */
+let inflightConfigLoad: Promise<void> | null = null
+
 // Preload image and return cleanup function
 function preloadImage(
   src: string,
@@ -151,16 +154,22 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
 
   // Load config from backend
   const loadConfig = useCallback(async () => {
-    try {
-      setLoading(true)
-      const newConfig = await fetchSystemConfig()
-      setConfig(newConfig)
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to load system config:', error)
-    } finally {
-      setLoading(false)
-    }
+    if (inflightConfigLoad) return inflightConfigLoad
+    const run = (async () => {
+      try {
+        setLoading(true)
+        const newConfig = await fetchSystemConfig()
+        setConfig(newConfig)
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to load system config:', error)
+      } finally {
+        setLoading(false)
+        inflightConfigLoad = null
+      }
+    })()
+    inflightConfigLoad = run
+    return run
   }, [setConfig, setLoading])
 
   useEffect(() => {

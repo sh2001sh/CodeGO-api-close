@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
@@ -49,6 +50,16 @@ func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	require.Equal(t, "stable", bindings[1].GroupID)
 	require.Equal(t, "cheap", view.Items[0].GroupID)
 	require.Equal(t, 1, view.Items[0].Priority)
+}
+
+func TestAutoRoutePoolRejectsMoreThanTenGroups(t *testing.T) {
+	groupIDs := make([]string, 11)
+	for i := range groupIDs {
+		groupIDs[i] = fmt.Sprintf("group-%d", i+1)
+	}
+
+	_, err := ReplaceAutoRoutePool(20, AutoRoutePoolUpdateRequest{GroupIDs: groupIDs})
+	require.EqualError(t, err, "全局 Auto 路由池最多可添加 10 个分组")
 }
 
 func TestAutoRoutePoolFiltersGroupsAboveTokenMultiplierLimit(t *testing.T) {

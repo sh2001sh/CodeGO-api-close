@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
-import { BookOpenText, ChevronDown, Crown, RefreshCw } from 'lucide-react'
+import { Activity, BookOpenText, ChevronDown, Crown, RefreshCw, Wallet } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,7 @@ import type {
   UserSubscriptionRecord,
 } from '@/features/subscriptions/types'
 import { getEpayMethods } from '@/features/wallet/components/subscription-plans-card'
-import { WalletStatsCard } from '@/features/wallet/components/wallet-stats-card'
+import { ResetOpportunityEntryCard } from '@/features/wallet/components/reset-opportunity-entry-card'
 import { WalletWorkspaceShell } from '@/features/wallet/components/wallet-workspace-shell'
 import { useWalletWorkspace } from '@/features/wallet/hooks/use-wallet-workspace'
 import { CurrentPackagePanel, PlanZone } from './components'
@@ -53,6 +53,11 @@ const PLAN_ORDER = [
   '50刀日卡',
   '100刀日卡',
 ] as const
+
+function formatQuotaDisplay(quota: number | undefined): string {
+  const usd = (quota ?? 0) / 500_000
+  return `$${usd.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
 
 function planRank(record: PlanRecord) {
   const title = record.plan?.title || ''
@@ -172,6 +177,43 @@ export function PackagesPage() {
         main={
           <CardStaggerContainer className='space-y-4'>
             <CardStaggerItem>
+              <div className='border-border bg-card grid grid-cols-2 gap-4 rounded-lg border px-4 py-3.5 sm:grid-cols-4 sm:px-5'>
+                <div className='min-w-0'>
+                  <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+                    <Wallet className='text-primary size-3.5' />
+                    通用余额
+                  </div>
+                  <div className='text-foreground mt-1 truncate text-2xl font-bold tabular-nums'>
+                    {formatQuotaDisplay(workspace.user?.quota)}
+                  </div>
+                </div>
+                <div className='min-w-0'>
+                  <div className='text-muted-foreground text-xs'>账本累计消耗</div>
+                  <div className='text-foreground mt-1 truncate text-lg font-semibold tabular-nums'>
+                    {formatQuotaDisplay(workspace.user?.used_quota)}
+                  </div>
+                </div>
+                <div className='min-w-0'>
+                  <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+                    <Activity className='text-primary size-3.5' />
+                    API 请求
+                  </div>
+                  <div className='text-foreground mt-1 truncate text-lg font-semibold tabular-nums'>
+                    {(workspace.user?.request_count ?? 0).toLocaleString()}
+                  </div>
+                </div>
+                <div className='min-w-0'>
+                  <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
+                    <Crown className='text-primary size-3.5' />
+                    生效订阅
+                  </div>
+                  <div className='text-foreground mt-1 truncate text-lg font-semibold tabular-nums'>
+                    {workspace.subscriptionData?.subscriptions?.length ?? 0}
+                  </div>
+                </div>
+              </div>
+            </CardStaggerItem>
+            <CardStaggerItem>
               <CurrentPackagePanel
                 subscriptions={workspace.subscriptionData?.subscriptions || []}
                 plans={workspace.publicPlans}
@@ -256,14 +298,22 @@ export function PackagesPage() {
           </CardStaggerContainer>
         }
         sidebar={
-          <WalletStatsCard
-            user={workspace.user}
-            plans={workspace.publicPlans}
-            loading={workspace.userLoading}
-            subscriptionData={workspace.subscriptionData}
-            subscriptionLoading={workspace.subscriptionLoading}
-            onSubscriptionRefresh={workspace.fetchSubscriptionData}
-          />
+          <aside className='space-y-4 lg:sticky lg:top-4'>
+            <ResetOpportunityEntryCard
+              resetOpportunity={
+                workspace.subscriptionData?.reset_opportunity ?? {
+                  available_count: 0,
+                  earned_total: 0,
+                  used_total: 0,
+                  used_this_month: false,
+                  current_month: '',
+                  last_used_month: '',
+                }
+              }
+              compact
+              title='套餐额度刷新'
+            />
+          </aside>
         }
       />
 

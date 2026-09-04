@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com.
 */
-import { X } from 'lucide-react'
 import { useEffect, type ReactNode } from 'react'
+import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 
 export function DawnModal(props: {
@@ -46,7 +46,7 @@ export function DawnModal(props: {
   if (!open) return null
 
   return createPortal(
-    <>
+    <div className='dawn dawn-portal'>
       <div className='mask' onClick={onClose} aria-hidden />
       <div
         className='modal'
@@ -54,11 +54,13 @@ export function DawnModal(props: {
         aria-modal='true'
         aria-label={label ?? 'dialog'}
       >
-        <div className={`box${variant === 'narrow' ? ' narrow' : ''}${variant === 'plain' ? ' plain' : ''}`}>
+        <div
+          className={`box${variant === 'narrow' ? ' narrow' : ''}${variant === 'plain' ? ' plain' : ''}`}
+        >
           {children}
         </div>
       </div>
-    </>,
+    </div>,
     document.body
   )
 }

@@ -5,9 +5,11 @@ import (
 	"strings"
 
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 )
 
 func TokenGroupValue(groupID string) string {
@@ -77,19 +79,49 @@ func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBi
 }
 
 func BindTokenToMarketplaceGroup(consumerUserID, tokenID int, groupID string) error {
+	_, err := BindTokenToMarketplaceGroupResult(consumerUserID, tokenID, groupID)
+	return err
+}
+
+// BindTokenToMarketplaceGroupResult binds an existing token, or creates one
+// for the current user when tokenID is zero.
+func BindTokenToMarketplaceGroupResult(consumerUserID, tokenID int, groupID string) (int, error) {
 	groupValue := TokenGroupValue(groupID)
 	binding, err := ResolveTokenGroupBinding(groupValue, consumerUserID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if binding == nil {
-		return errors.New("市场分组不存在")
+		return 0, errors.New("市场分组不存在")
 	}
-	token, err := identityapp.GetUserToken(consumerUserID, tokenID)
-	if err != nil {
-		return err
+	var token *identityschema.Token
+	if tokenID > 0 {
+		token, err = identityapp.GetUserToken(consumerUserID, tokenID)
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		key, generateErr := platformruntime.GenerateKey()
+		if generateErr != nil {
+			return 0, generateErr
+		}
+		var group marketplaceschema.Group
+		if err := platformdb.DB.First(&group, "id = ?", groupID).Error; err != nil {
+			return 0, err
+		}
+		token = &identityschema.Token{
+			UserId: consumerUserID, Name: "市场分组 - " + group.SystemDisplayName,
+			Key: key, CreatedTime: platformruntime.GetTimestamp(), ExpiredTime: -1,
+			UnlimitedQuota: true,
+		}
 	}
 	token.Group = groupValue
 	token.CrossGroupRetry = false
-	return identityapp.UpdateUserToken(token)
+	if tokenID > 0 {
+		return token.Id, identityapp.UpdateUserToken(token)
+	}
+	if err := identityapp.InsertUserToken(token); err != nil {
+		return 0, err
+	}
+	return token.Id, nil
 }

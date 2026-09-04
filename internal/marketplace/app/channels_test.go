@@ -14,6 +14,38 @@ func TestMarketplaceCodexUsesBearerCompatibleChannel(t *testing.T) {
 	require.Equal(t, constant.ChannelTypeOpenAI, providerChannelType("codex"))
 }
 
+func TestPauseAdminChannelKeepsEarnings(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.Settlement{},
+	))
+	channel := marketplaceschema.Channel{
+		ID: "pause-earnings-channel", OwnerUserID: 42, ProviderType: "openai_compatible",
+		BaseURLCiphertext: "encrypted-url", CredentialCiphertext: "encrypted-key",
+		Status: marketplacedomain.LifecycleActive,
+	}
+	group := autoRouteTestGroup("pause-earnings-group", channel.ID, channel.OwnerUserID, 1)
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Settlement{
+		{RequestID: "pause-pending", GroupID: group.ID, OwnerUserID: 42, OwnerNetAmount: 100, Status: "pending"},
+		{RequestID: "pause-released", GroupID: group.ID, OwnerUserID: 42, OwnerNetAmount: 200, Status: "released"},
+	}).Error)
+
+	require.NoError(t, PauseAdminChannel(channel.ID, true))
+	var pending, released marketplaceschema.Settlement
+	require.NoError(t, db.Where("request_id = ?", "pause-pending").First(&pending).Error)
+	require.NoError(t, db.Where("request_id = ?", "pause-released").First(&released).Error)
+	require.Equal(t, "pending", pending.Status)
+	require.Equal(t, "released", released.Status)
+	require.NoError(t, db.First(&channel, "id = ?", channel.ID).Error)
+	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
+	require.Equal(t, marketplacedomain.LifecycleSuspended, channel.Status)
+	require.Equal(t, marketplacedomain.LifecycleSuspended, group.LifecycleStatus)
+}
+
 func TestListOwnerChannelsIncludesIncomeSummary(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(

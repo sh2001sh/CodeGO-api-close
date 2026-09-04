@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const maxAutoRoutePoolMembers = 50
+const maxAutoRoutePoolMembers = 10
 const officialAutoRoutePrefix = "official:"
 
 var ErrAutoRouteModelUnavailable = errors.New("Auto 路由池没有支持该模型的可用分组")
@@ -111,7 +111,7 @@ func channelUserBlocked(channelID string, userID int) bool {
 func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*AutoRoutePoolView, error) {
 	groupIDs := normalizeAutoRouteGroupIDs(req.GroupIDs)
 	if len(groupIDs) > maxAutoRoutePoolMembers {
-		return nil, errors.New("全局 Auto 路由池最多可添加 50 个分组")
+		return nil, errors.New("全局 Auto 路由池最多可添加 10 个分组")
 	}
 	groups, _, err := loadAutoRouteGroups(ownerUserID)
 	if err != nil {

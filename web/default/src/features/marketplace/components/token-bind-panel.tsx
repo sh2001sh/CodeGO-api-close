@@ -14,10 +14,10 @@ export function TokenBindPanel(props: { groupId: string; compact?: boolean }) {
   const [tokenId, setTokenId] = useState(0)
 
   const bind = async () => {
-    if (!tokenId) return
     try {
-      await mutations.bind.mutateAsync({ groupId: props.groupId, tokenId })
-      toast.success(t('Token 已绑定到市场分组'))
+      const result = await mutations.bind.mutateAsync({ groupId: props.groupId, tokenId })
+      toast.success(tokenId ? t('Token 已绑定到市场分组') : t('已创建并绑定新的市场分组 Key'))
+      if (!tokenId && result?.token_id) setTokenId(result.token_id)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('绑定失败'))
     }
@@ -51,12 +51,12 @@ export function TokenBindPanel(props: { groupId: string; compact?: boolean }) {
         <Button
           size='sm'
           onClick={() => void bind()}
-          disabled={!tokenId || mutations.bind.isPending}
+          disabled={mutations.bind.isPending || tokens.isLoading}
         >
           {mutations.bind.isPending && (
             <Loader2 className='size-4 animate-spin' />
           )}
-          {t('确认绑定')}
+          {tokenId ? t('确认绑定') : t('创建并绑定')}
         </Button>
         <Button variant='outline' size='sm' render={<Link to='/keys' />}>
           {t('新建此分组 Key')}

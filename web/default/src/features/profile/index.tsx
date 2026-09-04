@@ -84,6 +84,10 @@ export function Profile() {
                   onProfileUpdate={refreshProfile}
                 />
                 <ProfileSecurityCard profile={profile} loading={loading} />
+                <div className='grid items-start gap-4 sm:grid-cols-2 sm:gap-5'>
+                  <PasskeyCard loading={loading} />
+                  <TwoFACard loading={loading} />
+                </div>
               </div>
 
               <div className='space-y-4 sm:space-y-6 xl:sticky xl:top-6'>
@@ -95,8 +99,6 @@ export function Profile() {
                   />
                 )}
                 {canConfigureSidebar && <SidebarModulesCard />}
-                <PasskeyCard loading={loading} />
-                <TwoFACard loading={loading} />
               </div>
             </div>
           </CardStaggerItem>

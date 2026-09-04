@@ -384,8 +384,8 @@ func BindToken(c *gin.Context) {
 		httpapi.ApiError(c, err)
 		return
 	}
-	err := marketplaceapp.BindTokenToMarketplaceGroup(c.GetInt("id"), req.TokenID, c.Param("id"))
-	respond(c, gin.H{"token_id": req.TokenID, "group_id": c.Param("id")}, err)
+	tokenID, err := marketplaceapp.BindTokenToMarketplaceGroupResult(c.GetInt("id"), req.TokenID, c.Param("id"))
+	respond(c, gin.H{"token_id": tokenID, "group_id": c.Param("id")}, err)
 }
 
 func CreateGroupInvite(c *gin.Context) {

@@ -93,7 +93,7 @@ export function PublicHeader(props: PublicHeaderProps) {
     logo: systemLogo,
     loading,
     logoLoaded,
-  } = useSystemConfig()
+  } = useSystemConfig({ autoLoad: true })
   const notifications = useNotifications()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname

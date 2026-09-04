@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
 import { AnimatedOutlet } from '@/components/page-transition'
@@ -32,13 +32,23 @@ interface DawnConsoleLayoutProps {
  * 声明的 --dawn-* 变量与 .dawn-console-* 样式同时生效。
  */
 export function DawnConsoleLayout({ children }: DawnConsoleLayoutProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   return (
     <LayoutProvider>
       <SearchProvider>
         <div className='dawn dawn-console-layout'>
-          <DawnConsoleTopNav />
+          <DawnConsoleTopNav onMenuClick={() => setSidebarOpen(true)} />
           <div className='dawn-console-body'>
-            <DawnConsoleSidebar />
+            <DawnConsoleSidebar
+              open={sidebarOpen}
+              onNavigate={() => setSidebarOpen(false)}
+            />
+            <div
+              className={`dawn-console-scrim${sidebarOpen ? ' show' : ''}`}
+              onClick={() => setSidebarOpen(false)}
+              aria-hidden
+            />
             <div className='dawn-console-main @container/content'>
               {children ?? <AnimatedOutlet />}
             </div>

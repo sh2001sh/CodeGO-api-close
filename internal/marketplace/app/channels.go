@@ -9,7 +9,6 @@ import (
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
-	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
@@ -251,11 +250,6 @@ func PauseAdminChannel(channelID string, paused bool) error {
 		status = marketplacedomain.LifecycleSuspended
 	}
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if paused && channel.Status != marketplacedomain.LifecycleSuspended {
-			if _, err := marketplacesettlement.ForfeitChannelPendingTx(tx, channel.ID); err != nil {
-				return err
-			}
-		}
 		if err := tx.Model(channel).Update("status", status).Error; err != nil {
 			return err
 		}

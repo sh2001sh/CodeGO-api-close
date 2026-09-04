@@ -3,6 +3,7 @@ package settlement
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -231,16 +232,22 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 
 // ForfeitChannelPending clears frozen pending earnings when a channel is shut down.
 func ForfeitChannelPending(channelID string) (ReclaimResult, error) {
-	if forfeitHook == nil {
-		return ReclaimResult{}, errors.New("marketplace settlement forfeit hook is not registered")
-	}
 	var groupID string
 	if err := platformdb.DB.Model(&marketplaceschema.Group{}).Where("channel_id = ?", channelID).Pluck("id", &groupID).Error; err != nil {
 		return ReclaimResult{}, err
 	}
 	var settlements []marketplaceschema.Settlement
 	if err := platformdb.DB.Where("group_id = ? AND status = ?", groupID, statusPending).Find(&settlements).Error; err != nil {
+		if isMissingSettlementTable(err) {
+			return ReclaimResult{}, nil
+		}
 		return ReclaimResult{}, err
+	}
+	if len(settlements) == 0 {
+		return ReclaimResult{}, nil
+	}
+	if forfeitHook == nil {
+		return ReclaimResult{}, errors.New("marketplace settlement forfeit hook is not registered")
 	}
 	result := ReclaimResult{}
 	for _, item := range settlements {
@@ -254,16 +261,22 @@ func ForfeitChannelPending(channelID string) (ReclaimResult, error) {
 }
 
 func ForfeitChannelPendingTx(tx *gorm.DB, channelID string) (ReclaimResult, error) {
-	if forfeitHook == nil {
-		return ReclaimResult{}, errors.New("marketplace settlement forfeit hook is not registered")
-	}
 	var groupID string
 	if err := tx.Model(&marketplaceschema.Group{}).Where("channel_id = ?", channelID).Pluck("id", &groupID).Error; err != nil {
 		return ReclaimResult{}, err
 	}
 	var settlements []marketplaceschema.Settlement
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("group_id = ? AND status = ?", groupID, statusPending).Find(&settlements).Error; err != nil {
+		if isMissingSettlementTable(err) {
+			return ReclaimResult{}, nil
+		}
 		return ReclaimResult{}, err
+	}
+	if len(settlements) == 0 {
+		return ReclaimResult{}, nil
+	}
+	if forfeitHook == nil {
+		return ReclaimResult{}, errors.New("marketplace settlement forfeit hook is not registered")
 	}
 	result := ReclaimResult{}
 	for _, item := range settlements {
@@ -274,6 +287,11 @@ func ForfeitChannelPendingTx(tx *gorm.DB, channelID string) (ReclaimResult, erro
 		result.Amount += item.OwnerNetAmount
 	}
 	return result, nil
+}
+
+func isMissingSettlementTable(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table") || strings.Contains(message, "does not exist")
 }
 
 func forfeitOne(settlementID string) error {

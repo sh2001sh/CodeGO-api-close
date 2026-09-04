@@ -72,13 +72,13 @@ export function PlanZone(props: {
         <span className='codego-stat-label sr-only'>{props.description}</span>
       </div>
       {props.loading ? (
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-          {Array.from({ length: 4 }).map((_, index) => (
+        <div className='grid gap-4 sm:grid-cols-2'>
+          {Array.from({ length: 2 }).map((_, index) => (
             <Skeleton key={index} className='h-[420px]' />
           ))}
         </div>
       ) : props.plans.length > 0 ? (
-        <StaggerContainer className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+        <StaggerContainer className='grid gap-4 sm:grid-cols-2'>
           {props.plans.map((record) => (
             <StaggerItem key={record.plan.id}>
               <PackagePlanCard

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com.
 */
-import { BadgeCheck, CircleDashed } from 'lucide-react'
+import { BadgeCheck, ChevronDown, CircleDashed } from 'lucide-react'
 import type { MarketplaceGroup } from '@/features/marketplace/types'
 import { compactCount, pct, sec, successRatePercent } from '../lib/format'
 
@@ -31,11 +31,16 @@ export function MarketGroupCard(props: {
   onToggleSelect: () => void
   onToggleExpand: () => void
   onUse: (group: MarketplaceGroup) => void
+  onBindKey: (group: MarketplaceGroup) => void
   onTest: (group: MarketplaceGroup) => void
   onBargain: (group: MarketplaceGroup) => void
   onJoinPool: (group: MarketplaceGroup) => void
   priceInfo?: { input: string; output: string; freeCount: number }
   modelPrices?: Record<string, string>
+  modelFees?: Record<
+    string,
+    { mode: 'free' | 'percall' | 'token'; input: string; output: string; cache: string }
+  >
 }) {
   const { group } = props
   const hasTraffic = group.request_count > 0
@@ -56,6 +61,14 @@ export function MarketGroupCard(props: {
     >
       <div className='halo' />
       <div className='top'>
+        {group.rank > 0 && (
+          <span
+            className={`rank-badge${group.rank <= 3 ? ' top' : ''}`}
+            title={`质量排行榜第 ${group.rank} 名`}
+          >
+            {String(group.rank).padStart(2, '0')}
+          </span>
+        )}
         <span className='src'>{group.source_label}</span>
         <div>
           <h3>{group.system_display_name}</h3>
@@ -101,7 +114,7 @@ export function MarketGroupCard(props: {
           <span>倍率</span>
         </div>
         <div
-          className={`m${hasTraffic && group.success_rate >= 0.99 ? 'good' : ''}${hasTraffic && group.success_rate < 0.98 ? 'warn' : ''}`}
+          className={`m${hasTraffic && group.success_rate >= 0.99 ? ' good' : ''}${hasTraffic && group.success_rate < 0.98 ? ' warn' : ''}`}
         >
           <b>
             {hasTraffic ? pct(group.success_rate) : '—'}
@@ -110,7 +123,7 @@ export function MarketGroupCard(props: {
           <span>24H 成功</span>
         </div>
         <div
-          className={`m${hasTraffic && group.avg_ttft_ms > 600 ? 'warn' : ''}`}
+          className={`m${hasTraffic && group.avg_ttft_ms > 600 ? ' warn' : ''}`}
         >
           <b>
             {hasTraffic ? sec(group.avg_ttft_ms) : '—'}
@@ -140,7 +153,7 @@ export function MarketGroupCard(props: {
           <span>模型数</span>
         </div>
         <div
-          className={`m${(props.priceInfo?.freeCount ?? 0) > 0 ? 'good' : ''}`}
+          className={`m${(props.priceInfo?.freeCount ?? 0) > 0 ? ' good' : ''}`}
         >
           <b>{props.priceInfo?.freeCount ?? 0}</b>
           <span>免费模型</span>
@@ -156,7 +169,7 @@ export function MarketGroupCard(props: {
           const price = props.modelPrices?.[model]
           return (
             <span
-            className={`mtag${price === '免费' ? ' free' : ''}`}
+              className={`mtag${price === '免费' ? ' free' : ''}`}
               key={model}
             >
               {model}
@@ -164,41 +177,62 @@ export function MarketGroupCard(props: {
             </span>
           )
         })}
+        {group.models.length > 0 && (
+          <button
+            className='mtag more'
+            onClick={(event) => {
+              event.stopPropagation()
+              props.onToggleExpand()
+            }}
+          >
+            {props.expanded ? '收起明细' : `全部 ${group.models.length} 模型`}
+            <ChevronDown
+              size={11}
+              style={{
+                transform: props.expanded ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.2s',
+              }}
+            />
+          </button>
+        )}
       </div>
 
       {props.expanded && (
         <div className='mlist'>
           <div className='mh'>
             <span>模型</span>
-            <span style={{ textAlign: 'right' }}>检测</span>
-            <span style={{ textAlign: 'right' }}>延迟</span>
+            <span style={{ textAlign: 'right' }}>输入 /1M</span>
+            <span style={{ textAlign: 'right' }}>输出 /1M</span>
           </div>
-          {(verification.length
-            ? verification
-            : group.models.map((model) => ({
+          {group.models.map((model) => {
+            const result =
+              verification.find((item) => item.model === model) ?? {
                 model,
                 status: '',
                 latency_ms: 0,
                 listed: true,
                 tested_at: '',
-              }))
-          ).map((result) => {
-            const passed = result.status === 'passed'
+              }
+            return (() => {
             const failed = result.status === 'failed'
+            const fee = props.modelFees?.[result.model]
+            const free = fee?.mode === 'free'
             return (
               <div className='mr' key={result.model}>
-                <span className='mn'>{result.model}</span>
-                <span
-                  className='mp'
-                  style={failed ? { color: 'var(--dawn-bad)' } : undefined}
-                >
-                  {passed ? '通过' : failed ? '失败' : '待检'}
+                <span className='mn'>
+                  {result.model}
+                  {free ? <i className='ftag'>免费</i> : null}
+                  {failed ? (
+                    <i className='ftag' style={{ background: 'var(--dawn-bad-bg)', color: 'var(--dawn-bad)' }}>
+                      检测失败
+                    </i>
+                  ) : null}
                 </span>
-                <span className='mp'>
-                  {result.latency_ms ? `${result.latency_ms}ms` : '—'}
-                </span>
+                <span className='mp'>{fee?.input ?? '—'}</span>
+                <span className='mp'>{fee?.output ?? '—'}</span>
               </div>
             )
+            })()
           })}
         </div>
       )}
@@ -238,6 +272,14 @@ export function MarketGroupCard(props: {
             onClick={() => props.onUse(group)}
           >
             订阅
+          </button>
+        )}
+        {lifecycleOn && props.authed && (
+          <button
+            className='btn mini'
+            onClick={() => props.onBindKey(group)}
+          >
+            绑定 Key
           </button>
         )}
         <button className='btn mini' onClick={props.onToggleExpand}>

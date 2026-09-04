@@ -45,7 +45,10 @@ interface SidebarGroupState {
  * Dawn 控制台侧栏：复用真实导航数据 + 后端 SidebarModules 权限过滤，
  * 同时保留管理员导航与聊天预设入口。
  */
-export function DawnConsoleSidebar() {
+export function DawnConsoleSidebar(props: {
+  open?: boolean
+  onNavigate?: () => void
+}) {
   const { t } = useTranslation()
   const location = useLocation()
   const userRole = useAuthStore((state) => state.auth.user?.role)
@@ -68,7 +71,12 @@ export function DawnConsoleSidebar() {
   const isActive = (item: NavItem) => checkIsActive(location.href, item)
 
   return (
-    <aside className='dawn-console-sidebar'>
+    <aside
+      className={`dawn-console-sidebar${props.open ? ' open' : ''}`}
+      onClickCapture={(event) => {
+        if ((event.target as HTMLElement).closest('a')) props.onNavigate?.()
+      }}
+    >
       {navGroups.map((group) => (
         <SidebarGroup
           key={group.id || group.title}

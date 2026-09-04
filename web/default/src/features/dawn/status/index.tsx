@@ -169,26 +169,26 @@ export function DawnStatus() {
           </div>
           <div className='cell'>
             <b className='c-ok'>{counts.ok}</b>
-            <span>
-              <i className='dot ok' style={{ width: 7, height: 7 }} /> 稳定
+            <span className='lbl'>
+              <i className='dot ok' /> 稳定
             </span>
           </div>
           <div className='cell'>
             <b className='c-warn'>{counts.warn}</b>
-            <span>
-              <i className='dot warn' style={{ width: 7, height: 7 }} /> 波动
+            <span className='lbl'>
+              <i className='dot warn' /> 波动
             </span>
           </div>
           <div className='cell'>
             <b className='c-bad'>{counts.bad}</b>
-            <span>
-              <i className='dot bad' style={{ width: 7, height: 7 }} /> 异常
+            <span className='lbl'>
+              <i className='dot bad' /> 异常
             </span>
           </div>
           <div className='cell'>
             <b style={{ color: 'var(--dawn-ink2)' }}>{counts.idle}</b>
-            <span>
-              <i className='dot idle' style={{ width: 7, height: 7 }} /> 无请求
+            <span className='lbl'>
+              <i className='dot idle' /> 无请求
             </span>
           </div>
         </div>
@@ -261,7 +261,7 @@ export function DawnStatus() {
         ) : visible.length ? (
           visible.map(({ group, st }) => (
             <div
-              className={`sgcard${openSet.has(group.id) ? 'open' : ''}`}
+              className={`sgcard${openSet.has(group.id) ? ' open' : ''}`}
               key={group.id}
             >
               <div
@@ -274,14 +274,27 @@ export function DawnStatus() {
                     toggle(group.id)
                 }}
               >
-                <span className={`dot ${st}`} />
-                <h3>{group.system_display_name}</h3>
-                <span className='src'>{group.source_label}</span>
-                {st === 'idle' && <span className='tag'>窗口内无调用</span>}
-                <span className='mini-recent' title='近期调用'>
+                <span className='sg-title'>
+                  <span className={`dot ${st}`} />
+                  <h3>{group.system_display_name}</h3>
+                  <span className='src'>{group.source_label}</span>
+                  {st === 'idle' && <span className='tag'>窗口内无调用</span>}
+                </span>
+                <span className='mini-recent'>
                   <RecentStrip group={group} />
                 </span>
-                <span className='chev'>
+                <span className='sg-meta'>
+                  <span className={`rate ${st}`}>
+                    成功率{' '}
+                    <b>
+                      {hasTraffic(group)
+                        ? `${pct(group.success_rate)}%`
+                        : '—'}
+                    </b>
+                  </span>
+                  <span className='cache'>
+                    缓存 <b>{pct(group.cache_hit_rate, 0)}%</b>
+                  </span>
                   <Link
                     className='btn mini'
                     to='/market'
@@ -290,9 +303,6 @@ export function DawnStatus() {
                     <Waypoints size={13} />
                     加入路由池
                   </Link>
-                  <span className='cache'>
-                    缓存 <b>{pct(group.cache_hit_rate, 0)}%</b>
-                  </span>
                   <ChevronDown size={16} className='cv' />
                 </span>
               </div>
@@ -384,7 +394,7 @@ export function DawnStatus() {
   )
 }
 
-/** 由 recent_request_series 渲染近期状态条。 */
+/** 由 recent_request_series 渲染近期状态条；hover 显示时段成功率与成功/失败次数。 */
 function RecentStrip({ group }: { group: MarketplaceGroup }) {
   const series = group.recent_request_series ?? []
   if (!series.length) {
@@ -402,14 +412,43 @@ function RecentStrip({ group }: { group: MarketplaceGroup }) {
               : rate >= 95
                 ? 'w'
                 : 'e'
+        const success =
+          rate == null
+            ? null
+            : Math.round((point.request_count * rate) / 100)
+        const failed =
+          success == null ? null : point.request_count - success
         return (
-          <i
-            key={point.ts}
-            className={cls}
-            title={`${rate == null ? '—' : rate.toFixed(1)}% · ${point.request_count} 次`}
-          />
+          <span className='seg' key={point.ts} tabIndex={-1}>
+            <i className={cls} />
+            <span className='tip' role='tooltip'>
+              {point.request_count === 0 || rate == null ? (
+                <>
+                  {formatSegTime(point.ts)} · 无请求
+                </>
+              ) : (
+                <>
+                  {formatSegTime(point.ts)}
+                  <br />
+                  成功率 <b>{rate.toFixed(1)}%</b>
+                  <br />
+                  成功 {success} · <span className='t-fail'>失败 {failed}</span>
+                </>
+              )}
+            </span>
+          </span>
         )
       })}
     </>
   )
+}
+
+function formatSegTime(ts: number): string {
+  const ms = ts < 1e12 ? ts * 1000 : ts
+  const date = new Date(ms)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function hasTraffic(group: MarketplaceGroup): boolean {
+  return group.request_count > 0
 }

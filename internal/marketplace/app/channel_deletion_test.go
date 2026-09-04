@@ -6,6 +6,7 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -81,6 +82,44 @@ func TestAdminCanDeleteAnotherOwnersMarketplaceChannel(t *testing.T) {
 
 	require.NoError(t, DeleteAdminChannel(channel.ID))
 	require.ErrorIs(t, db.First(&marketplaceschema.Channel{}, "id = ?", channel.ID).Error, gorm.ErrRecordNotFound)
+}
+
+func TestDeletingMarketplaceChannelForfeitsOnlyPendingEarnings(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.Settlement{},
+		&marketplaceschema.AutoRoutePoolMember{},
+		&marketplaceschema.RankingSnapshot{},
+	))
+	channel := marketplaceschema.Channel{
+		ID: "323456789012", OwnerUserID: 99, ProviderType: "anthropic",
+		BaseURLCiphertext: "encrypted-url", CredentialCiphertext: "encrypted-key",
+		Status: marketplacedomain.LifecycleActive,
+	}
+	group := autoRouteTestGroup("forfeit-delete", channel.ID, channel.OwnerUserID, 1)
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Settlement{
+		{RequestID: "forfeit-pending", GroupID: group.ID, OwnerUserID: 99, OwnerNetAmount: 125, PendingAccountID: "pending-99", Status: "pending"},
+		{RequestID: "keep-released", GroupID: group.ID, OwnerUserID: 99, OwnerNetAmount: 250, Status: "released"},
+	}).Error)
+
+	marketplacesettlement.RegisterForfeitHook(func(_ *gorm.DB, accountID string, adminID int, amount int, _ string) error {
+		require.Equal(t, "pending-99", accountID)
+		require.Equal(t, 1, adminID)
+		require.Equal(t, 125, amount)
+		return nil
+	})
+	t.Cleanup(func() { marketplacesettlement.RegisterForfeitHook(nil) })
+
+	require.NoError(t, DeleteAdminChannel(channel.ID))
+	var pending, released marketplaceschema.Settlement
+	require.NoError(t, db.Where("request_id = ?", "forfeit-pending").First(&pending).Error)
+	require.NoError(t, db.Where("request_id = ?", "keep-released").First(&released).Error)
+	require.Equal(t, "forfeited", pending.Status)
+	require.Equal(t, "released", released.Status)
 }
 
 func TestMarketplaceChannelIDIncrements(t *testing.T) {

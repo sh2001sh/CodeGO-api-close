@@ -3,6 +3,7 @@ package app
 import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -30,6 +31,9 @@ func deleteMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var current marketplaceschema.Channel
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", channel.ID).Error; err != nil {
+			return err
+		}
+		if _, err := marketplacesettlement.ForfeitChannelPendingTx(tx, current.ID); err != nil {
 			return err
 		}
 		if err := tx.Where("group_id = ?", group.ID).Delete(&marketplaceschema.AutoRoutePoolMember{}).Error; err != nil {

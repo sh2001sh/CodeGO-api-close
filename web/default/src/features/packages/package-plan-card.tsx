@@ -92,12 +92,14 @@ export function PackagePlanCard(props: {
     >
       <CardContent className='flex h-full flex-col gap-3 p-4'>
         <div className='text-center'>
-          {isRecommended && (
-            <span className='text-primary mb-2 inline-flex items-center gap-1 text-xs font-semibold'>
-              <Sparkles className='h-3.5 w-3.5' />
-              {t('Most popular')}
-            </span>
-          )}
+          <div className='mb-2 flex h-5 items-center justify-center'>
+            {isRecommended && (
+              <span className='text-primary inline-flex items-center gap-1 text-xs font-semibold'>
+                <Sparkles className='h-3.5 w-3.5' />
+                {t('Most popular')}
+              </span>
+            )}
+          </div>
           <div className='text-muted-foreground text-xs font-medium'>
             {translatePlanSubtitle(plan, t)}
           </div>

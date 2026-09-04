@@ -530,7 +530,7 @@ function UserUsageDialog(props: {
 
   const usage = useQuery({
     queryKey: ['marketplace-user-usage', channel.id],
-    queryFn: () => getMyMarketplaceUserUsage(),
+    queryFn: () => getMyMarketplaceUserUsage(channel.id),
     retry: false,
   })
 

@@ -65,7 +65,7 @@ export function WinnerFilters(props: {
 
 export function WinnerList(props: { records: LuckyPublicWin[] }) {
   return (
-    <div className='divide-border/70 grid divide-y lg:grid-cols-2 lg:divide-y-0'>
+    <div className='divide-border/70 @container grid divide-y @2xl:grid-cols-2 @2xl:divide-y-0'>
       {props.records.map((item, index) => (
         <article
           key={`${item.draw_date}-${item.lucky_suffix}-${item.matched_digits}-${index}`}

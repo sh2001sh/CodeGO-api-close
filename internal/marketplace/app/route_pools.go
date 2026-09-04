@@ -92,7 +92,7 @@ func UpdateRoutePool(ownerUserID int, poolID string, req RoutePoolUpdateRequest)
 	}
 	groupIDs := normalizeAutoRouteGroupIDs(req.GroupIDs)
 	if len(groupIDs) > maxAutoRoutePoolMembers {
-		return nil, errors.New("路由池最多可添加 50 个分组")
+		return nil, errors.New("路由池最多可添加 10 个分组")
 	}
 	groups, _, err := loadAutoRouteGroups(ownerUserID)
 	if err != nil {

@@ -250,7 +250,7 @@ export function DawnOverviewDashboard() {
             {(['24h', '7d', '30d'] as TimeRange[]).map((value) => (
               <button
                 key={value}
-                className={`rngb${range === value ? 'on' : ''}`}
+                className={`rngb${range === value ? ' on' : ''}`}
                 onClick={() => {
                   setQueryNow(Math.floor(Date.now() / 1000))
                   setRange(value)

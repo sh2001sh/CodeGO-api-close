@@ -30,50 +30,101 @@ interface ApiResponse<T = unknown> {
   data?: T
 }
 
-export async function createMarketplaceBargainRequest(input: { groupId: string; proposedMultiplier: number; reason: string }) {
-  const response = await api.post<ApiResponse>(`/api/marketplace/groups/${input.groupId}/bargain-requests`, { proposed_multiplier: input.proposedMultiplier, reason: input.reason })
+export async function createMarketplaceBargainRequest(input: {
+  groupId: string
+  proposedMultiplier: number
+  reason: string
+}) {
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/groups/${input.groupId}/bargain-requests`,
+    { proposed_multiplier: input.proposedMultiplier, reason: input.reason }
+  )
   return requireData(response.data)
 }
 
 export async function getMyMarketplaceBargainRequests(status = '') {
-  const response = await api.get<ApiResponse<MarketplaceBargainRequestList>>(`/api/marketplace/channels/mine/bargain-requests?status=${encodeURIComponent(status)}`)
+  const response = await api.get<ApiResponse<MarketplaceBargainRequestList>>(
+    `/api/marketplace/channels/mine/bargain-requests?status=${encodeURIComponent(status)}`
+  )
   return requireData(response.data)
 }
 
-export async function resolveMarketplaceBargainRequest(input: { id: string; action: 'approve' | 'reject'; resolutionNote: string }) {
-  const response = await api.post<ApiResponse>(`/api/marketplace/channels/mine/bargain-requests/${input.id}/resolve`, { action: input.action, resolution_note: input.resolutionNote })
+export async function resolveMarketplaceBargainRequest(input: {
+  id: string
+  action: 'approve' | 'reject'
+  resolutionNote: string
+}) {
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/channels/mine/bargain-requests/${input.id}/resolve`,
+    { action: input.action, resolution_note: input.resolutionNote }
+  )
   return requireData(response.data)
 }
 
-export async function getMyMarketplaceUserUsage() {
-  const response = await api.get<ApiResponse<MarketplaceOwnerUsageResult>>('/api/marketplace/channels/mine/user-usage')
+export async function getMyMarketplaceUserUsage(channelId?: string) {
+  const params = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : ''
+  const response = await api.get<ApiResponse<MarketplaceOwnerUsageResult>>(
+    `/api/marketplace/channels/mine/user-usage${params}`
+  )
   return requireData(response.data)
 }
 
-export async function setMarketplaceUserMultiplier(input: { channelId: string; userId: number; multiplier: number | null }) {
-  const response = await api.post<ApiResponse>(`/api/marketplace/channels/${input.channelId}/user-multiplier`, { user_id: input.userId, multiplier: input.multiplier })
+export async function setMarketplaceUserMultiplier(input: {
+  channelId: string
+  userId: number
+  multiplier: number | null
+}) {
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/channels/${input.channelId}/user-multiplier`,
+    { user_id: input.userId, multiplier: input.multiplier }
+  )
   return requireData(response.data)
 }
 
 export async function getMarketplaceTimeRangeMultipliers(channelId: string) {
-  const response = await api.get<ApiResponse<MarketplaceTimeRangeMultiplier[]>>(`/api/marketplace/channels/${channelId}/time-range-multipliers`)
+  const response = await api.get<ApiResponse<MarketplaceTimeRangeMultiplier[]>>(
+    `/api/marketplace/channels/${channelId}/time-range-multipliers`
+  )
   return requireData(response.data)
 }
 
-export async function createMarketplaceTimeRangeMultiplier(input: { channelId: string; startTimestamp: number; endTimestamp: number; multiplier: number; label: string }) {
-  const response = await api.post<ApiResponse<MarketplaceTimeRangeMultiplier>>(`/api/marketplace/channels/${input.channelId}/time-range-multipliers`, { start_timestamp: input.startTimestamp, end_timestamp: input.endTimestamp, multiplier: input.multiplier, label: input.label })
+export async function createMarketplaceTimeRangeMultiplier(input: {
+  channelId: string
+  startTimestamp: number
+  endTimestamp: number
+  multiplier: number
+  label: string
+}) {
+  const response = await api.post<ApiResponse<MarketplaceTimeRangeMultiplier>>(
+    `/api/marketplace/channels/${input.channelId}/time-range-multipliers`,
+    {
+      start_timestamp: input.startTimestamp,
+      end_timestamp: input.endTimestamp,
+      multiplier: input.multiplier,
+      label: input.label,
+    }
+  )
   return requireData(response.data)
 }
 
-export async function deleteMarketplaceTimeRangeMultiplier(input: { channelId: string; ruleId: string }) {
-  const response = await api.delete<ApiResponse>(`/api/marketplace/channels/${input.channelId}/time-range-multipliers/${input.ruleId}`)
+export async function deleteMarketplaceTimeRangeMultiplier(input: {
+  channelId: string
+  ruleId: string
+}) {
+  const response = await api.delete<ApiResponse>(
+    `/api/marketplace/channels/${input.channelId}/time-range-multipliers/${input.ruleId}`
+  )
   return requireData(response.data)
 }
 
 export interface MarketplaceBatchWelfareResult {
   success_count: number
   failed_count: number
-  details: Array<{ user_id: string; status: 'success' | 'failed'; error?: string }>
+  details: Array<{
+    user_id: string
+    status: 'success' | 'failed'
+    error?: string
+  }>
 }
 
 export async function sendMarketplaceBatchWelfare(input: {
@@ -255,7 +306,8 @@ export async function getMarketplaceRoutePools() {
 
 export async function createMarketplaceRoutePool(name: string) {
   const response = await api.post<ApiResponse<MarketplaceRoutePool>>(
-    '/api/marketplace/route-pools', { name }
+    '/api/marketplace/route-pools',
+    { name }
   )
   return requireData(response.data)
 }
@@ -284,7 +336,8 @@ export async function deleteMarketplaceRoutePool(id: string) {
   const response = await api.delete<ApiResponse>(
     `/api/marketplace/route-pools/${encodeURIComponent(id)}`
   )
-  if (!response.data.success) throw new Error(response.data.message || '删除路由池失败')
+  if (!response.data.success)
+    throw new Error(response.data.message || '删除路由池失败')
 }
 
 export async function startMarketplaceBatchTest(input: {
@@ -499,12 +552,13 @@ export async function setAdminMarketplaceChannelPaused(
 }
 
 export async function bindMarketplaceToken(groupId: string, tokenId: number) {
-  const response = await api.post<ApiResponse>(
+  const response = await api.post<ApiResponse<{ token_id: number; group_id: string }>>(
     `/api/marketplace/groups/${groupId}/bind-token`,
     { token_id: tokenId }
   )
   if (!response.data.success)
     throw new Error(response.data.message || '绑定失败')
+  return requireData(response.data)
 }
 
 export async function createMarketplaceGroupInvite(groupId: string) {

@@ -16,13 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import {
   Activity,
   Home,
   LogOut,
+  Menu,
   Settings,
   Store,
   TrendingUp,
@@ -44,11 +45,13 @@ const TOP_NAV_ITEMS = [
   { id: 'status', icon: Activity, label: '状态', path: '/status' },
 ]
 
-export function DawnConsoleTopNav() {
+export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
   const location = useLocation()
   const user = useAuthStore((state) => state.auth.user)
   const logout = useAuthStore((state) => state.auth.reset)
   const notifications = useNotifications()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const isAdmin = (user?.role ?? 0) >= 10
   const userId = user?.id
 
   useEffect(() => {
@@ -118,6 +121,13 @@ export function DawnConsoleTopNav() {
           <span>{normalizeSystemName()}</span>
         </Link>
 
+        <button
+          className='menu-btn'
+          aria-label='打开菜单'
+          onClick={props.onMenuClick}
+        >
+          <Menu size={18} />
+        </button>
         <span className='crumb'>CONSOLE</span>
         <span className='sp' />
 
@@ -145,23 +155,35 @@ export function DawnConsoleTopNav() {
             onClick={() => notifications.openDialog()}
           />
           <LanguageSwitcher />
-          <Link className='icon-btn' to='/system-settings/site' title='设置'>
-            <Settings size={16} />
-          </Link>
-          <div className='user-menu'>
-            <button className='user-btn'>
+          {isAdmin && (
+            <Link className='icon-btn' to='/system-settings/site' title='设置'>
+              <Settings size={16} />
+            </Link>
+          )}
+          <div
+            className={`user-menu${userMenuOpen ? ' open' : ''}`}
+            onMouseLeave={() => setUserMenuOpen(false)}
+          >
+            <button
+              className='user-btn'
+              aria-expanded={userMenuOpen}
+              aria-haspopup='true'
+              onClick={() => setUserMenuOpen((current) => !current)}
+            >
               <User size={14} />
               <span>{user?.display_name || user?.username || '用户'}</span>
             </button>
-            <div className='user-dropdown'>
+            <div className='user-dropdown' onClick={() => setUserMenuOpen(false)}>
               <Link to='/profile' className='dropdown-item'>
                 <User size={14} />
                 个人资料
               </Link>
-              <Link to='/system-settings/site' className='dropdown-item'>
-                <Settings size={14} />
-                系统设置
-              </Link>
+              {isAdmin && (
+                <Link to='/system-settings/site' className='dropdown-item'>
+                  <Settings size={14} />
+                  系统设置
+                </Link>
+              )}
               <button className='dropdown-item' onClick={handleLogout}>
                 <LogOut size={14} />
                 退出登录

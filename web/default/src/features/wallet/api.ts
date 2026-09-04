@@ -40,8 +40,6 @@ import type {
   BlindBoxSelfResponse,
   BlindBoxAmountRequest,
   BlindBoxPayRequest,
-  BlindBoxOpenRequest,
-  BlindBoxOpenResponse,
   BlindBoxOrderStatusResponse,
   BlindBoxProp,
   BlindBoxPropGift,
@@ -346,13 +344,6 @@ export async function cancelBlindBoxOrder(
   tradeNo: string
 ): Promise<ApiResponse> {
   const res = await api.post(`/api/blind-box/orders/${tradeNo}/cancel`)
-  return res.data
-}
-
-export async function openBlindBoxes(
-  request: BlindBoxOpenRequest
-): Promise<BlindBoxOpenResponse> {
-  const res = await api.post('/api/blind-box/open', request)
   return res.data
 }
 

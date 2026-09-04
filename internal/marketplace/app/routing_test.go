@@ -70,6 +70,23 @@ func TestMarketplacePrivateGroupOnlyAllowsOwner(t *testing.T) {
 	require.Equal(t, group.InternalGroupName, binding.InternalGroup)
 }
 
+func TestMarketplaceTokenBindingCreatesTokenWhenNoneSelected(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}, &identityschema.Token{}))
+	group := marketplaceschema.Group{ID: "auto-group", ChannelID: "auto-channel", OwnerUserID: 10, PublicSlug: "auto", SystemDisplayName: "自动分组", InternalGroupName: "market_auto", SourceType: marketplacedomain.SourceTypeMarketplaceUser, CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 1, LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed, Visibility: marketplacedomain.VisibilityPublic}
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: group.ChannelID, OwnerUserID: group.OwnerUserID, ProviderType: "openai_compatible", DeclaredModels: `["gpt-5"]`, BaseURLCiphertext: "url", CredentialCiphertext: "key"}).Error)
+	id, err := BindTokenToMarketplaceGroupResult(20, 0, group.ID)
+	require.NoError(t, err)
+	require.Positive(t, id)
+	var token identityschema.Token
+	require.NoError(t, db.First(&token, id).Error)
+	require.Equal(t, 20, token.UserId)
+	require.Equal(t, "market:auto-group", token.Group)
+	require.True(t, token.UnlimitedQuota)
+	require.NotEmpty(t, token.Key)
+}
+
 func openMarketplaceAppTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	originalDB := platformdb.DB

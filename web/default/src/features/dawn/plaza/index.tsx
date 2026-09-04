@@ -76,7 +76,7 @@ export function DawnPlaza() {
   const [view, setView] = useState<'table' | 'grid'>('table')
   const [vendor, setVendor] = useState('全部厂家')
   const [keyword, setKeyword] = useState('')
-  const [sort, setSort] = useState<'name' | 'price'>('name')
+  const [sort, setSort] = useState<'hot' | 'name' | 'price'>('hot')
   const [detail, setDetail] = useState<string | null>(null)
 
   const models = useMemo(
@@ -117,6 +117,13 @@ export function DawnPlaza() {
     )
     if (sort === 'price') {
       filtered.sort((a, b) => a.model_ratio - b.model_ratio)
+    } else if (sort === 'hot') {
+      const coverage = (m: (typeof filtered)[number]) =>
+        Array.isArray(m.enable_groups) ? m.enable_groups.length : 0
+      filtered.sort(
+        (a, b) =>
+          coverage(b) - coverage(a) || a.model_name.localeCompare(b.model_name)
+      )
     } else {
       filtered.sort((a, b) => a.model_name.localeCompare(b.model_name))
     }
@@ -223,9 +230,10 @@ export function DawnPlaza() {
             className='fsel'
             value={sort}
             onChange={(event) =>
-              setSort(event.target.value as 'name' | 'price')
+              setSort(event.target.value as 'hot' | 'name' | 'price')
             }
           >
+            <option value='hot'>按热度</option>
             <option value='name'>按名称</option>
             <option value='price'>按输入价</option>
           </select>
@@ -394,13 +402,13 @@ export function DawnPlaza() {
               ) : (
                 <>
                   <div
-                    className={`pc${detailModel.model_ratio === 0 ? 'free' : ''}`}
+                    className={`pc${detailModel.model_ratio === 0 ? ' free' : ''}`}
                   >
                     <b>{formatPrice(detailModel, 'input', unit)}</b>
                     <span>输入 / {unit}</span>
                   </div>
                   <div
-                    className={`pc${detailModel.model_ratio === 0 ? 'free' : ''}`}
+                    className={`pc${detailModel.model_ratio === 0 ? ' free' : ''}`}
                   >
                     <b>{formatPrice(detailModel, 'output', unit)}</b>
                     <span>输出 / {unit}</span>
@@ -601,7 +609,7 @@ function ModelRow(props: {
         <span className='ven'>{model.vendorName}</span>
         {metered && <span className='btag'>按量</span>}
       </span>
-      <span className={`price${isFree ? 'free' : ''}`}>
+      <span className={`price${isFree ? ' free' : ''}`}>
         <b>
           {metered
             ? meteredPrice(model)
@@ -611,7 +619,7 @@ function ModelRow(props: {
         </b>
         <span className='u'> /{unit}</span>
       </span>
-      <span className={`price${isFree ? 'free' : ''}`}>
+      <span className={`price${isFree ? ' free' : ''}`}>
         <b>
           {metered
             ? '按量'

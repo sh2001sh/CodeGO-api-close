@@ -22,7 +22,6 @@ import { useNavigate } from '@tanstack/react-router'
 import { Sparkles, Store, User, Waypoints } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { formatCurrencyFromUSD } from '@/lib/currency'
 import { SiteSeo } from '@/components/seo'
 import {
   acceptMarketplaceGroupInvite,
@@ -140,7 +139,7 @@ export function DawnMarket() {
   )
   const pricing = usePricingData()
 
-  const groupPrices = useMemo(() => {
+  const modelsByName = useMemo(() => {
     const models = mergePricingModels(
       pricing.models,
       pricing.pricedModelDetails
@@ -149,6 +148,79 @@ export function DawnMarket() {
     models.forEach((model) => {
       if (model.model_name) byName.set(model.model_name, model)
     })
+    return byName
+  }, [pricing.models, pricing.pricedModelDetails])
+
+  /** 智能精度：≥$1 两位、≥$0.01 四位、更小六位，去尾零（demo 风格）。 */
+  const fmtUsd = (value: number) => {
+    const digits = value >= 1 ? 2 : value >= 0.01 ? 4 : 6
+    const out = value
+      .toFixed(digits)
+      .replace(/(\.\d*?)0+$/, '$1')
+      .replace(/\.$/, '')
+    return `$${out}`
+  }
+
+  /** 每模型完整计费：输入 / 输出 / 缓存写读（已乘分组倍率）。 */
+  const modelFees = useMemo(() => {
+    const result = new Map<
+      string,
+      Record<
+        string,
+        { mode: 'free' | 'percall' | 'token'; input: string; output: string; cache: string }
+      >
+    >()
+    groups.forEach((group) => {
+      const multiplier = group.multiplier || 1
+      const map: Record<
+        string,
+        { mode: 'free' | 'percall' | 'token'; input: string; output: string; cache: string }
+      > = {}
+      group.models.forEach((name) => {
+        const model = modelsByName.get(name)
+        if (!model) return
+        if (model.quota_type === QUOTA_TYPE_VALUES.TOKEN && model.model_ratio === 0) {
+          map[name] = { mode: 'free', input: '免费', output: '免费', cache: '—' }
+          return
+        }
+        if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
+          const price = (model.model_price || 0) * multiplier
+          map[name] = {
+            mode: 'percall',
+            input: fmtUsd(price),
+            output: '按量',
+            cache: '—',
+          }
+          return
+        }
+        const input = model.model_ratio * 2 * multiplier
+        if (!Number.isFinite(input) || input <= 0) return
+        const output = input * (model.completion_ratio || 1)
+        const cacheWrite =
+          model.create_cache_ratio != null && Number.isFinite(Number(model.create_cache_ratio))
+            ? input * Number(model.create_cache_ratio)
+            : null
+        const cacheRead =
+          model.cache_ratio != null && Number.isFinite(Number(model.cache_ratio))
+            ? input * Number(model.cache_ratio)
+            : null
+        map[name] = {
+          mode: 'token',
+          input: fmtUsd(input),
+          output: fmtUsd(output),
+          cache:
+            cacheRead == null && cacheWrite == null
+              ? '不支持'
+              : `${cacheWrite != null ? fmtUsd(cacheWrite) : '—'} / ${cacheRead != null ? fmtUsd(cacheRead) : '—'}`,
+        }
+      })
+      result.set(group.id, map)
+    })
+    return result
+  }, [groups, modelsByName])
+
+  const groupPrices = useMemo(() => {
+    const byName = modelsByName
     const result = new Map<
       string,
       { input: string; output: string; freeCount: number }
@@ -176,20 +248,8 @@ export function DawnMarket() {
         }
       })
       result.set(group.id, {
-        input: Number.isFinite(bestInput)
-          ? formatCurrencyFromUSD(bestInput, {
-              digitsLarge: 4,
-              digitsSmall: 6,
-              abbreviate: false,
-            })
-          : '—',
-        output: Number.isFinite(bestOutput)
-          ? formatCurrencyFromUSD(bestOutput, {
-              digitsLarge: 4,
-              digitsSmall: 6,
-              abbreviate: false,
-            })
-          : '—',
+        input: Number.isFinite(bestInput) ? fmtUsd(bestInput) : '—',
+        output: Number.isFinite(bestOutput) ? fmtUsd(bestOutput) : '—',
         freeCount,
       })
     })
@@ -197,40 +257,17 @@ export function DawnMarket() {
   }, [groups, pricing.models, pricing.pricedModelDetails])
 
   const modelPrices = useMemo(() => {
-    const models = mergePricingModels(
-      pricing.models,
-      pricing.pricedModelDetails
-    )
-    const byName = new Map<string, PricingModel>()
-    models.forEach((model) => {
-      if (model.model_name) byName.set(model.model_name, model)
-    })
     const result = new Map<string, Record<string, string>>()
     groups.forEach((group) => {
-      const multiplier = group.multiplier || 1
       const map: Record<string, string> = {}
       group.models.forEach((name) => {
-        const model = byName.get(name)
-        if (!model) return
-        if (
-          model.quota_type === QUOTA_TYPE_VALUES.TOKEN &&
-          model.model_ratio === 0
-        ) {
-          map[name] = '免费'
-          return
-        }
-        const input = model.model_ratio * 2 * multiplier
-        if (!Number.isFinite(input) || input <= 0) return
-        map[name] = formatCurrencyFromUSD(input, {
-          digitsLarge: 4,
-          digitsSmall: 6,
-          abbreviate: false,
-        })
+        const fee = modelFees.get(group.id)?.[name]
+        if (fee) map[name] = fee.input
       })
       result.set(group.id, map)
     })
     return result
-  }, [groups, pricing.models, pricing.pricedModelDetails])
+  }, [groups, modelFees])
 
   const pools = useQuery({
     queryKey: ['marketplace-route-pools'],
@@ -357,7 +394,7 @@ export function DawnMarket() {
                   onChange={(event) => setSearch(event.target.value)}
                 />
                 <button
-                  className={`fbtn${filters.source === '' ? 'on' : ''}`}
+                  className={`fbtn${filters.source === '' ? ' on' : ''}`}
                   onClick={() =>
                     setFilters((current) => ({
                       ...current,
@@ -371,7 +408,7 @@ export function DawnMarket() {
                 {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
                   <button
                     key={source}
-                    className={`fbtn${filters.source === source ? 'on' : ''}`}
+                    className={`fbtn${filters.source === source ? ' on' : ''}`}
                     onClick={() =>
                       setFilters((current) => ({ ...current, source, page: 1 }))
                     }
@@ -381,7 +418,7 @@ export function DawnMarket() {
                 ))}
                 {import.meta.env.DEV && (
                   <button
-                    className={`fbtn${mockMode ? 'on' : ''}`}
+                    className={`fbtn${mockMode ? ' on' : ''}`}
                     onClick={() => setMockMode((current) => !current)}
                   >
                     {mockMode ? '示例数据：开' : '示例数据'}
@@ -466,11 +503,13 @@ export function DawnMarket() {
                         })
                       }
                       onUse={(target) => setUseGroup(target)}
+                      onBindKey={(target) => setUseGroup(target)}
                       onTest={(target) => setTestGroup(target)}
                       onBargain={(target) => setBargainGroup(target)}
                       onJoinPool={(target) => void joinPool(target)}
                       priceInfo={groupPrices.get(group.id)}
                       modelPrices={modelPrices.get(group.id)}
+                      modelFees={modelFees.get(group.id)}
                     />
                   ))}
                   {totalPages > 1 && (

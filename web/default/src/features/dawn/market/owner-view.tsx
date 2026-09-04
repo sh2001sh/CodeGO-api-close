@@ -35,6 +35,7 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatQuota } from '@/lib/format'
 import {
   createMarketplaceGroupInvite,
   createMarketplaceTimeRangeMultiplier,
@@ -54,7 +55,7 @@ import {
 } from '@/features/marketplace/hooks'
 import type { MarketplaceChannel } from '@/features/marketplace/types'
 import { DawnModal, ModalHead } from '../components/dawn-modal'
-import { fmtInt, fmtMoney } from '../lib/format'
+import { fmtInt } from '../lib/format'
 import { ChannelFormDialog } from './channel-form-dialog'
 
 const LIFECYCLE_LABEL: Record<string, string> = {
@@ -130,12 +131,12 @@ export function OwnerView() {
           <span>请求次数</span>
         </div>
         <div className='cell'>
-          <b>{fmtMoney(totals.income)}</b>
+          <b>{formatQuota(totals.income)}</b>
           <span>累计营收</span>
         </div>
         <div className='cell'>
           <b style={{ color: 'var(--dawn-copper)' }}>
-            {fmtMoney(totals.pending)}
+            {formatQuota(totals.pending)}
           </b>
           <span>待结算</span>
         </div>
@@ -305,9 +306,9 @@ export function OwnerView() {
                 className='num'
                 style={{ color: 'var(--dawn-copper)', fontWeight: 700 }}
               >
-                {fmtMoney(channel.total_income)}
+                {formatQuota(channel.total_income)}
               </span>
-              <span className='num'>{fmtMoney(channel.pending_income)}</span>
+              <span className='num'>{formatQuota(channel.pending_income)}</span>
               <span
                 style={{
                   display: 'flex',
@@ -468,7 +469,7 @@ export function OwnerView() {
             </div>
             <div className='kv'>
               <span>待结算</span>
-              <b>{fmtMoney(confirm.channel.pending_income)}</b>
+              <b>{formatQuota(confirm.channel.pending_income)}</b>
             </div>
             <div className='m-foot'>
               <button className='btn' onClick={() => setConfirm(null)}>
@@ -572,7 +573,7 @@ function UserUsageDialog(props: {
             </div>
             <div className='m'>
               <b style={{ color: 'var(--dawn-copper)' }}>
-                {fmtMoney(
+                {formatQuota(
                   rows.reduce((sum, row) => sum + row.total_consumer_amount, 0)
                 )}
               </b>
@@ -659,7 +660,7 @@ function UserUsageDialog(props: {
                     className='num'
                     style={{ color: 'var(--dawn-copper)', fontWeight: 700 }}
                   >
-                    {fmtMoney(row.total_consumer_amount)}
+                    {formatQuota(row.total_consumer_amount)}
                   </span>
                   <span className='num'>
                     {(row.success_rate * 100).toFixed(1)}%
@@ -694,15 +695,15 @@ function UserUsageDialog(props: {
           <div className='rsub'>SETTLEMENT</div>
           <div className='kv'>
             <span>累计营收</span>
-            <b>{fmtMoney(channel.total_income)}</b>
+            <b>{formatQuota(channel.total_income)}</b>
           </div>
           <div className='kv'>
             <span>待结算</span>
-            <b>{fmtMoney(channel.pending_income)}</b>
+            <b>{formatQuota(channel.pending_income)}</b>
           </div>
           <div className='kv'>
             <span>已释放</span>
-            <b>{fmtMoney(channel.released_income)}</b>
+            <b>{formatQuota(channel.released_income)}</b>
           </div>
           <div className='rule'>
             <span className='ric'>

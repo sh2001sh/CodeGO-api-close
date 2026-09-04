@@ -64,11 +64,18 @@ export function DawnStatus() {
   const [state, setState] = useState<StateFilter>('')
   const [openSet, setOpenSet] = useState<Set<string>>(() => new Set())
 
-  const stateOf = (group: MarketplaceGroup): HealthState =>
-    healthState({
+  const stateOf = (group: MarketplaceGroup): HealthState => {
+    // Prefer the backend's latest-window classification so the headline state
+    // uses the same thresholds as the marketplace status strip. Fall back to
+    // the aggregate metric for older responses that omit this field.
+    if (group.latest_request_status === 'healthy') return 'ok'
+    if (group.latest_request_status === 'unstable') return 'warn'
+    if (group.latest_request_status === 'failed') return 'bad'
+    return healthState({
       requestCount: group.request_count,
       successRate: group.success_rate,
     })
+  }
 
   const allModels = useMemo(
     () => [...new Set(groups.flatMap((group) => group.models))].sort(),

@@ -151,6 +151,7 @@ func V2MigrationIDs() []string {
 		"20260821_marketplace_group_invites",
 		"20260827_marketplace_channel_user_blocks",
 		"20260828_marketplace_auto_route_pool_config",
+		"20260904_marketplace_auto_route_pool_weights",
 		"20260828_marketplace_settlement_terminal_timestamps",
 		"20260817_marketplace_transport_capabilities",
 		"20260817_responses_background",
@@ -356,6 +357,12 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&marketplaceschema.ChannelUserBlock{})
 		}},
 		{ID: "20260828_marketplace_auto_route_pool_config", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.AutoRoutePoolConfig{})
+		}},
+		// The original config migration predates the scoring weights. Keep this
+		// additive migration separate so databases that already recorded the
+		// original step still receive the four columns.
+		{ID: "20260904_marketplace_auto_route_pool_weights", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.AutoRoutePoolConfig{})
 		}},
 		{ID: "20260828_marketplace_settlement_terminal_timestamps", Run: migrateMarketplaceSettlementTerminalTimestamps},

@@ -407,9 +407,9 @@ function RecentStrip({ group }: { group: MarketplaceGroup }) {
         const cls =
           point.request_count === 0 || rate == null
             ? ''
-            : rate >= 99
+            : rate > 90
               ? ''
-              : rate >= 95
+              : rate >= 75
                 ? 'w'
                 : 'e'
         const success =

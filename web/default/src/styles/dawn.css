@@ -3346,10 +3346,13 @@ For commercial licensing, please contact support@quantumnous.com.
 
   .dawn .dawn-nav .pill {
     /* Leave room for the fixed logo and account action on narrow screens. */
-    width: calc(100vw - 100px);
-    max-width: calc(100vw - 100px);
+    width: min(560px, calc(100vw - 132px));
+    max-width: calc(100vw - 132px);
     overflow-x: auto;
+    scrollbar-width: none;
   }
+
+  .dawn .dawn-nav .pill::-webkit-scrollbar { display: none; }
 
   .dawn .mrow {
     grid-template-columns: minmax(0, 1fr) 80px 80px;

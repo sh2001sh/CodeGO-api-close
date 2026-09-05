@@ -54,6 +54,7 @@ import {
   useMyMarketplaceChannels,
 } from '@/features/marketplace/hooks'
 import type { MarketplaceChannel } from '@/features/marketplace/types'
+import { ChannelEditDialog } from '@/features/marketplace/components/channel-edit-dialog'
 import { DawnModal, ModalHead } from '../components/dawn-modal'
 import { fmtInt } from '../lib/format'
 import { ChannelFormDialog } from './channel-form-dialog'
@@ -74,6 +75,7 @@ export function OwnerView() {
   const mutations = useMarketplaceMutations()
   const [keyword, setKeyword] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [editingChannel, setEditingChannel] = useState<MarketplaceChannel | null>(null)
   const [usageChannel, setUsageChannel] = useState<MarketplaceChannel | null>(
     null
   )
@@ -320,6 +322,13 @@ export function OwnerView() {
               >
                 <button
                   className='actb'
+                  title='编辑渠道'
+                  onClick={() => setEditingChannel(channel)}
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  className='actb'
                   title='时段倍率'
                   onClick={() => setRatesChannel(channel)}
                 >
@@ -435,6 +444,16 @@ export function OwnerView() {
       <ChannelFormDialog
         open={showCreate}
         onClose={() => setShowCreate(false)}
+      />
+      <ChannelEditDialog
+        channel={editingChannel}
+        open={editingChannel != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingChannel(null)
+            refresh()
+          }
+        }}
       />
       <DawnModal
         open={!!confirm}

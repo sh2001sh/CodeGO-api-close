@@ -46,9 +46,11 @@ export function useApiKeyGroupOptions() {
           ?.request_count,
       }))
     const poolOptions: ApiKeyGroupOption[] = routePools
-      .filter((pool) => Boolean(pool.token_group && pool.id))
+      .filter((pool) => Boolean(pool.id))
       .map((pool) => ({
-        value: pool.token_group,
+        // Older API responses omitted token_group; derive the stable value so
+        // existing saved pools remain selectable during API rollouts.
+        value: pool.token_group || `market:pool:${pool.id}`,
         label: pool.name,
         desc: `${pool.member_count} 个分组 · ${pool.models.length} 个模型`,
         ratio: '动态',

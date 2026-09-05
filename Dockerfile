@@ -9,6 +9,8 @@ COPY ./web/default .
 COPY ./VERSION .
 RUN test -n "$FRONTEND_REVISION" \
     && printf '%s' "$FRONTEND_REVISION" > /tmp/frontend-revision \
+    && grep -q '成员调整尚未保存' src/features/dawn/market/pool-workbench.tsx \
+    && rm -rf dist \
     && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build \
     && test -s dist/index.html
 
@@ -27,6 +29,8 @@ ADD go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+# Copy the freshly built frontend after the source tree so the embedded UI
+# cannot be shadowed by a stale or ignored web/default/dist directory.
 COPY --from=builder /build/dist ./web/default/dist
 RUN go build -ldflags "-s -w -X 'github.com/sh2001sh/new-api/internal/platform/config.Version=$(cat VERSION)'" -o app ${APP_PATH}
 

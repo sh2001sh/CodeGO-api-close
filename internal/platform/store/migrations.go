@@ -173,6 +173,7 @@ func V2MigrationIDs() []string {
 		"20260903_marketplace_named_route_pools",
 		"20260903_marketplace_owner_operations",
 		"20260905_query_path_indexes",
+		"20260905_marketplace_group_query_index",
 	}
 }
 
@@ -413,6 +414,10 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260901_gateway_route_pool_multi_pool", Run: migrateGatewayRoutePoolMultiPool},
 		{ID: "20260901_blind_box_remaining_seconds", Run: migrateBlindBoxRemainingSeconds},
 		{ID: "20260905_query_path_indexes", RunOutsideTx: migrateQueryPathIndexes},
+		// Keep the marketplace group index in its own repair migration so
+		// databases that already recorded 20260905_query_path_indexes still
+		// receive the later query path optimization.
+		{ID: "20260905_marketplace_group_query_index", RunOutsideTx: migrateMarketplaceGroupQueryIndex},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -611,6 +616,26 @@ func migrateQueryPathIndexes(_ *gorm.DB) error {
 	return nil
 }
 
+func migrateMarketplaceGroupQueryIndex(_ *gorm.DB) error {
+	primary := platformdb.DB
+	if primary == nil {
+		return nil
+	}
+	for _, item := range queryPathIndexStatements(primary.Dialector.Name()) {
+		if item.Name != "idx_marketplace_groups_visibility_lifecycle_updated" {
+			continue
+		}
+		if !queryPathTableExists(primary, item) {
+			return nil
+		}
+		if err := primary.Exec(item.SQL).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return fmt.Errorf("create query path index %s: %w", item.Name, err)
+		}
+		return nil
+	}
+	return nil
+}
+
 func queryPathTableExists(db *gorm.DB, item queryPathIndexStatement) bool {
 	switch item.Name {
 	case "idx_logs_channel_type_created_id":
@@ -619,6 +644,8 @@ func queryPathTableExists(db *gorm.DB, item queryPathIndexStatement) bool {
 		return db.Migrator().HasTable(&gatewayschema.RequestAttemptAudit{})
 	case "idx_marketplace_settlements_owner_group_created":
 		return db.Migrator().HasTable(&marketplaceschema.Settlement{})
+	case "idx_marketplace_groups_visibility_lifecycle_updated":
+		return db.Migrator().HasTable(&marketplaceschema.Group{})
 	default:
 		return false
 	}
@@ -640,18 +667,21 @@ func queryPathIndexStatements(dialect string) []queryPathIndexStatement {
 			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_channel_type_created_id ON logs (channel_id, type, created_at DESC, id DESC) WHERE type IN (%d, %d)`, auditschema.LogTypeConsume, auditschema.LogTypeError)},
 			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway.request_attempt_audits", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_request_attempt_audit_channel_started ON gateway.request_attempt_audits (channel_id, started_at DESC)`},
 			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace.settlements", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_settlements_owner_group_created ON marketplace.settlements (owner_user_id, group_id, created_at DESC)`},
+			{Name: "idx_marketplace_groups_visibility_lifecycle_updated", Table: "marketplace.groups", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_groups_visibility_lifecycle_updated ON marketplace.groups (visibility, lifecycle_status, updated_at DESC, id)`},
 		}
 	case "mysql":
 		return []queryPathIndexStatement{
 			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX idx_logs_channel_type_created_id ON logs (channel_id, type, created_at, id)"},
 			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway_request_attempt_audits", SQL: "CREATE INDEX idx_request_attempt_audit_channel_started ON gateway_request_attempt_audits (channel_id, started_at)"},
 			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace_settlements", SQL: "CREATE INDEX idx_marketplace_settlements_owner_group_created ON marketplace_settlements (owner_user_id, group_id, created_at)"},
+			{Name: "idx_marketplace_groups_visibility_lifecycle_updated", Table: "marketplace_groups", SQL: "CREATE INDEX idx_marketplace_groups_visibility_lifecycle_updated ON marketplace_groups (visibility, lifecycle_status, updated_at, id)"},
 		}
 	default:
 		return []queryPathIndexStatement{
 			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX IF NOT EXISTS idx_logs_channel_type_created_id ON logs (channel_id, type, created_at, id)"},
 			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway_request_attempt_audits", SQL: "CREATE INDEX IF NOT EXISTS idx_request_attempt_audit_channel_started ON gateway_request_attempt_audits (channel_id, started_at)"},
 			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace_settlements", SQL: "CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_owner_group_created ON marketplace_settlements (owner_user_id, group_id, created_at)"},
+			{Name: "idx_marketplace_groups_visibility_lifecycle_updated", Table: "marketplace_groups", SQL: "CREATE INDEX IF NOT EXISTS idx_marketplace_groups_visibility_lifecycle_updated ON marketplace_groups (visibility, lifecycle_status, updated_at, id)"},
 		}
 	}
 }

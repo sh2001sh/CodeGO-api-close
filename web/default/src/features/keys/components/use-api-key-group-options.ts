@@ -1,8 +1,10 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getUserGroups } from '@/lib/api'
-import { getMarketplaceRoutePools } from '@/features/marketplace/api'
-import { getMarketplaceAutoRoutePool } from '@/features/marketplace/api'
+import {
+  getMarketplaceAutoRoutePool,
+  getMarketplaceRoutePools,
+} from '@/features/marketplace/api'
 import { getSidebarGroupStatus } from '@/features/sidebar-group-status/api'
 import { getSelectableMarketplaceGroups } from '../api'
 import type { ApiKeyGroupOption } from './api-key-group-combobox'

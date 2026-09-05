@@ -258,11 +258,25 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 }
 
 func sendResponsesStreamData(c *gin.Context, info *relaycommon.RelayInfo, streamResponse dto.ResponsesStreamResponse, data string) error {
+	if err := sendResponsesStreamDataNoFlush(c, info, streamResponse, data); err != nil {
+		return err
+	}
+	if err := helper.FlushWriter(c); err != nil {
+		return err
+	}
+	helper.MarkResponseBodyDelivered(c)
+	return nil
+}
+
+// sendResponsesStreamDataNoFlush writes a Responses event (or its paced text
+// fragments) without forcing a transport flush. Callers can append adjacent
+// lifecycle events and flush the whole first-output batch once.
+func sendResponsesStreamDataNoFlush(c *gin.Context, info *relaycommon.RelayInfo, streamResponse dto.ResponsesStreamResponse, data string) error {
 	if data == "" {
 		return nil
 	}
 	if !isPaceableResponsesTextDelta(streamResponse) || info == nil || info.StreamPacer == nil {
-		return helper.ResponseChunkData(c, streamResponse, data)
+		return helper.ResponseChunkDataNoFlush(c, streamResponse, data)
 	}
 
 	for _, delta := range info.StreamPacer.SplitText(streamResponse.Delta) {
@@ -275,7 +289,7 @@ func sendResponsesStreamData(c *gin.Context, info *relaycommon.RelayInfo, stream
 		if err := info.StreamPacer.Pace(helper.StreamWorkerContext(c), delta); err != nil {
 			return err
 		}
-		if err := helper.ResponseChunkData(c, part, string(partData)); err != nil {
+		if err := helper.ResponseChunkDataNoFlush(c, part, string(partData)); err != nil {
 			return err
 		}
 	}

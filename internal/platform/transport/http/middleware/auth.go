@@ -464,7 +464,7 @@ func TokenAuth() func(c *gin.Context) {
 			userGroup = commerceapp.MultiplierCardRouteGroup()
 		} else if legacyMonthlyPassGroup {
 			userGroup = commerceapp.MultiplierCardRouteGroup()
-		} else if marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
+		} else if marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) || marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup) {
 			httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, false)
 			// The request model is not known during authentication. The distributor
 			// resolves the user's pool to one real marketplace group afterwards.

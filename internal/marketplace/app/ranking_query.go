@@ -274,6 +274,15 @@ func sortGroupItems(items []GroupListItem, field, direction string) {
 				}
 				return items[i].RequestCount < items[j].RequestCount
 			}
+		case "name":
+			leftName := strings.ToLower(items[i].SystemDisplayName)
+			rightName := strings.ToLower(items[j].SystemDisplayName)
+			if leftName != rightName {
+				if desc {
+					return leftName > rightName
+				}
+				return leftName < rightName
+			}
 		}
 		if left != right {
 			if desc {

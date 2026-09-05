@@ -397,10 +397,28 @@ export function DawnMarket() {
             <div ref={marketListRef} style={{ gridColumn: '1 / -1', scrollMarginTop: 20 }}>
               <div className='filters'>
                 <input
-                  placeholder='搜索分组 / 模型 / 来源'
+                  placeholder='输入模型 ID，如 gpt-6-astra'
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
+                <select
+                  className='fbtn'
+                  value={`${filters.sort}:${filters.direction}`}
+                  aria-label='市场排序'
+                  onChange={(event) => {
+                    const [sort, direction] = event.target.value.split(':')
+                    setFilters((current) => ({ ...current, sort, direction, page: 1 }))
+                  }}
+                >
+                  <option value='score:desc'>综合评分</option>
+                  <option value='multiplier:asc'>倍率最低</option>
+                  <option value='multiplier:desc'>倍率最高</option>
+                  <option value='success_rate:desc'>成功率最高</option>
+                  <option value='success_rate:asc'>成功率最低</option>
+                  <option value='ttft:asc'>首字最快</option>
+                  <option value='requests:desc'>调用次数最多</option>
+                  <option value='name:asc'>名称首字母</option>
+                </select>
                 <button
                   className={`fbtn${filters.source === '' ? ' on' : ''}`}
                   onClick={() =>

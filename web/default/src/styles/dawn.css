@@ -768,6 +768,10 @@ For commercial licensing, please contact support@quantumnous.com.
   color: var(--dawn-warn);
 }
 
+.dawn .metrics .m.bad b {
+  color: var(--dawn-bad);
+}
+
 /* 模型标签行 */
 .dawn .mline {
   display: flex;
@@ -822,7 +826,7 @@ For commercial licensing, please contact support@quantumnous.com.
 .dawn .mlist .mh,
 .dawn .mlist .mr {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 90px;
+  grid-template-columns: minmax(0, 1fr) 90px 90px 90px;
   gap: 8px;
   padding: 7px 12px;
   font-size: 11.5px;
@@ -932,13 +936,16 @@ For commercial licensing, please contact support@quantumnous.com.
   flex: 1;
   height: 14px;
   border-radius: 2px;
-  background: #5caa79;
+  background: var(--dawn-ok);
   min-width: 4px;
 }
 
 .dawn .rb.w {
   background: #d28a24;
 }
+
+.dawn .rb.ok { background: var(--dawn-ok); }
+.dawn .rb.idle { background: var(--dawn-idle); opacity: 0.5; }
 
 /* Keep the Dawn pages readable when the application theme switches to dark.
    The page has its own palette, so it must explicitly mirror the theme state. */
@@ -962,6 +969,21 @@ For commercial licensing, please contact support@quantumnous.com.
   --dawn-idle: #8f8175;
   color-scheme: dark;
 }
+
+.dark .dawn input,
+.dark .dawn select,
+.dark .dawn textarea,
+.dark .dawn .gtable,
+.dark .dawn .panel,
+.dark .dawn .filters,
+.dark .dawn .mcard,
+.dark .dawn .gcard {
+  background-color: var(--dawn-card);
+  color: var(--dawn-ink);
+  border-color: var(--dawn-line);
+}
+
+.dark .dawn input::placeholder { color: var(--dawn-ink2); }
 
 .dawn .capline {
   display: flex;
@@ -1726,6 +1748,19 @@ For commercial licensing, please contact support@quantumnous.com.
   display: flex;
 }
 
+.dawn .batchbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dawn .user-pagination {
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  color: var(--dawn-ink2);
+  font-size: 12px;
+}
+
 .dawn .usertable .tr {
   grid-template-columns: auto minmax(0, 1.4fr) repeat(3, 1fr) auto;
   cursor: default;
@@ -1812,6 +1847,12 @@ For commercial licensing, please contact support@quantumnous.com.
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 22px;
+  position: sticky;
+  top: -26px;
+  z-index: 2;
+  padding: 26px 0 14px;
+  margin-top: -26px;
+  background: var(--dawn-card);
 }
 
 .dawn .modal .m-head h3 {
@@ -3225,6 +3266,23 @@ For commercial licensing, please contact support@quantumnous.com.
 }
 
 @media (max-width: 860px) {
+  /* The floating nav is fixed; keep enough top clearance on phones. */
+  .dawn .dawn-wrap { width: 100%; padding: 96px 12px 56px; }
+  .dawn .mhead { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .dawn .mhead h1 { font-size: clamp(26px, 8vw, 38px); }
+  .dawn .gcard { padding: 14px; }
+  .dawn .gcard .top { gap: 8px; align-items: flex-start; }
+  .dawn .gcard h3 { max-width: 52vw; overflow-wrap: anywhere; }
+  .dawn .gact { gap: 6px; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; }
+  .dawn .gact .btn { flex: 0 0 auto; min-height: 40px; }
+  .dawn .mline { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; }
+  .dawn .mtag { flex: 0 0 auto; }
+  .dawn .mlist { overflow-x: auto; }
+  .dawn .mlist .mh, .dawn .mlist .mr { min-width: 560px; }
+  .dawn .poolpanel { width: 100%; max-width: 100%; overflow: hidden; }
+  .dawn .filters { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+  .dawn .filters input { min-width: 220px; }
+  .dawn .page-jump { min-height: 40px; }
   .dawn .statband {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -3254,7 +3312,9 @@ For commercial licensing, please contact support@quantumnous.com.
   }
 
   .dawn .dawn-nav .pill {
-    max-width: calc(100vw - 32px);
+    /* Leave room for the fixed logo and account action on narrow screens. */
+    width: calc(100vw - 100px);
+    max-width: calc(100vw - 100px);
     overflow-x: auto;
   }
 
@@ -3307,6 +3367,12 @@ For commercial licensing, please contact support@quantumnous.com.
   background: var(--dawn-paper);
   padding: 28px;
   animation: fadeIn 0.6s ease-out;
+}
+
+@media (max-width: 768px) {
+  .dawn-overview { padding: 16px 12px; overflow-x: hidden; }
+  .dawn-overview .pgw { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .dawn-overview .pgw .actions { width: 100%; overflow-x: auto; }
 }
 
 .dawn-overview .pgw {

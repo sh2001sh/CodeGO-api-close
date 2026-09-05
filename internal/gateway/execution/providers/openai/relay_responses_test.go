@@ -222,6 +222,39 @@ func TestOaiResponsesStreamHandlerFlushesLifecycleBeforeSemanticOutput(t *testin
 	require.Equal(t, gatewaystream.AttemptStageCompleted, gatewaystream.AttemptStageFromContext(c))
 }
 
+type countingFlushResponseWriter struct {
+	*httptest.ResponseRecorder
+	flushes int
+}
+
+func (w *countingFlushResponseWriter) Flush() {
+	w.flushes++
+	w.ResponseRecorder.Flush()
+}
+
+func TestOaiResponsesStreamHandlerBatchesFirstOutputFlush(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_123"}}`,
+		``,
+		`data: {"type":"response.output_text.delta","delta":"hello"}`,
+		``,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+	recorder := &countingFlushResponseWriter{ResponseRecorder: httptest.NewRecorder()}
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+	require.Nil(t, err)
+	require.Equal(t, 2, usage.TotalTokens)
+	require.Equal(t, 2, recorder.flushes, "lifecycle and first semantic event should share one flush")
+}
+
 func TestOaiResponsesStreamHandlerFlushesRemoteCompactionOutput(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	constant.StreamingTimeout = 30
@@ -499,6 +532,19 @@ func TestIsPaceableResponsesTextDelta(t *testing.T) {
 			require.Equal(t, testCase.want, isPaceableResponsesTextDelta(testCase.resp))
 		})
 	}
+}
+
+func TestCanBatchResponsesFirstEventKeepsLargeDeltaSplit(t *testing.T) {
+	pacer := relaycommon.NewStreamPacer("gpt-5.6-sol")
+	largeDelta := strings.Repeat("token ", 32)
+	require.False(t, canBatchResponsesFirstEvent(&relaycommon.RelayInfo{StreamPacer: pacer}, dto.ResponsesStreamResponse{
+		Type:  "response.output_text.delta",
+		Delta: largeDelta,
+	}))
+	require.True(t, canBatchResponsesFirstEvent(&relaycommon.RelayInfo{StreamPacer: relaycommon.NewStreamPacer("gpt-5.6-sol")}, dto.ResponsesStreamResponse{
+		Type:  "response.output_text.delta",
+		Delta: "hello",
+	}))
 }
 
 func TestOaiResponsesHandlerPreservesCacheWriteTokens(t *testing.T) {

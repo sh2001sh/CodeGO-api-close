@@ -62,15 +62,16 @@ func TestChannelWindowLogIndexStatementUsesDialect(t *testing.T) {
 
 func TestQueryPathIndexStatementsUseDialect(t *testing.T) {
 	postgres := queryPathIndexStatements("postgres")
-	require.Len(t, postgres, 3)
+	require.Len(t, postgres, 4)
 	require.Contains(t, postgres[0].SQL, "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
 	require.Contains(t, postgres[0].SQL, "WHERE type IN")
 	require.Contains(t, postgres[1].SQL, "gateway.request_attempt_audits")
 	require.Contains(t, postgres[2].SQL, "marketplace.settlements")
+	require.Contains(t, postgres[3].SQL, "marketplace.groups")
 
 	mysql := queryPathIndexStatements("mysql")
-	require.Len(t, mysql, 3)
-	require.NotContains(t, strings.Join([]string{mysql[0].SQL, mysql[1].SQL, mysql[2].SQL}, "\n"), "CONCURRENTLY")
+	require.Len(t, mysql, 4)
+	require.NotContains(t, strings.Join([]string{mysql[0].SQL, mysql[1].SQL, mysql[2].SQL, mysql[3].SQL}, "\n"), "CONCURRENTLY")
 
 	sqliteStatements := queryPathIndexStatements("sqlite")
 	require.Contains(t, sqliteStatements[0].SQL, "CREATE INDEX IF NOT EXISTS")
@@ -90,10 +91,11 @@ func TestMigrateQueryPathIndexesSQLiteIsIdempotent(t *testing.T) {
 	platformdb.LogDB = db
 	platformdb.UsingPostgreSQL = false
 
-	require.NoError(t, db.AutoMigrate(&auditschema.Log{}, &gatewayschema.RequestAttemptAudit{}, &marketplaceschema.Settlement{}))
+	require.NoError(t, db.AutoMigrate(&auditschema.Log{}, &gatewayschema.RequestAttemptAudit{}, &marketplaceschema.Settlement{}, &marketplaceschema.Group{}))
 	require.NoError(t, migrateQueryPathIndexes(db))
 	require.NoError(t, migrateQueryPathIndexes(db))
 	require.True(t, db.Migrator().HasIndex("logs", "idx_logs_channel_type_created_id"))
 	require.True(t, db.Migrator().HasIndex(&gatewayschema.RequestAttemptAudit{}, "idx_request_attempt_audit_channel_started"))
 	require.True(t, db.Migrator().HasIndex(&marketplaceschema.Settlement{}, "idx_marketplace_settlements_owner_group_created"))
+	require.True(t, db.Migrator().HasIndex(&marketplaceschema.Group{}, "idx_marketplace_groups_visibility_lifecycle_updated"))
 }

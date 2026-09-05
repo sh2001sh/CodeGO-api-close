@@ -174,7 +174,8 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		}
 		if semanticOutput {
 			sr.MarkProgress()
-			if sawSemanticOutput.CompareAndSwap(false, true) {
+			firstSemanticOutput := sawSemanticOutput.CompareAndSwap(false, true)
+			if firstSemanticOutput {
 				if info.FirstByteTrace != nil {
 					info.FirstByteTrace.MarkFirstSemanticReadAt(sr.ReceivedAt(), textOutput)
 				}
@@ -182,19 +183,30 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				if firstOutputTimer != nil {
 					firstOutputTimer.Stop()
 				}
-				if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents); err != nil {
-					logger.LogError(c, "failed to flush responses lifecycle events: "+err.Error())
-					sr.Stop(err)
-					return
-				}
-				preOutputEvents = nil
 			}
 			if textOutput && info.FirstByteTrace != nil {
 				info.FirstByteTrace.MarkFirstTextReadAt(sr.ReceivedAt())
 				info.FirstByteTrace.MarkFirstTextEvent()
 			}
 			helper.MarkSemanticCommitted(c)
-			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+			var err error
+			if firstSemanticOutput {
+				if canBatchResponsesFirstEvent(info, streamResponse) {
+					err = flushBufferedResponsesStreamEvents(c, info, preOutputEvents, &streamResponse, data)
+					if err == nil {
+						preOutputEvents = nil
+					}
+				} else {
+					err = flushBufferedResponsesStreamEvents(c, info, preOutputEvents, nil, "")
+					if err == nil {
+						preOutputEvents = nil
+						err = sendResponsesStreamData(c, info, streamResponse, data)
+					}
+				}
+			} else {
+				err = sendResponsesStreamData(c, info, streamResponse, data)
+			}
+			if err != nil {
 				logger.LogError(c, "failed to write responses stream response: "+err.Error())
 				sr.Stop(err)
 				return
@@ -209,17 +221,12 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			if firstOutputTimer != nil {
 				firstOutputTimer.Stop()
 			}
-			if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents); err != nil {
+			if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents, &streamResponse, data); err != nil {
 				logger.LogError(c, "failed to flush responses lifecycle events: "+err.Error())
 				sr.Stop(err)
 				return
 			}
 			preOutputEvents = nil
-			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
-				logger.LogError(c, "failed to write responses stream response: "+err.Error())
-				sr.Stop(err)
-				return
-			}
 		} else {
 			preOutputEventsDropped += appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, streamResponse, data)
 			preOutputEventsBuffered = len(preOutputEvents)
@@ -410,13 +417,18 @@ func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, 
 	return dropped
 }
 
-func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayInfo, events []bufferedResponsesStreamEvent) error {
+func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayInfo, events []bufferedResponsesStreamEvent, current *dto.ResponsesStreamResponse, currentData string) error {
 	for _, event := range events {
 		if err := helper.ResponseChunkDataNoFlush(c, event.response, event.data); err != nil {
 			return err
 		}
 	}
-	if len(events) == 0 {
+	if current != nil {
+		if err := sendResponsesStreamDataNoFlush(c, info, *current, currentData); err != nil {
+			return err
+		}
+	}
+	if len(events) == 0 && current == nil {
 		return nil
 	}
 	if err := helper.FlushWriter(c); err != nil {
@@ -428,6 +440,13 @@ func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayI
 
 func isResponsesTextDelta(streamResponse dto.ResponsesStreamResponse) bool {
 	return streamResponse.Type == "response.output_text.delta" && streamResponse.Delta != ""
+}
+
+func canBatchResponsesFirstEvent(info *relaycommon.RelayInfo, streamResponse dto.ResponsesStreamResponse) bool {
+	if !isPaceableResponsesTextDelta(streamResponse) || info == nil || info.StreamPacer == nil {
+		return true
+	}
+	return len(info.StreamPacer.SplitText(streamResponse.Delta)) <= 1
 }
 
 func responsesOutputText(response *dto.OpenAIResponsesResponse) string {

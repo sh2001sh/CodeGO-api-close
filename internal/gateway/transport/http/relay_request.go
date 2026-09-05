@@ -260,12 +260,21 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			}
 		}
 
-		relayInfo.FirstByteTrace.MarkModelPriceStarted()
-		currentPriceData, priceErr := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
-		relayInfo.FirstByteTrace.MarkModelPriceDone()
-		if priceErr != nil {
-			newAPIError = types.NewError(priceErr, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
-			break
+		// The first pricing pass happens before route selection. Reuse it when the
+		// selected route kept the same group ratio; recompute only when a retry (or
+		// an auto-group switch) changes the pricing context. This removes the
+		// duplicate marketplace/config lookups on the common first attempt while
+		// preserving cross-group billing semantics.
+		currentPriceData := priceData
+		if retryParam.GetRetry() > 0 || relayInfo.PriceData.GroupRatioInfo != priceData.GroupRatioInfo {
+			relayInfo.FirstByteTrace.MarkModelPriceStarted()
+			var priceErr error
+			currentPriceData, priceErr = relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
+			relayInfo.FirstByteTrace.MarkModelPriceDone()
+			if priceErr != nil {
+				newAPIError = types.NewError(priceErr, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
+				break
+			}
 		}
 
 		relayInfo.FirstByteTrace.MarkChannelAdmissionStarted()
@@ -323,19 +332,35 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			}
 			break
 		}
+		// Billing and request-body rewind are independent once the channel meta is
+		// initialized. Start the reservation before rewinding the body so the
+		// database/network wait does not extend the critical path by the rewind
+		// duration. Always join the reservation before proceeding or retrying.
+		var billingDone chan *types.NewAPIError
+		if !currentPriceData.FreeModel {
+			billingDone = make(chan *types.NewAPIError, 1)
+			relayInfo.FirstByteTrace.MarkBillingReserveStarted()
+			go func() {
+				billingDone <- billingapp.PreConsumeRelayBilling(c, currentPriceData.QuotaToPreConsume, relayInfo)
+			}()
+		}
+
 		relayInfo.FirstByteTrace.MarkRequestBodyRestoreStarted()
 		bodyErr := restoreRelayRequestBody(c)
 		relayInfo.FirstByteTrace.MarkRequestBodyRestoreDone()
 		if bodyErr != nil {
+			if billingDone != nil {
+				<-billingDone
+				relayInfo.FirstByteTrace.MarkBillingReserveDone()
+			}
 			releaseChannelConcurrency()
 			releaseFaultDomainSlot(true, 0)
 			newAPIError = bodyErr
 			break
 		}
 
-		if !currentPriceData.FreeModel {
-			relayInfo.FirstByteTrace.MarkBillingReserveStarted()
-			newAPIError = billingapp.PreConsumeRelayBilling(c, currentPriceData.QuotaToPreConsume, relayInfo)
+		if billingDone != nil {
+			newAPIError = <-billingDone
 			relayInfo.FirstByteTrace.MarkBillingReserveDone()
 			if newAPIError != nil {
 				releaseChannelConcurrency()

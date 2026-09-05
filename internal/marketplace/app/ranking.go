@@ -102,21 +102,55 @@ func filterGroupsBySource(groups []marketplaceschema.Group, channels map[string]
 }
 
 func GetMarketplaceGroup(slug string, windowHours, viewerUserID int) (*GroupListItem, error) {
-	query := normalizeGroupQuery(GroupQuery{ViewerUserID: viewerUserID, Search: slug, WindowHours: windowHours, Page: 1, PageSize: 50})
-	result, err := ListMarketplaceGroups(query)
+	// A detail request must stay O(1) with respect to the marketplace size. The
+	// previous implementation executed the full discovery pipeline, including
+	// ranking and recent-series queries for up to 1000 groups, then searched the
+	// result in memory. This made opening one card as expensive as loading the
+	// whole marketplace.
+	query := normalizeGroupQuery(GroupQuery{ViewerUserID: viewerUserID, WindowHours: windowHours, Page: 1, PageSize: 1})
+	groups, channels, err := loadPublicGroupsBySlug(query, slug)
 	if err != nil {
 		return nil, err
 	}
-	for index := range result.Items {
-		if result.Items[index].PublicSlug == slug {
-			return &result.Items[index], nil
+	// Details should remain responsive even when the ranking cache is cold. A
+	// background refresh will populate the missing snapshot while this request
+	// returns the bounded, observable state immediately.
+	snapshots, err := rankingSnapshotsForList(groups, channels, query.WindowHours)
+	if err != nil {
+		return nil, err
+	}
+	recent, err := marketplaceRecentRequestSeries(groups, channels)
+	if err != nil {
+		return nil, err
+	}
+	items := filterAndSortGroups(groups, channels, snapshots, recent, query)
+	if len(items) == 1 {
+		if err := attachChannelFeedback(items, channels, viewerUserID); err != nil {
+			return nil, err
 		}
+		return &items[0], nil
 	}
 	return nil, gorm.ErrRecordNotFound
 }
 
+func loadPublicGroupsBySlug(query GroupQuery, slug string) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
+	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{}).Select(marketplaceGroupColumns()).Where("public_slug = ?", strings.TrimSpace(slug))
+	dbQuery = dbQuery.Where("lifecycle_status NOT IN ?", []string{marketplacedomain.LifecycleSuspended, marketplacedomain.LifecycleDisabled})
+	if query.ViewerUserID > 0 {
+		dbQuery = dbQuery.Where("visibility = ? OR owner_user_id = ?", marketplacedomain.VisibilityPublic, query.ViewerUserID)
+	} else {
+		dbQuery = dbQuery.Where("visibility = ?", marketplacedomain.VisibilityPublic)
+	}
+	var groups []marketplaceschema.Group
+	if err := dbQuery.Limit(1).Find(&groups).Error; err != nil {
+		return nil, nil, err
+	}
+	channels, err := marketplaceChannelReadMap(groups)
+	return groups, channels, err
+}
+
 func loadPublicGroups(query GroupQuery) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
-	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{})
+	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{}).Select(marketplaceGroupColumns())
 	// Suspended and disabled channels are operationally unavailable and must
 	// not leak into public discovery, even when a status filter is supplied.
 	dbQuery = dbQuery.Where("lifecycle_status NOT IN ?", []string{
@@ -124,7 +158,7 @@ func loadPublicGroups(query GroupQuery) ([]marketplaceschema.Group, map[string]m
 		marketplacedomain.LifecycleDisabled,
 	})
 	if query.ViewerUserID > 0 {
-		if query.IncludeAccess && platformdb.DB.Migrator().HasTable(&marketplaceschema.GroupAccess{}) {
+		if query.IncludeAccess {
 			dbQuery = dbQuery.Where(fmt.Sprintf("visibility = ? OR owner_user_id = ? OR EXISTS (SELECT 1 FROM %s ga WHERE ga.group_id = %s.id AND ga.user_id = ?)", marketplaceschema.GroupAccess{}.TableName(), marketplaceschema.Group{}.TableName()), marketplacedomain.VisibilityPublic, query.ViewerUserID, query.ViewerUserID)
 		} else {
 			dbQuery = dbQuery.Where("visibility = ? OR owner_user_id = ?", marketplacedomain.VisibilityPublic, query.ViewerUserID)
@@ -145,11 +179,35 @@ func loadPublicGroups(query GroupQuery) ([]marketplaceschema.Group, map[string]m
 		dbQuery = dbQuery.Where("multiplier <= ?", query.MaxMultiplier)
 	}
 	var groups []marketplaceschema.Group
-	if err := dbQuery.Limit(1000).Find(&groups).Error; err != nil {
+	if err := dbQuery.Order("updated_at DESC, id ASC").Limit(1000).Find(&groups).Error; err != nil {
 		return nil, nil, err
 	}
-	channels, err := channelMap(groups)
+	channels, err := marketplaceChannelReadMap(groups)
 	return groups, channels, err
+}
+
+func marketplaceGroupColumns() string {
+	return "id, channel_id, owner_user_id, public_slug, system_display_name, internal_group_name, source_type, credit_pool_policy, multiplier, lifecycle_status, verification_status, visibility, published_at, verification_due_at, created_at, updated_at"
+}
+
+func marketplaceChannelReadMap(groups []marketplaceschema.Group) (map[string]marketplaceschema.Channel, error) {
+	ids := make([]string, 0, len(groups))
+	for _, group := range groups {
+		ids = append(ids, group.ChannelID)
+	}
+	result := make(map[string]marketplaceschema.Channel, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	var channels []marketplaceschema.Channel
+	const columns = "id, owner_user_id, provider_type, approved_source_label, source_label_status, declared_models, model_verification_results, connectivity_test_status, connectivity_test_checked_at, model_consistency_status, gpt56_mapping_results, gpt56_mapping_status, gpt56_mapping_checked_at, gpt56_mapping_level, gpt56_mapping_trigger, transport_capabilities, max_concurrency, user_max_concurrency, internal_channel_id"
+	if err := platformdb.DB.Select(columns).Where("id IN ?", ids).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	for _, channel := range channels {
+		result[channel.ID] = channel
+	}
+	return result, nil
 }
 
 func channelMap(groups []marketplaceschema.Group) (map[string]marketplaceschema.Channel, error) {
@@ -228,6 +286,14 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 	score += cappedMetricScore(weighted(total.tpsTotal, total.tpsWeight), 100) * 0.1
 	score += cappedMetricScore(total.cacheHitRate, 100) * 0.05
 	score += inverseMetricScore(group.Multiplier, 3) * 0.2
+	// Give recently published channels a small discovery boost so mature channels
+	// do not permanently monopolize the top of the marketplace.
+	if !group.CreatedAt.IsZero() {
+		ageDays := time.Since(group.CreatedAt).Hours() / 24
+		if ageDays < 30 {
+			score += (30 - math.Max(0, ageDays)) / 30 * 5
+		}
+	}
 	return marketplaceschema.RankingSnapshot{
 		GroupID: group.ID, WindowHours: hours, RankingVersion: rankingVersion,
 		Score: round1(score), RawSuccessRate: round2(successRate), WilsonSuccessRate: round2(wilson),

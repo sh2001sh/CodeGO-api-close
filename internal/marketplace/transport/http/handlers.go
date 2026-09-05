@@ -9,9 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
-	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 )
 
@@ -202,14 +200,14 @@ func BatchWelfare(c *gin.Context) {
 		return
 	}
 	if r.Type == "blind_box" {
+		if r.Amount <= 0 {
+			respond(c, nil, fmt.Errorf("盲盒数量必须大于 0"))
+			return
+		}
 		d := make([]any, 0, len(r.UserIDs))
 		success := 0
 		for _, externalID := range r.UserIDs {
-			var u identityschema.User
-			e := platformdb.DB.Where("external_id = ?", strings.ToUpper(strings.TrimSpace(externalID))).First(&u).Error
-			if e == nil {
-				_, e = commerceapp.GrantBlindBoxes(u.Id, c.GetInt("id"), commerceapp.AdminBlindBoxGrantRequest{Quantity: 1, Reason: "marketplace welfare: " + externalID, IdempotencyKey: fmt.Sprintf("marketplace-welfare-blindbox:%s:%d", c.Param("id"), u.Id)})
-			}
+			e := commerceapp.GiftBlindBoxPropsBatch(c.GetInt("id"), externalID, int(r.Amount), fmt.Sprintf("marketplace-welfare-blindbox:%s:%s:%d", c.Param("id"), externalID, r.Amount))
 			if e != nil {
 				d = append(d, gin.H{"user_id": externalID, "status": "failed", "error": e.Error()})
 			} else {

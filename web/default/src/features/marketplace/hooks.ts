@@ -79,7 +79,11 @@ export function useMarketplaceGroups(
     queryFn: () => getMarketplaceGroups(filters),
     enabled: options.enabled ?? true,
     placeholderData: (previousData) => previousData,
-    staleTime: 2 * 60_000,
+    // Marketplace rankings are refreshed asynchronously on the server. Keep
+    // the last page warm long enough to avoid refetching while users switch
+    // between filters or return from a detail view.
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
     refetchOnWindowFocus: false,
   })
 }

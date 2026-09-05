@@ -70,6 +70,7 @@ function ModelToolbar(props: {
         variant='outline'
         onClick={props.onFetch}
         disabled={props.fetching}
+        title={t('编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTPS 地址')}
       >
         {props.fetching ? <Loader2 className='animate-spin' /> : <RefreshCcw />}
         {t('同步上游模型')}

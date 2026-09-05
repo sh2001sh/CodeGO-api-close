@@ -539,6 +539,7 @@ function UserUsageDialog(props: {
 }) {
   const { channel } = props
   const [sort, setSort] = useState<'req' | 'spend'>('req')
+  const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rateUser, setRateUser] = useState<{
     id: string
@@ -565,6 +566,10 @@ function UserUsageDialog(props: {
         : b.total_consumer_amount - a.total_consumer_amount
     )
   }, [usage.data, channel.id, sort])
+  const pageSize = 10
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const visibleRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   const toggle = (id: string) =>
     setSelected((current) => {
@@ -637,9 +642,10 @@ function UserUsageDialog(props: {
             <select
               className='fsel'
               value={sort}
-              onChange={(event) =>
+              onChange={(event) => {
                 setSort(event.target.value as 'req' | 'spend')
-              }
+                setPage(1)
+              }}
             >
               <option value='req'>按请求次数</option>
               <option value='spend'>按消耗额度</option>
@@ -655,7 +661,7 @@ function UserUsageDialog(props: {
               <span />
             </div>
             {rows.length ? (
-              rows.map((row, index) => (
+              visibleRows.map((row, index) => (
                 <label
                   className='tr usertable'
                   style={{ display: 'grid' }}
@@ -669,7 +675,7 @@ function UserUsageDialog(props: {
                   />
                   <b className='nm' style={{ fontWeight: 700 }}>
                     <span className='rankn'>
-                      {String(index + 1).padStart(2, '0')}
+                      {String((currentPage - 1) * pageSize + index + 1).padStart(2, '0')}
                     </span>
                     {row.external_user_id || row.user_id}
                     {row.user_multiplier != null && (
@@ -707,6 +713,13 @@ function UserUsageDialog(props: {
               <div className='prev-empty'>暂无用户数据</div>
             )}
           </div>
+          {pageCount > 1 && (
+            <div className='m-foot user-pagination'>
+              <span>第 {currentPage} / {pageCount} 页 · 共 {rows.length} 位用户</span>
+              <button className='btn' disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>上一页</button>
+              <button className='btn' disabled={currentPage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>下一页</button>
+            </div>
+          )}
         </div>
         <div className='m-rail'>
           <h5>
@@ -745,13 +758,13 @@ function UserUsageDialog(props: {
         </div>
       </DawnModal>
 
-      {selected.size > 0 && (
-        <div className='batchbar on'>
+      <div className='batchbar on'>
           <span style={{ fontFamily: 'var(--dawn-mono)', fontSize: 12 }}>
             已选 {selected.size} 用户
           </span>
           <button
             className='btn mini night'
+            disabled={!selected.size}
             onClick={() => setWelfare('transfer')}
           >
             <Coins size={13} />
@@ -759,6 +772,7 @@ function UserUsageDialog(props: {
           </button>
           <button
             className='btn mini night'
+            disabled={!selected.size}
             onClick={() => setWelfare('blind_box')}
           >
             <Gift size={13} />
@@ -771,7 +785,6 @@ function UserUsageDialog(props: {
             <X size={13} />
           </button>
         </div>
-      )}
 
       <DawnModal
         open={!!rateUser}
@@ -873,14 +886,14 @@ function UserUsageDialog(props: {
             />
             <div className='field'>
               <label>
-                {welfare === 'transfer' ? '每人额度（$）' : '盲盒金额（$）'}
+                {welfare === 'transfer' ? '每人额度（$）' : '人均盲盒数量'}
               </label>
               <input
                 id='welfare-amount'
                 defaultValue='1'
                 type='number'
-                min='0.01'
-                step='0.5'
+                min='1'
+                step='1'
               />
             </div>
             <div className='m-foot'>
@@ -893,7 +906,7 @@ function UserUsageDialog(props: {
                   const input = document.querySelector(
                     '#welfare-amount'
                   ) as HTMLInputElement | null
-                  const amount = Number(input?.value ?? '1') || 1
+                  const amount = Math.max(1, Math.floor(Number(input?.value ?? '1') || 1))
                   try {
                     const result = await sendMarketplaceBatchWelfare({
                       channelId: channel.id,

@@ -95,7 +95,9 @@ const router = createRouter({
   routeTree,
   context: { queryClient },
   defaultPreload: 'intent',
-  defaultPreloadStaleTime: 0,
+  // Match the query cache window. A zero value caused every intent preload to
+  // refetch the same page and amplified slow read paths during navigation.
+  defaultPreloadStaleTime: 30 * 1000,
 })
 
 // Register the router instance for type safety

@@ -99,14 +99,6 @@ export function MarketGroupCard(props: {
 
       <div className='metrics'>
         <div className='m'>
-          <b>{props.priceInfo?.input ?? '—'}</b>
-          <span>输入价</span>
-        </div>
-        <div className='m'>
-          <b>{props.priceInfo?.output ?? '—'}</b>
-          <span>输出价</span>
-        </div>
-        <div className='m'>
           <b>
             {group.multiplier}
             <span className='u'>×</span>
@@ -114,7 +106,7 @@ export function MarketGroupCard(props: {
           <span>倍率</span>
         </div>
         <div
-          className={`m${hasTraffic && group.success_rate >= 0.99 ? ' good' : ''}${hasTraffic && group.success_rate < 0.98 ? ' warn' : ''}`}
+          className={`m${hasTraffic && group.success_rate >= 0.9 ? ' good' : ''}${hasTraffic && group.success_rate >= 0.75 && group.success_rate < 0.9 ? ' warn' : ''}${hasTraffic && group.success_rate < 0.75 ? ' bad' : ''}`}
         >
           <b>
             {hasTraffic ? pct(group.success_rate) : '—'}
@@ -248,9 +240,9 @@ export function MarketGroupCard(props: {
           const rate = successRatePercent(point.success_rate)
           const cls =
             point.request_count === 0 || rate == null
-              ? ''
+              ? 'idle'
               : rate >= 99
-                ? ''
+                ? 'ok'
                 : rate >= 95
                   ? 'w'
                   : 'e'
@@ -264,7 +256,7 @@ export function MarketGroupCard(props: {
           )
         })}
         {!group.recent_request_series?.length && (
-          <i className='rb' style={{ background: '#e4dcd2' }} />
+          <i className='rb idle' />
         )}
         <span className='rn'>
           {

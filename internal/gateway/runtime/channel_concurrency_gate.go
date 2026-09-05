@@ -115,8 +115,10 @@ var runChannelConcurrencyReserve = func(
 }
 
 // reserveRedisChannelConcurrency acquires one cross-Gateway lease. Redis being
-// disabled means the process-local gate remains authoritative. An enabled but
-// unavailable Redis fails closed so a cache outage cannot bypass global limits.
+	// disabled means the process-local gate remains authoritative. Redis is only
+	// the cross-instance coordination layer; if it is temporarily unavailable,
+	// keep serving through the local gate instead of turning every request into a
+	// route-pool failure. Limits recover automatically when Redis is reachable.
 func reserveRedisChannelConcurrency(
 	channelID, userID, totalLimit, userLimit int,
 ) (func(), bool, ChannelConcurrencyAdmission) {
@@ -128,7 +130,7 @@ func reserveRedisChannelConcurrency(
 	}
 	if platformcache.RDB == nil {
 		reportChannelConcurrencyGateError(errors.New("redis is enabled but the client is unavailable"))
-		return func() {}, true, ChannelConcurrencyDependencyUnavailable
+		return func() {}, false, ChannelConcurrencyAdmitted
 	}
 
 	token := channelConcurrencyLeaseToken()
@@ -136,7 +138,7 @@ func reserveRedisChannelConcurrency(
 	admitted, err := reserveChannelConcurrencyWithRetry(keys, token, totalLimit, userLimit)
 	if err != nil {
 		reportChannelConcurrencyGateError(fmt.Errorf("reserve channel %d lease: %w", channelID, err))
-		return func() {}, true, ChannelConcurrencyDependencyUnavailable
+		return func() {}, false, ChannelConcurrencyAdmitted
 	}
 	if admitted != 1 {
 		return func() {}, true, ChannelConcurrencyCapacityReached

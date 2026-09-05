@@ -218,7 +218,7 @@ func TestChannelConcurrencyEnforcesSharedPerUserLimitAcrossGatewayInstances(t *t
 	require.Zero(t, gate.active[511])
 }
 
-func TestRedisChannelConcurrencyGateFallsBackOnlyWhenRedisIsDisabled(t *testing.T) {
+func TestRedisChannelConcurrencyGateFallsBackWhenRedisUnavailable(t *testing.T) {
 	originalEnabled := platformcache.RedisEnabled
 	originalClient := platformcache.RDB
 	t.Cleanup(func() {
@@ -234,8 +234,8 @@ func TestRedisChannelConcurrencyGateFallsBackOnlyWhenRedisIsDisabled(t *testing.
 
 	platformcache.RedisEnabled = true
 	_, enforced, admission = reserveRedisChannelConcurrency(521, 7, 1, 1)
-	require.True(t, enforced)
-	require.Equal(t, ChannelConcurrencyDependencyUnavailable, admission)
+	require.False(t, enforced)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
 }
 
 func TestChannelConcurrencyPropagatesRedisDependencyFailure(t *testing.T) {
@@ -282,7 +282,7 @@ func TestChannelConcurrencyReserveRetriesWithSameToken(t *testing.T) {
 	require.Len(t, committedTokens, 1)
 }
 
-func TestRedisChannelConcurrencyTimeoutIsDependencyUnavailable(t *testing.T) {
+func TestRedisChannelConcurrencyTimeoutFallsBackToLocalGate(t *testing.T) {
 	originalEnabled := platformcache.RedisEnabled
 	originalClient := platformcache.RDB
 	originalRunner := runChannelConcurrencyReserve
@@ -306,8 +306,8 @@ func TestRedisChannelConcurrencyTimeoutIsDependencyUnavailable(t *testing.T) {
 	}
 
 	_, enforced, admission := reserveRedisChannelConcurrency(529, 7, 10, 1)
-	require.True(t, enforced)
-	require.Equal(t, ChannelConcurrencyDependencyUnavailable, admission)
+	require.False(t, enforced)
+	require.Equal(t, ChannelConcurrencyAdmitted, admission)
 }
 
 func TestChannelConcurrencyLeaseKeysShareRedisClusterSlot(t *testing.T) {

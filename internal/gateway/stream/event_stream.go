@@ -25,6 +25,12 @@ func markResponseBodyDelivered(c *gin.Context) {
 	httpctx.SetContextKey(c, constant.ContextKeyResponseBodyDelivered, true)
 }
 
+// MarkResponseBodyDelivered records that response bytes have been committed
+// downstream after a successful flush.
+func MarkResponseBodyDelivered(c *gin.Context) {
+	markResponseBodyDelivered(c)
+}
+
 func FlushWriter(c *gin.Context) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -90,6 +96,13 @@ func FlushHeaders(c *gin.Context) (err error) {
 // existing CustomEvent framing rules here avoids two Render calls per token
 // while preserving carriage-return escaping and data-frame termination.
 func writeSSEParts(c *gin.Context, parts ...string) error {
+	if err := writeSSEPartsRaw(c, parts...); err != nil {
+		return err
+	}
+	return FlushWriter(c)
+}
+
+func writeSSEPartsRaw(c *gin.Context, parts ...string) error {
 	if c == nil || c.Writer == nil {
 		return errors.New("context or writer is nil")
 	}
@@ -104,7 +117,7 @@ func writeSSEParts(c *gin.Context, parts ...string) error {
 	if _, err := io.WriteString(c.Writer, payload.String()); err != nil {
 		return fmt.Errorf("write SSE data failed: %w", err)
 	}
-	return FlushWriter(c)
+	return nil
 }
 
 func SetEventStreamHeaders(c *gin.Context) {
@@ -161,17 +174,27 @@ func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) error
 }
 
 func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data string) error {
+	if err := ResponseChunkDataNoFlush(c, resp, data); err != nil {
+		return err
+	}
+	if err := FlushWriter(c); err != nil {
+		return err
+	}
+	markResponseBodyDelivered(c)
+	return nil
+}
+
+// ResponseChunkDataNoFlush writes one Responses SSE event without forcing a
+// transport flush. Callers that already batch several events can flush once
+// after the batch to avoid a flush syscall per lifecycle event.
+func ResponseChunkDataNoFlush(c *gin.Context, resp dto.ResponsesStreamResponse, data string) error {
 	if IsClientGone(c) {
 		return fmt.Errorf("request context done")
 	}
-	err := writeSSEParts(c, fmt.Sprintf("event: %s\n", resp.Type), fmt.Sprintf("data: %s", data))
-	if err != nil && IsClientGone(c) {
+	if err := writeSSEPartsRaw(c, fmt.Sprintf("event: %s\n", resp.Type), fmt.Sprintf("data: %s", data)); err != nil {
 		return err
 	}
-	if err == nil {
-		markResponseBodyDelivered(c)
-	}
-	return err
+	return nil
 }
 
 func StringData(c *gin.Context, str string) error {

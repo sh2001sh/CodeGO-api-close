@@ -101,6 +101,8 @@ export function useMarketplaceAutoRoutePool(enabled = true) {
     queryKey: ['marketplace-auto-route-pool'],
     queryFn: getMarketplaceAutoRoutePool,
     enabled,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -131,6 +133,7 @@ export function useMarketplaceRoutePool(id: string) {
     queryFn: () => getMarketplaceRoutePool(id),
     enabled: Boolean(id),
     staleTime: 30_000,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -192,6 +195,8 @@ export function useMyMarketplaceChannels() {
   return useQuery({
     queryKey: ['marketplace-channels', 'mine'],
     queryFn: getMyMarketplaceChannels,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
     refetchInterval: (query) =>
       verificationRefetchInterval(query.state.data ?? []),
   })
@@ -204,6 +209,8 @@ export function useMyMarketplaceUsageLogs(
     queryKey: ['marketplace-channels', 'mine', 'usage-logs', params],
     queryFn: () => getMyMarketplaceUsageLogs(params),
     placeholderData: (previousData) => previousData,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
   })
 }
 

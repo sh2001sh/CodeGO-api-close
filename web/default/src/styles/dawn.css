@@ -699,7 +699,8 @@ For commercial licensing, please contact support@quantumnous.com.
 }
 
 .dawn .gcard .state .pub.on {
-  color: var(--dawn-ok);
+  color: #16834a;
+  font-weight: 800;
 }
 
 .dawn .gcard .state .pub.off {
@@ -729,7 +730,7 @@ For commercial licensing, please contact support@quantumnous.com.
 .dawn .metrics .m {
   padding: 10px 13px;
   border-right: 1px solid var(--dawn-line);
-  background: #fdfbf8;
+  background: var(--dawn-card);
 }
 
 .dawn .metrics .m:last-child {
@@ -781,7 +782,7 @@ For commercial licensing, please contact support@quantumnous.com.
   border: 1px solid var(--dawn-line);
   border-radius: 8px;
   padding: 3px 10px;
-  background: #fff;
+  background: var(--dawn-card);
   color: var(--dawn-ink2);
   display: inline-flex;
   align-items: center;
@@ -844,7 +845,7 @@ For commercial licensing, please contact support@quantumnous.com.
 
 .dawn .mlist .mr {
   border-bottom: 1px solid #f4e8da;
-  background: #fff;
+  background: var(--dawn-card);
 }
 
 .dawn .mlist .mr:last-child {
@@ -931,16 +932,59 @@ For commercial licensing, please contact support@quantumnous.com.
   flex: 1;
   height: 14px;
   border-radius: 2px;
-  background: #9fbea6;
+  background: #5caa79;
   min-width: 4px;
 }
 
 .dawn .rb.w {
-  background: #d39a42;
+  background: #d28a24;
 }
 
+/* Keep the Dawn pages readable when the application theme switches to dark.
+   The page has its own palette, so it must explicitly mirror the theme state. */
+.dark .dawn {
+  --dawn-paper: #141210;
+  --dawn-card: #25211e;
+  --dawn-cream: #2b2622;
+  --dawn-cream2: #322b26;
+  --dawn-ink: #f3ede3;
+  --dawn-ink2: #cabdae;
+  --dawn-copper: #e08a52;
+  --dawn-copper-deep: #c96f3e;
+  --dawn-flare: #503523;
+  --dawn-line: rgba(220, 190, 160, 0.22);
+  --dawn-ok: #7bc58f;
+  --dawn-ok-bg: #24412d;
+  --dawn-warn: #e0a94f;
+  --dawn-warn-bg: #4a3820;
+  --dawn-bad: #f08b7d;
+  --dawn-bad-bg: #4a2724;
+  --dawn-idle: #8f8175;
+  color-scheme: dark;
+}
+
+.dawn .capline {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--dawn-line);
+  background: #fffaf4;
+  color: var(--dawn-ink2);
+  font-size: 11px;
+}
+.dawn .capline b { color: var(--dawn-ink); }
+
 .dawn .rb.e {
-  background: #c85c4f;
+  background: #c44235;
+}
+
+.dawn .page-jump {
+  width: 4.5rem;
+  border: 1px solid var(--dawn-line);
+  padding: 4px 6px;
+  font-family: var(--dawn-mono);
+  text-align: center;
 }
 
 .dawn .recent .rn {
@@ -1131,7 +1175,7 @@ For commercial licensing, please contact support@quantumnous.com.
   padding: 8px 11px;
   border: 1px solid rgba(184, 86, 46, 0.3);
   border-radius: 10px;
-  background: #fff;
+  background: var(--dawn-card);
   outline: none;
 }
 
@@ -1152,7 +1196,7 @@ For commercial licensing, please contact support@quantumnous.com.
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 14px;
-  background: #fff;
+  background: var(--dawn-card);
 }
 
 .dawn .compare .col {
@@ -1209,7 +1253,7 @@ For commercial licensing, please contact support@quantumnous.com.
 .dawn .poolbox {
   border: 1px solid rgba(184, 86, 46, 0.25);
   border-radius: 12px;
-  background: #fff;
+  background: var(--dawn-card);
   overflow: hidden;
 }
 
@@ -1377,7 +1421,7 @@ For commercial licensing, please contact support@quantumnous.com.
   padding: 9px 12px;
   border: 1px solid rgba(184, 86, 46, 0.3);
   border-radius: 10px;
-  background: #fff;
+  background: var(--dawn-card);
   outline: none;
 }
 

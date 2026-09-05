@@ -52,6 +52,32 @@ func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	require.Equal(t, 1, view.Items[0].Priority)
 }
 
+func TestLoadAutoRouteGroupsForIDsOnlyLoadsSelectedGroups(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
+	selectedChannelID, unrelatedChannelID := 501, 502
+	require.NoError(t, db.Create([]marketplaceschema.Channel{
+		{ID: "selected-channel", OwnerUserID: 11, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &selectedChannelID, Status: marketplacedomain.LifecycleActive},
+		{ID: "unrelated-channel", OwnerUserID: 12, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &unrelatedChannelID, Status: marketplacedomain.LifecycleActive},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Group{
+		autoRouteTestGroup("selected-group", "selected-channel", 11, 1),
+		autoRouteTestGroup("unrelated-group", "unrelated-channel", 12, 1),
+	}).Error)
+
+	groups, channels, err := loadAutoRouteGroupsForIDs(20, []string{"selected-group"})
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	require.Equal(t, "selected-group", groups[0].ID)
+	require.Contains(t, channels, "selected-channel")
+	require.NotContains(t, channels, "unrelated-channel")
+
+	groups, channels, err = loadAutoRouteGroupsForIDs(20, []string{})
+	require.NoError(t, err)
+	require.Empty(t, groups)
+	require.Empty(t, channels)
+}
+
 func TestAutoRoutePoolRejectsMoreThanTenGroups(t *testing.T) {
 	groupIDs := make([]string, 11)
 	for i := range groupIDs {

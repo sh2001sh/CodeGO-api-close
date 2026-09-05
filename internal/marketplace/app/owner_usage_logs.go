@@ -9,6 +9,7 @@ import (
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -47,28 +48,66 @@ func ListOwnerUsageLogs(ownerUserID int, query OwnerUsageLogQuery) (*OwnerUsageL
 		channelByInternalID[channel.InternalChannelID] = channel
 	}
 
-	if err := ownerUsageLogDBQuery(channelIDs, query).Count(&result.Total).Error; err != nil {
-		return nil, err
-	}
-	result.Summary, err = loadOwnerUsageSummary(ownerUserID, channelIDs, groupIDs, query)
-	if err != nil {
-		return nil, err
-	}
 	var logs []auditschema.Log
-	if err := ownerUsageLogDBQuery(channelIDs, query).Order("id desc").
-		Limit(query.PageSize).
-		Offset((query.Page - 1) * query.PageSize).
-		Find(&logs).Error; err != nil {
-		return nil, err
+	var summary OwnerUsageLogSummary
+	loadLogs := func() error {
+		return ownerUsageLogDBQuery(channelIDs, query).Order("id desc").
+			Select("id, created_at, type, content, user_id, token_name, model_name, quota, prompt_tokens, completion_tokens, use_time, is_stream, channel_id, request_id, upstream_request_id, other").
+			Limit(query.PageSize).
+			Offset((query.Page - 1) * query.PageSize).
+			Find(&logs).Error
 	}
+	if platformdb.LogDB.Dialector.Name() == "sqlite" {
+		if err := ownerUsageLogDBQuery(channelIDs, query).Count(&result.Total).Error; err != nil {
+			return nil, err
+		}
+		if summary, err = loadOwnerUsageSummary(ownerUserID, channelIDs, groupIDs, query); err != nil {
+			return nil, err
+		}
+		if err := loadLogs(); err != nil {
+			return nil, err
+		}
+	} else {
+		var group errgroup.Group
+		group.Go(func() error {
+			return ownerUsageLogDBQuery(channelIDs, query).Count(&result.Total).Error
+		})
+		group.Go(func() error {
+			var err error
+			summary, err = loadOwnerUsageSummary(ownerUserID, channelIDs, groupIDs, query)
+			return err
+		})
+		group.Go(loadLogs)
+		if err := group.Wait(); err != nil {
+			return nil, err
+		}
+	}
+	result.Summary = summary
 
-	settlements, err := loadOwnerUsageSettlements(ownerUserID, logs)
-	if err != nil {
-		return nil, err
-	}
-	externalUserIDs, err := loadExternalUserIDs(logs)
-	if err != nil {
-		return nil, err
+	var settlements map[string]marketplaceschema.Settlement
+	var externalUserIDs map[int]string
+	if platformdb.LogDB.Dialector.Name() == "sqlite" {
+		if settlements, err = loadOwnerUsageSettlements(ownerUserID, logs); err != nil {
+			return nil, err
+		}
+		if externalUserIDs, err = loadExternalUserIDs(logs); err != nil {
+			return nil, err
+		}
+	} else {
+		var group errgroup.Group
+		group.Go(func() error {
+			var err error
+			settlements, err = loadOwnerUsageSettlements(ownerUserID, logs)
+			return err
+		})
+		group.Go(func() error {
+			var err error
+			externalUserIDs, err = loadExternalUserIDs(logs)
+			return err
+		})
+		if err := group.Wait(); err != nil {
+			return nil, err
+		}
 	}
 	result.Items = make([]OwnerUsageLogItem, 0, len(logs))
 	for i := range logs {

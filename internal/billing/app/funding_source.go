@@ -14,6 +14,10 @@ type SubscriptionFundingPreConsumeResult struct {
 	PreConsumed        int64
 	AmountTotal        int64
 	AmountUsedAfter    int64
+	ReservationID      string
+	AccountID          string
+	PlanID             int
+	PlanTitle          string
 }
 
 type SubscriptionFundingPlanInfo struct {
@@ -150,13 +154,19 @@ func (s *SubscriptionFunding) PreConsume(amount int) error {
 	s.preConsumed = res.PreConsumed
 	s.AmountTotal = res.AmountTotal
 	s.AmountUsedAfter = res.AmountUsedAfter
-	if reservation, err := findSubscriptionReservation(s.requestID); err != nil {
-		return err
-	} else if reservation != nil {
-		s.reservationID = reservation.ReservationID
-		s.accountID = reservation.AccountID
+	s.reservationID = res.ReservationID
+	s.accountID = res.AccountID
+	if s.reservationID == "" {
+		if reservation, err := findSubscriptionReservation(s.requestID); err != nil {
+			return err
+		} else if reservation != nil {
+			s.reservationID = reservation.ReservationID
+			s.accountID = reservation.AccountID
+		}
 	}
-	if subscriptionFundingHooks.GetPlanInfo != nil {
+	s.PlanId = res.PlanID
+	s.PlanTitle = res.PlanTitle
+	if s.PlanId == 0 && subscriptionFundingHooks.GetPlanInfo != nil {
 		if planInfo, err := subscriptionFundingHooks.GetPlanInfo(res.UserSubscriptionID); err == nil && planInfo != nil {
 			s.PlanId = planInfo.PlanID
 			s.PlanTitle = planInfo.PlanTitle

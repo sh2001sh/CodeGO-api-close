@@ -82,6 +82,10 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		return
 	}
+	// Validation ends once the request has been decoded and normalized. Keep
+	// relay-slot queueing separate so a busy gateway cannot masquerade as slow
+	// JSON/token validation in the first-byte trace.
+	firstByteTrace.MarkRequestValidated()
 
 	releaseRelaySlot, admitted, admissionStats := platformconcurrency.TryAcquireRelaySlot()
 	if !admitted {
@@ -100,9 +104,9 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	defer releaseRelaySlot()
 	firstByteTrace.MarkAdmitted()
 
-	firstByteTrace.MarkRequestValidated()
-
+	firstByteTrace.MarkRelayInfoGenerationStarted()
 	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
+	firstByteTrace.MarkRelayInfoGenerationDone()
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
@@ -161,7 +165,9 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		requestBudgetStart,
 	)
 
+	firstByteTrace.MarkModelPriceStarted()
 	priceData, err := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
+	firstByteTrace.MarkModelPriceDone()
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 		return
@@ -217,12 +223,20 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		relayInfo.FirstByteTrace.MarkRouteSelected()
+		relayInfo.FirstByteTrace.MarkChannelMetaStarted()
 		relayInfo.InitChannelMeta(c)
-		if sensitiveErr := checkPromptSensitiveForChannel(c, relayFormat, channel, meta); sensitiveErr != nil {
+		relayInfo.FirstByteTrace.MarkChannelMetaDone()
+		relayInfo.FirstByteTrace.MarkPromptSensitiveStarted()
+		sensitiveErr := checkPromptSensitiveForChannel(c, relayFormat, channel, meta)
+		relayInfo.FirstByteTrace.MarkPromptSensitiveDone()
+		if sensitiveErr != nil {
 			newAPIError = sensitiveErr
 			break
 		}
-		if auditErr := checkPromptAudit(c, relayFormat, request, relayInfo); auditErr != nil {
+		relayInfo.FirstByteTrace.MarkPromptAuditStarted()
+		auditErr := checkPromptAudit(c, relayFormat, request, relayInfo)
+		relayInfo.FirstByteTrace.MarkPromptAuditDone()
+		if auditErr != nil {
 			newAPIError = auditErr
 			break
 		}
@@ -246,18 +260,22 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			}
 		}
 
+		relayInfo.FirstByteTrace.MarkModelPriceStarted()
 		currentPriceData, priceErr := relaycommon.ModelPriceHelper(c, relayInfo, tokens, meta)
+		relayInfo.FirstByteTrace.MarkModelPriceDone()
 		if priceErr != nil {
 			newAPIError = types.NewError(priceErr, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 			break
 		}
 
+		relayInfo.FirstByteTrace.MarkChannelAdmissionStarted()
 		releaseChannelConcurrency, channelAdmission := relaycommon.TryBeginChannelRequestForUser(
 			channel.Id,
 			relayInfo.UserId,
 			channel.MarketplaceMaxConcurrency,
 			channel.MarketplaceUserMaxConcurrency,
 		)
+		relayInfo.FirstByteTrace.MarkChannelAdmissionDone()
 		if channelAdmission != relaycommon.ChannelConcurrencyAdmitted {
 			addUsedChannel(c, channel.Id)
 			reason, rejection, retryOtherChannel := channelConcurrencyRejection(channelAdmission)
@@ -279,6 +297,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		if capacityScope == "" {
 			capacityScope = fmt.Sprintf("channel:%d", channel.Id)
 		}
+		relayInfo.FirstByteTrace.MarkFaultDomainAdmissionStarted()
 		releaseFaultDomainSlot, admitted, _ := relaycommon.TryAcquireFaultDomainSlotForUser(
 			faultDomain,
 			capacityScope,
@@ -286,6 +305,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			relayInfo.UserId,
 			requestProfile.RequestType,
 		)
+		relayInfo.FirstByteTrace.MarkFaultDomainAdmissionDone()
 		if !admitted {
 			relaycommon.ExcludeFaultDomain(c, faultDomain)
 			relaycommon.ExcludeRouteDecisionCandidate(c, "fault_domain_capacity")

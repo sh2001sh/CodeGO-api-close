@@ -45,7 +45,7 @@ import {
 import { aggregateUsageByBucket } from '@/features/dashboard/lib/overview-usage'
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import { DawnQueryError } from '@/features/dawn/components/query-error'
-import { getAllUserLogs } from '@/features/usage-logs/api'
+import { getUserLogs } from '@/features/usage-logs/api'
 import type { UsageLog } from '@/features/usage-logs/data/schema'
 
 type TimeRange = '24h' | '7d' | '30d'
@@ -104,12 +104,21 @@ export function DawnOverviewDashboard() {
 
   const logsQuery = useQuery({
     queryKey: ['dawn-overview', 'logs', range, startTimestamp, endTimestamp],
-    queryFn: () =>
-      getAllUserLogs({
+    queryFn: async () => {
+      // The dashboard only needs token totals. Fetch one bounded aggregate
+      // page instead of walking every log page sequentially on first paint.
+      const response = await getUserLogs({
         type: 2,
         start_timestamp: startTimestamp,
         end_timestamp: endTimestamp,
-      }),
+        p: 1,
+        page_size: 1000,
+      })
+      if (!response.success || !response.data) {
+        throw new Error(response.message || '用量记录加载失败')
+      }
+      return response.data.items as UsageLog[]
+    },
     staleTime: 60_000,
   })
 

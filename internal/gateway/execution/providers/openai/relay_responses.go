@@ -412,10 +412,17 @@ func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, 
 
 func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayInfo, events []bufferedResponsesStreamEvent) error {
 	for _, event := range events {
-		if err := sendResponsesStreamData(c, info, event.response, event.data); err != nil {
+		if err := helper.ResponseChunkDataNoFlush(c, event.response, event.data); err != nil {
 			return err
 		}
 	}
+	if len(events) == 0 {
+		return nil
+	}
+	if err := helper.FlushWriter(c); err != nil {
+		return err
+	}
+	helper.MarkResponseBodyDelivered(c)
 	return nil
 }
 

@@ -9,12 +9,14 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/dto"
 	"github.com/stretchr/testify/require"
 )
 
 type countingResponseWriter struct {
 	http.ResponseWriter
-	writes int
+	writes  int
+	flushes int
 }
 
 func (w *countingResponseWriter) Write(p []byte) (int, error) {
@@ -23,6 +25,7 @@ func (w *countingResponseWriter) Write(p []byte) (int, error) {
 }
 
 func (w *countingResponseWriter) Flush() {
+	w.flushes++
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
@@ -74,6 +77,34 @@ func TestWriteSSEPartsUsesOneUnderlyingWrite(t *testing.T) {
 
 	require.NoError(t, writeSSEParts(ctx, "event: message\n", "data: payload"))
 	require.Equal(t, 1, underlying.writes)
+}
+
+func TestResponseChunkDataNoFlushDefersFlush(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	underlying := &countingResponseWriter{ResponseWriter: httptest.NewRecorder()}
+	ctx, _ := gin.CreateTestContext(underlying)
+	ctx.Request = httptest.NewRequest("GET", "/", nil)
+
+	resp := dto.ResponsesStreamResponse{Type: "response.output_text.delta"}
+	require.NoError(t, ResponseChunkDataNoFlush(ctx, resp, `{"delta":"hello"}`))
+	require.Equal(t, 1, underlying.writes)
+	require.Equal(t, 0, underlying.flushes)
+	require.Equal(t, "event: response.output_text.delta\ndata: {\"delta\":\"hello\"}\n\n", underlying.ResponseWriter.(*httptest.ResponseRecorder).Body.String())
+
+	require.NoError(t, FlushWriter(ctx))
+	require.Equal(t, 1, underlying.flushes)
+}
+
+func TestResponseChunkDataFlushesOnce(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	underlying := &countingResponseWriter{ResponseWriter: httptest.NewRecorder()}
+	ctx, _ := gin.CreateTestContext(underlying)
+	ctx.Request = httptest.NewRequest("GET", "/", nil)
+
+	resp := dto.ResponsesStreamResponse{Type: "response.completed"}
+	require.NoError(t, ResponseChunkData(ctx, resp, `{}`))
+	require.Equal(t, 1, underlying.writes)
+	require.Equal(t, 1, underlying.flushes)
 }
 
 func renderSSEPartsBaseline(c *gin.Context, event, data string) {

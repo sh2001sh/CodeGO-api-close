@@ -38,6 +38,18 @@ func NewLedgerRelayFunding(userID int, requestID string, source string) (*Ledger
 // NewLedgerRelayFundingWithInitialBalance reuses a balance read during funding
 // selection so the reservation path does not load the same wallet twice.
 func NewLedgerRelayFundingWithInitialBalance(userID int, requestID string, source string, initialBalance *int) (*LedgerRelayFunding, error) {
+	return newLedgerRelayFunding(userID, requestID, source, initialBalance, "")
+}
+
+// NewLedgerRelayFundingWithAccount reuses both the wallet balance and account
+// loaded during funding selection. The account id is only accepted from the
+// canonical balance lookup above, so the normal reservation transaction still
+// owns all balance mutations.
+func NewLedgerRelayFundingWithAccount(userID int, requestID string, source string, initialBalance *int, accountID string) (*LedgerRelayFunding, error) {
+	return newLedgerRelayFunding(userID, requestID, source, initialBalance, accountID)
+}
+
+func newLedgerRelayFunding(userID int, requestID string, source string, initialBalance *int, accountID string) (*LedgerRelayFunding, error) {
 	if userID <= 0 {
 		return nil, fmt.Errorf("invalid user id")
 	}
@@ -45,7 +57,7 @@ func NewLedgerRelayFundingWithInitialBalance(userID int, requestID string, sourc
 		return nil, fmt.Errorf("request id is required for ledger billing")
 	}
 
-	funding := &LedgerRelayFunding{userID: userID, requestID: requestID, source: source, initialBalance: initialBalance}
+	funding := &LedgerRelayFunding{userID: userID, requestID: requestID, source: source, initialBalance: initialBalance, accountID: strings.TrimSpace(accountID)}
 	switch source {
 	case BillingSourceWallet:
 		funding.accountType = billingAccountTypeClaudeWallet

@@ -1,7 +1,9 @@
 package app
 
 import (
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,6 +11,48 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 )
+
+const routeHealthRequestCacheKey = "gateway_route_health_request_cache"
+
+type routeHealthCacheEntry struct {
+	health gatewayruntime.ChannelHealth
+	found  bool
+}
+
+type routeHealthRequestCache struct {
+	channels map[string]routeHealthCacheEntry
+	domains  map[string]routeHealthCacheEntry
+}
+
+// resetRouteHealthRequestCache starts a fresh advisory-health view for a new
+// routing round. Retries can update circuit state, so cached values must not
+// leak across retry rounds.
+func resetRouteHealthRequestCache(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set(routeHealthRequestCacheKey, &routeHealthRequestCache{
+		channels: make(map[string]routeHealthCacheEntry),
+		domains:  make(map[string]routeHealthCacheEntry),
+	})
+}
+
+func getRouteHealthRequestCache(c *gin.Context) *routeHealthRequestCache {
+	if c == nil {
+		return nil
+	}
+	if value, exists := c.Get(routeHealthRequestCacheKey); exists {
+		if cache, ok := value.(*routeHealthRequestCache); ok && cache != nil {
+			return cache
+		}
+	}
+	cache := &routeHealthRequestCache{
+		channels: make(map[string]routeHealthCacheEntry),
+		domains:  make(map[string]routeHealthCacheEntry),
+	}
+	c.Set(routeHealthRequestCacheKey, cache)
+	return cache
+}
 
 type routePoolCandidateClass uint8
 
@@ -145,11 +189,40 @@ func routePoolChannelHealth(
 	modelName string,
 	requestType gatewayruntime.RequestType,
 ) (gatewayruntime.ChannelHealth, bool) {
-	shared, sharedFound := gatewayruntime.GetChannelHealth(channelID, modelName, requestType)
+	cache := getRouteHealthRequestCache(c)
+	cacheKey := strings.Join([]string{"channel", strconv.Itoa(channelID), modelName, string(requestType)}, "\x00")
+	if cache != nil {
+		if cached, ok := cache.channels[cacheKey]; ok {
+			return cached.health, cached.found
+		}
+	}
+	var shared gatewayruntime.ChannelHealth
+	var sharedFound bool
+	var user gatewayruntime.ChannelHealth
+	var userFound bool
 	if !gatewayruntime.IsAutoRouteRequest(c) {
+		shared, sharedFound = gatewayruntime.GetChannelHealth(channelID, modelName, requestType)
+	} else {
+		// Both reads are independent Redis lookups. Do them concurrently so a
+		// transiently slow Redis server contributes one wait, not two.
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			shared, sharedFound = gatewayruntime.GetChannelHealth(channelID, modelName, requestType)
+		}()
+		go func() {
+			defer wg.Done()
+			user, userFound = gatewayruntime.GetUserChannelHealth(c, channelID, modelName, requestType)
+		}()
+		wg.Wait()
+	}
+	if !gatewayruntime.IsAutoRouteRequest(c) {
+		if cache != nil {
+			cache.channels[cacheKey] = routeHealthCacheEntry{health: shared, found: sharedFound}
+		}
 		return shared, sharedFound
 	}
-	user, userFound := gatewayruntime.GetUserChannelHealth(c, channelID, modelName, requestType)
 	shared.State = ""
 	shared.ConsecutiveRetryableFailures = 0
 	shared.RecoveryProbeSuccesses = 0
@@ -168,7 +241,11 @@ func routePoolChannelHealth(
 		shared.LastFailureAt = user.LastFailureAt
 		shared.LastFailureRequestID = user.LastFailureRequestID
 	}
-	return shared, sharedFound || userFound
+	found := sharedFound || userFound
+	if cache != nil {
+		cache.channels[cacheKey] = routeHealthCacheEntry{health: shared, found: found}
+	}
+	return shared, found
 }
 
 func routePoolFaultDomainHealth(
@@ -177,10 +254,24 @@ func routePoolFaultDomainHealth(
 	modelName string,
 	requestType gatewayruntime.RequestType,
 ) (gatewayruntime.ChannelHealth, bool) {
-	if gatewayruntime.IsAutoRouteRequest(c) {
-		return gatewayruntime.GetUserFaultDomainHealth(c, domain, modelName, requestType)
+	cache := getRouteHealthRequestCache(c)
+	cacheKey := strings.Join([]string{"domain", domain, modelName, string(requestType)}, "\x00")
+	if cache != nil {
+		if cached, ok := cache.domains[cacheKey]; ok {
+			return cached.health, cached.found
+		}
 	}
-	return gatewayruntime.GetFaultDomainHealth(domain, modelName, requestType)
+	var health gatewayruntime.ChannelHealth
+	var found bool
+	if gatewayruntime.IsAutoRouteRequest(c) {
+		health, found = gatewayruntime.GetUserFaultDomainHealth(c, domain, modelName, requestType)
+	} else {
+		health, found = gatewayruntime.GetFaultDomainHealth(domain, modelName, requestType)
+	}
+	if cache != nil {
+		cache.domains[cacheKey] = routeHealthCacheEntry{health: health, found: found}
+	}
+	return health, found
 }
 
 func activeRoutePoolCircuit(health gatewayruntime.ChannelHealth, found bool, now time.Time) bool {

@@ -24,7 +24,7 @@ func UserUsageTimeSeries(owner int, channelID, userID string, rangeHours int) (m
 	}
 	start := time.Now().Add(-time.Duration(rangeHours) * time.Hour).Unix()
 	var logs []auditschema.Log
-	if err := platformdb.LogDB.Where("user_id=? AND channel_id=? AND created_at>=?", uid, c.InternalChannelID, start).Find(&logs).Error; err != nil {
+	if err := platformdb.LogDB.Select("created_at,type,prompt_tokens,completion_tokens").Where("user_id=? AND channel_id=? AND created_at>=?", uid, c.InternalChannelID, start).Find(&logs).Error; err != nil {
 		return nil, err
 	}
 	bucket := int64(3600)
@@ -100,13 +100,29 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 		Amount  int64
 		Last    time.Time
 	}
-	platformdb.DB.Model(&marketplaceschema.Settlement{}).Select("consumer_user_id as user_id, group_id, count(*) as cnt, sum(consumer_amount) as amount, max(created_at) as last").Where("group_id IN ?", ids).Group("consumer_user_id,group_id").Scan(&rows)
+	if err := platformdb.DB.Model(&marketplaceschema.Settlement{}).
+		Select("consumer_user_id as user_id, group_id, count(*) as cnt, sum(consumer_amount) as amount, max(created_at) as last").
+		Where("group_id IN ?", ids).Group("consumer_user_id,group_id").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	userIDs := make([]int, 0, len(rows))
+	for _, row := range rows {
+		userIDs = append(userIDs, row.UserID)
+	}
+	users := make([]identityschema.User, 0, len(userIDs))
+	if len(userIDs) > 0 {
+		if err := platformdb.DB.Select("id,external_id").Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+			return nil, err
+		}
+	}
+	externalIDs := make(map[int]string, len(users))
+	for _, user := range users {
+		externalIDs[user.Id] = user.ExternalId
+	}
 	items := make([]OwnerUserUsageItem, 0, len(rows))
 	for _, r := range rows {
-		var u identityschema.User
-		platformdb.DB.Select("id,external_id").First(&u, r.UserID)
 		group := groupsByID[r.GroupID]
-		items = append(items, OwnerUserUsageItem{UserID: strconv.Itoa(r.UserID), ExternalUserID: u.ExternalId, ChannelID: group.ChannelID, ChannelName: group.SystemDisplayName, GroupID: r.GroupID, RequestCount: r.Cnt, SuccessCount: r.Cnt, SuccessRate: 1, TotalConsumerAmount: r.Amount, LastRequestAt: r.Last})
+		items = append(items, OwnerUserUsageItem{UserID: strconv.Itoa(r.UserID), ExternalUserID: externalIDs[r.UserID], ChannelID: group.ChannelID, ChannelName: group.SystemDisplayName, GroupID: r.GroupID, RequestCount: r.Cnt, SuccessCount: r.Cnt, SuccessRate: 1, TotalConsumerAmount: r.Amount, LastRequestAt: r.Last})
 	}
 	return map[string]any{"items": items, "total": len(items), "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": len(items), "total_requests": len(items)}}, nil
 }

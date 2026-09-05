@@ -95,7 +95,7 @@ func GetUserFaultDomainHealth(c *gin.Context, domain, model string, requestTypes
 }
 
 func getUserRouteHealth(key string) (ChannelHealth, bool) {
-	state, found, err := getChannelHealthCache().Get(key)
+	state, found, err := getChannelHealthCache().GetWithTimeout(key, channelHealthReadTimeout)
 	return state, found && err == nil && !userRouteHealthEmpty(state)
 }
 

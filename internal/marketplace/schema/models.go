@@ -243,8 +243,8 @@ func (ChannelFeedback) TableName() string {
 type Settlement struct {
 	ID                     string     `json:"id" gorm:"column:id;primaryKey;size:64"`
 	RequestID              string     `json:"request_id" gorm:"column:request_id;size:64;uniqueIndex;not null"`
-	GroupID                string     `json:"group_id" gorm:"column:group_id;size:64;index;not null"`
-	OwnerUserID            int        `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
+	GroupID                string     `json:"group_id" gorm:"column:group_id;size:64;index;index:idx_marketplace_settlements_owner_group_created,priority:2;not null"`
+	OwnerUserID            int        `json:"owner_user_id" gorm:"column:owner_user_id;index;index:idx_marketplace_settlements_owner_group_created,priority:1;not null"`
 	ConsumerUserID         int        `json:"consumer_user_id" gorm:"column:consumer_user_id;index;not null"`
 	BillingSource          string     `json:"billing_source" gorm:"column:billing_source;size:24;not null;default:wallet"`
 	ConsumerAmount         int64      `json:"consumer_amount" gorm:"column:consumer_amount;not null"`
@@ -260,7 +260,7 @@ type Settlement struct {
 	ReleasedAt             *time.Time `json:"released_at" gorm:"column:released_at"`
 	ReclaimedAt            *time.Time `json:"reclaimed_at" gorm:"column:reclaimed_at"`
 	ForfeitedAt            *time.Time `json:"forfeited_at" gorm:"column:forfeited_at"`
-	CreatedAt              time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	CreatedAt              time.Time  `json:"created_at" gorm:"column:created_at;index:idx_marketplace_settlements_owner_group_created,priority:3;autoCreateTime"`
 }
 
 func (Settlement) TableName() string { return tableName("settlements") }

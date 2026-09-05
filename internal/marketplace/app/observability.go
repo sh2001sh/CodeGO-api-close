@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"sort"
 	"time"
 
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
@@ -30,6 +31,11 @@ type MarketplaceObservabilityView struct {
 	EndTimestamp   int64                          `json:"end_timestamp"`
 	Items          []MarketplaceObservabilityItem `json:"items"`
 }
+
+// Keep owner dashboards bounded even when an owner has years of audit data.
+// The UI presents a current health window, so retaining an unbounded slice is
+// both unnecessary and a direct source of latency/GC pressure.
+const maxObservabilitySamples = 100000
 
 func ListMarketplaceObservability(ownerUserID int, startTimestamp, endTimestamp int64) (*MarketplaceObservabilityView, error) {
 	if endTimestamp <= 0 {
@@ -87,7 +93,8 @@ func ListMarketplaceObservability(ownerUserID int, startTimestamp, endTimestamp 
 	var attempts []gatewayschema.RequestAttemptAudit
 	attemptsLoaded := false
 	if platformdb.DB != nil {
-		if err := platformdb.DB.Where("channel_id IN ? AND started_at BETWEEN ? AND ?", ids, time.Unix(startTimestamp, 0), time.Unix(endTimestamp, 0)).Find(&attempts).Error; err == nil && len(attempts) > 0 {
+		if err := platformdb.DB.Where("channel_id IN ? AND started_at BETWEEN ? AND ?", ids, time.Unix(startTimestamp, 0), time.Unix(endTimestamp, 0)).
+			Order("started_at DESC").Limit(maxObservabilitySamples).Find(&attempts).Error; err == nil && len(attempts) > 0 {
 			attemptsLoaded = true
 			for _, attempt := range attempts {
 				add(attempt.ChannelID, attempt.ModelName, attempt.Success, attempt.DurationMS, 0, int64(attempt.RetryIndex))
@@ -96,7 +103,8 @@ func ListMarketplaceObservability(ownerUserID int, startTimestamp, endTimestamp 
 	}
 	if !attemptsLoaded {
 		var logs []auditschema.Log
-		if err := platformdb.LogDB.Where("channel_id IN ? AND type IN ? AND created_at BETWEEN ? AND ?", ids, []int{auditschema.LogTypeConsume, auditschema.LogTypeError}, startTimestamp, endTimestamp).Find(&logs).Error; err != nil {
+		if err := platformdb.LogDB.Where("channel_id IN ? AND type IN ? AND created_at BETWEEN ? AND ?", ids, []int{auditschema.LogTypeConsume, auditschema.LogTypeError}, startTimestamp, endTimestamp).
+			Order("created_at DESC").Limit(maxObservabilitySamples).Find(&logs).Error; err != nil {
 			return nil, err
 		}
 		for _, log := range logs {
@@ -138,9 +146,5 @@ func int64FromAny(value any) int64 {
 	return 0
 }
 func sortInt64s(values []int64) {
-	for i := 1; i < len(values); i++ {
-		for j := i; j > 0 && values[j] < values[j-1]; j-- {
-			values[j], values[j-1] = values[j-1], values[j]
-		}
-	}
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
 }

@@ -24,6 +24,10 @@ type SubscriptionPreConsumeResult struct {
 	AmountTotal        int64
 	AmountUsedBefore   int64
 	AmountUsedAfter    int64
+	ReservationID      string
+	AccountID          string
+	PlanID             int
+	PlanTitle          string
 }
 
 type SubscriptionPlanInfo struct {

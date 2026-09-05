@@ -29,12 +29,15 @@ const (
 	channelHealthProbeLeaseDuration        = 10 * time.Second
 	channelHealthEmergencyProbeSlots       = 2
 	channelHealthTTL                       = 20 * time.Minute
-	channelModelUnavailableTTL             = 5 * time.Minute
-	channelModelUpstreamFailureTTL         = 2 * time.Minute
-	channelHealthShortWindow               = 2 * time.Minute
-	channelHealthShortMinRequests          = 5
-	channelHealthShortMaxSuccess           = 40.0
-	channelHealthTTFTWindow                = 20
+	// Health is advisory routing metadata. A slow or unavailable Redis instance
+	// must never hold a model request for the normal cache operation timeout.
+	channelHealthReadTimeout       = 150 * time.Millisecond
+	channelModelUnavailableTTL     = 5 * time.Minute
+	channelModelUpstreamFailureTTL = 2 * time.Minute
+	channelHealthShortWindow       = 2 * time.Minute
+	channelHealthShortMinRequests  = 5
+	channelHealthShortMaxSuccess   = 40.0
+	channelHealthTTFTWindow        = 20
 )
 
 // ChannelHealth captures the shared routing health for one channel/model pair.
@@ -120,7 +123,7 @@ func GetChannelHealth(channelID int, model string, requestTypes ...RequestType) 
 	if channelID <= 0 || model == "" {
 		return ChannelHealth{}, false
 	}
-	state, found, err := getChannelHealthCache().Get(channelHealthKey(channelID, model, requestTypes...))
+	state, found, err := getChannelHealthCache().GetWithTimeout(channelHealthKey(channelID, model, requestTypes...), channelHealthReadTimeout)
 	return state, found && err == nil
 }
 

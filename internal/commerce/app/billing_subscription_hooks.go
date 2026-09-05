@@ -17,6 +17,10 @@ func init() {
 				PreConsumed:        result.PreConsumed,
 				AmountTotal:        result.AmountTotal,
 				AmountUsedAfter:    result.AmountUsedAfter,
+				ReservationID:      result.ReservationID,
+				AccountID:          result.AccountID,
+				PlanID:             result.PlanID,
+				PlanTitle:          result.PlanTitle,
 			}, nil
 		},
 		ReserveAdditional: func(requestID string, subscriptionID int, modelName string, amount int64) error {

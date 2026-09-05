@@ -9,6 +9,7 @@ import (
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -19,18 +20,56 @@ func ListRoutePools(ownerUserID int) ([]RoutePoolSummary, error) {
 	if err := platformdb.DB.Where("owner_user_id = ?", ownerUserID).Order("created_at asc").Find(&pools).Error; err != nil {
 		return nil, err
 	}
+	if len(pools) == 0 {
+		return []RoutePoolSummary{}, nil
+	}
+	// A summary only needs selected members and declared models. Loading every
+	// pool through ListRoutePool repeats snapshots and recent-series queries.
+	groups, channels, err := loadAutoRouteGroups(ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	groupsByID := make(map[string]marketplaceschema.Group, len(groups))
+	for _, group := range groups {
+		groupsByID[group.ID] = group
+	}
+	poolIDs := make([]string, 0, len(pools))
+	for _, pool := range pools {
+		poolIDs = append(poolIDs, pool.ID)
+	}
+	var members []marketplaceschema.RoutePoolMember
+	if err := platformdb.DB.Where("pool_id IN ?", poolIDs).Order("priority asc, id asc").Find(&members).Error; err != nil {
+		return nil, err
+	}
+	selectedByPool := make(map[string][]marketplaceschema.RoutePoolMember, len(pools))
+	for _, member := range members {
+		selectedByPool[member.PoolID] = append(selectedByPool[member.PoolID], member)
+	}
+	officialItems := loadOfficialAutoRouteItemsSummary(ownerUserID)
+	officialByID := make(map[string]AutoRoutePoolItem, len(officialItems))
+	for _, item := range officialItems {
+		officialByID[item.GroupID] = item
+	}
 	result := make([]RoutePoolSummary, 0, len(pools))
 	for _, pool := range pools {
-		view, err := ListRoutePool(ownerUserID, pool.ID)
-		if err != nil {
-			return nil, err
-		}
 		models := make(map[string]string)
-		for _, item := range view.Items {
-			if !item.Selected {
+		membersForPool := selectedByPool[pool.ID]
+		for _, member := range membersForPool {
+			if item, ok := officialByID[member.GroupID]; ok {
+				for _, model := range item.Models {
+					models[strings.ToLower(model)] = model
+				}
 				continue
 			}
-			for _, model := range item.Models {
+			group, ok := groupsByID[member.GroupID]
+			if !ok {
+				continue
+			}
+			channel, ok := channels[group.ChannelID]
+			if !ok {
+				continue
+			}
+			for _, model := range decodeModels(channel.DeclaredModels) {
 				models[strings.ToLower(model)] = model
 			}
 		}
@@ -39,7 +78,7 @@ func ListRoutePools(ownerUserID int) ([]RoutePoolSummary, error) {
 			values = append(values, model)
 		}
 		sort.Strings(values)
-		result = append(result, RoutePoolSummary{ID: pool.ID, Name: pool.Name, TokenGroup: RoutePoolTokenGroupValue(pool.ID), MemberCount: view.SelectedCount, Models: values})
+		result = append(result, RoutePoolSummary{ID: pool.ID, Name: pool.Name, TokenGroup: RoutePoolTokenGroupValue(pool.ID), MemberCount: len(membersForPool), Models: values})
 	}
 	return result, nil
 }
@@ -72,16 +111,38 @@ func ListRoutePool(ownerUserID int, poolID string) (*RoutePoolView, error) {
 	if err != nil {
 		return nil, err
 	}
-	snapshots, err := loadAutoRouteSnapshots(groups)
-	if err != nil {
-		return nil, err
+	var snapshots map[string]marketplaceschema.RankingSnapshot
+	var series map[int][]RecentRequestBucket
+	loadSnapshots := func() error {
+		var err error
+		snapshots, err = loadAutoRouteSnapshots(groups)
+		return err
 	}
-	series, err := marketplaceRecentRequestSeries(groups, channels)
-	if err != nil {
-		return nil, err
+	loadSeries := func() error {
+		var err error
+		series, err = marketplaceRecentRequestSeries(groups, channels)
+		return err
+	}
+	if platformdb.DB.Dialector.Name() == "sqlite" {
+		if err := loadSnapshots(); err != nil {
+			return nil, err
+		}
+		if err := loadSeries(); err != nil {
+			return nil, err
+		}
+	} else {
+		var group errgroup.Group
+		group.Go(loadSnapshots)
+		group.Go(loadSeries)
+		if err := group.Wait(); err != nil {
+			return nil, err
+		}
 	}
 	config := routePoolConfig(pool)
-	items := buildRoutePoolItems(ownerUserID, groups, channels, snapshots, series, selected, config)
+	items, err := buildRoutePoolItems(ownerUserID, groups, channels, snapshots, series, selected, config)
+	if err != nil {
+		return nil, err
+	}
 	return &RoutePoolView{ID: pool.ID, Name: pool.Name, TokenGroup: RoutePoolTokenGroupValue(pool.ID), SelectedCount: len(selected), Items: items, Config: config}, nil
 }
 
@@ -212,11 +273,15 @@ func routePoolConfig(pool marketplaceschema.RoutePool) AutoRoutePoolConfig {
 	return normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{Strategy: pool.Strategy, MaxAttempts: pool.MaxAttempts, FailureCooldownSeconds: pool.FailureCooldownSeconds, MaxMultiplier: pool.MaxMultiplier})
 }
 
-func buildRoutePoolItems(ownerUserID int, groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, series map[int][]RecentRequestBucket, selected map[string]int, config AutoRoutePoolConfig) []AutoRoutePoolItem {
+func buildRoutePoolItems(ownerUserID int, groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, series map[int][]RecentRequestBucket, selected map[string]int, config AutoRoutePoolConfig) ([]AutoRoutePoolItem, error) {
+	blockedChannels, err := loadBlockedChannelIDs(ownerUserID, groups)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]AutoRoutePoolItem, 0, len(groups))
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
-		if channelUserBlocked(group.ChannelID, ownerUserID) {
+		if _, blocked := blockedChannels[group.ChannelID]; blocked {
 			continue
 		}
 		priority, isSelected := selected[group.ID]
@@ -238,5 +303,5 @@ func buildRoutePoolItems(ownerUserID int, groups []marketplaceschema.Group, chan
 		}
 		return items[i].GroupID < items[j].GroupID
 	})
-	return items
+	return items, nil
 }

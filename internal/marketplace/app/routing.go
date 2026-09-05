@@ -70,6 +70,13 @@ func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBi
 	if err := platformdb.DB.Select("model_prices", "declared_models").First(&channel, "id = ?", group.ChannelID).Error; err != nil {
 		return nil, err
 	}
+	// Owner approved bargains and per-user overrides are stored separately
+	// from the public group multiplier. Apply the override at bind time so the
+	// approved rate is used by billing and routing immediately.
+	var userMultiplier marketplaceschema.UserMultiplier
+	if err := platformdb.DB.Where("channel_id = ? AND user_id = ?", group.ChannelID, consumerUserID).First(&userMultiplier).Error; err == nil && userMultiplier.Multiplier > 0 {
+		group.Multiplier = userMultiplier.Multiplier
+	}
 	return &RoutingBinding{
 		GroupID: group.ID, InternalGroup: group.InternalGroupName, OwnerUserID: group.OwnerUserID,
 		SourceType: group.SourceType, CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: group.Multiplier,

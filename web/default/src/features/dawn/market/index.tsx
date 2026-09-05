@@ -92,6 +92,12 @@ export function DawnMarket() {
     () => new URLSearchParams(window.location.search).get('mock') === '1'
   )
   const inviteHandledRef = useRef(false)
+  const marketListRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (filters.page <= 1) return
+    marketListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [filters.page])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -274,6 +280,8 @@ export function DawnMarket() {
     queryFn: getMarketplaceRoutePools,
     enabled: authed,
     retry: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   })
   const autoPool = useMarketplaceAutoRoutePool(authed)
   const isAutoPool = activePoolID === 'auto'
@@ -386,7 +394,7 @@ export function DawnMarket() {
 
         {perspective === 'user' ? (
           <div className='cols'>
-            <div style={{ gridColumn: '1 / -1' }}>
+            <div ref={marketListRef} style={{ gridColumn: '1 / -1', scrollMarginTop: 20 }}>
               <div className='filters'>
                 <input
                   placeholder='搜索分组 / 模型 / 来源'
@@ -529,6 +537,18 @@ export function DawnMarket() {
                         第 {filters.page} / {totalPages} 页
                       </span>
                       <span style={{ display: 'flex', gap: 8 }}>
+                        <input
+                          className='page-jump'
+                          type='number'
+                          min={1}
+                          max={totalPages}
+                          value={filters.page}
+                          aria-label='跳转页码'
+                          onChange={(event) => {
+                            const page = Math.max(1, Math.min(totalPages, Number(event.target.value) || 1))
+                            setFilters((current) => ({ ...current, page }))
+                          }}
+                        />
                         <button
                           className='btn mini'
                           disabled={filters.page <= 1}

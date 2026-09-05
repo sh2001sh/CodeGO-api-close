@@ -551,6 +551,8 @@ function UserUsageDialog(props: {
     queryKey: ['marketplace-user-usage', channel.id],
     queryFn: () => getMyMarketplaceUserUsage(channel.id),
     retry: false,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
   })
 
   const rows = useMemo(() => {

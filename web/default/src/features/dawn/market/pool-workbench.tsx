@@ -80,6 +80,8 @@ export function PoolWorkbench(props: {
     queryFn: getMarketplaceRoutePools,
     enabled: authed,
     retry: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   })
   const autoPool = useMarketplaceAutoRoutePool(authed)
   const poolDetail = useMarketplaceRoutePool(

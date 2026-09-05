@@ -8,49 +8,63 @@ import (
 // FirstByteTrace separates gateway work from the wait for the first upstream
 // stream event. It deliberately stores no request content or upstream identity.
 type FirstByteTrace struct {
-	mu                        sync.RWMutex
-	startedAt                 time.Time
-	bodyReadStartAt           time.Time
-	bodyReadDoneAt            time.Time
-	jsonDecodeStartAt         time.Time
-	jsonDecodeDoneAt          time.Time
-	requestValidAt            time.Time
-	admittedAt                time.Time
-	relayInfoReadyAt          time.Time
-	preflightDoneAt           time.Time
-	routeSelectedAt           time.Time
-	requestBodyRestoreStartAt time.Time
-	requestBodyRestoreDoneAt  time.Time
-	billingReserveStartAt     time.Time
-	billingReserveDoneAt      time.Time
-	upstreamStartAt           time.Time
-	requestConversionDoneAt   time.Time
-	upstreamRequestReadyAt    time.Time
-	upstreamResponseHeadersAt time.Time
-	firstEventAt              time.Time
-	firstSemanticReadAt       time.Time
-	firstSemanticAt           time.Time
-	firstTextReadAt           time.Time
-	firstTextAt               time.Time
-	firstHeadersFlushAt       time.Time
-	firstFlushAt              time.Time
-	firstSemanticIsText       bool
-	semanticKindMarked        bool
-	outboundTraceMarked       bool
-	outboundDNSDuration       time.Duration
-	outboundConnectDuration   time.Duration
-	outboundTLSDuration       time.Duration
-	outboundGotConnAt         time.Time
-	outboundWroteRequestAt    time.Time
-	outboundFirstByteAt       time.Time
-	outboundConnReused        bool
-	outboundConnWasIdle       bool
-	outboundConnIdleDuration  time.Duration
-	outboundConnMarked        bool
-	outboundRequestBodyBytes  int64
-	outboundHTTPProtoMajor    int64
-	outboundHTTPProtoMinor    int64
-	requestBodyFastPath       bool
+	mu                          sync.RWMutex
+	startedAt                   time.Time
+	bodyReadStartAt             time.Time
+	bodyReadDoneAt              time.Time
+	jsonDecodeStartAt           time.Time
+	jsonDecodeDoneAt            time.Time
+	requestValidAt              time.Time
+	admittedAt                  time.Time
+	relayInfoGenerationStartAt  time.Time
+	relayInfoGenerationDoneAt   time.Time
+	relayInfoReadyAt            time.Time
+	preflightDoneAt             time.Time
+	routeSelectedAt             time.Time
+	channelMetaStartAt          time.Time
+	channelMetaDoneAt           time.Time
+	promptSensitiveStartAt      time.Time
+	promptSensitiveDoneAt       time.Time
+	promptAuditStartAt          time.Time
+	promptAuditDoneAt           time.Time
+	channelAdmissionStartAt     time.Time
+	channelAdmissionDoneAt      time.Time
+	faultDomainAdmissionStartAt time.Time
+	faultDomainAdmissionDoneAt  time.Time
+	modelPriceStartAt           time.Time
+	modelPriceDoneAt            time.Time
+	requestBodyRestoreStartAt   time.Time
+	requestBodyRestoreDoneAt    time.Time
+	billingReserveStartAt       time.Time
+	billingReserveDoneAt        time.Time
+	upstreamStartAt             time.Time
+	requestConversionDoneAt     time.Time
+	upstreamRequestReadyAt      time.Time
+	upstreamResponseHeadersAt   time.Time
+	firstEventAt                time.Time
+	firstSemanticReadAt         time.Time
+	firstSemanticAt             time.Time
+	firstTextReadAt             time.Time
+	firstTextAt                 time.Time
+	firstHeadersFlushAt         time.Time
+	firstFlushAt                time.Time
+	firstSemanticIsText         bool
+	semanticKindMarked          bool
+	outboundTraceMarked         bool
+	outboundDNSDuration         time.Duration
+	outboundConnectDuration     time.Duration
+	outboundTLSDuration         time.Duration
+	outboundGotConnAt           time.Time
+	outboundWroteRequestAt      time.Time
+	outboundFirstByteAt         time.Time
+	outboundConnReused          bool
+	outboundConnWasIdle         bool
+	outboundConnIdleDuration    time.Duration
+	outboundConnMarked          bool
+	outboundRequestBodyBytes    int64
+	outboundHTTPProtoMajor      int64
+	outboundHTTPProtoMinor      int64
+	requestBodyFastPath         bool
 }
 
 // FirstByteTraceContextKey stores the request trace in the Gin context so
@@ -84,11 +98,25 @@ func (t *FirstByteTrace) MarkJSONDecodeDone()    { t.mark(&t.jsonDecodeDoneAt) }
 func (t *FirstByteTrace) MarkHeadersFlush()      { t.mark(&t.firstHeadersFlushAt) }
 func (t *FirstByteTrace) MarkFirstFlush()        { t.mark(&t.firstFlushAt) }
 
-func (t *FirstByteTrace) MarkRequestValidated() { t.mark(&t.requestValidAt) }
-func (t *FirstByteTrace) MarkAdmitted()         { t.mark(&t.admittedAt) }
-func (t *FirstByteTrace) MarkRelayInfoReady()   { t.mark(&t.relayInfoReadyAt) }
-func (t *FirstByteTrace) MarkPreflightDone()    { t.mark(&t.preflightDoneAt) }
-func (t *FirstByteTrace) MarkRouteSelected()    { t.mark(&t.routeSelectedAt) }
+func (t *FirstByteTrace) MarkRequestValidated()            { t.mark(&t.requestValidAt) }
+func (t *FirstByteTrace) MarkAdmitted()                    { t.mark(&t.admittedAt) }
+func (t *FirstByteTrace) MarkRelayInfoGenerationStarted()  { t.mark(&t.relayInfoGenerationStartAt) }
+func (t *FirstByteTrace) MarkRelayInfoGenerationDone()     { t.mark(&t.relayInfoGenerationDoneAt) }
+func (t *FirstByteTrace) MarkRelayInfoReady()              { t.mark(&t.relayInfoReadyAt) }
+func (t *FirstByteTrace) MarkPreflightDone()               { t.mark(&t.preflightDoneAt) }
+func (t *FirstByteTrace) MarkRouteSelected()               { t.mark(&t.routeSelectedAt) }
+func (t *FirstByteTrace) MarkChannelMetaStarted()          { t.mark(&t.channelMetaStartAt) }
+func (t *FirstByteTrace) MarkChannelMetaDone()             { t.mark(&t.channelMetaDoneAt) }
+func (t *FirstByteTrace) MarkPromptSensitiveStarted()      { t.mark(&t.promptSensitiveStartAt) }
+func (t *FirstByteTrace) MarkPromptSensitiveDone()         { t.mark(&t.promptSensitiveDoneAt) }
+func (t *FirstByteTrace) MarkPromptAuditStarted()          { t.mark(&t.promptAuditStartAt) }
+func (t *FirstByteTrace) MarkPromptAuditDone()             { t.mark(&t.promptAuditDoneAt) }
+func (t *FirstByteTrace) MarkChannelAdmissionStarted()     { t.mark(&t.channelAdmissionStartAt) }
+func (t *FirstByteTrace) MarkChannelAdmissionDone()        { t.mark(&t.channelAdmissionDoneAt) }
+func (t *FirstByteTrace) MarkFaultDomainAdmissionStarted() { t.mark(&t.faultDomainAdmissionStartAt) }
+func (t *FirstByteTrace) MarkFaultDomainAdmissionDone()    { t.mark(&t.faultDomainAdmissionDoneAt) }
+func (t *FirstByteTrace) MarkModelPriceStarted()           { t.mark(&t.modelPriceStartAt) }
+func (t *FirstByteTrace) MarkModelPriceDone()              { t.mark(&t.modelPriceDoneAt) }
 func (t *FirstByteTrace) MarkRequestBodyRestoreStarted() {
 	t.mark(&t.requestBodyRestoreStartAt)
 }
@@ -222,6 +250,27 @@ func (t *FirstByteTrace) snapshot(includeProgress bool, now time.Time) map[strin
 	}
 	if !t.requestBodyRestoreStartAt.IsZero() && !t.requestBodyRestoreDoneAt.IsZero() {
 		snapshot["request_body_restore_ms"] = durationMilliseconds(t.requestBodyRestoreStartAt, t.requestBodyRestoreDoneAt)
+	}
+	if !t.relayInfoGenerationStartAt.IsZero() && !t.relayInfoGenerationDoneAt.IsZero() {
+		snapshot["relay_info_generation_ms"] = durationMilliseconds(t.relayInfoGenerationStartAt, t.relayInfoGenerationDoneAt)
+	}
+	if !t.channelMetaStartAt.IsZero() && !t.channelMetaDoneAt.IsZero() {
+		snapshot["channel_meta_init_ms"] = durationMilliseconds(t.channelMetaStartAt, t.channelMetaDoneAt)
+	}
+	if !t.promptSensitiveStartAt.IsZero() && !t.promptSensitiveDoneAt.IsZero() {
+		snapshot["prompt_sensitive_check_ms"] = durationMilliseconds(t.promptSensitiveStartAt, t.promptSensitiveDoneAt)
+	}
+	if !t.promptAuditStartAt.IsZero() && !t.promptAuditDoneAt.IsZero() {
+		snapshot["prompt_audit_ms"] = durationMilliseconds(t.promptAuditStartAt, t.promptAuditDoneAt)
+	}
+	if !t.channelAdmissionStartAt.IsZero() && !t.channelAdmissionDoneAt.IsZero() {
+		snapshot["channel_admission_ms"] = durationMilliseconds(t.channelAdmissionStartAt, t.channelAdmissionDoneAt)
+	}
+	if !t.faultDomainAdmissionStartAt.IsZero() && !t.faultDomainAdmissionDoneAt.IsZero() {
+		snapshot["fault_domain_admission_ms"] = durationMilliseconds(t.faultDomainAdmissionStartAt, t.faultDomainAdmissionDoneAt)
+	}
+	if !t.modelPriceStartAt.IsZero() && !t.modelPriceDoneAt.IsZero() {
+		snapshot["model_price_ms"] = durationMilliseconds(t.modelPriceStartAt, t.modelPriceDoneAt)
 	}
 	if !t.billingReserveStartAt.IsZero() && !t.billingReserveDoneAt.IsZero() {
 		snapshot["billing_reservation_ms"] = durationMilliseconds(t.billingReserveStartAt, t.billingReserveDoneAt)

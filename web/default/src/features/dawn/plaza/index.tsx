@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com.
 */
 import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
@@ -39,6 +40,7 @@ import type { PricingModel, TokenUnit } from '@/features/pricing/types'
 import { DawnModal } from '../components/dawn-modal'
 import { DawnNav } from '../components/dawn-nav'
 import { DawnQueryError } from '../components/query-error'
+import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
 
 const VENDOR_RULES: Array<[RegExp, string]> = [
   [/^gpt|^o[134](-mini)?|^chatgpt/, 'OpenAI'],
@@ -72,6 +74,16 @@ function guessVendor(name: string): string {
 
 export function DawnPlaza() {
   const pricing = usePricingData()
+  const perfQuery = useQuery({
+    queryKey: ['pricing-model-performance', 24],
+    queryFn: () => getPerfMetricsSummary(24),
+    staleTime: 60 * 1000,
+    retry: false,
+  })
+  const requestCounts = useMemo(
+    () => new Map((perfQuery.data?.data?.models ?? []).map((item) => [item.model_name, item.request_count ?? 0])),
+    [perfQuery.data]
+  )
   const [unit, setUnit] = useState<TokenUnit>('M')
   const [view, setView] = useState<'table' | 'grid'>('table')
   const [vendor, setVendor] = useState('全部厂家')
@@ -82,7 +94,7 @@ export function DawnPlaza() {
   const models = useMemo(
     () =>
       mergePricingModels(pricing.models, pricing.pricedModelDetails)
-        .filter((model) => model.model_name)
+        .filter((model) => model.model_name && Array.isArray(model.enable_groups) && model.enable_groups.length > 0)
         .map((model) => ({
           ...model,
           vendorName: model.vendor_name || guessVendor(model.model_name),
@@ -118,8 +130,7 @@ export function DawnPlaza() {
     if (sort === 'price') {
       filtered.sort((a, b) => a.model_ratio - b.model_ratio)
     } else if (sort === 'hot') {
-      const coverage = (m: (typeof filtered)[number]) =>
-        Array.isArray(m.enable_groups) ? m.enable_groups.length : 0
+      const coverage = (m: (typeof filtered)[number]) => requestCounts.get(m.model_name) ?? 0
       filtered.sort(
         (a, b) =>
           coverage(b) - coverage(a) || a.model_name.localeCompare(b.model_name)
@@ -128,7 +139,7 @@ export function DawnPlaza() {
       filtered.sort((a, b) => a.model_name.localeCompare(b.model_name))
     }
     return filtered
-  }, [models, vendor, keyword, sort])
+  }, [models, vendor, keyword, sort, requestCounts])
 
   const metered = models.filter(
     (model) => model.quota_type === QUOTA_TYPE_VALUES.REQUEST
@@ -146,9 +157,7 @@ export function DawnPlaza() {
     const enabled = Array.isArray(detailModel.enable_groups)
       ? detailModel.enable_groups
       : []
-    return groups.filter(
-      (group) => !enabled.length || enabled.includes(group.name)
-    )
+    return groups.filter((group) => enabled.includes(group.name))
   }, [detailModel, groups])
 
   return (

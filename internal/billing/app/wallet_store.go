@@ -36,9 +36,44 @@ type mirroredWalletTxStore struct {
 }
 
 func GetUserClaudeWalletQuota(userID int) (int, error) {
-	return getLedgerBackedWalletBalance(userID, billingAccountTypeClaudeWallet, func() (int, error) {
+	balance, _, err := GetUserClaudeWalletFunding(userID)
+	return balance, err
+}
+
+// GetUserClaudeWalletFunding returns the canonical wallet balance together with
+// its account id when the ledger has already been bootstrapped. Request-scoped
+// billing can reuse the id and avoid immediately reloading the same account.
+func GetUserClaudeWalletFunding(userID int) (int, string, error) {
+	return getLedgerBackedWalletFunding(userID, billingAccountTypeClaudeWallet, func() (int, error) {
 		return identitystore.LoadUserClaudeQuota(userID, false)
 	})
+}
+
+func getLedgerBackedWalletFunding(userID int, accountType string, legacyRead func() (int, error)) (int, string, error) {
+	if userID <= 0 {
+		return 0, "", errors.New("invalid user id")
+	}
+	var account billingschema.BillingAccount
+	err := platformdb.DB.Select("account_id").Where("owner_type = ? AND owner_id = ? AND account_type = ? AND quota_unit = ?",
+		billingOwnerTypeUser, userID, accountType, billingQuotaUnitQuota,
+	).First(&account).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) || isMissingBillingSchema(err) {
+		balance, readErr := legacyRead()
+		return balance, "", readErr
+	}
+	if err != nil {
+		return 0, "", err
+	}
+
+	var snapshot billingschema.BillingBalanceSnapshot
+	if err := platformdb.DB.Select("available_balance").Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || isMissingBillingSchema(err) {
+			balance, readErr := legacyRead()
+			return balance, "", readErr
+		}
+		return 0, "", err
+	}
+	return int(snapshot.AvailableBalance), account.AccountID, nil
 }
 
 // GetUnifiedCreditBalanceTx returns the canonical unified balance inside a transaction.

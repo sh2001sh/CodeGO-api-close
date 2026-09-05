@@ -19,6 +19,17 @@ import (
 var marketplaceRankingRefreshes singleflight.Group
 
 func rankingSnapshotsForRequest(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) (map[string]marketplaceschema.RankingSnapshot, error) {
+	return rankingSnapshotsForRequestMode(groups, channels, hours, true)
+}
+
+// rankingSnapshotsForList keeps the marketplace discovery endpoint bounded by
+// never making a user request wait for a cold ranking rebuild. Missing rows are
+// represented as empty metrics until the background refresh writes them.
+func rankingSnapshotsForList(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) (map[string]marketplaceschema.RankingSnapshot, error) {
+	return rankingSnapshotsForRequestMode(groups, channels, hours, false)
+}
+
+func rankingSnapshotsForRequestMode(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int, synchronousMissing bool) (map[string]marketplaceschema.RankingSnapshot, error) {
 	snapshots, err := loadRankingSnapshots(groups, hours)
 	if err != nil {
 		return nil, err
@@ -26,22 +37,30 @@ func rankingSnapshotsForRequest(groups []marketplaceschema.Group, channels map[s
 	publicGroups, _, privateGroups, privateChannels := partitionRankingGroups(groups, channels)
 	publicSnapshots := selectRankingSnapshots(snapshots, publicGroups)
 	if len(publicSnapshots) != len(publicGroups) {
-		refreshed, refreshErr := refreshPublicMarketplaceRankingSnapshots(hours)
-		if refreshErr != nil {
-			return nil, refreshErr
+		if synchronousMissing {
+			refreshed, refreshErr := refreshPublicMarketplaceRankingSnapshots(hours)
+			if refreshErr != nil {
+				return nil, refreshErr
+			}
+			mergeRankingSnapshots(snapshots, refreshed, publicGroups)
+		} else {
+			refreshPublicMarketplaceRankingsAsync(hours)
 		}
-		mergeRankingSnapshots(snapshots, refreshed, publicGroups)
 	} else if rankingSnapshotsStale(publicSnapshots, hours, time.Now().UTC()) {
 		refreshPublicMarketplaceRankingsAsync(hours)
 	}
 
 	privateSnapshots := selectRankingSnapshots(snapshots, privateGroups)
 	if len(privateSnapshots) != len(privateGroups) {
-		refreshed, refreshErr := refreshMarketplaceRankings(privateGroups, privateChannels, hours)
-		if refreshErr != nil {
-			return nil, refreshErr
+		if synchronousMissing {
+			refreshed, refreshErr := refreshMarketplaceRankings(privateGroups, privateChannels, hours)
+			if refreshErr != nil {
+				return nil, refreshErr
+			}
+			mergeRankingSnapshots(snapshots, refreshed, privateGroups)
+		} else {
+			refreshMarketplaceRankingsAsync(privateGroups, privateChannels, hours)
 		}
-		mergeRankingSnapshots(snapshots, refreshed, privateGroups)
 	} else if rankingSnapshotsStale(privateSnapshots, hours, time.Now().UTC()) {
 		refreshMarketplaceRankingsAsync(privateGroups, privateChannels, hours)
 	}

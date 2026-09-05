@@ -11,6 +11,7 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -26,25 +27,48 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 	if err != nil {
 		return nil, err
 	}
-	snapshots, err := loadAutoRouteSnapshots(groups)
-	if err != nil {
-		return nil, err
+	var snapshots map[string]marketplaceschema.RankingSnapshot
+	var recentSeries map[int][]RecentRequestBucket
+	loadSnapshots := func() error {
+		var err error
+		snapshots, err = loadAutoRouteSnapshots(groups)
+		return err
 	}
-	recentSeries, err := marketplaceRecentRequestSeries(groups, channels)
-	if err != nil {
-		return nil, err
+	loadRecentSeries := func() error {
+		var err error
+		recentSeries, err = marketplaceRecentRequestSeries(groups, channels)
+		return err
+	}
+	if platformdb.DB.Dialector.Name() == "sqlite" {
+		if err := loadSnapshots(); err != nil {
+			return nil, err
+		}
+		if err := loadRecentSeries(); err != nil {
+			return nil, err
+		}
+	} else {
+		var group errgroup.Group
+		group.Go(loadSnapshots)
+		group.Go(loadRecentSeries)
+		if err := group.Wait(); err != nil {
+			return nil, err
+		}
 	}
 	selected, err := loadAutoRoutePoolSelection(ownerUserID)
 	if err != nil {
 		return nil, err
 	}
 	config := loadAutoRoutePoolConfig(ownerUserID)
+	blockedChannels, err := loadBlockedChannelIDs(ownerUserID, groups)
+	if err != nil {
+		return nil, err
+	}
 
 	items := make([]AutoRoutePoolItem, 0, len(groups))
 	selectedCount := 0
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
-		if channelUserBlocked(group.ChannelID, ownerUserID) {
+		if _, blocked := blockedChannels[group.ChannelID]; blocked {
 			continue
 		}
 		priority, isSelected := selected[group.ID]
@@ -107,13 +131,46 @@ func channelUserBlocked(channelID string, userID int) bool {
 	return platformdb.DB.Model(&marketplaceschema.ChannelUserBlock{}).Where("channel_id = ? AND user_id = ?", channelID, userID).Count(&count).Error == nil && count > 0
 }
 
+func loadBlockedChannelIDs(userID int, groups []marketplaceschema.Group) (map[string]struct{}, error) {
+	channelIDs := make([]string, 0, len(groups))
+	seen := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		if group.ChannelID == "" {
+			continue
+		}
+		if _, ok := seen[group.ChannelID]; ok {
+			continue
+		}
+		seen[group.ChannelID] = struct{}{}
+		channelIDs = append(channelIDs, group.ChannelID)
+	}
+	blocked := make(map[string]struct{})
+	if len(channelIDs) == 0 || platformdb.DB == nil {
+		return blocked, nil
+	}
+	var rows []marketplaceschema.ChannelUserBlock
+	if err := platformdb.DB.Where("user_id = ? AND channel_id IN ?", userID, channelIDs).Find(&rows).Error; err != nil {
+		// The block table was added after the initial marketplace schema. Treat
+		// an older database as having no blocks until migration catches up.
+		message := strings.ToLower(err.Error())
+		if strings.Contains(message, "no such table") || strings.Contains(message, "does not exist") {
+			return blocked, nil
+		}
+		return nil, err
+	}
+	for _, row := range rows {
+		blocked[row.ChannelID] = struct{}{}
+	}
+	return blocked, nil
+}
+
 // ReplaceAutoRoutePool atomically replaces the current user's selected groups.
 func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*AutoRoutePoolView, error) {
 	groupIDs := normalizeAutoRouteGroupIDs(req.GroupIDs)
 	if len(groupIDs) > maxAutoRoutePoolMembers {
 		return nil, errors.New("全局 Auto 路由池最多可添加 10 个分组")
 	}
-	groups, _, err := loadAutoRouteGroups(ownerUserID)
+	groups, _, err := loadAutoRouteGroupsForIDs(ownerUserID, groupIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +286,13 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 	if multiplierLimit <= 0 && config.MaxMultiplier > 0 {
 		multiplierLimit = config.MaxMultiplier
 	}
-	groups, channels, err := loadAutoRouteGroups(ownerUserID)
+	marketplaceGroupIDs := make([]string, 0, len(selected))
+	for groupID := range selected {
+		if !strings.HasPrefix(groupID, officialAutoRoutePrefix) {
+			marketplaceGroupIDs = append(marketplaceGroupIDs, groupID)
+		}
+	}
+	groups, channels, err := loadAutoRouteGroupsForIDs(ownerUserID, marketplaceGroupIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +333,7 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 			score: score, priority: priority,
 		})
 	}
-	for _, item := range loadOfficialAutoRouteItems(ownerUserID, selected) {
+	for _, item := range loadOfficialAutoRouteItemsForSelection(ownerUserID, selected) {
 		priority, ok := selected[item.GroupID]
 		if !ok || !containsFold(item.Models, modelName) {
 			continue
@@ -337,7 +400,13 @@ func ListSelectedAutoRouteModels(ownerUserID int) ([]string, bool, error) {
 	}
 
 	models := make(map[string]string)
-	groups, channels, err := loadAutoRouteGroups(ownerUserID)
+	marketplaceGroupIDs := make([]string, 0, len(selected))
+	for groupID := range selected {
+		if !strings.HasPrefix(groupID, officialAutoRoutePrefix) {
+			marketplaceGroupIDs = append(marketplaceGroupIDs, groupID)
+		}
+	}
+	groups, channels, err := loadAutoRouteGroupsForIDs(ownerUserID, marketplaceGroupIDs)
 	if err != nil {
 		return nil, true, err
 	}
@@ -352,7 +421,7 @@ func ListSelectedAutoRouteModels(ownerUserID int) ([]string, bool, error) {
 			}
 		}
 	}
-	for _, item := range loadOfficialAutoRouteItems(ownerUserID, selected) {
+	for _, item := range loadOfficialAutoRouteItemsForSelection(ownerUserID, selected) {
 		if !item.Selected {
 			continue
 		}
@@ -373,8 +442,20 @@ func ListSelectedAutoRouteModels(ownerUserID int) ([]string, bool, error) {
 }
 
 func loadAutoRouteGroups(ownerUserID int) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
+	return loadAutoRouteGroupsForIDs(ownerUserID, nil)
+}
+
+func loadAutoRouteGroupsForIDs(ownerUserID int, groupIDs []string) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
+	// A non-nil empty slice means the pool contains only official groups. Keep
+	// that distinct from nil, which is the caller's request for the full list.
+	if groupIDs != nil && len(groupIDs) == 0 {
+		return []marketplaceschema.Group{}, map[string]marketplaceschema.Channel{}, nil
+	}
 	var groups []marketplaceschema.Group
 	query := platformdb.DB.Where("source_type = ? AND verification_status = ? AND lifecycle_status IN ?", marketplacedomain.SourceTypeMarketplaceUser, marketplacedomain.VerificationPassed, []string{marketplacedomain.LifecycleActive, marketplacedomain.LifecycleDegraded})
+	if groupIDs != nil {
+		query = query.Where("id IN ?", groupIDs)
+	}
 	if platformdb.DB.Migrator().HasTable(&marketplaceschema.GroupAccess{}) {
 		query = query.Where(fmt.Sprintf("visibility = ? OR owner_user_id = ? OR EXISTS (SELECT 1 FROM %s ga WHERE ga.group_id = %s.id AND ga.user_id = ?)", marketplaceschema.GroupAccess{}.TableName(), marketplaceschema.Group{}.TableName()), marketplacedomain.VisibilityPublic, ownerUserID, ownerUserID)
 	} else {

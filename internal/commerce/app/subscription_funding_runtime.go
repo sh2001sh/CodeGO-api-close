@@ -15,9 +15,9 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscription, record *commerceschema.SubscriptionPreConsumeRecord) error {
+func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscription, record *commerceschema.SubscriptionPreConsumeRecord) (*billingschema.BillingReservation, error) {
 	if sub == nil || record == nil || sub.AmountTotal <= 0 {
-		return nil
+		return nil, nil
 	}
 	account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
 		AccountType: "subscription",
@@ -26,12 +26,12 @@ func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscripti
 		QuotaUnit:   "quota",
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !ledgerBacked {
 		available := sub.AmountTotal - sub.AmountUsed
@@ -46,18 +46,18 @@ func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscripti
 				OperatorType:   "subscription_projection",
 				OperatorID:     record.RequestId,
 			}); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
-	_, err = billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
+	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
 		AccountID:      account.AccountID,
 		RequestID:      record.RequestId,
 		ReservedAmount: record.PreConsumed,
 		IdempotencyKey: "subscription:" + record.RequestId + ":reserve",
 		ExpiresAt:      subscriptionReservationExpiry(),
 	})
-	return err
+	return reservation, err
 }
 
 func subscriptionLedgerHasEntriesTx(tx *gorm.DB, accountID string) (bool, error) {

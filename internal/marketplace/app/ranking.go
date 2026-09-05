@@ -11,6 +11,7 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -39,13 +40,32 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		return nil, err
 	}
 	groups, channels = filterGroupsBySource(groups, channels, query.Source)
-	snapshots, err := rankingSnapshotsForRequest(groups, channels, query.WindowHours)
-	if err != nil {
-		return nil, err
+	var snapshots map[string]marketplaceschema.RankingSnapshot
+	var recentSeries map[int][]RecentRequestBucket
+	loadSnapshots := func() error {
+		var err error
+		snapshots, err = rankingSnapshotsForList(groups, channels, query.WindowHours)
+		return err
 	}
-	recentSeries, err := marketplaceRecentRequestSeries(groups, channels)
-	if err != nil {
-		return nil, err
+	loadRecentSeries := func() error {
+		var err error
+		recentSeries, err = marketplaceRecentRequestSeries(groups, channels)
+		return err
+	}
+	if platformdb.DB.Dialector.Name() == "sqlite" {
+		if err := loadSnapshots(); err != nil {
+			return nil, err
+		}
+		if err := loadRecentSeries(); err != nil {
+			return nil, err
+		}
+	} else {
+		var group errgroup.Group
+		group.Go(loadSnapshots)
+		group.Go(loadRecentSeries)
+		if err := group.Wait(); err != nil {
+			return nil, err
+		}
 	}
 	items := filterAndSortGroups(groups, channels, snapshots, recentSeries, query)
 	highlights := marketplaceHighlights(items)

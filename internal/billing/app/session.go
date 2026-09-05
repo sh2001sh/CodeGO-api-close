@@ -11,6 +11,7 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -177,20 +178,28 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		))
 	}
 
-	if effectiveQuota > 0 {
-		if err := PreConsumeTokenQuota(s.relayInfo, effectiveQuota); err != nil {
-			return types.NewErrorWithStatusCode(
-				err,
-				types.ErrorCodePreConsumeTokenQuotaFailed,
-				http.StatusForbidden,
-				types.ErrOptionWithSkipRetry(),
-				types.ErrOptionWithNoRecordErrorLog(),
-			)
-		}
+	tokenErr, fundingErr := s.preConsumeSources(effectiveQuota)
+	if tokenErr == nil && effectiveQuota > 0 {
 		s.tokenConsumed = effectiveQuota
 	}
+	if tokenErr != nil {
+		// Funding may have completed concurrently. Release that reservation before
+		// returning so both sources remain balanced on a failed request.
+		if fundingErr == nil {
+			if rollbackErr := s.funding.Refund(); rollbackErr != nil {
+				platformobservability.SysLog(fmt.Sprintf("error rolling back funding after token pre-consume failure: %s", rollbackErr.Error()))
+			}
+		}
+		return types.NewErrorWithStatusCode(
+			tokenErr,
+			types.ErrorCodePreConsumeTokenQuotaFailed,
+			http.StatusForbidden,
+			types.ErrOptionWithSkipRetry(),
+			types.ErrOptionWithNoRecordErrorLog(),
+		)
+	}
 
-	if err := s.funding.PreConsume(effectiveQuota); err != nil {
+	if fundingErr != nil {
 		if s.tokenConsumed > 0 && !s.relayInfo.IsPlayground {
 			if rollbackErr := AdjustTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -s.tokenConsumed); rollbackErr != nil {
 				platformobservability.SysLog(fmt.Sprintf(
@@ -198,18 +207,18 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 					s.relayInfo.UserId,
 					s.relayInfo.TokenId,
 					s.tokenConsumed,
-					err.Error(),
+					fundingErr.Error(),
 					rollbackErr.Error(),
 				))
 			}
 			s.tokenConsumed = 0
 		}
 
-		if insufficientErr := newFundingInsufficientError(s.funding.Source(), err); insufficientErr != nil {
+		if insufficientErr := newFundingInsufficientError(s.funding.Source(), fundingErr); insufficientErr != nil {
 			return insufficientErr
 		}
 
-		errMsg := err.Error()
+		errMsg := fundingErr.Error()
 		if strings.Contains(errMsg, "no active subscription") || strings.Contains(errMsg, "subscription quota insufficient") {
 			return types.NewErrorWithStatusCode(
 				fmt.Errorf("subscription quota insufficient or unavailable: %s", errMsg),
@@ -220,12 +229,33 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 			)
 		}
 
-		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		return types.NewError(fundingErr, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 	}
 
 	s.preConsumedQuota = effectiveQuota
 	s.syncRelayInfo()
 	return nil
+}
+
+// preConsumeSources performs independent token and funding reservations in
+// parallel when the database can service separate transactions concurrently.
+// SQLite deployments use a single writer lock, so keeping them serial avoids
+// introducing contention without changing production behavior.
+func (s *BillingSession) preConsumeSources(amount int) (tokenErr, fundingErr error) {
+	if amount <= 0 || platformdb.UsingSQLite {
+		tokenErr = PreConsumeTokenQuota(s.relayInfo, amount)
+		if tokenErr == nil {
+			fundingErr = s.funding.PreConsume(amount)
+		}
+		return tokenErr, fundingErr
+	}
+	fundingDone := make(chan error, 1)
+	go func() {
+		fundingDone <- s.funding.PreConsume(amount)
+	}()
+	tokenErr = PreConsumeTokenQuota(s.relayInfo, amount)
+	fundingErr = <-fundingDone
+	return tokenErr, fundingErr
 }
 
 func (s *BillingSession) scaleQuota(quota int, scale float64) int {

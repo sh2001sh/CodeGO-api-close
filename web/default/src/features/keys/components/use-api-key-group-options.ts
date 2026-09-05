@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getUserGroups } from '@/lib/api'
 import { getMarketplaceRoutePools } from '@/features/marketplace/api'
+import { getMarketplaceAutoRoutePool } from '@/features/marketplace/api'
 import { getSidebarGroupStatus } from '@/features/sidebar-group-status/api'
 import { getSelectableMarketplaceGroups } from '../api'
 import type { ApiKeyGroupOption } from './api-key-group-combobox'
@@ -20,6 +21,12 @@ export function useApiKeyGroupOptions() {
   const { data: routePools = [] } = useQuery({
     queryKey: ['api-key-marketplace-route-pools'],
     queryFn: getMarketplaceRoutePools,
+    staleTime: 60 * 1000,
+    retry: false,
+  })
+  const { data: autoRoutePool } = useQuery({
+    queryKey: ['api-key-marketplace-auto-pool'],
+    queryFn: getMarketplaceAutoRoutePool,
     staleTime: 60 * 1000,
     retry: false,
   })
@@ -57,6 +64,9 @@ export function useApiKeyGroupOptions() {
         category: 'marketplace_pool',
         models: pool.models,
       }))
-    return [...poolOptions, ...officialGroups, ...marketplaceGroups]
-  }, [groupStatus?.data, groupsData?.data, marketplaceGroups, routePools])
+    const autoOption: ApiKeyGroupOption[] = autoRoutePool
+      ? [{ value: 'market:auto', label: 'AUTO 路由池', desc: `${autoRoutePool.selected_count} 个分组`, ratio: '动态', category: 'marketplace_auto', models: autoRoutePool.items.filter((item) => item.selected).flatMap((item) => item.models) }]
+      : []
+    return [...autoOption, ...poolOptions, ...officialGroups, ...marketplaceGroups]
+  }, [autoRoutePool, groupStatus?.data, groupsData?.data, marketplaceGroups, routePools])
 }

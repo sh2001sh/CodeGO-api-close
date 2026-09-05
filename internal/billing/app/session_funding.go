@@ -112,7 +112,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 }
 
 func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
-	userQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
+	userQuota, accountID, err := GetUserClaudeWalletFunding(relayInfo.UserId)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
 	}
@@ -126,7 +126,7 @@ func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, p
 		)
 	}
 	relayInfo.UserQuota = userQuota
-	funding, err := NewLedgerRelayFundingWithInitialBalance(relayInfo.UserId, relayInfo.RequestId, BillingSourceWallet, &userQuota)
+	funding, err := NewLedgerRelayFundingWithAccount(relayInfo.UserId, relayInfo.RequestId, BillingSourceWallet, &userQuota, accountID)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 	}

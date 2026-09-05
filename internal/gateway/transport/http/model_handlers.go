@@ -37,7 +37,15 @@ func ListModels(c *gin.Context, modelType int) {
 	var err error
 	normalizedTokenGroup := gatewayroutingapp.NormalizeTokenGroup(tokenGroup)
 	marketplaceAutoToken := marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup)
-	if !tokenModelLimitEnabled && (normalizedTokenGroup == gatewayroutingapp.AutoGroupName || marketplaceAutoToken) && marketplaceapp.HasConfiguredAutoRoutePool(userID) {
+	marketplaceRoutePool := marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup)
+	if !tokenModelLimitEnabled && marketplaceRoutePool {
+		poolModels, poolErr := marketplaceapp.ListRoutePoolModels(userID, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup))
+		if poolErr != nil {
+			err = poolErr
+		} else {
+			userOpenAIModels = gatewayroutingapp.CollectOpenAIModelsForNames(userID, poolModels)
+		}
+	} else if !tokenModelLimitEnabled && (normalizedTokenGroup == gatewayroutingapp.AutoGroupName || marketplaceAutoToken) && marketplaceapp.HasConfiguredAutoRoutePool(userID) {
 		var poolModels []string
 		poolModels, _, err = marketplaceapp.ListSelectedAutoRouteModels(userID)
 		if err == nil {

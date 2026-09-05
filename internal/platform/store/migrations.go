@@ -172,6 +172,7 @@ func V2MigrationIDs() []string {
 		"20260901_blind_box_remaining_seconds",
 		"20260903_marketplace_named_route_pools",
 		"20260903_marketplace_owner_operations",
+		"20260905_query_path_indexes",
 	}
 }
 
@@ -411,6 +412,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260901_gateway_route_pool_multi_pool", Run: migrateGatewayRoutePoolMultiPool},
 		{ID: "20260901_blind_box_remaining_seconds", Run: migrateBlindBoxRemainingSeconds},
+		{ID: "20260905_query_path_indexes", RunOutsideTx: migrateQueryPathIndexes},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -578,6 +580,79 @@ func channelWindowLogIndexStatement(dialect string) string {
 		return "CREATE INDEX idx_logs_channel_window ON logs (channel_id, type, created_at, id)"
 	default:
 		return "CREATE INDEX IF NOT EXISTS idx_logs_channel_window ON logs (channel_id, type, created_at, id)"
+	}
+}
+
+// migrateQueryPathIndexes adds indexes introduced after the original table
+// migrations were already applied. It runs outside a transaction so PostgreSQL
+// can build each index concurrently on busy production tables.
+func migrateQueryPathIndexes(_ *gorm.DB) error {
+	primary := platformdb.DB
+	if primary == nil {
+		return nil
+	}
+
+	statements := queryPathIndexStatements(primary.Dialector.Name())
+	for _, item := range statements {
+		db := primary
+		if item.Database == queryPathDatabaseLogs {
+			db = platformdb.LogDB
+			if db == nil {
+				db = primary
+			}
+		}
+		if !queryPathTableExists(db, item) {
+			continue
+		}
+		if err := db.Exec(item.SQL).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return fmt.Errorf("create query path index %s: %w", item.Name, err)
+		}
+	}
+	return nil
+}
+
+func queryPathTableExists(db *gorm.DB, item queryPathIndexStatement) bool {
+	switch item.Name {
+	case "idx_logs_channel_type_created_id":
+		return db.Migrator().HasTable("logs")
+	case "idx_request_attempt_audit_channel_started":
+		return db.Migrator().HasTable(&gatewayschema.RequestAttemptAudit{})
+	case "idx_marketplace_settlements_owner_group_created":
+		return db.Migrator().HasTable(&marketplaceschema.Settlement{})
+	default:
+		return false
+	}
+}
+
+const queryPathDatabaseLogs = "logs"
+
+type queryPathIndexStatement struct {
+	Name     string
+	Database string
+	Table    string
+	SQL      string
+}
+
+func queryPathIndexStatements(dialect string) []queryPathIndexStatement {
+	switch strings.ToLower(strings.TrimSpace(dialect)) {
+	case "postgres":
+		return []queryPathIndexStatement{
+			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_channel_type_created_id ON logs (channel_id, type, created_at DESC, id DESC) WHERE type IN (%d, %d)`, auditschema.LogTypeConsume, auditschema.LogTypeError)},
+			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway.request_attempt_audits", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_request_attempt_audit_channel_started ON gateway.request_attempt_audits (channel_id, started_at DESC)`},
+			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace.settlements", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_settlements_owner_group_created ON marketplace.settlements (owner_user_id, group_id, created_at DESC)`},
+		}
+	case "mysql":
+		return []queryPathIndexStatement{
+			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX idx_logs_channel_type_created_id ON logs (channel_id, type, created_at, id)"},
+			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway_request_attempt_audits", SQL: "CREATE INDEX idx_request_attempt_audit_channel_started ON gateway_request_attempt_audits (channel_id, started_at)"},
+			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace_settlements", SQL: "CREATE INDEX idx_marketplace_settlements_owner_group_created ON marketplace_settlements (owner_user_id, group_id, created_at)"},
+		}
+	default:
+		return []queryPathIndexStatement{
+			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX IF NOT EXISTS idx_logs_channel_type_created_id ON logs (channel_id, type, created_at, id)"},
+			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway_request_attempt_audits", SQL: "CREATE INDEX IF NOT EXISTS idx_request_attempt_audit_channel_started ON gateway_request_attempt_audits (channel_id, started_at)"},
+			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace_settlements", SQL: "CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_owner_group_created ON marketplace_settlements (owner_user_id, group_id, created_at)"},
+		}
 	}
 }
 

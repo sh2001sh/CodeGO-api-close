@@ -31,7 +31,7 @@ func GetFaultDomainHealth(domain, model string, requestTypes ...RequestType) (Ch
 	if domain == "" || model == "" {
 		return ChannelHealth{}, false
 	}
-	state, found, err := getChannelHealthCache().Get(faultDomainHealthKey(domain, model, requestTypes...))
+	state, found, err := getChannelHealthCache().GetWithTimeout(faultDomainHealthKey(domain, model, requestTypes...), channelHealthReadTimeout)
 	return state, found && err == nil
 }
 

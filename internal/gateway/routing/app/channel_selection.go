@@ -68,6 +68,7 @@ func (p *RetryParam) ResetRetryNextTry() {
 // CacheGetRandomSatisfiedChannel selects an available channel for the current retry round.
 func CacheGetRandomSatisfiedChannel(param *RetryParam) (*gatewayschema.Channel, string, error) {
 	if param != nil && param.Ctx != nil {
+		resetRouteHealthRequestCache(param.Ctx)
 		param.Ctx.Set(routePoolContextKey, RoutePoolSelection{})
 		param.Ctx.Set(routePoolFaultDomainContextKey, "")
 	}

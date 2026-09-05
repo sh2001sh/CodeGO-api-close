@@ -152,16 +152,19 @@ export function MarketGroupCard(props: {
           <b>{group.models.length}</b>
           <span>模型数</span>
         </div>
-        <div
-          className={`m${(props.priceInfo?.freeCount ?? 0) > 0 ? ' good' : ''}`}
-        >
-          <b>{props.priceInfo?.freeCount ?? 0}</b>
-          <span>免费模型</span>
+        <div className='m'>
+          <b>{group.current_concurrency}/{group.max_concurrency || '∞'}</b>
+          <span>并发</span>
         </div>
         <div className='m'>
           <b>{group.score || '—'}</b>
           <span>评分</span>
         </div>
+      </div>
+
+      <div className='capline'>
+        <span>远程压缩</span>
+        <b>{group.remote_compaction_support === 'v1_v2' ? 'v1 + v2' : group.remote_compaction_support === 'v1' ? '仅 v1' : group.remote_compaction_support === 'v2' ? '仅 v2' : '不支持'}</b>
       </div>
 
       <div className='mline'>
@@ -203,6 +206,7 @@ export function MarketGroupCard(props: {
             <span>模型</span>
             <span style={{ textAlign: 'right' }}>输入 /1M</span>
             <span style={{ textAlign: 'right' }}>输出 /1M</span>
+            <span style={{ textAlign: 'right' }}>延迟</span>
           </div>
           {group.models.map((model) => {
             const result =
@@ -230,6 +234,7 @@ export function MarketGroupCard(props: {
                 </span>
                 <span className='mp'>{fee?.input ?? '—'}</span>
                 <span className='mp'>{fee?.output ?? '—'}</span>
+                <span className='mp'>{result.latency_ms > 0 ? `${result.latency_ms}ms` : '—'}</span>
               </div>
             )
             })()
@@ -275,23 +280,12 @@ export function MarketGroupCard(props: {
       <div className='gact' onClick={(event) => event.stopPropagation()}>
         {lifecycleOn && props.authed && (
           <button
-            className='btn mini primary'
-            onClick={() => props.onUse(group)}
-          >
-            订阅
-          </button>
-        )}
-        {lifecycleOn && props.authed && (
-          <button
             className='btn mini'
             onClick={() => props.onBindKey(group)}
           >
             绑定 Key
           </button>
         )}
-        <button className='btn mini' onClick={props.onToggleExpand}>
-          {props.expanded ? '收起明细' : '模型明细'}
-        </button>
         {props.authed && (
           <button className='btn mini' onClick={() => props.onTest(group)}>
             连通性测试

@@ -131,7 +131,8 @@ func preConsumeSubscriptionCandidate(requestID string, userID int, modelName str
 		if err := tx.Create(record).Error; err != nil {
 			return err
 		}
-		if err := reserveSubscriptionLedgerTx(tx, subscription, record); err != nil {
+		reservation, err := reserveSubscriptionLedgerTx(tx, subscription, record)
+		if err != nil {
 			return err
 		}
 
@@ -147,6 +148,12 @@ func preConsumeSubscriptionCandidate(requestID string, userID int, modelName str
 		result.AmountTotal = subscription.AmountTotal
 		result.AmountUsedBefore = usedBefore
 		result.AmountUsedAfter = subscription.AmountUsed
+		result.PlanID = plan.Id
+		result.PlanTitle = plan.Title
+		if reservation != nil {
+			result.ReservationID = reservation.ReservationID
+			result.AccountID = reservation.AccountID
+		}
 		return nil
 	})
 	if errors.Is(err, errSubscriptionCandidateUnavailable) {

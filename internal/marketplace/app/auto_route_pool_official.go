@@ -12,6 +12,22 @@ import (
 )
 
 func loadOfficialAutoRouteItems(ownerUserID int, selected map[string]int) []AutoRoutePoolItem {
+	return loadOfficialAutoRouteItemsFiltered(ownerUserID, selected, false, true)
+}
+
+func loadOfficialAutoRouteItemsForSelection(ownerUserID int, selected map[string]int) []AutoRoutePoolItem {
+	return loadOfficialAutoRouteItemsFiltered(ownerUserID, selected, true, true)
+}
+
+// loadOfficialAutoRouteItemsSummary is used by list endpoints that only need
+// the declared model names. Loading audit summaries for every official group
+// makes a simple route-pool list pay for one channel query plus one aggregate
+// query per group.
+func loadOfficialAutoRouteItemsSummary(ownerUserID int) []AutoRoutePoolItem {
+	return loadOfficialAutoRouteItemsFiltered(ownerUserID, nil, false, false)
+}
+
+func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int, selectedOnly bool, includeMetrics bool) []AutoRoutePoolItem {
 	userGroup, err := identitystore.LoadUserGroup(ownerUserID, false)
 	if err != nil {
 		return []AutoRoutePoolItem{}
@@ -20,11 +36,22 @@ func loadOfficialAutoRouteItems(ownerUserID int, selected map[string]int) []Auto
 	groupNames := make([]string, 0, len(usable))
 	for groupName := range usable {
 		if groupName != gatewayroutingapp.AutoGroupName {
+			// During request routing, only selected official groups can be
+			// candidates. Avoid loading request buckets and audit summaries for
+			// every globally usable group on every request.
+			if selectedOnly && selected != nil {
+				if _, ok := selected[officialAutoRoutePrefix+groupName]; !ok {
+					continue
+				}
+			}
 			groupNames = append(groupNames, groupName)
 		}
 	}
 	sort.Strings(groupNames)
-	recentStatuses := loadOfficialGroupRecentRequestStatuses(groupNames)
+	var recentStatuses map[string]string
+	if includeMetrics {
+		recentStatuses = loadOfficialGroupRecentRequestStatuses(groupNames)
+	}
 	items := make([]AutoRoutePoolItem, 0, len(usable))
 	for _, groupName := range groupNames {
 		description := usable[groupName]
@@ -35,7 +62,10 @@ func loadOfficialAutoRouteItems(ownerUserID int, selected map[string]int) []Auto
 		routeKey := officialAutoRoutePrefix + groupName
 		priority, isSelected := selected[routeKey]
 		multiplier := gatewayroutingapp.GetUserGroupRatio(userGroup, groupName)
-		metrics := loadOfficialGroupMetrics(groupName, recentStatuses[groupName])
+		metrics := officialGroupMetrics{Availability: 100, Status: recentStatuses[groupName]}
+		if includeMetrics {
+			metrics = loadOfficialGroupMetrics(groupName, recentStatuses[groupName])
+		}
 		items = append(items, AutoRoutePoolItem{
 			GroupID: routeKey, SourceType: marketplacedomain.SourceTypeOfficial,
 			SystemDisplayName: groupName, SourceLabel: description,

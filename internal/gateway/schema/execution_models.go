@@ -162,7 +162,7 @@ type RequestAttemptAudit struct {
 	RequestID    string    `gorm:"column:request_id;size:64;index:idx_request_attempt_audit_request"`
 	AttemptNo    int       `gorm:"column:attempt_no"`
 	RetryIndex   int       `gorm:"column:retry_index"`
-	ChannelID    int       `gorm:"column:channel_id;index"`
+	ChannelID    int       `gorm:"column:channel_id;index;index:idx_request_attempt_audit_channel_started,priority:1"`
 	ModelName    string    `gorm:"column:model_name;size:128;index"`
 	FaultDomain  string    `gorm:"column:fault_domain;size:128"`
 	RequestType  string    `gorm:"column:request_type;size:32"`
@@ -171,7 +171,7 @@ type RequestAttemptAudit struct {
 	StatusCode   int       `gorm:"column:status_code;default:0"`
 	FailureClass string    `gorm:"column:failure_class;size:128"`
 	Stage        string    `gorm:"column:stage;size:64"`
-	StartedAt    time.Time `gorm:"column:started_at;index"`
+	StartedAt    time.Time `gorm:"column:started_at;index;index:idx_request_attempt_audit_channel_started,priority:2"`
 	CompletedAt  time.Time `gorm:"column:completed_at;index"`
 	DurationMS   int64     `gorm:"column:duration_ms;default:0"`
 	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`

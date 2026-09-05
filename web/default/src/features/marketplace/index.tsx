@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
-import { acceptMarketplaceGroupInvite } from './api'
+import { acceptMarketplaceGroupInvite, getMyMarketplaceBargainRequests } from './api'
 import { MarketSurface } from './components/market-surface'
 import { TokenBindPanel } from './components/token-bind-panel'
 import { useMarketplaceGroups } from './hooks'
 import type { GroupFilters } from './types'
+import { useQuery } from '@tanstack/react-query'
 
 const defaultFilters: GroupFilters = {
   search: '',
@@ -183,6 +184,7 @@ export function MarketplacePage() {
               )}
             </TabsList>
             <TabsContent value='market'>
+              <MyBargainStatus />
               <MarketSurface
                 filters={filters}
                 updateFilters={updateFilters}
@@ -222,6 +224,40 @@ export function MarketplacePage() {
       </SectionPageLayout.Content>
     </SectionPageLayout>
     </div>
+  )
+}
+
+function MyBargainStatus() {
+  const query = useQuery({
+    queryKey: ['marketplace-bargains', 'mine'],
+    queryFn: () => getMyMarketplaceBargainRequests(''),
+    retry: false,
+  })
+  const items = query.data?.items ?? []
+  if (!items.length) return null
+  return (
+    <section className='border-border bg-card mb-3 rounded-lg border p-4'>
+      <div className='flex items-center justify-between gap-2'>
+        <div>
+          <h3 className='text-sm font-semibold'>我的砍价记录</h3>
+          <p className='text-muted-foreground mt-1 text-xs'>已批准的记录表示该分组已为你应用独立倍率。</p>
+        </div>
+        <span className='text-muted-foreground text-xs'>{items.length} 条</span>
+      </div>
+      <div className='mt-3 grid gap-2 md:grid-cols-2'>
+        {items.map((item) => (
+          <div key={item.id} className='border-border flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm'>
+            <span className='min-w-0 truncate'>{item.group_name}</span>
+            <span className='shrink-0'>
+              {item.current_multiplier}× → <b>{item.proposed_multiplier}×</b>
+              <span className='text-muted-foreground ml-2 text-xs'>
+                {item.status === 'approved' ? '已成功' : item.status === 'pending' ? '审核中' : '已拒绝'}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

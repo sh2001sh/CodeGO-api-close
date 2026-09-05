@@ -145,11 +145,11 @@ export function OwnerChannelActions(props: {
           />
           {['queued', 'running'].includes(channel.gpt56_mapping_status)
             ? t('检测中')
-            : t('检测 GPT-5.6')}
+            : t('GPT-5.6 一致性检测')}
         </Button>
       )}
       <Button
-        variant='outline'
+        variant='default'
         size='sm'
         onClick={() =>
           void act(

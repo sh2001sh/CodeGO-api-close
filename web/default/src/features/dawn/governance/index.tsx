@@ -89,7 +89,10 @@ export function DawnMarketplaceGovernance() {
   }
 
   const togglePause = (channel: MarketplaceChannel) => {
-    const paused = channel.lifecycle_status !== 'active'
+    // Only an actually published channel can be forced down. Draft,
+    // verifying and already suspended channels must use the restore path;
+    // otherwise clicking “恢复上架” would send paused=true again.
+    const paused = ['active', 'degraded'].includes(channel.lifecycle_status)
     mutations.adminPause.mutate(
       { id: channel.id, paused },
       {

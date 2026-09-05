@@ -1,4 +1,4 @@
-import { Clock3, Percent, ShieldCheck, WalletCards } from 'lucide-react'
+import { Activity, Clock3, Percent, ShieldCheck, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   Dialog,
@@ -20,7 +20,7 @@ export function ChannelCreateDialog(props: {
         <DialogHeader className='border-border shrink-0 border-b px-5 py-4 pr-14 sm:px-6'>
           <DialogTitle>{t('添加新渠道')}</DialogTitle>
           <DialogDescription>
-            {t('提交连接信息与服务策略，模型和实际调用检测通过后自动上架。')}
+            {t('提交后请先测试连通性，确认渠道可以正常连接和调用模型。')}
           </DialogDescription>
         </DialogHeader>
         <div className='min-h-0 flex-1 overflow-y-auto'>
@@ -40,6 +40,15 @@ function MarketplaceRules() {
     <aside className='border-border bg-muted/20 border-t px-5 py-6 xl:border-t-0 xl:border-l xl:px-6'>
       <h3 className='font-semibold'>{t('市场结算规则')}</h3>
       <div className='mt-5 space-y-5'>
+        <div className='border-primary/30 bg-primary/[0.06] rounded-lg border p-3'>
+          <div className='flex items-center gap-2 text-sm font-semibold'>
+            <Activity className='text-primary size-4' />
+            {t('上传后建议操作顺序')}
+          </div>
+          <p className='text-muted-foreground mt-2 text-xs leading-5'>
+            {t('先点击“测试连通性”，确认渠道可以正常连接和调用模型。GPT-5.6 一致性检测仅用于核对模型声明与映射，不是连接测试。')}
+          </p>
+        </div>
         <Rule icon={WalletCards} title={t('支持套餐与通用余额')}>
           {t('第三方分组默认支持套餐和通用余额，并分别按页面所示倍率扣费。')}
         </Rule>
@@ -50,7 +59,7 @@ function MarketplaceRules() {
           {t('调用完成后进入待结算，默认在 24 小时后释放到账。')}
         </Rule>
         <Rule icon={ShieldCheck} title={t('检测通过自动上架')}>
-          {t('固定来源无需人工审核，连接与实际模型调用检测通过后自动上架。')}
+          {t('固定来源无需人工审核，连通性测试与实际模型调用检测通过后自动上架。')}
         </Rule>
       </div>
     </aside>

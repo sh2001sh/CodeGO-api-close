@@ -65,11 +65,11 @@ export function AdminChannelActions(props: {
           <ShieldCheck />
           {['queued', 'running'].includes(channel.gpt56_mapping_status)
             ? t('检测中')
-            : t('检测 GPT-5.6')}
+            : t('GPT-5.6 一致性检测')}
         </Button>
       )}
       <Button
-        variant='outline'
+        variant='default'
         size='sm'
         disabled={
           connectivityTest.isPending ||
@@ -112,13 +112,13 @@ export function AdminChannelActions(props: {
           channelMutations.adminPause.mutate(
             {
               id: channel.id,
-              paused: channel.lifecycle_status !== 'suspended',
+              paused: ['active', 'degraded'].includes(channel.lifecycle_status),
             },
             {
               onSuccess: () =>
                 toast.success(
                   t(
-                    channel.lifecycle_status === 'suspended'
+                    !['active', 'degraded'].includes(channel.lifecycle_status)
                       ? '渠道已恢复'
                       : '渠道已关停，冻结额度已清理'
                   )

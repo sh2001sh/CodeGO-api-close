@@ -177,7 +177,9 @@ export function ChannelEditorForm(props: {
         toast.success(t('渠道已更新；渠道信息变化时需重新完成对应检测或测试'))
       } else {
         await mutations.create.mutateAsync(values)
-        toast.success(t('渠道已提交，必做检测或测试通过后将自动上架'))
+        toast.success(
+          t('渠道已提交，请先点击“测试连通性”确认可用；GPT-5.6 一致性检测仅用于核对模型映射')
+        )
         form.reset(channelFormDefaults)
         setAvailableModels([])
         setModelSyncDiff(null)

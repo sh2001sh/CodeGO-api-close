@@ -118,6 +118,9 @@ export function OwnerView() {
   const pendingBargains = (bargains.data?.items ?? []).filter(
     (item) => item.status === 'pending'
   )
+  const approvedBargains = (bargains.data?.items ?? []).filter(
+    (item) => item.status === 'approved'
+  )
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] })
@@ -245,6 +248,21 @@ export function OwnerView() {
                   驳回
                 </button>
               </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {approvedBargains.length > 0 && (
+        <div className='gtable' style={{ marginTop: 16 }}>
+          <div className='tr th' style={{ gridTemplateColumns: '110px minmax(0,1.4fr) 160px 120px' }}>
+            <span>用户</span><span>分组</span><span>已应用倍率</span><span>处理时间</span>
+          </div>
+          {approvedBargains.map((bargain) => (
+            <div className='tr' key={bargain.id} style={{ gridTemplateColumns: '110px minmax(0,1.4fr) 160px 120px', cursor: 'default' }}>
+              <b className='nm'>{bargain.user_external_id || bargain.user_id}</b>
+              <span>{bargain.group_name}</span>
+              <span className='num'>{bargain.current_multiplier}× → <b style={{ color: 'var(--dawn-ok)' }}>{bargain.proposed_multiplier}×</b></span>
+              <span className='num'>{bargain.resolved_at ? new Date(bargain.resolved_at).toLocaleDateString() : '—'}</span>
             </div>
           ))}
         </div>

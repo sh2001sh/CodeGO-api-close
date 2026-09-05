@@ -208,6 +208,15 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	} else if connectivityStatus == marketplacedomain.VerificationPassed {
 		lifecycle = marketplacedomain.LifecycleActive
 	}
+	// A manual connectivity test must not unpublish a channel that is already
+	// serving traffic. GPT-5.6 mapping is an additional evidence gate for new
+	// channels; its pending state must not downgrade an existing publication.
+	if probeErr == nil && connectivityStatus == marketplacedomain.VerificationPassed &&
+		(channel.Status == marketplacedomain.LifecycleActive ||
+			group.LifecycleStatus == marketplacedomain.LifecycleActive) {
+		status = marketplacedomain.VerificationPassed
+		lifecycle = marketplacedomain.LifecycleActive
+	}
 	hash := sha256.Sum256([]byte(run.ID + channel.ID + status + now.Format(time.RFC3339Nano)))
 	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		runUpdate := tx.Model(run).Where("status = ?", marketplacedomain.VerificationRunning).Updates(map[string]any{

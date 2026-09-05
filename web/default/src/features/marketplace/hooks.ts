@@ -118,11 +118,20 @@ export function useMarketplaceAutoRoutePoolUpdate() {
 }
 
 export function useMarketplaceRoutePools() {
-  return useQuery({ queryKey: ['marketplace-route-pools'], queryFn: getMarketplaceRoutePools })
+  return useQuery({
+    queryKey: ['marketplace-route-pools'],
+    queryFn: getMarketplaceRoutePools,
+    staleTime: 30_000,
+  })
 }
 
 export function useMarketplaceRoutePool(id: string) {
-  return useQuery({ queryKey: ['marketplace-route-pools', id], queryFn: () => getMarketplaceRoutePool(id), enabled: Boolean(id) })
+  return useQuery({
+    queryKey: ['marketplace-route-pools', id],
+    queryFn: () => getMarketplaceRoutePool(id),
+    enabled: Boolean(id),
+    staleTime: 30_000,
+  })
 }
 
 function useRoutePoolInvalidation() {
@@ -141,8 +150,21 @@ export function useMarketplaceRoutePoolCreate() {
 }
 
 export function useMarketplaceRoutePoolUpdate() {
-  const invalidate = useRoutePoolInvalidation()
-  return useMutation({ mutationFn: updateMarketplaceRoutePool, onSuccess: invalidate })
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: updateMarketplaceRoutePool,
+    onSuccess: (pool) => {
+      queryClient.setQueryData(['marketplace-route-pools', pool.id], pool)
+      void queryClient.invalidateQueries({
+        queryKey: ['marketplace-route-pools'],
+        refetchType: 'inactive',
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['api-key-marketplace-route-pools'],
+        refetchType: 'inactive',
+      })
+    },
+  })
 }
 
 export function useMarketplaceRoutePoolDelete() {

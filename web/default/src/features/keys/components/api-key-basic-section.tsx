@@ -13,7 +13,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { DateTimePicker } from '@/components/datetime-picker'
 import type { ApiKeyFormValues } from '../lib'
-import { ApiKeyAutoRoutePoolDialog } from './api-key-auto-route-pool-dialog'
 import { ApiKeyAvailableModelsDialog } from './api-key-available-models-dialog'
 import { ApiKeyFormSection } from './api-key-form-section'
 import {
@@ -138,7 +137,6 @@ function GroupField(props: { form: ApiKeyForm; groups: ApiKeyGroupOption[] }) {
             )}
             <div className='mt-2 flex flex-wrap gap-2'>
               <ApiKeyAvailableModelsDialog option={selectedOption} />
-              <ApiKeyAutoRoutePoolDialog />
             </div>
             <FormMessage />
           </FormItem>

@@ -66,7 +66,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
         <div className='border-y border-amber-200/70 bg-amber-50/60 px-4 py-3 text-xs leading-5 text-amber-950 sm:px-5'>
           <strong>{t('渠道关停与冻结额度规则')}</strong>：
           {t(
-            '渠道被管理员关停后，仍处于冻结期的待结算额度会被直接清理并转入主管理员账户，不会结算到您的钱包；待结算收益不会因普通额度回收操作而变动。'
+            '暂停渠道不会没收收益；只有删除或下架渠道时，仍处于冻结期的待结算额度才会按平台规则回收。'
           )}
         </div>
         <OwnerIncomeOverview channels={channels} />
@@ -178,6 +178,13 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                           </span>
                         )}
                       </div>
+                      <div className='border-border/60 mt-3 border-t pt-3'>
+                        <OwnerChannelActions
+                          channel={channel}
+                          onEdit={() => setEditing(channel)}
+                          onDelete={() => setDeleting(channel)}
+                        />
+                      </div>
                       {expandedChannelIDs.has(channel.id) && (
                         <div
                           id={`owner-channel-details-${channel.id}`}
@@ -187,11 +194,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                             <span className='text-muted-foreground text-xs'>
                               {t('渠道操作')}
                             </span>
-                            <OwnerChannelActions
-                              channel={channel}
-                              onEdit={() => setEditing(channel)}
-                              onDelete={() => setDeleting(channel)}
-                            />
+                            <span />
                           </div>
                           <ReviewSteps channel={channel} />
                           {channel.last_review_reason && (

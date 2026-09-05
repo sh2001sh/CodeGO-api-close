@@ -172,17 +172,32 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
     if (!import.meta.env.DEV) throw error
     const search = filters.search.trim().toLowerCase()
     const filtered = MOCK_MARKETPLACE_GROUPS.filter((item) => {
-      if (
-        search &&
-        !`${item.system_display_name} ${item.models.join(' ')}`
-          .toLowerCase()
-          .includes(search)
-      )
+      const searchable = [
+        item.id,
+        item.channel_id,
+        item.public_slug,
+        item.system_display_name,
+        item.source_label,
+        item.provider_type,
+        ...item.models,
+      ]
+        .join(' ')
+        .toLowerCase()
+      if (search && !searchable.includes(search))
         return false
       if (filters.source && item.source_label !== filters.source) return false
-      if (filters.provider && item.provider_type !== filters.provider)
+      if (
+        filters.provider &&
+        item.provider_type.toLowerCase() !== filters.provider.toLowerCase()
+      )
         return false
-      if (filters.model && !item.models.includes(filters.model)) return false
+      if (
+        filters.model &&
+        !item.models.some((model) =>
+          model.toLowerCase().includes(filters.model.trim().toLowerCase())
+        )
+      )
+        return false
       return true
     })
     const start = (filters.page - 1) * filters.page_size

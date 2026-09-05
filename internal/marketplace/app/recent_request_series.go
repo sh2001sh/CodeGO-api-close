@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
@@ -10,6 +11,13 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
 
+var recentSeriesCache struct {
+	sync.Mutex
+	at   time.Time
+	data map[int][]RecentRequestBucket
+	key  string
+}
+
 const (
 	marketplaceRecentWindowHours    = 6
 	marketplaceRecentWindowSegments = 12
@@ -17,6 +25,17 @@ const (
 )
 
 func marketplaceRecentRequestSeries(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel) (map[int][]RecentRequestBucket, error) {
+	cacheKey := ""
+	for _, group := range groups {
+		cacheKey += group.InternalGroupName + ";"
+	}
+	recentSeriesCache.Lock()
+	if time.Since(recentSeriesCache.at) < 10*time.Second && recentSeriesCache.data != nil && recentSeriesCache.key == cacheKey {
+		data := recentSeriesCache.data
+		recentSeriesCache.Unlock()
+		return data, nil
+	}
+	recentSeriesCache.Unlock()
 	groupChannelIDs := make(map[string]int, len(groups))
 	groupNames := make([]string, 0, len(groups))
 	for _, group := range groups {
@@ -45,7 +64,11 @@ func marketplaceRecentRequestSeries(groups []marketplaceschema.Group, channels m
 	if err != nil {
 		return nil, err
 	}
-	return buildMarketplaceRecentRequestSeries(windowStart, groupChannelIDs, rows), nil
+	data := buildMarketplaceRecentRequestSeries(windowStart, groupChannelIDs, rows)
+	recentSeriesCache.Lock()
+	recentSeriesCache.at, recentSeriesCache.data, recentSeriesCache.key = time.Now(), data, cacheKey
+	recentSeriesCache.Unlock()
+	return data, nil
 }
 
 func marketplaceRecentWindow(now int64) (int64, int64) {

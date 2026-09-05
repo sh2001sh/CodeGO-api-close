@@ -249,7 +249,14 @@ export function MarketGroupCard(props: {
                 : rate >= 95
                   ? 'w'
                   : 'e'
-          return <i className={`rb ${cls}`} key={point.ts} />
+          return (
+            <i
+              className={`rb ${cls}`}
+              key={point.ts}
+              title={`${new Date(point.ts).toLocaleTimeString()} · 成功率 ${rate == null ? '无数据' : `${rate.toFixed(1)}%`} · 请求 ${point.request_count}`}
+              aria-label={`成功率 ${rate == null ? '无数据' : `${rate.toFixed(1)}%`}，请求 ${point.request_count}`}
+            />
+          )
         })}
         {!group.recent_request_series?.length && (
           <i className='rb' style={{ background: '#e4dcd2' }} />

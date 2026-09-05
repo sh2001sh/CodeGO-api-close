@@ -96,7 +96,21 @@ export function Pricing() {
     () => buildThirdPartyVendors(thirdPartyModels, pricing.vendors || []),
     [pricing.vendors, thirdPartyModels]
   )
-  const officialFilters = useFilters(pricing.models || [])
+  const availableGroups = useMemo(
+    () =>
+      Object.keys(pricing.usableGroup || {}).filter(
+        (group) => !EXCLUDED_GROUPS.includes(group)
+      ),
+    [pricing.usableGroup]
+  )
+  const officialAvailableModels = useMemo(
+    () => (pricing.models || []).filter((model) => {
+      const groups = model.enable_groups || []
+      return groups.length === 0 || groups.some((group) => availableGroups.includes(group))
+    }),
+    [pricing.models, availableGroups]
+  )
+  const officialFilters = useFilters(officialAvailableModels)
   const thirdPartyFilters = useFilters(thirdPartyModels)
   const filters =
     sourceView === 'official' ? officialFilters : thirdPartyFilters
@@ -110,16 +124,9 @@ export function Pricing() {
         : null,
     [pricing.models, selectedModelName, sourceView, thirdPartyModels]
   )
-  const availableGroups = useMemo(
-    () =>
-      Object.keys(pricing.usableGroup || {}).filter(
-        (group) => !EXCLUDED_GROUPS.includes(group)
-      ),
-    [pricing.usableGroup]
-  )
   const totalFreeModels = useMemo(
-    () => countFreeModels(pricing.models || [], pricing.groupRatio || {}),
-    [pricing.groupRatio, pricing.models]
+    () => countFreeModels(officialAvailableModels, pricing.groupRatio || {}),
+    [pricing.groupRatio, officialAvailableModels]
   )
   const visibleFreeModels = useMemo(
     () => countFreeModels(filters.filteredModels, pricing.groupRatio || {}),
@@ -180,7 +187,7 @@ export function Pricing() {
             </div>
             <div className='sum'>
               <HeaderMetric
-                value={pricing.models.length}
+                value={officialAvailableModels.length}
                 label={t('官方模型')}
               />
               <HeaderMetric
@@ -195,12 +202,12 @@ export function Pricing() {
             onValueChange={(value) => setSourceView(value as PricingSourceView)}
           >
             <PricingSourceNavigation
-              officialCount={pricing.models.length}
+              officialCount={officialAvailableModels.length}
               thirdPartyCount={thirdPartyModels.length}
             />
             <TabsContent value='official'>
               <OfficialModelDirectory
-                models={pricing.models}
+                models={officialAvailableModels}
                 vendors={pricing.vendors}
                 availableGroups={availableGroups}
                 groupRatio={pricing.groupRatio}

@@ -42,8 +42,6 @@ export function ModelCardGrid(props: ModelCardGridProps) {
   const [page, setPage] = useState(1)
   const pageSize = DEFAULT_PRICING_PAGE_SIZE
   const tokenUnit = props.tokenUnit ?? DEFAULT_TOKEN_UNIT
-  const totalPages = Math.max(1, Math.ceil(props.models.length / pageSize))
-  const currentPage = Math.min(page, totalPages)
 
   const perfQuery = useQuery({
     queryKey: ['perf-metrics-summary', 24],
@@ -52,11 +50,6 @@ export function ModelCardGrid(props: ModelCardGridProps) {
     retry: false,
   })
 
-  const pagedModels = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
-    return props.models.slice(start, start + pageSize)
-  }, [currentPage, pageSize, props.models])
-
   const perfMap = useMemo(() => {
     const map = new Map<string, ModelPerfBadgeData>()
     for (const model of perfQuery.data?.data?.models ?? []) {
@@ -64,6 +57,27 @@ export function ModelCardGrid(props: ModelCardGridProps) {
     }
     return map
   }, [perfQuery.data])
+
+  const sortedModels = useMemo(
+    () =>
+      [...props.models].sort((left, right) => {
+        const leftCount = perfMap.get(left.model_name || '')?.request_count ?? 0
+        const rightCount =
+          perfMap.get(right.model_name || '')?.request_count ?? 0
+        return (
+          rightCount - leftCount ||
+          (left.model_name || '').localeCompare(right.model_name || '')
+        )
+      }),
+    [perfMap, props.models]
+  )
+
+  const totalPages = Math.max(1, Math.ceil(sortedModels.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pagedModels = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return sortedModels.slice(start, start + pageSize)
+  }, [currentPage, pageSize, sortedModels])
 
   if (props.models.length === 0) {
     return null
@@ -88,7 +102,7 @@ export function ModelCardGrid(props: ModelCardGridProps) {
       </div>
 
       {totalPages > 1 && (
-        <div className='text-muted-foreground flex flex-col items-center justify-between gap-3 border-t border-border/60 px-4 py-3 text-sm sm:flex-row'>
+        <div className='text-muted-foreground border-border/60 flex flex-col items-center justify-between gap-3 border-t px-4 py-3 text-sm sm:flex-row'>
           <p className='text-muted-foreground'>
             {t('Page {{current}} of {{total}}', {
               current: currentPage,

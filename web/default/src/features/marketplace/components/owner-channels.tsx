@@ -172,24 +172,32 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                             ? t('收起详情')
                             : t('查看详情')}
                         </Button>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          className='h-8 px-2'
+                          onClick={() => setEditing(channel)}
+                        >
+                          {t('编辑渠道')}
+                        </Button>
                         {!expandedChannelIDs.has(channel.id) && (
                           <span className='text-muted-foreground text-xs'>
                             {t('检测、模型与收入信息已折叠')}
                           </span>
                         )}
                       </div>
-                      <div className='border-border/60 mt-3 border-t pt-3'>
-                        <OwnerChannelActions
-                          channel={channel}
-                          onEdit={() => setEditing(channel)}
-                          onDelete={() => setDeleting(channel)}
-                        />
-                      </div>
                       {expandedChannelIDs.has(channel.id) && (
                         <div
                           id={`owner-channel-details-${channel.id}`}
                           className='mt-3'
                         >
+                          <div className='border-border/60 mb-3 border-b pb-3'>
+                            <OwnerChannelActions
+                              channel={channel}
+                              onEdit={() => setEditing(channel)}
+                              onDelete={() => setDeleting(channel)}
+                            />
+                          </div>
                           <div className='border-border/60 mb-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3'>
                             <span className='text-muted-foreground text-xs'>
                               {t('渠道操作')}

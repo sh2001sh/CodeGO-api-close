@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com.
 */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   BadgeCheck,
   ChevronDown,
@@ -30,7 +31,6 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Link } from '@tanstack/react-router'
 import { getMarketplaceRoutePools } from '@/features/marketplace/api'
 import {
   useMarketplaceAutoRoutePool,
@@ -66,7 +66,14 @@ export function PoolWorkbench(props: {
   mode: PoolPanelMode
   onModeChange: (mode: PoolPanelMode) => void
 }) {
-  const { authed, groups, activePoolID, onActivePoolChange, mode, onModeChange } = props
+  const {
+    authed,
+    groups,
+    activePoolID,
+    onActivePoolChange,
+    mode,
+    onModeChange,
+  } = props
 
   const pools = useQuery({
     queryKey: ['marketplace-route-pools'],
@@ -75,7 +82,9 @@ export function PoolWorkbench(props: {
     retry: false,
   })
   const autoPool = useMarketplaceAutoRoutePool(authed)
-  const poolDetail = useMarketplaceRoutePool(authed && activePoolID !== AUTO_ID ? activePoolID : '')
+  const poolDetail = useMarketplaceRoutePool(
+    authed && activePoolID !== AUTO_ID ? activePoolID : ''
+  )
   const createPool = useMarketplaceRoutePoolCreate()
   const updatePool = useMarketplaceRoutePoolUpdate()
   const deletePool = useMarketplaceRoutePoolDelete()
@@ -106,26 +115,45 @@ export function PoolWorkbench(props: {
   }, [authed, activePoolID, poolOptions, onActivePoolChange])
 
   const isAuto = activePoolID === AUTO_ID
+  const persistedMemberIds = useMemo(() => {
+    const items = (isAuto ? autoPool.data?.items : poolDetail.data?.items) ?? []
+    return items
+      .filter((item) => item.selected)
+      .sort((a, b) => a.priority - b.priority)
+      .map((item) => item.group_id)
+  }, [isAuto, autoPool.data, poolDetail.data])
+  const [draftMemberIds, setDraftMemberIds] = useState<string[]>([])
+  useEffect(() => {
+    setDraftMemberIds(persistedMemberIds)
+  }, [activePoolID, persistedMemberIds.join(',')])
   const members = useMemo(() => {
     if (isAuto) {
       const items = (autoPool.data?.items ?? []).filter((item) => item.selected)
-      return items.map((item) => {
-        return {
-          id: item.group_id,
-          name: item.system_display_name,
-          source: item.source_label,
-          multiplier: item.multiplier,
-          successRate: item.metrics_available ? item.success_rate : null,
-          ttft: item.metrics_available ? item.avg_ttft_ms : null,
-          cache: item.metrics_available ? item.cache_hit_rate : null,
-          observing: item.observing,
-        }
-      })
+      const byId = new Map(items.map((item) => [item.group_id, item]))
+      return draftMemberIds
+        .map((id) => byId.get(id))
+        .filter((item): item is (typeof items)[number] => Boolean(item))
+        .map((item) => {
+          return {
+            id: item.group_id,
+            name: item.system_display_name,
+            source: item.source_label,
+            multiplier: item.multiplier,
+            successRate: item.metrics_available ? item.success_rate : null,
+            ttft: item.metrics_available ? item.avg_ttft_ms : null,
+            cache: item.metrics_available ? item.cache_hit_rate : null,
+            observing: item.observing,
+          }
+        })
     }
-    const ids = poolDetail.data?.items ?? []
-    return ids
-      .filter((item) => item.selected)
-      .sort((a, b) => a.priority - b.priority)
+    const byId = new Map(
+      (poolDetail.data?.items ?? [])
+        .filter((item) => item.selected)
+        .map((item) => [item.group_id, item])
+    )
+    return draftMemberIds
+      .map((id) => byId.get(id))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
       .map((item) => {
         return {
           id: item.group_id,
@@ -138,7 +166,7 @@ export function PoolWorkbench(props: {
           observing: item.observing,
         }
       })
-  }, [isAuto, autoPool.data, poolDetail.data])
+  }, [isAuto, autoPool.data, poolDetail.data, draftMemberIds])
 
   const config: MarketplaceAutoRoutePoolConfig | undefined = isAuto
     ? autoPool.data?.config
@@ -194,12 +222,14 @@ export function PoolWorkbench(props: {
     const target = index + delta
     if (target < 0 || target >= next.length) return
     ;[next[index], next[target]] = [next[target], next[index]]
-    await saveMemberOrder(next.map((m) => m.id))
+    setDraftMemberIds(next.map((m) => m.id))
   }
 
   const remove = async (id: string) => {
-    await saveMemberOrder(members.filter((m) => m.id !== id).map((m) => m.id))
+    setDraftMemberIds(members.filter((m) => m.id !== id).map((m) => m.id))
   }
+
+  const isDirty = draftMemberIds.join(',') !== persistedMemberIds.join(',')
 
   const setStrategy = async (strategy: string) => {
     if (isAuto) {
@@ -242,11 +272,17 @@ export function PoolWorkbench(props: {
           ROUTE POOL
         </div>
         <h3>
-          {mode === 'create' ? '新建路由池' : mode === 'autobuild' ? '自动构建' : isAuto ? 'AUTO 池' : (poolDetail.data?.name ?? '路由池工作台')}
+          {mode === 'create'
+            ? '新建路由池'
+            : mode === 'autobuild'
+              ? '自动构建'
+              : isAuto
+                ? 'AUTO 池'
+                : (poolDetail.data?.name ?? '路由池工作台')}
         </h3>
         <div className='psub'>
           {mode === 'pool'
-            ? `POOL · ${members.length} 分组 · ${config ? STRATEGY_LABEL[config.strategy] ?? config.strategy : '—'}`
+            ? `POOL · ${members.length} 分组 · ${config ? (STRATEGY_LABEL[config.strategy] ?? config.strategy) : '—'}`
             : mode === 'create'
               ? 'CREATE'
               : 'AUTO BUILD'}
@@ -386,7 +422,11 @@ export function PoolWorkbench(props: {
                   ))}
                 </select>
                 {!isAuto && (
-                  <button className='btn mini' title='删除池' onClick={() => void removePool()}>
+                  <button
+                    className='btn mini'
+                    title='删除池'
+                    onClick={() => void removePool()}
+                  >
                     <X size={14} />
                   </button>
                 )}
@@ -403,7 +443,12 @@ export function PoolWorkbench(props: {
                   分组 <b>{members.length}</b>
                 </div>
                 <div className='crow'>
-                  方式 <b>{config ? STRATEGY_LABEL[config.strategy] ?? config.strategy : '—'}</b>
+                  方式{' '}
+                  <b>
+                    {config
+                      ? (STRATEGY_LABEL[config.strategy] ?? config.strategy)
+                      : '—'}
+                  </b>
                 </div>
                 <div className='crow'>
                   类型 <b>{isAuto ? 'AUTO' : '手动'}</b>
@@ -416,18 +461,39 @@ export function PoolWorkbench(props: {
                 </h5>
                 <div className='crow'>
                   成功{' '}
-                  <b className={weighted && weighted.success != null && weighted.success >= 0.98 ? 'ok' : 'bad'}>
-                    {weighted?.success != null ? `${pct(weighted.success)}%` : '—'}
+                  <b
+                    className={
+                      weighted &&
+                      weighted.success != null &&
+                      weighted.success >= 0.98
+                        ? 'ok'
+                        : 'bad'
+                    }
+                  >
+                    {weighted?.success != null
+                      ? `${pct(weighted.success)}%`
+                      : '—'}
                   </b>
                 </div>
                 <div className='crow'>
                   首字{' '}
-                  <b className={weighted && weighted.ttft != null && weighted.ttft <= 600 ? 'ok' : 'bad'}>
+                  <b
+                    className={
+                      weighted && weighted.ttft != null && weighted.ttft <= 600
+                        ? 'ok'
+                        : 'bad'
+                    }
+                  >
                     {weighted?.ttft != null ? `${sec(weighted.ttft)}s` : '—'}
                   </b>
                 </div>
                 <div className='crow'>
-                  缓存 <b>{weighted?.cache != null ? `${pct(weighted.cache, 0)}%` : '—'}</b>
+                  缓存{' '}
+                  <b>
+                    {weighted?.cache != null
+                      ? `${pct(weighted.cache, 0)}%`
+                      : '—'}
+                  </b>
                 </div>
               </div>
             </div>
@@ -442,11 +508,15 @@ export function PoolWorkbench(props: {
                   <div className='pool-item' key={member.id}>
                     <div className='r1'>
                       <GripVertical size={13} color='var(--dawn-ink2)' />
-                      <i className={`dot${member.observing ? ' w' : ''}`} />
+                      <i className={`dot${member.observing ? 'w' : ''}`} />
                       <span className='cname'>{member.name}</span>
                       <span className='csrc'>{member.source}</span>
                       <span className='ord'>
-                        <button disabled={index === 0} onClick={() => void move(index, -1)} title='上移'>
+                        <button
+                          disabled={index === 0}
+                          onClick={() => void move(index, -1)}
+                          title='上移'
+                        >
                           <ChevronUp size={13} />
                         </button>
                         <button
@@ -456,7 +526,10 @@ export function PoolWorkbench(props: {
                         >
                           <ChevronDown size={13} />
                         </button>
-                        <button onClick={() => void remove(member.id)} title='移出'>
+                        <button
+                          onClick={() => void remove(member.id)}
+                          title='移出'
+                        >
                           <X size={13} />
                         </button>
                       </span>
@@ -467,18 +540,38 @@ export function PoolWorkbench(props: {
                       </div>
                       <div>
                         成功
-                        <b className={member.successRate != null && member.successRate < 0.98 ? 'warn' : ''}>
-                          {member.successRate != null ? `${pct(member.successRate)}%` : '—'}
+                        <b
+                          className={
+                            member.successRate != null &&
+                            member.successRate < 0.98
+                              ? 'warn'
+                              : ''
+                          }
+                        >
+                          {member.successRate != null
+                            ? `${pct(member.successRate)}%`
+                            : '—'}
                         </b>
                       </div>
                       <div>
                         首字
-                        <b className={member.ttft != null && member.ttft > 600 ? 'warn' : ''}>
+                        <b
+                          className={
+                            member.ttft != null && member.ttft > 600
+                              ? 'warn'
+                              : ''
+                          }
+                        >
                           {member.ttft != null ? `${sec(member.ttft)}s` : '—'}
                         </b>
                       </div>
                       <div>
-                        缓存<b>{member.cache != null ? `${pct(member.cache, 0)}%` : '—'}</b>
+                        缓存
+                        <b>
+                          {member.cache != null
+                            ? `${pct(member.cache, 0)}%`
+                            : '—'}
+                        </b>
                       </div>
                     </div>
                   </div>
@@ -490,6 +583,18 @@ export function PoolWorkbench(props: {
                 </div>
               )}
             </div>
+            {isDirty && (
+              <div className='pp-foot'>
+                <span className='sub2'>成员调整尚未保存</span>
+                <button
+                  className='btn mini primary'
+                  disabled={updatePool.isPending || updateAutoPool.isPending}
+                  onClick={() => void saveMemberOrder(draftMemberIds)}
+                >
+                  保存更改
+                </button>
+              </div>
+            )}
             <div className='pp-note'>
               <Info size={12} />
               排序即调度顺序；指标取窗口均值。
@@ -503,20 +608,34 @@ export function PoolWorkbench(props: {
 
 function CreatePanel(props: {
   onCancel: () => void
-  onCreate: (name: string, strategy: 'priority' | 'score' | 'cost') => Promise<void>
+  onCreate: (
+    name: string,
+    strategy: 'priority' | 'score' | 'cost'
+  ) => Promise<void>
 }) {
   const [name, setName] = useState('')
-  const [strategy, setStrategy] = useState<'priority' | 'score' | 'cost'>('priority')
+  const [strategy, setStrategy] = useState<'priority' | 'score' | 'cost'>(
+    'priority'
+  )
   const [busy, setBusy] = useState(false)
   return (
     <>
       <div className='field'>
         <label>路由池名称</label>
-        <input placeholder='高峰保障池' value={name} onChange={(event) => setName(event.target.value)} />
+        <input
+          placeholder='高峰保障池'
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
       </div>
       <div className='field'>
         <label>路由方式</label>
-        <select value={strategy} onChange={(event) => setStrategy(event.target.value as 'priority' | 'score' | 'cost')}>
+        <select
+          value={strategy}
+          onChange={(event) =>
+            setStrategy(event.target.value as 'priority' | 'score' | 'cost')
+          }
+        >
           {Object.entries(STRATEGY_LABEL).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
@@ -559,7 +678,11 @@ type WeightKey = (typeof WEIGHTS)[number]['key']
 function AutoBuildPanel(props: {
   groups: MarketplaceGroup[]
   onCancel: () => void
-  onGenerate: (name: string, groupIds: string[], strategy: 'priority' | 'score' | 'cost') => Promise<void>
+  onGenerate: (
+    name: string,
+    groupIds: string[],
+    strategy: 'priority' | 'score' | 'cost'
+  ) => Promise<void>
 }) {
   const [name, setName] = useState('自动池')
   const [weights, setWeights] = useState<Record<WeightKey, number>>({
@@ -570,13 +693,18 @@ function AutoBuildPanel(props: {
   })
   const [size, setSize] = useState(3)
   const [explore, setExplore] = useState(1)
+  const [model, setModel] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const total = Object.values(weights).reduce((sum, value) => sum + value, 0) || 1
+  const total =
+    Object.values(weights).reduce((sum, value) => sum + value, 0) || 1
 
   const scored = useMemo(() => {
     const candidates = props.groups.filter(
-      (group) => group.request_count > 0 && group.lifecycle_status === 'active'
+      (group) =>
+        group.request_count > 0 &&
+        group.lifecycle_status === 'active' &&
+        (!model || group.models.includes(model))
     )
     if (!candidates.length) return []
     const values = {
@@ -593,19 +721,23 @@ function AutoBuildPanel(props: {
     return candidates
       .map((group) => {
         const score =
-          (weights.multiplier * (1 - norm(group.multiplier, values.multiplier)) +
+          ((weights.multiplier *
+            (1 - norm(group.multiplier, values.multiplier)) +
             weights.success * norm(group.success_rate * 100, values.success) +
             weights.ttft * (1 - norm(group.avg_ttft_ms, values.ttft)) +
             weights.cache * norm(group.cache_hit_rate * 100, values.cache)) /
-          total *
+            total) *
           100
         return { group, score }
       })
       .sort((a, b) => b.score - a.score)
-  }, [props.groups, weights, total])
+  }, [props.groups, weights, total, model])
 
   const exploration = useMemo(
-    () => props.groups.filter((group) => group.observing || group.request_count === 0),
+    () =>
+      props.groups.filter(
+        (group) => group.observing || group.request_count === 0
+      ),
     [props.groups]
   )
 
@@ -614,6 +746,22 @@ function AutoBuildPanel(props: {
 
   return (
     <>
+      <div className='field'>
+        <label>按模型筛选（可选）</label>
+        <select
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+        >
+          <option value=''>全部模型</option>
+          {Array.from(new Set(props.groups.flatMap((group) => group.models)))
+            .sort()
+            .map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+        </select>
+      </div>
       <div className='field'>
         <label>路由池名称</label>
         <input value={name} onChange={(event) => setName(event.target.value)} />
@@ -649,7 +797,9 @@ function AutoBuildPanel(props: {
               max={6}
               value={size}
               onChange={(event) =>
-                setSize(Math.max(1, Math.min(6, Number(event.target.value) || 1)))
+                setSize(
+                  Math.max(1, Math.min(6, Number(event.target.value) || 1))
+                )
               }
             />
           </div>
@@ -698,7 +848,12 @@ function AutoBuildPanel(props: {
             {explorer.map((group, index) => (
               <div className='prev-row' key={group.id}>
                 <span className='rk'>{String(index + 1).padStart(2, '0')}</span>
-                  <span className='nm'>{group.system_display_name}<span className='tag'>{group.observing ? '观测中' : '无流量'}</span></span>
+                <span className='nm'>
+                  {group.system_display_name}
+                  <span className='tag'>
+                    {group.observing ? '观测中' : '无流量'}
+                  </span>
+                </span>
                 <span className='mt'>{group.multiplier}×</span>
                 <span className='bar'>
                   <i style={{ width: '18%' }} />
@@ -720,7 +875,10 @@ function AutoBuildPanel(props: {
             try {
               await props.onGenerate(
                 name.trim() || '自动池',
-                [...main.map((entry) => entry.group.id), ...explorer.map((group) => group.id)],
+                [
+                  ...main.map((entry) => entry.group.id),
+                  ...explorer.map((group) => group.id),
+                ],
                 weights.multiplier >= 30 ? 'cost' : 'priority'
               )
             } finally {

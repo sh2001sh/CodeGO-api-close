@@ -931,16 +931,16 @@ For commercial licensing, please contact support@quantumnous.com.
   flex: 1;
   height: 14px;
   border-radius: 2px;
-  background: #dce9df;
+  background: #9fbea6;
   min-width: 4px;
 }
 
 .dawn .rb.w {
-  background: var(--dawn-warn-bg);
+  background: #d39a42;
 }
 
 .dawn .rb.e {
-  background: var(--dawn-bad-bg);
+  background: #c85c4f;
 }
 
 .dawn .recent .rn {

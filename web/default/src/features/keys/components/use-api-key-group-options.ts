@@ -2,8 +2,8 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getUserGroups } from '@/lib/api'
 import { getMarketplaceRoutePools } from '@/features/marketplace/api'
-import { getSelectableMarketplaceGroups } from '../api'
 import { getSidebarGroupStatus } from '@/features/sidebar-group-status/api'
+import { getSelectableMarketplaceGroups } from '../api'
 import type { ApiKeyGroupOption } from './api-key-group-combobox'
 
 export function useApiKeyGroupOptions() {
@@ -21,6 +21,7 @@ export function useApiKeyGroupOptions() {
     queryKey: ['api-key-marketplace-route-pools'],
     queryFn: getMarketplaceRoutePools,
     staleTime: 60 * 1000,
+    retry: false,
   })
   const { data: groupStatus } = useQuery({
     queryKey: ['sidebar-group-status'],
@@ -39,15 +40,21 @@ export function useApiKeyGroupOptions() {
         subscriptionEnabled: info.subscription_enabled,
         subscriptionRatio: info.subscription_ratio,
         category: 'official' as const,
-        successRate: groupStatus?.data?.find((item) => item.group === key)?.success_rate,
-        requestCount: groupStatus?.data?.find((item) => item.group === key)?.request_count,
+        successRate: groupStatus?.data?.find((item) => item.group === key)
+          ?.success_rate,
+        requestCount: groupStatus?.data?.find((item) => item.group === key)
+          ?.request_count,
       }))
-    const poolOptions: ApiKeyGroupOption[] = routePools.map((pool) => ({
-      value: pool.token_group,
-      label: pool.name,
-      desc: `${pool.member_count} 个分组 · ${pool.models.length} 个模型`,
-      ratio: '动态', category: 'marketplace_pool', models: pool.models,
-    }))
+    const poolOptions: ApiKeyGroupOption[] = routePools
+      .filter((pool) => Boolean(pool.token_group && pool.id))
+      .map((pool) => ({
+        value: pool.token_group,
+        label: pool.name,
+        desc: `${pool.member_count} 个分组 · ${pool.models.length} 个模型`,
+        ratio: '动态',
+        category: 'marketplace_pool',
+        models: pool.models,
+      }))
     return [...poolOptions, ...officialGroups, ...marketplaceGroups]
   }, [groupStatus?.data, groupsData?.data, marketplaceGroups, routePools])
 }

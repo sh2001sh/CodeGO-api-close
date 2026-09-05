@@ -425,7 +425,9 @@ type AutoRoutePoolView struct {
 }
 
 type RoutePoolCreateRequest struct {
-	Name string `json:"name"`
+	Name     string               `json:"name"`
+	GroupIDs []string             `json:"group_ids"`
+	Config   *AutoRoutePoolConfig `json:"config,omitempty"`
 }
 
 type RoutePoolUpdateRequest struct {

@@ -3988,6 +3988,14 @@ For commercial licensing, please contact support@quantumnous.com
   color: var(--primary-foreground);
 }
 
+/* Wallet screens use the same rounded surface language as the rest of the
+ * console. Keep the legacy asset shell square only on other workspaces. */
+.codego-wallet-workspace .app-page-shell,
+.codego-wallet-workspace .app-subtle-panel,
+.codego-wallet-workspace [data-slot='card'] {
+  border-radius: 0.75rem;
+}
+
 .codego-asset-workspace [data-slot='button'][data-variant='default']:hover {
   background: color-mix(in oklab, var(--primary) 90%, black);
 }

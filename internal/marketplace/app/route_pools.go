@@ -88,6 +88,10 @@ func CreateRoutePool(ownerUserID int, req RoutePoolCreateRequest) (*RoutePoolVie
 	if name == "" || len([]rune(name)) > 64 {
 		return nil, errors.New("路由池名称需为 1-64 个字符")
 	}
+	groupIDs := normalizeAutoRouteGroupIDs(req.GroupIDs)
+	if len(groupIDs) > maxAutoRoutePoolMembers {
+		return nil, errors.New("路由池最多可添加 10 个分组")
+	}
 	var count int64
 	if err := platformdb.DB.Model(&marketplaceschema.RoutePool{}).Where("owner_user_id = ?", ownerUserID).Count(&count).Error; err != nil {
 		return nil, err
@@ -95,11 +99,57 @@ func CreateRoutePool(ownerUserID int, req RoutePoolCreateRequest) (*RoutePoolVie
 	if count >= maxNamedRoutePools {
 		return nil, errors.New("每个用户最多创建 20 个路由池")
 	}
-	pool := marketplaceschema.RoutePool{ID: platformruntime.GetUUID(), OwnerUserID: ownerUserID, Name: name, Strategy: "priority", MaxAttempts: 3, FailureCooldownSeconds: 30}
-	if err := platformdb.DB.Create(&pool).Error; err != nil {
+	config := normalizeAutoRoutePoolConfig(req.Config)
+	pool := marketplaceschema.RoutePool{ID: platformruntime.GetUUID(), OwnerUserID: ownerUserID, Name: name, Strategy: config.Strategy, MaxAttempts: config.MaxAttempts, FailureCooldownSeconds: config.FailureCooldownSeconds, MaxMultiplier: config.MaxMultiplier}
+	if len(groupIDs) > 0 {
+		groups, _, err := loadAutoRouteGroupsForIDs(ownerUserID, groupIDs)
+		if err != nil {
+			return nil, err
+		}
+		eligible := make(map[string]struct{}, len(groups))
+		for _, group := range groups {
+			eligible[group.ID] = struct{}{}
+		}
+		for _, groupID := range groupIDs {
+			if strings.HasPrefix(groupID, officialAutoRoutePrefix) {
+				for _, item := range loadOfficialAutoRouteItemsSummary(ownerUserID) {
+					eligible[item.GroupID] = struct{}{}
+				}
+				break
+			}
+		}
+		validGroupIDs := make([]string, 0, len(groupIDs))
+		for _, groupID := range groupIDs {
+			if _, ok := eligible[groupID]; ok {
+				validGroupIDs = append(validGroupIDs, groupID)
+			}
+		}
+		groupIDs = validGroupIDs
+		if len(groupIDs) == 0 {
+			return nil, errors.New("没有可用的分组可加入路由池")
+		}
+	}
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&pool).Error; err != nil {
+			message := strings.ToLower(err.Error())
+			if strings.Contains(message, "uq_marketplace_route_pool_name") || strings.Contains(message, "duplicate key") || strings.Contains(message, "unique constraint") {
+				return errors.New("路由池名称已存在，请使用其他名称")
+			}
+			return err
+		}
+		for index, groupID := range groupIDs {
+			if err := tx.Create(&marketplaceschema.RoutePoolMember{PoolID: pool.ID, GroupID: groupID, Priority: index + 1}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	return ListRoutePool(ownerUserID, pool.ID)
+	// Metrics are loaded by the detail query after the pool is selected. Avoid
+	// repeating the expensive snapshot and request-series queries during create.
+	return &RoutePoolView{ID: pool.ID, Name: pool.Name, TokenGroup: RoutePoolTokenGroupValue(pool.ID), SelectedCount: len(groupIDs), Config: config}, nil
 }
 
 func ListRoutePool(ownerUserID int, poolID string) (*RoutePoolView, error) {
@@ -206,6 +256,11 @@ func UpdateRoutePool(ownerUserID int, poolID string, req RoutePoolUpdateRequest)
 func DeleteRoutePool(ownerUserID int, poolID string) error {
 	pool, _, err := loadRoutePool(ownerUserID, poolID)
 	if err != nil {
+		// DELETE is intentionally idempotent so a stale detail request or a
+		// repeated click cannot surface a misleading "record not found" error.
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
 		return err
 	}
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {

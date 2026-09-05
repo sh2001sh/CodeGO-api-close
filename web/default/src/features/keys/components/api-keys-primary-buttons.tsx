@@ -32,7 +32,7 @@ export function ApiKeysPrimaryButtons() {
         <Store className='h-4 w-4' />
         {t('前往分组市场')}
       </Button>
-      <Button size='sm' onClick={() => setOpen('create')}>
+      <Button variant='outline' size='sm' onClick={() => setOpen('create')}>
         <Plus className='h-4 w-4' />
         {t('Create API Key')}
       </Button>

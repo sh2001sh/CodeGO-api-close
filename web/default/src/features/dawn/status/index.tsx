@@ -141,7 +141,7 @@ export function DawnStatus() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <span className='live'>
               <i />
-              LIVE · 24H
+              LIVE · 12H
             </span>
             <button
               className='btn mini'
@@ -163,7 +163,7 @@ export function DawnStatus() {
 
         <div className='statband'>
           <div className='cell'>
-            <span className='win'>24H WINDOW</span>
+            <span className='win'>12H WINDOW</span>
             <b>{groups.length}</b>
             <span>分组</span>
           </div>

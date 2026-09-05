@@ -22,7 +22,7 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
   group: MarketplaceGroup
 }) {
   const { t, i18n } = useTranslation()
-  const bucketSeconds = props.group.recent_request_bucket_seconds || 1800
+  const bucketSeconds = props.group.recent_request_bucket_seconds || 3600
   const series = useMemo(
     () =>
       normalizeRecentRequestSeries(
@@ -44,7 +44,7 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
   const hasRecentTraffic = series.some((bucket) => bucket.request_count > 0)
   if (!hasRecentTraffic) return null
   const threshold = t(
-    '每个色块代表 30 分钟：90%（含）以上稳定，85%（含）至 90%（不含）波动，低于 85% 异常，灰色表示无请求'
+    '每个色块代表 1 小时：90%（含）以上稳定，85%（含）至 90%（不含）波动，低于 85% 异常，灰色表示无请求'
   )
 
   return (
@@ -55,7 +55,7 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
       </div>
       <div
         className='flex w-full gap-0.5'
-        aria-label={`${t('近 6 小时请求状态')}。${threshold}`}
+        aria-label={`${t('近 12 小时请求状态')}。${threshold}`}
       >
         {series.map((bucket, index) => {
           const range = formatBucketRange(bucket.ts, bucketSeconds, formatter)

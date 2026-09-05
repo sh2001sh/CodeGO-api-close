@@ -338,7 +338,10 @@ export function PoolWorkbench(props: {
                 </Link>
               </div>
             </div>
-            <div className='pp-note'>
+            <div
+              className='pp-note'
+              style={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}
+            >
               <Info size={12} />
               登录后可创建与编辑路由池
             </div>
@@ -347,12 +350,7 @@ export function PoolWorkbench(props: {
           <CreatePanel
             onCancel={() => onModeChange('pool')}
             onCreate={async (name, strategy) => {
-              const pool = await createPool.mutateAsync(name)
-              await updatePool.mutateAsync({
-                id: pool.id,
-                groupIds: [],
-                config: { strategy },
-              })
+              const pool = await createPool.mutateAsync({ name, config: { strategy } })
               onActivePoolChange(pool.id)
               onModeChange('pool')
               toast.success('路由池已创建')
@@ -363,12 +361,16 @@ export function PoolWorkbench(props: {
             groups={groups}
             onCancel={() => onModeChange('pool')}
             onGenerate={async (name, groupIds, strategy) => {
-              const pool = await createPool.mutateAsync(name)
-              await updatePool.mutateAsync({
-                id: pool.id,
-                groupIds,
-                config: { strategy },
-              })
+              let generatedName = name.trim() || '自动池'
+              if (generatedName === '自动池') {
+                const existingNames = new Set((pools.data ?? []).map((pool) => pool.name))
+                if (existingNames.has(generatedName)) {
+                  let suffix = 2
+                  while (existingNames.has(`${generatedName} ${suffix}`)) suffix += 1
+                  generatedName = `${generatedName} ${suffix}`
+                }
+              }
+              const pool = await createPool.mutateAsync({ name: generatedName, groupIds, config: { strategy } })
               onActivePoolChange(pool.id)
               onModeChange('pool')
               toast.success(`已生成路由池 · ${groupIds.length} 分组`)
@@ -704,8 +706,11 @@ function AutoBuildPanel(props: {
   const scored = useMemo(() => {
     const candidates = props.groups.filter(
       (group) =>
+        group.source_type === 'marketplace_user' &&
         group.request_count > 0 &&
-        group.lifecycle_status === 'active' &&
+        (group.lifecycle_status === 'active' || group.lifecycle_status === 'degraded') &&
+        group.verification_status === 'passed' &&
+        group.models.length > 0 &&
         (!model || group.models.includes(model))
     )
     if (!candidates.length) return []
@@ -738,7 +743,12 @@ function AutoBuildPanel(props: {
   const exploration = useMemo(
     () =>
       props.groups.filter(
-        (group) => group.observing || group.request_count === 0
+        (group) =>
+          group.source_type === 'marketplace_user' &&
+          (group.lifecycle_status === 'active' || group.lifecycle_status === 'degraded') &&
+          group.verification_status === 'passed' &&
+          group.models.length > 0 &&
+          (group.observing || group.request_count === 0)
       ),
     [props.groups]
   )
@@ -883,6 +893,8 @@ function AutoBuildPanel(props: {
                 ],
                 weights.multiplier >= 30 ? 'cost' : 'priority'
               )
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : '生成路由池失败')
             } finally {
               setBusy(false)
             }

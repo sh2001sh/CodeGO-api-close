@@ -22,6 +22,7 @@ For commercial licensing, please contact support@quantumnous.com.
    ══════════════════════════════════════════════════════════════════ */
 
 .dawn {
+  scrollbar-gutter: stable;
   --dawn-paper: #faf7f3;
   --dawn-card: #fffdfb;
   --dawn-cream: #fdf6ef;
@@ -1066,16 +1067,16 @@ For commercial licensing, please contact support@quantumnous.com.
   flex: 1;
   height: 10px;
   border-radius: 2px;
-  background: #dce9df;
+  background: var(--dawn-ok);
   min-width: 3px;
 }
 
 .dawn .mini-recent .seg i.w {
-  background: var(--dawn-warn-bg);
+  background: #c58a27;
 }
 
 .dawn .mini-recent .seg i.e {
-  background: var(--dawn-bad-bg);
+  background: #bd4b3f;
 }
 
 .dawn .mini-recent .seg .tip {

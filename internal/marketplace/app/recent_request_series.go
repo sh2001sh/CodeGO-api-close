@@ -19,7 +19,7 @@ var recentSeriesCache struct {
 }
 
 const (
-	marketplaceRecentWindowHours    = 6
+	marketplaceRecentWindowHours    = 12
 	marketplaceRecentWindowSegments = 12
 	marketplaceRecentBucketSeconds  = int64(marketplaceRecentWindowHours * 3600 / marketplaceRecentWindowSegments)
 )

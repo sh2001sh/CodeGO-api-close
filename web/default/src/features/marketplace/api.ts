@@ -319,10 +319,17 @@ export async function getMarketplaceRoutePools() {
   return requireData(response.data)
 }
 
-export async function createMarketplaceRoutePool(name: string) {
+export async function createMarketplaceRoutePool(input: string | {
+  name: string
+  groupIds?: string[]
+  config?: Partial<MarketplaceAutoRoutePoolConfig>
+}) {
+  const payload = typeof input === 'string'
+    ? { name: input }
+    : { name: input.name, group_ids: input.groupIds, config: input.config }
   const response = await api.post<ApiResponse<MarketplaceRoutePool>>(
     '/api/marketplace/route-pools',
-    { name }
+    payload
   )
   return requireData(response.data)
 }

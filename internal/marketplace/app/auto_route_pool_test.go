@@ -98,6 +98,22 @@ func TestAutoRoutePoolRejectsMoreThanTenGroups(t *testing.T) {
 	require.EqualError(t, err, "全局 Auto 路由池最多可添加 10 个分组")
 }
 
+func TestCreateRoutePoolReturnsLightweightViewAndRejectsDuplicateName(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.RoutePool{}, &marketplaceschema.RoutePoolMember{}))
+
+	view, err := CreateRoutePool(20, RoutePoolCreateRequest{Name: "自动池"})
+	require.NoError(t, err)
+	require.NotNil(t, view)
+	require.Equal(t, "自动池", view.Name)
+	require.Empty(t, view.Items)
+	require.Equal(t, "priority", view.Config.Strategy)
+
+	_, err = CreateRoutePool(20, RoutePoolCreateRequest{Name: "自动池"})
+	require.EqualError(t, err, "路由池名称已存在，请使用其他名称")
+	require.NoError(t, DeleteRoutePool(20, "missing-route-pool"))
+}
+
 func TestAutoRoutePoolFiltersGroupsAboveTokenMultiplierLimit(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(

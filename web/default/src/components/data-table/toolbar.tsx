@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import * as React from 'react'
 import { useState, type ReactNode } from 'react'
 import { type Table } from '@tanstack/react-table'
-import { ChevronDown, Loader2, X as Cross2Icon } from 'lucide-react'
+import { ChevronDown, Loader2, Search, X as Cross2Icon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -210,8 +210,13 @@ export function DataTableToolbar<TData>(props: DataTableToolbarProps<TData>) {
   ) : null
 
   const searchButton = hasSearch ? (
-    <Button onClick={props.onSearch} disabled={props.searchLoading}>
+    <Button
+      onClick={props.onSearch}
+      disabled={props.searchLoading}
+      className='min-w-20 gap-1.5'
+    >
       {props.searchLoading && <Loader2 className='animate-spin' />}
+      {!props.searchLoading && <Search className='size-4' />}
       {t('Search')}
     </Button>
   ) : null

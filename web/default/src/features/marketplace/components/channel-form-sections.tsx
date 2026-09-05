@@ -24,6 +24,11 @@ export function ChannelConnectionSection(props: {
       title={t('连接信息')}
       description={t('用于安全检测和读取上游模型。')}
     >
+      {props.editing && (
+        <div className='border-primary/25 bg-primary/[0.05] text-muted-foreground rounded-md border px-3 py-2 text-xs leading-5'>
+          {t('这是编辑模式：已有配置会保留。Base URL 和 API Key 留空即可保持原值，只填写需要修改的字段。')}
+        </div>
+      )}
       <ConnectionEndpointFields form={form} editing={props.editing} />
       <ConnectionCredentialFields form={form} editing={props.editing} />
     </FormSection>

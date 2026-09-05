@@ -31,8 +31,8 @@ export function WalletWorkspaceShell(props: WalletWorkspaceShellProps) {
         <div
           className={
             props.sidebar
-              ? 'codego-asset-workspace mx-auto grid w-full max-w-[1600px] items-start gap-5 min-[1200px]:grid-cols-[minmax(0,1fr)_288px] 2xl:grid-cols-[minmax(0,1fr)_320px]'
-              : 'codego-asset-workspace mx-auto w-full max-w-[1360px]'
+            ? 'codego-asset-workspace codego-wallet-workspace mx-auto grid w-full max-w-[1600px] items-start gap-5 min-[1200px]:grid-cols-[minmax(0,1fr)_288px] 2xl:grid-cols-[minmax(0,1fr)_320px]'
+              : 'codego-asset-workspace codego-wallet-workspace mx-auto w-full max-w-[1360px]'
           }
         >
           {props.framedMain === false ? (

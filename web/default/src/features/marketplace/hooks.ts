@@ -175,8 +175,17 @@ export function useMarketplaceRoutePoolUpdate() {
 }
 
 export function useMarketplaceRoutePoolDelete() {
-  const invalidate = useRoutePoolInvalidation()
-  return useMutation({ mutationFn: deleteMarketplaceRoutePool, onSuccess: invalidate })
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: deleteMarketplaceRoutePool,
+    onSuccess: async (_result, id) => {
+      queryClient.removeQueries({ queryKey: ['marketplace-route-pools', id] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['marketplace-route-pools'] }),
+        queryClient.invalidateQueries({ queryKey: ['api-key-marketplace-route-pools'] }),
+      ])
+    },
+  })
 }
 
 export function useMarketplaceBatchTest() {

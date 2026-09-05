@@ -94,7 +94,10 @@ export function DawnPlaza() {
   const models = useMemo(
     () =>
       mergePricingModels(pricing.models, pricing.pricedModelDetails)
-        .filter((model) => model.model_name && Array.isArray(model.enable_groups) && model.enable_groups.length > 0)
+        // priced_model_details intentionally does not expose source groups;
+        // requiring enable_groups here filtered every complete pricing detail
+        // out and made the plaza show “无匹配模型”.
+        .filter((model) => Boolean(model.model_name?.trim()))
         .map((model) => ({
           ...model,
           vendorName: model.vendor_name || guessVendor(model.model_name),

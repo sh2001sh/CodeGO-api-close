@@ -272,13 +272,14 @@ export function AffiliateRewardsPage() {
                       <Input
                         value={affiliateLink}
                         readOnly
-                        className='h-11 font-mono text-xs sm:text-sm'
+                        className='h-10 font-mono text-xs sm:text-sm'
                       />
                     )}
                     <Button
+                      variant='outline'
                       onClick={() => void copyAffiliateLink()}
                       disabled={!affiliateLink}
-                      className='h-11'
+                      className='h-10'
                     >
                       <Copy data-icon='inline-start' />
                       复制邀请链接

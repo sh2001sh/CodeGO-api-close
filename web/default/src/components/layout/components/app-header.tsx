@@ -26,6 +26,7 @@ import { NotificationButton } from '@/components/notification-button'
 import { NotificationDialog } from '@/components/notification-dialog'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 import { LuckyRewardNotifier } from '@/features/daily-lucky-number/components/lucky-reward-notifier'
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import { type TopNavLink } from '../types'
@@ -146,6 +147,7 @@ export function AppHeader({
                 onClick={() => notifications.openDialog()}
               />
             )}
+            <ThemeSwitch />
             <LanguageSwitcher />
             {showConfigDrawer && <ConfigDrawer />}
             {showProfileDropdown && <ProfileDropdown />}

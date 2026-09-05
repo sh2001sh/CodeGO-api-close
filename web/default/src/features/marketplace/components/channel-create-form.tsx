@@ -212,7 +212,9 @@ export function ChannelEditorForm(props: {
       <div className='border-border bg-muted/15 flex justify-end border-t px-4 py-4 sm:px-5'>
         <Button type='submit' disabled={pending}>
           {pending && <Loader2 className='animate-spin' />}
-          {editing ? t('保存修改') : t('提交并执行必做校验')}
+          {editing
+            ? t('保存修改（留空保持原值）')
+            : t('提交并执行必做校验')}
         </Button>
       </div>
     </form>

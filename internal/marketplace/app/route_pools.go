@@ -284,6 +284,12 @@ func buildRoutePoolItems(ownerUserID int, groups []marketplaceschema.Group, chan
 		if _, blocked := blockedChannels[group.ChannelID]; blocked {
 			continue
 		}
+		if config.MaxMultiplier > 0 && !MultiplierWithinLimit(group.Multiplier, config.MaxMultiplier) {
+			// Keep the editor consistent with runtime resolution: a group above
+			// the configured ceiling must not remain selectable after its public
+			// multiplier changes.
+			continue
+		}
 		priority, isSelected := selected[group.ID]
 		availability, score := autoRouteMetrics(group, snapshots[group.ID], config)
 		channelID := 0

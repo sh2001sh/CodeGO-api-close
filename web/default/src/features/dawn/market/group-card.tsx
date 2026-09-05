@@ -74,13 +74,15 @@ export function MarketGroupCard(props: {
           <h3>{group.system_display_name}</h3>
         </div>
         <div className='state'>
-          <span className={`pub ${lifecycleOn ? 'on' : 'off'}`}>
+          <span className={`pub ${!hasTraffic ? 'idle' : lifecycleOn ? 'on' : 'off'}`}>
             {group.observing ? (
               <CircleDashed size={12} />
             ) : (
               <BadgeCheck size={12} />
             )}
-            {group.observing
+            {!hasTraffic
+              ? '无请求'
+              : group.observing
               ? '观测中'
               : lifecycleOn
                 ? '在售'

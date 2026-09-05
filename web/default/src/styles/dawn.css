@@ -707,6 +707,11 @@ For commercial licensing, please contact support@quantumnous.com.
   color: var(--dawn-ink2);
 }
 
+.dawn .gcard .state .pub.idle {
+  color: var(--dawn-idle);
+  background: color-mix(in srgb, var(--dawn-idle) 12%, transparent);
+}
+
 .dawn .gcard .state .sub2 {
   font-size: 11px;
   color: var(--dawn-ink2);

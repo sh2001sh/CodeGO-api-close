@@ -52,6 +52,16 @@ func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	require.Equal(t, 1, view.Items[0].Priority)
 }
 
+func TestNormalizeAutoRoutePoolConfigClampsPositiveMultiplierCeiling(t *testing.T) {
+	config := normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{MaxMultiplier: 0.0001})
+	if config.MaxMultiplier != 0.001 {
+		t.Fatalf("max multiplier = %v, want 0.001", config.MaxMultiplier)
+	}
+	if unlimited := normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{MaxMultiplier: 0}).MaxMultiplier; unlimited != 0 {
+		t.Fatalf("zero max multiplier = %v, want unlimited zero", unlimited)
+	}
+}
+
 func TestLoadAutoRouteGroupsForIDsOnlyLoadsSelectedGroups(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))

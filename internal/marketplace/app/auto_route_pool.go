@@ -240,6 +240,9 @@ func normalizeAutoRoutePoolConfig(config *AutoRoutePoolConfig) AutoRoutePoolConf
 	if result.FailureCooldownSeconds < 5 || result.FailureCooldownSeconds > 3600 {
 		result.FailureCooldownSeconds = 30
 	}
+	if result.MaxMultiplier > 0 && result.MaxMultiplier < 0.001 {
+		result.MaxMultiplier = 0.001
+	}
 	if result.MaxMultiplier < 0 {
 		result.MaxMultiplier = 0
 	}

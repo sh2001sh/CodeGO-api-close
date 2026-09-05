@@ -83,7 +83,7 @@ function RoutePoolEditor({ poolID }: { poolID: string }) {
       <RoutePoolConfig label={t('路由策略')}><select className='border-input bg-background h-9 w-full rounded-md border px-2 text-sm' value={config.strategy} onChange={(event) => setConfig({ ...config, strategy: event.target.value as typeof config.strategy })}><option value='priority'>{t('手动优先级')}</option><option value='score'>{t('健康评分')}</option><option value='cost'>{t('倍率优先')}</option></select></RoutePoolConfig>
       <RoutePoolNumber label={t('最大尝试次数')} value={config.max_attempts} min={1} max={5} onChange={(value) => setConfig({ ...config, max_attempts: value })} />
       <RoutePoolNumber label={t('失败冷却（秒）')} value={config.failure_cooldown_seconds} min={5} max={3600} onChange={(value) => setConfig({ ...config, failure_cooldown_seconds: value })} />
-      <RoutePoolNumber label={t('倍率上限（0 为不限）')} value={config.max_multiplier} min={0} step={0.01} onChange={(value) => setConfig({ ...config, max_multiplier: value })} />
+      <RoutePoolNumber label={t('倍率上限（0 为不限，最低 0.001）')} value={config.max_multiplier} min={0} step={0.001} onChange={(value) => setConfig({ ...config, max_multiplier: value === 0 ? 0 : Math.max(0.001, value) })} />
     </div>
     <div className='border-border flex justify-end border-t px-4 py-3'><Button size='sm' disabled={update.isPending} onClick={() => update.mutate({ id: poolID, groupIds: draft, config })}><Check />{update.isPending ? t('保存中') : t('保存配置')}</Button></div>
   </>

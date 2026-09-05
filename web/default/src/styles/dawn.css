@@ -707,6 +707,34 @@ For commercial licensing, please contact support@quantumnous.com.
   color: var(--dawn-ink2);
 }
 
+/* Keep the Dawn palette readable when the application switches to dark mode.
+   The page previously forced a light color scheme, leaving pale surfaces and
+   dark text with poor contrast against the global dark shell. */
+.dark .dawn,
+[data-theme='dark'] .dawn {
+  --dawn-paper: #171311;
+  --dawn-card: #211b18;
+  --dawn-cream: #2a211c;
+  --dawn-cream2: #33261f;
+  --dawn-ink: #f5e9df;
+  --dawn-ink2: #c4aea0;
+  --dawn-copper: #e08155;
+  --dawn-copper-deep: #ef986d;
+  --dawn-flare: #573322;
+  --dawn-night: #0f0c0b;
+  --dawn-night-ink: #f8eee8;
+  --dawn-night-ink2: #cdb7a8;
+  --dawn-line: rgba(245, 220, 205, 0.2);
+  --dawn-ok: #79c486;
+  --dawn-ok-bg: #203c28;
+  --dawn-warn: #e8b45d;
+  --dawn-warn-bg: #4a351a;
+  --dawn-bad: #ef8477;
+  --dawn-bad-bg: #4b2521;
+  --dawn-idle: #806f63;
+  color-scheme: dark;
+}
+
 .dawn .gcard .state .pub.idle {
   color: var(--dawn-idle);
   background: color-mix(in srgb, var(--dawn-idle) 12%, transparent);

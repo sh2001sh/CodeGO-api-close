@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
@@ -16,6 +17,13 @@ import (
 )
 
 const rankingVersion = "marketplace-v3-exact-latency"
+
+var marketplaceListCache struct {
+	sync.Mutex
+	at     time.Time
+	key    string
+	result *GroupListResult
+}
 
 type rankingTotals struct {
 	requestCount   int64
@@ -35,6 +43,14 @@ type rankingTotals struct {
 
 func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	query = normalizeGroupQuery(query)
+	cacheKey := fmt.Sprintf("%+v", query)
+	marketplaceListCache.Lock()
+	if marketplaceListCache.result != nil && marketplaceListCache.key == cacheKey && time.Since(marketplaceListCache.at) < 5*time.Second {
+		result := marketplaceListCache.result
+		marketplaceListCache.Unlock()
+		return result, nil
+	}
+	marketplaceListCache.Unlock()
 	groups, channels, err := loadPublicGroups(query)
 	if err != nil {
 		return nil, err
@@ -80,7 +96,11 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	if err := attachChannelFeedback(items, channels, query.ViewerUserID); err != nil {
 		return nil, err
 	}
-	return &GroupListResult{Items: items, Highlights: highlights, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}, nil
+	result := &GroupListResult{Items: items, Highlights: highlights, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}
+	marketplaceListCache.Lock()
+	marketplaceListCache.at, marketplaceListCache.key, marketplaceListCache.result = time.Now(), cacheKey, result
+	marketplaceListCache.Unlock()
+	return result, nil
 }
 
 func filterGroupsBySource(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, source string) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel) {

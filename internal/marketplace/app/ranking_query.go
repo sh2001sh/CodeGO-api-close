@@ -9,6 +9,7 @@ import (
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
 
 var loadActiveChannelRequestLeases = gatewayruntime.ActiveChannelRequestLeasesForChannels
@@ -44,6 +45,13 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 			channelID = *channel.InternalChannelID
 		}
 		item := groupListItem(group, channel, models, snapshot, recentSeries[channelID])
+		if query.ViewerUserID > 0 && query.ViewerUserID != group.OwnerUserID {
+			var override marketplaceschema.UserMultiplier
+			if err := platformdb.DB.Where("channel_id = ? AND user_id = ?", channel.ID, query.ViewerUserID).First(&override).Error; err == nil && override.Multiplier > 0 {
+				item.Multiplier = marketplacedomain.NormalizeMultiplier(override.Multiplier)
+				item.SubscriptionMultiplier = marketplacedomain.SubscriptionMultiplier(item.Multiplier)
+			}
+		}
 		item.CurrentConcurrency = currentConcurrency[channelID]
 		items = append(items, item)
 	}

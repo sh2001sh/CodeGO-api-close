@@ -27,6 +27,17 @@ func loadOfficialAutoRouteItemsSummary(ownerUserID int) []AutoRoutePoolItem {
 	return loadOfficialAutoRouteItemsFiltered(ownerUserID, nil, false, false)
 }
 
+// loadOfficialAutoRouteModels returns only the model names exposed by the
+// selected official groups. Model-list requests must not load audit metrics.
+func loadOfficialAutoRouteModels(ownerUserID int, selected map[string]int) []string {
+	items := loadOfficialAutoRouteItemsFiltered(ownerUserID, selected, true, false)
+	models := make([]string, 0)
+	for _, item := range items {
+		models = append(models, item.Models...)
+	}
+	return models
+}
+
 func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int, selectedOnly bool, includeMetrics bool) []AutoRoutePoolItem {
 	userGroup, err := identitystore.LoadUserGroup(ownerUserID, false)
 	if err != nil {

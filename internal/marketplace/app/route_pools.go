@@ -285,16 +285,36 @@ func HasRoutePool(ownerUserID int, poolID string) bool {
 }
 
 func ListRoutePoolModels(ownerUserID int, poolID string) ([]string, error) {
-	view, err := ListRoutePool(ownerUserID, poolID)
+	_, selected, err := loadRoutePool(ownerUserID, poolID)
 	if err != nil {
 		return nil, err
 	}
 	models := map[string]string{}
-	for _, item := range view.Items {
-		if item.Selected {
-			for _, model := range item.Models {
+	marketplaceGroupIDs := make([]string, 0, len(selected))
+	for groupID := range selected {
+		if !strings.HasPrefix(groupID, officialAutoRoutePrefix) {
+			marketplaceGroupIDs = append(marketplaceGroupIDs, groupID)
+		}
+	}
+	groups, channels, err := loadAutoRouteGroupsForIDs(ownerUserID, marketplaceGroupIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, group := range groups {
+		if _, ok := selected[group.ID]; !ok {
+			continue
+		}
+		for _, model := range decodeModels(channels[group.ChannelID].DeclaredModels) {
+			model = strings.TrimSpace(model)
+			if model != "" {
 				models[strings.ToLower(model)] = model
 			}
+		}
+	}
+	for _, model := range loadOfficialAutoRouteModels(ownerUserID, selected) {
+		model = strings.TrimSpace(model)
+		if model != "" {
+			models[strings.ToLower(model)] = model
 		}
 	}
 	result := make([]string, 0, len(models))

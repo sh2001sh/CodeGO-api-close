@@ -319,7 +319,12 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 		if !containsFold(decodeModels(channel.DeclaredModels), modelName) {
 			continue
 		}
-		if !MultiplierWithinLimit(group.Multiplier, multiplierLimit) {
+		effectiveMultiplier := group.Multiplier
+		var userOverride marketplaceschema.UserMultiplier
+		if err := platformdb.DB.Where("channel_id = ? AND user_id = ?", channel.ID, ownerUserID).First(&userOverride).Error; err == nil && userOverride.Multiplier > 0 {
+			effectiveMultiplier = userOverride.Multiplier
+		}
+		if !MultiplierWithinLimit(effectiveMultiplier, multiplierLimit) {
 			overLimitCount++
 			continue
 		}
@@ -329,7 +334,7 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 				RouteKey: group.ID,
 				GroupID:  group.ID, InternalGroup: group.InternalGroupName,
 				OwnerUserID: group.OwnerUserID, SourceType: group.SourceType,
-				CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: group.Multiplier,
+				CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: effectiveMultiplier,
 				ModelPrices: decodeChannelModelPrices(channel.ModelPrices),
 				Models:      decodeModels(channel.DeclaredModels),
 			},

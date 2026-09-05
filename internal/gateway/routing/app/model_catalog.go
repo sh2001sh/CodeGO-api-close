@@ -134,8 +134,19 @@ func CollectUserOpenAIModels(userID int, tokenModelLimitEnabled bool, tokenModel
 // CollectOpenAIModelsForNames builds the public model catalog entries for an
 // explicit model set while preserving the user's billing visibility policy.
 func CollectOpenAIModelsForNames(userID int, modelNames []string) []dto.OpenAIModels {
+	return collectOpenAIModelsForNames(userID, modelNames, false)
+}
+
+// CollectMarketplaceModelsForNames keeps explicitly selected marketplace
+// models even when they do not have a legacy global billing entry. Marketplace
+// routing resolves pricing from the selected channel/group instead.
+func CollectMarketplaceModelsForNames(userID int, modelNames []string) []dto.OpenAIModels {
+	return collectOpenAIModelsForNames(userID, modelNames, true)
+}
+
+func collectOpenAIModelsForNames(userID int, modelNames []string, allowUnsetRatio bool) []dto.OpenAIModels {
 	userOpenAIModels := make([]dto.OpenAIModels, 0, len(modelNames))
-	acceptUnsetRatioModel := platformops.IsSelfUseModeEnabled()
+	acceptUnsetRatioModel := allowUnsetRatio || platformops.IsSelfUseModeEnabled()
 	if !acceptUnsetRatioModel && userID > 0 {
 		userSettings, _ := identitystore.LoadUserSetting(userID, false)
 		acceptUnsetRatioModel = userSettings.AcceptUnsetRatioModel

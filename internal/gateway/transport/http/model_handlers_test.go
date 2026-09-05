@@ -60,7 +60,9 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 		&gatewayschema.Channel{}, &gatewayschema.Ability{}, &gatewayschema.Model{},
 		&gatewayschema.Vendor{}, &billingschema.BillingAccount{},
 		&commerceschema.UserSubscription{},
-		&marketplaceschema.AutoRoutePoolMember{},
+		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
+		&marketplaceschema.AutoRoutePoolMember{}, &marketplaceschema.RoutePool{},
+		&marketplaceschema.RoutePoolMember{},
 	))
 
 	t.Cleanup(func() {
@@ -353,4 +355,42 @@ func TestListModelsKeepsMarketplaceGroupWithoutResolvedContext(t *testing.T) {
 
 	ids := decodeListModelsResponse(t, recorder)
 	require.Contains(t, ids, "zz-market-direct-model")
+}
+
+func TestListModelsUsesNamedRoutePoolInsteadOfGlobalAutoPool(t *testing.T) {
+	withSelfUseModeDisabled(t)
+	db := setupModelListControllerTestDB(t)
+	const userID = 1005
+	require.NoError(t, db.Create(&identityschema.User{
+		Id: userID, Username: "named-route-pool-user", Password: "password",
+		Group: "default", Status: constant.UserStatusEnabled,
+	}).Error)
+
+	globalChannelID, namedChannelID := 11, 12
+	require.NoError(t, db.Create([]marketplaceschema.Channel{
+		{ID: "global-codex-channel", OwnerUserID: 501, ProviderType: "openai", DeclaredModels: `["zz-global-codex-model"]`, InternalChannelID: &globalChannelID, Status: "active"},
+		{ID: "named-cc-channel", OwnerUserID: 502, ProviderType: "anthropic", DeclaredModels: `["zz-named-cc-model"]`, InternalChannelID: &namedChannelID, Status: "active"},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Group{
+		{ID: "global-codex-group", ChannelID: "global-codex-channel", OwnerUserID: 501, PublicSlug: "global-codex", SystemDisplayName: "global-codex", InternalGroupName: "global-codex-internal", SourceType: "marketplace_user", CreditPoolPolicy: "marketplace_universal_only", Multiplier: 1, LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public"},
+		{ID: "named-cc-group", ChannelID: "named-cc-channel", OwnerUserID: 502, PublicSlug: "named-cc", SystemDisplayName: "named-cc", InternalGroupName: "named-cc-internal", SourceType: "marketplace_user", CreditPoolPolicy: "marketplace_universal_only", Multiplier: 1, LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public"},
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.AutoRoutePoolMember{OwnerUserID: userID, GroupID: "global-codex-group", Priority: 1}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePool{ID: "named-cc-pool", OwnerUserID: userID, Name: "CC pool", Strategy: "priority", MaxAttempts: 3, FailureCooldownSeconds: 30}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePoolMember{PoolID: "named-cc-pool", GroupID: "named-cc-group", Priority: 1}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", userID)
+	// Authentication intentionally leaves route-pool requests on market:auto
+	// until a model is selected; the original bug replaced the named pool here.
+	httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, "market:pool:named-cc-pool")
+	httpctx.SetContextKey(ctx, constant.ContextKeyUsingGroup, "market:auto")
+
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+
+	ids := decodeListModelsResponse(t, recorder)
+	require.Contains(t, ids, "zz-named-cc-model")
+	require.NotContains(t, ids, "zz-global-codex-model")
 }

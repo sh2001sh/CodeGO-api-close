@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
@@ -45,4 +46,38 @@ func TestMergeMarketplaceGroupModelsUsesDeclaredModels(t *testing.T) {
 	require.Equal(t, "gpt-5.2-codex", summaries[group.InternalGroupName][0].Model)
 	displayNames := resolveGroupStatusDisplayNames([]string{group.InternalGroupName})
 	require.Equal(t, group.SystemDisplayName, displayNames[group.InternalGroupName])
+}
+
+func TestResolveGroupStatusSourcesKeepsMarketplaceOfficialGroupsOfficial(t *testing.T) {
+	originalDB := platformdb.DB
+	originalSQLite := platformdb.UsingSQLite
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformdb.UsingSQLite = originalSQLite
+	})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	platformdb.DB = db
+	platformdb.UsingSQLite = true
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}))
+
+	require.NoError(t, db.Create(&marketplaceschema.Group{
+		ID: "official-status", ChannelID: "official-channel", OwnerUserID: 1,
+		PublicSlug: "official-status", SystemDisplayName: "官方渠道",
+		InternalGroupName: "official-group", SourceType: marketplacedomain.SourceTypeOfficial,
+		CreditPoolPolicy: "marketplace_universal_only", Multiplier: 1,
+		LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public",
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{
+		ID: "market-status", ChannelID: "market-channel", OwnerUserID: 2,
+		PublicSlug: "market-status", SystemDisplayName: "第三方渠道",
+		InternalGroupName: "market-group", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: "marketplace_universal_only", Multiplier: 1,
+		LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public",
+	}).Error)
+
+	sources := resolveGroupStatusSources([]string{"official-group", "market-group", "unlisted-group"})
+	require.Equal(t, marketplacedomain.SourceTypeOfficial, sources["official-group"])
+	require.Equal(t, marketplacedomain.SourceTypeMarketplaceUser, sources["market-group"])
+	require.Equal(t, marketplacedomain.SourceTypeOfficial, sources["unlisted-group"])
 }

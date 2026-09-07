@@ -162,7 +162,14 @@ func resolveGroupStatusSources(groupNames []string) map[string]string {
 		return result
 	}
 	var groups []marketplaceschema.Group
-	if err := platformdb.DB.Select("internal_group_name").Where("internal_group_name IN ?", groupNames).Find(&groups).Error; err != nil {
+	// Only marketplace-owned groups should override the default official
+	// classification.  Official route metadata may also be present in the
+	// marketplace tables (for model/ranking purposes); treating every matching
+	// row as user supplied makes the official filter disappear from the status
+	// page.
+	if err := platformdb.DB.Select("internal_group_name").
+		Where("internal_group_name IN ? AND source_type = ?", groupNames, marketplacedomain.SourceTypeMarketplaceUser).
+		Find(&groups).Error; err != nil {
 		return result
 	}
 	for _, group := range groups {

@@ -1,6 +1,7 @@
 import { api } from '@/lib/api'
 import { MOCK_AUTO_ROUTE_POOL, MOCK_MARKETPLACE_GROUPS } from './lib/mock-data'
 import type {
+  GroupModelRequestStatus,
   ChannelFormValues,
   ChannelUpdateValues,
   GroupFilters,
@@ -194,6 +195,13 @@ function requireData<T>(response: ApiResponse<T>): T {
 export async function getMarketplaceGroupStatus() {
   const response = await api.get<ApiResponse<MarketplaceGroup[]>>(
     '/api/marketplace/group-status'
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceGroupModelStatus(slug: string) {
+  const response = await api.get<ApiResponse<GroupModelRequestStatus[]>>(
+    `/api/marketplace/groups/${encodeURIComponent(slug)}/model-status`
   )
   return requireData(response.data)
 }

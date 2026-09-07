@@ -18,6 +18,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		publicMarketplaceRoute.GET("/group-status", ListGroupStatus)
 		publicMarketplaceRoute.GET("/multiplier-trends", ListMultiplierTrends)
 		publicMarketplaceRoute.GET("/groups/:slug", GetGroup)
+		publicMarketplaceRoute.GET("/groups/:slug/model-status", GetGroupModelStatus)
 	}
 
 	marketplaceRoute := apiRouter.Group("/marketplace")

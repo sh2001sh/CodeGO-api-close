@@ -19,7 +19,10 @@ import {
 import type { MarketplaceGroup } from '../types'
 
 export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
-  group: MarketplaceGroup
+  group: Pick<
+    MarketplaceGroup,
+    'recent_request_series' | 'recent_request_bucket_seconds'
+  >
   compact?: boolean
 }) {
   const { t, i18n } = useTranslation()

@@ -35,6 +35,14 @@ export interface ModelVerificationResult {
   tested_at: string
 }
 
+export interface GroupModelRequestStatus {
+  model: string
+  request_count: number
+  success_rate: number
+  recent_request_bucket_seconds: number
+  recent_request_series: MarketplaceGroup['recent_request_series']
+}
+
 export interface GPT56MappingResult {
   requested_model: string
   reported_model?: string

@@ -4171,8 +4171,11 @@ For commercial licensing, please contact support@quantumnous.com.
 }
 
 /* Console Layout */
+/* Keep the shell and scroll areas on the same dynamic viewport. Mixing vh
+   with svh leaves a scrollable blank strip when mobile browser chrome moves. */
 .dawn-console-layout {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--dawn-paper);
 }
 
@@ -4180,12 +4183,14 @@ For commercial licensing, please contact support@quantumnous.com.
   display: flex;
   padding-top: 56px;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .dawn-console-main {
   flex: 1;
   min-width: 0;
-  height: calc(100svh - 56px);
+  height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
   overflow-y: auto;
 }
 
@@ -4197,6 +4202,7 @@ For commercial licensing, please contact support@quantumnous.com.
   padding: 16px 12px;
   overflow-y: auto;
   height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
   position: sticky;
   top: 56px;
 }

@@ -74,7 +74,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
             variant='neutral'
             showDot={false}
             copyText={externalID}
-            className='w-[72px] font-mono tabular-nums'
+            className='w-[72px] tabular-nums'
           />
         )
       },
@@ -339,7 +339,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
       cell: ({ row }) => {
         const ts = row.getValue('created_at') as number | undefined
         return (
-          <span className='text-muted-foreground font-mono text-xs whitespace-nowrap tabular-nums'>
+          <span className='text-muted-foreground text-xs whitespace-nowrap tabular-nums'>
             {ts ? formatTimestamp(ts).split(' ')[0] : '-'}
           </span>
         )

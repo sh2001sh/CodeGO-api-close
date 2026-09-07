@@ -197,6 +197,36 @@ func TestRetryCurrentChannelForResponsesBeforeSemanticOutput(t *testing.T) {
 	require.False(t, shouldRetryCurrentChannelIfNoAlternative(context, streamClosed))
 }
 
+func TestResponsesOnlyRouteKeepsRetryFallbackBeforeSemanticOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalHasAlternative := hasAlternativeSelectableRoute
+	hasAlternativeSelectableRoute = func(int, string, string) (bool, error) { return false, nil }
+	t.Cleanup(func() { hasAlternativeSelectableRoute = originalHasAlternative })
+
+	for _, stage := range []gatewaystream.AttemptStage{
+		gatewaystream.AttemptStageConnected,
+		gatewaystream.AttemptStageBootstrap,
+	} {
+		t.Run(string(stage), func(t *testing.T) {
+			context, _ := gin.CreateTestContext(httptest.NewRecorder())
+			context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			context.Set("original_model", "gpt-6-astra")
+			context.Set("use_channel", []string{"61001"})
+			context.Set(string(constant.ContextKeyResponsesStreamRetrySafe), true)
+			context.Set(string(constant.ContextKeyRelayAttemptStage), stage)
+			httpctx.SetContextKey(context, constant.ContextKeyUsingGroup, "pro-only")
+
+			ProcessChannelError(context, *types.NewChannelError(61001, constant.ChannelTypeOpenAI, "sole", false, "", false), types.NewOpenAIError(
+				errors.New("upstream connection reset before semantic output"),
+				types.ErrorCodeBadResponseStatusCode,
+				http.StatusBadGateway,
+			))
+
+			require.Equal(t, 61001, httpctx.GetContextKeyInt(context, constant.ContextKeyRetryFallbackChannelID))
+		})
+	}
+}
+
 func TestIncompleteStreamOnOnlyRouteDoesNotCoolModel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(nil)

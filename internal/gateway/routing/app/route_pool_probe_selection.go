@@ -78,7 +78,7 @@ func reserveRoutePoolRecoveryProbe(c *gin.Context, probes []scoredRoutePoolCandi
 }
 
 func tryStartRoutePoolChannelProbe(c *gin.Context, channelID int, modelName string, mode routePoolProbeMode, requestTypes ...gatewayruntime.RequestType) bool {
-	if gatewayruntime.IsAutoRouteRequest(c) {
+	if gatewayruntime.UsesIsolatedRouteHealth(c) {
 		switch mode {
 		case routePoolProbeRecovery:
 			return gatewayruntime.TryStartUserChannelRecoveryProbe(c, channelID, modelName, requestTypes...)
@@ -99,7 +99,7 @@ func tryStartRoutePoolChannelProbe(c *gin.Context, channelID int, modelName stri
 }
 
 func tryStartRoutePoolDomainProbe(c *gin.Context, domain, modelName string, mode routePoolProbeMode, requestTypes ...gatewayruntime.RequestType) bool {
-	if gatewayruntime.IsAutoRouteRequest(c) {
+	if gatewayruntime.UsesIsolatedRouteHealth(c) {
 		switch mode {
 		case routePoolProbeRecovery:
 			return gatewayruntime.TryStartUserFaultDomainRecoveryProbe(c, domain, modelName, requestTypes...)
@@ -120,7 +120,7 @@ func tryStartRoutePoolDomainProbe(c *gin.Context, domain, modelName string, mode
 }
 
 func releaseRoutePoolChannelProbe(c *gin.Context, channelID int, modelName string, requestTypes ...gatewayruntime.RequestType) {
-	if gatewayruntime.IsAutoRouteRequest(c) {
+	if gatewayruntime.UsesIsolatedRouteHealth(c) {
 		gatewayruntime.ReleaseUserChannelProbe(c, channelID, modelName, requestTypes...)
 		return
 	}
@@ -128,7 +128,7 @@ func releaseRoutePoolChannelProbe(c *gin.Context, channelID int, modelName strin
 }
 
 func releaseRoutePoolDomainProbe(c *gin.Context, domain, modelName string, requestTypes ...gatewayruntime.RequestType) {
-	if gatewayruntime.IsAutoRouteRequest(c) {
+	if gatewayruntime.UsesIsolatedRouteHealth(c) {
 		gatewayruntime.ReleaseUserFaultDomainProbe(c, domain, modelName, requestTypes...)
 		return
 	}

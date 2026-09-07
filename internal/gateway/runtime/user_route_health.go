@@ -26,8 +26,20 @@ func userRouteHealthScope(c *gin.Context) (int, bool) {
 	return userID, userID > 0
 }
 
-// IsAutoRouteRequest reports whether transient route health must be isolated
-// to the authenticated user instead of mutating the shared route circuit.
+// UsesIsolatedRouteHealth reports whether transient route health must avoid
+// shared route state. Direct group requests need the same user isolation as
+// Auto routing: one user's transient upstream failure must not make another
+// user's request unroutable. Anonymous Auto requests retain their previous
+// behavior and do not create shared cooldowns.
+func UsesIsolatedRouteHealth(c *gin.Context) bool {
+	if IsAutoRouteRequest(c) {
+		return true
+	}
+	_, ok := userRouteHealthScope(c)
+	return ok
+}
+
+// IsAutoRouteRequest reports whether the request selected an Auto route.
 func IsAutoRouteRequest(c *gin.Context) bool {
 	if c == nil {
 		return false

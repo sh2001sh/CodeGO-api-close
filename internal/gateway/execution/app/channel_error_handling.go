@@ -276,7 +276,7 @@ func shouldRetryCurrentChannelIfNoAlternative(c *gin.Context, err *types.NewAPIE
 		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
 		return false
 	}
-	return gatewaystream.AttemptStageFromContext(c) == gatewaystream.AttemptStageSelected
+	return canReuseSoleRouteBeforeOutput(c)
 }
 
 // shouldRetryPreservedOnlyRoute gives a sole eligible route one controlled
@@ -294,6 +294,20 @@ func shouldRetryPreservedOnlyRoute(c *gin.Context, preserveOnlyRoute bool) bool 
 		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
 		return false
 	}
+	return canReuseSoleRouteBeforeOutput(c)
+}
+
+// canReuseSoleRouteBeforeOutput permits a sole route to be selected again only
+// before downstream-visible model output. Responses lifecycle frames are safe
+// to replay through bootstrap; other relay formats retain selected-only retry.
+func canReuseSoleRouteBeforeOutput(c *gin.Context) bool {
+	if c == nil || httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||
+		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
+		return false
+	}
+	if gatewaystream.CanRetryResponsesBeforeSemanticOutput(c) {
+		return true
+	}
 	return gatewaystream.AttemptStageFromContext(c) == gatewaystream.AttemptStageSelected
 }
 
@@ -304,7 +318,7 @@ func isLocalStreamMaxDuration(c *gin.Context) bool {
 func recordChannelTransientFailure(c *gin.Context, channelID int, modelName string, err *types.NewAPIError) {
 	requestID := c.GetString(constant.RequestIdKey)
 	requestType := gatewayruntime.RequestTypeFromContext(c)
-	if gatewayruntime.IsAutoRouteRequest(c) {
+	if gatewayruntime.UsesIsolatedRouteHealth(c) {
 		gatewayruntime.RecordChannelSoftFailureForRequest(channelID, modelName, requestID, requestType)
 		if err != nil && !gatewayruntime.IsLongContextRequest(c) &&
 			(isGatewayFailureStatus(err.StatusCode) || isUpstreamCapacityFailure(err)) {
@@ -327,7 +341,7 @@ func recordFaultDomainTransientFailure(c *gin.Context, channelID int, modelName 
 	requestID := c.GetString(constant.RequestIdKey)
 	cooldown := retryableFailureCooldown(c, err)
 	requestType := gatewayruntime.RequestTypeFromContext(c)
-	if gatewayruntime.IsAutoRouteRequest(c) {
+	if gatewayruntime.UsesIsolatedRouteHealth(c) {
 		gatewayruntime.RecordUserFaultDomainFailure(c, domain, modelName, requestID, cooldown, requestType)
 		return
 	}

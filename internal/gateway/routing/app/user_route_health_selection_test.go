@@ -81,7 +81,7 @@ func TestRoutePoolCredentialConflictReleasesUserChannelProbe(t *testing.T) {
 	require.True(t, gatewayruntime.TryStartUserChannelLastResortProbe(context, channelID, modelName, gatewayruntime.RequestTypeChatShortStream))
 }
 
-func TestAutoRouteIgnoresSharedCooldownAsHardExclusion(t *testing.T) {
+func TestAuthenticatedRouteIgnoresSharedCooldownAsHardExclusion(t *testing.T) {
 	const (
 		channelID = 8_200_004
 		modelName = "gpt-route-pool-shared-soft-only"
@@ -94,16 +94,23 @@ func TestAutoRouteIgnoresSharedCooldownAsHardExclusion(t *testing.T) {
 		Member:  gatewayschema.RoutePoolMember{CostMultiplier: 0.09},
 	}}
 
-	autoContext := newAutoRouteHealthContext(505)
-	healthy, probes, lastResort := buildRoutePoolCandidateSets(autoContext, candidates, modelName, gatewayruntime.RequestTypeChatShortStream, time.Now())
+	authenticatedContext := newAutoRouteHealthContext(505)
+	healthy, probes, lastResort := buildRoutePoolCandidateSets(authenticatedContext, candidates, modelName, gatewayruntime.RequestTypeChatShortStream, time.Now())
 	require.Len(t, healthy, 1)
 	require.Empty(t, probes)
 	require.Empty(t, lastResort)
 	require.Greater(t, healthy[0].score, healthy[0].cost)
 
-	nonAutoContext := newAutoRouteHealthContext(506)
-	httpctx.SetContextKey(nonAutoContext, constant.ContextKeyTokenGroup, "default")
-	healthy, probes, lastResort = buildRoutePoolCandidateSets(nonAutoContext, candidates, modelName, gatewayruntime.RequestTypeChatShortStream, time.Now())
+	directGroupContext := newAutoRouteHealthContext(506)
+	httpctx.SetContextKey(directGroupContext, constant.ContextKeyTokenGroup, "default")
+	healthy, probes, lastResort = buildRoutePoolCandidateSets(directGroupContext, candidates, modelName, gatewayruntime.RequestTypeChatShortStream, time.Now())
+	require.Len(t, healthy, 1)
+	require.Empty(t, probes)
+	require.Empty(t, lastResort)
+
+	anonymousContext, _ := gin.CreateTestContext(httptest.NewRecorder())
+	httpctx.SetContextKey(anonymousContext, constant.ContextKeyTokenGroup, "default")
+	healthy, probes, lastResort = buildRoutePoolCandidateSets(anonymousContext, candidates, modelName, gatewayruntime.RequestTypeChatShortStream, time.Now())
 	require.Empty(t, healthy)
 	require.Empty(t, probes)
 	require.Len(t, lastResort, 1)

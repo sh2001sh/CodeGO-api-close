@@ -54,23 +54,25 @@ func TestAnonymousAutoTransientFailureDoesNotCreateSharedHealth(t *testing.T) {
 	require.Equal(t, 2, sharedState.Window2Requests)
 }
 
-func TestNonAutoTransientFailureRetainsGlobalHealth(t *testing.T) {
+func TestDirectGroupTransientFailureUsesUserHealth(t *testing.T) {
 	const (
 		channelID = 8_300_004
 		modelName = "gpt-non-auto-transient"
 	)
-	context := newExecutionAutoHealthContext(603, "non-auto-1", modelName)
+	context := newExecutionAutoHealthContext(603, "direct-group-1", modelName)
 	httpctx.SetContextKey(context, constant.ContextKeyTokenGroup, "default")
 	err := types.NewOpenAIError(errors.New("upstream bad gateway"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway)
 	recordChannelTransientFailure(context, channelID, modelName, err)
-	context.Set(constant.RequestIdKey, "non-auto-2")
+	context.Set(constant.RequestIdKey, "direct-group-2")
 	recordChannelTransientFailure(context, channelID, modelName, err)
 
-	state, found := gatewayruntime.GetChannelHealth(channelID, modelName, gatewayruntime.RequestTypeOther)
+	state, found := gatewayruntime.GetUserChannelHealth(context, channelID, modelName, gatewayruntime.RequestTypeOther)
 	require.True(t, found)
 	require.Equal(t, gatewayruntime.ChannelHealthCooling, state.State)
-	_, found = gatewayruntime.GetUserChannelHealth(context, channelID, modelName, gatewayruntime.RequestTypeOther)
-	require.False(t, found)
+	shared, found := gatewayruntime.GetChannelHealth(channelID, modelName, gatewayruntime.RequestTypeOther)
+	require.True(t, found)
+	require.Empty(t, shared.State)
+	require.Zero(t, shared.ConsecutiveRetryableFailures)
 }
 
 func TestAutoCredentialRejectionStillUsesGlobalCredentialCircuit(t *testing.T) {

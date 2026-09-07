@@ -421,7 +421,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			relaycommon.RecordChannelSuccess(channel.Id, relayInfo.OriginModelName, ttft, requestProfile.RequestType)
 			relaycommon.RecordChannelCredentialSuccess(channel.Id)
 			relaycommon.RecordFaultDomainSuccess(c.GetString("channel_fault_domain"), relayInfo.OriginModelName, requestProfile.RequestType)
-			if relaycommon.IsAutoRouteRequest(c) {
+			if relaycommon.UsesIsolatedRouteHealth(c) {
 				relaycommon.RecordUserChannelSuccess(c, channel.Id, relayInfo.OriginModelName, ttft, requestProfile.RequestType)
 				relaycommon.RecordUserFaultDomainSuccess(c, c.GetString("channel_fault_domain"), relayInfo.OriginModelName, requestProfile.RequestType)
 			}

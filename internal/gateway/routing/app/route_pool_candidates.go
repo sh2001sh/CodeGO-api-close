@@ -181,8 +181,9 @@ func classifyRoutePoolCandidate(
 }
 
 // routePoolChannelHealth overlays user-scoped transient state on shared
-// latency/reliability observations for Auto requests. Shared state remains a
-// soft score input, but cannot cool every user after one user's failures.
+// latency/reliability observations for authenticated requests. Shared state
+// remains a soft score input, but a user's transient failure cannot cool a
+// route for other users.
 func routePoolChannelHealth(
 	c *gin.Context,
 	channelID int,
@@ -200,7 +201,7 @@ func routePoolChannelHealth(
 	var sharedFound bool
 	var user gatewayruntime.ChannelHealth
 	var userFound bool
-	if !gatewayruntime.IsAutoRouteRequest(c) {
+	if !gatewayruntime.UsesIsolatedRouteHealth(c) {
 		shared, sharedFound = gatewayruntime.GetChannelHealth(channelID, modelName, requestType)
 	} else {
 		// Both reads are independent Redis lookups. Do them concurrently so a
@@ -217,7 +218,7 @@ func routePoolChannelHealth(
 		}()
 		wg.Wait()
 	}
-	if !gatewayruntime.IsAutoRouteRequest(c) {
+	if !gatewayruntime.UsesIsolatedRouteHealth(c) {
 		if cache != nil {
 			cache.channels[cacheKey] = routeHealthCacheEntry{health: shared, found: sharedFound}
 		}
@@ -263,7 +264,7 @@ func routePoolFaultDomainHealth(
 	}
 	var health gatewayruntime.ChannelHealth
 	var found bool
-	if gatewayruntime.IsAutoRouteRequest(c) {
+	if gatewayruntime.UsesIsolatedRouteHealth(c) {
 		health, found = gatewayruntime.GetUserFaultDomainHealth(c, domain, modelName, requestType)
 	} else {
 		health, found = gatewayruntime.GetFaultDomainHealth(domain, modelName, requestType)

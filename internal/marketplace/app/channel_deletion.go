@@ -28,7 +28,7 @@ func DeleteAdminChannel(channelID string) error {
 }
 
 func deleteMarketplaceChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group) error {
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var current marketplaceschema.Channel
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", channel.ID).Error; err != nil {
 			return err
@@ -55,4 +55,8 @@ func deleteMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		}
 		return tx.Delete(channel).Error
 	})
+	if err == nil {
+		invalidateAdminMarketplaceStatsCache()
+	}
+	return err
 }

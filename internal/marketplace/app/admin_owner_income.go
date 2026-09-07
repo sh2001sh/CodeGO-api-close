@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -14,6 +15,17 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 	if input.StartTimestamp > 0 && input.EndTimestamp > 0 && input.StartTimestamp > input.EndTimestamp {
 		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
 	}
+	normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch)
+	cacheKey := fmt.Sprintf("%p:%s:%d:%d", platformdb.DB, normalizedSearch, input.StartTimestamp, input.EndTimestamp)
+	adminMarketplaceStatsCache.Lock()
+	if adminMarketplaceStatsCache.ownerIncomeResult != nil &&
+		adminMarketplaceStatsCache.ownerIncomeKey == cacheKey &&
+		time.Since(adminMarketplaceStatsCache.ownerIncomeAt) < adminMarketplaceStatsCacheTTL {
+		result := cloneAdminOwnerIncomeResult(adminMarketplaceStatsCache.ownerIncomeResult)
+		adminMarketplaceStatsCache.Unlock()
+		return result, nil
+	}
+	adminMarketplaceStatsCache.Unlock()
 	query := platformdb.DB.Model(&marketplaceschema.Settlement{}).
 		Select(`owner_user_id,
 			COUNT(*) AS request_count,
@@ -22,13 +34,15 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 			COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount - reclaimed_amount ELSE 0 END), 0) AS released_income,
 			COALESCE(SUM(CASE WHEN status = 'reclaimed' THEN owner_net_amount ELSE reclaimed_amount END), 0) AS reclaimed_income,
 			COALESCE(SUM(CASE WHEN status = 'forfeited' THEN owner_net_amount ELSE 0 END), 0) AS forfeited_income`)
-	if normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch); normalizedSearch != "" {
+	if normalizedSearch != "" {
 		ownerUserIDs, err := ownerUserIDsByExternalID(normalizedSearch)
 		if err != nil {
 			return nil, err
 		}
 		if len(ownerUserIDs) == 0 {
-			return &AdminOwnerIncomeResult{Items: []AdminOwnerIncomeItem{}}, nil
+			result := &AdminOwnerIncomeResult{Items: []AdminOwnerIncomeItem{}}
+			cacheAdminOwnerIncomeResult(cacheKey, result)
+			return result, nil
 		}
 		query = query.Where("owner_user_id IN ?", ownerUserIDs)
 	}
@@ -61,7 +75,16 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		result.ReclaimedIncome += item.ReclaimedIncome
 		result.ForfeitedIncome += item.ForfeitedIncome
 	}
+	cacheAdminOwnerIncomeResult(cacheKey, result)
 	return result, nil
+}
+
+func cacheAdminOwnerIncomeResult(cacheKey string, result *AdminOwnerIncomeResult) {
+	adminMarketplaceStatsCache.Lock()
+	adminMarketplaceStatsCache.ownerIncomeAt = time.Now()
+	adminMarketplaceStatsCache.ownerIncomeKey = cacheKey
+	adminMarketplaceStatsCache.ownerIncomeResult = cloneAdminOwnerIncomeResult(result)
+	adminMarketplaceStatsCache.Unlock()
 }
 
 func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeReleaseResult, error) {
@@ -98,6 +121,7 @@ func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeRele
 	if err != nil {
 		return nil, err
 	}
+	invalidateAdminMarketplaceStatsCache()
 	return &AdminOwnerIncomeReleaseResult{
 		ReclaimedCount: result.Count, ReclaimedAmount: result.Amount,
 	}, nil

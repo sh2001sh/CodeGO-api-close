@@ -43,6 +43,7 @@ func CreateMarketplaceChannel(ownerUserID int, req CreateChannelRequest) (*Chann
 	}); err != nil {
 		return nil, err
 	}
+	invalidateAdminMarketplaceStatsCache()
 	queueMarketplaceCapabilityProbe(channel.ID)
 	if err := queueMarketplaceVerification(channel.ID); err != nil {
 		return nil, err
@@ -210,6 +211,7 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 	}); err != nil {
 		return nil, err
 	}
+	invalidateAdminMarketplaceStatsCache()
 	if channel.InternalChannelID != nil {
 		if err := syncInternalChannel(channel, group); err != nil {
 			return nil, err
@@ -232,12 +234,16 @@ func PauseOwnerChannel(ownerUserID int, channelID string, paused bool) error {
 	} else if group.VerificationStatus != marketplacedomain.VerificationPassed {
 		return errors.New("检测未通过，不能恢复服务")
 	}
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(channel).Update("status", status).Error; err != nil {
 			return err
 		}
 		return tx.Model(group).Update("lifecycle_status", status).Error
 	})
+	if err == nil {
+		invalidateAdminMarketplaceStatsCache()
+	}
+	return err
 }
 
 func PauseAdminChannel(channelID string, paused bool) error {
@@ -249,12 +255,16 @@ func PauseAdminChannel(channelID string, paused bool) error {
 	if paused {
 		status = marketplacedomain.LifecycleSuspended
 	}
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(channel).Update("status", status).Error; err != nil {
 			return err
 		}
 		return tx.Model(group).Update("lifecycle_status", status).Error
 	})
+	if err == nil {
+		invalidateAdminMarketplaceStatsCache()
+	}
+	return err
 }
 
 func SetChannelUserBlock(ownerUserID int, channelID string, targetUserID int, blocked bool) error {

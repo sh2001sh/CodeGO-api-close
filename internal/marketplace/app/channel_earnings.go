@@ -1,6 +1,9 @@
 package app
 
 import (
+	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -26,6 +29,18 @@ func earningsByGroupIDsInRange(ids []string, startTimestamp, endTimestamp int64)
 	if len(ids) == 0 {
 		return result, nil
 	}
+	cacheIDs := slices.Clone(ids)
+	slices.Sort(cacheIDs)
+	cacheKey := fmt.Sprintf("%p:%d:%d:%s", platformdb.DB, startTimestamp, endTimestamp, strings.Join(cacheIDs, ","))
+	adminMarketplaceStatsCache.Lock()
+	if adminMarketplaceStatsCache.channelEarningsResult != nil &&
+		adminMarketplaceStatsCache.channelEarningsKey == cacheKey &&
+		time.Since(adminMarketplaceStatsCache.channelEarningsAt) < adminMarketplaceStatsCacheTTL {
+		result := cloneChannelEarnings(adminMarketplaceStatsCache.channelEarningsResult)
+		adminMarketplaceStatsCache.Unlock()
+		return result, nil
+	}
+	adminMarketplaceStatsCache.Unlock()
 	var rows []ownerChannelEarnings
 	query := platformdb.DB.Model(&marketplaceschema.Settlement{}).
 		Select(`group_id,
@@ -48,5 +63,10 @@ func earningsByGroupIDsInRange(ids []string, startTimestamp, endTimestamp int64)
 	for _, row := range rows {
 		result[row.GroupID] = row
 	}
+	adminMarketplaceStatsCache.Lock()
+	adminMarketplaceStatsCache.channelEarningsAt = time.Now()
+	adminMarketplaceStatsCache.channelEarningsKey = cacheKey
+	adminMarketplaceStatsCache.channelEarningsResult = cloneChannelEarnings(result)
+	adminMarketplaceStatsCache.Unlock()
 	return result, nil
 }

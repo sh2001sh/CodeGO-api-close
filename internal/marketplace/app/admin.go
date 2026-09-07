@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -20,6 +21,16 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 	if input.StartTimestamp > 0 && input.EndTimestamp > 0 && input.StartTimestamp > input.EndTimestamp {
 		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
 	}
+	cacheKey := fmt.Sprintf("%p:%+v", platformdb.DB, input)
+	adminMarketplaceStatsCache.Lock()
+	if adminMarketplaceStatsCache.adminChannelsResult != nil &&
+		adminMarketplaceStatsCache.adminChannelsKey == cacheKey &&
+		time.Since(adminMarketplaceStatsCache.adminChannelsAt) < adminMarketplaceStatsCacheTTL {
+		result := cloneChannelViews(adminMarketplaceStatsCache.adminChannelsResult)
+		adminMarketplaceStatsCache.Unlock()
+		return result, nil
+	}
+	adminMarketplaceStatsCache.Unlock()
 	query := platformdb.DB.Model(&marketplaceschema.Channel{})
 	if source := strings.TrimSpace(input.Source); source != "" {
 		query = query.Where("submitted_source_label = ? OR approved_source_label = ?", source, source)
@@ -90,6 +101,11 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 			result = append(result, *view)
 		}
 	}
+	adminMarketplaceStatsCache.Lock()
+	adminMarketplaceStatsCache.adminChannelsAt = time.Now()
+	adminMarketplaceStatsCache.adminChannelsKey = cacheKey
+	adminMarketplaceStatsCache.adminChannelsResult = cloneChannelViews(result)
+	adminMarketplaceStatsCache.Unlock()
 	return result, nil
 }
 
@@ -132,6 +148,7 @@ func ReviewChannel(channelID string, req AdminReviewRequest) (*ChannelView, erro
 		channel.SourceLabelReviewReason = req.Reason
 		group.LifecycleStatus = marketplacedomain.LifecycleActive
 		group.PublishedAt = &now
+		invalidateAdminMarketplaceStatsCache()
 	}
 	return channelView(channel, group), err
 }
@@ -154,6 +171,7 @@ func rejectChannel(channel *marketplaceschema.Channel, group *marketplaceschema.
 		channel.SourceLabelStatus = marketplacedomain.SourceLabelRejected
 		channel.SourceLabelReviewReason = reason
 		group.LifecycleStatus = marketplacedomain.LifecycleDraft
+		invalidateAdminMarketplaceStatsCache()
 	}
 	return channelView(channel, group), err
 }

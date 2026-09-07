@@ -126,3 +126,77 @@ func TestIncomeReclaimSelectionCannotEscapeOwnerSearch(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, result.ReclaimedAmount)
 }
+
+func TestAdminStatisticsCacheInvalidatesAfterSettlementChanges(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	invalidateAdminMarketplaceStatsCache()
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Settlement{}))
+	require.NoError(t, db.Create(&identityschema.User{Id: 42, ExternalId: "ABC123", Username: "owner-42"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{
+		ID: "cached-first", RequestID: "cached-first", GroupID: "cached-group", OwnerUserID: 42,
+		OwnerNetAmount: 100, Status: "released",
+	}).Error)
+
+	ownerIncome, err := ListAdminOwnerIncome(AdminOwnerIncomeQuery{OwnerSearch: "ABC123"})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, ownerIncome.TotalIncome)
+	groupIncome, err := earningsByGroupIDs([]string{"cached-group"})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, groupIncome["cached-group"].TotalIncome)
+
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{
+		ID: "cached-second", RequestID: "cached-second", GroupID: "cached-group", OwnerUserID: 42,
+		OwnerNetAmount: 200, Status: "released",
+	}).Error)
+	ownerIncome, err = ListAdminOwnerIncome(AdminOwnerIncomeQuery{OwnerSearch: "ABC123"})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, ownerIncome.TotalIncome)
+	groupIncome, err = earningsByGroupIDs([]string{"cached-group"})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, groupIncome["cached-group"].TotalIncome)
+
+	invalidateAdminMarketplaceStatsCache()
+	ownerIncome, err = ListAdminOwnerIncome(AdminOwnerIncomeQuery{OwnerSearch: "ABC123"})
+	require.NoError(t, err)
+	require.EqualValues(t, 300, ownerIncome.TotalIncome)
+	groupIncome, err = earningsByGroupIDs([]string{"cached-group"})
+	require.NoError(t, err)
+	require.EqualValues(t, 300, groupIncome["cached-group"].TotalIncome)
+}
+
+func TestAdminChannelListCacheInvalidatesAfterChannelChanges(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	invalidateAdminMarketplaceStatsCache()
+	require.NoError(t, db.AutoMigrate(
+		&identityschema.User{},
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.Settlement{},
+	))
+	require.NoError(t, db.Create(&identityschema.User{Id: 42, ExternalId: "ABC123", Username: "owner-42"}).Error)
+	channel := marketplaceschema.Channel{ID: "cached-channel", OwnerUserID: 42, ProviderType: "openai"}
+	group := autoRouteTestGroup("cached-group", channel.ID, channel.OwnerUserID, 1)
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{
+		ID: "cached-list-first", RequestID: "cached-list-first", GroupID: group.ID, OwnerUserID: 42,
+		OwnerNetAmount: 100, Status: "released",
+	}).Error)
+
+	channels, err := ListAdminChannels(AdminChannelQuery{OwnerSearch: "ABC123"})
+	require.NoError(t, err)
+	require.Len(t, channels, 1)
+	require.EqualValues(t, 100, channels[0].TotalIncome)
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{
+		ID: "cached-list-second", RequestID: "cached-list-second", GroupID: group.ID, OwnerUserID: 42,
+		OwnerNetAmount: 200, Status: "released",
+	}).Error)
+
+	channels, err = ListAdminChannels(AdminChannelQuery{OwnerSearch: "ABC123"})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, channels[0].TotalIncome)
+	invalidateAdminMarketplaceStatsCache()
+	channels, err = ListAdminChannels(AdminChannelQuery{OwnerSearch: "ABC123"})
+	require.NoError(t, err)
+	require.EqualValues(t, 300, channels[0].TotalIncome)
+}

@@ -371,6 +371,8 @@ export function useAdminMarketplaceChannels(
     queryFn: () => getAdminMarketplaceChannels(filters),
     enabled,
     placeholderData: (previousData) => previousData,
+    staleTime: 5_000,
+    refetchOnWindowFocus: false,
     refetchInterval: (query) =>
       verificationRefetchInterval(query.state.data ?? []),
   })
@@ -381,6 +383,8 @@ export function useAdminOwnerIncome(filters: AdminMarketplaceChannelFilters) {
     queryKey: ['marketplace-owner-income', 'admin', filters],
     queryFn: () => getAdminOwnerIncome(filters),
     placeholderData: (previousData) => previousData,
+    staleTime: 5_000,
+    refetchOnWindowFocus: false,
   })
 }
 

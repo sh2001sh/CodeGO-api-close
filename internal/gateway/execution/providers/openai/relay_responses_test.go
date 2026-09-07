@@ -85,6 +85,44 @@ func TestOaiResponsesStreamHandlerAllowsRetryBeforeContent(t *testing.T) {
 	require.Empty(t, recorder.Body.String())
 }
 
+func TestResponsesEmptyItemsRemainRetryableUntilContent(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+	for _, tc := range []struct {
+		name      string
+		item      string
+		committed bool
+	}{
+		{"empty message", `{"type":"message","role":"assistant","content":[]}`, false},
+		{"empty reasoning", `{"type":"reasoning","summary":[]}`, false},
+		{"empty text placeholder", `{"type":"message","content":[{"type":"output_text","text":""}]}`, false},
+		{"message text", `{"type":"message","content":[{"type":"output_text","text":"hello"}]}`, true},
+		{"reasoning summary", `{"type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}]}`, true},
+		{"encrypted reasoning", `{"type":"reasoning","encrypted_content":"opaque"}`, true},
+		{"function call", `{"type":"function_call","name":"run","call_id":"call_test"}`, true},
+		{"compaction", `{"type":"compaction"}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			body := "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_test\"}}\n\n" +
+				"data: {\"type\":\"response.output_item.added\",\"item\":" + tc.item + "}\n\n" +
+				`data: {"type":"response.failed","response":{"error":{"type":"server_error","message":"Our servers are currently overloaded. Please try again later."}}}` + "\n\n"
+			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+			_, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{IsStream: true}, resp)
+			require.NotNil(t, err)
+			require.Equal(t, tc.committed, types.IsSkipRetryError(err))
+			require.Equal(t, tc.committed, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
+			require.Equal(t, !tc.committed, gatewaystream.CanRetryResponsesBeforeSemanticOutput(c))
+			if !tc.committed {
+				require.Empty(t, recorder.Body.String(), "failed attempt lifecycle must not escape to the client")
+			}
+		})
+	}
+}
+
 func TestOaiResponsesStreamHandlerMarksCancelledClient(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	constant.StreamingTimeout = 30
@@ -123,6 +161,7 @@ func TestOaiResponsesStreamHandlerTimesOutBeforeSemanticOutput(t *testing.T) {
 	defer writer.Close()
 	go func() {
 		_, _ = io.WriteString(writer, `data: {"type":"response.created","response":{"id":"resp_123"}}`+"\n\n")
+		_, _ = io.WriteString(writer, `data: {"type":"response.output_item.added","item":{"type":"reasoning","summary":[]}}`+"\n\n")
 	}()
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -195,6 +234,8 @@ func TestOaiResponsesStreamHandlerFlushesLifecycleBeforeSemanticOutput(t *testin
 	body := strings.Join([]string{
 		`data: {"type":"response.created","response":{"id":"resp_123"}}`,
 		``,
+		`data: {"type":"response.output_item.added","item":{"type":"message","content":[]}}`,
+		``,
 		`data: {"type":"response.output_text.delta","delta":"hello"}`,
 		``,
 		`data: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}`,
@@ -213,10 +254,12 @@ func TestOaiResponsesStreamHandlerFlushesLifecycleBeforeSemanticOutput(t *testin
 	require.Equal(t, 15, usage.TotalTokens)
 	output := recorder.Body.String()
 	created := strings.Index(output, `event: response.created`)
+	item := strings.Index(output, `event: response.output_item.added`)
 	delta := strings.Index(output, `event: response.output_text.delta`)
 	completed := strings.Index(output, `event: response.completed`)
 	require.GreaterOrEqual(t, created, 0)
-	require.Greater(t, delta, created)
+	require.Greater(t, item, created)
+	require.Greater(t, delta, item)
 	require.Greater(t, completed, delta)
 	require.True(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
 	require.Equal(t, gatewaystream.AttemptStageCompleted, gatewaystream.AttemptStageFromContext(c))

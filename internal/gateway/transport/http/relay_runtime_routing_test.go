@@ -64,6 +64,17 @@ func TestAutoDoesNotRetryContentPolicyRefusal(t *testing.T) {
 	require.False(t, shouldRetry(ctx, err, 2))
 }
 
+func TestAutoRetriesDisabledUpstreamGroupOnlyBeforeOutput(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	gatewayruntime.MarkAutoRouteRequest(ctx)
+	gatewayruntime.MarkRemainingCrossGroupRoutes(ctx, 2)
+	err := types.NewOpenAIError(errors.New("API Key 所属分组已停用"), types.ErrorCodeBadResponseStatusCode, http.StatusForbidden)
+	require.True(t, shouldRetry(ctx, err, 2))
+	ctx.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	require.False(t, shouldRetry(ctx, err, 2))
+}
+
 func TestNextUnifiedAutoChannelMovesToFollowingBinding(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())

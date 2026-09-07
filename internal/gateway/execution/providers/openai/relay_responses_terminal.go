@@ -36,7 +36,31 @@ func hasResponsesStreamContent(streamResponse dto.ResponsesStreamResponse) bool 
 		!(streamResponse.Type == dto.ResponsesOutputTypeItemDone && isResponsesCompactionItem(streamResponse.Item)) {
 		return false
 	}
-	return strings.TrimSpace(streamResponse.Item.Type) != ""
+	item := streamResponse.Item
+	switch strings.TrimSpace(item.Type) {
+	case "message", "reasoning":
+		// Empty item envelopes only announce that generation has started. Keep
+		// buffering them so a later upstream failure can still use another route
+		// and the first-output timer keeps running until actual content arrives.
+		if item.EncryptedContent != "" {
+			return true
+		}
+		for _, content := range item.Content {
+			if content.Text != "" || (content.Type != "" && content.Type != "output_text") {
+				return true
+			}
+		}
+		for _, summary := range item.Summary {
+			if summary.Text != "" {
+				return true
+			}
+		}
+		return false
+	default:
+		// Tool calls, compaction and unknown output types remain committed:
+		// replaying them may duplicate work or discard upstream state.
+		return strings.TrimSpace(item.Type) != ""
+	}
 }
 
 func isResponsesCompactionItem(item *dto.ResponsesOutput) bool {

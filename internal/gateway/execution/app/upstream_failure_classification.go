@@ -83,6 +83,7 @@ func IsUpstreamCredentialRejectedError(err *types.NewAPIError) bool {
 		"account has been disabled",
 		"account is disabled",
 		"account has been deactivated",
+		"api key 所属分组已停用",
 	)
 }
 

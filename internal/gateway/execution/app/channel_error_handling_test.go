@@ -94,6 +94,23 @@ func TestExplicitUpstreamCredentialRejectionIsRetryable(t *testing.T) {
 	require.True(t, isRetryableChannelFailure(err))
 }
 
+func TestDisabledUpstreamAPIKeyGroupCoolsChannel(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set(constant.RequestIdKey, t.Name())
+	ctx.Set("original_model", "gpt-disabled-group-test")
+	relaycommon.MarkAutoRouteRequest(ctx)
+	relaycommon.MarkRemainingCrossGroupRoutes(ctx, 2)
+	err := types.NewOpenAIError(errors.New("API Key 所属分组已停用"), types.ErrorCodeBadResponseStatusCode, http.StatusForbidden)
+	require.Equal(t, upstreamFailureCredentialRejected, classifyUpstreamFailure(err))
+	require.True(t, isRetryableChannelFailure(err))
+	ProcessChannelError(ctx, *types.NewChannelError(924992, constant.ChannelTypeOpenAI, "disabled-group", false, "", false), err)
+	require.True(t, relaycommon.IsChannelCredentialCooling(924992))
+	for _, message := range []string{"access denied", "request blocked by our safety systems"} {
+		require.False(t, IsUpstreamCredentialRejectedError(types.NewOpenAIError(errors.New(message), types.ErrorCodeBadResponseStatusCode, http.StatusForbidden)))
+	}
+}
+
 func TestDatabaseConnectionExhaustionIsRetryableTransientFailure(t *testing.T) {
 	err := types.NewOpenAIError(
 		errors.New("failed to connect to database: remaining connection slots are reserved (SQLSTATE 53300)"),

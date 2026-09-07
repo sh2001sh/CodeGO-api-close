@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"time"
@@ -82,8 +83,8 @@ func runStaleReservationRecovery(ctx context.Context, now time.Time) {
 	}
 }
 
-// RunLedgerWorkerBatch rebuilds one snapshot per pending account and publishes all
-// currently pending projection events for that account in the same transaction.
+// RunLedgerWorkerBatch periodically checks pending accounts and publishes their
+// projection events. Only inconsistent snapshots need a locked rebuild.
 func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 	if platformdb.DB == nil {
 		return 0, fmt.Errorf("primary database is not initialized")
@@ -146,8 +147,16 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 	processed := 0
 	now := time.Now().UTC()
 	reconcile := ledgerReconciliationDue(accountID, now)
+	repair := false
+	if reconcile {
+		var err error
+		repair, err = balanceSnapshotNeedsRepair(ctx, accountID)
+		if err != nil {
+			return 0, err
+		}
+	}
 	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if reconcile {
+		if repair {
 			if err := rebuildBalanceSnapshotTx(tx, accountID); err != nil {
 				return err
 			}
@@ -170,6 +179,28 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 		markLedgerReconciled(accountID, now)
 	}
 	return processed, err
+}
+
+func balanceSnapshotNeedsRepair(ctx context.Context, accountID string) (bool, error) {
+	differs := false
+	// Read the projection and ledger from one committed view without blocking
+	// credits/reservations while scanning history. READ COMMITTED could compare
+	// a snapshot from before a concurrent credit with ledger entries from after it.
+	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var actual billingschema.BillingBalanceSnapshot
+		if err := tx.Where("account_id = ?", accountID).First(&actual).Error; err != nil {
+			return err
+		}
+		expected, err := aggregateExpectedBalanceSnapshot(tx, accountID)
+		if err != nil {
+			return err
+		}
+		differs = snapshotDiffers(actual, expected)
+		return nil
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	// A mismatch is only a signal: the repair transaction recomputes under the
+	// original write lock, never writes this potentially outdated expected value.
+	return differs, err
 }
 
 func ledgerReconciliationDue(accountID string, now time.Time) bool {

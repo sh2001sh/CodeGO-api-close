@@ -62,18 +62,24 @@ func EnsureOwnerChannel(owner int, channelID string) error {
 }
 
 type OwnerUserUsageItem struct {
-	UserID                                  string    `json:"user_id"`
-	ExternalUserID                          string    `json:"external_user_id"`
-	ChannelID                               string    `json:"channel_id"`
-	ChannelName                             string    `json:"channel_name"`
-	GroupID                                 string    `json:"group_id"`
-	RequestCount, SuccessCount, FailedCount int64     `json:"request_count"`
-	SuccessRate                             float64   `json:"success_rate"`
-	TotalTokens                             int64     `json:"total_tokens"`
-	AvgLatencyMs, AvgTTFTMs                 float64   `json:"avg_latency_ms"`
-	TotalConsumerAmount, TotalOwnerIncome   int64     `json:"total_consumer_amount"`
-	UserMultiplier                          *float64  `json:"user_multiplier"`
-	LastRequestAt                           time.Time `json:"last_request_at"`
+	UserID              string  `json:"user_id"`
+	ExternalUserID      string  `json:"external_user_id"`
+	ChannelID           string  `json:"channel_id"`
+	ChannelName         string  `json:"channel_name"`
+	GroupID             string  `json:"group_id"`
+	RequestCount        int64   `json:"request_count"`
+	SuccessCount        int64   `json:"success_count"`
+	FailedCount         int64   `json:"failed_count"`
+	SuccessRate         float64 `json:"success_rate"`
+	TotalTokens         int64   `json:"total_tokens"`
+	AvgLatencyMs        float64 `json:"avg_latency_ms"`
+	AvgTTFTMs           float64 `json:"avg_ttft_ms"`
+	TotalConsumerAmount int64   `json:"total_consumer_amount"`
+	// Gross settlement uses the historical wallet multiplier for both billing sources.
+	TotalSettlementGrossAmount int64     `json:"total_settlement_gross_amount"`
+	TotalOwnerIncome           int64     `json:"total_owner_income"`
+	UserMultiplier             *float64  `json:"user_multiplier"`
+	LastRequestAt              time.Time `json:"last_request_at"`
 }
 
 func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any, error) {
@@ -82,7 +88,7 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 	if q.ChannelID != "" {
 		db = db.Where("channel_id = ?", q.ChannelID)
 	}
-	if err := db.Find(&groups).Error; err != nil {
+	if err := db.Select("id,channel_id,system_display_name").Find(&groups).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]string, len(groups))
@@ -92,18 +98,26 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 		groupsByID[groups[i].ID] = groups[i]
 	}
 	if len(ids) == 0 {
-		return map[string]any{"items": []OwnerUserUsageItem{}, "total": 0, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": 0}}, nil
+		return map[string]any{"items": []OwnerUserUsageItem{}, "total": 0, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": 0, "total_requests": int64(0)}}, nil
 	}
 	var rows []struct {
-		UserID  int
-		GroupID string
-		Cnt     int64
-		Amount  int64
-		Last    time.Time
+		UserID   int
+		GroupID  string
+		Cnt      int64
+		Amount   int64
+		Gross    int64
+		Income   int64
+		Last     time.Time
+		LastUnix int64
+	}
+	lastRequestSelect := "max(created_at) as last"
+	if platformdb.DB.Dialector.Name() == "sqlite" {
+		// SQLite loses the datetime column type inside MAX().
+		lastRequestSelect = "cast(strftime('%s', max(created_at)) as integer) as last_unix"
 	}
 	if err := platformdb.DB.Model(&marketplaceschema.Settlement{}).
-		Select("consumer_user_id as user_id, group_id, count(*) as cnt, sum(consumer_amount) as amount, max(created_at) as last").
-		Where("group_id IN ?", ids).Group("consumer_user_id,group_id").Scan(&rows).Error; err != nil {
+		Select("consumer_user_id as user_id, group_id, count(*) as cnt, sum(consumer_amount) as amount, sum(settlement_gross_amount) as gross, sum(owner_net_amount) as income, "+lastRequestSelect).
+		Where("owner_user_id = ? AND group_id IN ?", owner, ids).Group("consumer_user_id,group_id").Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	userIDs := make([]int, 0, len(rows))
@@ -121,11 +135,18 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 		externalIDs[user.Id] = user.ExternalId
 	}
 	items := make([]OwnerUserUsageItem, 0, len(rows))
+	uniqueUsers := make(map[int]struct{}, len(rows))
+	var totalRequests int64
 	for _, r := range rows {
 		group := groupsByID[r.GroupID]
-		items = append(items, OwnerUserUsageItem{UserID: strconv.Itoa(r.UserID), ExternalUserID: externalIDs[r.UserID], ChannelID: group.ChannelID, ChannelName: group.SystemDisplayName, GroupID: r.GroupID, RequestCount: r.Cnt, SuccessCount: r.Cnt, SuccessRate: 1, TotalConsumerAmount: r.Amount, LastRequestAt: r.Last})
+		if platformdb.DB.Dialector.Name() == "sqlite" {
+			r.Last = time.Unix(r.LastUnix, 0)
+		}
+		items = append(items, OwnerUserUsageItem{UserID: strconv.Itoa(r.UserID), ExternalUserID: externalIDs[r.UserID], ChannelID: group.ChannelID, ChannelName: group.SystemDisplayName, GroupID: r.GroupID, RequestCount: r.Cnt, SuccessCount: r.Cnt, SuccessRate: 1, TotalConsumerAmount: r.Amount, TotalSettlementGrossAmount: r.Gross, TotalOwnerIncome: r.Income, LastRequestAt: r.Last})
+		totalRequests += r.Cnt
+		uniqueUsers[r.UserID] = struct{}{}
 	}
-	return map[string]any{"items": items, "total": len(items), "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": len(items), "total_requests": len(items)}}, nil
+	return map[string]any{"items": items, "total": len(items), "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": len(uniqueUsers), "total_requests": totalRequests}}, nil
 }
 func SetUserMultiplier(owner int, channel string, user int, m *float64) error {
 	_, err := BatchSetUserMultipliers(owner, []MultiplierTarget{{ChannelID: channel, UserID: user}}, m)

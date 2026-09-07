@@ -3805,6 +3805,47 @@ For commercial licensing, please contact support@quantumnous.com.
   box-shadow: 0 -2px 8px rgba(184, 86, 46, 0.15);
 }
 
+.dawn .dawn-owner-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 660px);
+  height: auto;
+  padding: 5px;
+  gap: 5px;
+  border: 1px solid var(--dawn-line);
+  border-radius: 12px;
+  background: var(--dawn-cream2);
+}
+
+.dawn .dawn-owner-tabs [data-slot='tabs-trigger'] {
+  min-height: 46px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--dawn-ink2);
+  font-weight: 600;
+}
+
+.dawn .dawn-owner-tabs [data-slot='tabs-trigger']:hover {
+  background: var(--dawn-card);
+  color: var(--dawn-ink);
+}
+
+.dawn .dawn-owner-tabs [data-slot='tabs-trigger'][data-active] {
+  background: var(--dawn-copper);
+  color: var(--dawn-paper);
+  border-color: transparent;
+  box-shadow: 0 2px 6px var(--dawn-line);
+}
+
+@media (max-width: 480px) {
+  .dawn .dawn-owner-tabs [data-slot='tabs-trigger'] {
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 4px;
+    font-size: 12px;
+  }
+}
+
 .dawn-overview .donutwrap {
   display: flex;
   gap: 32px;
@@ -3817,17 +3858,34 @@ For commercial licensing, please contact support@quantumnous.com.
   --swp2: 0deg;
   width: 140px;
   height: 140px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: conic-gradient(
-    var(--dawn-ink) 0deg var(--swp),
-    #c98767 var(--swp) calc(var(--swp) + var(--swp2)),
-    var(--dawn-ok) calc(var(--swp) + var(--swp2)) 360deg
+    var(--dawn-copper) 0deg var(--swp),
+    var(--dawn-idle) var(--swp) calc(var(--swp) + var(--swp2)),
+    var(--dawn-ink2) calc(var(--swp) + var(--swp2)) 360deg
   );
   position: relative;
   transition:
     --swp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1),
     --swp2 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
   box-shadow: 0 4px 16px rgba(37, 29, 25, 0.1);
+}
+
+.dawn-overview .donut[data-empty='true'] {
+  background: var(--dawn-line);
+}
+
+.dawn-overview .token-cache-hit {
+  background: var(--dawn-copper);
+}
+
+.dawn-overview .token-cache-miss {
+  background: var(--dawn-idle);
+}
+
+.dawn-overview .token-output {
+  background: var(--dawn-ink2);
 }
 
 .dawn-overview .donut::after {

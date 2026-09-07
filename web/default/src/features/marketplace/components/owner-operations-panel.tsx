@@ -9,6 +9,7 @@ import {
 import { Check, RefreshCw, Send, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { formatQuota } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +34,7 @@ import {
   type MarketplaceBatchWelfareResult,
 } from '../api'
 import { useMyMarketplaceChannels } from '../hooks'
+import { rankOwnerUsers, type OwnerUsageSort } from '../lib/owner-usage-ranking'
 import type {
   MarketplaceBargainRequestList,
   MarketplaceOwnerUsageItem,
@@ -74,13 +76,11 @@ export function OwnerOperationsPanel() {
     },
   })
   const [channelID, setChannelID] = useState('')
+  const [rankingSort, setRankingSort] = useState<OwnerUsageSort>('requests')
   const activeChannelID = channelID || channels.data?.[0]?.id || ''
   const rankedUsers = useMemo(
-    () =>
-      (usage.data?.items ?? [])
-        .filter((item) => item.channel_id === activeChannelID)
-        .sort((left, right) => right.request_count - left.request_count),
-    [activeChannelID, usage.data?.items]
+    () => rankOwnerUsers(usage.data?.items ?? [], activeChannelID, rankingSort),
+    [activeChannelID, usage.data?.items, rankingSort]
   )
   const [selectedIDs, setSelectedIDs] = useState<Set<string>>(new Set())
   const [rankStart, setRankStart] = useState('1')
@@ -246,7 +246,7 @@ export function OwnerOperationsPanel() {
             </p>
           )}
       </div>
-      <div className='grid divide-y xl:grid-cols-2 xl:divide-x xl:divide-y-0'>
+      <div className='grid divide-y 2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] 2xl:divide-x 2xl:divide-y-0'>
         <BargainRequests query={requests} client={client} />
         <UserWelfarePanel
           channels={channels.data ?? []}
@@ -256,6 +256,11 @@ export function OwnerOperationsPanel() {
             setSelectedIDs(new Set())
           }}
           users={rankedUsers}
+          rankingSort={rankingSort}
+          onRankingSortChange={(value) => {
+            setRankingSort(value)
+            setSelectedIDs(new Set())
+          }}
           selectedIDs={selectedIDs}
           onSelectionChange={setSelectedIDs}
           rankStart={rankStart}
@@ -265,6 +270,7 @@ export function OwnerOperationsPanel() {
           onSelectRankRange={selectRankRange}
           onWelfare={setWelfare}
           loading={usage.isLoading}
+          error={usage.isError}
         />
       </div>
       <TimeMultiplierPanel channelID={activeChannelID} />
@@ -394,6 +400,8 @@ function UserWelfarePanel(props: {
   activeChannelID: string
   onChannelChange: (value: string) => void
   users: MarketplaceOwnerUsageItem[]
+  rankingSort: OwnerUsageSort
+  onRankingSortChange: (value: OwnerUsageSort) => void
   selectedIDs: Set<string>
   onSelectionChange: (ids: Set<string>) => void
   rankStart: string
@@ -403,6 +411,7 @@ function UserWelfarePanel(props: {
   onSelectRankRange: () => void
   onWelfare: (value: { type: WelfareType; amount: string }) => void
   loading: boolean
+  error: boolean
 }) {
   const { t } = useTranslation()
   const [amount, setAmount] = useState('')
@@ -420,29 +429,40 @@ function UserWelfarePanel(props: {
         : new Set(props.users.map((item) => item.user_id))
     )
   const valid =
-    props.selectedIDs.size > 0 && (type === 'blind_box' || Number(amount) > 0)
+    !props.loading &&
+    !props.error &&
+    props.selectedIDs.size > 0 &&
+    (type === 'blind_box' ||
+      (Number.isFinite(Number(amount)) && Number(amount) > 0))
   return (
-    <div className='p-4'>
+    <div className='min-w-0 p-4'>
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <div>
           <h4 className='text-sm font-medium'>{t('渠道用户福利')}</h4>
           <p className='text-muted-foreground mt-1 text-xs'>
-            {t('按请求次数排名，选择用户后统一发放。')}
+            {t('按已结算请求次数或消耗额度排名，选择用户后统一发放。')}
+          </p>
+          <p className='text-muted-foreground mt-1 text-xs'>
+            {t('消耗额度按请求结算时的余额等值计算，统一余额与套餐口径。')}
           </p>
         </div>
         <Badge variant='outline'>
           {t('已选 {{count}} 人', { count: props.selectedIDs.size })}
         </Badge>
       </div>
-      <div className='mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]'>
+      <div className='mt-4 grid gap-3 sm:grid-cols-2'>
         <Select
           value={props.activeChannelID}
           onValueChange={(value) => {
             if (value) props.onChannelChange(value)
           }}
         >
-          <SelectTrigger>
-            <SelectValue placeholder={t('选择渠道')} />
+          <SelectTrigger className='w-full min-w-0' aria-label={t('选择渠道')}>
+            <SelectValue placeholder={t('选择渠道')}>
+              {props.channels.find(
+                (channel) => channel.id === props.activeChannelID
+              )?.system_display_name || t('选择渠道')}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {props.channels.map((channel) => (
@@ -452,36 +472,74 @@ function UserWelfarePanel(props: {
             ))}
           </SelectContent>
         </Select>
-        <Input
-          type='number'
-          min={1}
-          value={props.rankStart}
-          onChange={(event) => props.onRankStartChange(event.target.value)}
-          aria-label={t('起始排名')}
-        />
-        <Input
-          type='number'
-          min={1}
-          value={props.rankEnd}
-          placeholder={t('末位')}
-          onChange={(event) => props.onRankEndChange(event.target.value)}
-          aria-label={t('结束排名')}
-        />
-        <Button variant='outline' onClick={props.onSelectRankRange}>
+        <Select
+          value={props.rankingSort}
+          onValueChange={(value) => {
+            if (value === 'requests' || value === 'amount')
+              props.onRankingSortChange(value)
+          }}
+        >
+          <SelectTrigger className='w-full' aria-label={t('排名依据')}>
+            <SelectValue>
+              {props.rankingSort === 'requests'
+                ? t('按请求次数排名')
+                : t('按消耗额度排名')}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='requests'>{t('按请求次数排名')}</SelectItem>
+            <SelectItem value='amount'>{t('按消耗额度排名')}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className='mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2'>
+        <label className='min-w-0 space-y-1 text-xs'>
+          <span className='text-muted-foreground'>{t('起始排名')}</span>
+          <Input
+            type='number'
+            min={1}
+            value={props.rankStart}
+            onChange={(event) => props.onRankStartChange(event.target.value)}
+            aria-label={t('起始排名')}
+          />
+        </label>
+        <label className='min-w-0 space-y-1 text-xs'>
+          <span className='text-muted-foreground'>{t('结束排名')}</span>
+          <Input
+            type='number'
+            min={1}
+            value={props.rankEnd}
+            placeholder={t('末位')}
+            onChange={(event) => props.onRankEndChange(event.target.value)}
+            aria-label={t('结束排名')}
+          />
+        </label>
+        <Button
+          variant='outline'
+          disabled={props.loading || props.error || !props.users.length}
+          onClick={props.onSelectRankRange}
+        >
           {t('选择排名')}
         </Button>
       </div>
-      {props.loading ? (
+      {props.error && (
+        <p role='alert' className='text-destructive py-6 text-sm'>
+          {t('用户使用记录加载失败，请刷新重试。')}
+        </p>
+      )}
+      {props.loading && (
         <p className='text-muted-foreground py-8 text-center text-sm'>
           {t('Loading...')}
         </p>
-      ) : props.users.length === 0 ? (
+      )}
+      {!props.loading && !props.error && props.users.length === 0 && (
         <p className='text-muted-foreground py-8 text-center text-sm'>
           {t('该渠道还没有可用于福利发放的用户使用记录。')}
         </p>
-      ) : (
-        <div className='mt-3 max-h-64 overflow-y-auto border-y'>
-          <div className='grid grid-cols-[auto_2.5rem_minmax(0,1fr)_auto] items-center gap-2 border-b px-2 py-2 text-xs font-medium'>
+      )}
+      {!props.loading && !props.error && props.users.length > 0 && (
+        <div className='mt-3 max-h-80 overflow-auto border-y'>
+          <div className='bg-card sticky top-0 grid grid-cols-[1rem_2rem_minmax(5rem,1fr)_4rem_6rem] items-center gap-2 border-b px-2 py-2 text-xs font-medium'>
             <input
               type='checkbox'
               checked={props.selectedIDs.size === props.users.length}
@@ -490,12 +548,13 @@ function UserWelfarePanel(props: {
             />
             <span>#</span>
             <span>{t('用户')}</span>
-            <span>{t('请求')}</span>
+            <span className='text-right'>{t('请求次数')}</span>
+            <span className='text-right'>{t('消耗额度')}</span>
           </div>
           {props.users.map((item, index) => (
             <label
               key={item.user_id}
-              className='grid grid-cols-[auto_2.5rem_minmax(0,1fr)_auto] items-center gap-2 border-b px-2 py-2 text-sm last:border-b-0'
+              className='hover:bg-muted/50 grid cursor-pointer grid-cols-[1rem_2rem_minmax(5rem,1fr)_4rem_6rem] items-center gap-2 border-b px-2 py-3 text-sm last:border-b-0'
             >
               <input
                 type='checkbox'
@@ -508,7 +567,12 @@ function UserWelfarePanel(props: {
               <span className='truncate'>
                 {item.external_user_id || item.user_id}
               </span>
-              <span className='tabular-nums'>{item.request_count}</span>
+              <span className='text-right tabular-nums'>
+                {item.request_count.toLocaleString()}
+              </span>
+              <span className='text-right tabular-nums'>
+                {formatQuota(item.total_settlement_gross_amount)}
+              </span>
             </label>
           ))}
         </div>
@@ -520,8 +584,10 @@ function UserWelfarePanel(props: {
             if (value) setType(value as WelfareType)
           }}
         >
-          <SelectTrigger>
-            <SelectValue />
+          <SelectTrigger className='w-full' aria-label={t('福利类型')}>
+            <SelectValue>
+              {type === 'transfer' ? t('批量转账') : t('批量发盲盒')}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value='transfer'>{t('批量转账')}</SelectItem>

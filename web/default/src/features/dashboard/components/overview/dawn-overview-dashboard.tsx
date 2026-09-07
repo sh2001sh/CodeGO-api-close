@@ -54,6 +54,7 @@ import type { QuotaDataItem } from '@/features/dashboard/types'
 import { DawnQueryError } from '@/features/dawn/components/query-error'
 import { getUserLogs } from '@/features/usage-logs/api'
 import type { UsageLog } from '@/features/usage-logs/data/schema'
+import { getTokenComposition } from '../../lib/token-composition'
 
 type TimeRange = '24h' | '7d' | '30d'
 
@@ -64,16 +65,6 @@ const RANGE_CONFIG: Record<
   '24h': { hours: 24, defaultTime: 'hour', bars: 24 },
   '7d': { hours: 24 * 7, defaultTime: 'day', bars: 7 },
   '30d': { hours: 24 * 30, defaultTime: 'day', bars: 15 },
-}
-
-function parseCacheTokens(other: string): number {
-  if (!other) return 0
-  try {
-    const parsed = JSON.parse(other) as { cache_tokens?: number }
-    return Number(parsed.cache_tokens ?? 0)
-  } catch {
-    return 0
-  }
 }
 
 export function DawnOverviewDashboard() {
@@ -169,15 +160,7 @@ export function DawnOverviewDashboard() {
         ) / totalGroupRequests
       : null
 
-  const tokenSplit = useMemo(() => {
-    const split = { input: 0, output: 0, cache: 0 }
-    logs.forEach((log) => {
-      split.input += Number(log.prompt_tokens ?? 0)
-      split.output += Number(log.completion_tokens ?? 0)
-      split.cache += parseCacheTokens(log.other ?? '')
-    })
-    return split
-  }, [logs])
+  const tokenSplit = useMemo(() => getTokenComposition(logs), [logs])
 
   const modelUsage = useMemo(() => {
     const map = new Map<string, number>()
@@ -219,12 +202,13 @@ export function DawnOverviewDashboard() {
     })
   }, [rows, range, config.bars])
 
-  const tokenTotal = tokenSplit.input + tokenSplit.output + tokenSplit.cache
-  const inputDeg = tokenTotal > 0 ? (tokenSplit.input / tokenTotal) * 360 : 0
-  const outputDeg = tokenTotal > 0 ? (tokenSplit.output / tokenTotal) * 360 : 0
+  const tokenTotal =
+    tokenSplit.cacheHit + tokenSplit.cacheMiss + tokenSplit.output
+  const hitDeg = tokenTotal > 0 ? (tokenSplit.cacheHit / tokenTotal) * 360 : 0
+  const missDeg = tokenTotal > 0 ? (tokenSplit.cacheMiss / tokenTotal) * 360 : 0
   const donutStyle = {
-    '--swp': `${inputDeg}deg`,
-    '--swp2': `${outputDeg}deg`,
+    '--swp': `${hitDeg}deg`,
+    '--swp2': `${missDeg}deg`,
   } as CSSProperties
 
   const baseUrl = getConfiguredServerAddress()
@@ -481,32 +465,42 @@ export function DawnOverviewDashboard() {
         <div className='panel rise' style={{ animationDelay: '.24s' }}>
           <div className='ph2'>
             <PieChart size={15} />
-            Token 构成
+            {t('Token 构成')}
             <span className='win'>
               {range.toUpperCase()} ·{' '}
               {t('最近 {{count}} 条调用', { count: logs.length })}
             </span>
           </div>
           <div className='donutwrap'>
-            <div className='donut' style={donutStyle} />
+            <div
+              className='donut'
+              data-empty={tokenTotal === 0}
+              style={donutStyle}
+              aria-hidden='true'
+            />
             <div className='dleg'>
               <div className='li'>
-                <i style={{ background: 'var(--dawn-ink)' }} />
-                输入 Tokens
-                <b>{formatCompactNumber(tokenSplit.input)}</b>
+                <i className='token-cache-hit' />
+                <span>{t('缓存命中输入 Token')}</span>
+                <b>{formatCompactNumber(tokenSplit.cacheHit)}</b>
               </div>
               <div className='li'>
-                <i style={{ background: '#C98767' }} />
-                输出 Tokens
+                <i className='token-cache-miss' />
+                <span>{t('缓存未命中输入 Token')}</span>
+                <b>{formatCompactNumber(tokenSplit.cacheMiss)}</b>
+              </div>
+              <div className='li'>
+                <i className='token-output' />
+                <span>{t('输出 Token')}</span>
                 <b>{formatCompactNumber(tokenSplit.output)}</b>
-              </div>
-              <div className='li'>
-                <i style={{ background: 'var(--dawn-ok)' }} />
-                缓存读取
-                <b>{formatCompactNumber(tokenSplit.cache)}</b>
               </div>
             </div>
           </div>
+          {tokenTotal === 0 && (
+            <p className='text-muted-foreground text-sm'>
+              {t('暂无 Token 用量')}
+            </p>
+          )}
         </div>
       </div>
 

@@ -564,6 +564,7 @@ export interface MarketplaceOwnerUsageItem {
   success_rate: number
   total_tokens: number
   total_consumer_amount: number
+  total_settlement_gross_amount: number
   user_multiplier?: number
   last_request_at: string
 }

@@ -1,14 +1,47 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
+	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+func TestBuildRankingUsesPreaggregatedLatencyWithoutRawPayloadScan(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	oldLogDB, oldRedis, oldMaster := platformdb.LogDB, platformcache.RedisEnabled, platformconfig.IsMasterNode
+	platformdb.LogDB, platformcache.RedisEnabled, platformconfig.IsMasterNode = db, false, true
+	t.Cleanup(func() {
+		platformdb.LogDB, platformcache.RedisEnabled, platformconfig.IsMasterNode = oldLogDB, oldRedis, oldMaster
+	})
+	require.NoError(t, auditprojection.EnsureSchema())
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.RankingSnapshot{}, &auditschema.Log{}))
+	channelID := 987632
+	auditprojection.Record(auditprojection.Sample{ChannelID: channelID, Model: "ranking-perf", Group: "ranking-perf", Success: true, HasAttemptTTFT: true, AttemptTTFTMs: 800, HasE2ETTFT: true, E2ETTFTMs: 4000})
+	require.NoError(t, db.Create(&auditschema.Log{ChannelId: channelID, Type: auditschema.LogTypeConsume, CreatedAt: time.Now().Unix(), Other: `{"attempt_ttft_ms":99000,"e2e_ttft_ms":99000}`}).Error)
+	rawPayloadQueries := 0
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:no_raw_ranking_payload", func(tx *gorm.DB) {
+		if tx.Statement.Table == "logs" && strings.Contains(tx.Statement.SQL.String(), "channel_id, other") {
+			rawPayloadQueries++
+		}
+	}))
+	groups := []marketplaceschema.Group{{ID: "ranking-perf", ChannelID: "ranking-perf"}}
+	channels := map[string]marketplaceschema.Channel{"ranking-perf": {InternalChannelID: &channelID}}
+	result, err := buildRanking(groups, channels, 24)
+	require.NoError(t, err)
+	require.Zero(t, rawPayloadQueries, "market refresh must not transfer or parse raw 24-hour log payloads")
+	require.EqualValues(t, 1000, result["ranking-perf"].AttemptTTFTP50Ms)
+	require.EqualValues(t, 5000, result["ranking-perf"].E2ETTFTP50Ms)
+}
 
 func TestRankingSnapshotsForRequestUsesFreshPersistedRows(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -48,7 +49,7 @@ func TestLoadGroupModelRequestBucketsCollapsesConcurrentMisses(t *testing.T) {
 	endTime := startTime + 60
 	bucketSize := int64(60)
 	groups := []string{"plus"}
-	cacheKey := fmt.Sprintf("%d:%d:%d:%s", startTime, endTime, bucketSize, groups[0])
+	cacheKey := fmt.Sprintf("%d:%d:%d", startTime, endTime, bucketSize)
 	t.Cleanup(func() {
 		loadGroupModelRequestBuckets = originalLoader
 		platformconfig.GroupStatusCacheSeconds = originalTTL
@@ -86,4 +87,85 @@ func TestLoadGroupModelRequestBucketsCollapsesConcurrentMisses(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.EqualValues(t, 1, queryCount.Load())
+}
+
+func TestGroupStatusSharesWindowAcrossVisibilityScopes(t *testing.T) {
+	oldLoader := loadGroupModelRequestBuckets
+	startTime := time.Now().UnixNano()
+	t.Cleanup(func() {
+		loadGroupModelRequestBuckets = oldLoader
+		groupStatusCache.Lock()
+		delete(groupStatusCache.items, fmt.Sprintf("%d:%d:60", startTime, startTime+60))
+		groupStatusCache.Unlock()
+	})
+	var queries atomic.Int32
+	loadGroupModelRequestBuckets = func(_, _, _ int64, groups []string) ([]GroupModelRequestBucket, error) {
+		queries.Add(1)
+		time.Sleep(20 * time.Millisecond)
+		if len(groups) > 0 {
+			return []GroupModelRequestBucket{{GroupName: groups[0], RequestCount: 2}}, nil
+		}
+		return []GroupModelRequestBucket{{GroupName: "public", RequestCount: 2}, {GroupName: "private", RequestCount: 3}}, nil
+	}
+	const callers = 32
+	var wg sync.WaitGroup
+	results := make(chan []GroupModelRequestBucket, callers)
+	for i := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			group := "public"
+			if i%2 == 1 {
+				group = "private"
+			}
+			rows, err := LoadGroupModelRequestBuckets(startTime, startTime+60, 60, []string{group})
+			if err != nil || len(rows) != 1 || rows[0].GroupName != group {
+				results <- nil
+				return
+			}
+			results <- rows
+		}()
+	}
+	wg.Wait()
+	close(results)
+	for rows := range results {
+		require.Len(t, rows, 1, "shared statistics must not leak another visibility scope")
+	}
+	require.EqualValues(t, 1, queries.Load())
+	unknown, err := LoadGroupModelRequestBuckets(startTime, startTime+60, 60, []string{"missing"})
+	require.NoError(t, err)
+	require.Empty(t, unknown)
+	rows, err := LoadGroupModelRequestBuckets(startTime, startTime+60, 60, []string{"public"})
+	require.NoError(t, err)
+	rows[0].GroupName = "changed"
+	rows, err = LoadGroupModelRequestBuckets(startTime, startTime+60, 60, []string{"public"})
+	require.NoError(t, err)
+	require.Equal(t, "public", rows[0].GroupName, "callers must not mutate the shared cache")
+}
+
+func TestGroupStatusSharedCacheRetriesFailedLoad(t *testing.T) {
+	oldLoader := loadGroupModelRequestBuckets
+	startTime := time.Now().UnixNano()
+	t.Cleanup(func() {
+		loadGroupModelRequestBuckets = oldLoader
+		groupStatusCache.Lock()
+		delete(groupStatusCache.items, fmt.Sprintf("%d:%d:60", startTime, startTime+60))
+		groupStatusCache.Unlock()
+	})
+	loadErr := errors.New("database unavailable")
+	calls := 0
+	loadGroupModelRequestBuckets = func(_, _, _ int64, groups []string) ([]GroupModelRequestBucket, error) {
+		calls++
+		if calls == 1 {
+			return nil, loadErr
+		}
+		return []GroupModelRequestBucket{{GroupName: "public"}, {GroupName: "private"}}, nil
+	}
+	rows, err := LoadGroupModelRequestBuckets(startTime, startTime+60, 60, []string{"public"})
+	require.ErrorIs(t, err, loadErr)
+	require.Empty(t, rows)
+	rows, err = LoadGroupModelRequestBuckets(startTime, startTime+60, 60, []string{"private"})
+	require.NoError(t, err)
+	require.Equal(t, []GroupModelRequestBucket{{GroupName: "private"}}, rows)
+	require.Equal(t, 2, calls)
 }

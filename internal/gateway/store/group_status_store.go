@@ -74,29 +74,51 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 	if cacheTTL <= 0 {
 		cacheTTL = time.Minute
 	}
-	cacheKey := fmt.Sprintf("%d:%d:%d:%s", startTime, endTime, bucketSize, strings.Join(filteredGroups, "\x00"))
+	// Cache aggregates by time window, not by each user's visibility subset.
+	// Keep all groups internal and filter every returned copy below.
+	cacheKey := fmt.Sprintf("%d:%d:%d", startTime, endTime, bucketSize)
 	if rows, state := loadGroupStatusCache(cacheKey, time.Now()); state == groupStatusCacheFresh {
-		return rows, nil
+		return filterGroupStatusRows(rows, filteredGroups), nil
 	} else if state == groupStatusCacheStale {
-		refreshGroupStatusCacheAsync(cacheKey, startTime, endTime, bucketSize, filteredGroups, cacheTTL)
-		return rows, nil
+		refreshGroupStatusCacheAsync(cacheKey, startTime, endTime, bucketSize, nil, cacheTTL)
+		return filterGroupStatusRows(rows, filteredGroups), nil
 	}
 	value, err, _ := groupStatusLoads.Do(cacheKey, func() (any, error) {
 		now := time.Now()
 		if rows, state := loadGroupStatusCache(cacheKey, now); state != groupStatusCacheMiss {
 			return rows, nil
 		}
-		return refreshGroupStatusCache(cacheKey, startTime, endTime, bucketSize, filteredGroups, cacheTTL)
+		return refreshGroupStatusCache(cacheKey, startTime, endTime, bucketSize, nil, cacheTTL)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return append([]GroupModelRequestBucket(nil), value.([]GroupModelRequestBucket)...), nil
+	return filterGroupStatusRows(value.([]GroupModelRequestBucket), filteredGroups), nil
+}
+
+func filterGroupStatusRows(rows []GroupModelRequestBucket, groups []string) []GroupModelRequestBucket {
+	if len(groups) == 0 {
+		return append([]GroupModelRequestBucket(nil), rows...)
+	}
+	allowed := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		allowed[group] = struct{}{}
+	}
+	result := make([]GroupModelRequestBucket, 0)
+	for _, row := range rows {
+		if _, ok := allowed[row.GroupName]; ok {
+			result = append(result, row)
+		}
+	}
+	return result
 }
 
 func refreshGroupStatusCacheAsync(cacheKey string, startTime, endTime, bucketSize int64, groups []string, cacheTTL time.Duration) {
 	go func() {
 		_, err, _ := groupStatusLoads.Do(cacheKey, func() (any, error) {
+			if rows, state := loadGroupStatusCache(cacheKey, time.Now()); state == groupStatusCacheFresh {
+				return rows, nil
+			}
 			return refreshGroupStatusCache(cacheKey, startTime, endTime, bucketSize, groups, cacheTTL)
 		})
 		if err != nil {

@@ -282,23 +282,6 @@ func aggregateChannelRankingRows(rows []auditprojection.ChannelSummary) map[int]
 	return result
 }
 
-func applyExactChannelLatency(totals map[int]rankingTotals, exact map[int]exactLatency) {
-	for channelID, latency := range exact {
-		value, exists := totals[channelID]
-		if !exists || latency.Count <= 0 {
-			continue
-		}
-		value.attemptTtftP50 = latency.AttemptP50
-		value.attemptTtftP95 = latency.AttemptP95
-		if latency.E2EP50 > 0 {
-			value.e2eTtftP50 = latency.E2EP50
-			value.e2eTtftP95 = latency.E2EP95
-		}
-		value.latencySamples = latency.Count
-		totals[channelID] = value
-	}
-}
-
 func metricWeight(value float64, requestCount int64) int64 {
 	if value <= 0 {
 		return 0

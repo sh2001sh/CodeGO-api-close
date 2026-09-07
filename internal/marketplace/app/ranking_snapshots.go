@@ -184,7 +184,8 @@ func buildRanking(groups []marketplaceschema.Group, channels map[string]marketpl
 		return nil, err
 	}
 	totals := aggregateChannelRankingRows(rows)
-	applyExactChannelLatency(totals, queryExactChannelLatency(hours, channelIDs))
+	// Percentiles are already aggregated from persisted and active histograms.
+	// Re-reading 24 hours of raw payloads here stalls unrelated gateway queries.
 	consumers := independentConsumerCountsByChannel(channelIDs, hours)
 	snapshots := scoreMarketplaceGroups(groups, channels, totals, consumers, hours)
 	if err := persistRankingSnapshots(snapshots); err != nil {

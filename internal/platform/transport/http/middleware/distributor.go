@@ -134,7 +134,8 @@ func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 					}
 					httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, usingGroup)
 				}
-				if autoChannel, autoGroup, managed, autoErr := selectMarketplaceAutoChannel(c, usingGroup, modelRequest.Model); managed {
+				selectionGroup := marketplacePoolSelectionGroup(c, usingGroup)
+				if autoChannel, autoGroup, managed, autoErr := selectMarketplaceAutoChannel(c, selectionGroup, modelRequest.Model); managed {
 					if autoErr != nil {
 						logger.LogError(c, "第三方 Auto 路由失败: "+autoErr.Error())
 						if errors.Is(autoErr, marketplaceapp.ErrAutoRouteModelUnavailable) {

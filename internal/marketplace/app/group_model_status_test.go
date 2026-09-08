@@ -32,7 +32,7 @@ func TestGroupModelStatusKeepsModelsAndGroupsSeparate(t *testing.T) {
 func TestGroupModelStatusEnforcesVisibilityBeforeStatistics(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &marketplaceschema.Channel{}, &marketplaceschema.GroupAccess{}))
-	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "private-model-status", ChannelID: "private-model-status", PublicSlug: "private-model-status", InternalGroupName: "private-model-status", Visibility: "private", LifecycleStatus: "active", OwnerUserID: 42}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "private-model-status", ChannelID: "private-model-status", PublicSlug: "private-model-status", InternalGroupName: "private-model-status", Visibility: "private", LifecycleStatus: "active", VerificationStatus: "passed", OwnerUserID: 42}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "private-model-status", DeclaredModels: `["model-a","model-b"]`}).Error)
 	_, err := GetMarketplaceGroupModelStatus("private-model-status", 0)
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)

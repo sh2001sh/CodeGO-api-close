@@ -54,16 +54,49 @@ func awardMonthlyPassPurchasePropTx(
 	userID int,
 	plan *commerceschema.SubscriptionPlan,
 	preview *commercedomain.SubscriptionPurchasePreview,
+	paidAmount float64,
 	reference string,
 ) error {
-	if preview == nil || preview.Action != commerceschema.SubscriptionPurchaseActionUpgrade {
+	if preview == nil {
 		return awardMonthlyPassPropTx(tx, userID, plan, reference)
 	}
-	if preview.CurrentPlan == nil || plan == nil {
+	if plan == nil {
 		return errors.New("invalid monthly pass upgrade grant")
 	}
-	duration := monthlyPassDurationSeconds(plan) - monthlyPassDurationSeconds(preview.CurrentPlan)
-	if duration <= 0 || commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) != commerceschema.SubscriptionPlanTypeMonthly {
+	targetDuration := monthlyPassDurationSeconds(plan)
+	if targetDuration <= 0 || commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) != commerceschema.SubscriptionPlanTypeMonthly {
+		return nil
+	}
+	if preview.Action == commerceschema.SubscriptionPurchaseActionSubscribe {
+		return awardMonthlyPassDurationTx(tx, userID, targetDuration, reference)
+	}
+	if preview.Action == commerceschema.SubscriptionPurchaseActionUpgrade && preview.CurrentPlan == nil {
+		return errors.New("invalid monthly pass purchase grant")
+	}
+
+	// Renewals follow the actual amount paid. Upgrades scale from the tier
+	// difference to the full target entitlement according to the old package's
+	// actual quota usage (e.g. Standard -> Pro: 15 + 30*usageRate minutes).
+	if preview.Action == commerceschema.SubscriptionPurchaseActionUpgrade {
+		minimum := targetDuration - monthlyPassDurationSeconds(preview.CurrentPlan)
+		usageRate := 1.0
+		if preview.CurrentSubscription != nil && preview.CurrentSubscription.AmountTotal > 0 {
+			usageRate = subscriptionUsageRate(preview.CurrentSubscription)
+		}
+		duration := minimum + int64(float64(targetDuration-minimum)*usageRate)
+		if duration <= 0 {
+			return nil
+		}
+		return awardMonthlyPassDurationTx(tx, userID, duration, reference)
+	}
+
+	paidRatio := 0.0
+	if plan.PriceAmount > 0 && paidAmount > 0 {
+		paidRatio = paidAmount / plan.PriceAmount
+	}
+	paidRatio = max(0, min(paidRatio, 1))
+	duration := int64(float64(targetDuration) * paidRatio)
+	if duration <= 0 {
 		return nil
 	}
 	return awardMonthlyPassDurationTx(tx, userID, duration, reference)

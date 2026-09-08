@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	"slices"
 	"time"
 
@@ -23,7 +24,7 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		time.Since(adminMarketplaceStatsCache.ownerIncomeAt) < adminMarketplaceStatsCacheTTL {
 		result := cloneAdminOwnerIncomeResult(adminMarketplaceStatsCache.ownerIncomeResult)
 		adminMarketplaceStatsCache.Unlock()
-		return result, nil
+		return populateAdminOwnerBalances(result)
 	}
 	adminMarketplaceStatsCache.Unlock()
 	query := platformdb.DB.Model(&marketplaceschema.Settlement{}).
@@ -76,6 +77,23 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		result.ForfeitedIncome += item.ForfeitedIncome
 	}
 	cacheAdminOwnerIncomeResult(cacheKey, result)
+	return populateAdminOwnerBalances(result)
+}
+
+func populateAdminOwnerBalances(result *AdminOwnerIncomeResult) (*AdminOwnerIncomeResult, error) {
+	ids := make([]int, 0, len(result.Items))
+	for _, item := range result.Items {
+		ids = append(ids, item.OwnerUserID)
+	}
+	balances, err := billingapp.GetUserClaudeWalletQuotas(ids)
+	if err != nil {
+		return nil, err
+	}
+	for index := range result.Items {
+		item := &result.Items[index]
+		item.CurrentQuota = balances[item.OwnerUserID]
+		item.ReclaimableQuota = max(0, min(item.CurrentQuota, item.ReleasedIncome))
+	}
 	return result, nil
 }
 

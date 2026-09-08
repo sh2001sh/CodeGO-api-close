@@ -31,6 +31,7 @@ export function useApiKeyGroupOptions() {
       official.data?.data ?? {}
     )
       .filter(([key]) => key.trim().toLowerCase() !== 'auto')
+      .filter(([key]) => key.trim().toLowerCase() !== 'default')
       .map(([key, info]) => ({
         value: key,
         label: key,

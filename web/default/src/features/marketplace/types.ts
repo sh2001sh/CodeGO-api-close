@@ -277,6 +277,8 @@ export interface AdminMarketplaceChannelFilters {
 }
 
 export interface AdminOwnerIncomeItem {
+  current_quota: number
+  reclaimable_quota: number
   owner_user_id: number
   owner_external_id: string
   request_count: number

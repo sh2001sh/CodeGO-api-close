@@ -52,6 +52,44 @@ func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	require.Equal(t, 1, view.Items[0].Priority)
 }
 
+func TestAutoRoutePoolScoreStrategyUsesMarketplaceScore(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.RankingSnapshot{},
+	))
+	highScoreChannelID, cheapChannelID, observingChannelID := 111, 112, 113
+	require.NoError(t, db.Create([]marketplaceschema.Channel{
+		{ID: "high-score-channel", OwnerUserID: 11, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &highScoreChannelID, Status: marketplacedomain.LifecycleActive},
+		{ID: "cheap-channel", OwnerUserID: 12, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &cheapChannelID, Status: marketplacedomain.LifecycleActive},
+		{ID: "observing-channel", OwnerUserID: 13, ProviderType: "openai", DeclaredModels: `["gpt-5"]`, InternalChannelID: &observingChannelID, Status: marketplacedomain.LifecycleActive},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Group{
+		autoRouteTestGroup("high-market-score", "high-score-channel", 11, 2),
+		autoRouteTestGroup("cheap-low-market-score", "cheap-channel", 12, 0.1),
+		autoRouteTestGroup("observing-high-score", "observing-channel", 13, 0.05),
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.RankingSnapshot{
+		{GroupID: "high-market-score", WindowHours: 24, RankingVersion: rankingVersion, Score: 90, WilsonSuccessRate: 10, AvgTTFTMs: 60000, RequestCount: 100},
+		{GroupID: "cheap-low-market-score", WindowHours: 24, RankingVersion: rankingVersion, Score: 20, WilsonSuccessRate: 100, AvgTTFTMs: 100, RequestCount: 100},
+		{GroupID: "observing-high-score", WindowHours: 24, RankingVersion: rankingVersion, Score: 99, WilsonSuccessRate: 100, AvgTTFTMs: 50, RequestCount: 1, Observing: true},
+	}).Error)
+	selected := map[string]int{
+		"observing-high-score":   1,
+		"cheap-low-market-score": 2,
+		"high-market-score":      3,
+	}
+
+	bindings, err := resolveRoutePoolBindings(20, selected, normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{Strategy: "score"}), "gpt-5", 0)
+	require.NoError(t, err)
+	require.Equal(t, []string{"high-market-score", "cheap-low-market-score", "observing-high-score"}, []string{bindings[0].GroupID, bindings[1].GroupID, bindings[2].GroupID})
+
+	bindings, err = resolveRoutePoolBindings(20, selected, normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{Strategy: "cost"}), "gpt-5", 0)
+	require.NoError(t, err)
+	require.Equal(t, []string{"observing-high-score", "cheap-low-market-score", "high-market-score"}, []string{bindings[0].GroupID, bindings[1].GroupID, bindings[2].GroupID})
+}
+
 func TestNormalizeAutoRoutePoolConfigClampsPositiveMultiplierCeiling(t *testing.T) {
 	config := normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{MaxMultiplier: 0.0001})
 	if config.MaxMultiplier != 0.001 {

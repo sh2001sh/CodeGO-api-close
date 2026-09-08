@@ -129,7 +129,8 @@ func TestAwardMonthlyPassPurchasePropTxAddsOnlyUpgradeDurationDifference(t *test
 		return db.Transaction(func(tx *gorm.DB) error {
 			return awardMonthlyPassPurchasePropTx(tx, user.Id, targetPlan, &commercedomain.SubscriptionPurchasePreview{
 				Action: commerceschema.SubscriptionPurchaseActionUpgrade, CurrentPlan: currentPlan,
-			}, reference)
+				CurrentSubscription: &commerceschema.UserSubscription{AmountTotal: 100, AmountUsed: 0},
+			}, 0.01, reference)
 		})
 	}
 	require.NoError(t, grantUpgrade(lite, standard, "monthly-pass-order:2"))
@@ -157,15 +158,96 @@ func TestAwardMonthlyPassPurchasePropTxExtendsActiveCardByUpgradeDifference(t *t
 		ActivatedAt: now, ExpiresAt: now + 10*60, BenefitReference: "monthly-pass-order:4",
 	}).Error)
 
-	preview := &commercedomain.SubscriptionPurchasePreview{Action: commerceschema.SubscriptionPurchaseActionUpgrade, CurrentPlan: lite}
+	preview := &commercedomain.SubscriptionPurchasePreview{Action: commerceschema.SubscriptionPurchaseActionUpgrade, CurrentPlan: lite,
+		CurrentSubscription: &commerceschema.UserSubscription{AmountTotal: 3, AmountUsed: 2}}
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
-		return awardMonthlyPassPurchasePropTx(tx, user.Id, standard, preview, "monthly-pass-order:5")
+		return awardMonthlyPassPurchasePropTx(tx, user.Id, standard, preview, 0.01, "monthly-pass-order:5")
 	}))
 
 	var prop commerceschema.BlindBoxProp
 	require.NoError(t, db.Where("user_id = ? AND prop_type = ?", user.Id, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).First(&prop).Error)
-	assert.InDelta(t, int64(25*60), prop.ExpiresAt-now, 3)
-	assert.EqualValues(t, 25*60, prop.RemainingSeconds)
+	assert.InDelta(t, int64(35*60), prop.ExpiresAt-now, 3)
+	assert.EqualValues(t, 35*60, prop.RemainingSeconds)
+}
+
+func TestAwardMonthlyPassPurchasePropTxScalesUpgradeByPreviousUsage(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8841, Username: "monthly_pass_upgrade_usage_ratio", Status: constant.UserStatusEnabled}
+	standard := &commerceschema.SubscriptionPlan{PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierStandard}
+	pro := &commerceschema.SubscriptionPlan{PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro}
+	require.NoError(t, db.Create(user).Error)
+	preview := &commercedomain.SubscriptionPurchasePreview{Action: commerceschema.SubscriptionPurchaseActionUpgrade, CurrentPlan: standard,
+		CurrentSubscription: &commerceschema.UserSubscription{AmountTotal: 100, AmountUsed: 10}}
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return awardMonthlyPassPurchasePropTx(tx, user.Id, pro, preview, 0.01, "monthly-pass-order:usage-ratio")
+	}))
+
+	var prop commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND benefit_reference = ?", user.Id, "monthly-pass-order:usage-ratio").First(&prop).Error)
+	assert.EqualValues(t, 18*60, prop.DurationSeconds)
+}
+
+func TestAwardMonthlyPassPurchasePropTxGrantsFullTargetAfterPreviousCardExhausted(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8838, Username: "monthly_pass_exhausted_upgrade", Status: constant.UserStatusEnabled}
+	standard := &commerceschema.SubscriptionPlan{PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierStandard, PriceAmount: 89}
+	pro := &commerceschema.SubscriptionPlan{PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro, PriceAmount: 169}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, db.Create(&commerceschema.BlindBoxProp{
+		UserId: user.Id, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		Title: monthlyPassTitle(30 * 60), Status: commerceschema.BlindBoxPropStatusExpired,
+		Multiplier: 0.1, DurationSeconds: 30 * 60, RemainingSeconds: 0,
+		BenefitReference: "monthly-pass-order:exhausted",
+	}).Error)
+
+	preview := &commercedomain.SubscriptionPurchasePreview{Action: commerceschema.SubscriptionPurchaseActionUpgrade, CurrentPlan: standard, CurrentSubscription: &commerceschema.UserSubscription{AmountTotal: 100, AmountUsed: 100}, AmountDue: pro.PriceAmount}
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return awardMonthlyPassPurchasePropTx(tx, user.Id, pro, preview, 169, "monthly-pass-order:full-target")
+	}))
+
+	var prop commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND prop_type = ? AND benefit_reference = ?", user.Id,
+		commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, "monthly-pass-order:full-target").First(&prop).Error)
+	assert.EqualValues(t, 45*60, prop.DurationSeconds)
+	assert.EqualValues(t, 45*60, prop.RemainingSeconds)
+}
+
+func TestAwardMonthlyPassPurchasePropTxGrantsFullUpgradeAfterPreviousPackageExhausted(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8840, Username: "monthly_pass_exhausted_low_price", Status: constant.UserStatusEnabled}
+	standard := &commerceschema.SubscriptionPlan{PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierStandard, PriceAmount: 89}
+	pro := &commerceschema.SubscriptionPlan{PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro, PriceAmount: 169}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, db.Create(&commerceschema.BlindBoxProp{
+		UserId: user.Id, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		Status: commerceschema.BlindBoxPropStatusExpired, Multiplier: 0.1,
+		DurationSeconds: 30 * 60, RemainingSeconds: 0,
+	}).Error)
+
+	preview := &commercedomain.SubscriptionPurchasePreview{Action: commerceschema.SubscriptionPurchaseActionUpgrade, CurrentPlan: standard}
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return awardMonthlyPassPurchasePropTx(tx, user.Id, pro, preview, 0.01, "monthly-pass-order:minimum")
+	}))
+
+	var prop commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND benefit_reference = ?", user.Id, "monthly-pass-order:minimum").First(&prop).Error)
+	assert.EqualValues(t, 45*60, prop.DurationSeconds)
+	assert.EqualValues(t, 45*60, prop.RemainingSeconds)
+}
+
+func TestAwardMonthlyPassPurchasePropTxScalesRenewalByPaidAmount(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8839, Username: "monthly_pass_renewal_ratio", Status: constant.UserStatusEnabled}
+	pro := &commerceschema.SubscriptionPlan{PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro, PriceAmount: 169}
+	require.NoError(t, db.Create(user).Error)
+	preview := &commercedomain.SubscriptionPurchasePreview{Action: commerceschema.SubscriptionPurchaseActionRenew, AmountDue: 169 * 0.5}
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return awardMonthlyPassPurchasePropTx(tx, user.Id, pro, preview, 169*0.5, "monthly-pass-order:renewal-half")
+	}))
+
+	var prop commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND benefit_reference = ?", user.Id, "monthly-pass-order:renewal-half").First(&prop).Error)
+	assert.EqualValues(t, 22*60+30, prop.DurationSeconds)
 }
 
 func TestMonthlyPassEntitlementBindsExactCardAndOriginalExpiry(t *testing.T) {

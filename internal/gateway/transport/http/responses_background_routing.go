@@ -15,6 +15,7 @@ type responsesBackgroundRoutingContext struct {
 	UsingGroup                string                                      `json:"using_group"`
 	TokenGroup                string                                      `json:"token_group"`
 	AutomaticRouting          bool                                        `json:"automatic_routing,omitempty"`
+	RoutePoolName             string                                      `json:"route_pool_name,omitempty"`
 	MarketplaceGroupID        string                                      `json:"marketplace_group_id,omitempty"`
 	MarketplaceOwnerID        int                                         `json:"marketplace_owner_id,omitempty"`
 	MarketplaceSourceType     string                                      `json:"marketplace_source_type,omitempty"`
@@ -27,10 +28,20 @@ type responsesBackgroundRoutingContext struct {
 }
 
 func captureResponsesBackgroundRoutingContext(c *gin.Context) (string, error) {
+	snapshot := snapshotResponsesRoutingContext(c)
+	raw, err := platformencoding.Marshal(snapshot)
+	if err != nil {
+		return "", err
+	}
+	return platformsecurity.EncryptSecret(string(raw))
+}
+
+func snapshotResponsesRoutingContext(c *gin.Context) responsesBackgroundRoutingContext {
 	snapshot := responsesBackgroundRoutingContext{
 		UsingGroup:              httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup),
 		TokenGroup:              httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup),
 		AutomaticRouting:        gatewayruntime.IsAutoRouteRequest(c),
+		RoutePoolName:           c.GetString(gatewayruntime.RoutePoolNameContextKey),
 		MarketplaceGroupID:      httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceGroupID),
 		MarketplaceOwnerID:      httpctx.GetContextKeyInt(c, constant.ContextKeyMarketplaceOwnerID),
 		MarketplaceSourceType:   httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceSourceType),
@@ -39,17 +50,16 @@ func captureResponsesBackgroundRoutingContext(c *gin.Context) (string, error) {
 		FaultDomain:             c.GetString("channel_fault_domain"),
 	}
 	if prices, found := httpctx.GetContextKeyType[map[string]marketplaceapp.ChannelModelPrice](c, constant.ContextKeyMarketplaceModelPrices); found {
-		snapshot.MarketplaceModelPrices = prices
+		snapshot.MarketplaceModelPrices = make(map[string]marketplaceapp.ChannelModelPrice, len(prices))
+		for model, price := range prices {
+			snapshot.MarketplaceModelPrices[model] = price
+		}
 	}
 	if selection, found := gatewayroutingapp.GetRoutePoolSelection(c); found {
 		snapshot.RoutePoolID = selection.PoolID
 		snapshot.ProcurementCostMultiplier = selection.ProcurementCostMultiplier
 	}
-	raw, err := platformencoding.Marshal(snapshot)
-	if err != nil {
-		return "", err
-	}
-	return platformsecurity.EncryptSecret(string(raw))
+	return snapshot
 }
 
 func restoreResponsesBackgroundRoutingContext(c *gin.Context, ciphertext string) error {
@@ -61,8 +71,14 @@ func restoreResponsesBackgroundRoutingContext(c *gin.Context, ciphertext string)
 	if err := platformencoding.Unmarshal([]byte(raw), &snapshot); err != nil {
 		return err
 	}
+	applyResponsesRoutingContext(c, snapshot)
+	return nil
+}
+
+func applyResponsesRoutingContext(c *gin.Context, snapshot responsesBackgroundRoutingContext) {
 	httpctx.SetContextKey(c, constant.ContextKeyUsingGroup, snapshot.UsingGroup)
 	httpctx.SetContextKey(c, constant.ContextKeyTokenGroup, snapshot.TokenGroup)
+	c.Set(gatewayruntime.RoutePoolNameContextKey, snapshot.RoutePoolName)
 	if snapshot.AutomaticRouting {
 		gatewayruntime.MarkAutoRouteRequest(c)
 	}
@@ -71,7 +87,11 @@ func restoreResponsesBackgroundRoutingContext(c *gin.Context, ciphertext string)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, snapshot.MarketplaceSourceType)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, snapshot.MarketplaceCreditPolicy)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, snapshot.MarketplaceMultiplier)
-	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, snapshot.MarketplaceModelPrices)
+	prices := make(map[string]marketplaceapp.ChannelModelPrice, len(snapshot.MarketplaceModelPrices))
+	for model, price := range snapshot.MarketplaceModelPrices {
+		prices[model] = price
+	}
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, prices)
 	if snapshot.RoutePoolID > 0 && snapshot.ProcurementCostMultiplier > 0 {
 		gatewayroutingapp.SetRoutePoolSelectionSnapshot(c, gatewayroutingapp.RoutePoolSelection{
 			PoolID: snapshot.RoutePoolID, ProcurementCostMultiplier: snapshot.ProcurementCostMultiplier,
@@ -80,5 +100,4 @@ func restoreResponsesBackgroundRoutingContext(c *gin.Context, ciphertext string)
 	if snapshot.FaultDomain != "" {
 		c.Set("channel_fault_domain", snapshot.FaultDomain)
 	}
-	return nil
 }

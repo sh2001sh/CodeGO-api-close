@@ -4,11 +4,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
+	"strings"
 )
 
 const (
-	routeSummaryLogKey = "route_summary"
-	adminInfoLogKey    = "admin_info"
+	RoutePoolNameContextKey = "request_route_pool_name"
+	routeSummaryLogKey      = "route_summary"
+	adminInfoLogKey         = "admin_info"
 )
 
 // RouteLogSummary is the user-visible, identifier-free Auto routing audit.
@@ -44,6 +46,15 @@ func AttachRouteLogInfo(c *gin.Context, other map[string]interface{}) {
 	if !IsAutoRouteRequest(c) {
 		return
 	}
+	poolName := c.GetString(RoutePoolNameContextKey)
+	if poolName == "" {
+		poolName = "自动路由池"
+	}
+	other["route_pool_name"] = poolName
+	group := httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	if group != "" && group != "auto" && group != "market:auto" && !strings.HasPrefix(group, "market:pool:") {
+		other["actual_group"] = group
+	}
 
 	selectedOrder := selectedAutoRouteOrder(c)
 	skippedCount := 0
@@ -74,6 +85,9 @@ func selectedAutoRouteOrder(c *gin.Context) int {
 	}
 	if _, found := httpctx.GetContextKey(c, constant.ContextKeyAutoGroupIndex); found {
 		return httpctx.GetContextKeyInt(c, constant.ContextKeyAutoGroupIndex) + 1
+	}
+	if decision, ok := GetRouteDecision(c); ok && decision.SelectedGroup != "" && decision.ChannelID > 0 {
+		return 1
 	}
 	return 0
 }

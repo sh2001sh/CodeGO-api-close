@@ -51,6 +51,7 @@ import type { UsageLog } from '../../data/schema'
 import {
   parseLogOther,
   getUsageLogGroupDisplayName,
+  getUsageLogRoutePoolName,
   getParamOverrideActionLabel,
   parseAuditLine,
   decodeBillingExprB64,
@@ -590,10 +591,20 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 />
               )}
 
-              {getUsageLogGroupDisplayName(props.log.group, other) && (
+              {getUsageLogRoutePoolName(props.log.group, other) && (
                 <DetailRow
-                  label={t('Group')}
-                  value={getUsageLogGroupDisplayName(props.log.group, other)}
+                  label={t('路由池')}
+                  value={t(getUsageLogRoutePoolName(props.log.group, other))}
+                />
+              )}
+              {(getUsageLogGroupDisplayName(props.log.group, other) ||
+                getUsageLogRoutePoolName(props.log.group, other)) && (
+                <DetailRow
+                  label={t('实际分组')}
+                  value={
+                    getUsageLogGroupDisplayName(props.log.group, other) ||
+                    t('未记录')
+                  }
                   mono
                 />
               )}

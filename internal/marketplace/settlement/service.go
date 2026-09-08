@@ -257,6 +257,7 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 		if filter.EndTimestamp > 0 {
 			query = query.Where("created_at < ?", time.Unix(filter.EndTimestamp+1, 0))
 		}
+		ownerAmounts := make(map[int]int64)
 		var cursor *marketplaceschema.Settlement
 		for {
 			batchQuery := query.Clauses(clause.Locking{Strength: "UPDATE"}).Order("created_at ASC, id ASC").Limit(500)
@@ -270,6 +271,7 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 			if len(items) == 0 {
 				break
 			}
+			fullIDs := make([]string, 0, len(items))
 			for _, item := range items {
 				amount := item.OwnerNetAmount - item.ReclaimedAmount
 				if filter.MaxAmount > 0 {
@@ -278,20 +280,24 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 				if amount <= 0 {
 					continue
 				}
-				if err := reclaimHook(tx, item.OwnerUserID, 1, int(amount), "marketplace-reclaim:"+operationID+":"+item.ID); err != nil {
-					return err
-				}
+				ownerAmounts[item.OwnerUserID] += amount
 				updates := map[string]any{"reclaimed_amount": item.ReclaimedAmount + amount, "reclaimed_at": time.Now().UTC()}
 				if item.ReclaimedAmount+amount == item.OwnerNetAmount {
-					updates["status"] = statusReclaimed
-				}
-				if err := tx.Model(&item).Updates(updates).Error; err != nil {
+					fullIDs = append(fullIDs, item.ID)
+				} else if err := tx.Model(&item).Updates(updates).Error; err != nil {
 					return err
 				}
 				result.Count++
 				result.Amount += amount
 				if filter.MaxAmount > 0 && result.Amount == filter.MaxAmount {
 					break
+				}
+			}
+			if len(fullIDs) > 0 {
+				if err := tx.Model(&marketplaceschema.Settlement{}).Where("id IN ?", fullIDs).Updates(map[string]any{
+					"reclaimed_amount": gorm.Expr("owner_net_amount"), "reclaimed_at": time.Now().UTC(), "status": statusReclaimed,
+				}).Error; err != nil {
+					return err
 				}
 			}
 			if filter.MaxAmount > 0 && result.Amount == filter.MaxAmount {
@@ -301,6 +307,16 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 		}
 		if filter.MaxAmount > 0 && result.Amount < filter.MaxAmount {
 			return errors.New("所选范围的可回收收益不足，未扣除额度，请刷新后重试")
+		}
+		owners := make([]int, 0, len(ownerAmounts))
+		for owner := range ownerAmounts {
+			owners = append(owners, owner)
+		}
+		slices.Sort(owners)
+		for _, owner := range owners {
+			if err := reclaimHook(tx, owner, 1, int(ownerAmounts[owner]), fmt.Sprintf("marketplace-reclaim:%s:owner:%d", operationID, owner)); err != nil {
+				return err
+			}
 		}
 		return tx.Model(&operation).Updates(map[string]any{"count": result.Count, "amount": result.Amount}).Error
 	})

@@ -397,8 +397,8 @@ export function useAdminOwnerIncomeRelease() {
         'ownerSearch' | 'ownerUserIds' | 'startTimestamp' | 'endTimestamp'
       > & { maxAmount?: number; operationId: string }
     ) => releaseAdminOwnerIncome(filters),
-    onSuccess: async () => {
-      await Promise.all([
+    onSuccess: () => {
+      void Promise.all([
         queryClient.invalidateQueries({
           queryKey: ['marketplace-owner-income', 'admin'],
         }),

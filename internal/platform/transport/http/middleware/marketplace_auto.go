@@ -31,7 +31,9 @@ func selectMarketplaceAutoChannel(c *gin.Context, tokenGroup, modelName string) 
 	var bindings []marketplaceapp.RoutingBinding
 	var err error
 	if isNamedMarketplacePool {
-		bindings, err = marketplaceapp.ResolveRoutePoolBindings(userID, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup), modelName, multiplierLimit)
+		var poolName string
+		bindings, poolName, err = marketplaceapp.ResolveRoutePoolBindings(userID, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup), modelName, multiplierLimit)
+		c.Set(gatewayruntime.RoutePoolNameContextKey, poolName)
 	} else {
 		bindings, err = marketplaceapp.ResolveAutoRouteBindings(userID, modelName, multiplierLimit)
 	}

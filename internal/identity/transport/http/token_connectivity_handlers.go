@@ -80,6 +80,9 @@ func tokenTestModels(token *identityschema.Token) ([]string, error) {
 	if group == gatewayroutingapp.AutoGroupName || marketplaceapp.IsMarketplaceAutoTokenGroup(group) {
 		if marketplaceapp.HasConfiguredAutoRoutePool(token.UserId) || marketplaceapp.IsMarketplaceAutoTokenGroup(group) {
 			pool, err := marketplaceapp.ListAutoRoutePool(token.UserId)
+			if err != nil {
+				return nil, err
+			}
 			if err == nil {
 				models := make(map[string]struct{})
 				for _, item := range pool.Items {
@@ -103,7 +106,7 @@ func tokenTestModels(token *identityschema.Token) ([]string, error) {
 func resolveTokenTestChannel(c *gin.Context, token *identityschema.Token, modelName string) (int, string, error) {
 	tokenGroup := gatewayroutingapp.NormalizeTokenGroup(token.Group)
 	if marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup) {
-		bindings, err := marketplaceapp.ResolveRoutePoolBindings(token.UserId, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup), modelName, token.MarketplaceMultiplierLimit)
+		bindings, _, err := marketplaceapp.ResolveRoutePoolBindings(token.UserId, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup), modelName, token.MarketplaceMultiplierLimit)
 		if err != nil {
 			return 0, "", err
 		}

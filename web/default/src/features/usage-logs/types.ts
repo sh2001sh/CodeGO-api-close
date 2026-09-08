@@ -145,6 +145,8 @@ export interface LogOtherData {
       | 'stream_circuit'
     >
   }
+  route_pool_name?: string
+  actual_group?: string
   request_path?: string
   status?: 'failed'
   status_code?: number

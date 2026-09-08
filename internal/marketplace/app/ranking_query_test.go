@@ -256,7 +256,7 @@ func TestGroupListItemReturnsSanitizedGPT56MappingReport(t *testing.T) {
 	require.NotContains(t, string(payload), "raw secret upstream error")
 }
 
-func TestPublicPendingReviewGroupIsLoadedForMarketplace(t *testing.T) {
+func TestPublicPendingReviewGroupIsExcludedFromMarketplace(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
 
@@ -280,9 +280,55 @@ func TestPublicPendingReviewGroupIsLoadedForMarketplace(t *testing.T) {
 
 	groups, channels, err := loadPublicGroups(GroupQuery{})
 	require.NoError(t, err)
+	require.Empty(t, groups)
+	require.Empty(t, channels)
+
+	group.LifecycleStatus = marketplacedomain.LifecycleActive
+	group.VerificationStatus = "pending"
+	require.NoError(t, db.Save(&group).Error)
+	groups, channels, err = loadPublicGroups(GroupQuery{})
+	require.NoError(t, err)
+	require.Len(t, groups, 0, "a group still needs verification_status=passed before publication")
+
+	group.VerificationStatus = marketplacedomain.VerificationPassed
+	channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
+	channel.ApprovedSourceLabel = "Claude Max"
+	require.NoError(t, db.Save(&group).Error)
+	require.NoError(t, db.Save(&channel).Error)
+	groups, channels, err = loadPublicGroups(GroupQuery{})
+	require.NoError(t, err)
 	require.Len(t, groups, 1)
 	require.Equal(t, group.ID, groups[0].ID)
-	require.Empty(t, publicSourceLabel(channels[channel.ID]))
+	require.Equal(t, "Claude Max", publicSourceLabel(channels[channel.ID]))
+}
+
+func TestPublicDiscoveryRequiresPassedVerificationAndOnlineLifecycle(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.GroupAccess{}))
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "approval-channel"}).Error)
+	group := marketplaceschema.Group{ID: "approval-group", ChannelID: "approval-channel", PublicSlug: "approval-group", InternalGroupName: "approval-group", OwnerUserID: 10, Visibility: "public"}
+	for _, lifecycle := range []string{"draft", "verifying", "pending_review", "suspended", "disabled", "active", "degraded"} {
+		for _, verification := range []string{"queued", "running", "failed", "passed"} {
+			group.LifecycleStatus, group.VerificationStatus = lifecycle, verification
+			require.NoError(t, db.Save(&group).Error)
+			want := verification == "passed" && (lifecycle == "active" || lifecycle == "degraded")
+			for _, viewer := range []int{0, 10, 11} {
+				query := GroupQuery{ViewerUserID: viewer, IncludeAccess: viewer > 0, Status: lifecycle, Verification: verification}
+				rows, err := loadPublicGroupRows(query)
+				require.NoError(t, err)
+				require.Equal(t, want, len(rows) == 1, "%s/%s viewer=%d", lifecycle, verification, viewer)
+				rows, _, err = loadPublicGroupsBySlug(query, group.PublicSlug)
+				require.NoError(t, err)
+				require.Equal(t, want, len(rows) == 1)
+				_, err = GetMarketplaceGroupModelStatus(group.PublicSlug, viewer)
+				if want {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			}
+		}
+	}
 }
 
 func TestPublicDiscoveryExcludesSuspendedGroups(t *testing.T) {

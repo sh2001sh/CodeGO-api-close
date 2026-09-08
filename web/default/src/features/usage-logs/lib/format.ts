@@ -112,14 +112,32 @@ export function getUsageLogGroupDisplayName(
   logGroup: string | null | undefined,
   other: LogOtherData | null
 ): string {
-  return (
+  const group =
     other?.marketplace_group_display_name ||
+    other?.actual_group ||
     other?.marketplace_channel_id ||
     other?.marketplace_group_id ||
     logGroup ||
     other?.group ||
     ''
+  if (
+    group === 'market:auto' ||
+    group === 'auto' ||
+    group.startsWith('market:pool:')
   )
+    return ''
+  return group
+}
+
+export function getUsageLogRoutePoolName(
+  logGroup: string | null | undefined,
+  other: LogOtherData | null
+): string {
+  if (other?.route_pool_name) return other.route_pool_name
+  if (logGroup?.startsWith('market:pool:')) return '路由池（名称未记录）'
+  if (other?.route_summary || logGroup === 'market:auto' || logGroup === 'auto')
+    return '自动路由池'
+  return ''
 }
 
 /**

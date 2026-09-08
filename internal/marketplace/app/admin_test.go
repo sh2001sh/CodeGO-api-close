@@ -54,8 +54,8 @@ func TestListAdminOwnerIncomeKeepsDeletedChannelHistory(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Settlement{}))
 	require.NoError(t, db.Create([]identityschema.User{
-		{Id: 42, ExternalId: "ABC123", Username: "owner-42", AffCode: "owner42"},
-		{Id: 77, ExternalId: "XYZ789", Username: "owner-77", AffCode: "owner77"},
+		{Id: 42, ExternalId: "ABC123", Username: "owner-42", AffCode: "owner42", ClaudeQuota: 250},
+		{Id: 77, ExternalId: "XYZ789", Username: "owner-77", AffCode: "owner77", ClaudeQuota: 800},
 	}).Error)
 	reference := time.Now().UTC().Truncate(time.Second)
 	require.NoError(t, db.Create([]marketplaceschema.Settlement{
@@ -77,8 +77,12 @@ func TestListAdminOwnerIncomeKeepsDeletedChannelHistory(t *testing.T) {
 	require.EqualValues(t, 700, result.ReleasedIncome)
 	require.Equal(t, 42, result.Items[0].OwnerUserID)
 	require.Equal(t, "ABC123", result.Items[0].OwnerExternalID)
+	require.EqualValues(t, 250, result.Items[0].CurrentQuota)
+	require.EqualValues(t, 250, result.Items[0].ReclaimableQuota)
 	require.Equal(t, 77, result.Items[1].OwnerUserID)
 	require.Equal(t, "XYZ789", result.Items[1].OwnerExternalID)
+	require.EqualValues(t, 800, result.Items[1].CurrentQuota)
+	require.EqualValues(t, 400, result.Items[1].ReclaimableQuota)
 
 	filtered, err := ListAdminOwnerIncome(AdminOwnerIncomeQuery{
 		OwnerSearch:    "abc",

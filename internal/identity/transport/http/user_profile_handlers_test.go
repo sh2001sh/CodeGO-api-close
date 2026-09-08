@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
@@ -10,9 +11,74 @@ import (
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
+	"reflect"
 	"testing"
 )
+
+func TestGetUserModelsForMarketplaceToken(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	if err := db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.ChannelUserBlock{}, &marketplaceschema.UserMultiplier{}); err != nil {
+		t.Fatal(err)
+	}
+	group := marketplaceschema.Group{
+		ID: "grok-group", ChannelID: "grok-channel", OwnerUserID: 42,
+		PublicSlug: "grok-group", InternalGroupName: "Grok-test",
+		SourceType:      marketplacedomain.SourceTypeMarketplaceUser,
+		LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed,
+		Visibility: marketplacedomain.VisibilityPublic,
+	}
+	channel := marketplaceschema.Channel{ID: group.ChannelID, OwnerUserID: 42, DeclaredModels: `["grok-4","gemini-2.5-pro","grok-4"]`}
+	if err := db.Create(&group).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&channel).Error; err != nil {
+		t.Fatal(err)
+	}
+	token := seedDesktopToken(t, db, 7, "grok-key", "test-grok-key")
+	token.Group = "market:" + group.ID
+	if err := db.Save(token).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		userID int
+		limits bool
+		want   []string
+		ok     bool
+	}{
+		{"third-party models", 7, false, []string{"gemini-2.5-pro", "grok-4"}, true},
+		{"token model restrictions", 7, true, []string{"grok-4"}, true},
+		{"other user cannot read token", 8, false, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			token.ModelLimitsEnabled = tc.limits
+			token.ModelLimits = "grok-4"
+			if err := db.Save(token).Error; err != nil {
+				t.Fatal(err)
+			}
+			ctx, recorder := newAuthenticatedContext(t, "GET", fmt.Sprintf("/api/user/models?token_id=%d", token.Id), nil, tc.userID)
+			GetUserModels(ctx)
+			response := decodeAPIResponse(t, recorder)
+			if response.Success != tc.ok {
+				t.Fatalf("success=%v, message=%s", response.Success, response.Message)
+			}
+			if !tc.ok {
+				return
+			}
+			var models []string
+			if err := platformencoding.Unmarshal(response.Data, &models); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(models, tc.want) {
+				t.Fatalf("models=%v, want=%v", models, tc.want)
+			}
+		})
+	}
+}
 
 func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)

@@ -9,6 +9,8 @@ import (
 var marketplaceSourcePrefixes = map[string]string{
 	"Codex Plus": "Codex-Plus",
 	"Codex Pro":  "Codex-Pro",
+	"Grok":       "Grok",
+	"Gemini":     "Gemini",
 	"Codex 混合号池": "Codex-Mixed",
 	"CC-Max":     "CC-Max",
 	"CC-Kiro":    "CC-Kiro",

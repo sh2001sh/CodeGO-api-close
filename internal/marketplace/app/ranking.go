@@ -154,13 +154,7 @@ func GetMarketplaceGroup(slug string, windowHours, viewerUserID int) (*GroupList
 }
 
 func loadPublicGroupsBySlug(query GroupQuery, slug string) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel, error) {
-	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{}).Select(marketplaceGroupColumns()).Where("public_slug = ?", strings.TrimSpace(slug))
-	dbQuery = dbQuery.Where("lifecycle_status NOT IN ?", []string{marketplacedomain.LifecycleSuspended, marketplacedomain.LifecycleDisabled})
-	if query.ViewerUserID > 0 {
-		dbQuery = dbQuery.Where("visibility = ? OR owner_user_id = ?", marketplacedomain.VisibilityPublic, query.ViewerUserID)
-	} else {
-		dbQuery = dbQuery.Where("visibility = ?", marketplacedomain.VisibilityPublic)
-	}
+	dbQuery := publicGroupsQuery(query).Where("public_slug = ?", strings.TrimSpace(slug))
 	var groups []marketplaceschema.Group
 	if err := dbQuery.Limit(1).Find(&groups).Error; err != nil {
 		return nil, nil, err
@@ -188,11 +182,10 @@ func loadPublicGroupRows(query GroupQuery) ([]marketplaceschema.Group, error) {
 
 func publicGroupsQuery(query GroupQuery) *gorm.DB {
 	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{}).Select(marketplaceGroupColumns())
-	// Suspended and disabled channels are operationally unavailable and must
-	// not leak into public discovery, even when a status filter is supplied.
-	dbQuery = dbQuery.Where("lifecycle_status NOT IN ?", []string{
-		marketplacedomain.LifecycleSuspended,
-		marketplacedomain.LifecycleDisabled,
+	// Public discovery requires approval even for owners and explicit filters.
+	dbQuery = dbQuery.Where("verification_status = ? AND lifecycle_status IN ?", marketplacedomain.VerificationPassed, []string{
+		marketplacedomain.LifecycleActive,
+		marketplacedomain.LifecycleDegraded,
 	})
 	if query.ViewerUserID > 0 {
 		if query.IncludeAccess {

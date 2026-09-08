@@ -46,6 +46,7 @@ import {
   hasAnyCacheTokens,
   parseLogOther,
   getUsageLogGroupDisplayName,
+  getUsageLogRoutePoolName,
   isViolationFeeLog,
 } from '../../lib/format'
 import { getEffectiveTokenThroughput } from '../../lib/throughput'
@@ -521,6 +522,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       const other = parseLogOther(log.other)
       const displayName = sensitiveVisible ? tokenName : '••••'
       const group = getUsageLogGroupDisplayName(log.group, other)
+      const poolName = getUsageLogRoutePoolName(log.group, other)
 
       const metaParts: string[] = []
       const groupRatioText = getGroupRatioText(other)
@@ -557,8 +559,19 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             </Tooltip>
           </TooltipProvider>
           {metaParts.length > 0 && (
-            <span className='text-muted-foreground/60 truncate text-[11px]'>
+            <span
+              className='text-muted-foreground/60 truncate text-[11px]'
+              title={metaParts.join(' · ')}
+            >
               {metaParts.join(' · ')}
+            </span>
+          )}
+          {poolName && (
+            <span
+              className='text-muted-foreground truncate text-[11px]'
+              title={sensitiveVisible ? t(poolName) : undefined}
+            >
+              {t('路由池')}：{sensitiveVisible ? t(poolName) : '••••'}
             </span>
           )}
         </div>

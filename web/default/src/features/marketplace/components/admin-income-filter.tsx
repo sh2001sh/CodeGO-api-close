@@ -156,7 +156,7 @@ export function AdminIncomeFilter(props: {
           {report?.items.map((item) => (
             <div
               key={item.owner_user_id}
-              className='border-border grid grid-cols-2 gap-x-4 gap-y-1 border-b px-4 py-2.5 text-xs last:border-b-0 sm:grid-cols-[minmax(8rem,1fr)_repeat(4,minmax(6rem,auto))] sm:items-center'
+              className='border-border grid grid-cols-2 gap-x-4 gap-y-2 border-b px-4 py-2.5 text-xs last:border-b-0 lg:grid-cols-4 lg:items-center'
             >
               <label className='col-span-2 flex items-center gap-2 sm:col-span-1'>
                 <input
@@ -176,6 +176,14 @@ export function AdminIncomeFilter(props: {
               <ReportValue
                 label={t('收益')}
                 value={formatQuota(item.total_income)}
+              />
+              <ReportValue
+                label={t('当前可用额度')}
+                value={formatQuota(item.current_quota)}
+              />
+              <ReportValue
+                label={t('当前可回收额度')}
+                value={formatQuota(item.reclaimable_quota)}
               />
               <ReportValue
                 label={t('待结算')}

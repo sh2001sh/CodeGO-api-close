@@ -82,6 +82,16 @@ export async function getApiKey(id: number): Promise<ApiResponse<ApiKey>> {
   return res.data
 }
 
+export async function getApiKeyModels(id: number): Promise<string[]> {
+  const res = await api.get<ApiResponse<string[]>>(
+    `/api/user/models?token_id=${id}`
+  )
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.message || 'Failed to load models')
+  }
+  return res.data.data
+}
+
 // Create a new API key
 export async function createApiKey(
   data: ApiKeyFormData

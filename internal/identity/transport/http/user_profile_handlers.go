@@ -1,12 +1,15 @@
 package http
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +23,38 @@ func GetUserSelf(c *gin.Context) {
 }
 
 func GetUserModels(c *gin.Context) {
+	if rawID, supplied := c.GetQuery("token_id"); supplied {
+		tokenID, err := strconv.Atoi(rawID)
+		if err != nil || tokenID <= 0 {
+			httpapi.ApiError(c, fmt.Errorf("invalid token_id"))
+			return
+		}
+		token, err := identityapp.GetUserToken(c.GetInt("id"), tokenID)
+		if err != nil {
+			httpapi.ApiError(c, err)
+			return
+		}
+		models, err := tokenTestModels(token)
+		if err != nil {
+			httpapi.ApiError(c, err)
+			return
+		}
+		allowed := token.GetModelLimitsMap()
+		result := make([]string, 0, len(models))
+		seen := make(map[string]bool, len(models))
+		for _, model := range models {
+			if token.ModelLimitsEnabled && !allowed[gatewaystore.FormatMatchingModelName(model)] {
+				continue
+			}
+			if !seen[model] {
+				result = append(result, model)
+				seen[model] = true
+			}
+		}
+		sort.Strings(result)
+		httpapi.ApiSuccess(c, result)
+		return
+	}
 	group := strings.TrimSpace(c.Query("group"))
 	if marketplaceapp.IsMarketplaceRoutePoolTokenGroup(group) {
 		models, err := marketplaceapp.ListRoutePoolModels(c.GetInt("id"), marketplaceapp.RoutePoolIDFromTokenGroup(group))

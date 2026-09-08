@@ -40,6 +40,41 @@ func GetUserClaudeWalletQuota(userID int) (int, error) {
 	return balance, err
 }
 
+// GetUserClaudeWalletQuotas reads current spendable balances in batches, with the
+// same legacy fallback as GetUserClaudeWalletFunding for unbootstrapped wallets.
+func GetUserClaudeWalletQuotas(userIDs []int) (map[int]int64, error) {
+	result := make(map[int]int64, len(userIDs))
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+	var users []identityschema.User
+	if err := platformdb.DB.Unscoped().Select("id", "claude_quota").Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	for _, user := range users {
+		result[user.Id] = int64(user.ClaudeQuota)
+	}
+	var rows []struct {
+		OwnerID          int
+		AvailableBalance int64
+	}
+	accounts := (billingschema.BillingAccount{}).TableName()
+	snapshots := (billingschema.BillingBalanceSnapshot{}).TableName()
+	err := platformdb.DB.Table(accounts+" AS a").Select("a.owner_id, s.available_balance").
+		Joins("JOIN "+snapshots+" AS s ON s.account_id = a.account_id").
+		Where("a.owner_type = ? AND a.owner_id IN ? AND a.account_type = ? AND a.quota_unit = ?", billingOwnerTypeUser, userIDs, billingAccountTypeClaudeWallet, billingQuotaUnitQuota).Scan(&rows).Error
+	if err != nil {
+		if isMissingBillingSchema(err) {
+			return result, nil
+		}
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.OwnerID] = row.AvailableBalance
+	}
+	return result, nil
+}
+
 // GetUserClaudeWalletFunding returns the canonical wallet balance together with
 // its account id when the ledger has already been bootstrapped. Request-scoped
 // billing can reuse the id and avoid immediately reloading the same account.

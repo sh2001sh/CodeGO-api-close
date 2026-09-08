@@ -216,15 +216,18 @@ func TestReclaimAllIncludesMoreThanFiveThousandRecordsAndRespectsFilters(t *test
 		{RequestID: "outside-time", GroupID: "g", OwnerUserID: 10, OwnerNetAmount: 100, Status: statusReleased, CreatedAt: reference.Add(-time.Hour)},
 		{RequestID: "pending", GroupID: "g", OwnerUserID: 10, OwnerNetAmount: 100, Status: statusPending, CreatedAt: reference},
 	}).Error)
+	transfers := 0
 	RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, amount int, _ string) error {
+		transfers++
 		require.Equal(t, 10, owner)
-		require.Equal(t, 1, amount)
+		require.Equal(t, 5001, amount)
 		return nil
 	})
 	t.Cleanup(func() { RegisterReclaimHook(nil) })
 	result, err := ReclaimPending(ReleaseFilter{OwnerUserIDs: []int{10}, StartTimestamp: reference.Unix(), EndTimestamp: reference.Unix(), OperationID: "large-batch"})
 	require.NoError(t, err)
 	require.Equal(t, 5001, result.Count)
+	require.Equal(t, 1, transfers)
 	require.EqualValues(t, 5001, result.Amount)
 	var untouched int64
 	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Where("status <> ?", statusReclaimed).Count(&untouched).Error)

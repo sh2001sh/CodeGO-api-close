@@ -106,8 +106,8 @@ func TestRankingSnapshotsForFilteredPublicRequestRefreshesFullPublicMarket(t *te
 		{ID: "channel-b", ProviderType: "openai_compatible"},
 	}
 	groups := []marketplaceschema.Group{
-		{ID: "group-a", ChannelID: "channel-a", PublicSlug: "group-a", InternalGroupName: "market_group_a", Visibility: marketplacedomain.VisibilityPublic, LifecycleStatus: marketplacedomain.LifecycleActive},
-		{ID: "group-b", ChannelID: "channel-b", PublicSlug: "group-b", InternalGroupName: "market_group_b", Visibility: marketplacedomain.VisibilityPublic, LifecycleStatus: marketplacedomain.LifecycleActive},
+		{ID: "group-a", ChannelID: "channel-a", PublicSlug: "group-a", InternalGroupName: "market_group_a", Visibility: marketplacedomain.VisibilityPublic, LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed},
+		{ID: "group-b", ChannelID: "channel-b", PublicSlug: "group-b", InternalGroupName: "market_group_b", Visibility: marketplacedomain.VisibilityPublic, LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed},
 	}
 	require.NoError(t, db.Create(&channels).Error)
 	require.NoError(t, db.Create(&groups).Error)

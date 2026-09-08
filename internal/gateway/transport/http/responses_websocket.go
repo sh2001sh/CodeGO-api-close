@@ -22,6 +22,14 @@ import (
 
 const responsesWebsocketMaxDuration = 60 * time.Minute
 
+const responsesWebsocketRoutingContextKey = "responses_websocket_routing_context"
+
+type responsesWebsocketRoutingContext struct {
+	ChannelID int
+	KeyIndex  int
+	Routing   responsesBackgroundRoutingContext
+}
+
 var responsesWebsocketUpgrader = websocket.Upgrader{
 	CheckOrigin: func(*http.Request) bool { return true },
 }
@@ -106,6 +114,7 @@ func executeResponsesWebsocketTurn(parent *gin.Context, conn *websocket.Conn, se
 	writer := newResponsesWebsocketHTTPWriter(conn, cancelTurn)
 	c := newResponsesWebsocketTurnContext(parent, writer, turnCtx, upstreamSession, body)
 	defer platformhttpx.CleanupBodyStorage(c)
+	defer saveResponsesWebsocketRoutingContext(parent, c, upstreamSession)
 
 	middleware.ModelRequestRateLimitWithHandler(
 		middleware.DistributeWithHandler(func(c *gin.Context) {
@@ -131,6 +140,14 @@ func newResponsesWebsocketTurnContext(parent *gin.Context, writer http.ResponseW
 	c, _ := gin.CreateTestContext(writer)
 	c.Request = request
 	c.Keys = cloneGinContextKeys(parent.Keys)
+	if saved, exists := parent.Get(responsesWebsocketRoutingContextKey); exists && upstreamSession != nil {
+		if snapshot, ok := saved.(responsesWebsocketRoutingContext); ok {
+			channelID, keyIndex, bound := upstreamSession.Route()
+			if bound && channelID == snapshot.ChannelID && keyIndex == snapshot.KeyIndex {
+				applyResponsesRoutingContext(c, snapshot.Routing)
+			}
+		}
+	}
 	responsesws.Attach(c, upstreamSession)
 	responsesws.ApplyRoutePin(c, upstreamSession)
 	requestID := platformruntime.GetTimeString() + platformruntime.GetRandomString(8)
@@ -142,6 +159,27 @@ func newResponsesWebsocketTurnContext(parent *gin.Context, writer http.ResponseW
 	requestContext = context.WithValue(requestContext, constant.TraceIdKey, traceID)
 	c.Request = c.Request.WithContext(requestContext)
 	return c
+}
+
+// Keep only the final pinned route, never a previous turn's reservation, retry
+// budget, candidate list or request audit. An unbound session selects afresh.
+func saveResponsesWebsocketRoutingContext(parent, turn *gin.Context, session *responsesws.Session) {
+	if session == nil {
+		return
+	}
+	channelID, keyIndex, bound := session.Route()
+	if !bound {
+		parent.Set(responsesWebsocketRoutingContextKey, nil)
+		return
+	}
+	// A rejected turn can fail before channel setup. Keep the last valid route
+	// while the upstream session is still pinned to it.
+	if channelID != httpctx.GetContextKeyInt(turn, constant.ContextKeyChannelId) {
+		return
+	}
+	parent.Set(responsesWebsocketRoutingContextKey, responsesWebsocketRoutingContext{
+		ChannelID: channelID, KeyIndex: keyIndex, Routing: snapshotResponsesRoutingContext(turn),
+	})
 }
 
 func cloneResponsesWebsocketTurnHeaders(source http.Header) http.Header {

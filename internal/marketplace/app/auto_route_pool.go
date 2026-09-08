@@ -321,9 +321,10 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 		return nil, err
 	}
 	type scoredBinding struct {
-		binding  RoutingBinding
-		score    float64
-		priority int
+		binding        RoutingBinding
+		marketScore    float64
+		hasMarketScore bool
+		priority       int
 	}
 	candidates := make([]scoredBinding, 0, len(selected))
 	overLimitCount := 0
@@ -345,7 +346,7 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 			overLimitCount++
 			continue
 		}
-		_, score := autoRouteMetrics(group, snapshots[group.ID], config)
+		snapshot := snapshots[group.ID]
 		internalChannelID := 0
 		if channel.InternalChannelID != nil {
 			internalChannelID = *channel.InternalChannelID
@@ -360,7 +361,8 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 				ModelPrices: decodeChannelModelPrices(channel.ModelPrices),
 				Models:      decodeModels(channel.DeclaredModels),
 			},
-			score: score, priority: priority,
+			marketScore: snapshot.Score, hasMarketScore: snapshot.RequestCount > 0 && !snapshot.Observing,
+			priority: priority,
 		})
 	}
 	for _, item := range loadOfficialAutoRouteItemsForSelection(ownerUserID, selected) {
@@ -380,7 +382,7 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 				Multiplier:       item.Multiplier,
 				Models:           item.Models,
 			},
-			score: item.RouteScore, priority: priority,
+			priority: priority,
 		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -390,10 +392,16 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 		if config.Strategy == "cost" && candidates[i].binding.Multiplier != candidates[j].binding.Multiplier {
 			return candidates[i].binding.Multiplier < candidates[j].binding.Multiplier
 		}
-		if candidates[i].score != candidates[j].score {
-			return candidates[i].score < candidates[j].score
+		if config.Strategy == "score" {
+			// Keep request routing aligned with the score and observation state shown in the marketplace ranking.
+			if candidates[i].hasMarketScore != candidates[j].hasMarketScore {
+				return candidates[i].hasMarketScore
+			}
+			if candidates[i].hasMarketScore && candidates[i].marketScore != candidates[j].marketScore {
+				return candidates[i].marketScore > candidates[j].marketScore
+			}
 		}
-		return candidates[i].binding.GroupID < candidates[j].binding.GroupID
+		return candidates[i].binding.RouteKey < candidates[j].binding.RouteKey
 	})
 	bindings := make([]RoutingBinding, 0, len(candidates))
 	for _, candidate := range candidates {

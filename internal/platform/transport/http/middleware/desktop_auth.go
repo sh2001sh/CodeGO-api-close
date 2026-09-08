@@ -107,7 +107,11 @@ func DesktopAuth() func(c *gin.Context) {
 		c.Set("desktop_device_scopes", identityapp.ParseDesktopScopes(device.Scopes))
 		c.Set("desktop_device", device)
 		c.Set("use_access_token", true)
-		if !enforceGlobalAuthenticatedAPIRateLimit(c) {
+		// Read-only desktop dashboard queries are already authenticated and are
+		// polled by the client. Do not let a stale session or a shared device
+		// exhaust the API limiter for normal page reads; write operations remain
+		// subject to the authenticated limiter.
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && !enforceGlobalAuthenticatedAPIRateLimit(c) {
 			return
 		}
 		c.Next()

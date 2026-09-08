@@ -271,12 +271,13 @@ func DeleteRoutePool(ownerUserID int, poolID string) error {
 	})
 }
 
-func ResolveRoutePoolBindings(ownerUserID int, poolID, modelName string, multiplierLimit float64) ([]RoutingBinding, error) {
+func ResolveRoutePoolBindings(ownerUserID int, poolID, modelName string, multiplierLimit float64) ([]RoutingBinding, string, error) {
 	pool, selected, err := loadRoutePool(ownerUserID, poolID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return resolveRoutePoolBindings(ownerUserID, selected, routePoolConfig(pool), modelName, multiplierLimit)
+	bindings, err := resolveRoutePoolBindings(ownerUserID, selected, routePoolConfig(pool), modelName, multiplierLimit)
+	return bindings, pool.Name, err
 }
 
 func HasRoutePool(ownerUserID int, poolID string) bool {

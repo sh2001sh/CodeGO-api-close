@@ -20,6 +20,9 @@ type GroupModelRequestStatus struct {
 // GetMarketplaceGroupModelStatus shares the overview's cached group/model scan.
 // Visibility is checked before reading statistics, including on cache hits.
 func GetMarketplaceGroupModelStatus(slug string, viewerUserID int) ([]GroupModelRequestStatus, error) {
+	if strings.HasPrefix(slug, officialAutoRoutePrefix) {
+		return getOfficialGroupModelStatus(strings.TrimPrefix(slug, officialAutoRoutePrefix), viewerUserID)
+	}
 	var group marketplaceschema.Group
 	if err := publicGroupsQuery(GroupQuery{ViewerUserID: viewerUserID, IncludeAccess: viewerUserID > 0}).
 		Where("public_slug = ?", slug).First(&group).Error; err != nil {

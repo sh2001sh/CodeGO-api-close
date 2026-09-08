@@ -181,14 +181,16 @@ type AdminOwnerIncomeReleaseResult struct {
 }
 
 type AdminOwnerIncomeItem struct {
-	OwnerUserID     int    `json:"owner_user_id"`
-	OwnerExternalID string `json:"owner_external_id"`
-	RequestCount    int64  `json:"request_count"`
-	TotalIncome     int64  `json:"total_income"`
-	PendingIncome   int64  `json:"pending_income"`
-	ReleasedIncome  int64  `json:"released_income"`
-	ReclaimedIncome int64  `json:"reclaimed_income"`
-	ForfeitedIncome int64  `json:"forfeited_income"`
+	CurrentQuota     int64  `json:"current_quota"`
+	ReclaimableQuota int64  `json:"reclaimable_quota"`
+	OwnerUserID      int    `json:"owner_user_id"`
+	OwnerExternalID  string `json:"owner_external_id"`
+	RequestCount     int64  `json:"request_count"`
+	TotalIncome      int64  `json:"total_income"`
+	PendingIncome    int64  `json:"pending_income"`
+	ReleasedIncome   int64  `json:"released_income"`
+	ReclaimedIncome  int64  `json:"reclaimed_income"`
+	ForfeitedIncome  int64  `json:"forfeited_income"`
 }
 
 type AdminOwnerIncomeResult struct {

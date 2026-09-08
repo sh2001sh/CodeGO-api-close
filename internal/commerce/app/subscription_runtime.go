@@ -165,7 +165,7 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 			upgradeGroup = strings.TrimSpace(sub.UpgradeGroup)
 		}
 		if preview != nil {
-			if err := awardMonthlyPassPurchasePropTx(tx, order.UserId, plan, preview, fmt.Sprintf("monthly-pass-order:%d", order.Id)); err != nil {
+			if err := awardMonthlyPassPurchasePropTx(tx, order.UserId, plan, preview, order.Money, fmt.Sprintf("monthly-pass-order:%d", order.Id)); err != nil {
 				return err
 			}
 		}

@@ -30,7 +30,7 @@ export function AdminOwnerIncomePanel(props: {
     selectedIDs.includes(item.owner_user_id)
   )
   const available = selected.reduce(
-    (sum, item) => sum + item.released_income,
+    (sum, item) => sum + item.reclaimable_quota,
     0
   )
 
@@ -58,7 +58,7 @@ export function AdminOwnerIncomePanel(props: {
       return
     }
     if (maxAmount && maxAmount > available) {
-      toast.error(t('输入金额超过所选渠道主的可回收收益'))
+      toast.error(t('输入金额超过所选渠道主当前可回收额度'))
       return
     }
     const scope = `${props.range.start?.toLocaleString() ?? t('不限开始时间')} — ${props.range.end?.toLocaleString() ?? t('不限结束时间')}`

@@ -45,6 +45,7 @@ export type ApiKeyGroupOption = {
   subscriptionRatio?: number
   successRate?: number | null
   requestCount?: number
+  avgTTFTMs?: number
   category?:
     | 'official'
     | 'marketplace'
@@ -121,6 +122,11 @@ function GroupRatioBadges({ option }: { option?: ApiKeyGroupOption }) {
       {option.successRate != null && option.requestCount !== 0 && (
         <Badge variant='outline' className='shrink-0 text-[10px] sm:text-xs'>
           成功率 {option.successRate.toFixed(1)}%
+        </Badge>
+      )}
+      {option.avgTTFTMs != null && option.requestCount !== 0 && (
+        <Badge variant='outline' className='shrink-0 text-[10px] sm:text-xs'>
+          首字 {(option.avgTTFTMs / 1000).toFixed(2)}s
         </Badge>
       )}
       <MappingStatusBadge option={option} />

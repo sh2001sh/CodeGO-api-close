@@ -28,6 +28,9 @@ export interface KeyGroupOptionResponse {
   mapping_status?: ApiKeyGroupOption['mappingStatus']
   models: string[]
   member_count?: number
+  success_rate?: number
+  avg_ttft_ms?: number
+  request_count?: number
 }
 
 export function toApiKeyGroupOptions(
@@ -47,5 +50,8 @@ export function toApiKeyGroupOptions(
     mappingStatus: option.mapping_status,
     category: option.category,
     models: option.models,
+    successRate: option.success_rate,
+    avgTTFTMs: option.avg_ttft_ms,
+    requestCount: option.request_count,
   }))
 }

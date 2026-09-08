@@ -22,6 +22,9 @@ type KeyGroupOption struct {
 	MappingStatus          string   `json:"mapping_status,omitempty"`
 	Models                 []string `json:"models"`
 	MemberCount            int      `json:"member_count,omitempty"`
+	SuccessRate            *float64 `json:"success_rate,omitempty"`
+	AvgTTFTMs              *float64 `json:"avg_ttft_ms,omitempty"`
+	RequestCount           int64    `json:"request_count,omitempty"`
 }
 
 func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
@@ -60,6 +63,9 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 		return nil, err
 	}
 	options := make([]KeyGroupOption, 0, len(groups))
+	// Statistics are optional selector metadata. A cold install may not have
+	// the snapshot table yet; group selection must still work without it.
+	snapshots, _ := rankingSnapshotsForList(groups, channelsByID, 24)
 	modelsByGroup := make(map[string][]string, len(groups))
 	for _, group := range groups {
 		channel, exists := channelsByID[group.ChannelID]
@@ -74,12 +80,19 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 		if price := prices[channel.ID]; userID != group.OwnerUserID && price > 0 {
 			multiplier = marketplacedomain.NormalizeMultiplier(price)
 		}
-		options = append(options, KeyGroupOption{
+		option := KeyGroupOption{
 			Value: "market:" + group.ID, Label: label, Category: "marketplace",
 			Multiplier: &multiplier, Models: models, MappingStatus: channel.GPT56MappingStatus,
 			SubscriptionEnabled:    group.CreditPoolPolicy == marketplacedomain.CreditPolicySubscriptionAndUniversal,
 			SubscriptionMultiplier: marketplacedomain.SubscriptionMultiplier(multiplier),
-		})
+		}
+		if snapshot, ok := snapshots[group.ID]; ok && snapshot.RequestCount > 0 {
+			successRate, ttft := snapshot.RawSuccessRate, snapshot.AvgTTFTMs
+			option.SuccessRate = &successRate
+			option.AvgTTFTMs = &ttft
+			option.RequestCount = snapshot.RequestCount
+		}
+		options = append(options, option)
 		if channel.InternalChannelID != nil && len(models) > 0 && group.SourceType == marketplacedomain.SourceTypeMarketplaceUser {
 			modelsByGroup[group.ID] = models
 		}

@@ -104,6 +104,29 @@ export function AdminChannelActions(props: {
           {verificationPause.isPending ? t('正在暂停') : t('暂停检测')}
         </Button>
       )}
+      {['active', 'degraded'].includes(channel.lifecycle_status) && (
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={channelMutations.adminPause.isPending}
+          onClick={() =>
+            channelMutations.adminPause.mutate(
+              { id: channel.id, paused: true },
+              {
+                onSuccess: () =>
+                  toast.success(t('渠道已暂停，冻结额度已保留')),
+                onError: (error) =>
+                  toast.error(
+                    error instanceof Error ? error.message : t('暂停渠道失败')
+                  ),
+              }
+            )
+          }
+        >
+          <CirclePause />
+          {t('暂停渠道（保留额度）')}
+        </Button>
+      )}
       <Button
         variant='outline'
         size='sm'

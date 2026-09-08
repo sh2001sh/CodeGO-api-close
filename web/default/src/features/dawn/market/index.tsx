@@ -31,6 +31,7 @@ import {
   getMarketplaceRoutePools,
   startMarketplaceBatchTest,
 } from '@/features/marketplace/api'
+import { OfficialMarketGroups } from '@/features/marketplace/components/official-market-groups'
 import {
   useMarketplaceAutoRoutePool,
   useMarketplaceGroups,
@@ -40,7 +41,6 @@ import {
   useReadMarketplaceMultiplierNotice,
 } from '@/features/marketplace/hooks'
 import { MARKETPLACE_SOURCE_OPTIONS } from '@/features/marketplace/lib/channel-form'
-import { OfficialMarketGroups } from '@/features/marketplace/components/official-market-groups'
 import { MOCK_MARKETPLACE_GROUPS } from '@/features/marketplace/lib/mock-data'
 import type {
   GroupFilters,
@@ -81,7 +81,11 @@ export function DawnMarket() {
   const readMultiplierNotice = useReadMarketplaceMultiplierNotice()
   useEffect(() => {
     for (const notice of multiplierNotices.data ?? []) {
-      toast.info(notice.cleared ? `专属倍率已清除：${notice.channel_name}` : `专属倍率已更新：${notice.channel_name} · ${notice.multiplier}×`)
+      toast.info(
+        notice.cleared
+          ? `专属倍率已清除：${notice.channel_name}`
+          : `专属倍率已更新：${notice.channel_name} · ${notice.multiplier}×`
+      )
       void readMultiplierNotice.mutateAsync(notice.id)
     }
   }, [multiplierNotices.data])
@@ -107,7 +111,10 @@ export function DawnMarket() {
 
   useEffect(() => {
     if (filters.page <= 1) return
-    marketListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    marketListRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
   }, [filters.page])
 
   useEffect(() => {
@@ -184,20 +191,38 @@ export function DawnMarket() {
       string,
       Record<
         string,
-        { mode: 'free' | 'percall' | 'token'; input: string; output: string; cache: string }
+        {
+          mode: 'free' | 'percall' | 'token'
+          input: string
+          output: string
+          cache: string
+        }
       >
     >()
     groups.forEach((group) => {
       const multiplier = group.multiplier || 1
       const map: Record<
         string,
-        { mode: 'free' | 'percall' | 'token'; input: string; output: string; cache: string }
+        {
+          mode: 'free' | 'percall' | 'token'
+          input: string
+          output: string
+          cache: string
+        }
       > = {}
       group.models.forEach((name) => {
         const model = modelsByName.get(name)
         if (!model) return
-        if (model.quota_type === QUOTA_TYPE_VALUES.TOKEN && model.model_ratio === 0) {
-          map[name] = { mode: 'free', input: '免费', output: '免费', cache: '—' }
+        if (
+          model.quota_type === QUOTA_TYPE_VALUES.TOKEN &&
+          model.model_ratio === 0
+        ) {
+          map[name] = {
+            mode: 'free',
+            input: '免费',
+            output: '免费',
+            cache: '—',
+          }
           return
         }
         if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
@@ -214,11 +239,13 @@ export function DawnMarket() {
         if (!Number.isFinite(input) || input <= 0) return
         const output = input * (model.completion_ratio || 1)
         const cacheWrite =
-          model.create_cache_ratio != null && Number.isFinite(Number(model.create_cache_ratio))
+          model.create_cache_ratio != null &&
+          Number.isFinite(Number(model.create_cache_ratio))
             ? input * Number(model.create_cache_ratio)
             : null
         const cacheRead =
-          model.cache_ratio != null && Number.isFinite(Number(model.cache_ratio))
+          model.cache_ratio != null &&
+          Number.isFinite(Number(model.cache_ratio))
             ? input * Number(model.cache_ratio)
             : null
         map[name] = {
@@ -405,7 +432,10 @@ export function DawnMarket() {
 
         {perspective === 'user' ? (
           <div className='cols'>
-            <div ref={marketListRef} style={{ gridColumn: '1 / -1', scrollMarginTop: 20 }}>
+            <div
+              ref={marketListRef}
+              style={{ gridColumn: '1 / -1', scrollMarginTop: 20 }}
+            >
               <div className='filters'>
                 <input
                   placeholder='输入模型 ID，如 gpt-6-astra'
@@ -418,7 +448,12 @@ export function DawnMarket() {
                   aria-label='市场排序'
                   onChange={(event) => {
                     const [sort, direction] = event.target.value.split(':')
-                    setFilters((current) => ({ ...current, sort, direction, page: 1 }))
+                    setFilters((current) => ({
+                      ...current,
+                      sort,
+                      direction,
+                      page: 1,
+                    }))
                   }}
                 >
                   <option value='score:desc'>综合评分</option>
@@ -430,44 +465,34 @@ export function DawnMarket() {
                   <option value='requests:desc'>调用次数最多</option>
                   <option value='name:asc'>名称首字母</option>
                 </select>
-                <button
-                  className={`fbtn${filters.source === '' ? ' on' : ''}`}
-                  onClick={() =>
+                <select
+                  className='fsel market-source-filter'
+                  value={filters.source}
+                  aria-label='市场来源'
+                  onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
-                      source: '',
+                      source: event.target.value,
                       page: 1,
                     }))
                   }
                 >
-                  全部
-                </button>
-                {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
-                  <button
-                    key={source}
-                    className={`fbtn${filters.source === source ? ' on' : ''}`}
-                    onClick={() =>
-                      setFilters((current) => ({ ...current, source, page: 1 }))
-                    }
-                  >
-                    {source}
-                  </button>
-                ))}
-                {import.meta.env.DEV && (
-                  <button
-                    className={`fbtn${mockMode ? ' on' : ''}`}
-                    onClick={() => setMockMode((current) => !current)}
-                  >
-                    {mockMode ? '示例数据：开' : '示例数据'}
-                  </button>
-                )}
-                <span
-                  style={{
-                    marginLeft: 'auto',
-                    display: 'inline-flex',
-                    gap: 10,
-                  }}
-                >
+                  <option value=''>全部来源</option>
+                  {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  ))}
+                </select>
+                <div className='market-actions'>
+                  {import.meta.env.DEV && (
+                    <button
+                      className={mockMode ? 'fbtn on' : 'fbtn'}
+                      onClick={() => setMockMode((current) => !current)}
+                    >
+                      {mockMode ? '示例数据：开' : '示例数据'}
+                    </button>
+                  )}
                   <button
                     className='btn primary'
                     onClick={() => {
@@ -496,12 +521,15 @@ export function DawnMarket() {
                     <Sparkles size={14} />
                     自动构建
                   </button>
-                </span>
+                </div>
               </div>
             </div>
 
             <div>
-              <OfficialMarketGroups poolID={activePoolID} enabled={authed && !mockMode} />
+              <OfficialMarketGroups
+                poolID={activePoolID}
+                enabled={authed && !mockMode}
+              />
               {groupsQuery.isLoading ? (
                 <div className='empty'>
                   <span className='eic'>
@@ -575,7 +603,13 @@ export function DawnMarket() {
                           value={filters.page}
                           aria-label='跳转页码'
                           onChange={(event) => {
-                            const page = Math.max(1, Math.min(totalPages, Number(event.target.value) || 1))
+                            const page = Math.max(
+                              1,
+                              Math.min(
+                                totalPages,
+                                Number(event.target.value) || 1
+                              )
+                            )
                             setFilters((current) => ({ ...current, page }))
                           }}
                         />

@@ -420,6 +420,17 @@ For commercial licensing, please contact support@quantumnous.com.
   outline: none;
 }
 
+.dawn .market-source-filter {
+  min-width: 132px;
+}
+
+.dawn .market-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
 /* ── 双栏 ── */
 .dawn .cols {
   display: grid;
@@ -1166,6 +1177,72 @@ For commercial licensing, please contact support@quantumnous.com.
 
 .dawn .gcard.sel .selhint {
   display: inline-flex;
+}
+
+/* Official groups share the marketplace card language instead of a separate panel. */
+.dawn .official-market-groups {
+  margin-bottom: 18px;
+}
+
+.dawn .official-market-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 4px 0 10px;
+}
+
+.dawn .official-market-heading span {
+  display: block;
+  color: var(--dawn-ink);
+  font-family: var(--dawn-disp);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.dawn .official-market-heading p,
+.dawn .official-source,
+.dawn .official-pool-hint {
+  margin: 3px 0 0;
+  color: var(--dawn-ink2);
+  font-size: 11px;
+}
+
+.dawn .official-market-heading > b {
+  color: var(--dawn-copper);
+  font-family: var(--dawn-mono);
+  font-size: 13px;
+}
+
+.dawn .official-gcard {
+  cursor: default;
+}
+
+.dawn .official-gcard .top > div:nth-child(2) {
+  min-width: 0;
+}
+
+.dawn .official-model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dawn .official-chevron-open {
+  transform: rotate(180deg);
+}
+
+.dawn .official-pool-hint {
+  margin: -6px 0 12px;
+}
+
+.dawn .official-pool-retry {
+  margin: -6px 0 12px;
+}
+
+.dawn .official-market-empty {
+  margin-top: 0;
+  margin-bottom: 16px;
 }
 
 /* ═══════════ 路由池工作台 ═══════════ */
@@ -3348,12 +3425,26 @@ For commercial licensing, please contact support@quantumnous.com.
     overflow: hidden;
   }
   .dawn .filters {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    padding-bottom: 4px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    overflow: visible;
   }
   .dawn .filters input {
-    min-width: 220px;
+    min-width: 0;
+  }
+  .dawn .market-actions {
+    grid-column: 1 / -1;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .dawn .market-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+  .dawn .market-actions .fbtn {
+    flex-basis: 100%;
+    justify-content: center;
   }
 
   .dawn .status-filters {

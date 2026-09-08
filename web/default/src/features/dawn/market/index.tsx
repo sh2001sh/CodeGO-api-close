@@ -31,7 +31,6 @@ import {
   getMarketplaceRoutePools,
   startMarketplaceBatchTest,
 } from '@/features/marketplace/api'
-import { OfficialMarketGroups } from '@/features/marketplace/components/official-market-groups'
 import {
   useMarketplaceAutoRoutePool,
   useMarketplaceGroups,
@@ -526,10 +525,6 @@ export function DawnMarket() {
             </div>
 
             <div>
-              <OfficialMarketGroups
-                poolID={activePoolID}
-                enabled={authed && !mockMode}
-              />
               {groupsQuery.isLoading ? (
                 <div className='empty'>
                   <span className='eic'>
@@ -546,6 +541,25 @@ export function DawnMarket() {
                 />
               ) : groups.length ? (
                 <>
+                  {filters.search && (
+                    <div className='market-search-status' role='status'>
+                      搜索“{filters.search}”找到{' '}
+                      {groupsQuery.data?.total ?? groups.length} 个分组
+                      <button
+                        className='btn mini'
+                        onClick={() => {
+                          setSearch('')
+                          setFilters((current) => ({
+                            ...current,
+                            search: '',
+                            page: 1,
+                          }))
+                        }}
+                      >
+                        清除搜索
+                      </button>
+                    </div>
+                  )}
                   {groups.map((group) => (
                     <MarketGroupCard
                       key={group.id}
@@ -646,8 +660,31 @@ export function DawnMarket() {
                   <span className='eic'>
                     <Store size={20} />
                   </span>
-                  <b>市场分组上架中</b>
-                  <span>渠道检测通过后自动上架</span>
+                  <b>
+                    {filters.search
+                      ? `没有找到与“${filters.search}”匹配的分组`
+                      : '市场分组上架中'}
+                  </b>
+                  <span>
+                    {filters.search
+                      ? '请尝试其他关键词或清除搜索条件'
+                      : '渠道检测通过后自动上架'}
+                  </span>
+                  {filters.search && (
+                    <button
+                      className='btn mini'
+                      onClick={() => {
+                        setSearch('')
+                        setFilters((current) => ({
+                          ...current,
+                          search: '',
+                          page: 1,
+                        }))
+                      }}
+                    >
+                      清除搜索
+                    </button>
+                  )}
                 </div>
               )}
             </div>

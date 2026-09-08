@@ -104,10 +104,11 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		recent := series[groupIndices[name]]
 		items = append(items, GroupListItem{
 			ID: key, PublicSlug: key, SystemDisplayName: name,
-			SourceType: marketplacedomain.SourceTypeOfficial, SourceLabel: name,
+			SourceType: marketplacedomain.SourceTypeOfficial, SourceLabel: "官方", Multiplier: 1,
 			LifecycleStatus: marketplacedomain.LifecycleActive, Models: models[name],
 			ModelVerificationResults: []ModelVerificationResult{}, GPT56MappingResults: []GPT56MappingResult{},
-			RequestCount: summary.RequestCount, SuccessRate: summary.SuccessRate, CacheHitRate: summary.CacheHitRate,
+			RequestCount: summary.RequestCount, SuccessRate: summary.SuccessRate, WilsonSuccessRate: summary.SuccessRate,
+			Score: summary.SuccessRate*0.35 + inverseMetricScore(1, 3)*0.2, CacheHitRate: summary.CacheHitRate,
 			RecentRequestSeries: recent, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 			LatestRequestStatus: latestRequestStatus(recent),
 		})

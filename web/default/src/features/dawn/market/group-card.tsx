@@ -51,6 +51,7 @@ export function MarketGroupCard(props: {
   >
 }) {
   const { group } = props
+  const isOfficial = group.source_type === 'official'
   const hasTraffic = group.request_count > 0
   const health = classifyRequestHealth(group.success_rate, group.request_count)
   const lifecycleOn = group.lifecycle_status === 'active'
@@ -274,17 +275,17 @@ export function MarketGroupCard(props: {
       <RecentRequestStrip group={group} />
 
       <div className='gact' onClick={(event) => event.stopPropagation()}>
-        {lifecycleOn && props.authed && (
+        {!isOfficial && lifecycleOn && props.authed && (
           <button className='btn mini' onClick={() => props.onBindKey(group)}>
             绑定 Key
           </button>
         )}
-        {props.authed && (
+        {!isOfficial && props.authed && (
           <button className='btn mini' onClick={() => props.onTest(group)}>
             连通性测试
           </button>
         )}
-        {lifecycleOn && props.authed && (
+        {!isOfficial && lifecycleOn && props.authed && (
           <button className='btn mini' onClick={() => props.onBargain(group)}>
             砍价
           </button>

@@ -84,6 +84,28 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		}
 	}
 	items := filterAndSortGroups(groups, channels, snapshots, recentSeries, query)
+	// Official routing groups participate in the same filtering, sorting and
+	// pagination pipeline as marketplace groups so users can compare every
+	// available source in one ranked list.
+	if official, err := listOfficialGroupStatus(query.ViewerUserID); err != nil {
+		return nil, err
+	} else {
+		for _, item := range official {
+			if matchesGroupListItemQuery(item, query) {
+				items = append(items, item)
+			}
+		}
+		sortGroupItems(items, query.Sort, query.Direction)
+		rank := 0
+		for index := range items {
+			if items[index].Observing {
+				items[index].Rank = 0
+				continue
+			}
+			rank++
+			items[index].Rank = rank
+		}
+	}
 	highlights := marketplaceHighlights(items)
 	total := len(items)
 	ranked := 0
@@ -101,6 +123,29 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	marketplaceListCache.at, marketplaceListCache.key, marketplaceListCache.result = time.Now(), cacheKey, result
 	marketplaceListCache.Unlock()
 	return result, nil
+}
+
+func matchesGroupListItemQuery(item GroupListItem, query GroupQuery) bool {
+	search := strings.ToLower(strings.TrimSpace(query.Search))
+	if search != "" {
+		haystack := strings.ToLower(strings.Join(append([]string{item.ID, item.PublicSlug, item.SystemDisplayName, item.SourceLabel, item.ProviderType}, item.Models...), " "))
+		if !strings.Contains(haystack, search) {
+			return false
+		}
+	}
+	if query.Model != "" && !containsSubstringFold(item.Models, query.Model) {
+		return false
+	}
+	if query.Source != "" && !strings.EqualFold(item.SourceLabel, query.Source) {
+		return false
+	}
+	if query.Provider != "" && !strings.EqualFold(item.ProviderType, query.Provider) {
+		return false
+	}
+	if query.Status != "" && !strings.EqualFold(item.LifecycleStatus, query.Status) {
+		return false
+	}
+	return true
 }
 
 func filterGroupsBySource(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, source string) ([]marketplaceschema.Group, map[string]marketplaceschema.Channel) {

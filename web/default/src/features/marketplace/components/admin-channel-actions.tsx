@@ -13,6 +13,7 @@ import {
   useMarketplaceMutations,
 } from '../hooks'
 import { failedConnectivityModels, hasGPT56Model } from '../lib/verification'
+import { isImageGenerationModel } from '../lib/model-capabilities'
 import type { MarketplaceChannel } from '../types'
 
 export function AdminChannelActions(props: {
@@ -30,18 +31,25 @@ export function AdminChannelActions(props: {
   const failedCount = failedConnectivityModels(
     channel.model_verification_results
   ).length
+  const verifiableDeclaredCount = channel.declared_models.filter(
+    (model) => !isImageGenerationModel(model)
+  ).length
+  const retryConnectivity =
+    failedCount > 0 ||
+    (channel.connectivity_test_status === 'failed' && verifiableDeclaredCount > 0)
+  const retryConnectivityCount = failedCount > 0 ? failedCount : verifiableDeclaredCount
   const connectivityRunning = ['queued', 'running'].includes(
     channel.connectivity_test_status
   )
 
   const runConnectivityTest = () => {
-    const mutation = failedCount > 0 ? connectivityRetry : connectivityTest
+    const mutation = retryConnectivity ? connectivityRetry : connectivityTest
     mutation.mutate(channel.id, {
       onSuccess: () =>
         toast.info(
-          failedCount > 0
+          retryConnectivity
             ? t('正在重新测试 {{count}} 个失败模型', {
-                count: failedCount,
+                count: retryConnectivityCount,
               })
             : t('模型连通性测试已开始，页面会自动更新结果')
         ),
@@ -81,8 +89,8 @@ export function AdminChannelActions(props: {
         <Activity />
         {connectivityRunning
           ? t('测试中')
-          : failedCount > 0
-            ? t('重试失败模型（{{count}}）', { count: failedCount })
+          : retryConnectivity
+            ? t('重试失败模型（{{count}}）', { count: retryConnectivityCount })
             : t('测试连通性')}
       </Button>
       {isVerificationRunning(channel) && (

@@ -199,8 +199,9 @@ func QueueFailedConnectivityTests(channelID string) error {
 	if err != nil {
 		return err
 	}
+	declared := verifiableMarketplaceModels(decodeModels(channel.DeclaredModels))
 	previous := decodeModelVerificationResults(channel.ModelVerificationResults)
-	failed := failedModelVerificationModels(verifiableMarketplaceModels(decodeModels(channel.DeclaredModels)), previous)
+	failed := retryableConnectivityModels(declared, previous, channel.ConnectivityTestStatus)
 	if len(failed) == 0 {
 		return errors.New("没有可重试的失败模型")
 	}

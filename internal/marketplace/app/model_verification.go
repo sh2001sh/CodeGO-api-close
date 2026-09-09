@@ -94,6 +94,22 @@ func failedModelVerificationModels(declared []string, results []ModelVerificatio
 	return failed
 }
 
+// retryableConnectivityModels returns failed models from the latest run. If a
+// channel-level failure happened before per-model probing produced any
+// results, retry all declared models so the channel can recover from transient
+// URL, credential, or upstream model-list failures.
+func retryableConnectivityModels(
+	declared []string,
+	results []ModelVerificationResult,
+	connectivityStatus string,
+) []string {
+	failed := failedModelVerificationModels(declared, results)
+	if len(failed) == 0 && connectivityStatus == marketplacedomain.VerificationFailed {
+		return normalizeModels(declared)
+	}
+	return failed
+}
+
 func retainModelVerificationResults(declared []string, results []ModelVerificationResult, retried []string) []ModelVerificationResult {
 	retriedModels := make(map[string]struct{}, len(retried))
 	for _, model := range retried {

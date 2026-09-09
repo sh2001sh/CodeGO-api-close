@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useMarketplaceMutations } from '../hooks'
 import { failedConnectivityModels, hasGPT56Model } from '../lib/verification'
+import { isImageGenerationModel } from '../lib/model-capabilities'
 import type { MarketplaceChannel } from '../types'
 
 export function OwnerChannelActions(props: {
@@ -32,6 +33,14 @@ export function OwnerChannelActions(props: {
   const failedConnectivityCount = failedConnectivityModels(
     channel.model_verification_results
   ).length
+  const verifiableDeclaredCount = channel.declared_models.filter(
+    (model) => !isImageGenerationModel(model)
+  ).length
+  const retryConnectivity =
+    failedConnectivityCount > 0 ||
+    (channel.connectivity_test_status === 'failed' && verifiableDeclaredCount > 0)
+  const retryConnectivityCount =
+    failedConnectivityCount > 0 ? failedConnectivityCount : verifiableDeclaredCount
   const verificationRunning =
     ['queued', 'running'].includes(channel.gpt56_mapping_status) ||
     ['queued', 'running'].includes(channel.connectivity_test_status)
@@ -153,7 +162,7 @@ export function OwnerChannelActions(props: {
         size='sm'
         onClick={() =>
           void act(
-            failedConnectivityCount > 0
+            retryConnectivity
               ? 'retry-connectivity'
               : 'test-connectivity'
           )
@@ -172,9 +181,9 @@ export function OwnerChannelActions(props: {
         />
         {['queued', 'running'].includes(channel.connectivity_test_status)
           ? t('测试中')
-          : failedConnectivityCount > 0
+          : retryConnectivity
             ? t('重试失败模型（{{count}}）', {
-                count: failedConnectivityCount,
+                count: retryConnectivityCount,
               })
             : t('测试连通性')}
       </Button>

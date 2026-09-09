@@ -45,3 +45,32 @@ func TestModelVerificationResultsRetainSuccessfulModelsWhenAddingModel(t *testin
 	require.Equal(t, "gpt-5", retained[0].Model)
 	require.Equal(t, marketplacedomain.ModelVerificationPassed, retained[0].Status)
 }
+
+func TestRetryableConnectivityModelsRetriesFailedModels(t *testing.T) {
+	results := []ModelVerificationResult{
+		{Model: "gpt-5", Listed: true, Status: marketplacedomain.ModelVerificationPassed},
+		{Model: "gpt-5-mini", Listed: false, Status: marketplacedomain.ModelVerificationFailed},
+	}
+
+	retry := retryableConnectivityModels(
+		[]string{"gpt-5", "gpt-5-mini"}, results, marketplacedomain.VerificationFailed,
+	)
+
+	require.Equal(t, []string{"gpt-5-mini"}, retry)
+}
+
+func TestRetryableConnectivityModelsFallsBackToAllModelsOnChannelFailure(t *testing.T) {
+	retry := retryableConnectivityModels(
+		[]string{"gpt-5", "gpt-5-mini"}, nil, marketplacedomain.VerificationFailed,
+	)
+
+	require.Equal(t, []string{"gpt-5", "gpt-5-mini"}, retry)
+}
+
+func TestRetryableConnectivityModelsDoesNotRetryEmptySuccessfulRun(t *testing.T) {
+	retry := retryableConnectivityModels(
+		[]string{"gpt-5"}, nil, marketplacedomain.VerificationPassed,
+	)
+
+	require.Empty(t, retry)
+}

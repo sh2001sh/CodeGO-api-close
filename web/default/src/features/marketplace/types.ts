@@ -482,6 +482,20 @@ export interface MarketplaceRoutePool extends Omit<
   id: string
   name: string
   token_group: string
+  auto_build: MarketplaceRoutePoolAutoBuild
+}
+
+export interface MarketplaceRoutePoolAutoBuild {
+  enabled: boolean
+  schedule: 'interval' | 'daily'
+  interval_minutes: number
+  daily_time: string
+  model: string
+  size: number
+  explore: number
+  last_built_at?: string | null
+  next_build_at?: string | null
+  last_error?: string
 }
 
 export interface MarketplaceBatchTestItem {

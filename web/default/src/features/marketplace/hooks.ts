@@ -16,6 +16,7 @@ import {
   bindMarketplaceRoutePoolToken,
   createMarketplaceRoutePool,
   updateMarketplaceRoutePool,
+  runMarketplaceRoutePoolAutoBuild,
   deleteMarketplaceRoutePool,
   getMyMarketplaceChannels,
   getMyMarketplaceUsageLogs,
@@ -176,6 +177,17 @@ export function useMarketplaceRoutePoolUpdate() {
       void queryClient.invalidateQueries({
         queryKey: ['api-key-group-options'],
       })
+    },
+  })
+}
+
+export function useMarketplaceRoutePoolAutoBuildRun() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: runMarketplaceRoutePoolAutoBuild,
+    onSuccess: (pool) => {
+      queryClient.setQueryData(['marketplace-route-pools', pool.id], pool)
+      void queryClient.invalidateQueries({ queryKey: ['marketplace-route-pools'] })
     },
   })
 }

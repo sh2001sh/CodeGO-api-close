@@ -432,15 +432,30 @@ type AutoRoutePoolView struct {
 }
 
 type RoutePoolCreateRequest struct {
-	Name     string               `json:"name"`
-	GroupIDs []string             `json:"group_ids"`
-	Config   *AutoRoutePoolConfig `json:"config,omitempty"`
+	Name      string                    `json:"name"`
+	GroupIDs  []string                  `json:"group_ids"`
+	Config    *AutoRoutePoolConfig      `json:"config,omitempty"`
+	AutoBuild *RoutePoolAutoBuildConfig `json:"auto_build,omitempty"`
 }
 
 type RoutePoolUpdateRequest struct {
-	Name     string               `json:"name"`
-	GroupIDs []string             `json:"group_ids"`
-	Config   *AutoRoutePoolConfig `json:"config,omitempty"`
+	Name      string                    `json:"name"`
+	GroupIDs  []string                  `json:"group_ids"`
+	Config    *AutoRoutePoolConfig      `json:"config,omitempty"`
+	AutoBuild *RoutePoolAutoBuildConfig `json:"auto_build,omitempty"`
+}
+
+type RoutePoolAutoBuildConfig struct {
+	Enabled         bool       `json:"enabled"`
+	Schedule        string     `json:"schedule"`
+	IntervalMinutes int        `json:"interval_minutes"`
+	DailyTime       string     `json:"daily_time"`
+	Model           string     `json:"model"`
+	Size            int        `json:"size"`
+	Explore         int        `json:"explore"`
+	LastBuiltAt     *time.Time `json:"last_built_at,omitempty"`
+	NextBuildAt     *time.Time `json:"next_build_at,omitempty"`
+	LastError       string     `json:"last_error,omitempty"`
 }
 
 type RoutePoolSummary struct {
@@ -452,10 +467,11 @@ type RoutePoolSummary struct {
 }
 
 type RoutePoolView struct {
-	ID            string              `json:"id"`
-	Name          string              `json:"name"`
-	TokenGroup    string              `json:"token_group"`
-	SelectedCount int                 `json:"selected_count"`
-	Items         []AutoRoutePoolItem `json:"items"`
-	Config        AutoRoutePoolConfig `json:"config"`
+	ID            string                   `json:"id"`
+	Name          string                   `json:"name"`
+	TokenGroup    string                   `json:"token_group"`
+	SelectedCount int                      `json:"selected_count"`
+	Items         []AutoRoutePoolItem      `json:"items"`
+	Config        AutoRoutePoolConfig      `json:"config"`
+	AutoBuild     RoutePoolAutoBuildConfig `json:"auto_build"`
 }

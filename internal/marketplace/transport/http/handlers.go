@@ -116,6 +116,11 @@ func DeleteRoutePool(c *gin.Context) {
 	respond(c, nil, marketplaceapp.DeleteRoutePool(c.GetInt("id"), c.Param("id")))
 }
 
+func RunRoutePoolAutoBuild(c *gin.Context) {
+	result, err := marketplaceapp.RunRoutePoolAutoBuild(c.GetInt("id"), c.Param("id"))
+	respond(c, result, err)
+}
+
 func StartBatchTest(c *gin.Context) {
 	var req marketplaceapp.BatchTestRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -35,6 +35,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.POST("/route-pools", middleware.CriticalRateLimit(), CreateRoutePool)
 		marketplaceRoute.GET("/route-pools/:id", GetRoutePool)
 		marketplaceRoute.PUT("/route-pools/:id", middleware.CriticalRateLimit(), UpdateRoutePool)
+		marketplaceRoute.POST("/route-pools/:id/auto-build/run", middleware.CriticalRateLimit(), RunRoutePoolAutoBuild)
 		marketplaceRoute.DELETE("/route-pools/:id", middleware.CriticalRateLimit(), DeleteRoutePool)
 		marketplaceRoute.POST("/route-pools/:id/bind-token", middleware.CriticalRateLimit(), BindRoutePoolToken)
 		marketplaceRoute.POST("/batch-tests", middleware.CriticalRateLimit(), StartBatchTest)

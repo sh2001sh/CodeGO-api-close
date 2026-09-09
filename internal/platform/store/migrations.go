@@ -176,6 +176,7 @@ func V2MigrationIDs() []string {
 		"20260903_marketplace_owner_operations",
 		"20260905_query_path_indexes",
 		"20260905_marketplace_group_query_index",
+		"20260909_marketplace_route_pool_auto_build",
 	}
 }
 
@@ -329,6 +330,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260815_marketplace_model_verification", Run: migrateMarketplaceModelVerification},
 		{ID: "20260815_marketplace_auto_route_pool", Run: migrateMarketplaceAutoRoutePool},
 		{ID: "20260903_marketplace_named_route_pools", Run: migrateMarketplaceNamedRoutePools},
+		{ID: "20260909_marketplace_route_pool_auto_build", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.RoutePool{})
+		}},
 		{ID: "20260903_marketplace_owner_operations", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{})
 		}},

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -101,6 +102,9 @@ func CreateRoutePool(ownerUserID int, req RoutePoolCreateRequest) (*RoutePoolVie
 	}
 	config := normalizeAutoRoutePoolConfig(req.Config)
 	pool := marketplaceschema.RoutePool{ID: platformruntime.GetUUID(), OwnerUserID: ownerUserID, Name: name, Strategy: config.Strategy, MaxAttempts: config.MaxAttempts, FailureCooldownSeconds: config.FailureCooldownSeconds, MaxMultiplier: config.MaxMultiplier}
+	if req.AutoBuild != nil {
+		applyRoutePoolAutoBuild(&pool, *req.AutoBuild)
+	}
 	if len(groupIDs) > 0 {
 		groups, _, err := loadAutoRouteGroupsForIDs(ownerUserID, groupIDs)
 		if err != nil {
@@ -149,7 +153,7 @@ func CreateRoutePool(ownerUserID int, req RoutePoolCreateRequest) (*RoutePoolVie
 	}
 	// Metrics are loaded by the detail query after the pool is selected. Avoid
 	// repeating the expensive snapshot and request-series queries during create.
-	return &RoutePoolView{ID: pool.ID, Name: pool.Name, TokenGroup: RoutePoolTokenGroupValue(pool.ID), SelectedCount: len(groupIDs), Config: config}, nil
+	return &RoutePoolView{ID: pool.ID, Name: pool.Name, TokenGroup: RoutePoolTokenGroupValue(pool.ID), SelectedCount: len(groupIDs), Config: config, AutoBuild: routePoolAutoBuildConfig(pool)}, nil
 }
 
 func ListRoutePool(ownerUserID int, poolID string) (*RoutePoolView, error) {
@@ -193,7 +197,7 @@ func ListRoutePool(ownerUserID int, poolID string) (*RoutePoolView, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &RoutePoolView{ID: pool.ID, Name: pool.Name, TokenGroup: RoutePoolTokenGroupValue(pool.ID), SelectedCount: len(selected), Items: items, Config: config}, nil
+	return &RoutePoolView{ID: pool.ID, Name: pool.Name, TokenGroup: RoutePoolTokenGroupValue(pool.ID), SelectedCount: len(selected), Items: items, Config: config, AutoBuild: routePoolAutoBuildConfig(pool)}, nil
 }
 
 func UpdateRoutePool(ownerUserID int, poolID string, req RoutePoolUpdateRequest) (*RoutePoolView, error) {
@@ -233,6 +237,9 @@ func UpdateRoutePool(ownerUserID int, poolID string, req RoutePoolUpdateRequest)
 		pool.Name = name
 	}
 	pool.Strategy, pool.MaxAttempts, pool.FailureCooldownSeconds, pool.MaxMultiplier = config.Strategy, config.MaxAttempts, config.FailureCooldownSeconds, config.MaxMultiplier
+	if req.AutoBuild != nil {
+		applyRoutePoolAutoBuild(&pool, *req.AutoBuild)
+	}
 	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&pool).Error; err != nil {
 			return err
@@ -347,6 +354,138 @@ func loadRoutePool(ownerUserID int, poolID string) (marketplaceschema.RoutePool,
 
 func routePoolConfig(pool marketplaceschema.RoutePool) AutoRoutePoolConfig {
 	return normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{Strategy: pool.Strategy, MaxAttempts: pool.MaxAttempts, FailureCooldownSeconds: pool.FailureCooldownSeconds, MaxMultiplier: pool.MaxMultiplier})
+}
+
+func routePoolAutoBuildConfig(pool marketplaceschema.RoutePool) RoutePoolAutoBuildConfig {
+	return RoutePoolAutoBuildConfig{Enabled: pool.AutoBuildEnabled, Schedule: pool.AutoBuildSchedule, IntervalMinutes: pool.AutoBuildInterval, DailyTime: pool.AutoBuildDailyTime, Model: pool.AutoBuildModel, Size: pool.AutoBuildSize, Explore: pool.AutoBuildExplore, LastBuiltAt: pool.AutoBuildLastAt, NextBuildAt: pool.AutoBuildNextAt, LastError: pool.AutoBuildLastError}
+}
+
+func applyRoutePoolAutoBuild(pool *marketplaceschema.RoutePool, cfg RoutePoolAutoBuildConfig) {
+	pool.AutoBuildEnabled = cfg.Enabled
+	pool.AutoBuildSchedule = cfg.Schedule
+	if pool.AutoBuildSchedule != "daily" {
+		pool.AutoBuildSchedule = "interval"
+	}
+	pool.AutoBuildInterval = cfg.IntervalMinutes
+	if pool.AutoBuildInterval < 15 {
+		pool.AutoBuildInterval = 15
+	}
+	if pool.AutoBuildInterval > 10080 {
+		pool.AutoBuildInterval = 10080
+	}
+	pool.AutoBuildDailyTime = strings.TrimSpace(cfg.DailyTime)
+	if len(pool.AutoBuildDailyTime) != 5 {
+		pool.AutoBuildDailyTime = "03:00"
+	}
+	pool.AutoBuildModel = strings.TrimSpace(cfg.Model)
+	pool.AutoBuildSize = cfg.Size
+	if pool.AutoBuildSize < 1 {
+		pool.AutoBuildSize = 1
+	}
+	if pool.AutoBuildSize > maxAutoRoutePoolMembers {
+		pool.AutoBuildSize = maxAutoRoutePoolMembers
+	}
+	pool.AutoBuildExplore = cfg.Explore
+	if pool.AutoBuildExplore < 0 {
+		pool.AutoBuildExplore = 0
+	}
+	if pool.AutoBuildExplore > maxAutoRoutePoolMembers {
+		pool.AutoBuildExplore = maxAutoRoutePoolMembers
+	}
+	if pool.AutoBuildEnabled {
+		next := nextRoutePoolAutoBuild(*pool, time.Now().UTC())
+		pool.AutoBuildNextAt = &next
+	}
+	if !pool.AutoBuildEnabled {
+		pool.AutoBuildNextAt = nil
+	}
+}
+
+func RunRoutePoolAutoBuild(ownerUserID int, poolID string) (*RoutePoolView, error) {
+	pool, _, err := loadRoutePool(ownerUserID, poolID)
+	if err != nil {
+		return nil, err
+	}
+	all, err := ListAutoRoutePool(ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	model := strings.ToLower(strings.TrimSpace(pool.AutoBuildModel))
+	candidates := make([]AutoRoutePoolItem, 0, len(all.Items))
+	for _, item := range all.Items {
+		if model == "" || containsModel(item.Models, model) {
+			candidates = append(candidates, item)
+		}
+	}
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].RouteScore < candidates[j].RouteScore })
+	size := pool.AutoBuildSize
+	if size < 1 {
+		size = 3
+	}
+	if size > len(candidates) {
+		size = len(candidates)
+	}
+	explore := pool.AutoBuildExplore
+	if explore < 0 {
+		explore = 0
+	}
+	selected := make([]string, 0, size+explore)
+	for i := 0; i < size; i++ {
+		selected = append(selected, candidates[i].GroupID)
+	}
+	for i := size; i < len(candidates) && len(selected) < size+explore; i++ {
+		if candidates[i].Observing || candidates[i].RequestCount == 0 {
+			selected = append(selected, candidates[i].GroupID)
+		}
+	}
+	if len(selected) == 0 {
+		return nil, errors.New("没有符合条件的可用分组")
+	}
+	if err := replaceRoutePoolMembers(pool.ID, selected); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	next := nextRoutePoolAutoBuild(pool, now)
+	if err := platformdb.DB.Model(&pool).Updates(map[string]interface{}{"auto_build_last_at": now, "auto_build_next_at": next, "auto_build_last_error": ""}).Error; err != nil {
+		return nil, err
+	}
+	return ListRoutePool(ownerUserID, pool.ID)
+}
+
+func containsModel(models []string, target string) bool {
+	for _, model := range models {
+		if strings.ToLower(strings.TrimSpace(model)) == target {
+			return true
+		}
+	}
+	return false
+}
+func replaceRoutePoolMembers(poolID string, ids []string) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("pool_id = ?", poolID).Delete(&marketplaceschema.RoutePoolMember{}).Error; err != nil {
+			return err
+		}
+		for i, id := range ids {
+			if err := tx.Create(&marketplaceschema.RoutePoolMember{PoolID: poolID, GroupID: id, Priority: i + 1}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+func nextRoutePoolAutoBuild(pool marketplaceschema.RoutePool, now time.Time) time.Time {
+	if pool.AutoBuildSchedule != "daily" {
+		return now.Add(time.Duration(pool.AutoBuildInterval) * time.Minute)
+	}
+	parsed, err := time.ParseInLocation("15:04", pool.AutoBuildDailyTime, time.Local)
+	if err != nil {
+		return now.Add(24 * time.Hour)
+	}
+	next := time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, time.Local)
+	if !next.After(now) {
+		next = next.Add(24 * time.Hour)
+	}
+	return next.UTC()
 }
 
 func buildRoutePoolItems(ownerUserID int, groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, series map[int][]RecentRequestBucket, selected map[string]int, config AutoRoutePoolConfig) ([]AutoRoutePoolItem, error) {

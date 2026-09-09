@@ -41,10 +41,12 @@ import {
   useMarketplaceRoutePoolCreate,
   useMarketplaceRoutePoolDelete,
   useMarketplaceRoutePoolUpdate,
+  useMarketplaceRoutePoolAutoBuildRun,
 } from '@/features/marketplace/hooks'
 import type {
   MarketplaceAutoRoutePoolConfig,
   MarketplaceGroup,
+  MarketplaceRoutePoolAutoBuild,
 } from '@/features/marketplace/types'
 import { pct, sec } from '../lib/format'
 
@@ -93,6 +95,7 @@ export function PoolWorkbench(props: {
   const updatePool = useMarketplaceRoutePoolUpdate()
   const deletePool = useMarketplaceRoutePoolDelete()
   const updateAutoPool = useMarketplaceAutoRoutePoolUpdate()
+  const runAutoBuild = useMarketplaceRoutePoolAutoBuildRun()
 
   const poolOptions = useMemo(() => {
     const custom = (pools.data ?? []).map((pool) => ({
@@ -453,6 +456,27 @@ export function PoolWorkbench(props: {
               </div>
             </div>
 
+            {!isAuto && poolDetail.data && (
+              <RoutePoolAutoBuildSettings
+                value={poolDetail.data.auto_build}
+                groups={groups}
+                busy={runAutoBuild.isPending || updatePool.isPending}
+                onRun={async () => {
+                  const pool = await runAutoBuild.mutateAsync(activePoolID)
+                  toast.success(`自动构建完成 · ${pool.selected_count} 分组`)
+                }}
+                onSave={async (autoBuild) => {
+                  await updatePool.mutateAsync({
+                    id: activePoolID,
+                    groupIds: draftMemberIds,
+                    config: currentConfig,
+                    autoBuild,
+                  })
+                  toast.success('自动构建计划已保存')
+                }}
+              />
+            )}
+
             <div className='compare'>
               <div className='col'>
                 <h5>
@@ -697,6 +721,43 @@ function CreatePanel(props: {
         </button>
       </div>
     </>
+  )
+}
+
+function RoutePoolAutoBuildSettings(props: {
+  value: MarketplaceRoutePoolAutoBuild
+  groups: MarketplaceGroup[]
+  busy: boolean
+  onSave: (value: MarketplaceRoutePoolAutoBuild) => Promise<void>
+  onRun: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [value, setValue] = useState<MarketplaceRoutePoolAutoBuild>(props.value)
+  useEffect(() => setValue(props.value), [props.value])
+  const models = useMemo(() => Array.from(new Set(props.groups.flatMap((g) => g.models))).sort(), [props.groups])
+  const summary = value.enabled
+    ? value.schedule === 'daily' ? `每天 ${value.daily_time || '03:00'}` : `每 ${value.interval_minutes || 60} 分钟`
+    : '已停用'
+  return (
+    <div className='mb-3 border border-border/60 rounded-md px-3 py-2'>
+      <button className='flex w-full items-center justify-between text-left text-xs' onClick={() => setOpen((v) => !v)}>
+        <span className='flex items-center gap-1.5'><Sparkles size={13} />自动智能构建 · {summary}{value.next_build_at ? ` · 下次 ${new Date(value.next_build_at).toLocaleString()}` : ''}</span>
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {open && <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
+        <label className='flex items-center gap-2 col-span-2'><input type='checkbox' checked={value.enabled} onChange={(e) => setValue({ ...value, enabled: e.target.checked })} />启用自动构建</label>
+        <label>调度方式<select className='mt-1 w-full' value={value.schedule} onChange={(e) => setValue({ ...value, schedule: e.target.value as 'interval' | 'daily' })}><option value='interval'>固定间隔</option><option value='daily'>每天指定时间</option></select></label>
+        {value.schedule === 'daily' ? <label>执行时间<input className='mt-1 w-full' type='time' value={value.daily_time || '03:00'} onChange={(e) => setValue({ ...value, daily_time: e.target.value })} /></label> : <label>间隔（分钟）<input className='mt-1 w-full' type='number' min={15} max={10080} value={value.interval_minutes || 60} onChange={(e) => setValue({ ...value, interval_minutes: Number(e.target.value) })} /></label>}
+        <label>模型筛选<select className='mt-1 w-full' value={value.model} onChange={(e) => setValue({ ...value, model: e.target.value })}><option value=''>全部模型</option>{models.map((model) => <option key={model} value={model}>{model}</option>)}</select></label>
+        <label>主选数量<input className='mt-1 w-full' type='number' min={1} max={10} value={value.size || 3} onChange={(e) => setValue({ ...value, size: Number(e.target.value) })} /></label>
+        <label>探索位<input className='mt-1 w-full' type='number' min={0} max={10} value={value.explore || 0} onChange={(e) => setValue({ ...value, explore: Number(e.target.value) })} /></label>
+        <div className='col-span-2 flex justify-end gap-2 pt-1'>
+          <button className='btn mini' disabled={props.busy} onClick={() => void props.onRun()}>立即构建</button>
+          <button className='btn mini primary' disabled={props.busy} onClick={() => void props.onSave(value)}>保存计划</button>
+        </div>
+        {value.last_error && <p className='col-span-2 text-destructive'>{value.last_error}</p>}
+      </div>}
+    </div>
   )
 }
 

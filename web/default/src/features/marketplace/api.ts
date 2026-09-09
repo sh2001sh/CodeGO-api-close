@@ -9,6 +9,7 @@ import type {
   MarketplaceAutoRoutePool,
   MarketplaceAutoRoutePoolConfig,
   MarketplaceRoutePool,
+  MarketplaceRoutePoolAutoBuild,
   MarketplaceRoutePoolSummary,
   MarketplaceGroupList,
   MarketplaceGroup,
@@ -416,10 +417,18 @@ export async function updateMarketplaceRoutePool(input: {
   name?: string
   groupIds: string[]
   config?: Partial<MarketplaceAutoRoutePoolConfig>
+  autoBuild?: Partial<MarketplaceRoutePoolAutoBuild>
 }) {
   const response = await api.put<ApiResponse<MarketplaceRoutePool>>(
     `/api/marketplace/route-pools/${encodeURIComponent(input.id)}`,
-    { name: input.name, group_ids: input.groupIds, config: input.config }
+    { name: input.name, group_ids: input.groupIds, config: input.config, auto_build: input.autoBuild }
+  )
+  return requireData(response.data)
+}
+
+export async function runMarketplaceRoutePoolAutoBuild(id: string) {
+  const response = await api.post<ApiResponse<MarketplaceRoutePool>>(
+    `/api/marketplace/route-pools/${encodeURIComponent(id)}/auto-build/run`
   )
   return requireData(response.data)
 }

@@ -86,7 +86,9 @@ export function PaymentConfirmDialog({
 
           <div className='flex items-center justify-between'>
             <span className='text-muted-foreground text-sm'>
-              {t('Payment amount (CNY)')}
+              {t('Payment amount ({{currency}})', {
+                currency: paymentMethod?.currency || 'CNY',
+              })}
             </span>
             {calculating ? (
               <Skeleton className='h-6 w-24' />

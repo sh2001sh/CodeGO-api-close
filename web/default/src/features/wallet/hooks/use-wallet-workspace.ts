@@ -12,7 +12,11 @@ import type {
   SelfSubscriptionData,
 } from '@/features/subscriptions/types'
 import { DEFAULT_DISCOUNT_RATE } from '../constants'
-import { getDefaultPaymentType, isWaffoPancakePayment } from '../lib'
+import {
+  getDefaultPaymentType,
+  getMinTopupAmount,
+  isWaffoPancakePayment,
+} from '../lib'
 import type {
   CreemProduct,
   PaymentMethod,
@@ -140,7 +144,7 @@ export function useWalletWorkspace() {
 
   useEffect(() => {
     if (topupInfo && topupAmount === 0) {
-      const minTopup = 1
+      const minTopup = getMinTopupAmount(topupInfo)
       setTopupAmount(minTopup)
 
       const defaultPaymentType = getDefaultPaymentType(topupInfo)
@@ -176,7 +180,7 @@ export function useWalletWorkspace() {
       setPaymentLoading(method.type)
 
       try {
-        const minTopup = 1
+        const minTopup = method.min_topup || getMinTopupAmount(topupInfo)
         if (topupAmount < minTopup) {
           return
         }
@@ -187,7 +191,7 @@ export function useWalletWorkspace() {
         setPaymentLoading(null)
       }
     },
-    [calculatePaymentAmount, topupAmount]
+    [calculatePaymentAmount, topupAmount, topupInfo]
   )
 
   const handlePaymentConfirm = useCallback(async () => {

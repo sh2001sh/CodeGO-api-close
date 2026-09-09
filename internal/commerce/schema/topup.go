@@ -39,6 +39,7 @@ type TopUp struct {
 	TradeNo                         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod                   string  `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider                 string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	ExternalPaymentID               string  `json:"external_payment_id,omitempty" gorm:"type:varchar(128);index"`
 	WalletType                      string  `json:"wallet_type" gorm:"type:varchar(32);default:'claude';index"`
 	FirstPurchaseDiscountApplied    bool    `json:"first_purchase_discount_applied" gorm:"not null;default:false;index"`
 	FirstPurchaseDiscountMultiplier float64 `json:"first_purchase_discount_multiplier" gorm:"type:decimal(8,4);not null;default:0"`

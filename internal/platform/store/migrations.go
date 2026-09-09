@@ -178,6 +178,7 @@ func V2MigrationIDs() []string {
 		"20260905_marketplace_group_query_index",
 		"20260909_marketplace_route_pool_auto_build",
 		"20260909_marketplace_multiplier_card_policy",
+		"20260910_nowpayments_topup",
 	}
 }
 
@@ -337,6 +338,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260909_marketplace_multiplier_card_policy", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.Channel{}, &gatewayschema.Channel{})
 		}},
+		{ID: "20260910_nowpayments_topup", Run: migrateNowPaymentsTopUp},
 		{ID: "20260903_marketplace_owner_operations", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{})
 		}},
@@ -1633,6 +1635,18 @@ func migrateFirstPurchaseDiscount(tx *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+// migrateNowPaymentsTopUp adds the provider order identifier used to match
+// asynchronous NOWPayments callbacks with their local top-up order.
+func migrateNowPaymentsTopUp(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&commerceschema.TopUp{}) {
+		return tx.AutoMigrate(&commerceschema.TopUp{})
+	}
+	if tx.Migrator().HasColumn(&commerceschema.TopUp{}, "ExternalPaymentID") {
+		return nil
+	}
+	return tx.Migrator().AddColumn(&commerceschema.TopUp{}, "ExternalPaymentID")
 }
 
 func migrateSubscriptionFirstPurchaseDiscount(tx *gorm.DB) error {

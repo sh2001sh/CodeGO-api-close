@@ -39,6 +39,7 @@ import {
   getDiscountLabel,
   getPaymentIcon,
   calculatePresetPricing,
+  getMinTopupAmount,
 } from '../lib'
 import type {
   PaymentMethod,
@@ -59,6 +60,7 @@ interface RechargeFormCardProps {
   paymentAmount: number
   calculating: boolean
   onPaymentMethodSelect: (method: PaymentMethod) => void
+  selectedPaymentMethod?: PaymentMethod
   paymentLoading: string | null
   redemptionCode: string
   onRedemptionCodeChange: (code: string) => void
@@ -89,6 +91,7 @@ export function RechargeFormCard({
   paymentAmount,
   calculating,
   onPaymentMethodSelect,
+  selectedPaymentMethod,
   paymentLoading,
   redemptionCode,
   onRedemptionCodeChange,
@@ -127,13 +130,14 @@ export function RechargeFormCard({
     topupInfo?.enable_online_topup ||
     topupInfo?.enable_stripe_topup ||
     enableWaffoTopup ||
-    enableWaffoPancakeTopup
+    enableWaffoPancakeTopup ||
+    topupInfo?.enable_nowpayments_topup
   const hasAnyTopup = hasConfigurableTopup || enableCreemTopup
   const hasStandardPaymentMethods =
     Array.isArray(topupInfo?.pay_methods) && topupInfo.pay_methods.length > 0
   const hasWaffoPaymentMethods =
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
-  const effectiveMinTopup = 1
+  const effectiveMinTopup = getMinTopupAmount(topupInfo)
   const redemptionEnabled = topupInfo?.enable_redemption !== false
 
   if (loading) {
@@ -328,7 +332,9 @@ export function RechargeFormCard({
                   </div>
                   <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
                     <span className='text-muted-foreground truncate text-xs'>
-                      {t('Payment amount (CNY)')}
+                      {t('Payment amount ({{currency}})', {
+                        currency: selectedPaymentMethod?.currency || 'CNY',
+                      })}
                     </span>
                     {calculating ? (
                       <Skeleton className='h-5 w-16' />
@@ -353,7 +359,7 @@ export function RechargeFormCard({
                     )}
                   >
                     {topupInfo?.pay_methods?.map((method) => {
-                      const minTopup = 1
+                      const minTopup = method.min_topup || effectiveMinTopup
                       const disabled = minTopup > topupAmount
 
                       const button = (
@@ -422,7 +428,8 @@ export function RechargeFormCard({
                     >
                       {waffoPayMethods?.map((method, index) => {
                         const loadingKey = `waffo-${index}`
-                        const waffoMin = 1
+                        const waffoMin =
+                          topupInfo?.waffo_min_topup || effectiveMinTopup
                         const belowMin = waffoMin > topupAmount
 
                         const button = (

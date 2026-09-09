@@ -257,6 +257,13 @@ export type BillingSettings = {
   XunhuSecret: string
   XunhuGateway: string
   XunhuMinTopUp: number
+  NowPaymentsEnabled: boolean
+  NowPaymentsApiKey: string
+  NowPaymentsIPNSecret: string
+  NowPaymentsPaymentCurrency: string
+  NowPaymentsPayCurrency: string
+  NowPaymentsQuotaPerUSDT: number
+  NowPaymentsMinTopUp: number
   WaffoEnabled: boolean
   WaffoApiKey: string
   WaffoPrivateKey: string

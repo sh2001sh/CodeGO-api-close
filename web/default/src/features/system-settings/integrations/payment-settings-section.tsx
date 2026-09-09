@@ -137,6 +137,16 @@ const paymentSchema = z.object({
   XunhuSecret: z.string(),
   XunhuGateway: z.string(),
   XunhuMinTopUp: z.coerce.number().min(0),
+  NowPaymentsEnabled: z.boolean(),
+  NowPaymentsApiKey: z.string(),
+  NowPaymentsIPNSecret: z.string(),
+  NowPaymentsPaymentCurrency: z.string().refine(
+    (value) => value.trim().toLowerCase() === 'usdt',
+    'NOWPayments only supports USDT'
+  ),
+  NowPaymentsPayCurrency: z.string().min(1),
+  NowPaymentsQuotaPerUSDT: z.coerce.number().positive(),
+  NowPaymentsMinTopUp: z.coerce.number().int().min(1),
 })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
@@ -562,6 +572,56 @@ export function PaymentSettingsSection({
     }
   }
 
+  const saveNowPaymentsSettings = async () => {
+    const values = form.getValues()
+    const sanitized = {
+      NowPaymentsEnabled: values.NowPaymentsEnabled as boolean,
+      NowPaymentsApiKey: values.NowPaymentsApiKey.trim(),
+      NowPaymentsIPNSecret: values.NowPaymentsIPNSecret.trim(),
+      NowPaymentsPaymentCurrency:
+        values.NowPaymentsPaymentCurrency.trim().toLowerCase(),
+      NowPaymentsPayCurrency: values.NowPaymentsPayCurrency.trim().toLowerCase(),
+      NowPaymentsQuotaPerUSDT: values.NowPaymentsQuotaPerUSDT as number,
+      NowPaymentsMinTopUp: values.NowPaymentsMinTopUp as number,
+    }
+    const initial = {
+      NowPaymentsEnabled: initialRef.current.NowPaymentsEnabled,
+      NowPaymentsApiKey: initialRef.current.NowPaymentsApiKey.trim(),
+      NowPaymentsIPNSecret: initialRef.current.NowPaymentsIPNSecret.trim(),
+      NowPaymentsPaymentCurrency:
+        initialRef.current.NowPaymentsPaymentCurrency.trim().toLowerCase(),
+      NowPaymentsPayCurrency:
+        initialRef.current.NowPaymentsPayCurrency.trim().toLowerCase(),
+      NowPaymentsQuotaPerUSDT: initialRef.current.NowPaymentsQuotaPerUSDT,
+      NowPaymentsMinTopUp: initialRef.current.NowPaymentsMinTopUp,
+    }
+    const updates: Array<{ key: string; value: string | number | boolean }> = []
+    if (sanitized.NowPaymentsEnabled !== initial.NowPaymentsEnabled) {
+      updates.push({ key: 'NowPaymentsEnabled', value: sanitized.NowPaymentsEnabled })
+    }
+    if (sanitized.NowPaymentsApiKey && sanitized.NowPaymentsApiKey !== initial.NowPaymentsApiKey) {
+      updates.push({ key: 'NowPaymentsApiKey', value: sanitized.NowPaymentsApiKey })
+    }
+    if (sanitized.NowPaymentsIPNSecret && sanitized.NowPaymentsIPNSecret !== initial.NowPaymentsIPNSecret) {
+      updates.push({ key: 'NowPaymentsIPNSecret', value: sanitized.NowPaymentsIPNSecret })
+    }
+    if (sanitized.NowPaymentsPaymentCurrency !== initial.NowPaymentsPaymentCurrency) {
+      updates.push({ key: 'NowPaymentsPaymentCurrency', value: sanitized.NowPaymentsPaymentCurrency })
+    }
+    if (sanitized.NowPaymentsPayCurrency !== initial.NowPaymentsPayCurrency) {
+      updates.push({ key: 'NowPaymentsPayCurrency', value: sanitized.NowPaymentsPayCurrency })
+    }
+    if (sanitized.NowPaymentsQuotaPerUSDT !== initial.NowPaymentsQuotaPerUSDT) {
+      updates.push({ key: 'NowPaymentsQuotaPerUSDT', value: sanitized.NowPaymentsQuotaPerUSDT })
+    }
+    if (sanitized.NowPaymentsMinTopUp !== initial.NowPaymentsMinTopUp) {
+      updates.push({ key: 'NowPaymentsMinTopUp', value: sanitized.NowPaymentsMinTopUp })
+    }
+    for (const update of updates) {
+      await updateOption.mutateAsync(update)
+    }
+  }
+
   const onSubmit = async (values: PaymentFormValues) => {
     const sanitized = {
       PayAddress: removeTrailingSlash(values.PayAddress),
@@ -584,6 +644,13 @@ export function PaymentSettingsSection({
       XunhuSecret: values.XunhuSecret.trim(),
       XunhuGateway: removeTrailingSlash(values.XunhuGateway),
       XunhuMinTopUp: values.XunhuMinTopUp,
+      NowPaymentsEnabled: values.NowPaymentsEnabled,
+      NowPaymentsApiKey: values.NowPaymentsApiKey.trim(),
+      NowPaymentsIPNSecret: values.NowPaymentsIPNSecret.trim(),
+      NowPaymentsPaymentCurrency: values.NowPaymentsPaymentCurrency.trim().toLowerCase(),
+      NowPaymentsPayCurrency: values.NowPaymentsPayCurrency.trim().toLowerCase(),
+      NowPaymentsQuotaPerUSDT: values.NowPaymentsQuotaPerUSDT,
+      NowPaymentsMinTopUp: values.NowPaymentsMinTopUp,
     }
 
     const initial = {
@@ -610,9 +677,38 @@ export function PaymentSettingsSection({
       XunhuSecret: initialRef.current.XunhuSecret.trim(),
       XunhuGateway: removeTrailingSlash(initialRef.current.XunhuGateway),
       XunhuMinTopUp: initialRef.current.XunhuMinTopUp,
+      NowPaymentsEnabled: initialRef.current.NowPaymentsEnabled,
+      NowPaymentsApiKey: initialRef.current.NowPaymentsApiKey.trim(),
+      NowPaymentsIPNSecret: initialRef.current.NowPaymentsIPNSecret.trim(),
+      NowPaymentsPaymentCurrency: initialRef.current.NowPaymentsPaymentCurrency.trim().toLowerCase(),
+      NowPaymentsPayCurrency: initialRef.current.NowPaymentsPayCurrency.trim().toLowerCase(),
+      NowPaymentsQuotaPerUSDT: initialRef.current.NowPaymentsQuotaPerUSDT,
+      NowPaymentsMinTopUp: initialRef.current.NowPaymentsMinTopUp,
     }
 
     const updates: Array<{ key: string; value: string | number | boolean }> = []
+
+    if (sanitized.NowPaymentsEnabled !== initial.NowPaymentsEnabled) {
+      updates.push({ key: 'NowPaymentsEnabled', value: sanitized.NowPaymentsEnabled })
+    }
+    if (sanitized.NowPaymentsApiKey && sanitized.NowPaymentsApiKey !== initial.NowPaymentsApiKey) {
+      updates.push({ key: 'NowPaymentsApiKey', value: sanitized.NowPaymentsApiKey })
+    }
+    if (sanitized.NowPaymentsIPNSecret && sanitized.NowPaymentsIPNSecret !== initial.NowPaymentsIPNSecret) {
+      updates.push({ key: 'NowPaymentsIPNSecret', value: sanitized.NowPaymentsIPNSecret })
+    }
+    if (sanitized.NowPaymentsPaymentCurrency !== initial.NowPaymentsPaymentCurrency) {
+      updates.push({ key: 'NowPaymentsPaymentCurrency', value: sanitized.NowPaymentsPaymentCurrency })
+    }
+    if (sanitized.NowPaymentsPayCurrency !== initial.NowPaymentsPayCurrency) {
+      updates.push({ key: 'NowPaymentsPayCurrency', value: sanitized.NowPaymentsPayCurrency })
+    }
+    if (sanitized.NowPaymentsQuotaPerUSDT !== initial.NowPaymentsQuotaPerUSDT) {
+      updates.push({ key: 'NowPaymentsQuotaPerUSDT', value: sanitized.NowPaymentsQuotaPerUSDT })
+    }
+    if (sanitized.NowPaymentsMinTopUp !== initial.NowPaymentsMinTopUp) {
+      updates.push({ key: 'NowPaymentsMinTopUp', value: sanitized.NowPaymentsMinTopUp })
+    }
 
     if (sanitized.PayAddress !== initial.PayAddress) {
       updates.push({ key: 'PayAddress', value: sanitized.PayAddress })
@@ -1668,6 +1764,137 @@ export function PaymentSettingsSection({
               {updateOption.isPending
                 ? t('Saving...')
                 : t('Save WeChat Pay settings')}
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className='space-y-4'>
+            <div>
+              <h3 className='text-lg font-medium'>{t('NOWPayments USDT')}</h3>
+              <p className='text-muted-foreground text-sm'>
+                {t('Accept USDT top-ups through NOWPayments. IPN URL:')} <code>/api/nowpayments/ipn</code>
+              </p>
+            </div>
+
+            <FormField
+              control={form.control}
+              name='NowPaymentsEnabled'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                  <div className='space-y-0.5'>
+                    <FormLabel className='text-base'>{t('Enabled')}</FormLabel>
+                    <FormDescription>
+                      {t('Enable USDT top-ups via NOWPayments')}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <div className='grid gap-6 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='NowPaymentsApiKey'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('API Key')}</FormLabel>
+                    <FormControl>
+                      <Input type='password' autoComplete='new-password' placeholder={t('Enter NOWPayments API key')} {...field} />
+                    </FormControl>
+                    <FormDescription>{t('Leave blank unless updating')}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='NowPaymentsIPNSecret'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('IPN Secret')}</FormLabel>
+                    <FormControl>
+                      <Input type='password' autoComplete='new-password' placeholder={t('Enter IPN secret')} {...field} />
+                    </FormControl>
+                    <FormDescription>{t('Used to verify x-nowpayments-sig')}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className='grid gap-6 md:grid-cols-4'>
+              <FormField
+                control={form.control}
+                name='NowPaymentsQuotaPerUSDT'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Quota per 1 USDT')}</FormLabel>
+                    <FormControl>
+                      <Input type='number' min={0.000001} step='0.1' value={(field.value ?? 5) as number} onChange={(event) => field.onChange(event.target.valueAsNumber)} />
+                    </FormControl>
+                    <FormDescription>{t('Default: 5 quotas')}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='NowPaymentsMinTopUp'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Minimum top-up quota')}</FormLabel>
+                    <FormControl>
+                      <Input type='number' min={1} step='1' value={(field.value ?? 5) as number} onChange={(event) => field.onChange(event.target.valueAsNumber)} />
+                    </FormControl>
+                    <FormDescription>{t('Default: 5 quotas')}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='NowPaymentsPaymentCurrency'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Payment currency')}</FormLabel>
+                    <FormControl>
+                      <Input readOnly {...field} value='USDT' />
+                    </FormControl>
+                    <FormDescription>{t('Fixed to USDT')}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='NowPaymentsPayCurrency'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('USDT network')}</FormLabel>
+                    <FormControl>
+                      <Input placeholder='usdttrc20' {...field} onChange={(event) => field.onChange(event.target.value.toLowerCase())} />
+                    </FormControl>
+                    <FormDescription>{t('Default: USDTTRC20')}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <Button
+              type='button'
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                saveNowPaymentsSettings()
+              }}
+              disabled={updateOption.isPending}
+            >
+              {updateOption.isPending ? t('Saving...') : t('Save NOWPayments settings')}
             </Button>
           </div>
 

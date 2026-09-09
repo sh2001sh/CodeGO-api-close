@@ -21,14 +21,17 @@ import i18next from 'i18next'
 import { toast } from 'sonner'
 import {
   calculateAmount,
+  calculateNowPaymentsAmount,
   calculateStripeAmount,
   calculateWaffoPancakeAmount,
   requestPayment,
+  requestNowPaymentsPayment,
   requestStripePayment,
   isApiSuccess,
 } from '../api'
 import {
   isStripePayment,
+  isNowPaymentsPayment,
   isWaffoPancakePayment,
   submitPaymentForm,
 } from '../lib'
@@ -49,11 +52,14 @@ export function usePayment() {
         setCalculating(true)
 
         const isStripe = isStripePayment(paymentType)
+        const isNowPayments = isNowPaymentsPayment(paymentType)
         const isPancake = isWaffoPancakePayment(paymentType)
         const response = isStripe
           ? await calculateStripeAmount({
               amount: topupAmount,
             })
+          : isNowPayments
+            ? await calculateNowPaymentsAmount({ amount: topupAmount })
           : isPancake
             ? await calculateWaffoPancakeAmount({
                 amount: topupAmount,
@@ -88,6 +94,7 @@ export function usePayment() {
         setProcessing(true)
 
         const isStripe = isStripePayment(paymentType)
+        const isNowPayments = isNowPaymentsPayment(paymentType)
         const amount = Math.floor(topupAmount)
 
         const response = isStripe
@@ -95,6 +102,8 @@ export function usePayment() {
               amount,
               payment_method: 'stripe',
             })
+          : isNowPayments
+            ? await requestNowPaymentsPayment({ amount })
           : await requestPayment({
               amount,
               payment_method: paymentType,
@@ -105,20 +114,26 @@ export function usePayment() {
           return false
         }
 
+        const responseData = response.data as Record<string, unknown> | undefined
+
         // Handle Stripe payment
-        if (isStripe && response.data?.pay_link) {
-          window.open(response.data.pay_link as string, '_blank')
+        if (isStripe && typeof responseData?.pay_link === 'string') {
+          window.open(responseData.pay_link, '_blank')
+          toast.success(i18next.t('Redirecting to payment page...'))
+          return true
+        }
+
+        if (isNowPayments && typeof responseData?.pay_url === 'string') {
+          window.open(responseData.pay_url, '_blank')
           toast.success(i18next.t('Redirecting to payment page...'))
           return true
         }
 
         // Handle non-Stripe payment
-        if (!isStripe && response.data) {
+        if (!isStripe && responseData) {
           const directUrl =
-            (response.data as { pay_url?: string; qrcode_url?: string })
-              ?.pay_url ||
-            (response.data as { pay_url?: string; qrcode_url?: string })
-              ?.qrcode_url
+            (typeof responseData.pay_url === 'string' && responseData.pay_url) ||
+            (typeof responseData.qrcode_url === 'string' && responseData.qrcode_url)
           if (directUrl) {
             window.open(directUrl, '_blank')
             toast.success(i18next.t('Redirecting to payment page...'))
@@ -126,7 +141,7 @@ export function usePayment() {
           }
           const url = (response as unknown as { url?: string }).url
           if (url) {
-            submitPaymentForm(url, response.data)
+            submitPaymentForm(url, responseData)
             toast.success(i18next.t('Redirecting to payment page...'))
             return true
           }

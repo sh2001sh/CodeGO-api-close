@@ -57,6 +57,14 @@ var XunhuSecret = ""
 var XunhuGateway = "https://api.xunhupay.com/payment/do.html"
 var XunhuMinTopUp = 10
 
+var NowPaymentsEnabled = false
+var NowPaymentsApiKey = ""
+var NowPaymentsIPNSecret = ""
+var NowPaymentsPaymentCurrency = "usdt"
+var NowPaymentsPayCurrency = "usdttrc20"
+var NowPaymentsQuotaPerUSDT = 5.0
+var NowPaymentsMinTopUp = 5
+
 var (
 	WaffoEnabled               bool
 	WaffoApiKey                string

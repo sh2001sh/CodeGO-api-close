@@ -37,6 +37,7 @@ import type {
   WaffoPaymentResponse,
   WaffoPancakePaymentRequest,
   WaffoPancakePaymentResponse,
+  NowPaymentsPaymentResponse,
   BlindBoxSelfResponse,
   BlindBoxAmountRequest,
   BlindBoxPayRequest,
@@ -159,6 +160,16 @@ export async function calculateStripeAmount(
   return res.data
 }
 
+/** Calculate the USDT amount for a NOWPayments top-up. */
+export async function calculateNowPaymentsAmount(
+  request: AmountRequest
+): Promise<AmountResponse> {
+  const res = await api.post('/api/user/nowpayments/amount', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
 /**
  * Request regular payment
  */
@@ -181,6 +192,16 @@ export async function requestStripePayment(
   request: PaymentRequest
 ): Promise<StripePaymentResponse> {
   const res = await api.post('/api/user/stripe/pay', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/** Request a NOWPayments USDT checkout invoice. */
+export async function requestNowPaymentsPayment(
+  request: AmountRequest
+): Promise<NowPaymentsPaymentResponse> {
+  const res = await api.post('/api/user/nowpayments/pay', request, {
     skipBusinessError: true,
   } as Record<string, unknown>)
   return res.data

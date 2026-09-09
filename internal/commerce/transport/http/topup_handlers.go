@@ -117,6 +117,20 @@ func RequestAmount(c *gin.Context) {
 	c.JSON(stdhttp.StatusOK, gin.H{"message": "success", "data": amount})
 }
 
+func RequestNowPaymentsAmount(c *gin.Context) {
+	var req commerceapp.AmountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(stdhttp.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		return
+	}
+	amount, err := commerceapp.QuoteNowPaymentsTopUpAmount(c.GetInt("id"), req)
+	if err != nil {
+		c.JSON(stdhttp.StatusOK, gin.H{"message": "error", "data": err.Error()})
+		return
+	}
+	c.JSON(stdhttp.StatusOK, gin.H{"message": "success", "data": amount})
+}
+
 func GetUserTopUps(c *gin.Context) {
 	pageInfo, err := commerceapp.ListUserTopUps(c.GetInt("id"), c.Query("keyword"), platformpagination.GetPageQuery(c))
 	if err != nil {

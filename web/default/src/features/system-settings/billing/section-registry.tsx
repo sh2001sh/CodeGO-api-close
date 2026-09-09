@@ -183,6 +183,15 @@ const BILLING_SECTIONS = [
           XunhuSecret: settings.XunhuSecret,
           XunhuGateway: settings.XunhuGateway,
           XunhuMinTopUp: settings.XunhuMinTopUp,
+          NowPaymentsEnabled: settings.NowPaymentsEnabled ?? false,
+          NowPaymentsApiKey: settings.NowPaymentsApiKey ?? '',
+          NowPaymentsIPNSecret: settings.NowPaymentsIPNSecret ?? '',
+          NowPaymentsPaymentCurrency:
+            settings.NowPaymentsPaymentCurrency ?? 'usdt',
+          NowPaymentsPayCurrency:
+            settings.NowPaymentsPayCurrency ?? 'usdttrc20',
+          NowPaymentsQuotaPerUSDT: settings.NowPaymentsQuotaPerUSDT ?? 5,
+          NowPaymentsMinTopUp: settings.NowPaymentsMinTopUp ?? 5,
         }}
         waffoDefaultValues={{
           WaffoEnabled: settings.WaffoEnabled ?? false,

@@ -86,6 +86,7 @@ export function Wallet(props: WalletProps) {
                 paymentAmount={workspace.paymentAmount}
                 calculating={workspace.calculating}
                 onPaymentMethodSelect={workspace.handlePaymentMethodSelect}
+                selectedPaymentMethod={workspace.selectedPaymentMethod}
                 paymentLoading={workspace.paymentLoading}
                 redemptionCode={workspace.redemptionCode}
                 onRedemptionCodeChange={workspace.setRedemptionCode}

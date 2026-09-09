@@ -54,6 +54,7 @@ func registerControlAPIRoutes(router *gin.Engine) {
 		apiRouter.POST("/creem/webhook", anonymousRequestBodyLimit, commercehttp.CreemWebhook)
 		apiRouter.POST("/waffo/webhook", anonymousRequestBodyLimit, commercehttp.WaffoWebhook)
 		apiRouter.POST("/waffo-pancake/webhook", anonymousRequestBodyLimit, commercehttp.WaffoPancakeWebhook)
+		apiRouter.POST("/nowpayments/ipn", anonymousRequestBodyLimit, commercehttp.NowPaymentsIPN)
 
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), identityhttp.UniversalVerify)
 

@@ -67,6 +67,11 @@ export type WaffoPancakePaymentResponse = ApiResponse<
     }
   | string
 >
+export type NowPaymentsPaymentResponse = ApiResponse<{
+  pay_url: string
+  order_id: string
+  payment_id: string
+}>
 
 /**
  * Creem product configuration
@@ -213,6 +218,8 @@ export interface PaymentMethod {
   min_topup?: number
   /** Optional icon URL provided by backend (preferred over built-in icons) */
   icon?: string
+  /** Payment currency label, when supplied by the provider */
+  currency?: string
 }
 
 /**
@@ -263,6 +270,12 @@ export interface TopupInfo {
   enable_waffo_pancake_topup?: boolean
   /** Minimum topup amount for Waffo Pancake */
   waffo_pancake_min_topup?: number
+  /** Whether NOWPayments USDT topup is enabled */
+  enable_nowpayments_topup?: boolean
+  /** Minimum quota for NOWPayments */
+  nowpayments_min_topup?: number
+  /** Quota credited per 1 USDT */
+  nowpayments_quota_per_usdt?: number
   /** Whether redemption code usage is enabled */
   enable_redemption?: boolean
   /** Whether compliance confirmation has been completed */

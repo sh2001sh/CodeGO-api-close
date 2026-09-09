@@ -37,6 +37,7 @@ export const PAYMENT_TYPES = {
   XUNHU: 'xunhu',
   WAFFO: 'waffo',
   WAFFO_PANCAKE: 'waffo_pancake',
+  NOWPAYMENTS: 'nowpayments',
 } as const
 
 /**
@@ -55,6 +56,7 @@ export const PAYMENT_ICON_COLORS = {
   [PAYMENT_TYPES.XUNHU]: '#FF8A00',
   [PAYMENT_TYPES.WAFFO]: '#2563EB',
   [PAYMENT_TYPES.WAFFO_PANCAKE]: '#F97316',
+  [PAYMENT_TYPES.NOWPAYMENTS]: '#16A34A',
 } as const
 
 /**

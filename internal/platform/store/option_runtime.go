@@ -188,6 +188,20 @@ func applyOptionValue(key string, value string) (err error) {
 		commercestore.XunhuGateway = value
 	case "XunhuMinTopUp":
 		commercestore.XunhuMinTopUp, _ = strconv.Atoi(value)
+	case "NowPaymentsEnabled":
+		commercestore.NowPaymentsEnabled = value == "true"
+	case "NowPaymentsApiKey":
+		commercestore.NowPaymentsApiKey = value
+	case "NowPaymentsIPNSecret":
+		commercestore.NowPaymentsIPNSecret = value
+	case "NowPaymentsPaymentCurrency":
+		commercestore.NowPaymentsPaymentCurrency = strings.ToLower(strings.TrimSpace(value))
+	case "NowPaymentsPayCurrency":
+		commercestore.NowPaymentsPayCurrency = strings.ToLower(strings.TrimSpace(value))
+	case "NowPaymentsQuotaPerUSDT":
+		commercestore.NowPaymentsQuotaPerUSDT, _ = strconv.ParseFloat(value, 64)
+	case "NowPaymentsMinTopUp":
+		commercestore.NowPaymentsMinTopUp, _ = strconv.Atoi(value)
 	case "WaffoEnabled":
 		commercestore.WaffoEnabled = value == "true"
 	case "WaffoApiKey":

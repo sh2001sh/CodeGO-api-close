@@ -10,6 +10,7 @@ import (
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/webhook"
 	waffocore "github.com/waffo-com/waffo-go/core"
+	"io"
 	stdhttp "net/http"
 )
 
@@ -300,6 +301,37 @@ func RequestXunhuPay(c *gin.Context) {
 		return
 	}
 	respondXunhuTopUp(c, req)
+}
+
+func RequestNowPaymentsPay(c *gin.Context) {
+	var req commerceapp.AmountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(stdhttp.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		return
+	}
+	payload, err := commerceapp.CreateNowPaymentsTopUp(c.Request.Context(), c.GetInt("id"), req)
+	if err != nil {
+		c.JSON(stdhttp.StatusOK, gin.H{"message": "error", "data": err.Error()})
+		return
+	}
+	c.JSON(stdhttp.StatusOK, gin.H{"message": "success", "data": payload})
+}
+
+func NowPaymentsIPN(c *gin.Context) {
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
+	if err != nil || len(body) == 0 {
+		c.AbortWithStatus(stdhttp.StatusBadRequest)
+		return
+	}
+	if err := commerceapp.HandleNowPaymentsIPN(c.Request.Context(), body, c.GetHeader(commerceapp.NowPaymentsSignatureHeader), c.ClientIP()); err != nil {
+		if err.Error() == "invalid NOWPayments IPN" {
+			c.AbortWithStatus(stdhttp.StatusUnauthorized)
+			return
+		}
+		c.AbortWithStatus(stdhttp.StatusBadRequest)
+		return
+	}
+	c.Status(stdhttp.StatusOK)
 }
 
 func respondXunhuTopUp(c *gin.Context, req commerceapp.EpayRequest) {

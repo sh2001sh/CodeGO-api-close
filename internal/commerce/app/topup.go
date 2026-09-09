@@ -73,6 +73,10 @@ func BuildTopUpInfo(userID int) map[string]any {
 			payMethods = append(payMethods, BuildXunhuPayMethod(GetXunhuMinTopupAmount(userGroup)))
 		}
 	}
+	enableNowPayments := IsNowPaymentsTopUpEnabled()
+	if enableNowPayments && !containsPayMethod(payMethods, PaymentMethodNowPayments) {
+		payMethods = append(payMethods, BuildNowPaymentsPayMethod())
+	}
 
 	return map[string]any{
 		"enable_online_topup":              IsEpayTopUpEnabled() || enableXunhu,
@@ -80,6 +84,7 @@ func BuildTopUpInfo(userID int) map[string]any {
 		"enable_creem_topup":               IsCreemTopUpEnabled(),
 		"enable_waffo_topup":               enableWaffo,
 		"enable_waffo_pancake_topup":       enableWaffoPancake,
+		"enable_nowpayments_topup":         enableNowPayments,
 		"enable_redemption":                complianceConfirmed,
 		"payment_compliance_confirmed":     complianceConfirmed,
 		"payment_compliance_terms_version": commercestore.CurrentComplianceTermsVersion,
@@ -89,15 +94,17 @@ func BuildTopUpInfo(userID int) map[string]any {
 			}
 			return nil
 		}(),
-		"creem_products":          commercestore.CreemProducts,
-		"pay_methods":             payMethods,
-		"min_topup":               commercestore.MinTopUp,
-		"stripe_min_topup":        commercestore.StripeMinTopUp,
-		"waffo_min_topup":         commercestore.WaffoMinTopUp,
-		"waffo_pancake_min_topup": commercestore.WaffoPancakeMinTopUp,
-		"amount_options":          commercestore.GetPaymentSetting().AmountOptions,
-		"discount":                commercestore.GetPaymentSetting().AmountDiscount,
-		"topup_link":              platformconfig.TopUpLink,
+		"creem_products":             commercestore.CreemProducts,
+		"pay_methods":                payMethods,
+		"min_topup":                  commercestore.MinTopUp,
+		"stripe_min_topup":           commercestore.StripeMinTopUp,
+		"waffo_min_topup":            commercestore.WaffoMinTopUp,
+		"waffo_pancake_min_topup":    commercestore.WaffoPancakeMinTopUp,
+		"nowpayments_min_topup":      GetNowPaymentsMinTopup(),
+		"nowpayments_quota_per_usdt": commercestore.NowPaymentsQuotaPerUSDT,
+		"amount_options":             commercestore.GetPaymentSetting().AmountOptions,
+		"discount":                   commercestore.GetPaymentSetting().AmountDiscount,
+		"topup_link":                 platformconfig.TopUpLink,
 	}
 }
 

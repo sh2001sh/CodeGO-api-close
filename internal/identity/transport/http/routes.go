@@ -57,6 +57,8 @@ func RegisterUserRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gi
 			selfRoute.POST("/pay", middleware.CriticalRateLimit(), commercehttp.RequestTopUpPayment)
 			selfRoute.POST("/xunhu/pay", middleware.CriticalRateLimit(), commercehttp.RequestXunhuPay)
 			selfRoute.POST("/amount", commercehttp.RequestAmount)
+			selfRoute.POST("/nowpayments/amount", commercehttp.RequestNowPaymentsAmount)
+			selfRoute.POST("/nowpayments/pay", middleware.CriticalRateLimit(), commercehttp.RequestNowPaymentsPay)
 			selfRoute.POST("/stripe/pay", middleware.CriticalRateLimit(), commercehttp.RequestStripePay)
 			selfRoute.POST("/stripe/amount", commercehttp.RequestStripeAmount)
 			selfRoute.POST("/creem/pay", middleware.CriticalRateLimit(), commercehttp.RequestCreemPay)

@@ -73,6 +73,25 @@ func TestScoreGroupDoesNotPromoteLegacyTTFTToPercentile(t *testing.T) {
 	require.Zero(t, snapshot.LatencySampleCount)
 }
 
+func TestScoreGroupPreservesCalculatedScorePrecision(t *testing.T) {
+	t.Parallel()
+
+	snapshot := scoreGroup(marketplaceschema.Group{ID: "precise", Multiplier: 1.5}, rankingTotals{
+		requestCount:   10000,
+		successWeight:  10000,
+		successTotal:   1000000,
+		latencyWeight:  10000,
+		latencyTotal:   150000000,
+		attemptTtftP50: 1500,
+		latencySamples: 10000,
+		tpsWeight:      10000,
+		tpsTotal:       504000,
+		cacheHitRate:   50,
+	}, 10, 24)
+
+	require.Equal(t, 67.53, snapshot.Score)
+}
+
 func TestAssignRanksUsesStableTieBreaker(t *testing.T) {
 	t.Parallel()
 

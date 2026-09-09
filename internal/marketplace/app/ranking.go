@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const rankingVersion = "marketplace-v3-exact-latency"
+const rankingVersion = "marketplace-v4-score-precision"
 
 var marketplaceListCache struct {
 	sync.Mutex
@@ -349,7 +349,7 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 	}
 	return marketplaceschema.RankingSnapshot{
 		GroupID: group.ID, WindowHours: hours, RankingVersion: rankingVersion,
-		Score: round1(score), RawSuccessRate: round2(successRate), WilsonSuccessRate: round2(wilson),
+		Score: round2(score), RawSuccessRate: round2(successRate), WilsonSuccessRate: round2(wilson),
 		// AvgTTFTMs remains a compatibility alias. New clients use the explicit
 		// attempt/e2e percentile fields below.
 		AvgTTFTMs:          round2(total.attemptTtftP50),

@@ -170,7 +170,7 @@ export function MarketGroupCard(props: {
           <span>并发</span>
         </div>
         <div className='m'>
-          <b>{group.score || '—'}</b>
+          <b>{hasTraffic ? group.score.toFixed(2) : '—'}</b>
           <span>评分</span>
         </div>
       </div>

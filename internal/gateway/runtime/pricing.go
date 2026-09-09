@@ -82,8 +82,20 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 		modelPrice = marketplaceImagePrice
 		usePrice = true
 	}
+	marketplaceChannelPrice, marketplacePriceSet := marketplaceChannelModelPrice(c, info.OriginModelName)
+	var marketplaceTokenPrice *marketplacedomain.ChannelModelPrice
+	if marketplacePriceSet {
+		if marketplaceChannelPrice.EffectiveBillingMode() == marketplacedomain.ChannelBillingModePerCall {
+			modelPrice = marketplaceChannelPrice.PricePerCall
+			usePrice = true
+		} else {
+			marketplaceTokenPrice = &marketplaceChannelPrice
+			modelPrice = 0
+			usePrice = false
+		}
+	}
 
-	if !marketplaceImage && gatewaystore.GetBillingMode(info.OriginModelName) == gatewaystore.BillingModeTieredExpr {
+	if !marketplaceImage && !marketplacePriceSet && gatewaystore.GetBillingMode(info.OriginModelName) == gatewaystore.BillingModeTieredExpr {
 		return modelPriceHelperTiered(c, info, promptTokens, meta, groupRatioInfo)
 	}
 
@@ -101,18 +113,23 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 	if !usePrice {
 		var success bool
 		var matchName string
-		var marketplaceTokenPrice *marketplacedomain.ChannelModelPrice
-		modelRatio, success, matchName = gatewaystore.GetModelRatio(info.OriginModelName)
-		if !success {
-			if channelPrice, ok := marketplaceChannelModelPrice(c, info.OriginModelName); ok {
-				if channelPrice.EffectiveBillingMode() == marketplacedomain.ChannelBillingModePerCall {
-					modelPrice = channelPrice.PricePerCall
-					usePrice = true
-				} else {
-					modelRatio = channelPrice.InputPricePerMillion / 2
-					completionRatio = channelPrice.OutputPricePerMillion / channelPrice.InputPricePerMillion
-					marketplaceTokenPrice = &channelPrice
-					success = true
+		if marketplacePriceSet {
+			modelRatio = marketplaceTokenPrice.InputPricePerMillion / 2
+			completionRatio = marketplaceTokenPrice.OutputPricePerMillion / marketplaceTokenPrice.InputPricePerMillion
+			success = true
+		} else {
+			modelRatio, success, matchName = gatewaystore.GetModelRatio(info.OriginModelName)
+			if !success {
+				if channelPrice, ok := marketplaceChannelModelPrice(c, info.OriginModelName); ok {
+					if channelPrice.EffectiveBillingMode() == marketplacedomain.ChannelBillingModePerCall {
+						modelPrice = channelPrice.PricePerCall
+						usePrice = true
+					} else {
+						modelRatio = channelPrice.InputPricePerMillion / 2
+						completionRatio = channelPrice.OutputPricePerMillion / channelPrice.InputPricePerMillion
+						marketplaceTokenPrice = &channelPrice
+						success = true
+					}
 				}
 			}
 		}
@@ -152,6 +169,9 @@ func ModelPriceHelper(c *gin.Context, info *RelayInfo, promptTokens int, meta *t
 				float64(preConsumedTokens), modelRatio, groupRatioInfo.GroupRatio,
 			)
 		}
+	} else if marketplacePriceSet && marketplaceTokenPrice != nil {
+		modelRatio = marketplaceTokenPrice.InputPricePerMillion / 2
+		completionRatio = marketplaceTokenPrice.OutputPricePerMillion / marketplaceTokenPrice.InputPricePerMillion
 	}
 	if usePrice {
 		if meta.ImagePriceRatio != 0 {
@@ -219,9 +239,24 @@ func marketplaceChannelModelPrice(c *gin.Context, modelName string) (marketplace
 func ModelPriceHelperPerCall(c *gin.Context, info *RelayInfo) (types.PriceData, error) {
 	groupRatioInfo := HandleGroupRatio(c, info)
 
-	modelPrice, success := gatewaystore.GetModelPrice(info.OriginModelName, true)
-	usePrice := success
+	marketplaceChannelPrice, marketplacePriceSet := marketplaceChannelModelPrice(c, info.OriginModelName)
+	var modelPrice float64
+	var success bool
 	var modelRatio float64
+	usePrice := false
+	if marketplacePriceSet {
+		if marketplaceChannelPrice.EffectiveBillingMode() == marketplacedomain.ChannelBillingModePerCall {
+			modelPrice = marketplaceChannelPrice.PricePerCall
+			usePrice = true
+			success = true
+		} else {
+			modelRatio = marketplaceChannelPrice.InputPricePerMillion / 2
+			success = true
+		}
+	} else {
+		modelPrice, success = gatewaystore.GetModelPrice(info.OriginModelName, true)
+		usePrice = success
+	}
 	marketplaceImagePrice, marketplaceImage, err := requiredMarketplaceImagePrice(c, info.OriginModelName)
 	if err != nil {
 		return types.PriceData{}, err

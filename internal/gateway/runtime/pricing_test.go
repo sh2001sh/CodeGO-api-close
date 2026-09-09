@@ -212,7 +212,7 @@ func TestMarketplaceChannelPerCallPriceSupportsPerCallEndpoints(t *testing.T) {
 	require.Positive(t, price.Quota)
 }
 
-func TestTieredSitePriceTakesPriorityOverMarketplacePerCallPrice(t *testing.T) {
+func TestMarketplacePerCallPriceOverridesTieredSitePrice(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
@@ -229,11 +229,12 @@ func TestTieredSitePriceTakesPriorityOverMarketplacePerCallPrice(t *testing.T) {
 	price, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 1000})
 
 	require.NoError(t, err)
-	require.False(t, price.UsePrice)
-	require.NotNil(t, info.TieredBillingSnapshot)
+	require.True(t, price.UsePrice)
+	require.InDelta(t, 999, price.ModelPrice, 0.000001)
+	require.Nil(t, info.TieredBillingSnapshot)
 }
 
-func TestGlobalModelPriceTakesPriorityOverMarketplaceChannelPrice(t *testing.T) {
+func TestMarketplaceChannelPriceOverridesGlobalModelPrice(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	originalRatios := gatewaystore.ModelRatio2JSONString()
 	var ratios map[string]float64
@@ -253,5 +254,6 @@ func TestGlobalModelPriceTakesPriorityOverMarketplaceChannelPrice(t *testing.T) 
 	info := &RelayInfo{OriginModelName: "market-global-priority-model", UsingGroup: "market_dynamic", UserGroup: "default"}
 	price, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 1000})
 	require.NoError(t, err)
-	require.Equal(t, 3.0, price.ModelRatio)
+	require.InDelta(t, 999/2.0, price.ModelRatio, 0.000001)
+	require.InDelta(t, 999.0/999.0, price.CompletionRatio, 0.000001)
 }

@@ -29,15 +29,25 @@ import {
   X,
 } from 'lucide-react'
 import { SiteSeo } from '@/components/seo'
+import { useMarketplaceGroups } from '@/features/marketplace/hooks'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
 import {
   EXCLUDED_GROUPS,
   QUOTA_TYPE_VALUES,
 } from '@/features/pricing/constants'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
+import {
+  formatDynamicUnitPrice,
+  getDynamicPricingTiers,
+  isDynamicPricingModel,
+} from '@/features/pricing/lib/dynamic-price'
 import { availablePricingModels } from '@/features/pricing/lib/merge-pricing-models'
 import { formatPrice, formatGroupPrice } from '@/features/pricing/lib/price'
-import type { PricingModel, TokenUnit } from '@/features/pricing/types'
+import type {
+  PriceType,
+  PricingModel,
+  TokenUnit,
+} from '@/features/pricing/types'
 import { DawnModal } from '../components/dawn-modal'
 import { DawnNav } from '../components/dawn-nav'
 import { DawnQueryError } from '../components/query-error'
@@ -74,6 +84,19 @@ function guessVendor(name: string): string {
 
 export function DawnPlaza() {
   const pricing = usePricingData()
+  const marketplaceGroupsQuery = useMarketplaceGroups({
+    search: '',
+    model: '',
+    source: '',
+    provider: '',
+    status: '',
+    verification: '',
+    sort: 'score',
+    direction: 'desc',
+    window_hours: 24,
+    page: 1,
+    page_size: 50,
+  })
   const perfQuery = useQuery({
     queryKey: ['pricing-model-performance', 24],
     queryFn: () => getPerfMetricsSummary(24),
@@ -128,6 +151,21 @@ export function DawnPlaza() {
     [pricing.usableGroup]
   )
 
+  const marketplaceGroups = useMemo(
+    () =>
+      (marketplaceGroupsQuery.data?.items ?? []).map((group) => ({
+        name: group.system_display_name,
+        ratio: group.multiplier || 1,
+        desc: group.source_label || group.source_type,
+        sourceLabel:
+          group.source_label ||
+          (group.source_type === 'official' ? '官方' : '第三方'),
+        sourceType: group.source_type,
+        models: group.models,
+      })),
+    [marketplaceGroupsQuery.data]
+  )
+
   const list = useMemo(() => {
     const query = keyword.trim().toLowerCase()
     const filtered = models.filter(
@@ -168,8 +206,24 @@ export function DawnPlaza() {
     const enabled = Array.isArray(detailModel.enable_groups)
       ? detailModel.enable_groups
       : []
-    return groups.filter((group) => enabled.includes(group.name))
-  }, [detailModel, groups])
+    const official = groups
+      .filter((group) => enabled.includes(group.name))
+      .map((group) => ({
+        ...group,
+        sourceLabel: '官方',
+        sourceType: 'official' as const,
+      }))
+    const marketplace = marketplaceGroups.filter((group) =>
+      group.models.some(
+        (model) => model.toLowerCase() === detailModel.model_name.toLowerCase()
+      )
+    )
+    const seen = new Set(official.map((group) => group.name))
+    return [
+      ...official,
+      ...marketplace.filter((group) => !seen.has(group.name)),
+    ]
+  }, [detailModel, groups, marketplaceGroups])
 
   return (
     <div className='dawn'>
@@ -424,21 +478,21 @@ export function DawnPlaza() {
                   <div
                     className={`pc${detailModel.model_ratio === 0 ? 'free' : ''}`}
                   >
-                    <b>{formatPrice(detailModel, 'input', unit)}</b>
+                    <b>{baseModelPrice(detailModel, 'input', unit)}</b>
                     <span>输入 / {unit}</span>
                   </div>
                   <div
                     className={`pc${detailModel.model_ratio === 0 ? 'free' : ''}`}
                   >
-                    <b>{formatPrice(detailModel, 'output', unit)}</b>
+                    <b>{baseModelPrice(detailModel, 'output', unit)}</b>
                     <span>输出 / {unit}</span>
                   </div>
                   <div className='pc'>
-                    <b>{cacheText(detailModel, unit, 'create_cache')}</b>
+                    <b>{baseModelPrice(detailModel, 'create_cache', unit)}</b>
                     <span>缓存写入 / {unit}</span>
                   </div>
                   <div className='pc free'>
-                    <b>{cacheText(detailModel, unit, 'cache')}</b>
+                    <b>{baseModelPrice(detailModel, 'cache', unit)}</b>
                     <span>缓存读取 / {unit}</span>
                   </div>
                 </>
@@ -468,6 +522,39 @@ export function DawnPlaza() {
               <Waypoints size={12} />
               各分组价格（含分组倍率）
             </div>
+            {isDynamicPricingModel(detailModel) && (
+              <div className='gtab' style={{ marginBottom: 12 }}>
+                <div className='gr gh'>
+                  <span>阶梯</span>
+                  <span>条件</span>
+                  <span>输入 /{unit}</span>
+                  <span>输出 /{unit}</span>
+                  <span />
+                </div>
+                {getDynamicPricingTiers(detailModel).map((tier, index) => (
+                  <div className='gr' key={`tier-${index}`}>
+                    <span className='gn'>第 {index + 1} 档</span>
+                    <span className='num'>
+                      {tier.conditions.length
+                        ? tier.conditions
+                            .map(
+                              (condition) =>
+                                `${condition.var} ${condition.op} ${condition.value}`
+                            )
+                            .join(' · ')
+                        : '默认'}
+                    </span>
+                    <span className='num'>
+                      {dynamicTierPrice(tier.inputPrice, unit)}
+                    </span>
+                    <span className='num'>
+                      {dynamicTierPrice(tier.outputPrice, unit)}
+                    </span>
+                    <span />
+                  </div>
+                ))}
+              </div>
+            )}
             <div className='gtab'>
               <div className='gr gh'>
                 <span>分组</span>
@@ -478,7 +565,12 @@ export function DawnPlaza() {
               </div>
               {detailGroups.map((group) => (
                 <div className='gr' key={group.name}>
-                  <span className='gn'>{group.name}</span>
+                  <span className='gn'>
+                    {group.name}
+                    <small style={{ marginLeft: 6, opacity: 0.6 }}>
+                      {group.sourceLabel}
+                    </small>
+                  </span>
                   <span className='num'>{group.ratio}×</span>
                   {detailModel.quota_type === QUOTA_TYPE_VALUES.REQUEST ? (
                     <>
@@ -491,31 +583,45 @@ export function DawnPlaza() {
                     <>
                       <span className='num'>
                         <b>
-                          {formatGroupPrice(
-                            detailModel,
-                            group.name,
-                            'input',
-                            unit,
-                            false,
-                            1,
-                            1,
-                            pricing.groupRatio
-                          )}
+                          {group.sourceType === 'official'
+                            ? formatGroupPrice(
+                                detailModel,
+                                group.name,
+                                'input',
+                                unit,
+                                false,
+                                1,
+                                1,
+                                pricing.groupRatio
+                              )
+                            : marketplaceGroupPrice(
+                                detailModel,
+                                group.ratio,
+                                'input',
+                                unit
+                              )}
                         </b>
                         <span className='u'> /{unit}</span>
                       </span>
                       <span className='num'>
                         <b>
-                          {formatGroupPrice(
-                            detailModel,
-                            group.name,
-                            'output',
-                            unit,
-                            false,
-                            1,
-                            1,
-                            pricing.groupRatio
-                          )}
+                          {group.sourceType === 'official'
+                            ? formatGroupPrice(
+                                detailModel,
+                                group.name,
+                                'output',
+                                unit,
+                                false,
+                                1,
+                                1,
+                                pricing.groupRatio
+                              )
+                            : marketplaceGroupPrice(
+                                detailModel,
+                                group.ratio,
+                                'output',
+                                unit
+                              )}
                         </b>
                         <span className='u'> /{unit}</span>
                       </span>
@@ -564,6 +670,34 @@ function cacheText(
 ): string {
   const value = formatPrice(model, type, unit)
   return value.includes('NaN') || value === '-' ? '—' : value
+}
+
+function marketplaceGroupPrice(
+  model: PricingModel,
+  ratio: number,
+  type: 'input' | 'output',
+  unit: TokenUnit
+): string {
+  return formatGroupPrice(model, '_marketplace', type, unit, false, 1, 1, {
+    _marketplace: ratio || 1,
+  })
+}
+
+function baseModelPrice(
+  model: PricingModel,
+  type: PriceType,
+  unit: TokenUnit
+): string {
+  if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) return meteredPrice(model)
+  return formatGroupPrice(model, '_base', type, unit, false, 1, 1, {
+    _base: 1,
+  })
+}
+
+function dynamicTierPrice(value: unknown, unit: TokenUnit): string {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) return '—'
+  return formatDynamicUnitPrice(numeric, { tokenUnit: unit })
 }
 
 function PriceText({ model, unit }: { model: PricingModel; unit: TokenUnit }) {

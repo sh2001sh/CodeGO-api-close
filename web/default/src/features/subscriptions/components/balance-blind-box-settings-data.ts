@@ -12,7 +12,7 @@ export const DEFAULT_BALANCE_BLIND_BOX_TIERS: BlindBoxTierSetting[] = [
   quotaTier('300.00-500.00 统一额度', 300, 500, 0.0000001),
   quotaTier('500.00 统一额度', 500, 500, 0.00000001),
   propTier('再来一抽', 0.0127),
-  propTier('15 分钟 0.1 倍率卡', 0.001),
+  propTier('九折充值卡', 0.001),
 ]
 
 export const BALANCE_BLIND_BOX_DEFAULTS = {

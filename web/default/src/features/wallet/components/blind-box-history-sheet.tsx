@@ -32,7 +32,7 @@ import {
 const PAGE_SIZE = 20
 
 const PROP_TITLES: Record<string, string> = {
-  topup_discount_90: '充值九折卡',
+  topup_discount_90: '九折充值卡',
   subscription_discount_90: '历史套餐折扣卡',
   consume_discount_95: '0.95 倍率卡',
   consume_discount_90: '0.9 倍率卡',
@@ -287,9 +287,9 @@ function propDescription(propType: string) {
   if (propType === 'extra_draw')
     return '已自动补发 1 个待开启盲盒，不占每日购买数量。'
   if (propType === 'topup_discount_90')
-    return '下次钱包充值自动享受九折，仅使用一次。'
+    return '下次套餐购买或余额充值自动享受九折，仅使用一次。'
   if (propType === 'subscription_discount_90')
-    return '迁移前获得的历史折扣卡，可转换为充值九折卡后使用。'
+    return '迁移前获得的历史折扣卡，可转换为九折充值卡后使用。'
   if (propType === 'consume_discount_95')
     return '仅官方渠道可用，启用后按 0.95 倍率计算，持续 24 小时。'
   if (propType === 'consume_discount_90')

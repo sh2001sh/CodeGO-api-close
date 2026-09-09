@@ -21,7 +21,7 @@ export function BlindBoxPropsList(props: {
       </div>
       <div className='text-muted-foreground mt-1 text-xs leading-5'>
         {t(
-          '倍率卡需手动启用，充值九折卡会自动应用于下一笔符合条件的统一额度充值。'
+          '倍率卡需手动启用，九折充值卡会自动应用于下一笔套餐购买或余额充值。'
         )}
       </div>
       <div className='mt-3 space-y-2'>
@@ -36,10 +36,7 @@ export function BlindBoxPropsList(props: {
           const pausable = monthlyPass || universalPointOne || zeroHour
           const canUse = available || (pausable && paused)
           const convertible =
-            available &&
-            ['topup_discount_90', 'subscription_discount_90'].includes(
-              prop.prop_type
-            )
+            available && prop.prop_type === 'subscription_discount_90'
 
           return (
             <div
@@ -87,9 +84,7 @@ export function BlindBoxPropsList(props: {
                       }
                       data-icon='inline-start'
                     />
-                    {prop.prop_type === 'subscription_discount_90'
-                      ? '转为充值九折卡'
-                      : '转为套餐九折卡'}
+                    转为九折充值卡
                   </Button>
                 ) : null}
                 {pausable && active ? (
@@ -196,6 +191,7 @@ function getPropDescription(
 }
 
 function getPropTitle(prop: BlindBoxProp) {
+  if (prop.prop_type === 'topup_discount_90') return '九折充值卡'
   if (prop.prop_type === 'consume_discount_10') return '15 分钟 0.1 倍率卡'
   if (prop.prop_type === 'monthly_pass_multiplier') return '套餐 0.1 倍率卡'
   if (prop.prop_type === 'subscription_discount_90') return '历史套餐折扣卡'

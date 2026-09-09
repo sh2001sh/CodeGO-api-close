@@ -35,7 +35,7 @@ export function normalizeDisplayedTiers(tiers: BlindBoxTierSetting[]) {
   const hasRemovedReward = tiers.some(
     (tier) =>
       tier.reward_type === 'prop' &&
-      !['再来一抽', '15 分钟 0.1 倍率卡'].includes(tier.name.trim())
+      !['再来一抽', '九折充值卡'].includes(tier.name.trim())
   )
   const exceedsCurrentCap = tiers.some((tier) => tier.max_usd > 500)
   const usesPreviousCommonRange = tiers.some(

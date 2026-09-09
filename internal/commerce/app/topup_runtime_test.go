@@ -24,7 +24,7 @@ func TestCompleteTopUpByTradeNo_ConsumesReservedBlindBoxProp(t *testing.T) {
 	var prop *commerceschema.BlindBoxProp
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var txErr error
-		prop, txErr = createBlindBoxPropTx(tx, user.Id, 2, "充值九折卡")
+		prop, txErr = createBlindBoxPropTx(tx, user.Id, 2, "九折充值卡")
 		return txErr
 	})
 	require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestExpireDueTopUps_ReleasesReservedBlindBoxProp(t *testing.T) {
 	var prop *commerceschema.BlindBoxProp
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
 		var err error
-		prop, err = createBlindBoxPropTx(tx, user.Id, 2, "充值九折卡")
+		prop, err = createBlindBoxPropTx(tx, user.Id, 2, "九折充值卡")
 		return err
 	}))
 

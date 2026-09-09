@@ -237,19 +237,13 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     async (prop: BlindBoxProp) => {
       if (
         prop.status !== 'available' ||
-        !['topup_discount_90', 'subscription_discount_90'].includes(
-          prop.prop_type
-        )
+        prop.prop_type !== 'subscription_discount_90'
       ) {
         return
       }
-      const targetType =
-        prop.prop_type === 'topup_discount_90'
-          ? 'subscription_discount_90'
-          : 'topup_discount_90'
       setConvertingPropId(prop.id)
       try {
-        const response = await convertBlindBoxProp(prop.id, targetType)
+        const response = await convertBlindBoxProp(prop.id, 'topup_discount_90')
         if (!isApiSuccess(response) || !response.data?.prop) {
           throw new Error(response.message || '转换失败')
         }

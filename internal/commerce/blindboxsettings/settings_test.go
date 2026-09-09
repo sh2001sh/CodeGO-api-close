@@ -14,7 +14,7 @@ func TestGetUsesUnifiedBlindBoxPoolForBothPaymentEntries(t *testing.T) {
 	require.InDelta(t, 0.52177312, setting.Tiers[0].Probability, 0.000000001)
 	require.Equal(t, "500.00 统一额度", setting.Tiers[9].Name)
 	require.Equal(t, "再来一抽", setting.Tiers[10].Name)
-	require.Equal(t, "15 分钟 0.1 倍率卡", setting.Tiers[11].Name)
+	require.Equal(t, "九折充值卡", setting.Tiers[11].Name)
 	require.Equal(t, 10, setting.DailyLimit)
 	require.Equal(t, 10, setting.BalanceBlindBoxDailyPurchaseLimit)
 	require.Len(t, setting.BalanceBlindBoxFirstDrawTiers, 3)
@@ -22,6 +22,22 @@ func TestGetUsesUnifiedBlindBoxPoolForBothPaymentEntries(t *testing.T) {
 	require.Len(t, setting.BalanceBlindBoxPityTiers, 3)
 	require.InDelta(t, defaultSubscriptionPrizeProbability, setting.SubscriptionPrizeProbability, 0.000000001)
 	require.Equal(t, defaultSubscriptionPlanTitle, setting.SubscriptionPlanTitle)
+}
+
+func TestGetMigratesMultiplierRewardToUniversalDiscountCard(t *testing.T) {
+	original := Get()
+	t.Cleanup(func() { Set(original) })
+
+	setting := original
+	setting.Tiers = copyTierSettings(original.Tiers)
+	setting.BalanceBlindBoxTiers = copyTierSettings(original.BalanceBlindBoxTiers)
+	setting.Tiers[11].Name = "15 分钟 0.1 倍率卡"
+	setting.BalanceBlindBoxTiers[11].Name = "15 分钟 0.1 倍率卡"
+	Set(setting)
+
+	normalized := Get()
+	require.Equal(t, "九折充值卡", normalized.Tiers[11].Name)
+	require.Equal(t, "九折充值卡", normalized.BalanceBlindBoxTiers[11].Name)
 }
 
 func TestGetMigratesKnownLegacyUnifiedPool(t *testing.T) {

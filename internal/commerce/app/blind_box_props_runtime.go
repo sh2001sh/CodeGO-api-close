@@ -160,14 +160,14 @@ func hasActiveBlindBoxPropTypeTx(tx *gorm.DB, userID int, propType string) bool 
 	return err == nil && count > 0
 }
 
-// ConvertBlindBoxDiscountProp converts an unused 10% top-up discount card
-// into a subscription discount card, or vice versa, without consuming it.
+// ConvertBlindBoxDiscountProp migrates an unused legacy subscription card to
+// the universal discount card used by top-up and subscription orders.
 func ConvertBlindBoxDiscountProp(userID int, propID int, targetType string) (*commerceschema.BlindBoxProp, error) {
 	if userID <= 0 || propID <= 0 {
 		return nil, errors.New("invalid blind box prop request")
 	}
 	targetSpec, ok := getBlindBoxPropSpecByType(targetType)
-	if !ok || !isConvertibleBlindBoxDiscountPropType(targetSpec.PropType) {
+	if !ok || targetSpec.PropType != commerceschema.BlindBoxPropTypeTopupDiscount90 {
 		return nil, errors.New("unsupported blind box prop conversion")
 	}
 	var prop commerceschema.BlindBoxProp
@@ -178,7 +178,7 @@ func ConvertBlindBoxDiscountProp(userID int, propID int, targetType string) (*co
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
 			return err
 		}
-		if !isConvertibleBlindBoxDiscountPropType(prop.PropType) {
+		if prop.PropType != commerceschema.BlindBoxPropTypeSubscriptionDiscount90 {
 			return errors.New("this prop cannot be converted")
 		}
 		if prop.Status != commerceschema.BlindBoxPropStatusAvailable {
@@ -207,11 +207,6 @@ func ConvertBlindBoxDiscountProp(userID int, propID int, targetType string) (*co
 		return nil, err
 	}
 	return &prop, nil
-}
-
-func isConvertibleBlindBoxDiscountPropType(propType string) bool {
-	return propType == commerceschema.BlindBoxPropTypeTopupDiscount90 ||
-		propType == commerceschema.BlindBoxPropTypeSubscriptionDiscount90
 }
 
 func GetUserBlindBoxConsumptionDiscountRate(userID int) float64 {
@@ -245,22 +240,28 @@ func GetUserBlindBoxTopupDiscountRate(userID int) float64 {
 	if userID <= 0 {
 		return 0
 	}
-	return getAvailableBlindBoxPropDiscountRateTx(platformdb.DB, userID, commerceschema.BlindBoxPropTypeTopupDiscount90)
+	return getAvailableBlindBoxPropDiscountRateTx(platformdb.DB, userID, []string{commerceschema.BlindBoxPropTypeTopupDiscount90})
 }
 
 func GetUserBlindBoxSubscriptionDiscountRate(userID int) float64 {
 	if userID <= 0 {
 		return 0
 	}
-	return getAvailableBlindBoxPropDiscountRateTx(platformdb.DB, userID, commerceschema.BlindBoxPropTypeSubscriptionDiscount90)
+	return getAvailableBlindBoxPropDiscountRateTx(platformdb.DB, userID, []string{
+		commerceschema.BlindBoxPropTypeTopupDiscount90,
+		commerceschema.BlindBoxPropTypeSubscriptionDiscount90,
+	})
 }
 
 func ReserveBlindBoxTopupDiscountPropTx(tx *gorm.DB, userID int, tradeNo string) (*commerceschema.BlindBoxProp, error) {
-	return reserveBlindBoxDiscountPropTx(tx, userID, tradeNo, commerceschema.BlindBoxPropTypeTopupDiscount90, commerceschema.BlindBoxPropOrderTypeTopup)
+	return reserveBlindBoxDiscountPropTx(tx, userID, tradeNo, []string{commerceschema.BlindBoxPropTypeTopupDiscount90}, commerceschema.BlindBoxPropOrderTypeTopup)
 }
 
 func ReserveBlindBoxSubscriptionDiscountPropTx(tx *gorm.DB, userID int, tradeNo string) (*commerceschema.BlindBoxProp, error) {
-	return reserveBlindBoxDiscountPropTx(tx, userID, tradeNo, commerceschema.BlindBoxPropTypeSubscriptionDiscount90, commerceschema.BlindBoxPropOrderTypeSubscription)
+	return reserveBlindBoxDiscountPropTx(tx, userID, tradeNo, []string{
+		commerceschema.BlindBoxPropTypeTopupDiscount90,
+		commerceschema.BlindBoxPropTypeSubscriptionDiscount90,
+	}, commerceschema.BlindBoxPropOrderTypeSubscription)
 }
 
 func ReleaseReservedBlindBoxPropByTradeNoTx(tx *gorm.DB, tradeNo string, orderType string) error {
@@ -355,12 +356,12 @@ func createBlindBoxPropTx(tx *gorm.DB, userID int, openRecordID int, rewardTitle
 	return prop, nil
 }
 
-func getAvailableBlindBoxPropDiscountRateTx(tx *gorm.DB, userID int, propType string) float64 {
-	if tx == nil || userID <= 0 || strings.TrimSpace(propType) == "" {
+func getAvailableBlindBoxPropDiscountRateTx(tx *gorm.DB, userID int, propTypes []string) float64 {
+	if tx == nil || userID <= 0 || len(propTypes) == 0 {
 		return 0
 	}
 	var prop commerceschema.BlindBoxProp
-	err := tx.Where("user_id = ? AND prop_type = ? AND status = ?", userID, propType, commerceschema.BlindBoxPropStatusAvailable).
+	err := tx.Where("user_id = ? AND prop_type IN ? AND status = ?", userID, propTypes, commerceschema.BlindBoxPropStatusAvailable).
 		Order("created_at asc, id asc").
 		First(&prop).Error
 	if err != nil {
@@ -369,10 +370,10 @@ func getAvailableBlindBoxPropDiscountRateTx(tx *gorm.DB, userID int, propType st
 	return prop.DiscountRate
 }
 
-func getAvailableBlindBoxPropByTypeTx(tx *gorm.DB, userID int, propType string) (*commerceschema.BlindBoxProp, error) {
+func getAvailableBlindBoxPropByTypeTx(tx *gorm.DB, userID int, propTypes []string) (*commerceschema.BlindBoxProp, error) {
 	var prop commerceschema.BlindBoxProp
 	if err := tx.Set("gorm:query_option", "FOR UPDATE").
-		Where("user_id = ? AND prop_type = ? AND status = ?", userID, propType, commerceschema.BlindBoxPropStatusAvailable).
+		Where("user_id = ? AND prop_type IN ? AND status = ?", userID, propTypes, commerceschema.BlindBoxPropStatusAvailable).
 		Order("created_at asc, id asc").
 		First(&prop).Error; err != nil {
 		return nil, err
@@ -380,11 +381,11 @@ func getAvailableBlindBoxPropByTypeTx(tx *gorm.DB, userID int, propType string) 
 	return &prop, nil
 }
 
-func reserveBlindBoxDiscountPropTx(tx *gorm.DB, userID int, tradeNo string, propType string, orderType string) (*commerceschema.BlindBoxProp, error) {
+func reserveBlindBoxDiscountPropTx(tx *gorm.DB, userID int, tradeNo string, propTypes []string, orderType string) (*commerceschema.BlindBoxProp, error) {
 	if tx == nil || userID <= 0 || strings.TrimSpace(tradeNo) == "" {
 		return nil, nil
 	}
-	prop, err := getAvailableBlindBoxPropByTypeTx(tx, userID, propType)
+	prop, err := getAvailableBlindBoxPropByTypeTx(tx, userID, propTypes)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -404,11 +405,11 @@ func reserveBlindBoxDiscountPropTx(tx *gorm.DB, userID int, tradeNo string, prop
 
 func getBlindBoxPropSpecByTitle(title string) (commerceschema.BlindBoxPropSpec, bool) {
 	trimmedTitle := strings.TrimSpace(title)
-	if trimmedTitle == "0.10 倍率体验卡" {
+	if trimmedTitle == "0.10 倍率体验卡" || trimmedTitle == "0.1 倍率卡" {
 		return getBlindBoxPropSpecByType(commerceschema.BlindBoxPropTypeConsumeDiscount10)
 	}
-	if trimmedTitle == "0.1 倍率卡" {
-		return getBlindBoxPropSpecByType(commerceschema.BlindBoxPropTypeConsumeDiscount10)
+	if trimmedTitle == "15 分钟 0.1 倍率卡" || trimmedTitle == "充值九折卡" {
+		return getBlindBoxPropSpecByType(commerceschema.BlindBoxPropTypeTopupDiscount90)
 	}
 	for _, spec := range blindBoxPropSpecs() {
 		if spec.Title == trimmedTitle {
@@ -432,7 +433,7 @@ func blindBoxPropSpecs() []commerceschema.BlindBoxPropSpec {
 	return []commerceschema.BlindBoxPropSpec{
 		{
 			PropType:     commerceschema.BlindBoxPropTypeTopupDiscount90,
-			Title:        "充值九折卡",
+			Title:        "九折充值卡",
 			DiscountRate: 0.10,
 			Multiplier:   1,
 		},

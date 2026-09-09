@@ -12,7 +12,7 @@ var defaultTierSettings = []TierSetting{
 	{Name: "300.00-500.00 统一额度", MinUSD: 300, MaxUSD: 500, Probability: 0.0000001, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "500.00 统一额度", MinUSD: 500, MaxUSD: 500, Probability: 0.00000001, RewardType: "claude_quota", WalletType: "claude"},
 	{Name: "再来一抽", Probability: 0.0127, RewardType: "prop"},
-	{Name: "15 分钟 0.1 倍率卡", Probability: 0.001, RewardType: "prop"},
+	{Name: "九折充值卡", Probability: 0.001, RewardType: "prop"},
 }
 
 var defaultBalanceBlindBoxTiers = copyTierSettings(defaultTierSettings)

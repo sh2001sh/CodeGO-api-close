@@ -183,8 +183,8 @@ export function BlindBoxPropRules() {
       detail: '揭晓后立即补发 1 个待开启盲盒，不占每日购买数量，可重复抽中',
     },
     {
-      title: '15 分钟 0.1 倍率卡',
-      detail: '低概率权益；全部现有官方分组通用，累计 15 分钟，可暂停',
+      title: '九折充值卡',
+      detail: '低概率权益；下一笔套餐购买或余额充值自动享受九折，仅使用一次',
     },
   ]
 
@@ -203,7 +203,7 @@ export function BlindBoxPropRules() {
         {rules.map((rule) => (
           <div
             key={rule.title}
-            className='grid gap-x-8 gap-y-0.5 border-b border-border/60 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]'
+            className='border-border/60 grid gap-x-8 gap-y-0.5 border-b py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]'
           >
             <div className='text-foreground text-[13px] font-medium'>
               {rule.title}

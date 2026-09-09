@@ -332,11 +332,12 @@ func TestCreatePendingSubscriptionOrderWithDiscounts_ReleasesReservedPropOnExpir
 	var prop *commerceschema.BlindBoxProp
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var txErr error
-		prop, txErr = createBlindBoxPropTx(tx, user.Id, 3, "套餐九折卡")
+		prop, txErr = createBlindBoxPropTx(tx, user.Id, 3, "九折充值卡")
 		return txErr
 	})
 	require.NoError(t, err)
 	require.NotNil(t, prop)
+	require.Equal(t, commerceschema.BlindBoxPropTypeTopupDiscount90, prop.PropType)
 
 	order := &commerceschema.SubscriptionOrder{
 		UserId:          user.Id,

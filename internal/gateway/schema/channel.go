@@ -26,6 +26,8 @@ type Channel struct {
 	MarketplaceMaxConcurrency        int     `json:"marketplace_max_concurrency" gorm:"column:marketplace_max_concurrency;not null;default:0"`
 	MarketplaceUserMaxConcurrency    int     `json:"marketplace_user_max_concurrency" gorm:"column:marketplace_user_max_concurrency;not null;default:0"`
 	SensitiveWordInterceptionEnabled *bool   `json:"sensitive_word_interception_enabled" gorm:"column:sensitive_word_interception_enabled;default:true"`
+	MultiplierCardSupported          bool    `json:"multiplier_card_supported" gorm:"column:multiplier_card_supported;not null;default:false"`
+	MultiplierCardUserEnabled        bool    `json:"multiplier_card_user_enabled" gorm:"column:multiplier_card_user_enabled;not null;default:false"`
 	Weight                           *uint   `json:"weight" gorm:"default:0"`
 	CreatedTime                      int64   `json:"created_time" gorm:"bigint"`
 	TestTime                         int64   `json:"test_time" gorm:"bigint"`

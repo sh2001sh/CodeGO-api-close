@@ -49,6 +49,8 @@ const (
 	ContextKeyChannelModelMapping            ContextKey = "model_mapping"
 	ContextKeyChannelStatusCodeMapping       ContextKey = "status_code_mapping"
 	ContextKeyChannelSensitiveWords          ContextKey = "channel_sensitive_word_interception_enabled"
+	ContextKeyMultiplierCardSupported        ContextKey = "multiplier_card_supported"
+	ContextKeyMultiplierCardUserEnabled      ContextKey = "multiplier_card_user_enabled"
 	ContextKeyChannelIsMultiKey              ContextKey = "channel_is_multi_key"
 	ContextKeyChannelMultiKeyIndex           ContextKey = "channel_multi_key_index"
 	ContextKeyChannelKey                     ContextKey = "channel_key"

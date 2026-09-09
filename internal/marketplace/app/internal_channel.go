@@ -29,6 +29,8 @@ func syncInternalChannel(channel *marketplaceschema.Channel, group *marketplaces
 	internal.MarketplaceMaxConcurrency = channel.MaxConcurrency
 	internal.MarketplaceUserMaxConcurrency = channel.UserMaxConcurrency
 	internal.SensitiveWordInterceptionEnabled = channel.SensitiveWordInterceptionEnabled
+	internal.MultiplierCardSupported = channel.MultiplierCardSupported
+	internal.MultiplierCardUserEnabled = channel.MultiplierCardUserEnabled
 	internal.ChannelInfo.ResponsesCapabilities = decodeMarketplaceCapabilities(channel.TransportCapabilities)
 	if err := gatewaystore.UpdateChannel(internal); err != nil {
 		return err

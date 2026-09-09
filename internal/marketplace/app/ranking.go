@@ -270,7 +270,7 @@ func marketplaceChannelReadMap(groups []marketplaceschema.Group) (map[string]mar
 		return result, nil
 	}
 	var channels []marketplaceschema.Channel
-	const columns = "id, owner_user_id, provider_type, approved_source_label, source_label_status, declared_models, model_verification_results, connectivity_test_status, connectivity_test_checked_at, model_consistency_status, gpt56_mapping_results, gpt56_mapping_status, gpt56_mapping_checked_at, gpt56_mapping_level, gpt56_mapping_trigger, transport_capabilities, max_concurrency, user_max_concurrency, internal_channel_id"
+	const columns = "id, owner_user_id, provider_type, approved_source_label, source_label_status, declared_models, model_verification_results, connectivity_test_status, connectivity_test_checked_at, model_consistency_status, gpt56_mapping_results, gpt56_mapping_status, gpt56_mapping_checked_at, gpt56_mapping_level, gpt56_mapping_trigger, transport_capabilities, max_concurrency, user_max_concurrency, internal_channel_id, multiplier_card_supported, multiplier_card_user_enabled"
 	if err := platformdb.DB.Select(columns).Where("id IN ?", ids).Find(&channels).Error; err != nil {
 		return nil, err
 	}

@@ -41,6 +41,8 @@ type Channel struct {
 	QPS                              float64        `json:"qps" gorm:"column:qps;not null;default:1"`
 	MaintenanceWindow                string         `json:"maintenance_window" gorm:"column:maintenance_window;size:255"`
 	SensitiveWordInterceptionEnabled *bool          `json:"sensitive_word_interception_enabled" gorm:"column:sensitive_word_interception_enabled;default:true"`
+	MultiplierCardSupported          bool           `json:"multiplier_card_supported" gorm:"column:multiplier_card_supported;not null;default:false"`
+	MultiplierCardUserEnabled        bool           `json:"multiplier_card_user_enabled" gorm:"column:multiplier_card_user_enabled;not null;default:false"`
 	Status                           string         `json:"status" gorm:"column:status;size:24;index;not null"`
 	InternalChannelID                *int           `json:"internal_channel_id" gorm:"column:internal_channel_id;index"`
 	LastReviewReason                 string         `json:"last_review_reason" gorm:"column:last_review_reason;size:500"`

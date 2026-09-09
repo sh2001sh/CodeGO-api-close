@@ -64,25 +64,27 @@ type ResponsesUsageInfo struct {
 }
 
 type ChannelMeta struct {
-	ChannelType           int
-	ChannelId             int
-	ChannelScope          string
-	ChannelIsMultiKey     bool
-	ChannelMultiKeyIndex  int
-	ChannelBaseUrl        string
-	ApiType               int
-	ApiVersion            string
-	ApiKey                string
-	Organization          string
-	ChannelCreateTime     int64
-	ParamOverride         map[string]interface{}
-	HeadersOverride       map[string]interface{}
-	ChannelSetting        dto.ChannelSettings
-	ChannelOtherSettings  dto.ChannelOtherSettings
-	UpstreamModelName     string
-	IsModelMapped         bool
-	SupportStreamOptions  bool // 是否支持流式选项
-	ResponsesCapabilities gatewayschema.ResponsesCapabilities
+	ChannelType               int
+	ChannelId                 int
+	ChannelScope              string
+	ChannelIsMultiKey         bool
+	ChannelMultiKeyIndex      int
+	ChannelBaseUrl            string
+	ApiType                   int
+	ApiVersion                string
+	ApiKey                    string
+	Organization              string
+	ChannelCreateTime         int64
+	ParamOverride             map[string]interface{}
+	HeadersOverride           map[string]interface{}
+	ChannelSetting            dto.ChannelSettings
+	ChannelOtherSettings      dto.ChannelOtherSettings
+	UpstreamModelName         string
+	IsModelMapped             bool
+	SupportStreamOptions      bool // 是否支持流式选项
+	ResponsesCapabilities     gatewayschema.ResponsesCapabilities
+	MultiplierCardSupported   bool
+	MultiplierCardUserEnabled bool
 }
 
 type TokenCountMeta struct {
@@ -226,22 +228,24 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	headerOverride := httpctx.GetContextKeyStringMap(c, constant.ContextKeyChannelHeaderOverride)
 	apiType, _ := constant.ChannelTypeToAPIType(channelType)
 	channelMeta := &ChannelMeta{
-		ChannelType:          channelType,
-		ChannelId:            httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId),
-		ChannelScope:         httpctx.GetContextKeyString(c, constant.ContextKeyChannelScope),
-		ChannelIsMultiKey:    httpctx.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey),
-		ChannelMultiKeyIndex: httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex),
-		ChannelBaseUrl:       httpctx.GetContextKeyString(c, constant.ContextKeyChannelBaseUrl),
-		ApiType:              apiType,
-		ApiVersion:           c.GetString("api_version"),
-		ApiKey:               httpctx.GetContextKeyString(c, constant.ContextKeyChannelKey),
-		Organization:         c.GetString("channel_organization"),
-		ChannelCreateTime:    c.GetInt64("channel_create_time"),
-		ParamOverride:        paramOverride,
-		HeadersOverride:      headerOverride,
-		UpstreamModelName:    httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel),
-		IsModelMapped:        false,
-		SupportStreamOptions: false,
+		ChannelType:               channelType,
+		ChannelId:                 httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId),
+		ChannelScope:              httpctx.GetContextKeyString(c, constant.ContextKeyChannelScope),
+		ChannelIsMultiKey:         httpctx.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey),
+		ChannelMultiKeyIndex:      httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex),
+		ChannelBaseUrl:            httpctx.GetContextKeyString(c, constant.ContextKeyChannelBaseUrl),
+		ApiType:                   apiType,
+		ApiVersion:                c.GetString("api_version"),
+		ApiKey:                    httpctx.GetContextKeyString(c, constant.ContextKeyChannelKey),
+		Organization:              c.GetString("channel_organization"),
+		ChannelCreateTime:         c.GetInt64("channel_create_time"),
+		ParamOverride:             paramOverride,
+		HeadersOverride:           headerOverride,
+		UpstreamModelName:         httpctx.GetContextKeyString(c, constant.ContextKeyOriginalModel),
+		IsModelMapped:             false,
+		SupportStreamOptions:      false,
+		MultiplierCardSupported:   httpctx.GetContextKeyBool(c, constant.ContextKeyMultiplierCardSupported),
+		MultiplierCardUserEnabled: httpctx.GetContextKeyBool(c, constant.ContextKeyMultiplierCardUserEnabled),
 	}
 	if capabilities, ok := httpctx.GetContextKeyType[gatewayschema.ResponsesCapabilities](c, constant.ContextKeyChannelResponsesCapabilities); ok {
 		channelMeta.ResponsesCapabilities = capabilities

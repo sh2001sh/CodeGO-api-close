@@ -189,6 +189,8 @@ func createInternalChannel(channel *marketplaceschema.Channel, group *marketplac
 		MarketplaceMaxConcurrency:        channel.MaxConcurrency,
 		MarketplaceUserMaxConcurrency:    channel.UserMaxConcurrency,
 		SensitiveWordInterceptionEnabled: channel.SensitiveWordInterceptionEnabled,
+		MultiplierCardSupported:          channel.MultiplierCardSupported,
+		MultiplierCardUserEnabled:        channel.MultiplierCardUserEnabled,
 		CreatedTime:                      platformruntime.GetTimestamp(), BaseURL: &baseURL,
 		Models: strings.Join(decodeModels(channel.DeclaredModels), ","), Group: group.InternalGroupName,
 		OtherInfo: string(metadata),

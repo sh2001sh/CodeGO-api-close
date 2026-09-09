@@ -86,8 +86,13 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		MaxConcurrency: req.MaxConcurrency, UserMaxConcurrency: req.UserMaxConcurrency, QPS: req.QPS,
 		MaintenanceWindow: strings.TrimSpace(req.MaintenanceWindow), Status: marketplacedomain.LifecycleDraft,
 		SensitiveWordInterceptionEnabled: &sensitiveWordInterceptionEnabled,
+		MultiplierCardSupported:          req.MultiplierCardSupported,
+		MultiplierCardUserEnabled:        req.MultiplierCardUserEnabled,
 		AutoProbeEnabled:                 req.AutoProbeEnabled, AutoProbeIntervalMinutes: req.AutoProbeIntervalMinutes,
 		AutoProbeModel: strings.TrimSpace(req.AutoProbeModel),
+	}
+	if !channel.MultiplierCardSupported {
+		channel.MultiplierCardUserEnabled = false
 	}
 	if channel.AutoProbeIntervalMinutes == 0 {
 		channel.AutoProbeIntervalMinutes = 10

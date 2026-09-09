@@ -17,6 +17,8 @@ function group(input: Partial<MarketplaceGroup> & Pick<MarketplaceGroup, 'id' | 
     verification_completed_at: new Date(now - 1800_000).toISOString(),
     subscription_enabled: false,
     subscription_multiplier: input.multiplier,
+    multiplier_card_supported: false,
+    multiplier_card_user_enabled: false,
     model_verification_results: input.models.map((model) => ({ model, status: 'passed', listed: true, latency_ms: input.avg_latency_ms ?? 800, tested_at: new Date(now - 1800_000).toISOString() })),
     connectivity_test_status: 'passed',
     connectivity_test_checked_at: new Date(now - 1800_000).toISOString(),

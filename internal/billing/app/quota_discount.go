@@ -36,7 +36,9 @@ func calculateUsageConsumptionDiscount(relayInfo *relaycommon.RelayInfo, quota i
 	result, err := applyBlindBoxConsumptionDiscount(BlindBoxConsumptionDiscountRequest{
 		RequestID: relayInfo.RequestId, UserID: relayInfo.UserId,
 		ChannelID: relayInfo.ChannelId, ChannelScope: relayInfo.ChannelScope,
-		ModelName: relayInfo.OriginModelName, UsingGroup: relayInfo.UsingGroup,
+		MultiplierCardSupported:   relayInfo.ChannelMeta != nil && relayInfo.ChannelMeta.MultiplierCardSupported,
+		MultiplierCardUserEnabled: relayInfo.ChannelMeta != nil && relayInfo.ChannelMeta.MultiplierCardUserEnabled,
+		ModelName:                 relayInfo.OriginModelName, UsingGroup: relayInfo.UsingGroup,
 		Quota: quota,
 	})
 	if err != nil {

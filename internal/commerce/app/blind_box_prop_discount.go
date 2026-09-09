@@ -20,7 +20,9 @@ func ApplyBlindBoxConsumptionDiscount(request billingapp.BlindBoxConsumptionDisc
 	if request.UserID <= 0 || request.Quota <= 0 || strings.TrimSpace(request.RequestID) == "" {
 		return result, nil
 	}
-	if strings.ToLower(strings.TrimSpace(request.ChannelScope)) != gatewayschema.ChannelScopeOfficial {
+	channelScope := strings.ToLower(strings.TrimSpace(request.ChannelScope))
+	if channelScope != gatewayschema.ChannelScopeOfficial &&
+		!(channelScope == gatewayschema.ChannelScopeExternal && request.MultiplierCardSupported && request.MultiplierCardUserEnabled) {
 		return result, nil
 	}
 
@@ -68,7 +70,7 @@ func ApplyBlindBoxConsumptionDiscount(request billingapp.BlindBoxConsumptionDisc
 		effectiveMultiplier := normalizeDiscountMultiplier(float64(quotaAfter) / float64(quotaBefore))
 		usage := &commerceschema.BlindBoxPropDiscountUsage{
 			RequestId: request.RequestID, UserId: request.UserID, PropId: prop.Id, PropTitle: prop.Title,
-			ChannelId: request.ChannelID, ChannelScope: gatewayschema.ChannelScopeOfficial,
+			ChannelId: request.ChannelID, ChannelScope: channelScope,
 			ModelName: request.ModelName, QuotaBeforeDiscount: int64(quotaBefore),
 			QuotaAfterDiscount: int64(quotaAfter), DiscountQuota: discountQuota,
 			DiscountRate:        normalizeDiscountMultiplier(float64(discountQuota) / float64(quotaBefore)),

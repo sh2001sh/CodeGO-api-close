@@ -114,6 +114,8 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		VerificationDueAt: group.VerificationDueAt, Multiplier: groupMultiplier,
 		SubscriptionEnabled:    group.CreditPoolPolicy == marketplacedomain.CreditPolicySubscriptionAndUniversal,
 		SubscriptionMultiplier: marketplacedomain.SubscriptionMultiplier(groupMultiplier), Models: models,
+		MultiplierCardSupported:   channel.MultiplierCardSupported,
+		MultiplierCardUserEnabled: channel.MultiplierCardUserEnabled,
 		VerificationCompletedAt:   latestModelVerificationAt(channel.ModelVerificationResults),
 		ModelVerificationResults:  publicModelVerificationResults(channel.ModelVerificationResults),
 		ConnectivityTestStatus:    channel.ConnectivityTestStatus,

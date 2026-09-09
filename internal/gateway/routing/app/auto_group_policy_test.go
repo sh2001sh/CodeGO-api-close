@@ -625,6 +625,32 @@ func TestOfficialChannelSelectionSkipsExternalCandidate(t *testing.T) {
 	require.Equal(t, "default", group)
 }
 
+func TestMultiplierCardSelectionAllowsEnabledExternalCandidate(t *testing.T) {
+	originalSelector := selectRandomSatisfiedChannel
+	t.Cleanup(func() { selectRandomSatisfiedChannel = originalSelector })
+	priority := int64(1)
+	selectRandomSatisfiedChannel = func(_ string, _ string, _ int) (*gatewayschema.Channel, error) {
+		return &gatewayschema.Channel{
+			Id:                        74,
+			Priority:                  &priority,
+			ChannelScope:              gatewayschema.ChannelScopeExternal,
+			MultiplierCardSupported:   true,
+			MultiplierCardUserEnabled: true,
+		}, nil
+	}
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(string(constant.ContextKeyOfficialChannelOnly), true)
+	channel, _, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx: context, TokenGroup: "default", ModelName: "gpt-multiplier-card",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 74, channel.Id)
+	require.False(t, context.GetBool(string(constant.ContextKeyOfficialChannelFallback)))
+}
+
 func TestOfficialChannelSelectionFallsBackWhenNoOfficialCandidateExists(t *testing.T) {
 	originalSelector := selectRandomSatisfiedChannel
 	t.Cleanup(func() { selectRandomSatisfiedChannel = originalSelector })

@@ -25,6 +25,8 @@ type CreateChannelRequest struct {
 	QPS                              float64                      `json:"qps"`
 	MaintenanceWindow                string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled *bool                        `json:"sensitive_word_interception_enabled"`
+	MultiplierCardSupported          bool                         `json:"multiplier_card_supported"`
+	MultiplierCardUserEnabled        bool                         `json:"multiplier_card_user_enabled"`
 	AutoProbeEnabled                 bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         int                          `json:"auto_probe_interval_minutes"`
 	AutoProbeModel                   string                       `json:"auto_probe_model"`
@@ -41,6 +43,8 @@ type UpdateChannelRequest struct {
 	QPS                              *float64                      `json:"qps"`
 	MaintenanceWindow                *string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled *bool                         `json:"sensitive_word_interception_enabled"`
+	MultiplierCardSupported          *bool                         `json:"multiplier_card_supported"`
+	MultiplierCardUserEnabled        *bool                         `json:"multiplier_card_user_enabled"`
 	AutoProbeEnabled                 *bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         *int                          `json:"auto_probe_interval_minutes"`
 	AutoProbeModel                   *string                       `json:"auto_probe_model"`
@@ -141,6 +145,8 @@ type ChannelView struct {
 	QPS                              float64                      `json:"qps"`
 	MaintenanceWindow                string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled bool                         `json:"sensitive_word_interception_enabled"`
+	MultiplierCardSupported          bool                         `json:"multiplier_card_supported"`
+	MultiplierCardUserEnabled        bool                         `json:"multiplier_card_user_enabled"`
 	InternalChannelID                *int                         `json:"internal_channel_id"`
 	LastReviewReason                 string                       `json:"last_review_reason"`
 	VerificationDueAt                *time.Time                   `json:"verification_due_at"`
@@ -238,6 +244,8 @@ type GroupListItem struct {
 	Multiplier                 float64                   `json:"multiplier"`
 	SubscriptionEnabled        bool                      `json:"subscription_enabled"`
 	SubscriptionMultiplier     float64                   `json:"subscription_multiplier"`
+	MultiplierCardSupported    bool                      `json:"multiplier_card_supported"`
+	MultiplierCardUserEnabled  bool                      `json:"multiplier_card_user_enabled"`
 	Models                     []string                  `json:"models"`
 	ModelVerificationResults   []ModelVerificationResult `json:"model_verification_results"`
 	ModelConsistencyStatus     string                    `json:"model_consistency_status"`

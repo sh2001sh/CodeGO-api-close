@@ -29,6 +29,15 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	if req.SensitiveWordInterceptionEnabled != nil {
 		channel.SensitiveWordInterceptionEnabled = req.SensitiveWordInterceptionEnabled
 	}
+	if req.MultiplierCardSupported != nil {
+		channel.MultiplierCardSupported = *req.MultiplierCardSupported
+	}
+	if req.MultiplierCardUserEnabled != nil {
+		channel.MultiplierCardUserEnabled = *req.MultiplierCardUserEnabled
+	}
+	if !channel.MultiplierCardSupported {
+		channel.MultiplierCardUserEnabled = false
+	}
 	changed, err := applyCredentialUpdate(channel, req)
 	if err != nil {
 		return false, err

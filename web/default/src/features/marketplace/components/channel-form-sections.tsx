@@ -138,8 +138,51 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
         />
       </FormField>
       <ChannelInterceptionPolicy form={form} />
+      <ChannelMultiplierCardPolicy form={form} />
       <ChannelAutoProbePolicy form={form} />
     </FormSection>
+  )
+}
+
+function ChannelMultiplierCardPolicy({ form }: { form: ChannelForm }) {
+  const { t } = useTranslation()
+  const supported = form.watch('multiplier_card_supported')
+  const enabled = form.watch('multiplier_card_user_enabled')
+  return (
+    <div className='grid gap-3 rounded-md border p-3'>
+      <div className='flex items-center justify-between gap-4'>
+        <div className='space-y-0.5'>
+          <p className='text-sm font-medium'>{t('倍率卡支持')}</p>
+          <p className='text-muted-foreground text-xs leading-5'>
+            {supported
+              ? t('该渠道声明支持倍率卡路由。')
+              : t('关闭后，用户倍率卡不会在该渠道上生效。')}
+          </p>
+        </div>
+        <Switch
+          checked={supported}
+          onCheckedChange={(checked) => {
+            form.setValue('multiplier_card_supported', checked, { shouldDirty: true })
+            if (!checked) form.setValue('multiplier_card_user_enabled', false, { shouldDirty: true })
+          }}
+          aria-label={t('倍率卡支持')}
+        />
+      </div>
+      <div className='flex items-center justify-between gap-4 border-t pt-3'>
+        <div className='space-y-0.5'>
+          <p className='text-sm font-medium'>{t('允许用户使用倍率卡')}</p>
+          <p className='text-muted-foreground text-xs leading-5'>
+            {enabled ? t('用户的有效倍率卡可用于该渠道。') : t('该渠道不会消耗用户倍率卡。')}
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          disabled={!supported}
+          onCheckedChange={(checked) => form.setValue('multiplier_card_user_enabled', checked, { shouldDirty: true })}
+          aria-label={t('允许用户使用倍率卡')}
+        />
+      </div>
+    </div>
   )
 }
 

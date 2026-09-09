@@ -34,13 +34,15 @@ type MonthlyPassEntitlement struct {
 }
 
 type BlindBoxConsumptionDiscountRequest struct {
-	RequestID    string
-	UserID       int
-	ChannelID    int
-	ChannelScope string
-	ModelName    string
-	UsingGroup   string
-	Quota        int
+	RequestID                 string
+	UserID                    int
+	ChannelID                 int
+	ChannelScope              string
+	MultiplierCardSupported   bool
+	MultiplierCardUserEnabled bool
+	ModelName                 string
+	UsingGroup                string
+	Quota                     int
 }
 
 type BlindBoxConsumptionDiscountResult struct {

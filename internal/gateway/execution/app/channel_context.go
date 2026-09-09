@@ -44,6 +44,8 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 	httpctx.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
 	httpctx.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 	httpctx.SetContextKey(c, constant.ContextKeyChannelSensitiveWords, channel.ShouldInterceptSensitiveWords())
+	httpctx.SetContextKey(c, constant.ContextKeyMultiplierCardSupported, channel.MultiplierCardSupported)
+	httpctx.SetContextKey(c, constant.ContextKeyMultiplierCardUserEnabled, channel.MultiplierCardUserEnabled)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelResponsesCapabilities, channel.ChannelInfo.ResponsesCapabilities)
 
 	key, index, newAPIError := selectChannelKeyForRequest(c, channel)

@@ -104,6 +104,8 @@ export interface MarketplaceGroup {
   multiplier: number
   subscription_enabled: boolean
   subscription_multiplier: number
+  multiplier_card_supported: boolean
+  multiplier_card_user_enabled: boolean
   models: string[]
   model_verification_results: ModelVerificationResult[]
   connectivity_test_status: ConnectivityTestStatus
@@ -251,6 +253,8 @@ export interface MarketplaceChannel {
   qps: number
   maintenance_window: string
   sensitive_word_interception_enabled: boolean
+  multiplier_card_supported: boolean
+  multiplier_card_user_enabled: boolean
   internal_channel_id?: number | null
   last_review_reason: string
   verification_due_at?: string | null
@@ -312,6 +316,8 @@ export interface ChannelFormValues {
   qps: number
   maintenance_window: string
   sensitive_word_interception_enabled: boolean
+  multiplier_card_supported: boolean
+  multiplier_card_user_enabled: boolean
 }
 
 export interface ChannelUpdateValues {
@@ -326,6 +332,8 @@ export interface ChannelUpdateValues {
   qps?: number
   maintenance_window?: string
   sensitive_word_interception_enabled?: boolean
+  multiplier_card_supported?: boolean
+  multiplier_card_user_enabled?: boolean
   base_url?: string
   api_key?: string
   model_consistency_status?: ModelConsistencyStatus

@@ -188,6 +188,13 @@ export function MarketGroupCard(props: {
         </b>
       </div>
 
+      {group.multiplier_card_supported && (
+        <div className='capline'>
+          <span>倍率卡</span>
+          <b>{group.multiplier_card_user_enabled ? '支持用户使用' : '渠道支持，暂不开放'}</b>
+        </div>
+      )}
+
       <div className='mline'>
         {group.models.slice(0, 5).map((model) => {
           const price = props.modelPrices?.[model]

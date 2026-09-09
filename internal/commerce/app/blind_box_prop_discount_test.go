@@ -88,7 +88,8 @@ func TestApplyBlindBoxConsumptionDiscountSkipsExternalChannel(t *testing.T) {
 
 	result, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
 		RequestID: "discount-external", UserID: prop.UserId, ChannelID: 20,
-		ChannelScope: gatewayschema.ChannelScopeExternal, ModelName: "gpt-5", Quota: 1000,
+		ChannelScope: gatewayschema.ChannelScopeExternal, MultiplierCardSupported: true,
+		MultiplierCardUserEnabled: false, ModelName: "gpt-5", Quota: 1000,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1000, result.QuotaAfterDiscount)
@@ -96,6 +97,30 @@ func TestApplyBlindBoxConsumptionDiscountSkipsExternalChannel(t *testing.T) {
 
 	require.NoError(t, db.First(prop, prop.Id).Error)
 	require.Zero(t, prop.UsedDiscountQuota)
+}
+
+func TestApplyBlindBoxConsumptionDiscountAllowsEnabledExternalChannel(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	prop := &commerceschema.BlindBoxProp{
+		UserId: 7006, PropType: commerceschema.BlindBoxPropTypeConsumeDiscount95,
+		Title: "0.95 倍率卡", Status: commerceschema.BlindBoxPropStatusActive,
+		DiscountRate: 0.05, Multiplier: 0.95,
+		ExpiresAt: platformruntime.GetTimestamp() + 3600,
+	}
+	require.NoError(t, db.Create(prop).Error)
+
+	result, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
+		RequestID: "discount-external-enabled", UserID: prop.UserId, ChannelID: 21,
+		ChannelScope: gatewayschema.ChannelScopeExternal, MultiplierCardSupported: true,
+		MultiplierCardUserEnabled: true, ModelName: "gpt-5", Quota: 1000,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 950, result.QuotaAfterDiscount)
+	require.Equal(t, 50, result.DiscountQuota)
+
+	var usage commerceschema.BlindBoxPropDiscountUsage
+	require.NoError(t, db.Where("request_id = ?", "discount-external-enabled").First(&usage).Error)
+	require.Equal(t, gatewayschema.ChannelScopeExternal, usage.ChannelScope)
 }
 
 func TestApplyBlindBoxConsumptionDiscountIgnoresPackageMultiplier(t *testing.T) {

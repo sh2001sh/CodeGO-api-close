@@ -90,6 +90,24 @@ func TestOwnerCanDisableSensitiveWordInterception(t *testing.T) {
 	require.False(t, *saved.SensitiveWordInterceptionEnabled)
 }
 
+func TestMultiplierCardUserAccessRequiresChannelSupport(t *testing.T) {
+	channel := &marketplaceschema.Channel{
+		ID: "multiplier-card-policy", MultiplierCardSupported: true, MultiplierCardUserEnabled: true,
+	}
+	group := &marketplaceschema.Group{ID: "multiplier-card-policy-group", Multiplier: 1}
+	disabled := false
+	enabled := true
+
+	_, err := applyChannelUpdate(channel, group, UpdateChannelRequest{
+		MultiplierCardSupported:   &disabled,
+		MultiplierCardUserEnabled: &enabled,
+	})
+
+	require.NoError(t, err)
+	require.False(t, channel.MultiplierCardSupported)
+	require.False(t, channel.MultiplierCardUserEnabled)
+}
+
 func TestAddingChannelModelPreservesExistingVerificationState(t *testing.T) {
 	channel := &marketplaceschema.Channel{
 		ID: "edit-without-verification", ProviderType: "openai_compatible",

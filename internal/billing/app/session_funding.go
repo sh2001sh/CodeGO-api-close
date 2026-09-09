@@ -154,7 +154,10 @@ func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayI
 	var entitlement *MonthlyPassEntitlement
 	// Multiplier cards are official-channel benefits, including when a market
 	// group accepts subscription funds. Unknown scope must not grant a discount.
-	if relayInfo.ChannelMeta != nil && strings.EqualFold(strings.TrimSpace(relayInfo.ChannelScope), gatewayschema.ChannelScopeOfficial) {
+	cardAllowed := relayInfo.ChannelMeta != nil &&
+		(strings.EqualFold(strings.TrimSpace(relayInfo.ChannelScope), gatewayschema.ChannelScopeOfficial) ||
+			(strings.EqualFold(strings.TrimSpace(relayInfo.ChannelScope), gatewayschema.ChannelScopeExternal) && relayInfo.ChannelMeta.MultiplierCardSupported && relayInfo.ChannelMeta.MultiplierCardUserEnabled))
+	if cardAllowed {
 		var err error
 		entitlement, err = getMonthlyPassEntitlement(relayInfo.UserId)
 		if err != nil {

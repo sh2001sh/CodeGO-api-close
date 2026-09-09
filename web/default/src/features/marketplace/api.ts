@@ -65,10 +65,28 @@ export async function resolveMarketplaceBargainRequest(input: {
   return requireData(response.data)
 }
 
-export async function getMyMarketplaceUserUsage(channelId?: string) {
-  const params = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : ''
+export async function getMyMarketplaceUserUsage(input: {
+  channelId?: string
+  startTimestamp?: number
+  endTimestamp?: number
+  search?: string
+  sort?: 'requests' | 'amount' | 'recent'
+  direction?: 'asc' | 'desc'
+  page?: number
+  pageSize?: number
+} = {}) {
+  const params = new URLSearchParams()
+  if (input.channelId) params.set('channel_id', input.channelId)
+  if (input.startTimestamp) params.set('start_timestamp', String(input.startTimestamp))
+  if (input.endTimestamp) params.set('end_timestamp', String(input.endTimestamp))
+  if (input.search) params.set('search', input.search)
+  if (input.sort) params.set('sort', input.sort)
+  if (input.direction) params.set('direction', input.direction)
+  if (input.page) params.set('page', String(input.page))
+  if (input.pageSize) params.set('page_size', String(input.pageSize))
+  const query = params.toString()
   const response = await api.get<ApiResponse<MarketplaceOwnerUsageResult>>(
-    `/api/marketplace/channels/mine/user-usage${params}`
+    `/api/marketplace/channels/mine/user-usage${query ? `?${query}` : ''}`
   )
   return requireData(response.data)
 }

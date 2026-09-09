@@ -10,7 +10,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"math"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -83,6 +85,18 @@ type OwnerUserUsageItem struct {
 }
 
 func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any, error) {
+	if q.Page < 1 {
+		q.Page = 1
+	}
+	if q.PageSize < 1 {
+		q.PageSize = 50
+	}
+	if q.PageSize > 200 {
+		q.PageSize = 200
+	}
+	if q.StartTimestamp > 0 && q.EndTimestamp > 0 && q.StartTimestamp > q.EndTimestamp {
+		q.StartTimestamp, q.EndTimestamp = q.EndTimestamp, q.StartTimestamp
+	}
 	var groups []marketplaceschema.Group
 	db := platformdb.DB.Where("owner_user_id = ?", owner)
 	if q.ChannelID != "" {
@@ -98,7 +112,7 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 		groupsByID[groups[i].ID] = groups[i]
 	}
 	if len(ids) == 0 {
-		return map[string]any{"items": []OwnerUserUsageItem{}, "total": 0, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": 0, "total_requests": int64(0)}}, nil
+		return map[string]any{"items": []OwnerUserUsageItem{}, "total": 0, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": 0, "total_requests": int64(0), "consumer_amount": int64(0), "owner_income": int64(0)}}, nil
 	}
 	var rows []struct {
 		UserID   int
@@ -115,9 +129,16 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 		// SQLite loses the datetime column type inside MAX().
 		lastRequestSelect = "cast(strftime('%s', max(created_at)) as integer) as last_unix"
 	}
-	if err := platformdb.DB.Model(&marketplaceschema.Settlement{}).
+	settlementDB := platformdb.DB.Model(&marketplaceschema.Settlement{}).
 		Select("consumer_user_id as user_id, group_id, count(*) as cnt, sum(consumer_amount) as amount, sum(settlement_gross_amount) as gross, sum(owner_net_amount) as income, "+lastRequestSelect).
-		Where("owner_user_id = ? AND group_id IN ?", owner, ids).Group("consumer_user_id,group_id").Scan(&rows).Error; err != nil {
+		Where("owner_user_id = ? AND group_id IN ?", owner, ids)
+	if q.StartTimestamp > 0 {
+		settlementDB = settlementDB.Where("created_at >= ?", time.Unix(q.StartTimestamp, 0))
+	}
+	if q.EndTimestamp > 0 {
+		settlementDB = settlementDB.Where("created_at < ?", time.Unix(q.EndTimestamp+1, 0))
+	}
+	if err := settlementDB.Group("consumer_user_id,group_id").Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	userIDs := make([]int, 0, len(rows))
@@ -136,17 +157,67 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 	}
 	items := make([]OwnerUserUsageItem, 0, len(rows))
 	uniqueUsers := make(map[int]struct{}, len(rows))
-	var totalRequests int64
+	var totalRequests, totalConsumerAmount, totalOwnerIncome int64
 	for _, r := range rows {
 		group := groupsByID[r.GroupID]
 		if platformdb.DB.Dialector.Name() == "sqlite" {
 			r.Last = time.Unix(r.LastUnix, 0)
 		}
-		items = append(items, OwnerUserUsageItem{UserID: strconv.Itoa(r.UserID), ExternalUserID: externalIDs[r.UserID], ChannelID: group.ChannelID, ChannelName: group.SystemDisplayName, GroupID: r.GroupID, RequestCount: r.Cnt, SuccessCount: r.Cnt, SuccessRate: 1, TotalConsumerAmount: r.Amount, TotalSettlementGrossAmount: r.Gross, TotalOwnerIncome: r.Income, LastRequestAt: r.Last})
+		item := OwnerUserUsageItem{UserID: strconv.Itoa(r.UserID), ExternalUserID: externalIDs[r.UserID], ChannelID: group.ChannelID, ChannelName: group.SystemDisplayName, GroupID: r.GroupID, RequestCount: r.Cnt, SuccessCount: r.Cnt, SuccessRate: 1, TotalConsumerAmount: r.Amount, TotalSettlementGrossAmount: r.Gross, TotalOwnerIncome: r.Income, LastRequestAt: r.Last}
+		if q.Search != "" && !strings.Contains(strings.ToLower(item.ExternalUserID+" "+item.UserID+" "+item.ChannelName), strings.ToLower(q.Search)) {
+			continue
+		}
+		items = append(items, item)
 		totalRequests += r.Cnt
+		totalConsumerAmount += r.Amount
+		totalOwnerIncome += r.Income
 		uniqueUsers[r.UserID] = struct{}{}
 	}
-	return map[string]any{"items": items, "total": len(items), "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": len(uniqueUsers), "total_requests": totalRequests}}, nil
+	sort.SliceStable(items, func(i, j int) bool {
+		compare := func() int {
+			switch q.Sort {
+			case "amount":
+				if items[i].TotalSettlementGrossAmount != items[j].TotalSettlementGrossAmount {
+					if items[i].TotalSettlementGrossAmount < items[j].TotalSettlementGrossAmount {
+						return -1
+					}
+					return 1
+				}
+			case "recent":
+				if !items[i].LastRequestAt.Equal(items[j].LastRequestAt) {
+					if items[i].LastRequestAt.Before(items[j].LastRequestAt) {
+						return -1
+					}
+					return 1
+				}
+			default:
+				if items[i].RequestCount != items[j].RequestCount {
+					if items[i].RequestCount < items[j].RequestCount {
+						return -1
+					}
+					return 1
+				}
+			}
+			return 0
+		}()
+		if compare == 0 {
+			return items[i].UserID < items[j].UserID
+		}
+		if q.Direction == "asc" {
+			return compare < 0
+		}
+		return compare > 0
+	})
+	total := len(items)
+	start := (q.Page - 1) * q.PageSize
+	if start > total {
+		start = total
+	}
+	end := start + q.PageSize
+	if end > total {
+		end = total
+	}
+	return map[string]any{"items": items[start:end], "total": total, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": len(uniqueUsers), "total_requests": totalRequests, "consumer_amount": totalConsumerAmount, "owner_income": totalOwnerIncome}}, nil
 }
 func SetUserMultiplier(owner int, channel string, user int, m *float64) error {
 	_, err := BatchSetUserMultipliers(owner, []MultiplierTarget{{ChannelID: channel, UserID: user}}, m)

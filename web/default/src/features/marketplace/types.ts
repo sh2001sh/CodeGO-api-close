@@ -567,6 +567,7 @@ export interface MarketplaceOwnerUsageItem {
   total_tokens: number
   total_consumer_amount: number
   total_settlement_gross_amount: number
+  total_owner_income: number
   user_multiplier?: number
   last_request_at: string
 }
@@ -576,6 +577,12 @@ export interface MarketplaceOwnerUsageResult {
   total: number
   page: number
   page_size: number
+  summary: {
+    total_users: number
+    total_requests: number
+    consumer_amount: number
+    owner_income: number
+  }
 }
 
 export interface MarketplaceOwnerMultiplierItem {

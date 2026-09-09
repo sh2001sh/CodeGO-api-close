@@ -179,7 +179,11 @@ func ListMyObservability(c *gin.Context) {
 	respond(c, result, err)
 }
 func ListMyChannelUserUsage(c *gin.Context) {
-	r, e := marketplaceapp.ListOwnerChannelUserUsage(c.GetInt("id"), marketplaceapp.OwnerUserUsageQuery{ChannelID: c.Query("channel_id"), Page: queryInt(c, "page", 1), PageSize: queryInt(c, "page_size", 20)})
+	r, e := marketplaceapp.ListOwnerChannelUserUsage(c.GetInt("id"), marketplaceapp.OwnerUserUsageQuery{
+		ChannelID: c.Query("channel_id"), Search: c.Query("search"), Sort: c.Query("sort"), Direction: c.Query("direction"),
+		StartTimestamp: queryInt64(c, "start_timestamp"), EndTimestamp: queryInt64(c, "end_timestamp"),
+		Page: queryInt(c, "page", 1), PageSize: queryInt(c, "page_size", 50),
+	})
 	respond(c, r, e)
 }
 func SetUserMultiplier(c *gin.Context) {

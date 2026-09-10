@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import {
+  AlertTriangle,
   Activity,
+  CheckCircle2,
   ChevronDown,
   CircleDollarSign,
   Clock3,
+  PauseCircle,
   Plus,
   RefreshCcw,
+  Search,
   WalletCards,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -85,6 +89,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
             '暂停渠道不会没收收益；只有删除或下架渠道时，仍处于冻结期的待结算额度才会按平台规则回收。'
           )}
         </div>
+        <OwnerOperationsPulse channels={channels} />
         <OwnerIncomeOverview channels={channels} />
         <div className='flex flex-wrap gap-2 border-b p-4'>
           <Input
@@ -224,8 +229,9 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                           {t('编辑渠道')}
                         </Button>
                         {!expandedChannelIDs.has(channel.id) && (
-                          <span className='text-muted-foreground text-xs'>
-                            {t('检测、模型与收入信息已折叠')}
+                          <span className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
+                            <ChannelHealthSummary channel={channel} />
+                            <span>{t('检测、模型与收入信息已折叠')}</span>
                           </span>
                         )}
                       </div>
@@ -337,6 +343,105 @@ export function OwnerChannels(props: { onAdd: () => void }) {
         }}
       />
     </>
+  )
+}
+
+function OwnerOperationsPulse(props: { channels: MarketplaceChannel[] }) {
+  const { t } = useTranslation()
+  const channels = props.channels
+  const active = channels.filter((channel) => channel.lifecycle_status === 'active').length
+  const attention = channels.filter((channel) => {
+    const failedModels = channel.model_verification_results.filter(
+      (result) => result.status === 'failed' || !result.listed
+    ).length
+    return (
+      ['degraded', 'suspended'].includes(channel.lifecycle_status) ||
+      channel.connectivity_test_status === 'failed' ||
+      failedModels > 0 ||
+      channel.source_label_status === 'rejected'
+    )
+  }).length
+  const checking = channels.filter((channel) =>
+    ['verifying', 'queued', 'running'].includes(channel.lifecycle_status) ||
+    ['queued', 'running'].includes(channel.connectivity_test_status)
+  ).length
+  const cards = [
+    {
+      icon: CheckCircle2,
+      label: t('正常运行'),
+      value: active,
+      tone: 'text-success bg-success/10',
+    },
+    {
+      icon: AlertTriangle,
+      label: t('需要处理'),
+      value: attention,
+      tone: 'text-warning bg-warning/10',
+    },
+    {
+      icon: Search,
+      label: t('正在检测'),
+      value: checking,
+      tone: 'text-info bg-info/10',
+    },
+    {
+      icon: PauseCircle,
+      label: t('已暂停'),
+      value: channels.filter((channel) => channel.lifecycle_status === 'suspended').length,
+      tone: 'text-muted-foreground bg-muted',
+    },
+  ]
+  return (
+    <section className='border-border bg-muted/15 border-y px-4 py-3 sm:px-5' aria-label={t('渠道运行概览')}>
+      <div className='flex flex-wrap items-center justify-between gap-3'>
+        <div>
+          <h4 className='text-sm font-semibold'>{t('运营信号')}</h4>
+          <p className='text-muted-foreground mt-0.5 text-xs'>
+            {attention > 0
+              ? t('有 {{count}} 个渠道需要关注，建议先处理检测或服务状态。', { count: attention })
+              : t('当前没有需要立即处理的渠道。')}
+          </p>
+        </div>
+        <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+          {cards.map(({ icon: Icon, label, value, tone }) => (
+            <div key={label} className='flex min-w-24 items-center gap-2 rounded-md border border-border/70 bg-card px-2.5 py-2'>
+              <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${tone}`}>
+                <Icon className='size-4' aria-hidden='true' />
+              </span>
+              <span className='min-w-0'>
+                <span className='text-muted-foreground block truncate text-[11px]'>{label}</span>
+                <span className='mt-0.5 block text-base font-semibold tabular-nums'>{value}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ChannelHealthSummary(props: { channel: MarketplaceChannel }) {
+  const { t } = useTranslation()
+  const failedModels = props.channel.model_verification_results.filter(
+    (result) => result.status === 'failed' || !result.listed
+  ).length
+  const status = props.channel.connectivity_test_status
+  const label =
+    status === 'passed'
+      ? t('检测通过')
+      : status === 'failed'
+        ? t('检测失败')
+        : status === 'running' || status === 'queued'
+          ? t('检测中')
+          : t('未检测')
+  const tone = status === 'passed' ? 'text-success' : status === 'failed' ? 'text-destructive' : 'text-muted-foreground'
+  return (
+    <span className='inline-flex items-center gap-1'>
+      <span className={`size-1.5 rounded-full ${status === 'passed' ? 'bg-success' : status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground'}`} aria-hidden='true' />
+      <span className={tone}>{label}</span>
+      {failedModels > 0 && <span className='text-destructive'>{t('{{count}} 个失败模型', { count: failedModels })}</span>}
+      {props.channel.request_count > 0 && <span>{t('{{count}} 次调用', { count: props.channel.request_count })}</span>}
+    </span>
   )
 }
 

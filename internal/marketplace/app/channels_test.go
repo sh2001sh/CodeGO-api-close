@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/constant"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,34 @@ func TestPauseAdminChannelKeepsEarnings(t *testing.T) {
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
 	require.Equal(t, marketplacedomain.LifecycleSuspended, channel.Status)
 	require.Equal(t, marketplacedomain.LifecycleSuspended, group.LifecycleStatus)
+}
+
+func TestPauseAdminChannelDisablesLinkedGatewayChannel(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&gatewayschema.Channel{},
+		&gatewayschema.Ability{},
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+	))
+	internal := gatewayschema.Channel{Id: 901, Key: "test-key", Status: constant.ChannelStatusEnabled}
+	channel := marketplaceschema.Channel{
+		ID: "pause-linked-channel", OwnerUserID: 42, ProviderType: "openai_compatible",
+		BaseURLCiphertext: "encrypted-url", CredentialCiphertext: "encrypted-key",
+		InternalChannelID: &internal.Id, Status: marketplacedomain.LifecycleActive,
+	}
+	group := autoRouteTestGroup("pause-linked-group", channel.ID, channel.OwnerUserID, 1)
+	require.NoError(t, db.Create(&internal).Error)
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+
+	require.NoError(t, PauseAdminChannel(channel.ID, true))
+	require.NoError(t, db.First(&internal, internal.Id).Error)
+	require.Equal(t, constant.ChannelStatusManuallyDisabled, internal.Status)
+
+	require.NoError(t, PauseAdminChannel(channel.ID, false))
+	require.NoError(t, db.First(&internal, internal.Id).Error)
+	require.Equal(t, constant.ChannelStatusEnabled, internal.Status)
 }
 
 func TestListOwnerChannelsIncludesIncomeSummary(t *testing.T) {

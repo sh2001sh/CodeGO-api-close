@@ -3,10 +3,13 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/sh2001sh/new-api/constant"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -246,6 +249,9 @@ func PauseOwnerChannel(ownerUserID int, channelID string, paused bool) error {
 		return tx.Model(group).Update("lifecycle_status", status).Error
 	})
 	if err == nil {
+		err = syncPausedMarketplaceChannel(channel, paused)
+	}
+	if err == nil {
 		invalidateAdminMarketplaceStatsCache()
 	}
 	return err
@@ -267,9 +273,39 @@ func PauseAdminChannel(channelID string, paused bool) error {
 		return tx.Model(group).Update("lifecycle_status", status).Error
 	})
 	if err == nil {
+		err = syncPausedMarketplaceChannel(channel, paused)
+	}
+	if err == nil {
 		invalidateAdminMarketplaceStatsCache()
 	}
 	return err
+}
+
+// syncPausedMarketplaceChannel prevents a paused marketplace channel from
+// being selected by gateway traffic or the periodic full-channel test task.
+// Marketplace and gateway channels are stored separately, so the lifecycle
+// update must be reflected in the linked internal channel explicitly.
+func syncPausedMarketplaceChannel(channel *marketplaceschema.Channel, paused bool) error {
+	if channel == nil || channel.InternalChannelID == nil || *channel.InternalChannelID <= 0 {
+		return nil
+	}
+	targetStatus := constant.ChannelStatusEnabled
+	reason := "marketplace channel resumed"
+	if paused {
+		targetStatus = constant.ChannelStatusManuallyDisabled
+		reason = "marketplace channel paused by owner or administrator"
+	}
+	internal, err := gatewaystore.LoadChannelByID(*channel.InternalChannelID, true)
+	if err != nil {
+		return err
+	}
+	if internal.Status == targetStatus {
+		return nil
+	}
+	if !gatewaystore.UpdateChannelStatus(internal.Id, "", targetStatus, reason) {
+		return fmt.Errorf("同步市场渠道 %s 的内部渠道状态失败", channel.ID)
+	}
+	return nil
 }
 
 func SetChannelUserBlock(ownerUserID int, channelID string, targetUserID int, blocked bool) error {

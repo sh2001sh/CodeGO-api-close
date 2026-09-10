@@ -75,6 +75,10 @@ func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 				return
 			}
+			if poolErr := marketplaceapp.RequireChannelInBoundRoutePool(c, modelRequest.Model, channel.Id); poolErr != nil {
+				abortWithOpenAiMessage(c, http.StatusForbidden, poolErr.Error(), types.ErrorCodeAccessDenied)
+				return
+			}
 		} else {
 			// Select a channel for the user
 			// check token model mapping

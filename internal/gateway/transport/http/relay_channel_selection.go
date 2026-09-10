@@ -35,6 +35,9 @@ func getChannel(c *gin.Context, info *gatewayruntime.RelayInfo, retryParam *gate
 }
 
 func loadPinnedChannel(c *gin.Context, info *gatewayruntime.RelayInfo, channelID int) (*gatewayschema.Channel, *types.NewAPIError) {
+	if err := marketplaceapp.RequireChannelInBoundRoutePool(c, info.OriginModelName, channelID); err != nil {
+		return nil, types.NewError(err, types.ErrorCodeAccessDenied, types.ErrOptionWithSkipRetry())
+	}
 	channel, err := gatewaystore.LoadChannelByID(channelID, true)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())

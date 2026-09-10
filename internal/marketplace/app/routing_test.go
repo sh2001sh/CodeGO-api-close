@@ -3,15 +3,54 @@ package app
 import (
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/sh2001sh/new-api/constant"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+func TestBoundRoutePoolRejectsDirectChannelOutsidePool(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
+		&marketplaceschema.RoutePool{}, &marketplaceschema.RoutePoolMember{},
+		&marketplaceschema.RankingSnapshot{},
+	))
+	insideID, outsideID := 101, 202
+	insideChannel := marketplaceschema.Channel{
+		ID: "inside-channel", OwnerUserID: 10, DeclaredModels: `["gpt-5"]`,
+		InternalChannelID: &insideID, Status: marketplacedomain.LifecycleActive,
+	}
+	outsideChannel := marketplaceschema.Channel{
+		ID: "outside-channel", OwnerUserID: 11, DeclaredModels: `["gpt-5"]`,
+		InternalChannelID: &outsideID, Status: marketplacedomain.LifecycleActive,
+	}
+	insideGroup := marketplaceschema.Group{
+		ID: "inside-group", ChannelID: insideChannel.ID, OwnerUserID: 10,
+		InternalGroupName: "market_inside", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 1,
+		LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed,
+		Visibility: marketplacedomain.VisibilityPublic,
+	}
+	require.NoError(t, db.Create(&insideChannel).Error)
+	require.NoError(t, db.Create(&outsideChannel).Error)
+	require.NoError(t, db.Create(&insideGroup).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePool{ID: "strict-pool", OwnerUserID: 20, Name: "严格池", Strategy: "priority"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePoolMember{PoolID: "strict-pool", GroupID: insideGroup.ID, Priority: 1}).Error)
+
+	ctx, _ := gin.CreateTestContext(nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyUserId, 20)
+	httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, RoutePoolTokenGroupValue("strict-pool"))
+	require.NoError(t, RequireChannelInBoundRoutePool(ctx, "gpt-5", insideID))
+	require.ErrorIs(t, RequireChannelInBoundRoutePool(ctx, "gpt-5", outsideID), ErrChannelOutsideBoundRoutePool)
+}
 
 func TestMarketplaceTokenBindingIsStableAndAllowsSelfConsumption(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)

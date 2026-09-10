@@ -4,13 +4,19 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 )
+
+var ErrChannelOutsideBoundRoutePool = errors.New("指定渠道不属于当前 Key 绑定的路由池")
 
 func TokenGroupValue(groupID string) string {
 	return marketplacedomain.TokenGroupPrefix + strings.TrimSpace(groupID)
@@ -34,6 +40,36 @@ func IsMarketplaceRoutePoolTokenGroup(value string) bool {
 
 func RoutePoolIDFromTokenGroup(value string) string {
 	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(value), marketplacedomain.TokenGroupPrefix+"pool:"))
+}
+
+// RequireChannelInBoundRoutePool closes direct and pinned-channel shortcuts
+// that would otherwise bypass named marketplace pool resolution.
+func RequireChannelInBoundRoutePool(c *gin.Context, modelName string, channelID int) error {
+	tokenGroup := httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+	if !IsMarketplaceRoutePoolTokenGroup(tokenGroup) {
+		return nil
+	}
+	bindings, _, err := ResolveRoutePoolBindings(
+		httpctx.GetContextKeyInt(c, constant.ContextKeyUserId),
+		RoutePoolIDFromTokenGroup(tokenGroup),
+		strings.TrimSpace(modelName),
+		httpctx.GetContextKeyFloat64(c, constant.ContextKeyTokenMarketplaceMultiplierLimit),
+	)
+	if err != nil {
+		return err
+	}
+	for _, binding := range bindings {
+		if binding.InternalChannelID > 0 {
+			if binding.InternalChannelID == channelID {
+				return nil
+			}
+			continue
+		}
+		if gatewaystore.IsChannelEnabledForGroupModel(binding.InternalGroup, modelName, channelID) {
+			return nil
+		}
+	}
+	return ErrChannelOutsideBoundRoutePool
 }
 
 func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBinding, error) {

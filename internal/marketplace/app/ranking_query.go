@@ -70,7 +70,11 @@ func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.
 			return false
 		}
 	}
-	if query.Model != "" && !containsSubstringFold(models, query.Model) {
+	modelFilters := query.Models
+	if len(modelFilters) == 0 && strings.TrimSpace(query.Model) != "" {
+		modelFilters = []string{query.Model}
+	}
+	if len(modelFilters) > 0 && !matchesAnyModelFilter(models, modelFilters) {
 		return false
 	}
 	if query.Source != "" && !strings.EqualFold(publicSourceLabel(channel), query.Source) {
@@ -80,6 +84,15 @@ func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.
 		return false
 	}
 	return channel.ID != ""
+}
+
+func matchesAnyModelFilter(models, filters []string) bool {
+	for _, filter := range filters {
+		if strings.TrimSpace(filter) != "" && containsSubstringFold(models, filter) {
+			return true
+		}
+	}
+	return false
 }
 
 func isNumericChannelID(search string) bool {

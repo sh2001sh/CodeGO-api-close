@@ -9,6 +9,7 @@ import {
   getAdminOwnerIncome,
   releaseAdminOwnerIncome,
   getMarketplaceGroups,
+  getMarketplaceModels,
   getMarketplaceMultiplierTrends,
   getMarketplaceAutoRoutePool,
   getMarketplaceRoutePools,
@@ -87,6 +88,16 @@ export function useMarketplaceGroups(
     // Marketplace rankings are refreshed asynchronously on the server. Keep
     // the last page warm long enough to avoid refetching while users switch
     // between filters or return from a detail view.
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useMarketplaceModels() {
+  return useQuery({
+    queryKey: ['marketplace-models'],
+    queryFn: getMarketplaceModels,
     staleTime: 5 * 60_000,
     gcTime: 15 * 60_000,
     refetchOnWindowFocus: false,

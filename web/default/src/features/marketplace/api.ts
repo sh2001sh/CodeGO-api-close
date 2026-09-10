@@ -228,7 +228,13 @@ export async function getMarketplaceGroupModelStatus(slug: string) {
 export async function getMarketplaceGroups(filters: GroupFilters) {
   const params = new URLSearchParams()
   Object.entries(filters).forEach(([key, value]) => {
-    if (value !== '') params.set(key, String(value))
+    if (Array.isArray(value)) {
+      value.forEach((item) =>
+        params.append(key === 'models' ? 'model' : key, item)
+      )
+    } else if (value !== '') {
+      params.set(key, String(value))
+    }
   })
   try {
     const response = await api.get<ApiResponse<MarketplaceGroupList>>(
@@ -255,6 +261,15 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
       if (
         filters.provider &&
         item.provider_type.toLowerCase() !== filters.provider.toLowerCase()
+      )
+        return false
+      if (
+        (filters.models?.length ?? 0) > 0 &&
+        !filters.models?.some((selectedModel) =>
+          item.models.some((model) =>
+            model.toLowerCase().includes(selectedModel.trim().toLowerCase())
+          )
+        )
       )
         return false
       if (
@@ -295,6 +310,13 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
       window_hours: filters.window_hours,
     }
   }
+}
+
+export async function getMarketplaceModels() {
+  const response = await api.get<ApiResponse<string[]>>(
+    '/api/marketplace/models'
+  )
+  return requireData(response.data)
 }
 
 export async function getMarketplaceMultiplierTrends(input: {

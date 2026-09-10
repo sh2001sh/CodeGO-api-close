@@ -424,6 +424,31 @@ For commercial licensing, please contact support@quantumnous.com.
   min-width: 132px;
 }
 
+.dawn .market-model-filter {
+  min-width: 142px;
+  justify-content: space-between;
+  white-space: nowrap;
+}
+
+.market-model-filter-clear {
+  display: flex;
+  min-height: 40px;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.market-model-filter-clear:hover,
+.market-model-filter-clear:focus-visible {
+  background: var(--muted);
+  color: var(--foreground);
+  outline: none;
+}
+
 .dawn .market-actions {
   display: inline-flex;
   align-items: center;

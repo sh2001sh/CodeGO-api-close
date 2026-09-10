@@ -15,6 +15,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 	publicMarketplaceRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
 	{
 		publicMarketplaceRoute.GET("/groups", ListGroups)
+		publicMarketplaceRoute.GET("/models", ListModels)
 		publicMarketplaceRoute.GET("/group-status", ListGroupStatus)
 		publicMarketplaceRoute.GET("/multiplier-trends", ListMultiplierTrends)
 		publicMarketplaceRoute.GET("/groups/:slug", GetGroup)

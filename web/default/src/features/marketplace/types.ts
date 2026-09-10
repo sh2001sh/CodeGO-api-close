@@ -354,6 +354,7 @@ export interface ChannelModelPrice {
 export interface GroupFilters {
   search: string
   model: string
+  models?: string[]
   source: string
   provider: string
   status: string

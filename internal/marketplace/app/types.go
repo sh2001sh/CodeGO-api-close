@@ -215,6 +215,7 @@ type GroupQuery struct {
 	IncludeAccess bool
 	Search        string
 	Model         string
+	Models        []string
 	Source        string
 	Provider      string
 	Status        string

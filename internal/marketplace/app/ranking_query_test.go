@@ -84,6 +84,8 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "group-filter"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Search: "Codex Plus"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Model: "5.2"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Models: []string{"claude", "4.1"}}))
+	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Models: []string{"gemini", "deepseek"}}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Source: "Codex Plus"}))
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Provider: "openai_compatible"}))
 	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Source: "CC-Kiro"}))

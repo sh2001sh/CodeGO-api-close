@@ -19,9 +19,29 @@ For commercial licensing, please contact support@quantumnous.com.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Sparkles, Store, User, Waypoints } from 'lucide-react'
+import {
+  ChevronsUpDown,
+  Sparkles,
+  Store,
+  User,
+  Waypoints,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { SiteSeo } from '@/components/seo'
 import {
   acceptMarketplaceGroupInvite,
@@ -34,6 +54,7 @@ import {
 import {
   useMarketplaceAutoRoutePool,
   useMarketplaceGroups,
+  useMarketplaceModels,
   useMarketplaceRoutePool,
   useMarketplaceTokens,
   useMarketplaceMultiplierNotices,
@@ -60,6 +81,7 @@ import { PoolWorkbench, type PoolPanelMode } from './pool-workbench'
 const DEFAULT_FILTERS: GroupFilters = {
   search: '',
   model: '',
+  models: [],
   source: '',
   provider: '',
   status: '',
@@ -72,6 +94,83 @@ const DEFAULT_FILTERS: GroupFilters = {
 }
 
 type Perspective = 'user' | 'owner'
+
+function ModelMultiSelect(props: {
+  models: string[]
+  selected: string[]
+  onChange: (models: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = new Set(props.selected.map((model) => model.toLowerCase()))
+
+  const toggle = (model: string) => {
+    const key = model.toLowerCase()
+    props.onChange(
+      selected.has(key)
+        ? props.selected.filter((item) => item.toLowerCase() !== key)
+        : [...props.selected, model]
+    )
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type='button'
+            className={`fbtn market-model-filter${props.selected.length ? 'on' : ''}`}
+            role='combobox'
+            aria-expanded={open}
+            aria-label='筛选模型'
+          />
+        }
+      >
+        <span>
+          {props.selected.length > 0
+            ? `已选 ${props.selected.length} 个模型`
+            : '筛选模型'}
+        </span>
+        <ChevronsUpDown size={14} aria-hidden='true' />
+      </PopoverTrigger>
+      <PopoverContent
+        className='market-model-filter-popover w-[min(360px,calc(100vw-32px))] p-0'
+        align='start'
+      >
+        <Command>
+          <CommandInput placeholder='搜索模型' />
+          <CommandList className='max-h-72'>
+            <CommandEmpty>没有匹配的模型</CommandEmpty>
+            <CommandGroup>
+              {props.models.map((model) => {
+                const checked = selected.has(model.toLowerCase())
+                return (
+                  <CommandItem
+                    key={model}
+                    value={model}
+                    data-checked={checked}
+                    onSelect={() => toggle(model)}
+                  >
+                    <span className='truncate font-mono text-xs'>{model}</span>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          </CommandList>
+          {props.selected.length > 0 && (
+            <button
+              type='button'
+              className='market-model-filter-clear'
+              onClick={() => props.onChange([])}
+            >
+              <X size={14} />
+              清空模型筛选
+            </button>
+          )}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 export function DawnMarket() {
   const user = useAuthStore((state) => state.auth.user)
@@ -155,12 +254,24 @@ export function DawnMarket() {
   }, [authed, navigate, queryClient])
 
   const groupsQuery = useMarketplaceGroups(filters)
+  const marketplaceModels = useMarketplaceModels()
   const groups = useMemo(
     () =>
       mockMode ? MOCK_MARKETPLACE_GROUPS : (groupsQuery.data?.items ?? []),
     [groupsQuery.data, mockMode]
   )
   const pricing = usePricingData()
+
+  const filterModels = useMemo(() => {
+    const values = new Map<string, string>()
+    for (const model of marketplaceModels.data ?? []) {
+      const name = model.trim()
+      if (name) values.set(name.toLowerCase(), name)
+    }
+    return [...values.values()].sort((left, right) =>
+      left.localeCompare(right, undefined, { sensitivity: 'base' })
+    )
+  }, [marketplaceModels.data])
 
   const modelsByName = useMemo(() => {
     const models = mergePricingModels(
@@ -464,6 +575,13 @@ export function DawnMarket() {
                   <option value='requests:desc'>调用次数最多</option>
                   <option value='name:asc'>名称首字母</option>
                 </select>
+                <ModelMultiSelect
+                  models={filterModels}
+                  selected={filters.models ?? []}
+                  onChange={(models) =>
+                    setFilters((current) => ({ ...current, models, page: 1 }))
+                  }
+                />
                 <select
                   className='fsel market-source-filter'
                   value={filters.source}
@@ -541,9 +659,13 @@ export function DawnMarket() {
                 />
               ) : groups.length ? (
                 <>
-                  {filters.search && (
+                  {(filters.search || (filters.models?.length ?? 0) > 0) && (
                     <div className='market-search-status' role='status'>
-                      搜索“{filters.search}”找到{' '}
+                      {filters.search ? `搜索“${filters.search}”` : '当前筛选'}
+                      {(filters.models?.length ?? 0) > 0
+                        ? ` · ${filters.models?.length} 个模型`
+                        : ''}
+                      {' 找到 '}
                       {groupsQuery.data?.total ?? groups.length} 个分组
                       <button
                         className='btn mini'
@@ -552,11 +674,12 @@ export function DawnMarket() {
                           setFilters((current) => ({
                             ...current,
                             search: '',
+                            models: [],
                             page: 1,
                           }))
                         }}
                       >
-                        清除搜索
+                        清除筛选
                       </button>
                     </div>
                   )}
@@ -661,16 +784,16 @@ export function DawnMarket() {
                     <Store size={20} />
                   </span>
                   <b>
-                    {filters.search
-                      ? `没有找到与“${filters.search}”匹配的分组`
+                    {filters.search || (filters.models?.length ?? 0) > 0
+                      ? '没有找到符合当前筛选的分组'
                       : '市场分组上架中'}
                   </b>
                   <span>
-                    {filters.search
+                    {filters.search || (filters.models?.length ?? 0) > 0
                       ? '请尝试其他关键词或清除搜索条件'
                       : '渠道检测通过后自动上架'}
                   </span>
-                  {filters.search && (
+                  {(filters.search || (filters.models?.length ?? 0) > 0) && (
                     <button
                       className='btn mini'
                       onClick={() => {
@@ -678,11 +801,12 @@ export function DawnMarket() {
                         setFilters((current) => ({
                           ...current,
                           search: '',
+                          models: [],
                           page: 1,
                         }))
                       }}
                     >
-                      清除搜索
+                      清除筛选
                     </button>
                   )}
                 </div>

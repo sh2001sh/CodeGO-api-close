@@ -17,7 +17,7 @@ import (
 func ListGroups(c *gin.Context) {
 	query := marketplaceapp.GroupQuery{
 		ViewerUserID: c.GetInt("id"),
-		Search:       c.Query("search"), Model: c.Query("model"), Source: c.Query("source"),
+		Search:       c.Query("search"), Model: c.Query("model"), Models: c.QueryArray("model"), Source: c.Query("source"),
 		Provider: c.Query("provider"), Status: c.Query("status"),
 		IncludeAccess: c.Query("include_access") == "true",
 		Verification:  c.Query("verification"), Sort: c.Query("sort"), Direction: c.Query("direction"),
@@ -26,6 +26,11 @@ func ListGroups(c *gin.Context) {
 		MaxMultiplier: queryFloat(c, "max_multiplier"),
 	}
 	result, err := marketplaceapp.ListMarketplaceGroups(query)
+	respond(c, result, err)
+}
+
+func ListModels(c *gin.Context) {
+	result, err := marketplaceapp.ListAvailablePricingModels(c.GetInt("id"))
 	respond(c, result, err)
 }
 

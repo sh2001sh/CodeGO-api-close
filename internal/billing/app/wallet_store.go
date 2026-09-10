@@ -269,7 +269,7 @@ func ReclaimMarketplaceOwnerEarningsTx(tx *gorm.DB, ownerUserID, adminUserID, am
 // settlement account and credits the administrator wallet without crediting
 // the channel owner's wallet.
 func ForfeitMarketplacePendingEarningsTx(tx *gorm.DB, pendingAccountID string, adminUserID, amount int, operationID string) error {
-	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{AccountID: pendingAccountID, RequestID: "marketplace-forfeit:" + operationID, ReservedAmount: int64(amount), IdempotencyKey: operationID + ":reserve"})
+	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{AccountID: pendingAccountID, RequestID: ledgerSyncRequestID(operationID), ReservedAmount: int64(amount), IdempotencyKey: operationID + ":reserve"})
 	if err != nil {
 		return err
 	}

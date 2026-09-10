@@ -19,6 +19,9 @@ type UserSetting struct {
 	SubscriptionOrderIds             []int    `json:"subscription_order_ids,omitempty"`
 	Language                         string   `json:"language,omitempty"`
 	FavoriteModelIDs                 []int    `json:"favorite_model_ids,omitempty"`
+	// BypassModelRequestLimits is an administrator-managed exception for a
+	// specific user's model RPM and Marketplace per-user concurrency limits.
+	BypassModelRequestLimits bool `json:"bypass_model_request_limits,omitempty"`
 }
 
 var (

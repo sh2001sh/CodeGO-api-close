@@ -27,6 +27,13 @@ import (
 	"github.com/sh2001sh/new-api/types"
 )
 
+func marketplaceUserConcurrencyLimit(c *gin.Context, configuredLimit int) int {
+	if httpctx.GetContextKeyBool(c, constant.ContextKeyBypassModelRequestLimits) {
+		return 0
+	}
+	return configuredLimit
+}
+
 func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	requestID := c.GetString(constant.RequestIdKey)
 	firstByteTrace := traceFromContext(c)
@@ -282,7 +289,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			channel.Id,
 			relayInfo.UserId,
 			channel.MarketplaceMaxConcurrency,
-			channel.MarketplaceUserMaxConcurrency,
+			marketplaceUserConcurrencyLimit(c, channel.MarketplaceUserMaxConcurrency),
 		)
 		relayInfo.FirstByteTrace.MarkChannelAdmissionDone()
 		if channelAdmission != relaycommon.ChannelConcurrencyAdmitted {

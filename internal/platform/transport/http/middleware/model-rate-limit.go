@@ -176,6 +176,10 @@ func ModelRequestRateLimitWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 
 func modelRequestRateLimitWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if httpctx.GetContextKeyBool(c, constant.ContextKeyBypassModelRequestLimits) {
+			runRateLimitedHandler(c, next)
+			return
+		}
 		// 在每个请求时检查是否启用限流
 		if !requestsettings.ModelRequestRateLimitEnabled {
 			runRateLimitedHandler(c, next)

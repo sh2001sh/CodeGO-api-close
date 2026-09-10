@@ -11,6 +11,7 @@ import (
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
+	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
@@ -426,6 +427,8 @@ func TokenAuth() func(c *gin.Context) {
 		}
 
 		identityapp.WriteUserContext(c, userCache)
+		httpctx.SetContextKey(c, constant.ContextKeyBypassModelRequestLimits,
+			identitydomain.GetBaseSetting(userCache).BypassModelRequestLimits)
 
 		userGroup := userCache.Group
 		tokenGroup := token.Group

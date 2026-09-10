@@ -77,6 +77,9 @@ const (
 	ContextKeyUserGroup   ContextKey = "user_group"
 	ContextKeyUsingGroup  ContextKey = "group"
 	ContextKeyUserName    ContextKey = "username"
+	// ContextKeyBypassModelRequestLimits is populated during token authentication
+	// from the administrator-managed user setting.
+	ContextKeyBypassModelRequestLimits ContextKey = "bypass_model_request_limits"
 
 	ContextKeyLocalCountTokens ContextKey = "local_count_tokens"
 

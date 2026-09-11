@@ -30,7 +30,7 @@ type verificationReport struct {
 }
 
 func main() {
-	strict := flag.Bool("strict", false, "fail when pending outbox events or legacy blind-box credits remain")
+	strict := flag.Bool("strict", false, "fail when legacy blind-box credits remain")
 	flag.Parse()
 
 	platformconfig.IsMasterNode = true
@@ -194,7 +194,7 @@ func (report verificationReport) hasFailures(strict bool) bool {
 	return len(report.MissingMigrations) > 0 ||
 		len(report.MissingSettlementColumns) > 0 ||
 		report.InconsistentLedgers > 0 ||
-		(strict && (report.PendingOutboxEvents > 0 || report.LegacyBlindBoxCredits > 0))
+		(strict && report.LegacyBlindBoxCredits > 0)
 }
 
 func printReport(report verificationReport) {

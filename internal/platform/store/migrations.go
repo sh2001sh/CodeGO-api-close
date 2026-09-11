@@ -181,6 +181,7 @@ func V2MigrationIDs() []string {
 		"20260910_nowpayments_topup",
 		"20260911_security_audit_events",
 		"20260911_security_audit_delivery_status",
+		"20260912_marketplace_settlement_due_index",
 	}
 }
 
@@ -347,6 +348,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260911_security_audit_delivery_status", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.SecurityAuditEvent{})
 		}},
+		{ID: "20260912_marketplace_settlement_due_index", RunOutsideTx: migrateMarketplaceSettlementDueIndex},
 		{ID: "20260903_marketplace_owner_operations", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{})
 		}},
@@ -658,6 +660,29 @@ func migrateQueryPathIndexes(_ *gorm.DB) error {
 		if err := db.Exec(item.SQL).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 			return fmt.Errorf("create query path index %s: %w", item.Name, err)
 		}
+	}
+	return nil
+}
+
+// migrateMarketplaceSettlementDueIndex accelerates the release worker query
+// on busy installations. PostgreSQL keeps the hot pending set small; other
+// dialects use a portable composite index.
+func migrateMarketplaceSettlementDueIndex(_ *gorm.DB) error {
+	primary := platformdb.DB
+	if primary == nil || !primary.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+		return nil
+	}
+	var statement string
+	switch strings.ToLower(primary.Dialector.Name()) {
+	case "postgres":
+		statement = "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_settlements_due ON marketplace.settlements (available_at ASC) WHERE status = 'pending'"
+	case "mysql":
+		statement = "CREATE INDEX idx_marketplace_settlements_due ON marketplace_settlements (status, available_at)"
+	default:
+		statement = "CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_due ON marketplace_settlements (status, available_at)"
+	}
+	if err := primary.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		return fmt.Errorf("create marketplace settlement due index: %w", err)
 	}
 	return nil
 }

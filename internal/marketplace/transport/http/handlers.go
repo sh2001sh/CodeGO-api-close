@@ -1,6 +1,10 @@
 package http
 
 import (
+	"bytes"
+	"encoding/csv"
+	"mime"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -167,7 +171,52 @@ func ListMyChannels(c *gin.Context) {
 }
 
 func ListMyUsageLogs(c *gin.Context) {
-	result, err := marketplaceapp.ListOwnerUsageLogs(c.GetInt("id"), marketplaceapp.OwnerUsageLogQuery{
+	result, err := marketplaceapp.ListOwnerUsageLogs(c.GetInt("id"), ownerUsageLogQuery(c))
+	respond(c, result, err)
+}
+
+func ExportMyUsageLogs(c *gin.Context) {
+	items, err := marketplaceapp.ExportOwnerUsageLogs(c.GetInt("id"), ownerUsageLogQuery(c))
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	var buffer bytes.Buffer
+	buffer.WriteString("\xEF\xBB\xBF")
+	writer := csv.NewWriter(&buffer)
+	if err := writer.Write([]string{"日志 ID", "时间", "渠道", "分组", "用户", "状态", "模型", "请求 ID", "上游请求 ID", "Prompt Tokens", "Completion Tokens", "耗时(ms)", "HTTP 状态", "错误类型", "错误代码", "错误信息", "用户扣费", "渠道收入", "平台佣金", "倍率", "收入状态"}); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	for _, item := range items {
+		row := []string{
+			strconv.Itoa(item.ID), time.Unix(item.CreatedAt, 0).Format("2006-01-02 15:04:05"), item.ChannelName, item.GroupID,
+			item.UserID, item.Status, item.ModelName, item.RequestID, item.UpstreamRequestID,
+			strconv.Itoa(item.PromptTokens), strconv.Itoa(item.CompletionTokens), strconv.FormatInt(item.TotalDurationMs, 10),
+			strconv.Itoa(item.StatusCode), item.ErrorType, item.ErrorCode, item.ErrorMessage,
+			strconv.FormatInt(item.ConsumerAmount, 10), strconv.FormatInt(item.OwnerIncome, 10), strconv.FormatInt(item.PlatformCommission, 10),
+			strconv.FormatFloat(item.Multiplier, 'f', -1, 64), item.IncomeStatus,
+		}
+		for index := range row {
+			row[index] = safeCSVCell(row[index])
+		}
+		if err := writer.Write(row); err != nil {
+			httpapi.ApiError(c, err)
+			return
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	filename := "channel-usage-logs-" + time.Now().Format("20060102-150405") + ".csv"
+	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
+	c.Data(http.StatusOK, "text/csv; charset=utf-8", buffer.Bytes())
+}
+
+func ownerUsageLogQuery(c *gin.Context) marketplaceapp.OwnerUsageLogQuery {
+	return marketplaceapp.OwnerUsageLogQuery{
 		ChannelID:         c.Query("channel_id"),
 		Status:            c.Query("status"),
 		ModelName:         c.Query("model_name"),
@@ -180,8 +229,7 @@ func ListMyUsageLogs(c *gin.Context) {
 		Page:              queryInt(c, "page", 1),
 		PageSize:          queryInt(c, "page_size", 20),
 		SummaryOnly:       c.Query("summary_only") == "true",
-	})
-	respond(c, result, err)
+	}
 }
 
 func ListMyObservability(c *gin.Context) {

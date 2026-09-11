@@ -44,6 +44,7 @@ const (
 	ErrorCodePromptGuardBlocked     ErrorCode = "prompt_guard_blocked"
 	ErrorCodePromptGuardUnavailable ErrorCode = "prompt_guard_unavailable"
 	ErrorCodePromptGuardInvalid     ErrorCode = "prompt_guard_invalid_response"
+	ErrorCodeCyberPolicy            ErrorCode = "cyber_policy"
 	ErrorCodeViolationFeeGrokCSAM   ErrorCode = "violation_fee.grok.csam"
 
 	// new api error
@@ -104,6 +105,25 @@ type NewAPIError struct {
 	errorCode      ErrorCode
 	StatusCode     int
 	Metadata       json.RawMessage
+	rawBody        []byte
+	rawContentType string
+}
+
+// SetRawResponse preserves an upstream policy error for exact downstream
+// delivery. Callers still return NewAPIError so retry and billing cleanup run.
+func (e *NewAPIError) SetRawResponse(body []byte, contentType string) {
+	if e == nil {
+		return
+	}
+	e.rawBody = append([]byte(nil), body...)
+	e.rawContentType = strings.TrimSpace(contentType)
+}
+
+func (e *NewAPIError) RawResponse() ([]byte, string, bool) {
+	if e == nil || len(e.rawBody) == 0 {
+		return nil, "", false
+	}
+	return append([]byte(nil), e.rawBody...), e.rawContentType, true
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.

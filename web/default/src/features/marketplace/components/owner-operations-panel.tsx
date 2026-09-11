@@ -9,8 +9,8 @@ import {
 import { Check, RefreshCw, RotateCcw, Search, Send, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { formatQuota } from '@/lib/format'
 import dayjs from '@/lib/dayjs'
+import { formatQuota } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import {
   createMarketplaceTimeRangeMultiplier,
   deleteMarketplaceTimeRangeMultiplier,
@@ -40,12 +41,15 @@ import type {
   MarketplaceBargainRequestList,
   MarketplaceOwnerUsageItem,
 } from '../types'
-import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 
 type WelfareType = 'transfer' | 'blind_box'
 type DateRange = { start?: Date; end?: Date }
 
-export function OwnerOperationsPanel() {
+export function OwnerOperationsPanel({
+  focus,
+}: {
+  focus?: { channelId: string; userId: number; nonce: number }
+}) {
   const { t } = useTranslation()
   const client = useQueryClient()
   const channels = useMyMarketplaceChannels()
@@ -53,23 +57,35 @@ export function OwnerOperationsPanel() {
     start: dayjs().startOf('day').toDate(),
     end: dayjs().endOf('day').toDate(),
   }))
-  const [searchDraft, setSearchDraft] = useState('')
-  const [search, setSearch] = useState('')
-  const [channelID, setChannelID] = useState('')
+  const initialUserSearch = focus?.userId ? String(focus.userId) : ''
+  const [searchDraft, setSearchDraft] = useState(initialUserSearch)
+  const [search, setSearch] = useState(initialUserSearch)
+  const [channelID, setChannelID] = useState(focus?.channelId ?? '')
   const [rankingSort, setRankingSort] = useState<OwnerUsageSort>('requests')
   const activeChannelID = channelID || channels.data?.[0]?.id || ''
   const usage = useQuery({
-    queryKey: ['marketplace-owner-usage', activeChannelID, range, search, rankingSort],
-    queryFn: () => getMyMarketplaceUserUsage({
-      channelId: activeChannelID || undefined,
-      startTimestamp: range.start ? Math.floor(range.start.getTime() / 1000) : undefined,
-      endTimestamp: range.end ? Math.floor(range.end.getTime() / 1000) : undefined,
-      search: search || undefined,
-      sort: rankingSort,
-      direction: 'desc',
-      page: 1,
-      pageSize: 200,
-    }),
+    queryKey: [
+      'marketplace-owner-usage',
+      activeChannelID,
+      range,
+      search,
+      rankingSort,
+    ],
+    queryFn: () =>
+      getMyMarketplaceUserUsage({
+        channelId: activeChannelID || undefined,
+        startTimestamp: range.start
+          ? Math.floor(range.start.getTime() / 1000)
+          : undefined,
+        endTimestamp: range.end
+          ? Math.floor(range.end.getTime() / 1000)
+          : undefined,
+        search: search || undefined,
+        sort: rankingSort,
+        direction: 'desc',
+        page: 1,
+        pageSize: 200,
+      }),
   })
   const requests = useQuery({
     queryKey: ['marketplace-owner-bargains'],
@@ -274,11 +290,21 @@ export function OwnerOperationsPanel() {
             setSelectedIDs(new Set())
           }}
           range={range}
-          onRangeChange={(value) => { setRange(value); setSelectedIDs(new Set()) }}
+          onRangeChange={(value) => {
+            setRange(value)
+            setSelectedIDs(new Set())
+          }}
           search={searchDraft}
           onSearchChange={setSearchDraft}
-          onSearch={() => { setSearch(searchDraft.trim()); setSelectedIDs(new Set()) }}
-          onClearSearch={() => { setSearchDraft(''); setSearch(''); setSelectedIDs(new Set()) }}
+          onSearch={() => {
+            setSearch(searchDraft.trim())
+            setSelectedIDs(new Set())
+          }}
+          onClearSearch={() => {
+            setSearchDraft('')
+            setSearch('')
+            setSelectedIDs(new Set())
+          }}
           summary={usage.data?.summary}
           users={rankedUsers}
           rankingSort={rankingSort}
@@ -430,7 +456,12 @@ function UserWelfarePanel(props: {
   onSearchChange: (value: string) => void
   onSearch: () => void
   onClearSearch: () => void
-  summary?: { total_users: number; total_requests: number; consumer_amount: number; owner_income: number }
+  summary?: {
+    total_users: number
+    total_requests: number
+    consumer_amount: number
+    owner_income: number
+  }
   users: MarketplaceOwnerUsageItem[]
   rankingSort: OwnerUsageSort
   onRankingSortChange: (value: OwnerUsageSort) => void
@@ -525,20 +556,65 @@ function UserWelfarePanel(props: {
         </Select>
       </div>
       <div className='mt-3 flex flex-col gap-2 lg:flex-row'>
-        <form className='flex min-w-0 flex-1' onSubmit={(event) => { event.preventDefault(); props.onSearch() }}>
-          <Input value={props.search} onChange={(event) => props.onSearchChange(event.target.value)} placeholder={t('搜索用户外部 ID、用户 ID 或渠道')} aria-label={t('搜索用户')} className='rounded-r-none' />
-          <Button type='submit' variant='outline' size='icon' className='rounded-l-none border-l-0' aria-label={t('搜索')}><Search /></Button>
+        <form
+          className='flex min-w-0 flex-1'
+          onSubmit={(event) => {
+            event.preventDefault()
+            props.onSearch()
+          }}
+        >
+          <Input
+            value={props.search}
+            onChange={(event) => props.onSearchChange(event.target.value)}
+            placeholder={t('搜索用户外部 ID、用户 ID 或渠道')}
+            aria-label={t('搜索用户')}
+            className='rounded-r-none'
+          />
+          <Button
+            type='submit'
+            variant='outline'
+            size='icon'
+            className='rounded-l-none border-l-0'
+            aria-label={t('搜索')}
+          >
+            <Search />
+          </Button>
         </form>
-        <CompactDateTimeRangePicker start={props.range.start} end={props.range.end} onChange={props.onRangeChange} className='w-full lg:w-[18.5rem]' />
-        {(props.range.start || props.range.end || props.search) && <Button variant='outline' size='icon' onClick={() => { props.onRangeChange({}); props.onClearSearch() }} title={t('清除筛选')} aria-label={t('清除筛选')}><RotateCcw /></Button>}
+        <CompactDateTimeRangePicker
+          start={props.range.start}
+          end={props.range.end}
+          onChange={props.onRangeChange}
+          className='w-full lg:w-[18.5rem]'
+        />
+        {(props.range.start || props.range.end || props.search) && (
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => {
+              props.onRangeChange({})
+              props.onClearSearch()
+            }}
+            title={t('清除筛选')}
+            aria-label={t('清除筛选')}
+          >
+            <RotateCcw />
+          </Button>
+        )}
       </div>
-      <div className='mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-4'>
+      <div className='bg-border mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border sm:grid-cols-4'>
         {[
           [t('用户数'), props.summary?.total_users ?? 0],
           [t('请求次数'), props.summary?.total_requests ?? 0],
           [t('用户扣费'), formatQuota(props.summary?.consumer_amount ?? 0)],
           [t('渠道收入'), formatQuota(props.summary?.owner_income ?? 0)],
-        ].map(([label, value]) => <div key={String(label)} className='bg-card px-3 py-2'><div className='text-muted-foreground text-xs'>{label}</div><div className='mt-1 font-semibold tabular-nums'>{typeof value === 'number' ? value.toLocaleString() : value}</div></div>)}
+        ].map(([label, value]) => (
+          <div key={String(label)} className='bg-card px-3 py-2'>
+            <div className='text-muted-foreground text-xs'>{label}</div>
+            <div className='mt-1 font-semibold tabular-nums'>
+              {typeof value === 'number' ? value.toLocaleString() : value}
+            </div>
+          </div>
+        ))}
       </div>
       <div className='mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2'>
         <label className='min-w-0 space-y-1 text-xs'>

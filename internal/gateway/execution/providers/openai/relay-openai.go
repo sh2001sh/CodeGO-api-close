@@ -223,11 +223,29 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var streamItems []string // store stream items
 	var lastStreamData string
 	var secondLastStreamData string // 存储倒数第二个stream data，用于音频模型
+	var cyberPolicyErr *types.NewAPIError
 
 	// 检查是否为音频模型
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+		if err := cyberPolicyAPIError([]byte(data), resp.StatusCode, resp.Header.Get("Content-Type")); err != nil {
+			if lastStreamData != "" {
+				if writeErr := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); writeErr != nil {
+					sr.Stop(writeErr)
+					return
+				}
+			}
+			lastStreamData = ""
+			if writeErr := helper.StringData(c, data); writeErr != nil {
+				sr.Stop(writeErr)
+				return
+			}
+			cyberPolicyErr = err
+			c.Set(string(constant.ContextKeyCyberPolicyResponseForwarded), true)
+			sr.Stop(err)
+			return
+		}
 		var streamResponse dto.ChatCompletionsStreamResponse
 		if err := platformencoding.UnmarshalString(data, &streamResponse); err == nil {
 			for _, choice := range streamResponse.Choices {
@@ -253,6 +271,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			streamItems = append(streamItems, data)
 		}
 	})
+	if cyberPolicyErr != nil {
+		return nil, cyberPolicyErr
+	}
 
 	// 对音频模型，从倒数第二个stream data中提取usage信息
 	if isAudioModel && secondLastStreamData != "" {
@@ -328,6 +349,9 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 			logger.LogError(c, fmt.Sprintf("openrouter enterprise response success=false, data: %s", enterpriseResponse.Data))
 			return nil, types.NewOpenAIError(fmt.Errorf("openrouter response success=false"), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 		}
+	}
+	if cyberErr := cyberPolicyAPIError(responseBody, resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
+		return nil, cyberErr
 	}
 
 	err = platformencoding.Unmarshal(responseBody, &simpleResponse)
@@ -478,6 +502,7 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 	sendChan := make(chan []byte, 100)
 	receiveChan := make(chan []byte, 100)
 	errChan := make(chan error, 2)
+	cyberPolicyChan := make(chan *types.NewAPIError, 1)
 
 	usage := &dto.RealtimeUsage{}
 	localUsage := &dto.RealtimeUsage{}
@@ -514,6 +539,7 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 					errChan <- fmt.Errorf("realtime prompt audit stopped request: %s", auditError.GetErrorCode())
 					return
 				}
+				c.Set(string(constant.ContextKeySecurityAuditPromptBody), append([]byte(nil), message...))
 
 				if realtimeEvent.Type == dto.RealtimeEventTypeSessionUpdate {
 					if realtimeEvent.Session != nil {
@@ -568,6 +594,18 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 					return
 				}
 				info.SetFirstResponseTime()
+				if cyberErr := cyberPolicyAPIError(message, http.StatusOK, "application/json"); cyberErr != nil {
+					if err := helper.WssString(c, clientConn, string(message)); err != nil {
+						errChan <- fmt.Errorf("error writing cyber policy response to client: %v", err)
+						return
+					}
+					c.Set(string(constant.ContextKeyCyberPolicyResponseForwarded), true)
+					select {
+					case cyberPolicyChan <- cyberErr:
+					default:
+					}
+					return
+				}
 				realtimeEvent := &dto.RealtimeEvent{}
 				err = platformencoding.Unmarshal(message, realtimeEvent)
 				if err != nil {
@@ -654,13 +692,18 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 		}
 	})
 
+	var cyberPolicyErr *types.NewAPIError
 	select {
 	case <-clientClosed:
 	case <-targetClosed:
 	case err := <-errChan:
 		//return service.OpenAIErrorWrapper(err, "realtime_error", http.StatusInternalServerError), nil
 		logger.LogError(c, "realtime error: "+err.Error())
+	case cyberPolicyErr = <-cyberPolicyChan:
 	case <-c.Done():
+	}
+	if cyberPolicyErr != nil {
+		return cyberPolicyErr, sumUsage
 	}
 
 	if usage.TotalTokens != 0 {
@@ -695,26 +738,33 @@ func checkRealtimePromptAudit(c *gin.Context, info *relaycommon.RelayInfo, messa
 	}
 	switch decision.Kind {
 	case securityaudit.DecisionBlock:
+		riskCode := "prompt_guard"
+		if decision.Result != nil && len(decision.Result.Categories) > 0 {
+			riskCode = strings.Join(decision.Result.Categories, ",")
+		}
+		_, err := securityaudit.RecordEvent(c.Request.Context(), securityaudit.EventInput{
+			RequestID: c.GetString(constant.RequestIdKey), Source: securityaudit.EventSourcePromptGuard,
+			Decision: string(decision.Kind), RiskCode: riskCode, Severity: "high",
+			UserID: info.UserId, TokenID: info.TokenId, TokenName: c.GetString("token_name"), ChannelID: info.ChannelId,
+			MarketplaceGroupID: info.MarketplaceGroupID, OwnerUserID: info.MarketplaceOwnerID,
+			Model: info.OriginModelName, Protocol: "openai_realtime", HTTPStatus: http.StatusForbidden,
+			UpstreamErrorType: "prompt_guard", UpstreamErrorCode: string(decision.ErrorCode),
+			UpstreamErrorMessage: "提示词安全审计拒绝了该请求，请调整输入后重试",
+			PromptBody:           message, BillingResult: securityaudit.BillingResultNotCharged,
+		})
+		if err != nil {
+			logger.LogError(c, "record realtime prompt guard event failed: "+err.Error())
+		}
 		return types.NewErrorWithStatusCode(
 			fmt.Errorf("提示词安全审计拒绝了该请求，请调整输入后重试"),
 			types.ErrorCodePromptGuardBlocked,
 			http.StatusForbidden,
 			types.ErrOptionWithSkipRetry(),
 		)
-	case securityaudit.DecisionInvalid:
-		return types.NewErrorWithStatusCode(
-			fmt.Errorf("提示词安全审计返回无效结果，请稍后重试"),
-			types.ErrorCodePromptGuardInvalid,
-			http.StatusServiceUnavailable,
-			types.ErrOptionWithSkipRetry(),
-		)
 	default:
-		return types.NewErrorWithStatusCode(
-			fmt.Errorf("提示词安全审计暂时不可用，请稍后重试"),
-			types.ErrorCodePromptGuardUnavailable,
-			http.StatusServiceUnavailable,
-			types.ErrOptionWithSkipRetry(),
-		)
+		// Prompt Guard is a secondary control. Invalid or unavailable checks
+		// must not turn a healthy realtime session into a gateway failure.
+		return nil
 	}
 }
 
@@ -742,6 +792,9 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+	if cyberErr := cyberPolicyAPIError(responseBody, resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
+		return nil, cyberErr
 	}
 
 	var usageResp dto.SimpleResponse
@@ -940,6 +993,9 @@ func OpenaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+	if cyberErr := cyberPolicyAPIError(responseBody, resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
+		return nil, cyberErr
 	}
 
 	var imageResp dto.ImageResponse

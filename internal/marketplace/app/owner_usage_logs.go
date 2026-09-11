@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -118,6 +119,32 @@ func ListOwnerUsageLogs(ownerUserID int, query OwnerUsageLogQuery) (*OwnerUsageL
 		result.Items = append(result.Items, item)
 	}
 	return result, nil
+}
+
+const maxOwnerUsageLogExportRows = 20000
+
+func ExportOwnerUsageLogs(ownerUserID int, query OwnerUsageLogQuery) ([]OwnerUsageLogItem, error) {
+	query.SummaryOnly = false
+	query.Page = 1
+	query.PageSize = 100
+	result := make([]OwnerUsageLogItem, 0)
+	for {
+		page, err := ListOwnerUsageLogs(ownerUserID, query)
+		if err != nil {
+			return nil, err
+		}
+		if page.Total > maxOwnerUsageLogExportRows {
+			return nil, fmt.Errorf("导出日志超过 %d 条，请缩小时间范围或增加筛选条件", maxOwnerUsageLogExportRows)
+		}
+		if len(result)+len(page.Items) > maxOwnerUsageLogExportRows {
+			return nil, fmt.Errorf("导出日志超过 %d 条，请缩小时间范围或增加筛选条件", maxOwnerUsageLogExportRows)
+		}
+		result = append(result, page.Items...)
+		if len(page.Items) == 0 || len(result) >= int(page.Total) {
+			return result, nil
+		}
+		query.Page++
+	}
 }
 
 func loadExternalUserIDs(logs []auditschema.Log) (map[int]string, error) {

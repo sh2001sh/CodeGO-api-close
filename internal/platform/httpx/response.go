@@ -44,6 +44,15 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 	CloseResponseBodyGracefully(resp)
 	var errResponse dto.GeneralErrorResponse
 	responseBodyText := string(responseBody)
+	if cyber, ok := DetectCyberPolicyError(responseBody); ok {
+		newAPIErr = types.WithOpenAIError(types.OpenAIError{
+			Message: cyber.Message,
+			Type:    defaultCyberValue(cyber.Type, "invalid_request_error"),
+			Code:    types.ErrorCodeCyberPolicy,
+		}, resp.StatusCode, types.ErrOptionWithSkipRetry())
+		newAPIErr.SetRawResponse(responseBody, resp.Header.Get("Content-Type"))
+		return
+	}
 	responseBodyPreview := platformtext.LocalLogPreview(responseBodyText)
 	buildErrWithBody := func(message string) error {
 		if message == "" {
@@ -84,9 +93,55 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 	return
 }
 
+type CyberPolicyError struct {
+	Code    string
+	Type    string
+	Message string
+}
+
+// DetectCyberPolicyError recognizes the structured OpenAI error and the
+// documented message used by compatible providers that omit error.code.
+func DetectCyberPolicyError(payload []byte) (CyberPolicyError, bool) {
+	var root map[string]any
+	if json.Unmarshal(payload, &root) != nil {
+		message := strings.TrimSpace(string(payload))
+		if strings.Contains(strings.ToLower(message), "this content was flagged for possible cybersecurity risk") {
+			return CyberPolicyError{Code: "cyber_policy", Message: message}, true
+		}
+		return CyberPolicyError{}, false
+	}
+	candidates := make([]map[string]any, 0, 2)
+	if value, ok := root["error"].(map[string]any); ok {
+		candidates = append(candidates, value)
+	}
+	if response, ok := root["response"].(map[string]any); ok {
+		if value, ok := response["error"].(map[string]any); ok {
+			candidates = append(candidates, value)
+		}
+	}
+	for _, value := range candidates {
+		code := strings.TrimSpace(fmt.Sprint(value["code"]))
+		message := strings.TrimSpace(fmt.Sprint(value["message"]))
+		if strings.EqualFold(code, "cyber_policy") || strings.Contains(strings.ToLower(message), "this content was flagged for possible cybersecurity risk") {
+			return CyberPolicyError{Code: "cyber_policy", Type: strings.TrimSpace(fmt.Sprint(value["type"])), Message: message}, true
+		}
+	}
+	return CyberPolicyError{}, false
+}
+
+func defaultCyberValue(value, fallback string) string {
+	if strings.TrimSpace(value) == "" || value == "<nil>" {
+		return fallback
+	}
+	return value
+}
+
 // ResetStatusCode applies per-channel status code remapping to upstream errors.
 func ResetStatusCode(newAPIErr *types.NewAPIError, statusCodeMappingStr string) {
 	if newAPIErr == nil {
+		return
+	}
+	if _, _, raw := newAPIErr.RawResponse(); raw {
 		return
 	}
 	if statusCodeMappingStr == "" || statusCodeMappingStr == "{}" {

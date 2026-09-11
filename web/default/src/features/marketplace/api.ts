@@ -27,6 +27,9 @@ import type {
   MarketplaceTimeRangeMultiplier,
   MarketplaceOwnerMultiplierItem,
   MarketplaceMultiplierNotice,
+  SecurityAuditEvent,
+  SecurityAuditEventFilters,
+  SecurityAuditEventList,
 } from './types'
 
 interface ApiResponse<T = unknown> {
@@ -66,20 +69,24 @@ export async function resolveMarketplaceBargainRequest(input: {
   return requireData(response.data)
 }
 
-export async function getMyMarketplaceUserUsage(input: {
-  channelId?: string
-  startTimestamp?: number
-  endTimestamp?: number
-  search?: string
-  sort?: 'requests' | 'amount' | 'recent'
-  direction?: 'asc' | 'desc'
-  page?: number
-  pageSize?: number
-} = {}) {
+export async function getMyMarketplaceUserUsage(
+  input: {
+    channelId?: string
+    startTimestamp?: number
+    endTimestamp?: number
+    search?: string
+    sort?: 'requests' | 'amount' | 'recent'
+    direction?: 'asc' | 'desc'
+    page?: number
+    pageSize?: number
+  } = {}
+) {
   const params = new URLSearchParams()
   if (input.channelId) params.set('channel_id', input.channelId)
-  if (input.startTimestamp) params.set('start_timestamp', String(input.startTimestamp))
-  if (input.endTimestamp) params.set('end_timestamp', String(input.endTimestamp))
+  if (input.startTimestamp)
+    params.set('start_timestamp', String(input.startTimestamp))
+  if (input.endTimestamp)
+    params.set('end_timestamp', String(input.endTimestamp))
   if (input.search) params.set('search', input.search)
   if (input.sort) params.set('sort', input.sort)
   if (input.direction) params.set('direction', input.direction)
@@ -443,7 +450,12 @@ export async function updateMarketplaceRoutePool(input: {
 }) {
   const response = await api.put<ApiResponse<MarketplaceRoutePool>>(
     `/api/marketplace/route-pools/${encodeURIComponent(input.id)}`,
-    { name: input.name, group_ids: input.groupIds, config: input.config, auto_build: input.autoBuild }
+    {
+      name: input.name,
+      group_ids: input.groupIds,
+      config: input.config,
+      auto_build: input.autoBuild,
+    }
   )
   return requireData(response.data)
 }
@@ -547,6 +559,30 @@ export async function getMyMarketplaceUsageLogs(
     >
   )
   return requireData(response.data)
+}
+
+export async function exportMyMarketplaceUsageLogs(
+  params: MarketplaceOwnerUsageLogFilters
+) {
+  const search = new URLSearchParams()
+  if (params.channelId) search.set('channel_id', params.channelId)
+  if (params.status) search.set('status', params.status)
+  if (params.modelName) search.set('model_name', params.modelName)
+  if (params.requestId) search.set('request_id', params.requestId)
+  if (params.upstreamRequestId) search.set('upstream_request_id', params.upstreamRequestId)
+  if (params.externalUserId) search.set('external_user_id', params.externalUserId)
+  if (params.search) search.set('search', params.search)
+  if (params.startTimestamp) search.set('start_timestamp', String(params.startTimestamp))
+  if (params.endTimestamp) search.set('end_timestamp', String(params.endTimestamp))
+  const response = await api.get<Blob>(
+    `/api/marketplace/channels/mine/logs/export?${search.toString()}`,
+    { responseType: 'blob', disableDuplicate: true, skipBusinessError: true, skipErrorHandler: true } as Record<string, unknown>
+  )
+  if (String(response.headers['content-type'] ?? '').includes('application/json')) {
+    const payload = JSON.parse(await response.data.text()) as ApiResponse
+    throw new Error(payload.message || '渠道日志导出失败')
+  }
+  return response.data
 }
 
 export async function createMarketplaceChannel(values: ChannelFormValues) {
@@ -810,6 +846,69 @@ export async function reviewMarketplaceChannel(
   const response = await api.post<ApiResponse<MarketplaceChannel>>(
     `/api/marketplace/admin/channels/${channelId}/review`,
     { approved, reason }
+  )
+  return requireData(response.data)
+}
+
+export async function getSecurityAuditEvents(
+  filters: SecurityAuditEventFilters,
+  admin = false
+) {
+  const params = securityAuditParams(filters)
+  params.set('page', String(filters.page))
+  params.set('page_size', String(filters.pageSize))
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.get<ApiResponse<SecurityAuditEventList>>(
+    `${prefix}/security-audit/events?${params.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function exportSecurityAuditEvents(
+  filters: SecurityAuditEventFilters
+) {
+  const params = securityAuditParams(filters)
+  const response = await api.get<Blob>(
+    `/api/marketplace/security-audit/events/export?${params.toString()}`,
+    {
+      responseType: 'blob',
+      disableDuplicate: true,
+      skipBusinessError: true,
+      skipErrorHandler: true,
+    } as Record<string, unknown>
+  )
+  const contentType = String(response.headers['content-type'] ?? '')
+  if (contentType.includes('application/json')) {
+    const payload = JSON.parse(await response.data.text()) as ApiResponse
+    throw new Error(payload.message || '安全审计日志导出失败')
+  }
+  return response.data
+}
+
+function securityAuditParams(filters: SecurityAuditEventFilters) {
+  const params = new URLSearchParams()
+  if (filters.source) params.set('source', filters.source)
+  if (filters.reviewStatus) params.set('review_status', filters.reviewStatus)
+  if (filters.channelId) params.set('channel_id', filters.channelId)
+  if (filters.model) params.set('model', filters.model)
+  if (filters.search) params.set('search', filters.search)
+  if (filters.startTimestamp)
+    params.set('start_timestamp', String(filters.startTimestamp))
+  if (filters.endTimestamp)
+    params.set('end_timestamp', String(filters.endTimestamp))
+  return params
+}
+
+export async function updateSecurityAuditEvent(input: {
+  id: string
+  status: SecurityAuditEvent['review_status']
+  note: string
+  admin?: boolean
+}) {
+  const prefix = input.admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.patch<ApiResponse<SecurityAuditEvent>>(
+    `${prefix}/security-audit/events/${input.id}`,
+    { status: input.status, note: input.note }
   )
   return requireData(response.data)
 }

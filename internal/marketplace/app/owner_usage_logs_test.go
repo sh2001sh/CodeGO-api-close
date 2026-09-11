@@ -65,6 +65,10 @@ func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
 	require.Equal(t, "A2B3C4", success.UserID)
 	require.Equal(t, int64(95), success.OwnerIncome)
 	require.Equal(t, "pending", success.IncomeStatus)
+	exported, err := ExportOwnerUsageLogs(10, OwnerUsageLogQuery{ChannelID: "owner-channel"})
+	require.NoError(t, err)
+	require.Len(t, exported, 2)
+	require.ElementsMatch(t, []string{"owner-success", "owner-error"}, []string{exported[0].RequestID, exported[1].RequestID})
 	failed := itemsByRequestID["owner-error"]
 	require.Equal(t, "D5E6F7", failed.UserID)
 	require.Zero(t, failed.OwnerIncome)

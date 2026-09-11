@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { TFunction } from 'i18next'
 import {
   Box,
   Cable,
@@ -30,6 +31,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  ShieldAlert,
   Store,
   Ticket,
   User,
@@ -38,7 +40,6 @@ import {
   UsersRound,
   Wallet,
 } from 'lucide-react'
-import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
 import { type SidebarData } from '@/components/layout/types'
@@ -211,6 +212,11 @@ export function buildSidebarData(t: TFunction): SidebarData {
                 title: t('Operations'),
                 url: '/operations',
                 icon: ShieldCheck,
+              },
+              {
+                title: t('安全审计'),
+                url: '/security-audit',
+                icon: ShieldAlert,
               },
             ],
           },

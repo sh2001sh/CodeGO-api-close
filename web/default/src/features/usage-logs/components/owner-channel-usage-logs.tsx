@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-table'
 import {
   Activity,
+  Download,
   RefreshCcw,
   RotateCcw,
   Search,
@@ -28,6 +29,7 @@ import {
 import { TableCell, TableRow } from '@/components/ui/table'
 import { DataTablePage } from '@/components/data-table'
 import { useMyMarketplaceUsageLogs } from '@/features/marketplace/hooks'
+import { exportMyMarketplaceUsageLogs } from '@/features/marketplace/api'
 import type {
   MarketplaceChannel,
   MarketplaceOwnerUsageLog,
@@ -35,6 +37,7 @@ import type {
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import { useOwnerChannelLogColumns } from './owner-channel-log-columns'
 import { OwnerChannelLogDetailsDialog } from './owner-channel-log-details-dialog'
+import { toast } from 'sonner'
 
 interface DateRange {
   start?: Date
@@ -43,12 +46,23 @@ interface DateRange {
 
 export function OwnerChannelUsageLogs(props: {
   channels: MarketplaceChannel[]
+  focus?: {
+    channelId: string
+    requestId: string
+    userId: number
+    nonce: number
+  }
 }) {
   const { t } = useTranslation()
-  const [channelId, setChannelId] = React.useState('all')
+  const [channelId, setChannelId] = React.useState(
+    props.focus?.channelId || 'all'
+  )
   const [status, setStatus] = React.useState('all')
-  const [searchDraft, setSearchDraft] = React.useState('')
-  const [search, setSearch] = React.useState('')
+  const initialSearch =
+    props.focus?.requestId ||
+    (props.focus?.userId ? String(props.focus.userId) : '')
+  const [searchDraft, setSearchDraft] = React.useState(initialSearch)
+  const [search, setSearch] = React.useState(initialSearch)
   const [selectedLog, setSelectedLog] =
     React.useState<MarketplaceOwnerUsageLog | null>(null)
   const [range, setRange] = React.useState<DateRange>(() => ({
@@ -58,6 +72,7 @@ export function OwnerChannelUsageLogs(props: {
     pageIndex: 0,
     pageSize: 20,
   })
+  const [exporting, setExporting] = React.useState(false)
   const query = useMyMarketplaceUsageLogs({
     channelId: channelId === 'all' ? undefined : channelId,
     status: status === 'success' || status === 'failed' ? status : undefined,
@@ -111,6 +126,34 @@ export function OwnerChannelUsageLogs(props: {
     resetPage(setPagination)
   }
 
+  const exportLogs = async () => {
+    setExporting(true)
+    try {
+      const blob = await exportMyMarketplaceUsageLogs({
+        channelId: channelId === 'all' ? undefined : channelId,
+        status: status === 'success' || status === 'failed' ? status : undefined,
+        search: search || undefined,
+        startTimestamp: toTimestamp(range.start),
+        endTimestamp: toTimestamp(range.end),
+        page: 1,
+        pageSize: pagination.pageSize,
+      })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `channel-usage-logs-${dayjs().format('YYYYMMDD-HHmmss')}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      toast.success(t('渠道日志已导出'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('渠道日志导出失败'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <>
       {query.isError && (
@@ -149,6 +192,9 @@ export function OwnerChannelUsageLogs(props: {
             onSearch={applySearch}
             onRangeChange={updateRange}
             onRefresh={() => void query.refetch()}
+            exporting={exporting}
+            canExport={(data?.total ?? 0) > 0}
+            onExport={exportLogs}
           />
         }
         renderRow={(row) => (
@@ -190,6 +236,9 @@ function OwnerLogToolbar(props: {
   onSearch: () => void
   onRangeChange: (range: DateRange) => void
   onRefresh: () => void
+  exporting: boolean
+  canExport: boolean
+  onExport: () => void
 }) {
   const { t } = useTranslation()
   return (
@@ -285,6 +334,16 @@ function OwnerLogToolbar(props: {
               <RotateCcw />
             </Button>
           )}
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={props.onExport}
+            disabled={props.exporting || !props.canExport}
+            title={t('导出当前筛选范围的渠道日志')}
+          >
+            <Download className={props.exporting ? 'animate-pulse' : ''} />
+            {props.exporting ? t('导出中') : t('导出日志')}
+          </Button>
           <Button
             variant='outline'
             size='icon'

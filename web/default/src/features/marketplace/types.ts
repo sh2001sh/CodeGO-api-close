@@ -637,3 +637,82 @@ export interface MarketplaceTimeRangeMultiplier {
   multiplier: number
   label: string
 }
+
+export type SecurityAuditSource = 'prompt_guard' | 'upstream_cyber_policy'
+export type SecurityAuditReviewStatus =
+  | 'unreviewed'
+  | 'acknowledged'
+  | 'resolved'
+  | 'false_positive'
+export type SecurityAuditSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type SecurityAuditNotificationStatus =
+  | 'pending'
+  | 'dispatched'
+  | 'partial_failed'
+  | 'failed'
+  | 'skipped'
+
+export interface SecurityAuditEvent {
+  id: string
+  request_id: string
+  source: SecurityAuditSource
+  decision: string
+  risk_code: string
+  severity: SecurityAuditSeverity | ''
+  user_id: number
+  token_id: number
+  token_name: string
+  channel_id: number
+  marketplace_channel_id: string
+  marketplace_group_id: string
+  owner_user_id: number
+  model: string
+  protocol: string
+  http_status: number
+  upstream_error_type: string
+  upstream_error_code: string
+  upstream_error_message: string
+  upstream_error_body: string
+  prompt_hash: string
+  prompt_preview: string
+  prompt_length: number
+  message_count: number
+  billing_result: string
+  notification_status: SecurityAuditNotificationStatus | ''
+  notification_targets: number
+  notification_success: number
+  notified_at?: string | null
+  recent_trigger_count: number
+  review_status: SecurityAuditReviewStatus
+  review_note: string
+  reviewed_by: number
+  reviewed_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SecurityAuditEventFilters {
+  source?: string
+  reviewStatus?: string
+  channelId?: string
+  model?: string
+  search?: string
+  startTimestamp?: number
+  endTimestamp?: number
+  page: number
+  pageSize: number
+}
+
+export interface SecurityAuditEventList {
+  items: SecurityAuditEvent[]
+  total: number
+  page: number
+  page_size: number
+  summary: {
+    total: number
+    unreviewed: number
+    affected_channels: number
+    affected_users: number
+    today: number
+  }
+}

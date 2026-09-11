@@ -334,6 +334,7 @@ func migratePrimaryDB() error {
 		&marketplaceschema.AutoRoutePoolConfig{},
 		&marketplaceschema.RoutePool{}, &marketplaceschema.RoutePoolMember{},
 		&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{},
+		&gatewayschema.SecurityAuditEvent{},
 	)
 	if err != nil {
 		return err

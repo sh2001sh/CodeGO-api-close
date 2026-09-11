@@ -19,6 +19,9 @@ func OaiResponsesCompactionHandler(c *gin.Context, resp *http.Response) (*dto.Us
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
+	if cyberErr := cyberPolicyAPIError(responseBody, resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
+		return nil, cyberErr
+	}
 
 	var compactResp dto.OpenAIResponsesCompactionResponse
 	if err := platformencoding.Unmarshal(responseBody, &compactResp); err != nil {

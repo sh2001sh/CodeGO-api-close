@@ -3,6 +3,7 @@ package openai
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	helper "github.com/sh2001sh/new-api/internal/gateway/stream"
@@ -49,6 +50,9 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+	if cyberErr := cyberPolicyAPIError(body, resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
+		return nil, cyberErr
 	}
 
 	if err := platformencoding.Unmarshal(body, &responsesResp); err != nil {
@@ -109,6 +113,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		sentStop    bool
 		sawToolCall bool
 		streamErr   *types.NewAPIError
+		cyberErr    *types.NewAPIError
 	)
 
 	toolCallIndexByID := make(map[string]int)
@@ -314,6 +319,17 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		if streamErr != nil {
 			sr.Stop(streamErr)
+			return
+		}
+		if detected := cyberPolicyAPIError([]byte(data), resp.StatusCode, resp.Header.Get("Content-Type")); detected != nil {
+			if err := helper.StringData(c, data); err != nil {
+				streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+				sr.Stop(streamErr)
+				return
+			}
+			cyberErr = detected
+			c.Set(string(constant.ContextKeyCyberPolicyResponseForwarded), true)
+			sr.Stop(detected)
 			return
 		}
 
@@ -531,6 +547,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		default:
 		}
 	})
+	if cyberErr != nil {
+		return nil, cyberErr
+	}
 
 	if streamErr != nil {
 		return nil, streamErr

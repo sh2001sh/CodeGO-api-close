@@ -40,12 +40,39 @@ import {
   batchSetMarketplaceUserMultipliers,
   getMarketplaceMultiplierNotices,
   readMarketplaceMultiplierNotice,
+  getSecurityAuditEvents,
+  updateSecurityAuditEvent,
 } from './api'
 import type {
   AdminMarketplaceChannelFilters,
   GroupFilters,
   MarketplaceOwnerUsageLogFilters,
+  SecurityAuditEventFilters,
 } from './types'
+
+export function useSecurityAuditEvents(
+  filters: SecurityAuditEventFilters,
+  admin = false
+) {
+  return useQuery({
+    queryKey: ['security-audit-events', admin, filters],
+    queryFn: () => getSecurityAuditEvents(filters, admin),
+    placeholderData: (previousData) => previousData,
+  })
+}
+
+export function useSecurityAuditEventUpdate(admin = false) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: Parameters<typeof updateSecurityAuditEvent>[0]) =>
+      updateSecurityAuditEvent({ ...input, admin }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['security-audit-events', admin],
+      })
+    },
+  })
+}
 
 function verificationRefetchInterval(
   channels: {
@@ -198,7 +225,9 @@ export function useMarketplaceRoutePoolAutoBuildRun() {
     mutationFn: runMarketplaceRoutePoolAutoBuild,
     onSuccess: (pool) => {
       queryClient.setQueryData(['marketplace-route-pools', pool.id], pool)
-      void queryClient.invalidateQueries({ queryKey: ['marketplace-route-pools'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['marketplace-route-pools'],
+      })
     },
   })
 }

@@ -42,6 +42,9 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
+	if cyberErr := cyberPolicyAPIError(responseBody, resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
+		return nil, cyberErr
+	}
 	if gatewaycontract.HasRemoteCompactionV2(c.Request.Header) {
 		responseBody, _, err = dto.NormalizeCodexRemoteCompactionResponse(responseBody)
 		if err != nil {
@@ -127,6 +130,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var sawResponseCompleted atomic.Bool
 	var firstOutputTimedOut atomic.Bool
 	var terminalFailure error
+	var cyberPolicyErr *types.NewAPIError
 	var preOutputEvents []bufferedResponsesStreamEvent
 	preOutputEventsBuffered := 0
 	preOutputEventsDropped := 0
@@ -171,6 +175,19 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
 			sr.Error(err)
 			return
+		}
+		if isResponsesFailureEvent(streamResponse) {
+			if cyberErr := cyberPolicyAPIError([]byte(data), resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
+				if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+					sr.Stop(err)
+					return
+				}
+				cyberPolicyErr = cyberErr
+				c.Set(string(constant.ContextKeyResponsesTerminalSent), true)
+				c.Set(string(constant.ContextKeyCyberPolicyResponseForwarded), true)
+				sr.Stop(cyberErr)
+				return
+			}
 		}
 		relaycommon.RecordResponsesConversationWindow(c, info, []byte(data))
 		if turnState := responsesTurnStateFromEvent(streamResponse.Headers); turnState != "" {
@@ -294,6 +311,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		}
 	})
+	if cyberPolicyErr != nil {
+		return nil, cyberPolicyErr
+	}
 	// The scanner may observe a downstream cancellation while it is unwinding
 	// its workers. StreamStatus is the synchronized outcome of those workers,
 	// so use it to reliably propagate client-gone to the main relay path before

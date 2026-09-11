@@ -407,7 +407,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		gatewayroutingapp.EndAutoGroupAttempt(c)
 		releaseChannelConcurrency()
 		if releaseFaultDomainSlot != nil {
-			if newAPIError == nil || relaycommon.IsLocalStreamMaxDurationExceeded(c) {
+			if newAPIError == nil || newAPIError.GetErrorCode() == types.ErrorCodeCyberPolicy || relaycommon.IsLocalStreamMaxDurationExceeded(c) {
 				releaseFaultDomainSlot(true, 0)
 			} else {
 				releaseFaultDomainSlot(false, newAPIError.StatusCode)
@@ -435,21 +435,24 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			relayInfo.LastError = nil
 			return
 		}
+		recordUpstreamCyberPolicyEvent(c, relayInfo, newAPIError)
 
 		newAPIError = billingapp.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
-		gatewayexecutionapp.ProcessChannelError(c,
-			*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, httpctx.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
-			newAPIError,
-		)
-		if shouldRecordAutoGroupFailure(c, newAPIError) {
-			gatewayroutingapp.RecordAutoGroupFailure(c, relayInfo.OriginModelName)
-		}
-		if c.GetBool("responses_ephemeral_websocket") {
-			if session := responsesws.FromContext(c); session != nil {
-				session.ResetRoute()
+		if newAPIError.GetErrorCode() != types.ErrorCodeCyberPolicy {
+			gatewayexecutionapp.ProcessChannelError(c,
+				*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, httpctx.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
+				newAPIError,
+			)
+			if shouldRecordAutoGroupFailure(c, newAPIError) {
+				gatewayroutingapp.RecordAutoGroupFailure(c, relayInfo.OriginModelName)
 			}
-			routepin.Clear(c)
+			if c.GetBool("responses_ephemeral_websocket") {
+				if session := responsesws.FromContext(c); session != nil {
+					session.ResetRoute()
+				}
+				routepin.Clear(c)
+			}
 		}
 
 		if !shouldRetry(c, newAPIError, retryTimes-retryParam.GetRetry()) {

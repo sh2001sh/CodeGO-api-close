@@ -128,6 +128,7 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/blind-box-admin': { section: 'admin', module: 'blind_box' },
   '/system-settings': { section: 'admin', module: 'setting' },
   '/system-settings/site': { section: 'admin', module: 'setting' },
+  '/security-audit': { section: 'admin', module: 'setting' },
 }
 
 /**

@@ -152,6 +152,48 @@ func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {
 	require.Contains(t, logBuffer.String(), body)
 }
 
+func TestDetectCyberPolicyError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		body    string
+		matched bool
+	}{
+		{name: "openai error code", body: `{"error":{"message":"blocked","type":"invalid_request_error","code":"cyber_policy"}}`, matched: true},
+		{name: "responses nested error", body: `{"response":{"error":{"message":"blocked","code":"cyber_policy"}}}`, matched: true},
+		{name: "standard provider message", body: `{"error":{"message":"This content was flagged for possible cybersecurity risk"}}`, matched: true},
+		{name: "plain standard provider message", body: `This content was flagged for possible cybersecurity risk`, matched: true},
+		{name: "ordinary upstream error", body: `{"error":{"message":"rate limited","code":"rate_limit"}}`, matched: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, matched := DetectCyberPolicyError([]byte(test.body))
+			require.Equal(t, test.matched, matched)
+		})
+	}
+}
+
+func TestRelayErrorHandlerPreservesCyberPolicyResponseAndSkipsRetry(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"error":{"message":"This content was flagged for possible cybersecurity risk","type":"invalid_request_error","code":"cyber_policy"}}`)
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json; charset=utf-8"}},
+		Body:       io.NopCloser(bytes.NewReader(body)),
+	}
+
+	apiErr := RelayErrorHandler(context.Background(), resp, false)
+	require.Equal(t, types.ErrorCodeCyberPolicy, apiErr.GetErrorCode())
+	require.True(t, types.IsSkipRetryError(apiErr))
+	rawBody, contentType, ok := apiErr.RawResponse()
+	require.True(t, ok)
+	require.Equal(t, body, rawBody)
+	require.Equal(t, "application/json; charset=utf-8", contentType)
+
+	ResetStatusCode(apiErr, `{"400":503}`)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+}
+
 func withDebugEnabled(t *testing.T, enabled bool) {
 	t.Helper()
 

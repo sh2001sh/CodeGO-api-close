@@ -74,6 +74,7 @@ func checkPromptAuditWithService(
 	})
 	switch decision.Kind {
 	case securityaudit.DecisionBlock:
+		recordPromptGuardEvent(c, info, relayFormat, body, fallbackText, decision)
 		return types.NewErrorWithStatusCode(
 			errors.New("提示词安全审计拒绝了该请求，请调整输入后重试"),
 			types.ErrorCodePromptGuardBlocked,

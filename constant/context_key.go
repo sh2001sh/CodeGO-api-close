@@ -104,6 +104,10 @@ const (
 	// ContextKeyResponsesTerminalSent prevents the generic finalizer from
 	// appending a second terminal event after response.failed was emitted.
 	ContextKeyResponsesTerminalSent ContextKey = "responses_terminal_sent"
+	// ContextKeyCyberPolicyResponseForwarded prevents the generic error finalizer
+	// from appending a sanitized error after the upstream policy event was sent.
+	ContextKeyCyberPolicyResponseForwarded ContextKey = "cyber_policy_response_forwarded"
+	ContextKeySecurityAuditPromptBody      ContextKey = "security_audit_prompt_body"
 	// ContextKeyStreamContentDelivered is set once retrying would duplicate text
 	// or tool arguments already delivered to the client.
 	ContextKeyStreamContentDelivered ContextKey = "stream_content_delivered"

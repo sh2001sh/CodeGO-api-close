@@ -48,6 +48,7 @@ import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedUsageLogsIndexRouteImport } from './routes/_authenticated/usage-logs/index'
 import { Route as AuthenticatedSystemSettingsIndexRouteImport } from './routes/_authenticated/system-settings/index'
 import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
+import { Route as AuthenticatedSecurityAuditIndexRouteImport } from './routes/_authenticated/security-audit/index'
 import { Route as AuthenticatedRoutePoolsIndexRouteImport } from './routes/_authenticated/route-pools/index'
 import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/_authenticated/redemption-codes/index'
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile/index'
@@ -284,6 +285,12 @@ const AuthenticatedSubscriptionsIndexRoute =
   AuthenticatedSubscriptionsIndexRouteImport.update({
     id: '/subscriptions/',
     path: '/subscriptions/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSecurityAuditIndexRoute =
+  AuthenticatedSecurityAuditIndexRouteImport.update({
+    id: '/security-audit/',
+    path: '/security-audit/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedRoutePoolsIndexRoute =
@@ -575,6 +582,7 @@ export interface FileRoutesByFullPath {
   '/profile/': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
   '/route-pools/': typeof AuthenticatedRoutePoolsIndexRoute
+  '/security-audit/': typeof AuthenticatedSecurityAuditIndexRoute
   '/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
   '/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
@@ -652,6 +660,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes': typeof AuthenticatedRedemptionCodesIndexRoute
   '/route-pools': typeof AuthenticatedRoutePoolsIndexRoute
+  '/security-audit': typeof AuthenticatedSecurityAuditIndexRoute
   '/subscriptions': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-settings': typeof AuthenticatedSystemSettingsIndexRoute
   '/usage-logs': typeof AuthenticatedUsageLogsIndexRoute
@@ -733,6 +742,7 @@ export interface FileRoutesById {
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
   '/_authenticated/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
   '/_authenticated/route-pools/': typeof AuthenticatedRoutePoolsIndexRoute
+  '/_authenticated/security-audit/': typeof AuthenticatedSecurityAuditIndexRoute
   '/_authenticated/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/_authenticated/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
   '/_authenticated/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
@@ -813,6 +823,7 @@ export interface FileRouteTypes {
     | '/profile/'
     | '/redemption-codes/'
     | '/route-pools/'
+    | '/security-audit/'
     | '/subscriptions/'
     | '/system-settings/'
     | '/usage-logs/'
@@ -890,6 +901,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/redemption-codes'
     | '/route-pools'
+    | '/security-audit'
     | '/subscriptions'
     | '/system-settings'
     | '/usage-logs'
@@ -970,6 +982,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile/'
     | '/_authenticated/redemption-codes/'
     | '/_authenticated/route-pools/'
+    | '/_authenticated/security-audit/'
     | '/_authenticated/subscriptions/'
     | '/_authenticated/system-settings/'
     | '/_authenticated/usage-logs/'
@@ -1294,6 +1307,13 @@ declare module '@tanstack/react-router' {
       path: '/subscriptions'
       fullPath: '/subscriptions/'
       preLoaderRoute: typeof AuthenticatedSubscriptionsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/security-audit/': {
+      id: '/_authenticated/security-audit/'
+      path: '/security-audit'
+      fullPath: '/security-audit/'
+      preLoaderRoute: typeof AuthenticatedSecurityAuditIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/route-pools/': {
@@ -1680,6 +1700,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
   AuthenticatedRedemptionCodesIndexRoute: typeof AuthenticatedRedemptionCodesIndexRoute
   AuthenticatedRoutePoolsIndexRoute: typeof AuthenticatedRoutePoolsIndexRoute
+  AuthenticatedSecurityAuditIndexRoute: typeof AuthenticatedSecurityAuditIndexRoute
   AuthenticatedSubscriptionsIndexRoute: typeof AuthenticatedSubscriptionsIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
@@ -1717,6 +1738,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
   AuthenticatedRoutePoolsIndexRoute: AuthenticatedRoutePoolsIndexRoute,
+  AuthenticatedSecurityAuditIndexRoute: AuthenticatedSecurityAuditIndexRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,

@@ -273,6 +273,17 @@ func finalizeRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *webso
 	}
 	recordFinalRelayFailureLog(c, apiErr)
 	logger.LogError(c, fmt.Sprintf("relay error: %s", platformtext.LocalLogPreview(apiErr.Error())))
+	if body, contentType, ok := apiErr.RawResponse(); ok && !httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		c.Data(apiErr.StatusCode, contentType, body)
+		httpctx.SetContextKey(c, constant.ContextKeyResponseBodyDelivered, true)
+		return
+	}
+	if c.GetBool(string(constant.ContextKeyCyberPolicyResponseForwarded)) {
+		return
+	}
 	if httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) {
 		if !httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) || c.GetBool(string(constant.ContextKeyClientGone)) {
 			return
@@ -413,6 +424,9 @@ func shouldRecordRelayFailureSample(upstreamStarted bool, apiErr *types.NewAPIEr
 
 func shouldCountRelayFailureInSuccessRate(apiErr *types.NewAPIError) bool {
 	if apiErr == nil {
+		return false
+	}
+	if apiErr.GetErrorCode() == types.ErrorCodeCyberPolicy {
 		return false
 	}
 	// Local sensitive-word interception is a policy decision made before the

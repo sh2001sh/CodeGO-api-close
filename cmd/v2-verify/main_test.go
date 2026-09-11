@@ -40,6 +40,18 @@ func TestUserAccountRequiresVerificationForHistoricalUsage(t *testing.T) {
 	require.False(t, userAccountRequiresVerification(user, "claude_wallet"))
 }
 
+func TestOnlineVerificationAllowsPendingButRejectsIntegrityFailures(t *testing.T) {
+	require.False(t, (verificationReport{PendingOutboxEvents: 10}).hasFailures(true))
+	for _, report := range []verificationReport{
+		{MissingMigrations: []string{"missing"}},
+		{MissingSettlementColumns: []string{"ReclaimedAt"}},
+		{InconsistentLedgers: 1},
+		{LegacyBlindBoxCredits: 1},
+	} {
+		require.True(t, report.hasFailures(true))
+	}
+}
+
 func TestVerifyAllowsUnfundedAccountsToBeCreatedLazily(t *testing.T) {
 	db := verifyTestDatabase(t)
 	require.NoError(t, db.Create(&identityschema.User{Id: 1, Username: "lazy-user"}).Error)

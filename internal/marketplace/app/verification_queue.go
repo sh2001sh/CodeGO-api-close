@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
@@ -63,11 +62,10 @@ func publishImageOnlyChannel(channel *marketplaceschema.Channel) error {
 			return err
 		}
 		return tx.Model(group).Updates(map[string]any{
-			"lifecycle_status":     marketplacedomain.LifecycleActive,
-			"verification_status":  marketplacedomain.VerificationPassed,
-			"verification_summary": "仅包含生图模型，按次计费，免连通性检测",
-			"verification_due_at":  now.Add(7 * 24 * time.Hour),
-			"published_at":         now,
+			"lifecycle_status":    marketplacedomain.LifecycleActive,
+			"verification_status": marketplacedomain.VerificationPassed,
+			"verification_due_at": now.Add(7 * 24 * time.Hour),
+			"published_at":        now,
 		}).Error
 	})
 }
@@ -125,7 +123,7 @@ func QueueIncrementalConnectivityTest(channelID string) error {
 		if allModelsVerified(declared, previous) {
 			return publishVerifiedConnectivity(channel)
 		}
-		if err := persistUnchangedVerificationFailure(channel, previous); err != nil {
+		if err := persistUnchangedVerificationFailure(channel); err != nil {
 			return err
 		}
 		return errors.New("已有失败模型，请使用“重试失败模型”")
@@ -134,16 +132,10 @@ func QueueIncrementalConnectivityTest(channelID string) error {
 	return queueConnectivityTest(channel, pending, retained)
 }
 
-func persistUnchangedVerificationFailure(channel *marketplaceschema.Channel, results []ModelVerificationResult) error {
+func persistUnchangedVerificationFailure(channel *marketplaceschema.Channel) error {
 	_, group, err := loadChannelGroup(channel.ID)
 	if err != nil {
 		return err
-	}
-	failed := len(failedModelVerificationModels(
-		verifiableMarketplaceModels(decodeModels(channel.DeclaredModels)), results,
-	))
-	if failed < 1 {
-		failed = 1
 	}
 	now := time.Now().UTC()
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
@@ -155,10 +147,9 @@ func persistUnchangedVerificationFailure(channel *marketplaceschema.Channel, res
 			return err
 		}
 		return tx.Model(group).Updates(map[string]any{
-			"lifecycle_status":     marketplacedomain.LifecycleDraft,
-			"verification_status":  marketplacedomain.VerificationFailed,
-			"verification_due_at":  nil,
-			"verification_summary": fmt.Sprintf("%d 个模型检测未通过；请使用“重试失败模型”", failed),
+			"lifecycle_status":    marketplacedomain.LifecycleDraft,
+			"verification_status": marketplacedomain.VerificationFailed,
+			"verification_due_at": nil,
 		}).Error
 	})
 }

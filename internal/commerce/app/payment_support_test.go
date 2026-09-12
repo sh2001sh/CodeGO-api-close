@@ -177,8 +177,38 @@ func TestEpayWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
 	require.False(t, IsEpayWebhookEnabled())
 }
 
-func TestIsXunhuPaymentMethodRoutesLegacyWxpayToXunhu(t *testing.T) {
+func TestIsXunhuPaymentMethodDoesNotHijackGenericWxpay(t *testing.T) {
 	require.True(t, IsXunhuPaymentMethod(commerceschema.PaymentMethodXunhu))
-	require.True(t, IsXunhuPaymentMethod("wxpay"))
+	require.False(t, IsXunhuPaymentMethod("wxpay"))
 	require.False(t, IsXunhuPaymentMethod("alipay"))
+}
+
+func TestBuildTopUpInfoKeepsEpayWxpayWhenXunhuIsAlsoEnabled(t *testing.T) {
+	setting := commercestore.GetPaymentSetting()
+	originalConfirmed := setting.ComplianceConfirmed
+	originalVersion := setting.ComplianceTermsVersion
+	originalPayAddress, originalEpayID, originalEpayKey := commercestore.PayAddress, commercestore.EpayId, commercestore.EpayKey
+	originalXunhuEnabled, originalXunhuAppID := commercestore.XunhuEnabled, commercestore.XunhuAppID
+	originalXunhuSecret, originalXunhuGateway := commercestore.XunhuSecret, commercestore.XunhuGateway
+	originalMethods := commercestore.PayMethods
+	t.Cleanup(func() {
+		setting.ComplianceConfirmed = originalConfirmed
+		setting.ComplianceTermsVersion = originalVersion
+		commercestore.PayAddress, commercestore.EpayId, commercestore.EpayKey = originalPayAddress, originalEpayID, originalEpayKey
+		commercestore.XunhuEnabled, commercestore.XunhuAppID = originalXunhuEnabled, originalXunhuAppID
+		commercestore.XunhuSecret, commercestore.XunhuGateway = originalXunhuSecret, originalXunhuGateway
+		commercestore.PayMethods = originalMethods
+	})
+
+	setting.ComplianceConfirmed = true
+	setting.ComplianceTermsVersion = commercestore.CurrentComplianceTermsVersion
+	commercestore.PayAddress, commercestore.EpayId, commercestore.EpayKey = "https://jianpay.example", "merchant", "secret"
+	commercestore.XunhuEnabled, commercestore.XunhuAppID = true, "xunhu-app"
+	commercestore.XunhuSecret, commercestore.XunhuGateway = "xunhu-secret", "https://xunhu.example/pay"
+	commercestore.PayMethods = []map[string]string{{"name": "微信支付", "type": "wxpay", "color": "#07C160"}}
+
+	info := BuildTopUpInfo(0)
+	methods := info["pay_methods"].([]map[string]string)
+	require.True(t, containsPayMethod(methods, "wxpay"))
+	require.True(t, containsPayMethod(methods, commerceschema.PaymentMethodXunhu))
 }

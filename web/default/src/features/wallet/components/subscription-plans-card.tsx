@@ -45,11 +45,15 @@ export function getEpayMethods(
       (method) =>
         method?.type && method.type !== 'stripe' && method.type !== 'creem'
     )
-    .map((method) =>
-      method.type === 'xunhu' || method.type === 'wxpay'
-        ? { ...method, name: '微信支付' }
-        : method
-    )
+    .map((method) => {
+      if (method.type === 'xunhu') {
+        return { ...method, name: '微信支付（XunhuPay）' }
+      }
+      if (method.type === 'wxpay') {
+        return { ...method, name: '微信支付' }
+      }
+      return method
+    })
 }
 
 function getRemainingDays(sub: UserSubscriptionRecord) {

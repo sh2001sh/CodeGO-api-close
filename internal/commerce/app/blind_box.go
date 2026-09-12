@@ -185,9 +185,11 @@ func buildBlindBoxPayMethods() []map[string]string {
 		filtered = append(filtered, method)
 	}
 	if IsXunhuTopUpEnabled() {
-		filtered = CloneDisplayedPayMethods(filtered, "wxpay")
+		if !IsEpayTopUpEnabled() {
+			filtered = CloneDisplayedPayMethods(filtered, "wxpay")
+		}
 		filtered = append(filtered, map[string]string{
-			"name":      "微信支付",
+			"name":      "微信支付（XunhuPay）",
 			"type":      commerceschema.PaymentMethodXunhu,
 			"color":     "rgba(var(--semi-orange-5), 1)",
 			"min_topup": "1",

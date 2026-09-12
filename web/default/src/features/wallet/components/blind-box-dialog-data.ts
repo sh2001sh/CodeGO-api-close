@@ -62,7 +62,7 @@ export function getBlindBoxMethodLabel(
   } | null
 ) {
   if (!method) return '未选择'
-  if (method.type === 'xunhu') return '微信支付'
+  if (method.type === 'xunhu') return '微信支付（XunhuPay）'
   return method.name || method.type || '在线支付'
 }
 

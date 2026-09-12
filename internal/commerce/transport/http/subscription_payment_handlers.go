@@ -194,7 +194,7 @@ func PurchasePackage(c *gin.Context) {
 		RequestSubscriptionStripePay(c)
 	case commerceschema.PaymentMethodCreem:
 		RequestSubscriptionCreemPay(c)
-	case commerceschema.PaymentMethodXunhu, "wxpay":
+	case commerceschema.PaymentMethodXunhu:
 		RequestSubscriptionXunhuPay(c)
 	default:
 		RequestSubscriptionEpay(c)

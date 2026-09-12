@@ -126,7 +126,9 @@ func CloneDisplayedPayMethods(methods []map[string]string, skipType string) []ma
 			next[key] = value
 		}
 		switch strings.TrimSpace(next["type"]) {
-		case commerceschema.PaymentMethodXunhu, "wxpay":
+		case commerceschema.PaymentMethodXunhu:
+			next["name"] = "微信支付（XunhuPay）"
+		case "wxpay":
 			next["name"] = "微信支付"
 		}
 		cloned = append(cloned, next)
@@ -329,7 +331,7 @@ func BuildWaffoPancakePayMethod() map[string]string {
 
 func BuildXunhuPayMethod(minTopup int64) map[string]string {
 	return map[string]string{
-		"name":      "微信支付",
+		"name":      "微信支付（XunhuPay）",
 		"type":      commerceschema.PaymentMethodXunhu,
 		"color":     "rgba(var(--semi-orange-5), 1)",
 		"min_topup": strconv.FormatInt(minTopup, 10),
@@ -373,7 +375,7 @@ func VerifyXunhuHash(params map[string]string) bool {
 
 func IsXunhuPaymentMethod(method string) bool {
 	trimmed := strings.TrimSpace(method)
-	return trimmed == commerceschema.PaymentMethodXunhu || trimmed == "wxpay"
+	return trimmed == commerceschema.PaymentMethodXunhu
 }
 
 func FormatXunhuCreatePaymentError(err error) string {

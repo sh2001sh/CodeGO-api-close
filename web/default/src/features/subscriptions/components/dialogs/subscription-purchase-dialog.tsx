@@ -108,7 +108,10 @@ function getMethodLabel(
   methods: PaymentMethod[],
   t: (key: string) => string
 ): string {
-  if (type === 'xunhu' || type === 'wxpay') {
+  if (type === 'xunhu') {
+    return '微信支付（XunhuPay）'
+  }
+  if (type === 'wxpay') {
     return '微信支付'
   }
   return (
@@ -542,7 +545,12 @@ export function SubscriptionPurchaseDialog(props: Props) {
         const payUrl = response.data?.pay_url || ''
         const qrCodeUrl = response.data?.qrcode_url || ''
         if ((payUrl || qrCodeUrl) && response.data?.order_id) {
-          startPendingPayment(response, '微信支付', payUrl, qrCodeUrl)
+          startPendingPayment(
+            response,
+            '微信支付（XunhuPay）',
+            payUrl,
+            qrCodeUrl
+          )
           return
         }
       } else if (

@@ -62,7 +62,12 @@ func BuildTopUpInfo(userID int) map[string]any {
 
 	enableXunhu := IsXunhuTopUpEnabled()
 	if enableXunhu {
-		payMethods = CloneDisplayedPayMethods(payMethods, "wxpay")
+		// Keep the generic wxpay method when an Epay-compatible gateway is
+		// configured. It belongs to Epay; only the explicit xunhu type belongs
+		// to XunhuPay.
+		if !IsEpayTopUpEnabled() {
+			payMethods = CloneDisplayedPayMethods(payMethods, "wxpay")
+		}
 		userGroup := ""
 		if userID > 0 {
 			if group, err := loadCommerceUserGroup(userID, true); err == nil {

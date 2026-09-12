@@ -58,7 +58,8 @@ func RequestEpay(c *gin.Context) {
 	respondEpayTopUp(c, req)
 }
 
-// RequestTopUpPayment routes every WeChat payment identifier to XunhuPay.
+// RequestTopUpPayment only routes the explicit xunhu type to XunhuPay.
+// Generic wxpay remains available to Epay-compatible gateways such as JianPay.
 func RequestTopUpPayment(c *gin.Context) {
 	req, ok := bindTopUpPaymentRequest(c)
 	if !ok {

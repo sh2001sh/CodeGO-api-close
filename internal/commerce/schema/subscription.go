@@ -179,9 +179,15 @@ type SubscriptionOrder struct {
 	Status               string  `json:"status"`
 	// FulfillmentStatus separates provider payment confirmation from benefits delivery.
 	// Existing historical rows default to completed so migrations cannot re-grant benefits.
-	FulfillmentStatus string `json:"fulfillment_status" gorm:"type:varchar(32);default:'completed';index"`
-	CreateTime        int64  `json:"create_time"`
-	CompleteTime      int64  `json:"complete_time"`
+	FulfillmentStatus string  `json:"fulfillment_status" gorm:"type:varchar(32);default:'completed';index"`
+	CreateTime        int64   `json:"create_time"`
+	CompleteTime      int64   `json:"complete_time"`
+	RefundStatus      string  `json:"refund_status" gorm:"type:varchar(24);default:'';index"`
+	RefundNo          string  `json:"refund_no,omitempty" gorm:"type:varchar(128);index"`
+	RefundProviderID  string  `json:"refund_provider_id,omitempty" gorm:"type:varchar(128)"`
+	RefundAmount      float64 `json:"refund_amount" gorm:"type:decimal(10,2);default:0"`
+	RefundQuota       int64   `json:"refund_quota" gorm:"default:0"`
+	RefundUpdatedAt   int64   `json:"refund_updated_at"`
 
 	ProviderPayload string `json:"provider_payload" gorm:"type:text"`
 }

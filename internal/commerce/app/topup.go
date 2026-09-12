@@ -10,6 +10,7 @@ import (
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -287,6 +288,9 @@ func HandleEpayWebhook(params map[string]string, clientIP string) (bool, error) 
 		logger.LogError(context.Background(), fmt.Sprintf("epay complete topup failed trade_no=%s user_id=%d client_ip=%s error=%q topup=%q", topUp.TradeNo, topUp.UserId, clientIP, completeErr.Error(), platformtext.GetJsonString(topUp)))
 		return false, completeErr
 	}
+	_ = platformdb.DB.Model(&commerceschema.TopUp{}).
+		Where("trade_no = ?", completedTopUp.TradeNo).
+		Update("provider_payload", platformtext.GetJsonString(params)).Error
 
 	logger.LogInfo(context.Background(), fmt.Sprintf("epay topup success trade_no=%s user_id=%d wallet_type=%s client_ip=%s quota_to_add=%d money=%.2f", completedTopUp.TradeNo, completedTopUp.UserId, completedTopUp.WalletType, clientIP, creditedQuota, completedTopUp.Money))
 	auditapp.RecordTopupLog(completedTopUp.UserId, fmt.Sprintf("epay topup success, wallet: %s, quota: %v, paid: %.2f", completedTopUp.NormalizedWalletType(), logger.LogQuota(creditedQuota), completedTopUp.Money), clientIP, completedTopUp.PaymentMethod, "epay")

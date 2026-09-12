@@ -34,12 +34,16 @@ const (
 )
 
 type NowPaymentsCheckoutPayload struct {
-	PayURL    string `json:"pay_url"`
-	OrderID   string `json:"order_id"`
-	PaymentID string `json:"payment_id"`
+	PayURL                 string `json:"pay_url"`
+	OrderID                string `json:"order_id"`
+	PaymentID              string `json:"payment_id"`
+	PayAddress             string `json:"pay_address,omitempty"`
+	PayAmount              string `json:"pay_amount,omitempty"`
+	PayCurrency            string `json:"pay_currency,omitempty"`
+	ExpirationEstimateDate string `json:"expiration_estimate_date,omitempty"`
 }
 
-type nowPaymentsInvoiceRequest struct {
+type nowPaymentsPaymentRequest struct {
 	PriceAmount      float64 `json:"price_amount"`
 	PriceCurrency    string  `json:"price_currency"`
 	PayCurrency      string  `json:"pay_currency"`
@@ -50,9 +54,13 @@ type nowPaymentsInvoiceRequest struct {
 	CancelURL        string  `json:"cancel_url"`
 }
 
-type nowPaymentsInvoiceResponse struct {
-	ID         string `json:"id"`
-	InvoiceURL string `json:"invoice_url"`
+type nowPaymentsPaymentResponse struct {
+	PaymentID              json.RawMessage `json:"payment_id"`
+	PayAddress             string          `json:"pay_address"`
+	PayAmount              json.RawMessage `json:"pay_amount"`
+	PayCurrency            string          `json:"pay_currency"`
+	InvoiceURL             string          `json:"invoice_url"`
+	ExpirationEstimateDate string          `json:"expiration_estimate_date"`
 }
 
 type NowPaymentsIPNPayload struct {
@@ -76,7 +84,7 @@ func IsNowPaymentsTopUpEnabled() bool {
 
 func BuildNowPaymentsPayMethod() map[string]string {
 	return map[string]string{
-		"name":      "USDT (NOWPayments)",
+		"name":      "USDT（NOWPayments）",
 		"type":      PaymentMethodNowPayments,
 		"color":     "rgba(var(--semi-green-5), 1)",
 		"min_topup": fmt.Sprintf("%d", GetNowPaymentsMinTopup()),
@@ -154,7 +162,7 @@ func CreateNowPaymentsTopUp(ctx context.Context, userID int, req AmountRequest) 
 	}
 	callbackURL := strings.TrimRight(CallbackAddress(), "/") + "/api/nowpayments/ipn"
 	returnURL := BuildPaymentReturnPath("/console/topup?pay=pending&show_history=true")
-	payload := nowPaymentsInvoiceRequest{
+	payload := nowPaymentsPaymentRequest{
 		PriceAmount:      topup.Money,
 		PriceCurrency:    strings.ToLower(strings.TrimSpace(commercestore.NowPaymentsPaymentCurrency)),
 		PayCurrency:      strings.ToLower(strings.TrimSpace(commercestore.NowPaymentsPayCurrency)),
@@ -169,7 +177,7 @@ func CreateNowPaymentsTopUp(ctx context.Context, userID int, req AmountRequest) 
 		_ = UpdatePendingTopUpStatus(tradeNo, PaymentProviderNowPayments, constant.TopUpStatusFailed)
 		return nil, errors.New("创建支付请求失败")
 	}
-	reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodPost, nowPaymentsAPIBaseURL+"/invoice", bytes.NewReader(body))
+	reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodPost, nowPaymentsAPIBaseURL+"/payment", bytes.NewReader(body))
 	if err != nil {
 		_ = UpdatePendingTopUpStatus(tradeNo, PaymentProviderNowPayments, constant.TopUpStatusFailed)
 		return nil, errors.New("创建支付请求失败")
@@ -188,17 +196,23 @@ func CreateNowPaymentsTopUp(ctx context.Context, userID int, req AmountRequest) 
 		_ = UpdatePendingTopUpStatus(tradeNo, PaymentProviderNowPayments, constant.TopUpStatusFailed)
 		return nil, errors.New("NOWPayments 创建支付失败")
 	}
-	var invoice nowPaymentsInvoiceResponse
-	if err := platformencoding.Unmarshal(responseBody, &invoice); err != nil || strings.TrimSpace(invoice.InvoiceURL) == "" || strings.TrimSpace(invoice.ID) == "" {
+	var payment nowPaymentsPaymentResponse
+	if err := platformencoding.Unmarshal(responseBody, &payment); err != nil || strings.TrimSpace(payment.PayAddress) == "" {
 		_ = UpdatePendingTopUpStatus(tradeNo, PaymentProviderNowPayments, constant.TopUpStatusFailed)
 		return nil, errors.New("NOWPayments 返回无效")
 	}
-	if err := platformdb.DB.Model(&commerceschema.TopUp{}).Where("trade_no = ? AND status = ?", tradeNo, constant.TopUpStatusPending).Update("external_payment_id", invoice.ID).Error; err != nil {
+	paymentID, paymentIDErr := nowPaymentsRawNumber(payment.PaymentID)
+	payAmount, payAmountErr := nowPaymentsRawNumber(payment.PayAmount)
+	if paymentIDErr != nil || payAmountErr != nil || strings.TrimSpace(paymentID) == "" || strings.TrimSpace(payAmount) == "" {
+		_ = UpdatePendingTopUpStatus(tradeNo, PaymentProviderNowPayments, constant.TopUpStatusFailed)
+		return nil, errors.New("NOWPayments 返回无效")
+	}
+	if err := platformdb.DB.Model(&commerceschema.TopUp{}).Where("trade_no = ? AND status = ?", tradeNo, constant.TopUpStatusPending).Update("external_payment_id", paymentID).Error; err != nil {
 		_ = UpdatePendingTopUpStatus(tradeNo, PaymentProviderNowPayments, constant.TopUpStatusFailed)
 		return nil, errors.New("保存支付订单失败")
 	}
-	logger.LogInfo(ctx, fmt.Sprintf("NOWPayments 充值订单创建成功 user_id=%d trade_no=%s payment_id=%s amount=%d usdt=%.6f", userID, tradeNo, invoice.ID, req.Amount, topup.Money))
-	return &NowPaymentsCheckoutPayload{PayURL: invoice.InvoiceURL, OrderID: tradeNo, PaymentID: invoice.ID}, nil
+	logger.LogInfo(ctx, fmt.Sprintf("NOWPayments 充值订单创建成功 user_id=%d trade_no=%s payment_id=%s amount=%d usdt=%.6f", userID, tradeNo, paymentID, req.Amount, topup.Money))
+	return &NowPaymentsCheckoutPayload{PayURL: payment.InvoiceURL, OrderID: tradeNo, PaymentID: paymentID, PayAddress: payment.PayAddress, PayAmount: payAmount, PayCurrency: payment.PayCurrency, ExpirationEstimateDate: payment.ExpirationEstimateDate}, nil
 }
 
 func VerifyNowPaymentsIPNSignature(body []byte, signature string) bool {

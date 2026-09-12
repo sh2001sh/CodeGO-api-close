@@ -386,19 +386,32 @@ export function RechargeFormCard({
                         </Button>
                       )
 
-                      return disabled ? (
-                        <TooltipProvider key={method.type}>
-                          <Tooltip>
-                            <TooltipTrigger render={button}></TooltipTrigger>
-                            <TooltipContent>
-                              {t('Minimum topup amount: {{amount}}', {
+                      return (
+                        <div key={method.type} className='min-w-0'>
+                          {disabled ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={button}
+                                ></TooltipTrigger>
+                                <TooltipContent>
+                                  {t('Minimum topup amount: {{amount}}', {
+                                    amount: minTopup,
+                                  })}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            button
+                          )}
+                          {method.type === 'nowpayments' ? (
+                            <p className='text-muted-foreground mt-1 text-center text-xs'>
+                              {t('Minimum {{amount}} USDT', {
                                 amount: minTopup,
                               })}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        button
+                            </p>
+                          ) : null}
+                        </div>
                       )
                     })}
                   </div>

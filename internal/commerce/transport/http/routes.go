@@ -15,6 +15,9 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		walletRoute.PUT("/transfers/payment-password", middleware.CriticalRateLimit(), configureWalletTransferPassword)
 		walletRoute.POST("/transfers/payment-password/email-code", middleware.EmailVerificationRateLimit(), sendWalletTransferPasswordEmailCode)
 		walletRoute.POST("/transfers", middleware.CriticalRateLimit(), createWalletTransfer)
+		walletRoute.GET("/refunds/eligible", listRefundableOrders)
+		walletRoute.POST("/refunds", middleware.CriticalRateLimit(), createUserRefund)
+		walletRoute.POST("/refunds/:refund_no/sync", middleware.CriticalRateLimit(), syncUserRefund)
 	}
 
 	subscriptionRoute := apiRouter.Group("/subscription")

@@ -179,6 +179,7 @@ func V2MigrationIDs() []string {
 		"20260909_marketplace_route_pool_auto_build",
 		"20260909_marketplace_multiplier_card_policy",
 		"20260910_nowpayments_topup",
+		"20260912_jianpay_partial_refunds",
 		"20260911_security_audit_events",
 		"20260911_security_audit_delivery_status",
 		"20260912_marketplace_settlement_due_index",
@@ -342,6 +343,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&marketplaceschema.Channel{}, &gatewayschema.Channel{})
 		}},
 		{ID: "20260910_nowpayments_topup", Run: migrateNowPaymentsTopUp},
+		{ID: "20260912_jianpay_partial_refunds", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&commerceschema.TopUp{}, &commerceschema.SubscriptionOrder{})
+		}},
 		{ID: "20260911_security_audit_events", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.SecurityAuditEvent{})
 		}},

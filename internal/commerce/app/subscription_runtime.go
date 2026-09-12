@@ -276,14 +276,15 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *commerceschema.SubscriptionOr
 	if err := tx.Where("trade_no = ?", order.TradeNo).First(topup).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			topup = &commerceschema.TopUp{
-				UserId:        order.UserId,
-				Amount:        0,
-				Money:         order.Money,
-				TradeNo:       order.TradeNo,
-				PaymentMethod: order.PaymentMethod,
-				CreateTime:    order.CreateTime,
-				CompleteTime:  now,
-				Status:        constant.TopUpStatusSuccess,
+				UserId:          order.UserId,
+				Amount:          0,
+				Money:           order.Money,
+				TradeNo:         order.TradeNo,
+				PaymentMethod:   order.PaymentMethod,
+				PaymentProvider: order.PaymentProvider,
+				CreateTime:      order.CreateTime,
+				CompleteTime:    now,
+				Status:          constant.TopUpStatusSuccess,
 			}
 			return tx.Create(topup).Error
 		}
@@ -291,6 +292,9 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *commerceschema.SubscriptionOr
 	}
 
 	topup.Money = order.Money
+	if order.PaymentProvider != "" {
+		topup.PaymentProvider = order.PaymentProvider
+	}
 	if topup.PaymentMethod == "" {
 		topup.PaymentMethod = order.PaymentMethod
 	} else if topup.PaymentMethod != order.PaymentMethod {

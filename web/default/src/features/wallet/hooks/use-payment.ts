@@ -35,6 +35,7 @@ import {
   isWaffoPancakePayment,
   submitPaymentForm,
 } from '../lib'
+import type { NowPaymentsPaymentResponse } from '../types'
 
 // ============================================================================
 // Payment Hook
@@ -44,6 +45,8 @@ export function usePayment() {
   const [amount, setAmount] = useState<number>(0)
   const [calculating, setCalculating] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [nowPaymentsPayment, setNowPaymentsPayment] =
+    useState<NowPaymentsPaymentResponse['data']>()
 
   // Calculate payment amount
   const calculatePaymentAmount = useCallback(
@@ -60,13 +63,13 @@ export function usePayment() {
             })
           : isNowPayments
             ? await calculateNowPaymentsAmount({ amount: topupAmount })
-          : isPancake
-            ? await calculateWaffoPancakeAmount({
-                amount: topupAmount,
-              })
-            : await calculateAmount({
-                amount: topupAmount,
-              })
+            : isPancake
+              ? await calculateWaffoPancakeAmount({
+                  amount: topupAmount,
+                })
+              : await calculateAmount({
+                  amount: topupAmount,
+                })
 
         if (isApiSuccess(response) && response.data) {
           const calculatedAmount = parseFloat(response.data)
@@ -104,17 +107,19 @@ export function usePayment() {
             })
           : isNowPayments
             ? await requestNowPaymentsPayment({ amount })
-          : await requestPayment({
-              amount,
-              payment_method: paymentType,
-            })
+            : await requestPayment({
+                amount,
+                payment_method: paymentType,
+              })
 
         if (!isApiSuccess(response)) {
           toast.error(response.message || i18next.t('Payment request failed'))
           return false
         }
 
-        const responseData = response.data as Record<string, unknown> | undefined
+        const responseData = response.data as
+          | Record<string, unknown>
+          | undefined
 
         // Handle Stripe payment
         if (isStripe && typeof responseData?.pay_link === 'string') {
@@ -123,17 +128,25 @@ export function usePayment() {
           return true
         }
 
-        if (isNowPayments && typeof responseData?.pay_url === 'string') {
-          window.open(responseData.pay_url, '_blank')
-          toast.success(i18next.t('Redirecting to payment page...'))
+        if (
+          isNowPayments &&
+          typeof responseData?.pay_address === 'string' &&
+          typeof responseData?.pay_amount === 'string'
+        ) {
+          setNowPaymentsPayment(
+            responseData as NowPaymentsPaymentResponse['data']
+          )
+          toast.success(i18next.t('Payment address created'))
           return true
         }
 
         // Handle non-Stripe payment
         if (!isStripe && responseData) {
           const directUrl =
-            (typeof responseData.pay_url === 'string' && responseData.pay_url) ||
-            (typeof responseData.qrcode_url === 'string' && responseData.qrcode_url)
+            (typeof responseData.pay_url === 'string' &&
+              responseData.pay_url) ||
+            (typeof responseData.qrcode_url === 'string' &&
+              responseData.qrcode_url)
           if (directUrl) {
             window.open(directUrl, '_blank')
             toast.success(i18next.t('Redirecting to payment page...'))
@@ -165,5 +178,7 @@ export function usePayment() {
     calculatePaymentAmount,
     processPayment,
     setAmount,
+    nowPaymentsPayment,
+    clearNowPaymentsPayment: () => setNowPaymentsPayment(undefined),
   }
 }

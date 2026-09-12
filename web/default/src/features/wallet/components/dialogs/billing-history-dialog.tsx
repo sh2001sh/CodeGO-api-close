@@ -16,9 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search, Copy, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -53,12 +54,19 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/status-badge'
+import {
+  createUserRefund,
+  getRefundableOrders,
+  isApiSuccess,
+  syncUserRefund,
+} from '../../api'
 import { useBillingHistory } from '../../hooks/use-billing-history'
 import {
   getStatusConfig,
   getPaymentMethodName,
   formatTimestamp,
 } from '../../lib/billing'
+import type { RefundableOrder } from '../../types'
 
 interface BillingHistoryDialogProps {
   open: boolean
@@ -86,7 +94,84 @@ export function BillingHistoryDialog({
   } = useBillingHistory()
 
   const [confirmTradeNo, setConfirmTradeNo] = useState<string | null>(null)
+  const [refundableOrders, setRefundableOrders] = useState<RefundableOrder[]>(
+    []
+  )
+  const [refundSubmitting, setRefundSubmitting] = useState<string | null>(null)
   const { copyToClipboard, copiedText } = useCopyToClipboard({ notify: false })
+
+  const refreshRefundableOrders = useCallback(async () => {
+    try {
+      const response = await getRefundableOrders()
+      if (isApiSuccess(response)) {
+        setRefundableOrders(response.data?.items || [])
+      }
+    } catch {
+      toast.error(t('Failed to load refund information'))
+    }
+  }, [t])
+
+  useEffect(() => {
+    if (open) void refreshRefundableOrders()
+  }, [open, refreshRefundableOrders])
+
+  const refundableByTradeNo = useMemo(
+    () => new Map(refundableOrders.map((order) => [order.trade_no, order])),
+    [refundableOrders]
+  )
+
+  const pollRefund = useCallback(
+    async (refundNo: string) => {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000))
+        const response = await syncUserRefund(refundNo)
+        if (!isApiSuccess(response) || response.data?.status !== 'processing') {
+          await refreshRefundableOrders()
+          return
+        }
+      }
+      await refreshRefundableOrders()
+    },
+    [refreshRefundableOrders]
+  )
+
+  const requestRefund = useCallback(
+    async (order: RefundableOrder) => {
+      if (
+        !window.confirm(
+          t('Confirm refund of {{amount}}?', {
+            amount: `${order.refund_amount.toFixed(2)} 元`,
+          })
+        )
+      ) {
+        return
+      }
+      setRefundSubmitting(order.trade_no)
+      try {
+        const response = await createUserRefund({
+          order_type: order.order_type,
+          trade_no: order.trade_no,
+        })
+        if (isApiSuccess(response)) {
+          toast.success(t('Refund request submitted'))
+          await refreshRefundableOrders()
+          if (
+            response.data?.status === 'processing' &&
+            response.data.refund_no
+          ) {
+            void pollRefund(response.data.refund_no)
+          }
+        } else {
+          toast.error(response.message || t('Refund request failed'))
+        }
+      } catch {
+        toast.error(t('Refund request failed'))
+      } finally {
+        setRefundSubmitting(null)
+      }
+    },
+    [pollRefund, refreshRefundableOrders, t]
+  )
 
   const totalPages = Math.ceil(total / pageSize)
 
@@ -184,6 +269,7 @@ export function BillingHistoryDialog({
                 <div className='space-y-3'>
                   {records.map((record) => {
                     const statusConfig = getStatusConfig(record.status)
+                    const refundInfo = refundableByTradeNo.get(record.trade_no)
                     return (
                       <div
                         key={record.id}
@@ -274,6 +360,59 @@ export function BillingHistoryDialog({
                             </Button>
                           </div>
                         )}
+
+                        {refundInfo ? (
+                          <div className='bg-muted/30 mt-4 rounded-md border border-dashed p-3'>
+                            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+                              <div className='min-w-0 space-y-1 text-xs'>
+                                <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
+                                  <span className='font-medium'>
+                                    {t('Refundable amount')}:{' '}
+                                    <span className='text-foreground'>
+                                      {refundInfo.refund_amount.toFixed(2)} 元
+                                    </span>
+                                  </span>
+                                  <span className='text-muted-foreground'>
+                                    {t('Fee')}:{' '}
+                                    {refundInfo.fee_amount.toFixed(2)} 元
+                                  </span>
+                                </div>
+                                <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1'>
+                                  <span>
+                                    {t('Used quota')}:{' '}
+                                    {formatNumber(refundInfo.used_quota)}
+                                  </span>
+                                  <span>
+                                    {t('Remaining quota')}:{' '}
+                                    {formatNumber(refundInfo.remaining_quota)}
+                                  </span>
+                                  {refundInfo.unavailable_reason ? (
+                                    <span>{refundInfo.unavailable_reason}</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <Button
+                                size='sm'
+                                onClick={() => void requestRefund(refundInfo)}
+                                disabled={
+                                  !refundInfo.refundable ||
+                                  !!refundSubmitting ||
+                                  refundInfo.refund_status === 'processing'
+                                }
+                              >
+                                {refundSubmitting === refundInfo.trade_no
+                                  ? t('Processing...')
+                                  : refundInfo.refund_status === 'processing'
+                                    ? t('Refund is processing')
+                                    : refundInfo.refund_status === 'success'
+                                      ? t('Refund completed')
+                                      : refundInfo.refundable
+                                        ? t('Request refund')
+                                        : t('No refundable amount')}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     )
                   })}

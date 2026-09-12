@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
+import { NowPaymentsPaymentDialog } from './components/dialogs/nowpayments-payment-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
 import { RechargeFormCard } from './components/recharge-form-card'
 import { WalletAccountOverview } from './components/wallet-account-overview'
@@ -76,37 +77,39 @@ export function Wallet(props: WalletProps) {
             </Tabs>
 
             {activeSection === 'funding' ? (
-              <RechargeFormCard
-                topupInfo={workspace.topupInfo}
-                presetAmounts={workspace.presetAmounts}
-                selectedPreset={workspace.selectedPreset}
-                onSelectPreset={workspace.handleSelectPreset}
-                topupAmount={workspace.topupAmount}
-                onTopupAmountChange={workspace.handleTopupAmountChange}
-                paymentAmount={workspace.paymentAmount}
-                calculating={workspace.calculating}
-                onPaymentMethodSelect={workspace.handlePaymentMethodSelect}
-                selectedPaymentMethod={workspace.selectedPaymentMethod}
-                paymentLoading={workspace.paymentLoading}
-                redemptionCode={workspace.redemptionCode}
-                onRedemptionCodeChange={workspace.setRedemptionCode}
-                onRedeem={workspace.handleRedeem}
-                redeeming={workspace.redeeming}
-                topupLink={workspace.topupInfo?.topup_link}
-                loading={workspace.topupLoading}
-                showRedemptionSection={false}
-                usdExchangeRate={workspace.effectiveUsdExchangeRate}
-                creemProducts={workspace.topupInfo?.creem_products}
-                enableCreemTopup={workspace.topupInfo?.enable_creem_topup}
-                onCreemProductSelect={workspace.handleCreemProductSelect}
-                enableWaffoTopup={workspace.topupInfo?.enable_waffo_topup}
-                waffoPayMethods={workspace.topupInfo?.waffo_pay_methods}
-                onWaffoMethodSelect={workspace.handleWaffoMethodSelect}
-                enableWaffoPancakeTopup={
-                  workspace.topupInfo?.enable_waffo_pancake_topup
-                }
-                compact
-              />
+              <>
+                <RechargeFormCard
+                  topupInfo={workspace.topupInfo}
+                  presetAmounts={workspace.presetAmounts}
+                  selectedPreset={workspace.selectedPreset}
+                  onSelectPreset={workspace.handleSelectPreset}
+                  topupAmount={workspace.topupAmount}
+                  onTopupAmountChange={workspace.handleTopupAmountChange}
+                  paymentAmount={workspace.paymentAmount}
+                  calculating={workspace.calculating}
+                  onPaymentMethodSelect={workspace.handlePaymentMethodSelect}
+                  selectedPaymentMethod={workspace.selectedPaymentMethod}
+                  paymentLoading={workspace.paymentLoading}
+                  redemptionCode={workspace.redemptionCode}
+                  onRedemptionCodeChange={workspace.setRedemptionCode}
+                  onRedeem={workspace.handleRedeem}
+                  redeeming={workspace.redeeming}
+                  topupLink={workspace.topupInfo?.topup_link}
+                  loading={workspace.topupLoading}
+                  showRedemptionSection={false}
+                  usdExchangeRate={workspace.effectiveUsdExchangeRate}
+                  creemProducts={workspace.topupInfo?.creem_products}
+                  enableCreemTopup={workspace.topupInfo?.enable_creem_topup}
+                  onCreemProductSelect={workspace.handleCreemProductSelect}
+                  enableWaffoTopup={workspace.topupInfo?.enable_waffo_topup}
+                  waffoPayMethods={workspace.topupInfo?.waffo_pay_methods}
+                  onWaffoMethodSelect={workspace.handleWaffoMethodSelect}
+                  enableWaffoPancakeTopup={
+                    workspace.topupInfo?.enable_waffo_pancake_topup
+                  }
+                  compact
+                />
+              </>
             ) : null}
 
             <WalletPagePanels
@@ -140,6 +143,13 @@ export function Wallet(props: WalletProps) {
         processing={workspace.processing || workspace.pancakeProcessing}
         discountRate={workspace.getDiscountRate()}
       />
+
+      {workspace.nowPaymentsPayment ? (
+        <NowPaymentsPaymentDialog
+          payment={workspace.nowPaymentsPayment}
+          onClose={workspace.clearNowPaymentsPayment}
+        />
+      ) : null}
 
       <BillingHistoryDialog
         open={workspace.billingDialogOpen}

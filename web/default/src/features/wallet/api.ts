@@ -58,6 +58,8 @@ import type {
   WalletTransferEmailCodeResponse,
   UnifiedCreditMigrationDetailResponse,
   BalanceBlindBoxSimulationResult,
+  RefundableOrder,
+  RefundResult,
 } from './types'
 
 // ============================================================================
@@ -123,6 +125,30 @@ export async function createWalletTransfer(
   request: CreateWalletTransferRequest
 ): Promise<WalletTransferResponse> {
   const res = await api.post('/api/wallet/transfers', request)
+  return res.data
+}
+
+export async function getRefundableOrders(): Promise<
+  ApiResponse<{ items: RefundableOrder[] }>
+> {
+  const res = await api.get('/api/wallet/refunds/eligible')
+  return res.data
+}
+
+export async function createUserRefund(request: {
+  order_type: string
+  trade_no: string
+}): Promise<ApiResponse<RefundResult>> {
+  const res = await api.post('/api/wallet/refunds', request)
+  return res.data
+}
+
+export async function syncUserRefund(
+  refundNo: string
+): Promise<ApiResponse<RefundResult>> {
+  const res = await api.post(
+    `/api/wallet/refunds/${encodeURIComponent(refundNo)}/sync`
+  )
   return res.data
 }
 
@@ -197,7 +223,7 @@ export async function requestStripePayment(
   return res.data
 }
 
-/** Request a NOWPayments USDT checkout invoice. */
+/** Create a NOWPayments USDT payment and return the receiving address. */
 export async function requestNowPaymentsPayment(
   request: AmountRequest
 ): Promise<NowPaymentsPaymentResponse> {

@@ -67,6 +67,8 @@ export function useWalletWorkspace() {
     processing,
     calculatePaymentAmount,
     processPayment,
+    nowPaymentsPayment,
+    clearNowPaymentsPayment,
   } = usePayment()
   const { redeeming, redeemCode } = useRedemption()
   const { processing: creemProcessing, processCreemPayment } = useCreemPayment()
@@ -283,6 +285,7 @@ export function useWalletWorkspace() {
     creemDialogOpen,
     selectedCreemProduct,
     processing,
+    nowPaymentsPayment,
     pancakeProcessing,
     creemProcessing,
     fetchUser,
@@ -301,5 +304,6 @@ export function useWalletWorkspace() {
     setBillingDialogOpen,
     setCreemDialogOpen,
     setRedemptionCode,
+    clearNowPaymentsPayment,
   }
 }

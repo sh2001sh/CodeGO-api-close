@@ -6,6 +6,8 @@ import (
 
 	"github.com/glebarez/sqlite"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -15,7 +17,7 @@ import (
 func TestListAndUpdateEventsEnforceOwnerScope(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&gatewayschema.SecurityAuditEvent{}))
+	require.NoError(t, db.AutoMigrate(&gatewayschema.SecurityAuditEvent{}, &identityschema.User{}, &marketplaceschema.ChannelUserBlock{}))
 	originalDB := platformdb.DB
 	platformdb.DB = db
 	t.Cleanup(func() { platformdb.DB = originalDB })
@@ -26,13 +28,20 @@ func TestListAndUpdateEventsEnforceOwnerScope(t *testing.T) {
 		{ID: "owner-b", DedupeKey: "b", Source: EventSourceUpstreamCyberPolicy, Decision: "blocked", RiskCode: "cyber_policy", Severity: "high", OwnerUserID: 202, UserID: 2, MarketplaceChannelID: "channel-b", ReviewStatus: ReviewStatusUnreviewed, CreatedAt: now},
 	}
 	require.NoError(t, db.Create(&events).Error)
+	require.NoError(t, db.Create(&identityschema.User{Id: 1, ExternalId: "EXT-1"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.ChannelUserBlock{ChannelID: "channel-a", UserID: 1}).Error)
 
 	ownerResult, err := ListEvents(EventQuery{ViewerUserID: 101, Page: 1, PageSize: 20})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), ownerResult.Total)
 	require.Len(t, ownerResult.Items, 1)
 	require.Equal(t, "owner-a", ownerResult.Items[0].ID)
+	require.Equal(t, "EXT-1", ownerResult.Items[0].UserExternalID)
+	require.True(t, ownerResult.Items[0].UserBlocked)
 	require.Equal(t, int64(1), ownerResult.Summary.AffectedChannels)
+	searched, err := ListEvents(EventQuery{ViewerUserID: 101, Search: "EXT-1", Page: 1, PageSize: 20})
+	require.NoError(t, err)
+	require.Len(t, searched.Items, 1)
 
 	exported, err := ExportEvents(EventQuery{ViewerUserID: 101, MarketplaceChannel: "channel-a"})
 	require.NoError(t, err)
@@ -71,7 +80,7 @@ func TestNormalizeSeverityUsesSupportedLevels(t *testing.T) {
 func TestListEventsCountsRecentTriggersWithinOwnerScope(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&gatewayschema.SecurityAuditEvent{}))
+	require.NoError(t, db.AutoMigrate(&gatewayschema.SecurityAuditEvent{}, &identityschema.User{}, &marketplaceschema.ChannelUserBlock{}))
 	originalDB := platformdb.DB
 	platformdb.DB = db
 	t.Cleanup(func() { platformdb.DB = originalDB })

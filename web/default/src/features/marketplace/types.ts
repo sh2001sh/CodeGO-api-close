@@ -661,6 +661,8 @@ export interface SecurityAuditEvent {
   risk_code: string
   severity: SecurityAuditSeverity | ''
   user_id: number
+  user_external_id: string
+  user_blocked: boolean
   token_id: number
   token_name: string
   channel_id: number

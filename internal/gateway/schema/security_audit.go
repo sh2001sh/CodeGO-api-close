@@ -13,6 +13,8 @@ type SecurityAuditEvent struct {
 	RiskCode             string     `json:"risk_code" gorm:"column:risk_code;size:64;index;not null"`
 	Severity             string     `json:"severity" gorm:"column:severity;size:16;index;not null"`
 	UserID               int        `json:"user_id" gorm:"column:user_id;index"`
+	UserExternalID       string     `json:"user_external_id" gorm:"-"`
+	UserBlocked          bool       `json:"user_blocked" gorm:"-"`
 	TokenID              int        `json:"token_id" gorm:"column:token_id;index"`
 	TokenName            string     `json:"token_name" gorm:"column:token_name;size:128"`
 	ChannelID            int        `json:"channel_id" gorm:"column:channel_id;index"`

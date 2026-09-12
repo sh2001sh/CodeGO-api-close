@@ -11,6 +11,7 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
+  ShieldBan,
   UserRound,
   Waypoints,
 } from 'lucide-react'
@@ -39,11 +40,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { exportSecurityAuditEvents } from '@/features/marketplace/api'
 import {
   useSecurityAuditEvents,
   useSecurityAuditEventUpdate,
+  useMarketplaceMutations,
 } from '@/features/marketplace/hooks'
-import { exportSecurityAuditEvents } from '@/features/marketplace/api'
 import type {
   MarketplaceChannel,
   SecurityAuditEvent,
@@ -130,6 +132,7 @@ export function SecurityAuditPanel({
   }
   const events = useSecurityAuditEvents(filters, admin)
   const update = useSecurityAuditEventUpdate(admin)
+  const marketplaceMutations = useMarketplaceMutations()
   const data = events.data
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / 20))
 
@@ -227,6 +230,43 @@ export function SecurityAuditPanel({
   const openEvent = (event: SecurityAuditEvent) => {
     setSelected(event)
     setNote(event.review_note ?? '')
+  }
+
+  const toggleUserBlock = () => {
+    if (
+      !selected ||
+      admin ||
+      selected.user_id <= 0 ||
+      !selected.marketplace_channel_id
+    ) {
+      return
+    }
+    const blocked = !selected.user_blocked
+    if (
+      !window.confirm(
+        blocked
+          ? t('确认拉黑该用户？拉黑只对当前渠道生效。')
+          : t('确认解除该用户在当前渠道的拉黑状态？')
+      )
+    ) {
+      return
+    }
+    marketplaceMutations.userBlock.mutate(
+      {
+        channelId: selected.marketplace_channel_id,
+        userId: selected.user_id,
+        blocked,
+      },
+      {
+        onSuccess: () => {
+          setSelected({ ...selected, user_blocked: blocked })
+          void events.refetch()
+          toast.success(blocked ? t('用户已被拉黑') : t('已解除用户拉黑'))
+        },
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : t('操作失败')),
+      }
+    )
   }
 
   const exportEvents = async () => {
@@ -507,8 +547,16 @@ export function SecurityAuditPanel({
                       {item.marketplace_channel_id || item.channel_id || '-'}
                     </TableCell>
                     <TableCell>
-                      <div>{item.user_id || '-'}</div>
+                      <div className='flex items-center gap-1'>
+                        <span>{item.user_external_id || '-'}</span>
+                        {item.user_blocked && (
+                          <Badge variant='destructive' className='text-[10px]'>
+                            {t('已拉黑')}
+                          </Badge>
+                        )}
+                      </div>
                       <div className='text-muted-foreground max-w-36 truncate text-xs'>
+                        ID {item.user_id || '-'} ·{' '}
                         {item.token_name || `#${item.token_id}`}
                       </div>
                     </TableCell>
@@ -615,6 +663,25 @@ export function SecurityAuditPanel({
                       {admin ? t('查看用户') : t('查看渠道用户')}
                     </Button>
                   )}
+                  {!admin &&
+                    selected.user_id > 0 &&
+                    selected.marketplace_channel_id && (
+                      <Button
+                        variant={
+                          selected.user_blocked ? 'outline' : 'destructive'
+                        }
+                        size='sm'
+                        disabled={marketplaceMutations.userBlock.isPending}
+                        onClick={toggleUserBlock}
+                      >
+                        <ShieldBan />
+                        {marketplaceMutations.userBlock.isPending
+                          ? t('处理中')
+                          : selected.user_blocked
+                            ? t('解除拉黑')
+                            : t('拉黑该用户')}
+                      </Button>
+                    )}
                   {admin && selected.channel_id > 0 && (
                     <Button
                       variant='outline'
@@ -689,7 +756,8 @@ function DetailGrid({ event }: { event: SecurityAuditEvent }) {
   const items = [
     ['来源', sourceLabels[event.source] ?? event.source],
     ['触发时间', dayjs(event.created_at).format('YYYY-MM-DD HH:mm:ss')],
-    ['用户', String(event.user_id || '-')],
+    ['用户内部 ID', String(event.user_id || '-')],
+    ['用户外部 ID', event.user_external_id || '-'],
     ['Key', event.token_name || `#${event.token_id}`],
     ['渠道', event.marketplace_channel_id || String(event.channel_id || '-')],
     ['市场分组', event.marketplace_group_id || '-'],
@@ -786,6 +854,7 @@ function AuditEventCard({
   event: SecurityAuditEvent
   onOpen: (event: SecurityAuditEvent) => void
 }) {
+  const { t } = useTranslation()
   return (
     <button
       type='button'
@@ -814,7 +883,12 @@ function AuditEventCard({
         <div>
           <span className='text-muted-foreground'>用户 / Key</span>
           <p className='mt-0.5 truncate'>
-            {event.user_id || '-'} · {event.token_name || `#${event.token_id}`}
+            {event.user_external_id || '-'} ·{' '}
+            {event.token_name || `#${event.token_id}`}
+          </p>
+          <p className='text-muted-foreground mt-0.5 truncate text-[11px]'>
+            ID {event.user_id || '-'}
+            {event.user_blocked ? ` · ${t('已拉黑')}` : ''}
           </p>
         </div>
         <div>

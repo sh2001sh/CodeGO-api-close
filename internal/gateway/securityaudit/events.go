@@ -191,6 +191,9 @@ func ListEvents(query EventQuery) (*EventList, error) {
 	if err := populateRecentTriggerCounts(query, items); err != nil {
 		return nil, err
 	}
+	if err := populateUserContext(items); err != nil {
+		return nil, err
+	}
 	summary, err := eventSummary(query)
 	if err != nil {
 		return nil, err
@@ -224,7 +227,68 @@ func ExportEvents(query EventQuery) ([]gatewayschema.SecurityAuditEvent, error) 
 	if err := populateRecentTriggerCounts(query, items); err != nil {
 		return nil, err
 	}
+	if err := populateUserContext(items); err != nil {
+		return nil, err
+	}
 	return items, nil
+}
+
+func populateUserContext(events []gatewayschema.SecurityAuditEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	userIDs := make([]int, 0, len(events))
+	seenUsers := make(map[int]struct{})
+	channelIDs := make([]string, 0, len(events))
+	seenChannels := make(map[string]struct{})
+	for _, event := range events {
+		if event.UserID > 0 {
+			if _, ok := seenUsers[event.UserID]; !ok {
+				seenUsers[event.UserID] = struct{}{}
+				userIDs = append(userIDs, event.UserID)
+			}
+		}
+		channelID := strings.TrimSpace(event.MarketplaceChannelID)
+		if channelID != "" {
+			if _, ok := seenChannels[channelID]; !ok {
+				seenChannels[channelID] = struct{}{}
+				channelIDs = append(channelIDs, channelID)
+			}
+		}
+	}
+
+	type userIdentity struct {
+		ID         int
+		ExternalID string `gorm:"column:external_id"`
+	}
+	identities := make([]userIdentity, 0, len(userIDs))
+	if len(userIDs) > 0 {
+		if err := platformdb.DB.Unscoped().Model(&identityschema.User{}).
+			Select("id, external_id").Where("id IN ?", userIDs).Find(&identities).Error; err != nil {
+			return err
+		}
+	}
+	externalIDs := make(map[int]string, len(identities))
+	for _, identity := range identities {
+		externalIDs[identity.ID] = identity.ExternalID
+	}
+
+	blockedUsers := make(map[string]struct{})
+	if len(channelIDs) > 0 && len(userIDs) > 0 {
+		var blocks []marketplaceschema.ChannelUserBlock
+		if err := platformdb.DB.Where("channel_id IN ? AND user_id IN ?", channelIDs, userIDs).Find(&blocks).Error; err != nil {
+			return err
+		}
+		for _, block := range blocks {
+			blockedUsers[block.ChannelID+"\x00"+strconv.Itoa(block.UserID)] = struct{}{}
+		}
+	}
+	for index := range events {
+		events[index].UserExternalID = externalIDs[events[index].UserID]
+		key := strings.TrimSpace(events[index].MarketplaceChannelID) + "\x00" + strconv.Itoa(events[index].UserID)
+		_, events[index].UserBlocked = blockedUsers[key]
+	}
+	return nil
 }
 
 func UpdateEventReview(viewerUserID int, admin bool, eventID, status, note string) (*gatewayschema.SecurityAuditEvent, error) {
@@ -291,7 +355,8 @@ func applyEventFilters(db *gorm.DB, query EventQuery) *gorm.DB {
 		if userID, err := strconv.Atoi(value); err == nil {
 			db = db.Where("(request_id LIKE ? OR token_name LIKE ? OR upstream_error_message LIKE ? OR user_id = ?)", like, like, like, userID)
 		} else {
-			db = db.Where("(request_id LIKE ? OR token_name LIKE ? OR upstream_error_message LIKE ?)", like, like, like)
+			userIDs := platformdb.DB.Model(&identityschema.User{}).Select("id").Where("external_id LIKE ?", like)
+			db = db.Where("(request_id LIKE ? OR token_name LIKE ? OR upstream_error_message LIKE ? OR user_id IN (?))", like, like, like, userIDs)
 		}
 	}
 	return db

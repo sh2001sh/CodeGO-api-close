@@ -235,6 +235,45 @@ func TestMarketplaceGroupUsesDerivedSubscriptionMultiplier(t *testing.T) {
 	require.InDelta(t, 10, info.SubscriptionQuotaScale, 1e-9)
 }
 
+func TestMarketplaceGroupControlsMonthlyPassMultiplier(t *testing.T) {
+	for _, test := range []struct {
+		name               string
+		enabled            bool
+		expectedMultiplier float64
+	}{
+		{name: "disabled", enabled: false, expectedMultiplier: 1},
+		{name: "enabled", enabled: true, expectedMultiplier: 0.1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			previousHooks := subscriptionFundingHooks
+			RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
+				PreConsume: func(_ string, _ int, _ string, amount int64) (*SubscriptionFundingPreConsumeResult, error) {
+					return &SubscriptionFundingPreConsumeResult{UserSubscriptionID: 300, PreConsumed: amount, AmountTotal: 10_000, AmountUsedAfter: amount}, nil
+				},
+				GetMonthlyPassEntitlement: testMonthlyPassEntitlement,
+			})
+			t.Cleanup(func() { RegisterSubscriptionFundingHooks(previousHooks) })
+
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			info := &relaycommon.RelayInfo{
+				UserId: 3, OriginModelName: "gpt-5", RequestId: "marketplace-card-" + test.name,
+				UsingGroup: "marketplace-internal", MarketplaceGroupID: "marketplace-group",
+				MarketplaceMultiplier: 1, MarketplaceMultiplierCardEnabled: test.enabled,
+				ChannelMeta:  &relaycommon.ChannelMeta{ChannelScope: gatewayschema.ChannelScopeExternal},
+				IsPlayground: true, ForcePreConsume: true,
+				UserSetting: dto.UserSetting{FundingSourceOrder: []string{BillingSourceSubscription}},
+				PriceData:   types.PriceData{GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1}},
+			}
+
+			session, apiErr := NewBillingSession(ctx, info, 1_000)
+			require.Nil(t, apiErr)
+			require.NotNil(t, session)
+			require.Equal(t, test.expectedMultiplier, info.SubscriptionPackageMultiplier)
+			require.Equal(t, 10*test.expectedMultiplier, info.SubscriptionQuotaScale)
+		})
+	}
+}
+
 func TestMonthlyPassMultiplierDoesNotApplyAfterWalletFallback(t *testing.T) {
 	setupMonthlyPassFundingTestDB(t)
 	seedUser(t, 1102, 5_000)

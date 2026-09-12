@@ -9,6 +9,7 @@ import {
   getAdminOwnerIncome,
   releaseAdminOwnerIncome,
   getMarketplaceGroups,
+  getOfficialMarketplaceGroups,
   getMarketplaceMultiplierTrends,
   getMarketplaceAutoRoutePool,
   getMyMarketplaceChannels,
@@ -65,6 +66,17 @@ export function useMarketplaceGroups(filters: GroupFilters) {
     queryKey: ['marketplace-groups', filters],
     queryFn: () => getMarketplaceGroups(filters),
     placeholderData: (previousData) => previousData,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useOfficialMarketplaceGroups() {
+  return useQuery({
+    queryKey: ['marketplace-official-groups'],
+    queryFn: getOfficialMarketplaceGroups,
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,

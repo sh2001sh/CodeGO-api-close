@@ -40,10 +40,11 @@ func TestAdminCanUpdateMarketplaceChannelContent(t *testing.T) {
 
 	newSource := "CC-Kiro"
 	newMultiplier := 0.5
+	multiplierCardEnabled := true
 	consistency := marketplacedomain.ModelConsistencyQuestioned
 	updated, err := UpdateAdminChannel(channel.ID, AdminUpdateChannelRequest{
 		UpdateChannelRequest: UpdateChannelRequest{
-			SourceLabel: &newSource, Multiplier: &newMultiplier,
+			SourceLabel: &newSource, Multiplier: &newMultiplier, MultiplierCardEnabled: &multiplierCardEnabled,
 		},
 		ModelConsistencyStatus: &consistency,
 	})
@@ -51,6 +52,7 @@ func TestAdminCanUpdateMarketplaceChannelContent(t *testing.T) {
 	require.Equal(t, newSource, updated.SubmittedSourceLabel)
 	require.Equal(t, marketplacedomain.SourceLabelApproved, updated.SourceLabelStatus)
 	require.Equal(t, newMultiplier, updated.Multiplier)
+	require.True(t, updated.MultiplierCardEnabled)
 	require.Equal(t, consistency, updated.ModelConsistencyStatus)
 	var savedChannel marketplaceschema.Channel
 	require.NoError(t, db.First(&savedChannel, "id = ?", channel.ID).Error)
@@ -58,6 +60,7 @@ func TestAdminCanUpdateMarketplaceChannelContent(t *testing.T) {
 	var savedGroup marketplaceschema.Group
 	require.NoError(t, db.First(&savedGroup, "channel_id = ?", channel.ID).Error)
 	require.Equal(t, "CC-Kiro-ae381d", savedGroup.InternalGroupName)
+	require.True(t, savedGroup.MultiplierCardEnabled)
 }
 
 func TestModelConsistencyStatusValidation(t *testing.T) {
@@ -65,6 +68,40 @@ func TestModelConsistencyStatusValidation(t *testing.T) {
 	require.NoError(t, applyModelConsistencyStatus(channel, marketplacedomain.ModelConsistencyPassed))
 	require.Equal(t, marketplacedomain.ModelConsistencyPassed, channel.ModelConsistencyStatus)
 	require.EqualError(t, applyModelConsistencyStatus(channel, "owner-defined"), "模型一致性标注无效")
+}
+
+func TestOnlyMarketplaceOwnerCanUpdateMultiplierCardSetting(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
+		&marketplaceschema.VerificationRun{}, &marketplaceschema.GPT56MappingRun{},
+	))
+	channel := marketplaceschema.Channel{
+		ID: "owner-card-setting", OwnerUserID: 42, ProviderType: "openai_compatible",
+		BaseURLCiphertext: "encrypted-url", CredentialCiphertext: "encrypted-key",
+		DeclaredModels: `["gpt-5"]`, MaxConcurrency: 10, QPS: 5,
+	}
+	group := marketplaceschema.Group{
+		ID: "owner-card-group", ChannelID: channel.ID, OwnerUserID: channel.OwnerUserID,
+		PublicSlug: "mg_owner_card", InternalGroupName: "market_owner_card", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: marketplacedomain.CreditPolicySubscriptionAndUniversal, Multiplier: 1,
+		LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed,
+		Visibility: marketplacedomain.VisibilityPublic,
+	}
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+
+	enabled := true
+	updated, err := UpdateOwnerChannel(channel.OwnerUserID, channel.ID, UpdateChannelRequest{MultiplierCardEnabled: &enabled})
+	require.NoError(t, err)
+	require.True(t, updated.MultiplierCardEnabled)
+
+	require.NoError(t, db.Model(&group).Update("owner_user_id", 77).Error)
+	disabled := false
+	_, err = UpdateOwnerChannel(channel.OwnerUserID, channel.ID, UpdateChannelRequest{MultiplierCardEnabled: &disabled})
+	require.Error(t, err)
+	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
+	require.True(t, group.MultiplierCardEnabled)
 }
 
 func TestOwnerCanDisableSensitiveWordInterception(t *testing.T) {

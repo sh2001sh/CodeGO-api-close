@@ -12,10 +12,18 @@ import (
 )
 
 func loadOfficialAutoRouteItems(ownerUserID int, selected map[string]int) []AutoRoutePoolItem {
-	userGroup, err := identitystore.LoadUserGroup(ownerUserID, false)
-	if err != nil {
-		return []AutoRoutePoolItem{}
+	userGroup := ""
+	if ownerUserID > 0 {
+		var err error
+		userGroup, err = identitystore.LoadUserGroup(ownerUserID, false)
+		if err != nil {
+			return []AutoRoutePoolItem{}
+		}
 	}
+	return loadOfficialAutoRouteItemsForUserGroup(userGroup, selected)
+}
+
+func loadOfficialAutoRouteItemsForUserGroup(userGroup string, selected map[string]int) []AutoRoutePoolItem {
 	usable := gatewayroutingapp.GetUserUsableGroups(userGroup)
 	groupNames := make([]string, 0, len(usable))
 	for groupName := range usable {

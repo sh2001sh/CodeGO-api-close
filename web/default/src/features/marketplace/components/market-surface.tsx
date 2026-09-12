@@ -29,7 +29,7 @@ export function MarketSurface(props: {
       <div className='flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5'>
         <div>
           <h3 className='text-sm font-semibold'>
-            {props.ranking ? t('质量排行榜') : t('渠道目录')}
+            {props.ranking ? t('质量排行榜') : t('第三方市场')}
           </h3>
           <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
             {props.summary}
@@ -56,7 +56,7 @@ export function MarketSurface(props: {
         </div>
       </div>
       {props.ranking && (
-        <div className='border-border border-y bg-primary/[0.05] px-4 py-3 text-xs leading-5'>
+        <div className='border-border bg-primary/[0.05] border-y px-4 py-3 text-xs leading-5'>
           <span className='text-foreground'>
             {t(
               '榜单使用 Wilson 可靠性修正，并综合 TTFT、总延迟、TPS 与倍率；小样本渠道会继续观测，不参与正式名次。'

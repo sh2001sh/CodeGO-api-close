@@ -6,6 +6,7 @@ import type {
   MarketplaceChannel,
   MarketplaceAutoRoutePool,
   MarketplaceGroupList,
+  OfficialMarketplaceGroupList,
   MarketplaceOwnerUsageLogResult,
   MarketplaceOwnerUsageLogFilters,
   MarketplaceMultiplierTrend,
@@ -46,6 +47,13 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
   })
   const response = await api.get<ApiResponse<MarketplaceGroupList>>(
     `/api/marketplace/groups?${params.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function getOfficialMarketplaceGroups() {
+  const response = await api.get<ApiResponse<OfficialMarketplaceGroupList>>(
+    '/api/marketplace/official-groups'
   )
   return requireData(response.data)
 }

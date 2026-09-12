@@ -40,6 +40,7 @@ func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Gr
 		MaxConcurrency: channel.MaxConcurrency, UserMaxConcurrency: channel.UserMaxConcurrency, QPS: channel.QPS,
 		MaintenanceWindow: channel.MaintenanceWindow, InternalChannelID: channel.InternalChannelID,
 		SensitiveWordInterceptionEnabled: marketplaceSensitiveWordInterceptionEnabled(channel),
+		MultiplierCardEnabled:            group.MultiplierCardEnabled,
 		LastReviewReason:                 channel.LastReviewReason, VerificationDueAt: group.VerificationDueAt,
 		CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt,
 	}

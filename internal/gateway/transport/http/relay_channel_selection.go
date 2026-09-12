@@ -154,12 +154,14 @@ func applyUnifiedAutoBinding(c *gin.Context, info *gatewayruntime.RelayInfo, bin
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, "")
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, "")
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, float64(0))
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplierCardEnabled, false)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, map[string]marketplaceapp.ChannelModelPrice{})
 	info.MarketplaceGroupID = ""
 	info.MarketplaceOwnerID = 0
 	info.MarketplaceSourceType = ""
 	info.MarketplaceCreditPolicy = ""
 	info.MarketplaceMultiplier = 0
+	info.MarketplaceMultiplierCardEnabled = false
 }
 
 func applyMarketplaceBinding(c *gin.Context, info *gatewayruntime.RelayInfo, binding marketplaceapp.RoutingBinding) {
@@ -168,10 +170,12 @@ func applyMarketplaceBinding(c *gin.Context, info *gatewayruntime.RelayInfo, bin
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, binding.SourceType)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, binding.CreditPoolPolicy)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, binding.Multiplier)
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplierCardEnabled, binding.MultiplierCardEnabled)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, binding.ModelPrices)
 	info.MarketplaceGroupID = binding.GroupID
 	info.MarketplaceOwnerID = binding.OwnerUserID
 	info.MarketplaceSourceType = binding.SourceType
 	info.MarketplaceCreditPolicy = binding.CreditPoolPolicy
 	info.MarketplaceMultiplier = binding.Multiplier
+	info.MarketplaceMultiplierCardEnabled = binding.MultiplierCardEnabled
 }

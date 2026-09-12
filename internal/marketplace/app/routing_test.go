@@ -21,7 +21,7 @@ func TestMarketplaceTokenBindingIsStableAndAllowsSelfConsumption(t *testing.T) {
 		ID: "group-1", ChannelID: "channel-1", OwnerUserID: 10,
 		PublicSlug: "market-group-1", SystemDisplayName: "用户分组 1.00x · #0001",
 		InternalGroupName: "market_u0100_group1", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
-		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 1,
+		CreditPoolPolicy: marketplacedomain.CreditPolicyUniversalOnly, Multiplier: 1, MultiplierCardEnabled: true,
 		LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed,
 		Visibility: marketplacedomain.VisibilityPublic,
 	}
@@ -44,6 +44,7 @@ func TestMarketplaceTokenBindingIsStableAndAllowsSelfConsumption(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, group.InternalGroupName, binding.InternalGroup)
 	require.Equal(t, marketplacedomain.CreditPolicyUniversalOnly, binding.CreditPoolPolicy)
+	require.True(t, binding.MultiplierCardEnabled)
 	require.Equal(t, float64(2), binding.ModelPrices["gpt-5"].InputPricePerMillion)
 }
 

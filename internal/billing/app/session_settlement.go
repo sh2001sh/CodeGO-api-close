@@ -80,9 +80,6 @@ func (s *BillingSession) reserveSettlementIncrease(actualQuota int) (int, error)
 		if !errors.Is(err, billingdomain.ErrInsufficientBalance) {
 			return 0, err
 		}
-		if _, subscription := s.funding.(*SubscriptionFunding); subscription {
-			return s.preConsumedQuota, nil
-		}
 		balanceSource, ok := s.funding.(fundingAvailableBalance)
 		if !ok {
 			return s.preConsumedQuota, nil

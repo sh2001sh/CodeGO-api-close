@@ -159,6 +159,26 @@ export interface MarketplaceGroupList {
   window_hours: number
 }
 
+export interface OfficialMarketplaceGroup {
+  group_id: string
+  system_display_name: string
+  description: string
+  multiplier: number
+  subscription_enabled: boolean
+  subscription_multiplier: number
+  models: string[]
+  success_rate: number
+  avg_latency_ms: number
+  latest_request_status: 'healthy' | 'unstable' | 'failed' | 'unknown'
+  metrics_available: boolean
+  request_count: number
+}
+
+export interface OfficialMarketplaceGroupList {
+  items: OfficialMarketplaceGroup[]
+  total: number
+}
+
 export type MultiplierTrendMetric = 'reliable_min' | 'listed_min' | 'median'
 
 export interface MarketplaceMultiplierTrendPoint {
@@ -243,6 +263,7 @@ export interface MarketplaceChannel {
   qps: number
   maintenance_window: string
   sensitive_word_interception_enabled: boolean
+  multiplier_card_enabled: boolean
   internal_channel_id?: number | null
   last_review_reason: string
   verification_due_at?: string | null
@@ -298,6 +319,7 @@ export interface ChannelFormValues {
   qps: number
   maintenance_window: string
   sensitive_word_interception_enabled: boolean
+  multiplier_card_enabled: boolean
 }
 
 export interface ChannelUpdateValues {
@@ -312,6 +334,7 @@ export interface ChannelUpdateValues {
   qps?: number
   maintenance_window?: string
   sensitive_word_interception_enabled?: boolean
+  multiplier_card_enabled?: boolean
   base_url?: string
   api_key?: string
   model_consistency_status?: ModelConsistencyStatus

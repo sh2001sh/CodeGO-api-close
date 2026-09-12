@@ -272,6 +272,7 @@ func TestResponsesBackgroundRoutingContextRoundTrip(t *testing.T) {
 	httpctx.SetContextKey(source, constant.ContextKeyMarketplaceSourceType, "marketplace_user")
 	httpctx.SetContextKey(source, constant.ContextKeyMarketplaceCreditPolicy, "subscription_and_universal")
 	httpctx.SetContextKey(source, constant.ContextKeyMarketplaceMultiplier, 0.8)
+	httpctx.SetContextKey(source, constant.ContextKeyMarketplaceMultiplierCardEnabled, true)
 	prices := map[string]marketplaceapp.ChannelModelPrice{
 		"gpt-5": {InputPricePerMillion: 1.25, OutputPricePerMillion: 10},
 	}
@@ -291,6 +292,7 @@ func TestResponsesBackgroundRoutingContextRoundTrip(t *testing.T) {
 	require.Equal(t, "market-group", httpctx.GetContextKeyString(target, constant.ContextKeyMarketplaceGroupID))
 	require.Equal(t, 42, httpctx.GetContextKeyInt(target, constant.ContextKeyMarketplaceOwnerID))
 	require.Equal(t, 0.8, httpctx.GetContextKeyFloat64(target, constant.ContextKeyMarketplaceMultiplier))
+	require.True(t, httpctx.GetContextKeyBool(target, constant.ContextKeyMarketplaceMultiplierCardEnabled))
 	restoredPrices, found := httpctx.GetContextKeyType[map[string]marketplaceapp.ChannelModelPrice](target, constant.ContextKeyMarketplaceModelPrices)
 	require.True(t, found)
 	require.Equal(t, prices, restoredPrices)

@@ -159,6 +159,7 @@ export function ChannelEditorForm(props: {
             maintenance_window: values.maintenance_window,
             sensitive_word_interception_enabled:
               values.sensitive_word_interception_enabled,
+            multiplier_card_enabled: values.multiplier_card_enabled,
             auto_probe_enabled: values.auto_probe_enabled,
             auto_probe_interval_minutes: values.auto_probe_interval_minutes,
             auto_probe_model: values.auto_probe_model,

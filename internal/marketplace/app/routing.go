@@ -47,8 +47,9 @@ func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBi
 	return &RoutingBinding{
 		GroupID: group.ID, InternalGroup: group.InternalGroupName, OwnerUserID: group.OwnerUserID,
 		SourceType: group.SourceType, CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: group.Multiplier,
-		ModelPrices: decodeChannelModelPrices(channel.ModelPrices),
-		Models:      decodeModels(channel.DeclaredModels),
+		MultiplierCardEnabled: group.MultiplierCardEnabled,
+		ModelPrices:           decodeChannelModelPrices(channel.ModelPrices),
+		Models:                decodeModels(channel.DeclaredModels),
 	}, nil
 }
 

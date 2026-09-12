@@ -77,6 +77,7 @@ export const channelFormSchema = z.object({
   qps: z.number().positive().max(10000),
   maintenance_window: z.string().max(255),
   sensitive_word_interception_enabled: z.boolean(),
+  multiplier_card_enabled: z.boolean(),
   auto_probe_enabled: z.boolean(),
   auto_probe_interval_minutes: z.number().int().min(1).max(1440),
   auto_probe_model: z.string().max(128),
@@ -109,6 +110,7 @@ export const channelFormDefaults: ChannelFormInput = {
   qps: 5,
   maintenance_window: '',
   sensitive_word_interception_enabled: true,
+  multiplier_card_enabled: false,
   auto_probe_enabled: false,
   auto_probe_interval_minutes: 10,
   auto_probe_model: '',
@@ -138,6 +140,7 @@ export function channelFormDefaultsForEdit(
     maintenance_window: channel.maintenance_window,
     sensitive_word_interception_enabled:
       channel.sensitive_word_interception_enabled,
+    multiplier_card_enabled: channel.multiplier_card_enabled,
     auto_probe_enabled: channel.auto_probe_enabled,
     auto_probe_interval_minutes: channel.auto_probe_interval_minutes || 10,
     auto_probe_model:

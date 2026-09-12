@@ -25,6 +25,7 @@ type CreateChannelRequest struct {
 	QPS                              float64                      `json:"qps"`
 	MaintenanceWindow                string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled *bool                        `json:"sensitive_word_interception_enabled"`
+	MultiplierCardEnabled            bool                         `json:"multiplier_card_enabled"`
 	AutoProbeEnabled                 bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         int                          `json:"auto_probe_interval_minutes"`
 	AutoProbeModel                   string                       `json:"auto_probe_model"`
@@ -41,6 +42,7 @@ type UpdateChannelRequest struct {
 	QPS                              *float64                      `json:"qps"`
 	MaintenanceWindow                *string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled *bool                         `json:"sensitive_word_interception_enabled"`
+	MultiplierCardEnabled            *bool                         `json:"multiplier_card_enabled"`
 	AutoProbeEnabled                 *bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         *int                          `json:"auto_probe_interval_minutes"`
 	AutoProbeModel                   *string                       `json:"auto_probe_model"`
@@ -141,6 +143,7 @@ type ChannelView struct {
 	QPS                              float64                      `json:"qps"`
 	MaintenanceWindow                string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled bool                         `json:"sensitive_word_interception_enabled"`
+	MultiplierCardEnabled            bool                         `json:"multiplier_card_enabled"`
 	InternalChannelID                *int                         `json:"internal_channel_id"`
 	LastReviewReason                 string                       `json:"last_review_reason"`
 	VerificationDueAt                *time.Time                   `json:"verification_due_at"`
@@ -360,15 +363,16 @@ type AdminReviewRequest struct {
 }
 
 type RoutingBinding struct {
-	RouteKey         string
-	GroupID          string
-	InternalGroup    string
-	OwnerUserID      int
-	SourceType       string
-	CreditPoolPolicy string
-	Multiplier       float64
-	ModelPrices      map[string]ChannelModelPrice
-	Models           []string
+	RouteKey              string
+	GroupID               string
+	InternalGroup         string
+	OwnerUserID           int
+	SourceType            string
+	CreditPoolPolicy      string
+	Multiplier            float64
+	MultiplierCardEnabled bool
+	ModelPrices           map[string]ChannelModelPrice
+	Models                []string
 }
 
 type AutoRoutePoolUpdateRequest struct {
@@ -401,4 +405,24 @@ type AutoRoutePoolView struct {
 	TokenGroup    string              `json:"token_group"`
 	SelectedCount int                 `json:"selected_count"`
 	Items         []AutoRoutePoolItem `json:"items"`
+}
+
+type OfficialGroupListItem struct {
+	GroupID                string   `json:"group_id"`
+	SystemDisplayName      string   `json:"system_display_name"`
+	Description            string   `json:"description"`
+	Multiplier             float64  `json:"multiplier"`
+	SubscriptionEnabled    bool     `json:"subscription_enabled"`
+	SubscriptionMultiplier float64  `json:"subscription_multiplier"`
+	Models                 []string `json:"models"`
+	SuccessRate            float64  `json:"success_rate"`
+	AvgLatencyMS           float64  `json:"avg_latency_ms"`
+	LatestRequestStatus    string   `json:"latest_request_status"`
+	MetricsAvailable       bool     `json:"metrics_available"`
+	RequestCount           int64    `json:"request_count"`
+}
+
+type OfficialGroupListView struct {
+	Items []OfficialGroupListItem `json:"items"`
+	Total int                     `json:"total"`
 }

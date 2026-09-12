@@ -14,6 +14,7 @@ import { MarketSurface } from './components/market-surface'
 import { MarketplaceAudienceGuide } from './components/marketplace-audience-guide'
 import { MarketplaceMultiplierTrend } from './components/marketplace-multiplier-trend'
 import { MarketplaceOverview } from './components/marketplace-overview'
+import { OfficialGroupsSection } from './components/official-groups-section'
 import { RankingLeaderboard } from './components/ranking-leaderboard'
 import { TokenBindPanel } from './components/token-bind-panel'
 import { useMarketplaceGroups } from './hooks'
@@ -193,12 +194,15 @@ export function MarketplacePage() {
               )}
             </TabsList>
             <TabsContent value='market'>
-              <MarketSurface
-                filters={filters}
-                updateFilters={updateFilters}
-                query={groups}
-                summary={`${t('共 {{total}} 个公开分组', { total: groups.data?.total ?? 0 })} · ${t('{{count}} 个达到正式排名门槛', { count: groups.data?.ranked_count ?? 0 })} · ${t('先看倍率、成功率和首字速度')}`}
-              />
+              <div className='space-y-3'>
+                <OfficialGroupsSection />
+                <MarketSurface
+                  filters={filters}
+                  updateFilters={updateFilters}
+                  query={groups}
+                  summary={`${t('共 {{total}} 个公开分组', { total: groups.data?.total ?? 0 })} · ${t('{{count}} 个达到正式排名门槛', { count: groups.data?.ranked_count ?? 0 })} · ${t('先看倍率、成功率和首字速度')}`}
+                />
+              </div>
             </TabsContent>
             <TabsContent value='insights'>
               <div className='space-y-4'>

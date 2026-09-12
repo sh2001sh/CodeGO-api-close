@@ -151,9 +151,13 @@ func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayI
 	if groupRatio > 0 {
 		baseQuotaScale /= groupRatio
 	}
-	entitlement, err := getMonthlyPassEntitlement(relayInfo.UserId)
-	if err != nil {
-		return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+	var entitlement *MonthlyPassEntitlement
+	if relayInfo.MarketplaceGroupID == "" || relayInfo.MarketplaceMultiplierCardEnabled {
+		var err error
+		entitlement, err = getMonthlyPassEntitlement(relayInfo.UserId)
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+		}
 	}
 	packageMultiplier := 1.0
 	quotaScale := baseQuotaScale

@@ -91,7 +91,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		channel.AutoProbeIntervalMinutes = 10
 	}
 	markMarketplaceCapabilitiesPending(channel)
-	group := newMarketplaceGroup(channelID, ownerUserID, ownerName, sourceLabel, req.Multiplier, req.Visibility)
+	group := newMarketplaceGroup(channelID, ownerUserID, ownerName, sourceLabel, req.Multiplier, req.Visibility, req.MultiplierCardEnabled)
 	return channel, group, nil
 }
 
@@ -103,7 +103,7 @@ func newMarketplaceChannelID(tx *gorm.DB) (string, error) {
 	return strconv.FormatUint(sequence.ID, 10), nil
 }
 
-func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLabel string, multiplier float64, visibility string) *marketplaceschema.Group {
+func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLabel string, multiplier float64, visibility string, multiplierCardEnabled bool) *marketplaceschema.Group {
 	multiplier = marketplacedomain.NormalizeMultiplier(multiplier)
 	groupID := platformruntime.GetUUID()
 	compact := strings.ReplaceAll(groupID, "-", "")
@@ -114,7 +114,8 @@ func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLab
 		InternalGroupName: marketplaceInternalGroupName(sourceLabel, groupID),
 		OwnerDisplayName:  ownerName, SourceType: marketplacedomain.SourceTypeMarketplaceUser,
 		CreditPoolPolicy: marketplacedomain.CreditPolicySubscriptionAndUniversal, Multiplier: multiplier,
-		RoutingVersion: 1, LifecycleStatus: marketplacedomain.LifecycleVerifying,
+		MultiplierCardEnabled: multiplierCardEnabled,
+		RoutingVersion:        1, LifecycleStatus: marketplacedomain.LifecycleVerifying,
 		VerificationStatus: marketplacedomain.VerificationQueued, Visibility: visibility,
 	}
 }
@@ -230,7 +231,7 @@ func loadOwnedChannelGroup(ownerUserID int, channelID string) (*marketplaceschem
 		return nil, nil, err
 	}
 	var group marketplaceschema.Group
-	if err := platformdb.DB.Where("channel_id = ?", channel.ID).First(&group).Error; err != nil {
+	if err := platformdb.DB.Where("channel_id = ? AND owner_user_id = ?", channel.ID, ownerUserID).First(&group).Error; err != nil {
 		return nil, nil, err
 	}
 	return &channel, &group, nil

@@ -133,8 +133,35 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
         />
       </FormField>
       <ChannelInterceptionPolicy form={form} />
+      <MultiplierCardPolicy form={form} />
       <ChannelAutoProbePolicy form={form} />
     </FormSection>
+  )
+}
+
+function MultiplierCardPolicy(props: { form: ChannelForm }) {
+  const { t } = useTranslation()
+  const enabled = props.form.watch('multiplier_card_enabled')
+  return (
+    <div className='flex min-h-16 items-center justify-between gap-4 rounded-md border px-3 py-2.5'>
+      <div className='space-y-0.5'>
+        <p className='text-sm font-medium'>{t('允许套餐倍率卡')}</p>
+        <p className='text-muted-foreground text-xs leading-5'>
+          {enabled
+            ? t('用户在此分组使用套餐额度时，可以应用有效的套餐倍率卡。')
+            : t('用户仍可使用套餐额度，但不会在此分组应用套餐倍率卡。')}
+        </p>
+      </div>
+      <Switch
+        checked={enabled}
+        onCheckedChange={(checked) =>
+          props.form.setValue('multiplier_card_enabled', checked, {
+            shouldDirty: true,
+          })
+        }
+        aria-label={t('允许套餐倍率卡')}
+      />
+    </div>
   )
 }
 

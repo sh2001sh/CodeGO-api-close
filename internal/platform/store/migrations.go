@@ -158,6 +158,7 @@ func V2MigrationIDs() []string {
 		"20260819_billing_outbox_published_cleanup",
 		"20260819_archive_retention_indexes",
 		"20260819_marketplace_latency_metrics",
+		"20260913_marketplace_group_multiplier_card",
 	}
 }
 
@@ -363,6 +364,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 				}
 			}
 			return tx.AutoMigrate(&channelLatencyHistogramMigration{}, &marketplaceschema.RankingSnapshot{})
+		}},
+		{ID: "20260913_marketplace_group_multiplier_card", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.Group{})
 		}},
 	}
 	for _, step := range steps {
@@ -699,6 +703,9 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 		return !db.Migrator().HasTable(&marketplaceschema.MultiplierTrendSnapshot{})
 	case "20260817_marketplace_subscription_billing":
 		return marketplaceSubscriptionBillingNeedsRepair(db)
+	case "20260913_marketplace_group_multiplier_card":
+		return db.Migrator().HasTable(&marketplaceschema.Group{}) &&
+			!db.Migrator().HasColumn(&marketplaceschema.Group{}, "MultiplierCardEnabled")
 	case "20260821_marketplace_group_invites":
 		return !db.Migrator().HasTable(&marketplaceschema.GroupInvite{}) ||
 			!db.Migrator().HasTable(&marketplaceschema.GroupAccess{})

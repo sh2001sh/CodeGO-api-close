@@ -12,31 +12,33 @@ import (
 )
 
 type responsesBackgroundRoutingContext struct {
-	UsingGroup                string                                      `json:"using_group"`
-	TokenGroup                string                                      `json:"token_group"`
-	AutomaticRouting          bool                                        `json:"automatic_routing,omitempty"`
-	MarketplaceGroupID        string                                      `json:"marketplace_group_id,omitempty"`
-	MarketplaceOwnerID        int                                         `json:"marketplace_owner_id,omitempty"`
-	MarketplaceSourceType     string                                      `json:"marketplace_source_type,omitempty"`
-	MarketplaceCreditPolicy   string                                      `json:"marketplace_credit_policy,omitempty"`
-	MarketplaceMultiplier     float64                                     `json:"marketplace_multiplier,omitempty"`
-	MarketplaceModelPrices    map[string]marketplaceapp.ChannelModelPrice `json:"marketplace_model_prices,omitempty"`
-	RoutePoolID               int64                                       `json:"route_pool_id,omitempty"`
-	ProcurementCostMultiplier float64                                     `json:"procurement_cost_multiplier,omitempty"`
-	FaultDomain               string                                      `json:"fault_domain,omitempty"`
+	UsingGroup                       string                                      `json:"using_group"`
+	TokenGroup                       string                                      `json:"token_group"`
+	AutomaticRouting                 bool                                        `json:"automatic_routing,omitempty"`
+	MarketplaceGroupID               string                                      `json:"marketplace_group_id,omitempty"`
+	MarketplaceOwnerID               int                                         `json:"marketplace_owner_id,omitempty"`
+	MarketplaceSourceType            string                                      `json:"marketplace_source_type,omitempty"`
+	MarketplaceCreditPolicy          string                                      `json:"marketplace_credit_policy,omitempty"`
+	MarketplaceMultiplier            float64                                     `json:"marketplace_multiplier,omitempty"`
+	MarketplaceMultiplierCardEnabled bool                                        `json:"marketplace_multiplier_card_enabled,omitempty"`
+	MarketplaceModelPrices           map[string]marketplaceapp.ChannelModelPrice `json:"marketplace_model_prices,omitempty"`
+	RoutePoolID                      int64                                       `json:"route_pool_id,omitempty"`
+	ProcurementCostMultiplier        float64                                     `json:"procurement_cost_multiplier,omitempty"`
+	FaultDomain                      string                                      `json:"fault_domain,omitempty"`
 }
 
 func captureResponsesBackgroundRoutingContext(c *gin.Context) (string, error) {
 	snapshot := responsesBackgroundRoutingContext{
-		UsingGroup:              httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup),
-		TokenGroup:              httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup),
-		AutomaticRouting:        gatewayruntime.IsAutoRouteRequest(c),
-		MarketplaceGroupID:      httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceGroupID),
-		MarketplaceOwnerID:      httpctx.GetContextKeyInt(c, constant.ContextKeyMarketplaceOwnerID),
-		MarketplaceSourceType:   httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceSourceType),
-		MarketplaceCreditPolicy: httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceCreditPolicy),
-		MarketplaceMultiplier:   httpctx.GetContextKeyFloat64(c, constant.ContextKeyMarketplaceMultiplier),
-		FaultDomain:             c.GetString("channel_fault_domain"),
+		UsingGroup:                       httpctx.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+		TokenGroup:                       httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup),
+		AutomaticRouting:                 gatewayruntime.IsAutoRouteRequest(c),
+		MarketplaceGroupID:               httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceGroupID),
+		MarketplaceOwnerID:               httpctx.GetContextKeyInt(c, constant.ContextKeyMarketplaceOwnerID),
+		MarketplaceSourceType:            httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceSourceType),
+		MarketplaceCreditPolicy:          httpctx.GetContextKeyString(c, constant.ContextKeyMarketplaceCreditPolicy),
+		MarketplaceMultiplier:            httpctx.GetContextKeyFloat64(c, constant.ContextKeyMarketplaceMultiplier),
+		MarketplaceMultiplierCardEnabled: httpctx.GetContextKeyBool(c, constant.ContextKeyMarketplaceMultiplierCardEnabled),
+		FaultDomain:                      c.GetString("channel_fault_domain"),
 	}
 	if prices, found := httpctx.GetContextKeyType[map[string]marketplaceapp.ChannelModelPrice](c, constant.ContextKeyMarketplaceModelPrices); found {
 		snapshot.MarketplaceModelPrices = prices
@@ -71,6 +73,7 @@ func restoreResponsesBackgroundRoutingContext(c *gin.Context, ciphertext string)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceSourceType, snapshot.MarketplaceSourceType)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceCreditPolicy, snapshot.MarketplaceCreditPolicy)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplier, snapshot.MarketplaceMultiplier)
+	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceMultiplierCardEnabled, snapshot.MarketplaceMultiplierCardEnabled)
 	httpctx.SetContextKey(c, constant.ContextKeyMarketplaceModelPrices, snapshot.MarketplaceModelPrices)
 	if snapshot.RoutePoolID > 0 && snapshot.ProcurementCostMultiplier > 0 {
 		gatewayroutingapp.SetRoutePoolSelectionSnapshot(c, gatewayroutingapp.RoutePoolSelection{

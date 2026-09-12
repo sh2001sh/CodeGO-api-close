@@ -39,12 +39,13 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 
 	want := map[string]bool{
 		"GET /api/marketplace/groups":                     false,
+		"GET /api/marketplace/official-groups":            false,
 		"GET /api/marketplace/multiplier-trends":          false,
 		"GET /api/marketplace/auto-route-pool":            false,
 		"PUT /api/marketplace/auto-route-pool":            false,
 		"POST /api/marketplace/groups/:id/bind-token":     false,
 		"POST /api/marketplace/groups/:id/invite":         false,
-		"POST /api/marketplace/invites/accept":             false,
+		"POST /api/marketplace/invites/accept":            false,
 		"POST /api/marketplace/channels":                  false,
 		"POST /api/marketplace/channels/fetch-models":     false,
 		"POST /api/marketplace/channels/:id/detect":       false,

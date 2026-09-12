@@ -158,6 +158,7 @@ type ChannelView struct {
 	ForfeitedIncome                  int64                        `json:"forfeited_income"`
 	CreatedAt                        time.Time                    `json:"created_at"`
 	UpdatedAt                        time.Time                    `json:"updated_at"`
+	DeletedAt                        *time.Time                   `json:"deleted_at"`
 }
 
 type AdminChannelQuery struct {

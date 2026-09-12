@@ -98,7 +98,7 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 		q.StartTimestamp, q.EndTimestamp = q.EndTimestamp, q.StartTimestamp
 	}
 	var groups []marketplaceschema.Group
-	db := platformdb.DB.Where("owner_user_id = ?", owner)
+	db := platformdb.DB.Unscoped().Where("owner_user_id = ?", owner)
 	if q.ChannelID != "" {
 		db = db.Where("channel_id = ?", q.ChannelID)
 	}

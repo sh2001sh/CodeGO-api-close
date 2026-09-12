@@ -265,6 +265,7 @@ export interface MarketplaceChannel {
   reclaimed_income: number
   created_at: string
   updated_at: string
+  deleted_at?: string | null
 }
 
 export interface AdminMarketplaceChannelFilters {

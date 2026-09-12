@@ -80,14 +80,16 @@ function verificationRefetchInterval(
     verification_status: string
     gpt56_mapping_status?: string
     connectivity_test_status?: string
+    deleted_at?: string | null
   }[]
 ) {
   return channels.some(
     (channel) =>
-      channel.lifecycle_status === 'verifying' ||
-      ['queued', 'running'].includes(channel.verification_status) ||
-      ['queued', 'running'].includes(channel.gpt56_mapping_status ?? '') ||
-      ['queued', 'running'].includes(channel.connectivity_test_status ?? '')
+      !channel.deleted_at &&
+      (channel.lifecycle_status === 'verifying' ||
+        ['queued', 'running'].includes(channel.verification_status) ||
+        ['queued', 'running'].includes(channel.gpt56_mapping_status ?? '') ||
+        ['queued', 'running'].includes(channel.connectivity_test_status ?? ''))
   )
     ? 2000
     : false

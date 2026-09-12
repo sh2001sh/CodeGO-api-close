@@ -145,6 +145,24 @@ func TestListOwnerUsageLogsFiltersSingleOwnedChannel(t *testing.T) {
 	require.Equal(t, "K3L4M5", result.Items[0].UserID)
 }
 
+func TestListOwnerUsageLogsIncludesDeletedOwnedChannel(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	internalID := 303
+	channel := marketplaceschema.Channel{ID: "deleted", OwnerUserID: 10, InternalChannelID: &internalID, Status: "active", ProviderType: "openai"}
+	group := marketplaceschema.Group{ID: "deleted-group", ChannelID: channel.ID, OwnerUserID: 10, SystemDisplayName: "Deleted", InternalGroupName: "Deleted", PublicSlug: "deleted", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1}
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, logDB.Create(&auditschema.Log{UserId: 201, Type: auditschema.LogTypeConsume, ChannelId: internalID, RequestId: "deleted-request"}).Error)
+	require.NoError(t, db.Delete(&group).Error)
+	require.NoError(t, db.Delete(&channel).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{ChannelID: channel.ID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, channel.ID, result.Items[0].ChannelID)
+}
+
 func TestListOwnerUsageLogsRejectsForeignChannelFilter(t *testing.T) {
 	openOwnerUsageLogTestDB(t)
 	_, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{ChannelID: "foreign-channel"})

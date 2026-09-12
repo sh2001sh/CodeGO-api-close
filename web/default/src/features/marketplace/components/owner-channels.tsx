@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
@@ -46,7 +47,10 @@ export function OwnerChannels(props: { onAdd: () => void }) {
   const keyword = search.trim().toLowerCase()
   const visible = channels.filter(
     (channel) =>
-      (!status || channel.lifecycle_status === status) &&
+      (!status ||
+        (status === 'deleted'
+          ? Boolean(channel.deleted_at)
+          : !channel.deleted_at && channel.lifecycle_status === status)) &&
       (!keyword ||
         [
           channel.id,
@@ -86,7 +90,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
         <div className='border-border bg-muted/30 text-muted-foreground border-y px-4 py-3 text-xs leading-5 sm:px-5'>
           <strong>{t('渠道关停与冻结额度规则')}</strong>：
           {t(
-            '暂停渠道不会没收收益；只有删除或下架渠道时，仍处于冻结期的待结算额度才会按平台规则回收。'
+            '暂停、下架或删除渠道都不会没收收益；冻结期内的待结算额度会继续冻结，并在原定时间到账。已删除渠道的使用日志与结算记录仍可查询。'
           )}
         </div>
         <OwnerOperationsPulse channels={channels} />
@@ -112,6 +116,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
             <option value='degraded'>{t('质量下降')}</option>
             <option value='suspended'>{t('已暂停')}</option>
             <option value='disabled'>{t('已下架')}</option>
+            <option value='deleted'>{t('已删除')}</option>
           </NativeSelect>
         </div>
         <div>
@@ -162,9 +167,18 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                         <span className='text-[15px] font-semibold'>
                           {channel.system_display_name}
                         </span>
-                        <MarketplaceStatusBadge
-                          status={channel.lifecycle_status}
-                        />
+                        {channel.deleted_at ? (
+                          <Badge
+                            variant='outline'
+                            className='text-muted-foreground'
+                          >
+                            {t('已删除')}
+                          </Badge>
+                        ) : (
+                          <MarketplaceStatusBadge
+                            status={channel.lifecycle_status}
+                          />
+                        )}
                         <span className='border-primary/25 bg-primary/[0.07] text-primary app-numeric ml-1 rounded-[4px] border px-1.5 py-0.5 text-xs font-semibold tabular-nums'>
                           {formatMultiplier(channel.multiplier)}x
                         </span>
@@ -220,14 +234,16 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                             ? t('收起详情')
                             : t('查看详情')}
                         </Button>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          className='h-8 px-2'
-                          onClick={() => setEditing(channel)}
-                        >
-                          {t('编辑渠道')}
-                        </Button>
+                        {!channel.deleted_at && (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            className='h-8 px-2'
+                            onClick={() => setEditing(channel)}
+                          >
+                            {t('编辑渠道')}
+                          </Button>
+                        )}
                         {!expandedChannelIDs.has(channel.id) && (
                           <span className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
                             <ChannelHealthSummary channel={channel} />
@@ -240,13 +256,15 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                           id={`owner-channel-details-${channel.id}`}
                           className='mt-3'
                         >
-                          <div className='border-border/60 mb-3 border-b pb-3'>
-                            <OwnerChannelActions
-                              channel={channel}
-                              onEdit={() => setEditing(channel)}
-                              onDelete={() => setDeleting(channel)}
-                            />
-                          </div>
+                          {!channel.deleted_at && (
+                            <div className='border-border/60 mb-3 border-b pb-3'>
+                              <OwnerChannelActions
+                                channel={channel}
+                                onEdit={() => setEditing(channel)}
+                                onDelete={() => setDeleting(channel)}
+                              />
+                            </div>
+                          )}
                           <div className='border-border/60 mb-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3'>
                             <span className='text-muted-foreground text-xs'>
                               {t('渠道操作')}
@@ -267,7 +285,9 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                               </p>
                             )}
                           <ChannelVerificationStatus channel={channel} />
-                          <SensitiveWordPolicyControl channel={channel} />
+                          {!channel.deleted_at && (
+                            <SensitiveWordPolicyControl channel={channel} />
+                          )}
                           <GPT56MappingStatusView
                             models={channel.declared_models}
                             status={channel.gpt56_mapping_status}
@@ -348,7 +368,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
 
 function OwnerOperationsPulse(props: { channels: MarketplaceChannel[] }) {
   const { t } = useTranslation()
-  const channels = props.channels
+  const channels = props.channels.filter((channel) => !channel.deleted_at)
   const active = channels.filter((channel) => channel.lifecycle_status === 'active').length
   const attention = channels.filter((channel) => {
     const failedModels = channel.model_verification_results.filter(

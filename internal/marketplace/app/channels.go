@@ -131,10 +131,10 @@ func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLab
 
 func ListOwnerChannels(ownerUserID int) ([]ChannelView, error) {
 	var channels []marketplaceschema.Channel
-	if err := platformdb.DB.Where("owner_user_id = ?", ownerUserID).Order("created_at desc").Find(&channels).Error; err != nil {
+	if err := platformdb.DB.Unscoped().Where("owner_user_id = ?", ownerUserID).Order("deleted_at asc, created_at desc").Find(&channels).Error; err != nil {
 		return nil, err
 	}
-	groups, err := groupsByChannelIDs(channelIDs(channels))
+	groups, err := groupsByChannelIDsWithDeleted(channelIDs(channels))
 	if err != nil {
 		return nil, err
 	}
@@ -338,12 +338,20 @@ func loadOwnedChannelGroup(ownerUserID int, channelID string) (*marketplaceschem
 }
 
 func groupsByChannelIDs(ids []string) (map[string]*marketplaceschema.Group, error) {
+	return groupsByChannelIDsQuery(platformdb.DB, ids)
+}
+
+func groupsByChannelIDsWithDeleted(ids []string) (map[string]*marketplaceschema.Group, error) {
+	return groupsByChannelIDsQuery(platformdb.DB.Unscoped(), ids)
+}
+
+func groupsByChannelIDsQuery(query *gorm.DB, ids []string) (map[string]*marketplaceschema.Group, error) {
 	result := make(map[string]*marketplaceschema.Group)
 	if len(ids) == 0 {
 		return result, nil
 	}
 	var groups []marketplaceschema.Group
-	if err := platformdb.DB.Where("channel_id IN ?", ids).Find(&groups).Error; err != nil {
+	if err := query.Where("channel_id IN ?", ids).Find(&groups).Error; err != nil {
 		return nil, err
 	}
 	for index := range groups {

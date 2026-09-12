@@ -41,8 +41,10 @@ export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
     page: 1,
     pageSize: 20,
   })
-  const runningCount = props.channels.filter((channel) =>
-    ['active', 'degraded'].includes(channel.lifecycle_status)
+  const runningCount = props.channels.filter(
+    (channel) =>
+      !channel.deleted_at &&
+      ['active', 'degraded'].includes(channel.lifecycle_status)
   ).length
   const period = useMemo(() => formatPeriod(range, t), [range, t])
   const metrics = [
@@ -106,6 +108,7 @@ export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
                 {props.channels.map((channel) => (
                   <SelectItem key={channel.id} value={channel.id}>
                     {channel.system_display_name}
+                    {channel.deleted_at ? ` (${t('已删除')})` : ''}
                   </SelectItem>
                 ))}
               </SelectGroup>

@@ -14,6 +14,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import dayjs from '@/lib/dayjs'
 import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -28,8 +29,8 @@ import {
 } from '@/components/ui/select'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { DataTablePage } from '@/components/data-table'
-import { useMyMarketplaceUsageLogs } from '@/features/marketplace/hooks'
 import { exportMyMarketplaceUsageLogs } from '@/features/marketplace/api'
+import { useMyMarketplaceUsageLogs } from '@/features/marketplace/hooks'
 import type {
   MarketplaceChannel,
   MarketplaceOwnerUsageLog,
@@ -37,7 +38,6 @@ import type {
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import { useOwnerChannelLogColumns } from './owner-channel-log-columns'
 import { OwnerChannelLogDetailsDialog } from './owner-channel-log-details-dialog'
-import { toast } from 'sonner'
 
 interface DateRange {
   start?: Date
@@ -131,7 +131,8 @@ export function OwnerChannelUsageLogs(props: {
     try {
       const blob = await exportMyMarketplaceUsageLogs({
         channelId: channelId === 'all' ? undefined : channelId,
-        status: status === 'success' || status === 'failed' ? status : undefined,
+        status:
+          status === 'success' || status === 'failed' ? status : undefined,
         search: search || undefined,
         startTimestamp: toTimestamp(range.start),
         endTimestamp: toTimestamp(range.end),
@@ -148,7 +149,9 @@ export function OwnerChannelUsageLogs(props: {
       URL.revokeObjectURL(url)
       toast.success(t('渠道日志已导出'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('渠道日志导出失败'))
+      toast.error(
+        error instanceof Error ? error.message : t('渠道日志导出失败')
+      )
     } finally {
       setExporting(false)
     }
@@ -294,6 +297,7 @@ function OwnerLogToolbar(props: {
                 {props.channels.map((channel) => (
                   <SelectItem key={channel.id} value={channel.id}>
                     {channel.system_display_name}
+                    {channel.deleted_at ? ` (${t('已删除')})` : ''}
                   </SelectItem>
                 ))}
               </SelectGroup>

@@ -2,11 +2,11 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
-	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -63,6 +63,11 @@ func TestOwnerCanOnlyDeleteOwnMarketplaceChannel(t *testing.T) {
 	require.ErrorIs(t, db.First(&marketplaceschema.RankingSnapshot{}, "group_id = ?", group.ID).Error, gorm.ErrRecordNotFound)
 	require.NoError(t, db.First(&marketplaceschema.VerificationRun{}, "channel_id = ?", channel.ID).Error)
 	require.NoError(t, db.First(&marketplaceschema.Settlement{}, "group_id = ?", group.ID).Error)
+	channels, err := ListOwnerChannels(42)
+	require.NoError(t, err)
+	require.Len(t, channels, 1)
+	require.NotNil(t, channels[0].DeletedAt)
+	require.Equal(t, int64(1), channels[0].RequestCount)
 }
 
 func TestAdminCanDeleteAnotherOwnersMarketplaceChannel(t *testing.T) {
@@ -84,7 +89,7 @@ func TestAdminCanDeleteAnotherOwnersMarketplaceChannel(t *testing.T) {
 	require.ErrorIs(t, db.First(&marketplaceschema.Channel{}, "id = ?", channel.ID).Error, gorm.ErrRecordNotFound)
 }
 
-func TestDeletingMarketplaceChannelForfeitsOnlyPendingEarnings(t *testing.T) {
+func TestDeletingMarketplaceChannelKeepsPendingEarningsFrozen(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(
 		&marketplaceschema.Channel{},
@@ -101,24 +106,18 @@ func TestDeletingMarketplaceChannelForfeitsOnlyPendingEarnings(t *testing.T) {
 	group := autoRouteTestGroup("forfeit-delete", channel.ID, channel.OwnerUserID, 1)
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&group).Error)
+	availableAt := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
 	require.NoError(t, db.Create([]marketplaceschema.Settlement{
-		{RequestID: "forfeit-pending", GroupID: group.ID, OwnerUserID: 99, OwnerNetAmount: 125, PendingAccountID: "pending-99", Status: "pending"},
+		{RequestID: "keep-pending", GroupID: group.ID, OwnerUserID: 99, OwnerNetAmount: 125, PendingAccountID: "pending-99", Status: "pending", AvailableAt: availableAt},
 		{RequestID: "keep-released", GroupID: group.ID, OwnerUserID: 99, OwnerNetAmount: 250, Status: "released"},
 	}).Error)
 
-	marketplacesettlement.RegisterForfeitHook(func(_ *gorm.DB, accountID string, adminID int, amount int, _ string) error {
-		require.Equal(t, "pending-99", accountID)
-		require.Equal(t, 1, adminID)
-		require.Equal(t, 125, amount)
-		return nil
-	})
-	t.Cleanup(func() { marketplacesettlement.RegisterForfeitHook(nil) })
-
 	require.NoError(t, DeleteAdminChannel(channel.ID))
 	var pending, released marketplaceschema.Settlement
-	require.NoError(t, db.Where("request_id = ?", "forfeit-pending").First(&pending).Error)
+	require.NoError(t, db.Where("request_id = ?", "keep-pending").First(&pending).Error)
 	require.NoError(t, db.Where("request_id = ?", "keep-released").First(&released).Error)
-	require.Equal(t, "forfeited", pending.Status)
+	require.Equal(t, "pending", pending.Status)
+	require.Equal(t, availableAt, pending.AvailableAt)
 	require.Equal(t, "released", released.Status)
 }
 

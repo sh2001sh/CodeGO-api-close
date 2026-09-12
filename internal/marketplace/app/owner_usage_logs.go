@@ -340,7 +340,7 @@ func hasOwnerUsageContentFilters(query OwnerUsageLogQuery) bool {
 
 func loadOwnerUsageChannels(ownerUserID int, selectedChannelID string) ([]ownerUsageChannel, error) {
 	var channels []marketplaceschema.Channel
-	db := platformdb.DB.Where("owner_user_id = ?", ownerUserID)
+	db := platformdb.DB.Unscoped().Where("owner_user_id = ?", ownerUserID)
 	if selectedChannelID != "" {
 		db = db.Where("id = ?", selectedChannelID)
 	}
@@ -357,7 +357,7 @@ func loadOwnerUsageChannels(ownerUserID int, selectedChannelID string) ([]ownerU
 	}
 	var groups []marketplaceschema.Group
 	if len(channelIDs) > 0 {
-		if err := platformdb.DB.Where("channel_id IN ?", channelIDs).Find(&groups).Error; err != nil {
+		if err := platformdb.DB.Unscoped().Where("channel_id IN ?", channelIDs).Find(&groups).Error; err != nil {
 			return nil, err
 		}
 	}

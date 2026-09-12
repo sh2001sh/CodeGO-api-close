@@ -45,6 +45,10 @@ func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Gr
 		LastReviewReason:                 channel.LastReviewReason, VerificationDueAt: group.VerificationDueAt,
 		CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt,
 	}
+	if channel.DeletedAt.Valid {
+		deletedAt := channel.DeletedAt.Time
+		view.DeletedAt = &deletedAt
+	}
 	if latest, err := LatestVerification(channel.ID); err == nil && latest != nil {
 		view.VerificationStage = latest.Stage
 		view.VerificationSummary = latest.Summary

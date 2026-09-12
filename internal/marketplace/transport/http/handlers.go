@@ -423,7 +423,7 @@ func queueOwnedChannelAction(c *gin.Context, queue func(string) error) {
 		return
 	}
 	for _, channel := range channels {
-		if channel.ID == c.Param("id") {
+		if channel.ID == c.Param("id") && channel.DeletedAt == nil {
 			if err := queue(channel.ID); err != nil {
 				httpapi.ApiError(c, err)
 				return

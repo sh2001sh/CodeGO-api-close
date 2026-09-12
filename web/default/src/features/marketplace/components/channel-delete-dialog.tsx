@@ -31,7 +31,7 @@ export function ChannelDeleteDialog(props: {
       onOpenChange={props.onOpenChange}
       title={t('删除渠道')}
       desc={t(
-        '删除后，该渠道会立即从分组市场、API Key 分组和 Auto 路由池中移除，无法恢复。历史检测与结算记录将保留用于审计。'
+        '删除后，该渠道会立即从分组市场、API Key 分组和 Auto 路由池中移除，无法恢复。历史检测、使用日志与结算记录会保留，冻结期内的待结算收益仍按原时间到账。'
       )}
       confirmText={t('确认删除')}
       destructive

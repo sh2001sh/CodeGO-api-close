@@ -53,6 +53,9 @@ export function OwnerOperationsPanel({
   const { t } = useTranslation()
   const client = useQueryClient()
   const channels = useMyMarketplaceChannels()
+  const manageableChannels = (channels.data ?? []).filter(
+    (channel) => !channel.deleted_at
+  )
   const [range, setRange] = useState<DateRange>(() => ({
     start: dayjs().startOf('day').toDate(),
     end: dayjs().endOf('day').toDate(),
@@ -62,7 +65,11 @@ export function OwnerOperationsPanel({
   const [search, setSearch] = useState(initialUserSearch)
   const [channelID, setChannelID] = useState(focus?.channelId ?? '')
   const [rankingSort, setRankingSort] = useState<OwnerUsageSort>('requests')
-  const activeChannelID = channelID || channels.data?.[0]?.id || ''
+  const activeChannelID = manageableChannels.some(
+    (channel) => channel.id === channelID
+  )
+    ? channelID
+    : manageableChannels[0]?.id || ''
   const usage = useQuery({
     queryKey: [
       'marketplace-owner-usage',
@@ -283,7 +290,7 @@ export function OwnerOperationsPanel({
       <div className='grid divide-y 2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] 2xl:divide-x 2xl:divide-y-0'>
         <BargainRequests query={requests} client={client} />
         <UserWelfarePanel
-          channels={channels.data ?? []}
+          channels={manageableChannels}
           activeChannelID={activeChannelID}
           onChannelChange={(value) => {
             setChannelID(value)

@@ -116,6 +116,56 @@ func TestBillingSessionSettlementCapsAtReservedQuotaWhenBalanceIsInsufficient(t 
 	require.EqualValues(t, 10_000, snapshot.ConsumedTotal)
 }
 
+type partiallyAvailableSubscriptionFunding struct {
+	available int64
+	reserved  int64
+	settled   int64
+}
+
+func (f *partiallyAvailableSubscriptionFunding) Source() string { return BillingSourceSubscription }
+
+func (f *partiallyAvailableSubscriptionFunding) PreConsume(amount int) error {
+	f.reserved = int64(amount)
+	return nil
+}
+
+func (f *partiallyAvailableSubscriptionFunding) Settle(delta int) error {
+	f.settled += int64(delta)
+	return nil
+}
+
+func (f *partiallyAvailableSubscriptionFunding) Refund() error { return nil }
+
+func (f *partiallyAvailableSubscriptionFunding) ReserveAdditional(amount int64) error {
+	if amount > f.available {
+		return billingdomain.ErrInsufficientBalance
+	}
+	f.available -= amount
+	f.reserved += amount
+	return nil
+}
+
+func (f *partiallyAvailableSubscriptionFunding) AvailableBalance() (int64, error) {
+	return f.available, nil
+}
+
+func TestBillingSessionSubscriptionSettlementConsumesRemainingBalanceOnShortfall(t *testing.T) {
+	funding := &partiallyAvailableSubscriptionFunding{available: 750}
+	info := &relaycommon.RelayInfo{}
+	session := &BillingSession{
+		relayInfo:        info,
+		funding:          funding,
+		preConsumedQuota: 250,
+	}
+
+	require.NoError(t, session.Settle(2_000))
+	require.Zero(t, funding.settled)
+	require.Zero(t, funding.available)
+	require.Equal(t, 1_000, info.BillingSettledQuota)
+	require.Zero(t, info.SubscriptionPostDelta)
+	require.True(t, info.BillingSettled)
+}
+
 func TestBillingSessionReserveDoesNotDoubleCountSubscriptionAdditionalQuota(t *testing.T) {
 	originalHooks := subscriptionFundingHooks
 	t.Cleanup(func() { subscriptionFundingHooks = originalHooks })

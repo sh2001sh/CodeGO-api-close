@@ -145,15 +145,31 @@ func BindTokenToMarketplaceRoutePool(userID, tokenID int, poolID string) (int, e
 // BindTokenToMarketplaceGroupResult binds an existing token, or creates one
 // for the current user when tokenID is zero.
 func BindTokenToMarketplaceGroupResult(consumerUserID, tokenID int, groupID string) (int, error) {
+	groupID = strings.TrimSpace(groupID)
 	groupValue := TokenGroupValue(groupID)
-	binding, err := ResolveTokenGroupBinding(groupValue, consumerUserID)
-	if err != nil {
-		return 0, err
-	}
-	if binding == nil {
-		return 0, errors.New("市场分组不存在")
+	displayName := ""
+	if strings.HasPrefix(groupID, officialAutoRoutePrefix) {
+		officialName := strings.TrimSpace(strings.TrimPrefix(groupID, officialAutoRoutePrefix))
+		models, err := officialStatusModels(consumerUserID)
+		if err != nil {
+			return 0, err
+		}
+		if officialName == "" || len(models[officialName]) == 0 {
+			return 0, errors.New("官方分组不存在或当前账号不可用")
+		}
+		groupValue = officialName
+		displayName = officialName
+	} else {
+		binding, err := ResolveTokenGroupBinding(groupValue, consumerUserID)
+		if err != nil {
+			return 0, err
+		}
+		if binding == nil {
+			return 0, errors.New("市场分组不存在")
+		}
 	}
 	var token *identityschema.Token
+	var err error
 	if tokenID > 0 {
 		token, err = identityapp.GetUserToken(consumerUserID, tokenID)
 		if err != nil {
@@ -164,12 +180,15 @@ func BindTokenToMarketplaceGroupResult(consumerUserID, tokenID int, groupID stri
 		if generateErr != nil {
 			return 0, generateErr
 		}
-		var group marketplaceschema.Group
-		if err := platformdb.DB.First(&group, "id = ?", groupID).Error; err != nil {
-			return 0, err
+		if displayName == "" {
+			var group marketplaceschema.Group
+			if err := platformdb.DB.First(&group, "id = ?", groupID).Error; err != nil {
+				return 0, err
+			}
+			displayName = group.SystemDisplayName
 		}
 		token = &identityschema.Token{
-			UserId: consumerUserID, Name: "市场分组 - " + group.SystemDisplayName,
+			UserId: consumerUserID, Name: "市场分组 - " + displayName,
 			Key: key, CreatedTime: platformruntime.GetTimestamp(), ExpiredTime: -1,
 			UnlimitedQuota: true,
 		}

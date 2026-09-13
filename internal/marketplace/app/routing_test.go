@@ -6,6 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
+	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -124,6 +126,29 @@ func TestMarketplaceTokenBindingCreatesTokenWhenNoneSelected(t *testing.T) {
 	require.Equal(t, "market:auto-group", token.Group)
 	require.True(t, token.UnlimitedQuota)
 	require.NotEmpty(t, token.Key)
+}
+
+func TestOfficialGroupCanBindExistingToken(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	originalGroups := gatewaygroups.UserUsableGroups2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(originalGroups))
+	})
+	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"official-pro":"官方 Pro"}`))
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Group{}, &gatewayschema.Ability{},
+		&gatewayschema.Channel{}, &identityschema.User{}, &identityschema.Token{},
+	))
+	require.NoError(t, db.Create(&identityschema.User{Id: 20, Username: "official-user", Group: "default"}).Error)
+	require.NoError(t, db.Create(&gatewayschema.Channel{Id: 901, Status: constant.ChannelStatusEnabled}).Error)
+	require.NoError(t, db.Create(&gatewayschema.Ability{Group: "official-pro", Model: "gpt-6-astra", ChannelId: 901, Enabled: true}).Error)
+	require.NoError(t, db.Create(&identityschema.Token{Id: 2, UserId: 20, Key: "official-token", CrossGroupRetry: true}).Error)
+
+	require.NoError(t, BindTokenToMarketplaceGroup(20, 2, "official:official-pro"))
+	var token identityschema.Token
+	require.NoError(t, db.First(&token, 2).Error)
+	require.Equal(t, "official-pro", token.Group)
+	require.False(t, token.CrossGroupRetry)
 }
 
 func openMarketplaceAppTestDB(t *testing.T) *gorm.DB {

@@ -60,7 +60,7 @@ function group(input: Partial<MarketplaceGroup> & Pick<MarketplaceGroup, 'id' | 
 }
 
 export const MOCK_MARKETPLACE_GROUPS: MarketplaceGroup[] = [
-  group({ id: 'mock-official-fast', system_display_name: '官方 · GPT-5.2 Fast', source_label: '官方来源', provider_type: 'OpenAI', models: ['gpt-5.2', 'gpt-5.2-mini'], multiplier: 1, rank: 1, score: 96, avg_ttft_ms: 280, avg_latency_ms: 610, avg_tps: 92 }),
+  group({ id: 'mock-official-fast', system_display_name: '官方 · GPT-5.2 Fast', source_type: 'official', source_label: '官方', provider_type: 'OpenAI', models: ['gpt-5.2', 'gpt-5.2-mini'], multiplier: 1, rank: 1, score: 96, avg_ttft_ms: 280, avg_latency_ms: 610, avg_tps: 92 }),
   group({ id: 'mock-community-steady', system_display_name: '社区 · 稳定编程组', source_label: '社区贡献', provider_type: 'OpenAI Compatible', models: ['gpt-5.2', 'claude-3-7-sonnet'], multiplier: 1.15, rank: 2, score: 93, avg_ttft_ms: 360, avg_latency_ms: 740, avg_tps: 78 }),
   group({ id: 'mock-cloud-balanced', system_display_name: '云端 · Balanced', source_label: '第三方市场', provider_type: 'Azure OpenAI', models: ['gpt-5.2', 'gpt-4.1'], multiplier: 1.25, rank: 3, score: 90, avg_ttft_ms: 430, avg_latency_ms: 860, avg_tps: 70 }),
   group({ id: 'mock-lab-low-cost', system_display_name: '实验室 · 低倍率', source_label: '第三方市场', provider_type: 'DeepSeek', models: ['deepseek-v3', 'deepseek-r1'], multiplier: 0.88, rank: 4, score: 87, avg_ttft_ms: 510, avg_latency_ms: 980, avg_tps: 62 }),

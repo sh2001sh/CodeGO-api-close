@@ -131,3 +131,14 @@ func TestSortGroupItemsPutsMissingTTFTSamplesLast(t *testing.T) {
 		require.Equal(t, "missing", items[1].ID)
 	}
 }
+
+func TestOfficialGroupMatchesAnySelectedModel(t *testing.T) {
+	t.Parallel()
+
+	item := GroupListItem{
+		ID:     "official:pro",
+		Models: []string{"gpt-6-astra", "claude-sonnet-4-5"},
+	}
+	require.True(t, matchesGroupListItemQuery(item, GroupQuery{Models: []string{"gemini", "sonnet"}}))
+	require.False(t, matchesGroupListItemQuery(item, GroupQuery{Models: []string{"gemini", "deepseek"}}))
+}

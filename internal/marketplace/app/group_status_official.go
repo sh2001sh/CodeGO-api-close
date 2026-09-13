@@ -70,6 +70,13 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 	if err != nil || len(models) == 0 {
 		return nil, err
 	}
+	userGroup := ""
+	if viewerUserID > 0 {
+		userGroup, err = identitystore.LoadUserGroup(viewerUserID, false)
+		if err != nil {
+			return nil, err
+		}
+	}
 	names := make([]string, 0, len(models))
 	groupIndices := make(map[string]int, len(models))
 	for name := range models {
@@ -104,7 +111,8 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		recent := series[groupIndices[name]]
 		items = append(items, GroupListItem{
 			ID: key, PublicSlug: key, SystemDisplayName: name,
-			SourceType: marketplacedomain.SourceTypeOfficial, SourceLabel: "官方", Multiplier: 1,
+			SourceType: marketplacedomain.SourceTypeOfficial, SourceLabel: "官方",
+			Multiplier:      gatewayroutingapp.GetUserGroupRatio(userGroup, name),
 			LifecycleStatus: marketplacedomain.LifecycleActive, Models: models[name],
 			ModelVerificationResults: []ModelVerificationResult{}, GPT56MappingResults: []GPT56MappingResult{},
 			RequestCount: summary.RequestCount, SuccessRate: summary.SuccessRate, WilsonSuccessRate: summary.SuccessRate,

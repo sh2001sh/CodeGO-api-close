@@ -133,7 +133,11 @@ func matchesGroupListItemQuery(item GroupListItem, query GroupQuery) bool {
 			return false
 		}
 	}
-	if query.Model != "" && !containsSubstringFold(item.Models, query.Model) {
+	modelFilters := query.Models
+	if len(modelFilters) == 0 && strings.TrimSpace(query.Model) != "" {
+		modelFilters = []string{query.Model}
+	}
+	if len(modelFilters) > 0 && !matchesAnyModelFilter(item.Models, modelFilters) {
 		return false
 	}
 	if query.Source != "" && !strings.EqualFold(item.SourceLabel, query.Source) {

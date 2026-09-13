@@ -282,12 +282,12 @@ export function MarketGroupCard(props: {
       <RecentRequestStrip group={group} />
 
       <div className='gact' onClick={(event) => event.stopPropagation()}>
-        {!isOfficial && lifecycleOn && props.authed && (
+        {lifecycleOn && props.authed && (
           <button className='btn mini' onClick={() => props.onBindKey(group)}>
             绑定 Key
           </button>
         )}
-        {!isOfficial && props.authed && (
+        {props.authed && (
           <button className='btn mini' onClick={() => props.onTest(group)}>
             连通性测试
           </button>

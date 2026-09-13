@@ -51,7 +51,6 @@ import {
   getMarketplaceRoutePools,
   startMarketplaceBatchTest,
 } from '@/features/marketplace/api'
-import { OfficialMarketGroups } from '@/features/marketplace/components/official-market-groups'
 import {
   useMarketplaceAutoRoutePool,
   useMarketplaceGroups,
@@ -596,6 +595,7 @@ export function DawnMarket() {
                   }
                 >
                   <option value=''>全部来源</option>
+                  <option value='官方'>官方</option>
                   {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
                     <option key={source} value={source}>
                       {source}
@@ -644,7 +644,32 @@ export function DawnMarket() {
             </div>
 
             <div>
-              <OfficialMarketGroups poolID={activePoolID} enabled={authed} />
+              {(filters.search || (filters.models?.length ?? 0) > 0) &&
+                !groupsQuery.isLoading &&
+                (!groupsQuery.isError || mockMode) && (
+                  <div className='market-search-status' role='status'>
+                    {filters.search ? `搜索“${filters.search}”` : '当前筛选'}
+                    {(filters.models?.length ?? 0) > 0
+                      ? ` · ${filters.models?.length} 个模型`
+                      : ''}
+                    {' · 找到 '}
+                    {groupsQuery.data?.total ?? groups.length} 个分组
+                    <button
+                      className='btn mini'
+                      onClick={() => {
+                        setSearch('')
+                        setFilters((current) => ({
+                          ...current,
+                          search: '',
+                          models: [],
+                          page: 1,
+                        }))
+                      }}
+                    >
+                      清除筛选
+                    </button>
+                  </div>
+                )}
               {groupsQuery.isLoading ? (
                 <div className='empty'>
                   <span className='eic'>
@@ -661,30 +686,6 @@ export function DawnMarket() {
                 />
               ) : groups.length ? (
                 <>
-                  {(filters.search || (filters.models?.length ?? 0) > 0) && (
-                    <div className='market-search-status' role='status'>
-                      {filters.search ? `搜索“${filters.search}”` : '当前筛选'}
-                      {(filters.models?.length ?? 0) > 0
-                        ? ` · ${filters.models?.length} 个模型`
-                        : ''}
-                      {' 找到 '}
-                      {groupsQuery.data?.total ?? groups.length} 个分组
-                      <button
-                        className='btn mini'
-                        onClick={() => {
-                          setSearch('')
-                          setFilters((current) => ({
-                            ...current,
-                            search: '',
-                            models: [],
-                            page: 1,
-                          }))
-                        }}
-                      >
-                        清除筛选
-                      </button>
-                    </div>
-                  )}
                   {groups.map((group) => (
                     <MarketGroupCard
                       key={group.id}

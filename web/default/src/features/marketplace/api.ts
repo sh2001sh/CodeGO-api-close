@@ -736,7 +736,9 @@ export async function setAdminMarketplaceChannelPaused(
 export async function bindMarketplaceToken(groupId: string, tokenId: number) {
   const response = await api.post<
     ApiResponse<{ token_id: number; group_id: string }>
-  >(`/api/marketplace/groups/${groupId}/bind-token`, { token_id: tokenId })
+  >(`/api/marketplace/groups/${encodeURIComponent(groupId)}/bind-token`, {
+    token_id: tokenId,
+  })
   if (!response.data.success)
     throw new Error(response.data.message || '绑定失败')
   return requireData(response.data)

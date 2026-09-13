@@ -7,6 +7,9 @@ import (
 	"time"
 
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
+	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -65,14 +68,59 @@ func StartBatchMarketplaceTest(userID int, req BatchTestRequest) (*BatchTestView
 	for _, group := range groups {
 		allowed[group.ID] = group
 	}
+	officialModels := map[string][]string{}
+	userGroup := ""
+	for _, rawID := range req.GroupIDs {
+		if strings.HasPrefix(strings.TrimSpace(rawID), officialAutoRoutePrefix) {
+			officialModels, err = officialStatusModels(userID)
+			if err != nil {
+				return nil, err
+			}
+			userGroup, err = identitystore.LoadUserGroup(userID, false)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
 	seen := map[string]bool{}
 	items := make([]BatchTestItem, 0, len(req.GroupIDs))
+	targets := make(map[string]batchTestTarget, len(req.GroupIDs))
 	for _, rawID := range req.GroupIDs {
 		id := strings.TrimSpace(rawID)
 		if id == "" || seen[id] {
 			continue
 		}
 		seen[id] = true
+		if strings.HasPrefix(id, officialAutoRoutePrefix) {
+			name := strings.TrimSpace(strings.TrimPrefix(id, officialAutoRoutePrefix))
+			if !containsFold(officialModels[name], model) {
+				return nil, errors.New("所选官方分组不支持指定模型")
+			}
+			availableChannels, loadErr := gatewaystore.LoadEnabledChannelsForGroup(name)
+			if loadErr != nil {
+				return nil, loadErr
+			}
+			channelID := 0
+			for _, channel := range availableChannels {
+				if gatewaystore.IsChannelEnabledForGroupModel(name, model, channel.Id) {
+					channelID = channel.Id
+					break
+				}
+			}
+			if channelID <= 0 {
+				return nil, errors.New("所选官方分组当前没有可用于测试的渠道")
+			}
+			items = append(items, BatchTestItem{GroupID: id, GroupName: name, Status: "queued"})
+			targets[id] = batchTestTarget{
+				InternalChannelID: channelID,
+				GroupID:           id,
+				InternalGroup:     name,
+				CreditPoolPolicy:  marketplacedomain.CreditPolicyOfficialDefault,
+				Multiplier:        gatewayroutingapp.GetUserGroupRatio(userGroup, name),
+			}
+			continue
+		}
 		group, ok := allowed[id]
 		if !ok {
 			return nil, errors.New("包含不可用或无权访问的分组")
@@ -81,19 +129,11 @@ func StartBatchMarketplaceTest(userID int, req BatchTestRequest) (*BatchTestView
 		if !containsFold(decodeModels(channel.DeclaredModels), model) {
 			return nil, errors.New("所选分组不支持指定模型")
 		}
-		items = append(items, BatchTestItem{GroupID: id, GroupName: group.SystemDisplayName, Status: "queued"})
-	}
-	if len(items) == 0 {
-		return nil, errors.New("没有有效的测试分组")
-	}
-	targets := make(map[string]batchTestTarget, len(items))
-	for _, item := range items {
-		group := allowed[item.GroupID]
-		channel := channels[group.ChannelID]
 		if channel.InternalChannelID == nil || *channel.InternalChannelID <= 0 {
 			return nil, errors.New("所选分组缺少可用的内部渠道")
 		}
-		targets[item.GroupID] = batchTestTarget{
+		items = append(items, BatchTestItem{GroupID: id, GroupName: group.SystemDisplayName, Status: "queued"})
+		targets[id] = batchTestTarget{
 			InternalChannelID: *channel.InternalChannelID,
 			GroupID:           group.ID,
 			InternalGroup:     group.InternalGroupName,
@@ -102,6 +142,9 @@ func StartBatchMarketplaceTest(userID int, req BatchTestRequest) (*BatchTestView
 			Multiplier:        group.Multiplier,
 			ModelPrices:       decodeChannelModelPrices(channel.ModelPrices),
 		}
+	}
+	if len(items) == 0 {
+		return nil, errors.New("没有有效的测试分组")
 	}
 	view := &BatchTestView{
 		ID: platformruntime.GetUUID(), OwnerUserID: userID, Model: model,

@@ -79,15 +79,35 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	requestCopy := *responsesReq
 	request := &requestCopy
 	err = nil
-	if changed, normalizeErr := request.NormalizeCodexDelegationBootstrap(); normalizeErr != nil {
-		return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	} else if changed {
-		logger.LogInfo(c, "normalized Codex delegation bootstrap into user message")
-	}
-	if changed, normalizeErr := request.NormalizeCodexAgentMessages(); normalizeErr != nil {
-		return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	} else if changed {
-		logger.LogInfo(c, "normalized Codex agent message into user message")
+	portableResponses := info.ApiType != appconstant.APITypeCodex
+	if portableResponses {
+		if changed, normalizeErr := request.NormalizeCodexDelegationBootstrap(); normalizeErr != nil {
+			return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		} else if changed {
+			logger.LogInfo(c, "normalized Codex delegation bootstrap into user message")
+		}
+		if changed, normalizeErr := request.NormalizeCodexAgentMessages(); normalizeErr != nil {
+			return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		} else if changed {
+			logger.LogInfo(c, "normalized Codex agent message into user message")
+		}
+		if changed, normalizeErr := request.LiftCodexAdditionalTools(); normalizeErr != nil {
+			return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		} else if changed {
+			logger.LogInfo(c, "lifted Codex additional tools into top-level tools")
+		}
+		if changed, normalizeErr := request.StripCodexMessageMetadata(); normalizeErr != nil {
+			return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		} else if changed {
+			logger.LogInfo(c, "stripped Codex agent message metadata")
+		}
+		if request.NormalizePortableReasoningEffort() {
+			logger.LogInfo(c, "normalized unsupported Codex ultra reasoning effort to xhigh")
+		}
+		if len(request.ClientMetadata) > 0 {
+			request.ClientMetadata = nil
+			logger.LogInfo(c, "stripped Codex client metadata for portable Responses upstream")
+		}
 	}
 	if changed, normalizeErr := request.NormalizeCodexInputItemIDs(); normalizeErr != nil {
 		return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
@@ -223,7 +243,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				outboundJSON = normalized
 			}
 		}
-		if !preserveRemoteCompactionV2Body && shouldNormalizeResponsesCompatibilityBody(outboundJSON) {
+		if portableResponses && !preserveRemoteCompactionV2Body && shouldNormalizeResponsesCompatibilityBody(outboundJSON) {
 			normalized, changed, err := normalizeResponsesCompatibilityBody(outboundJSON)
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())

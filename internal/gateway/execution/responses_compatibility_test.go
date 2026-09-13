@@ -50,6 +50,29 @@ func TestNormalizeResponsesCompatibilityBodyConvertsAgentMessage(t *testing.T) {
 	require.JSONEq(t, `{"model":"gpt-6-astra","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"child result"}]}]}`, string(normalized))
 }
 
+func TestNormalizeResponsesCompatibilityBodyLiftsCodexMultiAgentFields(t *testing.T) {
+	body := []byte(`{
+		"model":"gpt-6-astra",
+		"client_metadata":{"thread_id":"private"},
+		"reasoning":{"effort":"ultra"},
+		"input":[
+			{"type":"additional_tools","id":"at_1","role":"system","tools":[{"type":"function","name":"spawn_agent","parameters":{"type":"object"}}]},
+			{"type":"agent_message","id":"amsg_1","author":"/root/worker","recipient":"/root","phase":"commentary","content":[{"type":"input_text","text":"done"}]}
+		]
+	}`)
+
+	normalized, changed, err := normalizeResponsesCompatibilityBody(body)
+
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{
+		"model":"gpt-6-astra",
+		"reasoning":{"effort":"xhigh"},
+		"tools":[{"type":"function","name":"spawn_agent","parameters":{"type":"object"}}],
+		"input":[{"type":"message","id":"amsg_1","role":"user","content":[{"type":"input_text","text":"done"}]}]
+	}`, string(normalized))
+}
+
 func TestNormalizeResponsesBackgroundFalseOmitsUnsupportedField(t *testing.T) {
 	body := []byte(`{"model":"gpt-5","input":"hello","background":false,"stream":true}`)
 

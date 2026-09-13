@@ -32,11 +32,13 @@ func isGenericInvalidRequestParametersError(apiErr *types.NewAPIError) bool {
 
 func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {
 	return bytes.Contains(body, []byte(`"transformer_metadata"`)) ||
+		bytes.Contains(body, []byte(`"client_metadata"`)) ||
 		bytes.Contains(body, []byte(`"include"`)) ||
 		bytes.Contains(body, []byte(`"namespace"`)) ||
 		bytes.Contains(body, []byte(`"function_call_output"`)) ||
 		bytes.Contains(body, []byte(`"custom_tool_call_output"`)) ||
 		bytes.Contains(body, []byte(`"tool_search_output"`)) ||
+		bytes.Contains(body, []byte(`"additional_tools"`)) ||
 		bytes.Contains(body, []byte(`"agent_message"`))
 }
 
@@ -121,7 +123,10 @@ func normalizeResponsesCompatibilityBody(body []byte) ([]byte, bool, error) {
 	}
 	changed := false
 	if raw, ok := payload["input"]; ok {
-		request := &dto.OpenAIResponsesRequest{Input: raw}
+		request := &dto.OpenAIResponsesRequest{Input: raw, Tools: payload["tools"]}
+		if reasoningRaw := payload["reasoning"]; len(reasoningRaw) > 0 {
+			_ = platformencoding.Unmarshal(reasoningRaw, &request.Reasoning)
+		}
 		if delegationChanged, err := request.NormalizeCodexDelegationBootstrap(); err != nil {
 			return nil, false, err
 		} else if delegationChanged {
@@ -132,12 +137,36 @@ func normalizeResponsesCompatibilityBody(body []byte) ([]byte, bool, error) {
 		} else if agentMessageChanged {
 			changed = true
 		}
+		if additionalToolsChanged, err := request.LiftCodexAdditionalTools(); err != nil {
+			return nil, false, err
+		} else if additionalToolsChanged {
+			changed = true
+		}
+		if metadataChanged, err := request.StripCodexMessageMetadata(); err != nil {
+			return nil, false, err
+		} else if metadataChanged {
+			changed = true
+		}
+		if request.NormalizePortableReasoningEffort() {
+			changed = true
+		}
 		if changed {
 			payload["input"] = request.Input
+			if len(request.Tools) > 0 {
+				payload["tools"] = request.Tools
+			}
+			if request.Reasoning != nil {
+				reasoning, _ := platformencoding.Marshal(request.Reasoning)
+				payload["reasoning"] = reasoning
+			}
 		}
 	}
 	if _, ok := payload["transformer_metadata"]; ok {
 		delete(payload, "transformer_metadata")
+		changed = true
+	}
+	if _, ok := payload["client_metadata"]; ok {
+		delete(payload, "client_metadata")
 		changed = true
 	}
 	if raw, ok := payload["include"]; ok {

@@ -3,6 +3,7 @@ package dto
 import (
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"strings"
 )
 
@@ -122,6 +123,9 @@ func (r *OpenAIResponsesRequest) NormalizeCodexAgentMessages() (bool, error) {
 		}
 		item["type"] = json.RawMessage(`"message"`)
 		item["role"] = json.RawMessage(`"user"`)
+		delete(item, "author")
+		delete(item, "recipient")
+		delete(item, "phase")
 		changed = true
 	}
 	if !changed {
@@ -133,6 +137,102 @@ func (r *OpenAIResponsesRequest) NormalizeCodexAgentMessages() (bool, error) {
 	}
 	r.Input = normalized
 	return true, nil
+}
+
+// LiftCodexAdditionalTools moves turn-scoped tool declarations emitted by
+// Codex Responses Lite from input into the public top-level tools field.
+func (r *OpenAIResponsesRequest) LiftCodexAdditionalTools() (bool, error) {
+	if r == nil || len(r.Input) == 0 {
+		return false, nil
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(r.Input, &items); err != nil {
+		return false, nil
+	}
+	var tools []json.RawMessage
+	if len(r.Tools) > 0 && string(r.Tools) != "null" {
+		if err := json.Unmarshal(r.Tools, &tools); err != nil {
+			return false, err
+		}
+	}
+	kept := make([]json.RawMessage, 0, len(items))
+	changed := false
+	for _, raw := range items {
+		var item map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &item); err != nil {
+			kept = append(kept, raw)
+			continue
+		}
+		typ, _ := jsonRawString(item["type"])
+		if typ != "additional_tools" {
+			kept = append(kept, raw)
+			continue
+		}
+		var additional []json.RawMessage
+		if err := json.Unmarshal(item["tools"], &additional); err != nil {
+			return false, fmt.Errorf("additional_tools.tools must be an array: %w", err)
+		}
+		tools = append(tools, additional...)
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	input, err := json.Marshal(kept)
+	if err != nil {
+		return false, err
+	}
+	encodedTools, err := json.Marshal(tools)
+	if err != nil {
+		return false, err
+	}
+	r.Input, r.Tools = input, encodedTools
+	return true, nil
+}
+
+// StripCodexMessageMetadata removes private multi-agent routing fields from
+// ordinary messages after Codex history has been converted for a portable
+// Responses provider.
+func (r *OpenAIResponsesRequest) StripCodexMessageMetadata() (bool, error) {
+	if r == nil || len(r.Input) == 0 {
+		return false, nil
+	}
+	var items []map[string]json.RawMessage
+	if err := json.Unmarshal(r.Input, &items); err != nil {
+		return false, nil
+	}
+	changed := false
+	for _, item := range items {
+		typ, _ := jsonRawString(item["type"])
+		if typ != "message" {
+			continue
+		}
+		for _, field := range []string{"author", "recipient", "phase"} {
+			if _, found := item[field]; found {
+				delete(item, field)
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return false, nil
+	}
+	normalized, err := json.Marshal(items)
+	if err != nil {
+		return false, err
+	}
+	r.Input = normalized
+	return true, nil
+}
+
+// NormalizePortableReasoningEffort handles clients that send Codex's UI-only
+// ultra level directly. xhigh is the closest portable wire-level fallback.
+func (r *OpenAIResponsesRequest) NormalizePortableReasoningEffort() bool {
+	if r == nil || r.Reasoning == nil || !strings.EqualFold(strings.TrimSpace(r.Reasoning.Effort), "ultra") {
+		return false
+	}
+	r.Reasoning.Effort = "xhigh"
+	return true
 }
 
 func isCodexDelegationItem(item map[string]json.RawMessage) bool {

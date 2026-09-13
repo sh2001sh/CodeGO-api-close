@@ -78,6 +78,32 @@ func TestNormalizeCodexAgentMessages(t *testing.T) {
 	]`, string(req.Input))
 }
 
+func TestNormalizeCodexAgentMessagesStripsPrivateMetadata(t *testing.T) {
+	req := &OpenAIResponsesRequest{Input: json.RawMessage(`[{"type":"agent_message","author":"/root/a","recipient":"/root","phase":"commentary","content":[{"type":"input_text","text":"done"}]}]`)}
+	changed, err := req.NormalizeCodexAgentMessages()
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `[{"type":"message","role":"user","content":[{"type":"input_text","text":"done"}]}]`, string(req.Input))
+}
+
+func TestLiftCodexAdditionalTools(t *testing.T) {
+	req := &OpenAIResponsesRequest{
+		Input: json.RawMessage(`[{"type":"message","role":"user","content":"hi"},{"type":"additional_tools","tools":[{"type":"function","name":"spawn_agent"}]}]`),
+		Tools: json.RawMessage(`[{"type":"function","name":"existing"}]`),
+	}
+	changed, err := req.LiftCodexAdditionalTools()
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `[{"type":"message","role":"user","content":"hi"}]`, string(req.Input))
+	require.JSONEq(t, `[{"type":"function","name":"existing"},{"type":"function","name":"spawn_agent"}]`, string(req.Tools))
+}
+
+func TestNormalizePortableReasoningEffort(t *testing.T) {
+	req := &OpenAIResponsesRequest{Reasoning: &Reasoning{Effort: "ultra"}}
+	require.True(t, req.NormalizePortableReasoningEffort())
+	require.Equal(t, "xhigh", req.Reasoning.Effort)
+}
+
 func TestNormalizeCodexAgentMessagesPreservesStringInput(t *testing.T) {
 	req := &OpenAIResponsesRequest{Input: json.RawMessage(`"hello"`)}
 	changed, err := req.NormalizeCodexAgentMessages()

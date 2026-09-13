@@ -64,6 +64,28 @@ func TestNormalizeCodexDelegationBootstrapSupportsTUIAndRejectsInvalidXML(t *tes
 	require.Equal(t, "function_call_output", items[1]["type"])
 }
 
+func TestNormalizeCodexAgentMessages(t *testing.T) {
+	req := &OpenAIResponsesRequest{Input: json.RawMessage(`[
+		{"type":"agent_message","content":[{"type":"input_text","text":"plain"},{"type":"encrypted_content","encrypted_content":"delegated task"}]},
+		{"type":"message","role":"user","content":[{"type":"input_text","text":"keep"}]}
+	]`)}
+	changed, err := req.NormalizeCodexAgentMessages()
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `[
+		{"type":"message","role":"user","content":[{"type":"input_text","text":"plain"},{"type":"input_text","text":"delegated task"}]},
+		{"type":"message","role":"user","content":[{"type":"input_text","text":"keep"}]}
+	]`, string(req.Input))
+}
+
+func TestNormalizeCodexAgentMessagesPreservesStringInput(t *testing.T) {
+	req := &OpenAIResponsesRequest{Input: json.RawMessage(`"hello"`)}
+	changed, err := req.NormalizeCodexAgentMessages()
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.JSONEq(t, `"hello"`, string(req.Input))
+}
+
 func TestOpenAIResponsesRequestNormalizesRemoteCompactionItemIDs(t *testing.T) {
 	request := &OpenAIResponsesRequest{
 		Input: json.RawMessage(`[

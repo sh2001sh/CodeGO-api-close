@@ -35,7 +35,8 @@ func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {
 		bytes.Contains(body, []byte(`"namespace"`)) ||
 		bytes.Contains(body, []byte(`"function_call_output"`)) ||
 		bytes.Contains(body, []byte(`"custom_tool_call_output"`)) ||
-		bytes.Contains(body, []byte(`"tool_search_output"`))
+		bytes.Contains(body, []byte(`"tool_search_output"`)) ||
+		bytes.Contains(body, []byte(`"agent_message"`))
 }
 
 // normalizeResponsesCompatibilityBody repairs deterministic compatibility
@@ -51,8 +52,15 @@ func normalizeResponsesCompatibilityBody(body []byte) ([]byte, bool, error) {
 		if delegationChanged, err := request.NormalizeCodexDelegationBootstrap(); err != nil {
 			return nil, false, err
 		} else if delegationChanged {
-			payload["input"] = request.Input
 			changed = true
+		}
+		if agentMessageChanged, err := request.NormalizeCodexAgentMessages(); err != nil {
+			return nil, false, err
+		} else if agentMessageChanged {
+			changed = true
+		}
+		if changed {
+			payload["input"] = request.Input
 		}
 	}
 	if _, ok := payload["transformer_metadata"]; ok {

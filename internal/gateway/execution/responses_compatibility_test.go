@@ -37,6 +37,17 @@ func TestNormalizeResponsesCompatibilityBodyRepairsToolHistory(t *testing.T) {
 func TestShouldNormalizeResponsesCompatibilityBodyFastRejectsOrdinaryBody(t *testing.T) {
 	require.False(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","stream":true,"input":"hello"}`)))
 	require.True(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","include":["usage"]}`)))
+	require.True(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","input":[{"type":"agent_message"}]}`)))
+}
+
+func TestNormalizeResponsesCompatibilityBodyConvertsAgentMessage(t *testing.T) {
+	body := []byte(`{"model":"gpt-6-astra","input":[{"type":"agent_message","content":[{"type":"encrypted_content","encrypted_content":"child result"}]}]}`)
+
+	normalized, changed, err := normalizeResponsesCompatibilityBody(body)
+
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{"model":"gpt-6-astra","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"child result"}]}]}`, string(normalized))
 }
 
 func TestNormalizeResponsesBackgroundFalseOmitsUnsupportedField(t *testing.T) {

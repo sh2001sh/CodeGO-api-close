@@ -85,6 +85,56 @@ func (r *OpenAIResponsesRequest) NormalizeCodexDelegationBootstrap() (bool, erro
 	return true, nil
 }
 
+// NormalizeCodexAgentMessages converts Codex MultiAgent V2 agent_message
+// items into portable Responses user messages. Some Responses-compatible
+// upstreams reject agent_message even though Codex emits it as conversation
+// input after a child agent replies.
+func (r *OpenAIResponsesRequest) NormalizeCodexAgentMessages() (bool, error) {
+	if r == nil || len(r.Input) == 0 {
+		return false, nil
+	}
+	var items []map[string]json.RawMessage
+	if err := json.Unmarshal(r.Input, &items); err != nil {
+		return false, nil
+	}
+	changed := false
+	for _, item := range items {
+		typ, _ := jsonRawString(item["type"])
+		if typ != "agent_message" {
+			continue
+		}
+		var parts []map[string]json.RawMessage
+		if raw, ok := item["content"]; ok && json.Unmarshal(raw, &parts) == nil {
+			for _, part := range parts {
+				partType, _ := jsonRawString(part["type"])
+				if partType != "encrypted_content" {
+					continue
+				}
+				text, ok := jsonRawString(part["encrypted_content"])
+				if !ok {
+					continue
+				}
+				part["type"] = json.RawMessage(`"input_text"`)
+				part["text"] = mustJSONRaw(text)
+				delete(part, "encrypted_content")
+			}
+			item["content"] = mustJSONRaw(parts)
+		}
+		item["type"] = json.RawMessage(`"message"`)
+		item["role"] = json.RawMessage(`"user"`)
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	normalized, err := json.Marshal(items)
+	if err != nil {
+		return false, err
+	}
+	r.Input = normalized
+	return true, nil
+}
+
 func isCodexDelegationItem(item map[string]json.RawMessage) bool {
 	typ, _ := jsonRawString(item["type"])
 	ns, _ := jsonRawString(item["namespace"])

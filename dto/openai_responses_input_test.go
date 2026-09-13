@@ -117,6 +117,24 @@ func TestOpenAIResponsesRequestNormalizesRemoteCompactionInputIdempotently(t *te
 	require.False(t, changed)
 }
 
+func TestNormalizeCodexInputItemIDsRepairsWrongToolPrefixes(t *testing.T) {
+	request := &OpenAIResponsesRequest{Input: json.RawMessage(`[
+		{"type":"custom_tool_call","id":"fc_call","call_id":"call_1","name":"apply_patch","input":"patch"},
+		{"type":"custom_tool_call_output","id":"fco_result","call_id":"call_1","output":"done"},
+		{"type":"function_call","id":"fc_valid","call_id":"call_2","name":"read","arguments":"{}"}
+	]`)}
+
+	changed, err := request.NormalizeCodexInputItemIDs()
+
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `[
+		{"type":"custom_tool_call","id":"ctc_fc_call","call_id":"call_1","name":"apply_patch","input":"patch"},
+		{"type":"custom_tool_call_output","id":"ctco_fco_result","call_id":"call_1","output":"done"},
+		{"type":"function_call","id":"fc_valid","call_id":"call_2","name":"read","arguments":"{}"}
+	]`, string(request.Input))
+}
+
 func TestNormalizeCodexRemoteCompactionResponseAndStreamEvent(t *testing.T) {
 	response, changed, err := NormalizeCodexRemoteCompactionResponse([]byte(`{
 		"id":"resp_1",

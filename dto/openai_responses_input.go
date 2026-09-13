@@ -187,6 +187,21 @@ func (r *OpenAIResponsesRequest) NormalizeCodexRemoteCompactionInput() (bool, er
 	return true, nil
 }
 
+// NormalizeCodexInputItemIDs gives every known Responses input item an ID
+// prefix matching its type. Codex can replay a custom tool item with an fc_
+// or generic item_ ID, while strict upstreams require ctc_/ctco_ prefixes.
+func (r *OpenAIResponsesRequest) NormalizeCodexInputItemIDs() (bool, error) {
+	if r == nil || len(r.Input) == 0 {
+		return false, nil
+	}
+	items, changed, err := normalizeCodexResponseItems(r.Input, false)
+	if err != nil || !changed {
+		return changed, err
+	}
+	r.Input = items
+	return true, nil
+}
+
 // NormalizeCodexRemoteCompactionResponse normalizes item IDs in a non-stream
 // Responses payload before it is returned to a remote-compaction client.
 func NormalizeCodexRemoteCompactionResponse(body []byte) ([]byte, bool, error) {
@@ -298,10 +313,12 @@ func normalizeCodexResponseItem(raw json.RawMessage, stripNamespace bool) (json.
 	expectedPrefix := codexResponseItemIDPrefix(itemType)
 	oldID, hasID := jsonRawString(item["id"])
 	newID := oldID
-	if hasID && expectedPrefix != "" && strings.HasPrefix(oldID, "item_") {
-		suffix := strings.TrimPrefix(oldID, "item_")
-		if suffix != "" {
-			newID = expectedPrefix + "_" + suffix
+	if hasID && oldID != "" && expectedPrefix != "" && !strings.HasPrefix(oldID, expectedPrefix) {
+		newID = expectedPrefix + "_" + oldID
+		if strings.HasPrefix(oldID, "item_") {
+			newID = expectedPrefix + "_" + strings.TrimPrefix(oldID, "item_")
+		}
+		if newID != expectedPrefix+"_" {
 			normalizedID, err := json.Marshal(newID)
 			if err != nil {
 				return raw, false, "", "", err

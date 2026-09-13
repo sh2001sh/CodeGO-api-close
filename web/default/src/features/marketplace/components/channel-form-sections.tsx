@@ -26,7 +26,9 @@ export function ChannelConnectionSection(props: {
     >
       {props.editing && (
         <div className='border-primary/25 bg-primary/[0.05] text-muted-foreground rounded-md border px-3 py-2 text-xs leading-5'>
-          {t('这是编辑模式：已有配置会保留。Base URL 和 API Key 留空即可保持原值，只填写需要修改的字段。')}
+          {t(
+            '这是编辑模式：已有配置会保留。Base URL 和 API Key 留空即可保持原值，只填写需要修改的字段。'
+          )}
         </div>
       )}
       <ConnectionEndpointFields form={form} editing={props.editing} />
@@ -146,42 +148,29 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
 
 function ChannelMultiplierCardPolicy({ form }: { form: ChannelForm }) {
   const { t } = useTranslation()
-  const supported = form.watch('multiplier_card_supported')
   const enabled = form.watch('multiplier_card_user_enabled')
   return (
-    <div className='grid gap-3 rounded-md border p-3'>
-      <div className='flex items-center justify-between gap-4'>
-        <div className='space-y-0.5'>
-          <p className='text-sm font-medium'>{t('倍率卡支持')}</p>
-          <p className='text-muted-foreground text-xs leading-5'>
-            {supported
-              ? t('该渠道声明支持倍率卡路由。')
-              : t('关闭后，用户倍率卡不会在该渠道上生效。')}
-          </p>
-        </div>
-        <Switch
-          checked={supported}
-          onCheckedChange={(checked) => {
-            form.setValue('multiplier_card_supported', checked, { shouldDirty: true })
-            if (!checked) form.setValue('multiplier_card_user_enabled', false, { shouldDirty: true })
-          }}
-          aria-label={t('倍率卡支持')}
-        />
+    <div className='flex items-center justify-between gap-4 rounded-md border p-3'>
+      <div className='space-y-0.5'>
+        <p className='text-sm font-medium'>{t('允许使用倍率卡')}</p>
+        <p className='text-muted-foreground text-xs leading-5'>
+          {enabled
+            ? t('倍率卡请求可以路由到该渠道。')
+            : t('倍率卡请求不会使用该渠道。')}
+        </p>
       </div>
-      <div className='flex items-center justify-between gap-4 border-t pt-3'>
-        <div className='space-y-0.5'>
-          <p className='text-sm font-medium'>{t('允许用户使用倍率卡')}</p>
-          <p className='text-muted-foreground text-xs leading-5'>
-            {enabled ? t('用户的有效倍率卡可用于该渠道。') : t('该渠道不会消耗用户倍率卡。')}
-          </p>
-        </div>
-        <Switch
-          checked={enabled}
-          disabled={!supported}
-          onCheckedChange={(checked) => form.setValue('multiplier_card_user_enabled', checked, { shouldDirty: true })}
-          aria-label={t('允许用户使用倍率卡')}
-        />
-      </div>
+      <Switch
+        checked={enabled}
+        onCheckedChange={(checked) => {
+          form.setValue('multiplier_card_user_enabled', checked, {
+            shouldDirty: true,
+          })
+          form.setValue('multiplier_card_supported', checked, {
+            shouldDirty: true,
+          })
+        }}
+        aria-label={t('允许用户使用倍率卡')}
+      />
     </div>
   )
 }

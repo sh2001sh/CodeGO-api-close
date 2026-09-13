@@ -104,8 +104,8 @@ func TestMultiplierCardUserAccessRequiresChannelSupport(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.False(t, channel.MultiplierCardSupported)
-	require.False(t, channel.MultiplierCardUserEnabled)
+	require.True(t, channel.MultiplierCardSupported)
+	require.True(t, channel.MultiplierCardUserEnabled)
 }
 
 func TestAddingChannelModelPreservesExistingVerificationState(t *testing.T) {

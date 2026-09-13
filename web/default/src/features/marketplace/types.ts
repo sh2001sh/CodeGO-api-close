@@ -459,6 +459,8 @@ export interface MarketplaceAutoRoutePoolItem {
   observing: boolean
   request_count: number
   models: string[]
+  multiplier_card_supported?: boolean
+  multiplier_card_user_enabled?: boolean
   selected: boolean
   priority: number
 }

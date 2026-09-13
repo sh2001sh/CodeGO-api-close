@@ -6,7 +6,6 @@ import (
 
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
-	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/shopspring/decimal"
@@ -21,8 +20,7 @@ func ApplyBlindBoxConsumptionDiscount(request billingapp.BlindBoxConsumptionDisc
 		return result, nil
 	}
 	channelScope := strings.ToLower(strings.TrimSpace(request.ChannelScope))
-	if channelScope != gatewayschema.ChannelScopeOfficial &&
-		!(channelScope == gatewayschema.ChannelScopeExternal && request.MultiplierCardSupported && request.MultiplierCardUserEnabled) {
+	if !request.MultiplierCardUserEnabled {
 		return result, nil
 	}
 

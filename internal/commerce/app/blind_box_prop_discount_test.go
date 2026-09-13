@@ -22,7 +22,7 @@ func TestApplyBlindBoxConsumptionDiscountIsOfficialUnlimitedAndIdempotent(t *tes
 
 	request := billingapp.BlindBoxConsumptionDiscountRequest{
 		RequestID: "discount-official-1", UserID: prop.UserId, ChannelID: 10,
-		ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "gpt-5", Quota: 1000,
+		ChannelScope: gatewayschema.ChannelScopeOfficial, MultiplierCardUserEnabled: true, ModelName: "gpt-5", Quota: 1000,
 	}
 	first, err := ApplyBlindBoxConsumptionDiscount(request)
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestApplyBlindBoxConsumptionDiscountSeparatesNominalAndEffectiveMultiplier(
 
 	result, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
 		RequestID: "discount-effective-ratio", UserID: prop.UserId, ChannelID: 10,
-		ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "gpt-5", Quota: 999,
+		ChannelScope: gatewayschema.ChannelScopeOfficial, MultiplierCardUserEnabled: true, ModelName: "gpt-5", Quota: 999,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 899, result.QuotaAfterDiscount)
@@ -156,7 +156,7 @@ func TestApplyBlindBoxUniversalMultiplierUsesSelectedOfficialGroup(t *testing.T)
 
 	result, err := ApplyBlindBoxConsumptionDiscount(billingapp.BlindBoxConsumptionDiscountRequest{
 		RequestID: "discount-blind-box-universal", UserID: prop.UserId, ChannelID: 31,
-		ChannelScope: gatewayschema.ChannelScopeOfficial, ModelName: "claude-sonnet-4",
+		ChannelScope: gatewayschema.ChannelScopeOfficial, MultiplierCardUserEnabled: true, ModelName: "claude-sonnet-4",
 		UsingGroup: "official-claude", Quota: 1000,
 	})
 	require.NoError(t, err)

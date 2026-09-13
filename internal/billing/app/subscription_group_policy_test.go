@@ -72,7 +72,7 @@ func TestSubscriptionGroupPolicyAppliesToPreConsumeAndSettlement(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	info := &relaycommon.RelayInfo{
 		UserId: 1, OriginModelName: "gpt-5", RequestId: "subscription-policy-scale",
-		UsingGroup: "official", ChannelMeta: &relaycommon.ChannelMeta{ChannelScope: gatewayschema.ChannelScopeOfficial},
+		UsingGroup: "official", ChannelMeta: &relaycommon.ChannelMeta{ChannelScope: gatewayschema.ChannelScopeOfficial, MultiplierCardUserEnabled: true},
 		IsPlayground: true, ForcePreConsume: true,
 		PriceData: types.PriceData{GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 2}},
 	}
@@ -117,7 +117,7 @@ func TestMonthlyPassMultiplierAppliesToSubscriptionFunding(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	info := &relaycommon.RelayInfo{
 		UserId: 2, OriginModelName: "gpt-5", RequestId: "monthly-pass-subscription-funded",
-		UsingGroup: "official", ChannelMeta: &relaycommon.ChannelMeta{ChannelScope: gatewayschema.ChannelScopeOfficial},
+		UsingGroup: "official", ChannelMeta: &relaycommon.ChannelMeta{ChannelScope: gatewayschema.ChannelScopeOfficial, MultiplierCardUserEnabled: true},
 		IsPlayground: true, ForcePreConsume: true,
 		UserSetting: dto.UserSetting{FundingSourceOrder: []string{BillingSourceSubscription, BillingSourceWallet}},
 		PriceData:   types.PriceData{GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1}},

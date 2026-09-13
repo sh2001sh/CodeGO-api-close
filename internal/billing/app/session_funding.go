@@ -152,11 +152,8 @@ func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayI
 		baseQuotaScale /= groupRatio
 	}
 	var entitlement *MonthlyPassEntitlement
-	// Multiplier cards are official-channel benefits, including when a market
-	// group accepts subscription funds. Unknown scope must not grant a discount.
-	cardAllowed := relayInfo.ChannelMeta != nil &&
-		(strings.EqualFold(strings.TrimSpace(relayInfo.ChannelScope), gatewayschema.ChannelScopeOfficial) ||
-			(strings.EqualFold(strings.TrimSpace(relayInfo.ChannelScope), gatewayschema.ChannelScopeExternal) && relayInfo.ChannelMeta.MultiplierCardSupported && relayInfo.ChannelMeta.MultiplierCardUserEnabled))
+	// One policy switch controls multiplier-card eligibility for every channel.
+	cardAllowed := relayInfo.ChannelMeta != nil && relayInfo.ChannelMeta.MultiplierCardUserEnabled
 	if cardAllowed {
 		var err error
 		entitlement, err = getMonthlyPassEntitlement(relayInfo.UserId)

@@ -278,7 +278,7 @@ func channelExcludedByScope(c *gin.Context, channel *gatewayschema.Channel) bool
 	if !requiresOfficialChannel(c) || channel == nil {
 		return false
 	}
-	return !channel.IsOfficial() && !(channel.MultiplierCardSupported && channel.MultiplierCardUserEnabled)
+	return !channel.MultiplierCardUserEnabled
 }
 
 func retryFallbackChannelID(c *gin.Context) int {

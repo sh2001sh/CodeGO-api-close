@@ -412,26 +412,28 @@ type AutoRoutePoolConfig struct {
 }
 
 type AutoRoutePoolItem struct {
-	GroupID             string   `json:"group_id"`
-	SourceType          string   `json:"source_type"`
-	PublicSlug          string   `json:"public_slug"`
-	SystemDisplayName   string   `json:"system_display_name"`
-	SourceLabel         string   `json:"source_label"`
-	LifecycleStatus     string   `json:"lifecycle_status"`
-	Multiplier          float64  `json:"multiplier"`
-	Availability        float64  `json:"availability"`
-	SuccessRate         float64  `json:"success_rate"`
-	CacheHitRate        float64  `json:"cache_hit_rate"`
-	AvgTTFTMs           float64  `json:"avg_ttft_ms"`
-	AvgLatencyMS        float64  `json:"avg_latency_ms"`
-	LatestRequestStatus string   `json:"latest_request_status"`
-	MetricsAvailable    bool     `json:"metrics_available"`
-	RouteScore          float64  `json:"route_score"`
-	Observing           bool     `json:"observing"`
-	RequestCount        int64    `json:"request_count"`
-	Models              []string `json:"models"`
-	Selected            bool     `json:"selected"`
-	Priority            int      `json:"priority"`
+	GroupID                   string   `json:"group_id"`
+	SourceType                string   `json:"source_type"`
+	PublicSlug                string   `json:"public_slug"`
+	SystemDisplayName         string   `json:"system_display_name"`
+	SourceLabel               string   `json:"source_label"`
+	LifecycleStatus           string   `json:"lifecycle_status"`
+	Multiplier                float64  `json:"multiplier"`
+	Availability              float64  `json:"availability"`
+	SuccessRate               float64  `json:"success_rate"`
+	CacheHitRate              float64  `json:"cache_hit_rate"`
+	AvgTTFTMs                 float64  `json:"avg_ttft_ms"`
+	AvgLatencyMS              float64  `json:"avg_latency_ms"`
+	LatestRequestStatus       string   `json:"latest_request_status"`
+	MetricsAvailable          bool     `json:"metrics_available"`
+	RouteScore                float64  `json:"route_score"`
+	Observing                 bool     `json:"observing"`
+	RequestCount              int64    `json:"request_count"`
+	Models                    []string `json:"models"`
+	MultiplierCardSupported   bool     `json:"multiplier_card_supported"`
+	MultiplierCardUserEnabled bool     `json:"multiplier_card_user_enabled"`
+	Selected                  bool     `json:"selected"`
+	Priority                  int      `json:"priority"`
 }
 
 type AutoRoutePoolView struct {

@@ -34,6 +34,7 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	}
 	if req.MultiplierCardUserEnabled != nil {
 		channel.MultiplierCardUserEnabled = *req.MultiplierCardUserEnabled
+		channel.MultiplierCardSupported = channel.MultiplierCardUserEnabled
 	}
 	if !channel.MultiplierCardSupported {
 		channel.MultiplierCardUserEnabled = false

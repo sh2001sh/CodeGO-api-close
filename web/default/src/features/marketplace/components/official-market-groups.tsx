@@ -179,6 +179,12 @@ export function OfficialMarketGroups(props: {
               <span>{t('24H 请求')}</span>
             </div>
           </div>
+          {item.multiplier_card_user_enabled && (
+            <div className='capline'>
+              <span>{t('倍率卡')}</span>
+              <b>{t('支持使用')}</b>
+            </div>
+          )}
           <div className='mline'>
             {item.models.slice(0, 5).map((model) => (
               <span className='mtag' key={model}>

@@ -188,10 +188,10 @@ export function MarketGroupCard(props: {
         </b>
       </div>
 
-      {group.multiplier_card_supported && (
+      {group.multiplier_card_user_enabled && (
         <div className='capline'>
           <span>倍率卡</span>
-          <b>{group.multiplier_card_user_enabled ? '支持用户使用' : '渠道支持，暂不开放'}</b>
+          <b>支持使用</b>
         </div>
       )}
 

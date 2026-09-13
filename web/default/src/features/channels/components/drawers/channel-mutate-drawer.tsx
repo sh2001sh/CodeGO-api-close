@@ -2457,6 +2457,31 @@ export function ChannelMutateDrawer({
 
                       <FormField
                         control={form.control}
+                        name='multiplier_card_user_enabled'
+                        render={({ field }) => (
+                          <FormItem className='flex items-center justify-between border-t pt-4'>
+                            <div className='space-y-0.5'>
+                              <FormLabel>{t('允许使用倍率卡')}</FormLabel>
+                              <FormDescription>
+                                {field.value
+                                  ? t(
+                                      '倍率卡请求可以路由到该渠道，市场页会显示倍率卡标识。'
+                                    )
+                                  : t('倍率卡请求不会使用该渠道。')}
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
                         name='auto_ban'
                         render={({ field }) => (
                           <FormItem className='flex items-center justify-between'>

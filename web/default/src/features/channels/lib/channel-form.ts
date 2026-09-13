@@ -49,6 +49,7 @@ export const channelFormSchema = z.object({
   header_override: z.string().optional(),
   settings: z.string().optional(),
   sensitive_word_interception_enabled: z.boolean(),
+  multiplier_card_user_enabled: z.boolean(),
   other: z.string().optional(),
   // Multi-key options (not sent to backend directly)
   multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
@@ -109,6 +110,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   header_override: '',
   settings: '{}',
   sensitive_word_interception_enabled: true,
+  multiplier_card_user_enabled: false,
   other: '',
   multi_key_mode: 'single',
   multi_key_type: 'random',
@@ -244,6 +246,7 @@ export function transformChannelToFormDefaults(
     settings: channel.settings || '{}',
     sensitive_word_interception_enabled:
       channel.sensitive_word_interception_enabled ?? true,
+    multiplier_card_user_enabled: channel.multiplier_card_user_enabled ?? false,
     other: channel.other || '',
     multi_key_mode: 'single',
     multi_key_type: channel.channel_info.multi_key_mode || 'random',
@@ -427,6 +430,8 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     settings: buildSettingsJSON(formData),
     sensitive_word_interception_enabled:
       formData.sensitive_word_interception_enabled,
+    multiplier_card_supported: formData.multiplier_card_user_enabled,
+    multiplier_card_user_enabled: formData.multiplier_card_user_enabled,
     other: formData.other || '',
   }
 
@@ -477,6 +482,8 @@ export function transformFormDataToUpdatePayload(
     settings: buildSettingsJSON(formData),
     sensitive_word_interception_enabled:
       formData.sensitive_word_interception_enabled,
+    multiplier_card_supported: formData.multiplier_card_user_enabled,
+    multiplier_card_user_enabled: formData.multiplier_card_user_enabled,
     other: formData.other || '',
   }
 

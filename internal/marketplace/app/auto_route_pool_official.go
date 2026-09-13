@@ -89,6 +89,15 @@ func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int
 			RouteScore:          round2(math.Max(multiplier, 0.000001)),
 			Models:              models, Selected: isSelected, Priority: priority,
 		})
+		if channels, loadErr := gatewaystore.LoadEnabledChannelsForGroup(groupName); loadErr == nil {
+			for _, channel := range channels {
+				if channel.MultiplierCardUserEnabled {
+					items[len(items)-1].MultiplierCardSupported = true
+					items[len(items)-1].MultiplierCardUserEnabled = true
+					break
+				}
+			}
+		}
 	}
 	return items
 }

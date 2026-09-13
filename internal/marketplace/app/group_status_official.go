@@ -112,6 +112,15 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 			RecentRequestSeries: recent, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 			LatestRequestStatus: latestRequestStatus(recent),
 		})
+		if channels, loadErr := gatewaystore.LoadEnabledChannelsForGroup(name); loadErr == nil {
+			for _, channel := range channels {
+				if channel.MultiplierCardUserEnabled {
+					items[len(items)-1].MultiplierCardSupported = true
+					items[len(items)-1].MultiplierCardUserEnabled = true
+					break
+				}
+			}
+		}
 	}
 	return items, nil
 }

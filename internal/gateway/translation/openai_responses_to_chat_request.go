@@ -169,12 +169,39 @@ func responsesInputToChatMessages(raw json.RawMessage, meta *ResponsesChatBridge
 				return nil, nil, fmt.Errorf("input[%d].tools must be an array", index)
 			}
 			additionalTools = append(additionalTools, tools...)
+		case "agent_message":
+			if text := responsesAgentMessageText(envelope["content"]); text != "" {
+				builder.flushPendingAssistant()
+				builder.messages = append(builder.messages, dto.Message{Role: "user", Content: text})
+			}
 		default:
 			return nil, nil, fmt.Errorf("unsupported responses input item type %q", itemType)
 		}
 	}
 	builder.flushPendingAssistant()
 	return builder.messages, additionalTools, nil
+}
+
+func responsesAgentMessageText(raw json.RawMessage) string {
+	var parts []map[string]json.RawMessage
+	if len(raw) == 0 || platformencoding.Unmarshal(raw, &parts) != nil {
+		return ""
+	}
+	var builder strings.Builder
+	for _, part := range parts {
+		typ := rawString(part["type"])
+		switch typ {
+		case "input_text", "output_text", "text":
+			builder.WriteString(rawString(part["text"]))
+		case "encrypted_content":
+			text := rawString(part["encrypted_content"])
+			if text == "" {
+				text = rawString(part["text"])
+			}
+			builder.WriteString(text)
+		}
+	}
+	return strings.TrimSpace(builder.String())
 }
 
 type responsesChatMessageBuilder struct {

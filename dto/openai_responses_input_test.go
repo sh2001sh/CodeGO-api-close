@@ -33,6 +33,37 @@ func TestOpenAIResponsesRequestPreservesStringInput(t *testing.T) {
 	require.JSONEq(t, `"hello"`, string(request.Input))
 }
 
+func TestNormalizeCodexDelegationBootstrap(t *testing.T) {
+	req := &OpenAIResponsesRequest{Input: json.RawMessage(`[{"type":"function_call_output","namespace":"codex_app","name":"create_thread","output":"<codex_delegation>do work</codex_delegation>"}]`)}
+	changed, err := req.NormalizeCodexDelegationBootstrap()
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `[{"type":"message","role":"user","content":[{"type":"input_text","text":"<codex_delegation>do work</codex_delegation>"}]}]`, string(req.Input))
+}
+
+func TestNormalizeCodexDelegationBootstrapKeepsPairedToolOutput(t *testing.T) {
+	raw := json.RawMessage(`[{"type":"function_call","call_id":"call-1","name":"create_thread","namespace":"codex_app","arguments":"{}"},{"type":"function_call_output","call_id":"call-1","namespace":"codex_app","name":"create_thread","output":"<codex_delegation>do work</codex_delegation>"}]`)
+	req := &OpenAIResponsesRequest{Input: raw}
+	changed, err := req.NormalizeCodexDelegationBootstrap()
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, raw, req.Input)
+}
+
+func TestNormalizeCodexDelegationBootstrapSupportsTUIAndRejectsInvalidXML(t *testing.T) {
+	req := &OpenAIResponsesRequest{Input: json.RawMessage(`[
+		{"type":"function_call_output","namespace":"codex_tui","name":"send_message_to_thread","output":"<codex_delegation><message>continue</message></codex_delegation>"},
+		{"type":"function_call_output","namespace":"codex_app","name":"create_thread","output":"<codex_delegation>"}
+	]`)}
+	changed, err := req.NormalizeCodexDelegationBootstrap()
+	require.NoError(t, err)
+	require.True(t, changed)
+	var items []map[string]any
+	require.NoError(t, json.Unmarshal(req.Input, &items))
+	require.Equal(t, "message", items[0]["type"])
+	require.Equal(t, "function_call_output", items[1]["type"])
+}
+
 func TestOpenAIResponsesRequestNormalizesRemoteCompactionItemIDs(t *testing.T) {
 	request := &OpenAIResponsesRequest{
 		Input: json.RawMessage(`[

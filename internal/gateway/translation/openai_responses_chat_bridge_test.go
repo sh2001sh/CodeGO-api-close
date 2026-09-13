@@ -97,6 +97,18 @@ func TestResponsesRequestToChatCompletionsRejectsPreviousResponseID(t *testing.T
 	require.ErrorContains(t, err, "previous_response_id")
 }
 
+func TestResponsesRequestToChatCompletionsConvertsAgentMessageEncryptedContent(t *testing.T) {
+	request := &dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Input: json.RawMessage(`[{"type":"agent_message","content":[{"type":"encrypted_content","encrypted_content":"delegated task"}]}]`),
+	}
+	chat, _, err := ResponsesRequestToChatCompletionsRequest(request)
+	require.NoError(t, err)
+	require.Len(t, chat.Messages, 1)
+	require.Equal(t, "user", chat.Messages[0].Role)
+	require.Equal(t, "delegated task", chat.Messages[0].Content)
+}
+
 func TestChatCompletionsResponseToResponsesPreservesMixedOutput(t *testing.T) {
 	message := dto.Message{Role: "assistant", Content: "I will call the tool."}
 	reasoning := "tool required"

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sh2001sh/new-api/dto"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	"github.com/sh2001sh/new-api/types"
 )
@@ -45,6 +46,15 @@ func normalizeResponsesCompatibilityBody(body []byte) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	changed := false
+	if raw, ok := payload["input"]; ok {
+		request := &dto.OpenAIResponsesRequest{Input: raw}
+		if delegationChanged, err := request.NormalizeCodexDelegationBootstrap(); err != nil {
+			return nil, false, err
+		} else if delegationChanged {
+			payload["input"] = request.Input
+			changed = true
+		}
+	}
 	if _, ok := payload["transformer_metadata"]; ok {
 		delete(payload, "transformer_metadata")
 		changed = true

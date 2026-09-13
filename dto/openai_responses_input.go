@@ -2,6 +2,7 @@ package dto
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"strings"
 )
 
@@ -45,6 +46,78 @@ func (r *OpenAIResponsesRequest) StripUnsupportedInputNamespaces() (bool, error)
 	}
 	r.Input = normalizedInput
 	return true, nil
+}
+
+// NormalizeCodexDelegationBootstrap converts the function_call_output emitted
+// by Codex when create_thread/send_message_to_thread starts a child agent into
+// a normal user message. Delegation output is a new user turn, not a tool
+// result; forwarding it as function_call_output makes strict Responses
+// gateways reject the request because it has no matching call_id.
+func (r *OpenAIResponsesRequest) NormalizeCodexDelegationBootstrap() (bool, error) {
+	if r == nil || len(r.Input) == 0 {
+		return false, nil
+	}
+	var items []map[string]json.RawMessage
+	if err := json.Unmarshal(r.Input, &items); err != nil {
+		return false, nil
+	}
+	changed := false
+	for index, item := range items {
+		if !isCodexDelegationItem(item) {
+			continue
+		}
+		output, _ := jsonRawString(item["output"])
+		items[index] = map[string]json.RawMessage{
+			"type":    json.RawMessage(`"message"`),
+			"role":    json.RawMessage(`"user"`),
+			"content": mustJSONRaw([]map[string]string{{"type": "input_text", "text": output}}),
+		}
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	normalized, err := json.Marshal(items)
+	if err != nil {
+		return false, err
+	}
+	r.Input = normalized
+	return true, nil
+}
+
+func isCodexDelegationItem(item map[string]json.RawMessage) bool {
+	typ, _ := jsonRawString(item["type"])
+	ns, _ := jsonRawString(item["namespace"])
+	name, _ := jsonRawString(item["name"])
+	if typ != "function_call_output" || (ns != "codex_app" && ns != "codex_tui") ||
+		(name != "create_thread" && name != "send_message_to_thread") {
+		return false
+	}
+	callID, callIDPresent := item["call_id"]
+	if callIDPresent {
+		value, ok := jsonRawString(callID)
+		if !ok || strings.TrimSpace(value) != "" {
+			return false
+		}
+	}
+	output, ok := jsonRawString(item["output"])
+	return ok && validCodexDelegationEnvelope(output)
+}
+
+func validCodexDelegationEnvelope(value string) bool {
+	var envelope struct {
+		XMLName xml.Name
+		Inner   string `xml:",innerxml"`
+	}
+	if err := xml.Unmarshal([]byte(value), &envelope); err != nil {
+		return false
+	}
+	return envelope.XMLName.Local == "codex_delegation" && strings.TrimSpace(envelope.Inner) != ""
+}
+
+func mustJSONRaw(value any) json.RawMessage {
+	encoded, _ := json.Marshal(value)
+	return encoded
 }
 
 // NormalizeCodexRemoteCompactionInput converts legacy generic item IDs in a

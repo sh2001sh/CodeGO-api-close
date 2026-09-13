@@ -79,6 +79,11 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	requestCopy := *responsesReq
 	request := &requestCopy
 	err = nil
+	if changed, normalizeErr := request.NormalizeCodexDelegationBootstrap(); normalizeErr != nil {
+		return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	} else if changed {
+		logger.LogInfo(c, "normalized Codex delegation bootstrap into user message")
+	}
 	if err := relaycommon.ModelMappedHelper(c, info, request); err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}

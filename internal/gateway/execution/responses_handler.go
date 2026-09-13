@@ -382,6 +382,7 @@ func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo,
 	// provider validation failure to the caller. Explicit field errors continue
 	// through the targeted compatibility normalizers below.
 	if isGenericInvalidRequestParametersError(apiErr) && len(jsonBody) > 0 {
+		logger.LogInfo(c, "Responses generic 400 request shape: "+summarizeResponsesRequestShape(jsonBody))
 		logger.LogInfo(c, "retrying Responses request after generic upstream invalid-parameters response")
 		resp, err = doResponsesRequest(c, info, adaptor, bytes.NewReader(jsonBody), jsonBody)
 		if err != nil {

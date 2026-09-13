@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,78 @@ func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {
 		bytes.Contains(body, []byte(`"custom_tool_call_output"`)) ||
 		bytes.Contains(body, []byte(`"tool_search_output"`)) ||
 		bytes.Contains(body, []byte(`"agent_message"`))
+}
+
+func summarizeResponsesRequestShape(body []byte) string {
+	var payload map[string]json.RawMessage
+	if platformencoding.Unmarshal(body, &payload) != nil {
+		return `{"decode_error":true}`
+	}
+	shape := map[string]any{
+		"top_level_fields": sortedRawKeys(payload),
+		"body_bytes":       len(body),
+	}
+	var items []map[string]json.RawMessage
+	if platformencoding.Unmarshal(payload["input"], &items) == nil {
+		itemTypes := make(map[string]int)
+		itemFields := make(map[string]map[string]struct{})
+		contentTypes := make(map[string]int)
+		for _, item := range items {
+			itemType := rawString(item["type"])
+			if itemType == "" {
+				itemType = "<empty>"
+			}
+			itemTypes[itemType]++
+			if itemFields[itemType] == nil {
+				itemFields[itemType] = make(map[string]struct{})
+			}
+			for key := range item {
+				itemFields[itemType][key] = struct{}{}
+			}
+			var parts []map[string]json.RawMessage
+			if platformencoding.Unmarshal(item["content"], &parts) == nil {
+				for _, part := range parts {
+					contentTypes[rawString(part["type"])]++
+				}
+			}
+		}
+		fields := make(map[string][]string, len(itemFields))
+		for itemType, keys := range itemFields {
+			values := make([]string, 0, len(keys))
+			for key := range keys {
+				values = append(values, key)
+			}
+			sort.Strings(values)
+			fields[itemType] = values
+		}
+		shape["input_count"] = len(items)
+		shape["input_types"] = itemTypes
+		shape["input_fields"] = fields
+		shape["content_types"] = contentTypes
+	}
+	var tools []map[string]json.RawMessage
+	if platformencoding.Unmarshal(payload["tools"], &tools) == nil {
+		toolTypes := make(map[string]int)
+		for _, tool := range tools {
+			toolTypes[rawString(tool["type"])]++
+		}
+		shape["tool_count"] = len(tools)
+		shape["tool_types"] = toolTypes
+	}
+	encoded, err := platformencoding.Marshal(shape)
+	if err != nil {
+		return `{"encode_error":true}`
+	}
+	return string(encoded)
+}
+
+func sortedRawKeys(values map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // normalizeResponsesCompatibilityBody repairs deterministic compatibility

@@ -361,6 +361,23 @@ func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo,
 		return httpResp, nil
 	}
 	apiErr := platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+	// Some OpenAI-compatible gateways intermittently return only a generic 400
+	// during request validation. No response body has been sent at this point,
+	// so replaying the exact body once is safe and avoids exposing a transient
+	// provider validation failure to the caller. Explicit field errors continue
+	// through the targeted compatibility normalizers below.
+	if isGenericInvalidRequestParametersError(apiErr) && len(jsonBody) > 0 {
+		logger.LogInfo(c, "retrying Responses request after generic upstream invalid-parameters response")
+		resp, err = doResponsesRequest(c, info, adaptor, bytes.NewReader(jsonBody), jsonBody)
+		if err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+		}
+		httpResp, _ = resp.(*http.Response)
+		if httpResp == nil || httpResp.StatusCode == http.StatusOK {
+			return httpResp, nil
+		}
+		apiErr = platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+	}
 	if retryJSON, ok := normalizePreviousResponseIDRetry(jsonBody, apiErr); ok {
 		if original, found := c.Get("responses_conversation_window_fallback"); found {
 			if fullBody, valid := original.([]byte); valid && len(fullBody) > 0 {

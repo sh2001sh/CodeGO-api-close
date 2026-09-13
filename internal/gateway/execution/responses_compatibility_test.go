@@ -161,3 +161,21 @@ func TestNormalizeRejectedResponsesFieldAcceptsGenericInvalidRequestCode(t *test
 	require.Equal(t, "max_output_tokens", field)
 	require.NotContains(t, string(normalized), "max_output_tokens")
 }
+
+func TestIsGenericInvalidRequestParametersError(t *testing.T) {
+	matching := types.WithOpenAIError(types.OpenAIError{
+		Code:    "invalid_request_error",
+		Message: "Invalid request parameters. Check the request and try again.",
+	}, http.StatusBadRequest)
+	require.True(t, isGenericInvalidRequestParametersError(matching))
+
+	explicit := types.WithOpenAIError(types.OpenAIError{
+		Code:    "invalid_request_error",
+		Message: "Unknown parameter: input[64].status",
+	}, http.StatusBadRequest)
+	require.False(t, isGenericInvalidRequestParametersError(explicit))
+
+	require.False(t, isGenericInvalidRequestParametersError(types.WithOpenAIError(
+		types.OpenAIError{Message: "Invalid request parameters"}, http.StatusOK,
+	)))
+}

@@ -51,6 +51,7 @@ import {
   getMarketplaceRoutePools,
   startMarketplaceBatchTest,
 } from '@/features/marketplace/api'
+import { OfficialMarketGroups } from '@/features/marketplace/components/official-market-groups'
 import {
   useMarketplaceAutoRoutePool,
   useMarketplaceGroups,
@@ -643,6 +644,7 @@ export function DawnMarket() {
             </div>
 
             <div>
+              <OfficialMarketGroups poolID={activePoolID} enabled={authed} />
               {groupsQuery.isLoading ? (
                 <div className='empty'>
                   <span className='eic'>

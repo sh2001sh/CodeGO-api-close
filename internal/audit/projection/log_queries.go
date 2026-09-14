@@ -221,16 +221,24 @@ func loadUsedLogGroups(userID int) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	var err error
-	if platformdb.UsingPostgreSQL && userID == 0 {
+	if platformdb.UsingPostgreSQL {
 		// Seek to the next distinct key in idx_logs_group rather than visiting
 		// every historical log just to produce at most 200 filter options.
-		err = platformdb.LogDB.WithContext(ctx).Raw(`WITH RECURSIVE used_groups AS (
-			(SELECT "group" AS name, 1 AS n FROM logs WHERE "group" > '' ORDER BY "group" LIMIT 1)
+		// User-scoped seeks use idx_logs_user_group and constrain both branches.
+		scope := ""
+		args := make([]any, 0, 3)
+		if userID > 0 {
+			scope = "user_id = ? AND "
+			args = append(args, userID, userID)
+		}
+		args = append(args, logGroupOptionLimit)
+		err = platformdb.LogDB.WithContext(ctx).Raw(fmt.Sprintf(`WITH RECURSIVE used_groups AS (
+			(SELECT "group" AS name, 1 AS n FROM logs WHERE %s"group" > '' ORDER BY "group" LIMIT 1)
 			UNION ALL
 			SELECT next.name, used_groups.n + 1 FROM used_groups
-			CROSS JOIN LATERAL (SELECT "group" AS name FROM logs WHERE "group" > used_groups.name ORDER BY "group" LIMIT 1) AS next
+			CROSS JOIN LATERAL (SELECT "group" AS name FROM logs WHERE %s"group" > used_groups.name ORDER BY "group" LIMIT 1) AS next
 			WHERE used_groups.n < ?
-		) SELECT name FROM used_groups ORDER BY name`, logGroupOptionLimit).Scan(&groups).Error
+		) SELECT name FROM used_groups ORDER BY name`, scope, scope), args...).Scan(&groups).Error
 	} else {
 		err = query.WithContext(ctx).Order(groupCol+" ASC").Limit(logGroupOptionLimit).Pluck(groupCol, &groups).Error
 	}

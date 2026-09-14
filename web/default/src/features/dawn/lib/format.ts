@@ -33,7 +33,7 @@ export function successRatePercent(
 }
 
 /** 毫秒 → 秒文本。 */
-export function sec(ms: number | null | undefined, digits = 2): string {
+export function sec(ms: number | null | undefined, digits = 3): string {
   if (ms == null || !Number.isFinite(ms)) return '—'
   return (ms / 1000).toFixed(digits)
 }

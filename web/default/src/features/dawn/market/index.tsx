@@ -686,38 +686,80 @@ export function DawnMarket() {
                 />
               ) : groups.length ? (
                 <>
-                  {groups.map((group) => (
-                    <MarketGroupCard
-                      key={group.id}
-                      group={group}
-                      selected={selected === group.id}
-                      inPool={poolMemberIDs.has(group.id)}
-                      poolName={activePoolName}
-                      authed={authed}
-                      expanded={expanded.has(group.id)}
-                      onToggleSelect={() =>
-                        setSelected((current) =>
-                          current === group.id ? null : group.id
-                        )
-                      }
-                      onToggleExpand={() =>
-                        setExpanded((current) => {
-                          const next = new Set(current)
-                          if (next.has(group.id)) next.delete(group.id)
-                          else next.add(group.id)
-                          return next
-                        })
-                      }
-                      onUse={(target) => setUseGroup(target)}
-                      onBindKey={(target) => setUseGroup(target)}
-                      onTest={(target) => setTestGroup(target)}
-                      onBargain={(target) => setBargainGroup(target)}
-                      onJoinPool={(target) => void joinPool(target)}
-                      priceInfo={groupPrices.get(group.id)}
-                      modelPrices={modelPrices.get(group.id)}
-                      modelFees={modelFees.get(group.id)}
-                    />
-                  ))}
+                  {(() => {
+                    const hasSearch =
+                      Boolean(filters.search.trim()) ||
+                      (filters.models?.length ?? 0) > 0
+                    const official = groups.filter(
+                      (group) => group.source_type === 'official'
+                    )
+                    const thirdParty = groups.filter(
+                      (group) => group.source_type !== 'official'
+                    )
+                    // 搜索/筛选时只显示匹配结果，避免固定官方区块把结果推到首屏以下。
+                    const sections = hasSearch
+                      ? [{ key: 'results', title: '筛选结果', items: groups }]
+                      : [
+                          {
+                            key: 'official',
+                            title: '官方分组',
+                            items: official,
+                          },
+                          {
+                            key: 'third-party',
+                            title: '第三方分组',
+                            items: thirdParty,
+                          },
+                        ]
+                    return sections.map((section) =>
+                      section.items.length ? (
+                        <section
+                          key={section.key}
+                          className='market-group-section'
+                          aria-labelledby={`market-section-${section.key}`}
+                        >
+                          <div className='market-group-section-head'>
+                            <h2 id={`market-section-${section.key}`}>
+                              {section.title}
+                            </h2>
+                            <span>{section.items.length} 个分组</span>
+                          </div>
+                          {section.items.map((group) => (
+                            <MarketGroupCard
+                              key={group.id}
+                              group={group}
+                              selected={selected === group.id}
+                              inPool={poolMemberIDs.has(group.id)}
+                              poolName={activePoolName}
+                              authed={authed}
+                              expanded={expanded.has(group.id)}
+                              onToggleSelect={() =>
+                                setSelected((current) =>
+                                  current === group.id ? null : group.id
+                                )
+                              }
+                              onToggleExpand={() =>
+                                setExpanded((current) => {
+                                  const next = new Set(current)
+                                  if (next.has(group.id)) next.delete(group.id)
+                                  else next.add(group.id)
+                                  return next
+                                })
+                              }
+                              onUse={(target) => setUseGroup(target)}
+                              onBindKey={(target) => setUseGroup(target)}
+                              onTest={(target) => setTestGroup(target)}
+                              onBargain={(target) => setBargainGroup(target)}
+                              onJoinPool={(target) => void joinPool(target)}
+                              priceInfo={groupPrices.get(group.id)}
+                              modelPrices={modelPrices.get(group.id)}
+                              modelFees={modelFees.get(group.id)}
+                            />
+                          ))}
+                        </section>
+                      ) : null
+                    )
+                  })()}
                   {totalPages > 1 && (
                     <div
                       className='gtable'

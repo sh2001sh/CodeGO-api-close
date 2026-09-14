@@ -116,7 +116,8 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 			LifecycleStatus: marketplacedomain.LifecycleActive, Models: models[name],
 			ModelVerificationResults: []ModelVerificationResult{}, GPT56MappingResults: []GPT56MappingResult{},
 			RequestCount: summary.RequestCount, SuccessRate: summary.SuccessRate, WilsonSuccessRate: summary.SuccessRate,
-			Score: summary.SuccessRate*0.35 + inverseMetricScore(1, 3)*0.2, CacheHitRate: summary.CacheHitRate,
+			AvgTTFTMs: float64(summary.AvgTtftMs), LatencySampleCount: summary.RequestCount,
+			Score: summary.SuccessRate*0.35 + inverseMetricScore(float64(summary.AvgTtftMs), 3000)*0.2 + inverseMetricScore(1, 3)*0.2, CacheHitRate: summary.CacheHitRate,
 			RecentRequestSeries: recent, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 			LatestRequestStatus: latestRequestStatus(recent),
 		})

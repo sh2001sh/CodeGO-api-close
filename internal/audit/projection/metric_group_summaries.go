@@ -85,7 +85,7 @@ func buildGroupSummaries(groups []string, totals map[string]counters) []GroupSum
 		if !ok || total.requestCount == 0 {
 			continue
 		}
-		results = append(results, GroupSummary{Group: group, SuccessRate: roundMetric(successRate(total)),
+		results = append(results, GroupSummary{Group: group, AvgTtftMs: avg(total.ttftSumMs, total.ttftCount), SuccessRate: roundMetric(successRate(total)),
 			CacheHitRate: roundMetric(cacheHitRate(total)), RequestCount: total.requestCount})
 	}
 	return results

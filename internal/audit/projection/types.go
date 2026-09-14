@@ -83,6 +83,7 @@ type SummaryAllResult struct {
 
 type GroupSummary struct {
 	Group        string  `json:"group"`
+	AvgTtftMs    int64   `json:"avg_ttft_ms"`
 	SuccessRate  float64 `json:"success_rate"`
 	CacheHitRate float64 `json:"cache_hit_rate"`
 	RequestCount int64   `json:"-"`

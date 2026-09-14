@@ -647,6 +647,36 @@ For commercial licensing, please contact support@quantumnous.com.
   overflow: hidden;
 }
 
+.dawn .market-group-section {
+  margin: 0 0 28px;
+}
+
+.dawn .market-group-section + .market-group-section {
+  border-top: 1px solid var(--dawn-line);
+  padding-top: 24px;
+}
+
+.dawn .market-group-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 0 4px;
+}
+
+.dawn .market-group-section-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.dawn .market-group-section-head span {
+  color: var(--dawn-ink2);
+  font-size: 12px;
+}
+
 .dawn .gcard:hover {
   border-color: rgba(184, 86, 46, 0.45);
 }

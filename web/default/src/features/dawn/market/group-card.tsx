@@ -137,10 +137,10 @@ export function MarketGroupCard(props: {
           className={cn('m', hasTraffic && group.avg_ttft_ms > 600 && 'warn')}
         >
           <b>
-            {hasTraffic ? sec(group.avg_ttft_ms) : '—'}
+            {hasTraffic && group.avg_ttft_ms > 0 ? sec(group.avg_ttft_ms) : '—'}
             <span className='u'>s</span>
           </b>
-          <span>P50</span>
+          <span>平均首字</span>
         </div>
         <div className='m'>
           <b>

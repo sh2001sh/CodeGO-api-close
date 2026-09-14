@@ -31,6 +31,8 @@ type rankingTotals struct {
 	successTotal   float64
 	latencyWeight  int64
 	latencyTotal   float64
+	ttftWeight     int64
+	ttftTotal      float64
 	attemptTtftP50 float64
 	attemptTtftP95 float64
 	e2eTtftP50     float64
@@ -311,6 +313,8 @@ func aggregateChannelRankingRows(rows []auditprojection.ChannelSummary) map[int]
 			successTotal:   row.SuccessRate * float64(row.RequestCount),
 			latencyWeight:  metricWeight(float64(row.AvgLatencyMs), row.RequestCount),
 			latencyTotal:   float64(row.AvgLatencyMs) * float64(row.RequestCount),
+			ttftWeight:     metricWeight(float64(row.AvgTtftMs), row.RequestCount),
+			ttftTotal:      float64(row.AvgTtftMs) * float64(row.RequestCount),
 			attemptTtftP50: float64(row.AttemptTtftP50Ms),
 			attemptTtftP95: float64(row.AttemptTtftP95Ms),
 			e2eTtftP50:     float64(row.E2eTtftP50Ms),
@@ -354,9 +358,9 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 	return marketplaceschema.RankingSnapshot{
 		GroupID: group.ID, WindowHours: hours, RankingVersion: rankingVersion,
 		Score: round2(score), RawSuccessRate: round2(successRate), WilsonSuccessRate: round2(wilson),
-		// AvgTTFTMs remains a compatibility alias. New clients use the explicit
-		// attempt/e2e percentile fields below.
-		AvgTTFTMs:          round2(total.attemptTtftP50),
+		// Average TTFT uses the raw measured sums rather than latency histogram
+		// buckets, so the UI can display an actual calculated value.
+		AvgTTFTMs:          round2(weighted(total.ttftTotal, total.ttftWeight)),
 		AttemptTTFTP50Ms:   round2(total.attemptTtftP50),
 		AttemptTTFTP95Ms:   round2(total.attemptTtftP95),
 		E2ETTFTP50Ms:       round2(total.e2eTtftP50),

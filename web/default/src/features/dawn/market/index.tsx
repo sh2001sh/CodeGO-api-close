@@ -336,7 +336,47 @@ export function DawnMarket() {
       > = {}
       group.models.forEach((name) => {
         const model = modelsByName.get(name)
-        if (!model) return
+        const channelPrice = Object.entries(group.model_prices ?? {}).find(
+          ([configured]) => configured.toLowerCase() === name.toLowerCase()
+        )?.[1]
+        if (channelPrice?.billing_mode === 'per_call') {
+          map[name] = {
+            mode: 'percall',
+            input: fmtUsd((channelPrice.price_per_call ?? 0) * multiplier),
+            output: '—',
+            cacheWrite: '—',
+            cacheRead: '—',
+            tiered: false,
+          }
+          return
+        }
+        if (!model || model.pricing_available === false) {
+          if (channelPrice) {
+            map[name] = {
+              mode: 'token',
+              input: fmtUsd(
+                (channelPrice.input_price_per_million ?? 0) * multiplier
+              ),
+              output: fmtUsd(
+                (channelPrice.output_price_per_million ?? 0) * multiplier
+              ),
+              cacheWrite:
+                channelPrice.cache_write_price_per_million == null
+                  ? '—'
+                  : fmtUsd(
+                      channelPrice.cache_write_price_per_million * multiplier
+                    ),
+              cacheRead:
+                channelPrice.cache_read_price_per_million == null
+                  ? '—'
+                  : fmtUsd(
+                      channelPrice.cache_read_price_per_million * multiplier
+                    ),
+              tiered: false,
+            }
+          }
+          return
+        }
         if (
           model.quota_type === QUOTA_TYPE_VALUES.TOKEN &&
           model.model_ratio === 0 &&
@@ -425,7 +465,8 @@ export function DawnMarket() {
       const map: Record<string, string> = {}
       group.models.forEach((name) => {
         const fee = modelFees.get(group.id)?.[name]
-        if (fee) map[name] = fee.mode === 'percall' ? `${fee.input}/次` : fee.input
+        if (fee)
+          map[name] = fee.mode === 'percall' ? `${fee.input}/次` : fee.input
       })
       result.set(group.id, map)
     })

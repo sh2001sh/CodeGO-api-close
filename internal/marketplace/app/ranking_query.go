@@ -131,7 +131,8 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 	}
 	groupMultiplier := marketplacedomain.NormalizeMultiplier(group.Multiplier)
 	return GroupListItem{
-		ID: group.ID, ChannelID: channel.ID, PublicSlug: group.PublicSlug,
+		ModelPrices: decodeChannelModelPrices(channel.ModelPrices),
+		ID:          group.ID, ChannelID: channel.ID, PublicSlug: group.PublicSlug,
 		SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), groupMultiplier, channel.ID),
 		SourceType:        group.SourceType, SourceLabel: publicSourceLabel(channel),
 		ProviderType:     channel.ProviderType,

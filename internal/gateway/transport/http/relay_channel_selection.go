@@ -62,6 +62,8 @@ func selectedDistributorChannel(c *gin.Context) *gatewayschema.Channel {
 		Id: c.GetInt("channel_id"), Type: c.GetInt("channel_type"),
 		Name: c.GetString("channel_name"), AutoBan: &autoBanInt,
 		SensitiveWordInterceptionEnabled: &interceptSensitiveWords,
+		MarketplaceMaxConcurrency:        c.GetInt("channel_marketplace_max_concurrency"),
+		MarketplaceUserMaxConcurrency:    c.GetInt("channel_marketplace_user_max_concurrency"),
 	}
 }
 

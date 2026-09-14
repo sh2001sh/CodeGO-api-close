@@ -85,6 +85,7 @@ export interface GPT56MappingRun {
 }
 
 export interface MarketplaceGroup {
+  model_prices?: Record<string, ChannelModelPrice>
   id: string
   channel_id: string
   public_slug: string

@@ -234,7 +234,7 @@ func TestMarketplacePerCallPriceOverridesTieredSitePrice(t *testing.T) {
 	require.Nil(t, info.TieredBillingSnapshot)
 }
 
-func TestMarketplaceChannelPriceOverridesGlobalModelPrice(t *testing.T) {
+func TestMarketplaceTokenPriceDefersToGlobalModelPrice(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	originalRatios := gatewaystore.ModelRatio2JSONString()
 	var ratios map[string]float64
@@ -254,6 +254,20 @@ func TestMarketplaceChannelPriceOverridesGlobalModelPrice(t *testing.T) {
 	info := &RelayInfo{OriginModelName: "market-global-priority-model", UsingGroup: "market_dynamic", UserGroup: "default"}
 	price, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 1000})
 	require.NoError(t, err)
-	require.InDelta(t, 999/2.0, price.ModelRatio, 0.000001)
-	require.InDelta(t, 999.0/999.0, price.CompletionRatio, 0.000001)
+	require.InDelta(t, 3, price.ModelRatio, 0.000001)
+
+	// Explicit free pricing is configured pricing, not a missing price.
+	ratios["market-global-priority-model"] = 0
+	updatedRatios, err = json.Marshal(ratios)
+	require.NoError(t, err)
+	require.NoError(t, gatewaystore.UpdateModelRatioByJSONString(string(updatedRatios)))
+	_, selected := marketplaceChannelModelPrice(ctx, info.OriginModelName)
+	require.False(t, selected)
+	delete(ratios, "market-global-priority-model")
+	updatedRatios, err = json.Marshal(ratios)
+	require.NoError(t, err)
+	require.NoError(t, gatewaystore.UpdateModelRatioByJSONString(string(updatedRatios)))
+	fallback, selected := marketplaceChannelModelPrice(ctx, info.OriginModelName)
+	require.True(t, selected)
+	require.Equal(t, 999.0, fallback.InputPricePerMillion)
 }

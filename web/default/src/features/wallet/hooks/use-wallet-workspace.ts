@@ -31,7 +31,13 @@ import { useWaffoPancakePayment } from './use-waffo-pancake-payment'
 import { useWaffoPayment } from './use-waffo-payment'
 
 export function useWalletWorkspace() {
-  const [user, setUser] = useState<UserWalletData | null>(null)
+  // Keep the authenticated profile visible while the wallet profile request is
+  // loading. The request can be slow when the ledger is busy; rendering a
+  // zero-valued placeholder here makes a real balance look like it was lost.
+  const [user, setUser] = useState<UserWalletData | null>(() => {
+    const current = useAuthStore.getState().auth.user
+    return current ? (current as UserWalletData) : null
+  })
   const [userLoading, setUserLoading] = useState(true)
   const [subscriptionData, setSubscriptionData] =
     useState<SelfSubscriptionData | null>(null)
@@ -84,9 +90,13 @@ export function useWalletWorkspace() {
         const userData = response.data as UserWalletData
         setUser(userData)
         setAuthUser(response.data)
+      } else {
+        // Preserve the last known balance on a transient business failure.
+        // Clearing it would make both wallet and package pages show $0.
+        setUser((current) => current || (useAuthStore.getState().auth.user as UserWalletData | null))
       }
     } catch (_error) {
-      // no-op
+      setUser((current) => current || (useAuthStore.getState().auth.user as UserWalletData | null))
     } finally {
       setUserLoading(false)
     }

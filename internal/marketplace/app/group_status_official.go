@@ -90,7 +90,7 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 	var rows []gatewaystore.GroupModelRequestBucket
 	var summaries []auditprojection.GroupSummary
 	if platformdb.LogDB != nil {
-		rows, err = gatewaystore.LoadGroupModelRequestBuckets(start, end, marketplaceRecentBucketSeconds, names)
+		rows, err = gatewaystore.LoadCachedGroupModelRequestBuckets(start, end, marketplaceRecentBucketSeconds, names)
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +212,7 @@ func getOfficialGroupModelStatus(name string, viewerUserID int) ([]GroupModelReq
 	start, end := marketplaceRecentWindow(time.Now().Unix())
 	var rows []gatewaystore.GroupModelRequestBucket
 	if platformdb.LogDB != nil {
-		rows, err = gatewaystore.LoadGroupModelRequestBuckets(start, end, marketplaceRecentBucketSeconds, []string{name})
+		rows, err = gatewaystore.LoadCachedGroupModelRequestBuckets(start, end, marketplaceRecentBucketSeconds, []string{name})
 		if err != nil {
 			return nil, err
 		}

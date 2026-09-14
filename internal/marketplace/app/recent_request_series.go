@@ -55,7 +55,7 @@ func marketplaceRecentRequestSeries(groups []marketplaceschema.Group, channels m
 	if platformdb.LogDB == nil {
 		return buildMarketplaceRecentRequestSeries(windowStart, groupChannelIDs, nil), nil
 	}
-	rows, err := gatewaystore.LoadGroupModelRequestBuckets(
+	rows, err := gatewaystore.LoadCachedGroupModelRequestBuckets(
 		windowStart,
 		windowEnd,
 		marketplaceRecentBucketSeconds,
@@ -128,7 +128,7 @@ func loadOfficialGroupRecentRequestStatuses(groupNames []string) map[string]stri
 	}
 
 	windowStart, windowEnd := marketplaceRecentWindow(time.Now().Unix())
-	rows, err := gatewaystore.LoadGroupModelRequestBuckets(
+	rows, err := gatewaystore.LoadCachedGroupModelRequestBuckets(
 		windowStart,
 		windowEnd,
 		marketplaceRecentBucketSeconds,

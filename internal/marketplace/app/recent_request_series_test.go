@@ -47,6 +47,9 @@ func TestMarketplaceRecentRequestSeriesAggregatesAuditLogsIntoFixedWindow(t *tes
 		{CreatedAt: previousBucketStart + 30, Type: auditschema.LogTypeError, Group: groupName, ModelName: "model-a", Other: `{"counted_in_success_rate":false}`},
 		{CreatedAt: currentBucketStart + 10, Type: auditschema.LogTypeConsume, Group: groupName, ModelName: "model-b"},
 	}).Error)
+	start, end := marketplaceRecentWindow(now)
+	_, err := gatewaystore.LoadGroupModelRequestBuckets(start, end, marketplaceRecentBucketSeconds, []string{groupName})
+	require.NoError(t, err)
 
 	seriesByChannel, err := marketplaceRecentRequestSeries(
 		[]marketplaceschema.Group{{ID: "group-fixed", ChannelID: "channel-fixed", InternalGroupName: groupName}},

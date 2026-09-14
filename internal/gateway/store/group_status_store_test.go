@@ -42,6 +42,45 @@ func TestGroupStatusCacheMaxAgeIsBounded(t *testing.T) {
 	require.Equal(t, 30*time.Minute, groupStatusCacheMaxAge(10*time.Minute))
 }
 
+func TestCachedGroupStatusColdReadDoesNotWaitForHistory(t *testing.T) {
+	oldLoader := loadGroupModelRequestBuckets
+	start := time.Now().UnixNano()
+	key := fmt.Sprintf("%d:%d:60", start, start+60)
+	entered, release, completed := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	loadGroupModelRequestBuckets = func(_, _, _ int64, _ []string) ([]GroupModelRequestBucket, error) {
+		close(entered)
+		<-release
+		return []GroupModelRequestBucket{{GroupName: "public", RequestCount: 2}, {GroupName: "private", RequestCount: 4}}, nil
+	}
+	t.Cleanup(func() {
+		loadGroupModelRequestBuckets = oldLoader
+		groupStatusCache.Lock()
+		delete(groupStatusCache.items, key)
+		groupStatusCache.Unlock()
+	})
+	go func() {
+		rows, err := LoadCachedGroupModelRequestBuckets(start, start+60, 60, []string{"public"})
+		if err == nil && len(rows) == 0 {
+			close(completed)
+		}
+	}()
+	select {
+	case <-completed:
+	case <-time.After(time.Second):
+		close(release)
+		t.Fatal("cold discovery waited for the blocked history query")
+	}
+	<-entered
+	close(release)
+	require.Eventually(t, func() bool {
+		_, state := loadGroupStatusCache(key, time.Now())
+		return state == groupStatusCacheFresh
+	}, time.Second, time.Millisecond)
+	rows, err := LoadCachedGroupModelRequestBuckets(start, start+60, 60, []string{"public"})
+	require.NoError(t, err)
+	require.Equal(t, []GroupModelRequestBucket{{GroupName: "public", RequestCount: 2}}, rows)
+}
+
 func TestLoadGroupModelRequestBucketsCollapsesConcurrentMisses(t *testing.T) {
 	originalLoader := loadGroupModelRequestBuckets
 	originalTTL := platformconfig.GroupStatusCacheSeconds

@@ -62,6 +62,17 @@ func ListGroupStatusGroups() ([]string, error) {
 }
 
 func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int64, groups []string) ([]GroupModelRequestBucket, error) {
+	return loadGroupRequestBuckets(startTime, endTime, bucketSize, groups, true)
+}
+
+// LoadCachedGroupModelRequestBuckets keeps discovery and route-pool requests
+// independent of a cold historical statistics scan. Empty buckets mean unknown,
+// never healthy; the shared refresh reports failures and populates later reads.
+func LoadCachedGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int64, groups []string) ([]GroupModelRequestBucket, error) {
+	return loadGroupRequestBuckets(startTime, endTime, bucketSize, groups, false)
+}
+
+func loadGroupRequestBuckets(startTime int64, endTime int64, bucketSize int64, groups []string, waitForCold bool) ([]GroupModelRequestBucket, error) {
 	if endTime <= startTime {
 		return []GroupModelRequestBucket{}, nil
 	}
@@ -82,6 +93,10 @@ func LoadGroupModelRequestBuckets(startTime int64, endTime int64, bucketSize int
 	} else if state == groupStatusCacheStale {
 		refreshGroupStatusCacheAsync(cacheKey, startTime, endTime, bucketSize, nil, cacheTTL)
 		return filterGroupStatusRows(rows, filteredGroups), nil
+	}
+	if !waitForCold {
+		refreshGroupStatusCacheAsync(cacheKey, startTime, endTime, bucketSize, nil, cacheTTL)
+		return []GroupModelRequestBucket{}, nil
 	}
 	value, err, _ := groupStatusLoads.Do(cacheKey, func() (any, error) {
 		now := time.Now()

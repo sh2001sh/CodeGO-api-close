@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -380,17 +381,19 @@ func TestOaiResponsesStreamHandlerAcceptsCompactionDoneWithoutCompletedOutput(t 
 	require.Contains(t, recorder.Body.String(), `response.output_item.done`)
 }
 
-func TestOaiResponsesStreamHandlerDoesNotFailWhenLifecycleBufferOverflows(t *testing.T) {
+func TestOaiResponsesStreamHandlerPreservesTextPartLifecycleWhenBufferOverflows(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	constant.StreamingTimeout = 30
 	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
 
 	var body strings.Builder
 	body.WriteString(`data: {"type":"response.created","response":{"id":"resp_123"}}` + "\n\n")
+	body.WriteString(`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"msg_opencode","type":"message","role":"assistant","content":[]}}` + "\n\n")
+	body.WriteString(`data: {"type":"response.content_part.added","output_index":0,"item_id":"msg_opencode","content_index":0,"part":{"type":"output_text","text":"","annotations":[]}}` + "\n\n")
 	for index := 0; index < responsesPreOutputEventLimit+8; index++ {
 		body.WriteString(`data: {"type":"response.in_progress","response":{"id":"resp_123"}}` + "\n\n")
 	}
-	body.WriteString(`data: {"type":"response.output_text.delta","delta":"hello"}` + "\n\n")
+	body.WriteString(`data: {"type":"response.output_text.delta","output_index":0,"item_id":"msg_opencode","content_index":0,"delta":"hello"}` + "\n\n")
 	body.WriteString(`data: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}` + "\n\n")
 	body.WriteString("data: [DONE]\n\n")
 
@@ -404,11 +407,46 @@ func TestOaiResponsesStreamHandlerDoesNotFailWhenLifecycleBufferOverflows(t *tes
 	require.Nil(t, err)
 	require.NotNil(t, usage)
 	require.Equal(t, 15, usage.TotalTokens)
-	require.Contains(t, recorder.Body.String(), `event: response.created`)
-	require.Contains(t, recorder.Body.String(), `event: response.output_text.delta`)
+	output := recorder.Body.String()
+	created := strings.Index(output, `event: response.created`)
+	itemAdded := strings.Index(output, `event: response.output_item.added`)
+	partAdded := strings.Index(output, `event: response.content_part.added`)
+	delta := strings.Index(output, `event: response.output_text.delta`)
+	require.GreaterOrEqual(t, created, 0)
+	require.Greater(t, itemAdded, created)
+	require.Greater(t, partAdded, itemAdded)
+	require.Greater(t, delta, partAdded)
 	lifecycle, ok := c.Get("responses_stream_lifecycle")
 	require.True(t, ok)
 	require.Greater(t, lifecycle.(map[string]interface{})["pre_output_events_dropped"].(int), 0)
+}
+
+func TestOaiResponsesStreamHandlerRejectsStructuralLifecycleOverflowBeforeWriting(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+
+	var body strings.Builder
+	body.WriteString(`data: {"type":"response.created","response":{"id":"resp_structural_overflow"}}` + "\n\n")
+	for index := 0; index < responsesPreOutputEventLimit; index++ {
+		body.WriteString(fmt.Sprintf(
+			`data: {"type":"response.output_item.added","output_index":%d,"item":{"id":"msg_%d","type":"message","role":"assistant","content":[]}}`+"\n\n",
+			index,
+			index,
+		))
+	}
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body.String())), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+
+	require.Nil(t, usage)
+	require.NotNil(t, err)
+	require.Equal(t, http.StatusBadGateway, err.StatusCode)
+	require.Equal(t, types.ErrorCodeBadResponse, err.GetErrorCode())
+	require.False(t, types.IsSkipRetryError(err))
+	require.Empty(t, recorder.Body.String())
 }
 
 func TestOaiResponsesStreamHandlerSucceedsAfterResponseCompleted(t *testing.T) {

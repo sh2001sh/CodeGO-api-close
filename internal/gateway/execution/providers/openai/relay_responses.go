@@ -130,6 +130,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var sawResponseCompleted atomic.Bool
 	var firstOutputTimedOut atomic.Bool
 	var terminalFailure error
+	var preOutputBufferErr error
 	var cyberPolicyErr *types.NewAPIError
 	var preOutputEvents []bufferedResponsesStreamEvent
 	preOutputEventsBuffered := 0
@@ -266,8 +267,14 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 			preOutputEvents = nil
 		} else {
-			preOutputEventsDropped += appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, streamResponse, data)
+			dropped, bufferErr := appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, streamResponse, data)
+			preOutputEventsDropped += dropped
 			preOutputEventsBuffered = len(preOutputEvents)
+			if bufferErr != nil {
+				preOutputBufferErr = bufferErr
+				sr.Stop(bufferErr)
+				return
+			}
 		}
 		switch streamResponse.Type {
 		case "response.completed":
@@ -313,6 +320,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	})
 	if cyberPolicyErr != nil {
 		return nil, cyberPolicyErr
+	}
+	if preOutputBufferErr != nil {
+		return nil, types.NewOpenAIError(preOutputBufferErr, types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
 	// The scanner may observe a downstream cancellation while it is unwinding
 	// its workers. StreamStatus is the synchronized outcome of those workers,
@@ -434,28 +444,52 @@ func responsesRequestUsesImageGeneration(info *relaycommon.RelayInfo) bool {
 }
 
 // appendBufferedResponsesStreamEvent keeps lifecycle data bounded until the
-// first model-visible event. Overflowing lifecycle-only events are discarded,
-// not treated as an upstream failure, so large Responses continuations remain
-// retry-safe and can still reach their first output.
-func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, size *int, response dto.ResponsesStreamResponse, data string) (dropped int) {
+// first model-visible event. Only redundant response-state events may be
+// discarded: item and content-part events establish IDs that strict Responses
+// clients need before accepting subsequent deltas.
+func appendBufferedResponsesStreamEvent(events *[]bufferedResponsesStreamEvent, size *int, response dto.ResponsesStreamResponse, data string) (dropped int, err error) {
 	if len(data) > responsesPreOutputByteLimit {
-		return 1
+		if isDroppableResponsesPreOutputEvent(response) {
+			return 1, nil
+		}
+		return 0, fmt.Errorf("responses stream structural event exceeded pre-output buffer")
 	}
 	for len(*events) > 0 && (len(*events) >= responsesPreOutputEventLimit || *size+len(data) > responsesPreOutputByteLimit) {
-		dropIndex := 0
-		if (*events)[0].response.Type == "response.created" && len(*events) > 1 {
-			dropIndex = 1
+		dropIndex := -1
+		for index := range *events {
+			if isDroppableResponsesPreOutputEvent((*events)[index].response) {
+				dropIndex = index
+				break
+			}
+		}
+		if dropIndex < 0 {
+			if isDroppableResponsesPreOutputEvent(response) {
+				return dropped + 1, nil
+			}
+			return dropped, fmt.Errorf("responses stream structural events exceeded pre-output buffer")
 		}
 		*size -= len((*events)[dropIndex].data)
 		*events = append((*events)[:dropIndex], (*events)[dropIndex+1:]...)
 		dropped++
 	}
 	if len(*events) >= responsesPreOutputEventLimit || *size+len(data) > responsesPreOutputByteLimit {
-		return dropped + 1
+		if isDroppableResponsesPreOutputEvent(response) {
+			return dropped + 1, nil
+		}
+		return dropped, fmt.Errorf("responses stream structural events exceeded pre-output buffer")
 	}
 	*events = append(*events, bufferedResponsesStreamEvent{response: response, data: data})
 	*size += len(data)
-	return dropped
+	return dropped, nil
+}
+
+func isDroppableResponsesPreOutputEvent(response dto.ResponsesStreamResponse) bool {
+	switch response.Type {
+	case "response.in_progress", "response.queued":
+		return true
+	default:
+		return false
+	}
 }
 
 func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayInfo, events []bufferedResponsesStreamEvent, current *dto.ResponsesStreamResponse, currentData string) error {

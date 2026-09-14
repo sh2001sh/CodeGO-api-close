@@ -209,7 +209,7 @@ func UpdateRoutePool(ownerUserID int, poolID string, req RoutePoolUpdateRequest)
 	if len(groupIDs) > maxAutoRoutePoolMembers {
 		return nil, errors.New("路由池最多可添加 10 个分组")
 	}
-	groups, _, err := loadAutoRouteGroups(ownerUserID)
+	groups, _, err := loadAutoRouteGroupsForIDs(ownerUserID, groupIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -217,8 +217,13 @@ func UpdateRoutePool(ownerUserID int, poolID string, req RoutePoolUpdateRequest)
 	for _, group := range groups {
 		eligible[group.ID] = struct{}{}
 	}
-	for _, item := range loadOfficialAutoRouteItems(ownerUserID, nil) {
-		eligible[item.GroupID] = struct{}{}
+	for _, groupID := range groupIDs {
+		if strings.HasPrefix(groupID, officialAutoRoutePrefix) {
+			for _, item := range loadOfficialAutoRouteItemsSummary(ownerUserID) {
+				eligible[item.GroupID] = struct{}{}
+			}
+			break
+		}
 	}
 	for _, groupID := range groupIDs {
 		if _, ok := eligible[groupID]; !ok {

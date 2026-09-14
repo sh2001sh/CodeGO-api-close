@@ -178,8 +178,13 @@ func ReplaceAutoRoutePool(ownerUserID int, req AutoRoutePoolUpdateRequest) (*Aut
 	for _, group := range groups {
 		eligible[group.ID] = struct{}{}
 	}
-	for _, item := range loadOfficialAutoRouteItems(ownerUserID, nil) {
-		eligible[item.GroupID] = struct{}{}
+	for _, groupID := range groupIDs {
+		if strings.HasPrefix(groupID, officialAutoRoutePrefix) {
+			for _, item := range loadOfficialAutoRouteItemsSummary(ownerUserID) {
+				eligible[item.GroupID] = struct{}{}
+			}
+			break
+		}
 	}
 	for _, groupID := range groupIDs {
 		if _, ok := eligible[groupID]; !ok {

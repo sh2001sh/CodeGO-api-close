@@ -17,17 +17,15 @@ import (
 var rejectedResponsesFieldPattern = regexp.MustCompile(`(?i)(?:unknown|unsupported)\s+(?:parameter|field)\s*(?::|=|is)?\s*["']?([a-zA-Z0-9_.\[\]-]+)`)
 
 // isGenericInvalidRequestParametersError identifies the generic 400 returned
-// by a few OpenAI-compatible gateways when their validation layer temporarily
-// rejects an otherwise valid Responses request. These gateways do not expose
-// the offending field, so the caller can safely replay the request once before
-// handing the error back to normal channel retry handling.
+// by OpenAI-compatible gateways without identifying a rejected field. Do not
+// assume this is transient or strip meaningful tools from the request.
 func isGenericInvalidRequestParametersError(apiErr *types.NewAPIError) bool {
 	if apiErr == nil || apiErr.StatusCode != 400 {
 		return false
 	}
 	message := strings.ToLower(strings.TrimSpace(apiErr.Error()))
 	return message == "invalid request parameters. check the request and try again." ||
-		strings.Contains(message, "invalid request parameters")
+		message == "invalid request parameters"
 }
 
 func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {

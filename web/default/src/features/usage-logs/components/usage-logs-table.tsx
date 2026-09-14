@@ -103,7 +103,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       pagination.pageSize,
       columnFilters,
       searchParams,
-      t,
     ],
     queryFn: async () => {
       const result = await fetchLogsByCategory({
@@ -128,6 +127,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       return undefined
     },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   })
 
   const logs = data?.items || []

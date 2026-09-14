@@ -387,6 +387,7 @@ func tryResponsesOriginalBodyFastPath(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, requestBody io.Reader, jsonBody []byte) (*http.Response, *types.NewAPIError) {
+	c.Set(string(appconstant.ContextKeyResponsesGenericUpstream400), false)
 	resp, err := doResponsesRequest(c, info, adaptor, requestBody, jsonBody)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
@@ -396,23 +397,13 @@ func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo,
 		return httpResp, nil
 	}
 	apiErr := platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
-	// Some OpenAI-compatible gateways intermittently return only a generic 400
-	// during request validation. No response body has been sent at this point,
-	// so replaying the exact body once is safe and avoids exposing a transient
-	// provider validation failure to the caller. Explicit field errors continue
-	// through the targeted compatibility normalizers below.
+	// A generic validation rejection has no safe field-level rewrite. Let the
+	// bounded outer retry choose an alternative provider before any content is
+	// delivered, rather than replaying the same unsupported body here.
 	if isGenericInvalidRequestParametersError(apiErr) && len(jsonBody) > 0 {
 		logger.LogInfo(c, "Responses generic 400 request shape: "+summarizeResponsesRequestShape(jsonBody))
-		logger.LogInfo(c, "retrying Responses request after generic upstream invalid-parameters response")
-		resp, err = doResponsesRequest(c, info, adaptor, bytes.NewReader(jsonBody), jsonBody)
-		if err != nil {
-			return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
-		}
-		httpResp, _ = resp.(*http.Response)
-		if httpResp == nil || httpResp.StatusCode == http.StatusOK {
-			return httpResp, nil
-		}
-		apiErr = platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+		c.Set(string(appconstant.ContextKeyResponsesGenericUpstream400), true)
+		return nil, apiErr
 	}
 	if retryJSON, ok := normalizePreviousResponseIDRetry(jsonBody, apiErr); ok {
 		if original, found := c.Get("responses_conversation_window_fallback"); found {

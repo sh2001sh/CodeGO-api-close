@@ -30,8 +30,22 @@ func normalizeGroupQuery(query GroupQuery) GroupQuery {
 	return query
 }
 
-func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, recentSeries map[int][]RecentRequestBucket, query GroupQuery) []GroupListItem {
+func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, recentSeries map[int][]RecentRequestBucket, query GroupQuery) ([]GroupListItem, error) {
 	items := make([]GroupListItem, 0, len(groups))
+	overrides := make(map[string]float64)
+	if query.ViewerUserID > 0 && len(channels) > 0 {
+		channelIDs := make([]string, 0, len(channels))
+		for id := range channels {
+			channelIDs = append(channelIDs, id)
+		}
+		var rows []marketplaceschema.UserMultiplier
+		if err := platformdb.DB.Where("user_id = ? AND channel_id IN ?", query.ViewerUserID, channelIDs).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			overrides[row.ChannelID] = row.Multiplier
+		}
+	}
 	currentConcurrency := activeMarketplaceChannelRequests(channels)
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
@@ -46,9 +60,8 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 		}
 		item := groupListItem(group, channel, models, snapshot, recentSeries[channelID])
 		if query.ViewerUserID > 0 && query.ViewerUserID != group.OwnerUserID {
-			var override marketplaceschema.UserMultiplier
-			if err := platformdb.DB.Where("channel_id = ? AND user_id = ?", channel.ID, query.ViewerUserID).First(&override).Error; err == nil && override.Multiplier > 0 {
-				item.Multiplier = marketplacedomain.NormalizeMultiplier(override.Multiplier)
+			if override := overrides[channel.ID]; override > 0 {
+				item.Multiplier = marketplacedomain.NormalizeMultiplier(override)
 				item.SubscriptionMultiplier = marketplacedomain.SubscriptionMultiplier(item.Multiplier)
 			}
 		}
@@ -56,7 +69,7 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 		items = append(items, item)
 	}
 	sortGroupItems(items, query.Sort, query.Direction)
-	return items
+	return items, nil
 }
 
 func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, query GroupQuery) bool {

@@ -2,10 +2,30 @@ package app
 
 import (
 	"fmt"
+	"sync"
+	"time"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"golang.org/x/sync/singleflight"
 )
+
+// This aggregate is display-only; balances and authorization continue to read
+// their authoritative ledgers. Do not rescan a user's entire settlement history
+// every time another layout component requests the profile.
+var historicalUsageCache = struct {
+	sync.Mutex
+	items map[string]historicalUsageEntry
+}{items: make(map[string]historicalUsageEntry)}
+
+type historicalUsageEntry struct {
+	amount int64
+	at     time.Time
+}
+
+var historicalUsageLoads singleflight.Group
+
+const historicalUsageTTL = 30 * time.Second
 
 // GetUserLedgerConsumedQuota returns request-backed settled usage from the
 // user's wallet and subscription billing accounts. Non-request balance moves
@@ -15,6 +35,40 @@ func GetUserLedgerConsumedQuota(userID int) (int64, error) {
 	if userID <= 0 {
 		return 0, fmt.Errorf("invalid user id")
 	}
+	key := fmt.Sprintf("%p:%d", platformdb.DB, userID)
+	value, err, _ := historicalUsageLoads.Do(key, func() (any, error) {
+		historicalUsageCache.Lock()
+		cached, ok := historicalUsageCache.items[key]
+		historicalUsageCache.Unlock()
+		if ok && time.Since(cached.at) < historicalUsageTTL {
+			return cached.amount, nil
+		}
+		amount, err := loadUserLedgerConsumedQuota(userID)
+		if err != nil {
+			return nil, err
+		}
+		historicalUsageCache.Lock()
+		defer historicalUsageCache.Unlock()
+		if len(historicalUsageCache.items) >= 1024 {
+			for key, value := range historicalUsageCache.items {
+				if time.Since(value.at) >= historicalUsageTTL {
+					delete(historicalUsageCache.items, key)
+				}
+			}
+			if len(historicalUsageCache.items) >= 1024 {
+				clear(historicalUsageCache.items)
+			}
+		}
+		historicalUsageCache.items[key] = historicalUsageEntry{amount: amount, at: time.Now()}
+		return amount, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return value.(int64), nil
+}
+
+func loadUserLedgerConsumedQuota(userID int) (int64, error) {
 
 	// Keep the subscription lookup in SQL so billing does not import the
 	// commerce package and create an application-layer import cycle.

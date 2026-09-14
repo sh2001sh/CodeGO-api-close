@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
@@ -25,6 +26,28 @@ type relayErrorEnvelope struct {
 		Type    string `json:"type"`
 		Code    string `json:"code"`
 	} `json:"error"`
+}
+
+func TestGenericResponsesUpstream400RetriesOnlyBeforeContentWithinBudget(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	err := types.WithOpenAIError(types.OpenAIError{Message: "Invalid request parameters. Check the request and try again."}, http.StatusBadRequest)
+	require.False(t, shouldRetry(ctx, err, 2), "unclassified client errors must not retry")
+	ctx.Set(string(constant.ContextKeyResponsesGenericUpstream400), true)
+	require.True(t, shouldRetry(ctx, err, 2))
+	attempt := 1
+	params := &gatewayroutingapp.RetryParam{Retry: &attempt}
+	ctx.Set("use_channel", []string{"367"})
+	httpctx.SetContextKey(ctx, constant.ContextKeyRetryFallbackChannelID, 367)
+	fallback, _ := retryFallbackChannel(ctx, params, "default")
+	require.Nil(t, fallback, "a generic rejection must not replay the sole provider")
+	fallback, _ = retryLastUsedSoleRoute(ctx, params, "default")
+	require.Nil(t, fallback)
+	require.False(t, shouldRetry(ctx, err, 0))
+	explicit := types.WithOpenAIError(types.OpenAIError{Message: "Invalid request parameters: input is required"}, http.StatusBadRequest)
+	require.False(t, shouldRetry(ctx, explicit, 2))
+	ctx.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	require.False(t, shouldRetry(ctx, err, 2), "tool calls or output already delivered must never replay")
 }
 
 func TestRefundRelayBillingSkipsRequestsWithoutRelayInfo(t *testing.T) {

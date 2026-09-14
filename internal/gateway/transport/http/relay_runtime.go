@@ -90,6 +90,9 @@ func retryFallbackChannel(c *gin.Context, retryParam *gatewayroutingapp.RetryPar
 	if c == nil || retryParam == nil || retryParam.GetRetry() <= 0 {
 		return nil, selectGroup
 	}
+	if c.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)) {
+		return nil, selectGroup
+	}
 	channelID := httpctx.GetContextKeyInt(c, constant.ContextKeyRetryFallbackChannelID)
 	if channelID <= 0 {
 		return nil, selectGroup
@@ -122,6 +125,7 @@ func retryFallbackChannel(c *gin.Context, retryParam *gatewayroutingapp.RetryPar
 // delivered, and revalidates the channel's current enabled ability.
 func retryLastUsedSoleRoute(c *gin.Context, retryParam *gatewayroutingapp.RetryParam, selectGroup string) (*gatewayschema.Channel, string) {
 	if c == nil || retryParam == nil || retryParam.GetRetry() <= 0 ||
+		c.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)) ||
 		httpctx.GetContextKeyBool(c, constant.ContextKeyResponseBodyDelivered) ||
 		c.GetBool(string(constant.ContextKeyStreamContentDelivered)) {
 		return nil, selectGroup
@@ -213,6 +217,12 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	}
 	if types.IsSkipRetryError(openaiErr) {
 		return false
+	}
+	if c.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)) && openaiErr.StatusCode == http.StatusBadRequest {
+		message := strings.ToLower(strings.TrimSpace(openaiErr.Error()))
+		if message == "invalid request parameters. check the request and try again." || message == "invalid request parameters" {
+			return true
+		}
 	}
 	if gatewayexecutionapp.IsModelScopedUpstreamFailure(openaiErr) {
 		return c.GetBool("model_unavailable_with_alternative")

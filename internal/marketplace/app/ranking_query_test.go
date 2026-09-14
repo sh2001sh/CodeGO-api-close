@@ -180,7 +180,7 @@ func TestFilterAndSortGroupsMapsCurrentConcurrencyByInternalChannel(t *testing.T
 	require.True(t, admitted)
 	defer release()
 
-	items := filterAndSortGroups(
+	items, err := filterAndSortGroups(
 		[]marketplaceschema.Group{group},
 		map[string]marketplaceschema.Channel{channel.ID: channel},
 		map[string]marketplaceschema.RankingSnapshot{},
@@ -188,6 +188,7 @@ func TestFilterAndSortGroupsMapsCurrentConcurrencyByInternalChannel(t *testing.T
 		GroupQuery{},
 	)
 
+	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.Equal(t, 12, items[0].MaxConcurrency)
 	require.Equal(t, 3, items[0].UserMaxConcurrency)
@@ -208,7 +209,7 @@ func TestFilterAndSortGroupsUsesAdmissionLeasesForLimitedChannels(t *testing.T) 
 		InternalChannelID: &internalChannelID,
 		MaxConcurrency:    10,
 	}
-	items := filterAndSortGroups(
+	items, err := filterAndSortGroups(
 		[]marketplaceschema.Group{{ID: "group-leases", ChannelID: channel.ID}},
 		map[string]marketplaceschema.Channel{channel.ID: channel},
 		map[string]marketplaceschema.RankingSnapshot{},
@@ -216,6 +217,7 @@ func TestFilterAndSortGroupsUsesAdmissionLeasesForLimitedChannels(t *testing.T) 
 		GroupQuery{},
 	)
 
+	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.Equal(t, 7, items[0].CurrentConcurrency)
 }

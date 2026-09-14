@@ -1,7 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
@@ -9,6 +11,33 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 )
+
+func TestHistoricalUsageCacheIsScopedAndExpires(t *testing.T) {
+	truncate(t)
+	seedUser(t, 9501, 0)
+	account := &billingschema.BillingAccount{AccountID: "wallet-cache-history", AccountType: "wallet", OwnerType: "user", OwnerID: 9501, QuotaUnit: "quota", Status: "active"}
+	require.NoError(t, platformdb.DB.Create(account).Error)
+	createHistoricalUsageSettlement(t, account.AccountID, "cached-usage", 40, true)
+	amount, err := GetUserLedgerConsumedQuota(9501)
+	require.NoError(t, err)
+	require.Equal(t, int64(40), amount)
+	createHistoricalUsageSettlement(t, account.AccountID, "new-usage", 20, true)
+	amount, err = GetUserLedgerConsumedQuota(9501)
+	require.NoError(t, err)
+	require.Equal(t, int64(40), amount, "repeated profile reads reuse the aggregate")
+	other, err := GetUserLedgerConsumedQuota(9502)
+	require.NoError(t, err)
+	require.Zero(t, other, "another user must not see the cached usage")
+	key := fmt.Sprintf("%p:%d", platformdb.DB, 9501)
+	historicalUsageCache.Lock()
+	historicalUsageCache.items[key] = historicalUsageEntry{amount: 40, at: time.Now().Add(-historicalUsageTTL)}
+	historicalUsageCache.Unlock()
+	amount, err = GetUserLedgerConsumedQuota(9501)
+	require.NoError(t, err)
+	require.Equal(t, int64(60), amount)
+	_, err = GetUserLedgerConsumedQuota(0)
+	require.Error(t, err)
+}
 
 func TestGetUserLedgerConsumedQuotaIncludesWalletAndSubscriptions(t *testing.T) {
 	truncate(t)

@@ -4,17 +4,44 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	gatewayproviders "github.com/sh2001sh/new-api/internal/gateway/execution/providers"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+type rejectingResponsesAdaptor struct {
+	gatewayproviders.SyncAdaptor
+	requests int
+	body     []byte
+}
+
+func (a *rejectingResponsesAdaptor) DoRequest(_ *gin.Context, _ *relaycommon.RelayInfo, body io.Reader) (any, error) {
+	a.requests++
+	a.body, _ = io.ReadAll(body)
+	return &http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header), Body: io.NopCloser(bytes.NewBufferString(`{"error":{"message":"Invalid request parameters. Check the request and try again.","type":"invalid_request_error"}}`))}, nil
+}
+
+func TestGenericResponses400DoesNotReplayOrRewriteRejectedBody(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	payload := []byte(`{"model":"gpt-6-astra","input":[{"type":"function_call_output","call_id":"call_1","output":"result"}],"tools":[{"type":"web_search"}]}`)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(payload))
+	adaptor := &rejectingResponsesAdaptor{}
+	_, apiErr := sendResponsesWithCompatibility(ctx, &relaycommon.RelayInfo{}, adaptor, bytes.NewReader(payload), payload)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.Equal(t, 1, adaptor.requests)
+	require.Equal(t, payload, adaptor.body)
+	require.True(t, ctx.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)))
+}
 
 func TestTryResponsesOriginalBodyFastPathReusesExactBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)

@@ -3,6 +3,7 @@ package projection
 import (
 	"context"
 	"errors"
+	"fmt"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -13,6 +14,8 @@ import (
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/types"
+	"golang.org/x/sync/singleflight"
+	"gorm.io/gorm"
 )
 
 const logSearchCountLimit = 10000
@@ -26,9 +29,12 @@ var usedLogGroupsCache struct {
 type cachedLogGroups struct {
 	groups []string
 	at     time.Time
+	db     *gorm.DB
 }
 
-const usedLogGroupsCacheTTL = 30 * time.Second
+const usedLogGroupsCacheTTL = 5 * time.Minute
+
+var usedLogGroupsLoads singleflight.Group
 
 func GetLogByTokenID(tokenID int) ([]*auditschema.Log, error) {
 	var logs []*auditschema.Log
@@ -113,7 +119,10 @@ func ListUserLogs(userID int, query auditdomain.LogListQuery) ([]*auditschema.Lo
 		tx = tx.Where("logs.created_at <= ?", query.EndTimestamp)
 	}
 	tx = applyLogContainsFilter(tx, "logs."+logGroupColumn(), query.Group)
-	if err := tx.Model(&auditschema.Log{}).Limit(logSearchCountLimit).Count(&total).Error; err != nil {
+	// LIMIT on COUNT(*) limits the one aggregate row, not the scanned logs.
+	// Bound the input relation instead, matching the existing search limit.
+	countRows := tx.Session(&gorm.Session{}).Model(&auditschema.Log{}).Select("1").Limit(logSearchCountLimit)
+	if err := platformdb.LogDB.Table("(?) AS limited_logs", countRows).Count(&total).Error; err != nil {
 		platformobservability.SysError("failed to count user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
 	}
@@ -179,12 +188,28 @@ func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {
 // ListUsedLogGroups returns distinct groups visible to an administrator or user.
 func ListUsedLogGroups(userID int) ([]string, error) {
 	usedLogGroupsCache.RLock()
-	if item, ok := usedLogGroupsCache.items[userID]; ok && time.Since(item.at) < usedLogGroupsCacheTTL {
+	if item, ok := usedLogGroupsCache.items[userID]; ok && item.db == platformdb.LogDB && time.Since(item.at) < usedLogGroupsCacheTTL {
 		groups := append([]string(nil), item.groups...)
 		usedLogGroupsCache.RUnlock()
 		return groups, nil
 	}
 	usedLogGroupsCache.RUnlock()
+	value, err, _ := usedLogGroupsLoads.Do(fmt.Sprintf("%p:%d", platformdb.LogDB, userID), func() (any, error) {
+		return loadUsedLogGroups(userID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), value.([]string)...), nil
+}
+
+func loadUsedLogGroups(userID int) ([]string, error) {
+	usedLogGroupsCache.RLock()
+	item, ok := usedLogGroupsCache.items[userID]
+	usedLogGroupsCache.RUnlock()
+	if ok && item.db == platformdb.LogDB && time.Since(item.at) < usedLogGroupsCacheTTL {
+		return append([]string(nil), item.groups...), nil
+	}
 	groups := make([]string, 0)
 	groupCol := logGroupColumn()
 	query := platformdb.LogDB.Table("logs").
@@ -193,15 +218,38 @@ func ListUsedLogGroups(userID int) ([]string, error) {
 	if userID > 0 {
 		query = query.Where("user_id = ?", userID)
 	}
-	err := query.Order(groupCol+" ASC").
-		Limit(logGroupOptionLimit).
-		Pluck(groupCol, &groups).Error
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var err error
+	if platformdb.UsingPostgreSQL && userID == 0 {
+		// Seek to the next distinct key in idx_logs_group rather than visiting
+		// every historical log just to produce at most 200 filter options.
+		err = platformdb.LogDB.WithContext(ctx).Raw(`WITH RECURSIVE used_groups AS (
+			(SELECT "group" AS name, 1 AS n FROM logs WHERE "group" > '' ORDER BY "group" LIMIT 1)
+			UNION ALL
+			SELECT next.name, used_groups.n + 1 FROM used_groups
+			CROSS JOIN LATERAL (SELECT "group" AS name FROM logs WHERE "group" > used_groups.name ORDER BY "group" LIMIT 1) AS next
+			WHERE used_groups.n < ?
+		) SELECT name FROM used_groups ORDER BY name`, logGroupOptionLimit).Scan(&groups).Error
+	} else {
+		err = query.WithContext(ctx).Order(groupCol+" ASC").Limit(logGroupOptionLimit).Pluck(groupCol, &groups).Error
+	}
 	if err == nil {
 		usedLogGroupsCache.Lock()
 		if usedLogGroupsCache.items == nil {
 			usedLogGroupsCache.items = make(map[int]cachedLogGroups)
 		}
-		usedLogGroupsCache.items[userID] = cachedLogGroups{groups: append([]string(nil), groups...), at: time.Now()}
+		if len(usedLogGroupsCache.items) >= 1024 {
+			for id, cached := range usedLogGroupsCache.items {
+				if time.Since(cached.at) >= usedLogGroupsCacheTTL {
+					delete(usedLogGroupsCache.items, id)
+				}
+			}
+			if len(usedLogGroupsCache.items) >= 1024 {
+				clear(usedLogGroupsCache.items)
+			}
+		}
+		usedLogGroupsCache.items[userID] = cachedLogGroups{groups: append([]string(nil), groups...), at: time.Now(), db: platformdb.LogDB}
 		usedLogGroupsCache.Unlock()
 	}
 	return groups, err

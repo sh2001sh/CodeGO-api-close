@@ -104,6 +104,10 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		metrics[summary.Group] = summary
 	}
 	series := buildMarketplaceRecentRequestSeries(start, groupIndices, rows)
+	cards, err := officialMultiplierCardGroups(names)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]GroupListItem, 0, len(names))
 	for _, name := range names {
 		key := officialAutoRoutePrefix + name
@@ -119,19 +123,81 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 			AvgTTFTMs: float64(summary.AvgTtftMs), LatencySampleCount: summary.RequestCount,
 			Score: summary.SuccessRate*0.35 + inverseMetricScore(float64(summary.AvgTtftMs), 3000)*0.2 + inverseMetricScore(1, 3)*0.2, CacheHitRate: summary.CacheHitRate,
 			RecentRequestSeries: recent, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
-			LatestRequestStatus: latestRequestStatus(recent),
+			LatestRequestStatus:     latestRequestStatus(recent),
+			MultiplierCardSupported: cards[name], MultiplierCardUserEnabled: cards[name],
 		})
-		if channels, loadErr := gatewaystore.LoadEnabledChannelsForGroup(name); loadErr == nil {
-			for _, channel := range channels {
-				if channel.MultiplierCardUserEnabled {
-					items[len(items)-1].MultiplierCardSupported = true
-					items[len(items)-1].MultiplierCardUserEnabled = true
-					break
-				}
-			}
-		}
 	}
 	return items, nil
+}
+
+// Read only the public capability flag, without loading channel credentials
+// separately for every official group.
+func officialMultiplierCardGroups(names []string) (map[string]bool, error) {
+	result := make(map[string]bool)
+	if len(names) == 0 {
+		return result, nil
+	}
+	groupColumn := "abilities.`group`"
+	if platformdb.UsingPostgreSQL {
+		groupColumn = `abilities."group"`
+	}
+	var enabled []string
+	err := platformdb.DB.Table("abilities").Joins("JOIN channels ON channels.id = abilities.channel_id").
+		Where(groupColumn+" IN ? AND abilities.enabled = ? AND channels.status = ? AND channels.multiplier_card_user_enabled = ?", names, true, constant.ChannelStatusEnabled, true).
+		Distinct().Pluck(groupColumn, &enabled).Error
+	for _, name := range enabled {
+		result[name] = true
+	}
+	return result, err
+}
+
+type officialGroupCapability struct {
+	Models         []string
+	ChannelIDs     []int
+	MultiplierCard bool
+}
+
+func loadOfficialGroupCapabilities(names []string) (map[string]officialGroupCapability, error) {
+	result := make(map[string]officialGroupCapability)
+	if len(names) == 0 {
+		return result, nil
+	}
+	groupColumn := "abilities.`group`"
+	if platformdb.UsingPostgreSQL {
+		groupColumn = `abilities."group"`
+	}
+	var rows []struct {
+		GroupName                 string
+		Model                     string
+		ChannelID                 int
+		MultiplierCardUserEnabled bool
+	}
+	err := platformdb.DB.Table("abilities").
+		Select(groupColumn+" AS group_name, abilities.model, abilities.channel_id, channels.multiplier_card_user_enabled").
+		Joins("JOIN channels ON channels.id = abilities.channel_id").
+		Where(groupColumn+" IN ? AND abilities.enabled = ? AND channels.status = ?", names, true, constant.ChannelStatusEnabled).
+		Order("abilities.model, abilities.channel_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	modelsSeen, channelsSeen := make(map[string]map[string]bool), make(map[string]map[int]bool)
+	for _, row := range rows {
+		item := result[row.GroupName]
+		if modelsSeen[row.GroupName] == nil {
+			modelsSeen[row.GroupName], channelsSeen[row.GroupName] = make(map[string]bool), make(map[int]bool)
+		}
+		if row.Model != "" && !modelsSeen[row.GroupName][row.Model] {
+			item.Models = append(item.Models, row.Model)
+			modelsSeen[row.GroupName][row.Model] = true
+		}
+		if !channelsSeen[row.GroupName][row.ChannelID] {
+			item.ChannelIDs = append(item.ChannelIDs, row.ChannelID)
+			channelsSeen[row.GroupName][row.ChannelID] = true
+		}
+		item.MultiplierCard = item.MultiplierCard || row.MultiplierCardUserEnabled
+		result[row.GroupName] = item
+	}
+	return result, nil
 }
 
 func getOfficialGroupModelStatus(name string, viewerUserID int) ([]GroupModelRequestStatus, error) {

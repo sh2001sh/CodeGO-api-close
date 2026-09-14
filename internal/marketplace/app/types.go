@@ -212,22 +212,23 @@ type AdminOwnerIncomeResult struct {
 }
 
 type GroupQuery struct {
-	ViewerUserID  int
-	IncludeAccess bool
-	Search        string
-	Model         string
-	Models        []string
-	Source        string
-	Provider      string
-	Status        string
-	Verification  string
-	Sort          string
-	Direction     string
-	WindowHours   int
-	Page          int
-	PageSize      int
-	MinMultiplier float64
-	MaxMultiplier float64
+	SeparateOfficial bool
+	ViewerUserID     int
+	IncludeAccess    bool
+	Search           string
+	Model            string
+	Models           []string
+	Source           string
+	Provider         string
+	Status           string
+	Verification     string
+	Sort             string
+	Direction        string
+	WindowHours      int
+	Page             int
+	PageSize         int
+	MinMultiplier    float64
+	MaxMultiplier    float64
 }
 
 type GroupListItem struct {
@@ -321,13 +322,14 @@ type GroupHighlights struct {
 }
 
 type GroupListResult struct {
-	Items       []GroupListItem `json:"items"`
-	Highlights  GroupHighlights `json:"highlights"`
-	Total       int             `json:"total"`
-	Page        int             `json:"page"`
-	PageSize    int             `json:"page_size"`
-	RankedCount int             `json:"ranked_count"`
-	WindowHours int             `json:"window_hours"`
+	OfficialItems []GroupListItem `json:"official_items,omitempty"`
+	Items         []GroupListItem `json:"items"`
+	Highlights    GroupHighlights `json:"highlights"`
+	Total         int             `json:"total"`
+	Page          int             `json:"page"`
+	PageSize      int             `json:"page_size"`
+	RankedCount   int             `json:"ranked_count"`
+	WindowHours   int             `json:"window_hours"`
 }
 
 type MultiplierTrendQuery struct {

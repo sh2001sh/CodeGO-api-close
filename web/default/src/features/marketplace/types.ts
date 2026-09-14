@@ -160,6 +160,7 @@ export interface ChannelFeedbackSummary {
 }
 
 export interface MarketplaceGroupList {
+  official_items?: MarketplaceGroup[]
   items: MarketplaceGroup[]
   highlights: MarketplaceGroupHighlights
   total: number
@@ -353,6 +354,7 @@ export interface ChannelModelPrice {
 }
 
 export interface GroupFilters {
+  separate_official?: boolean
   search: string
   model: string
   models?: string[]

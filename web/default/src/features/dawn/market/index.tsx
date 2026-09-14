@@ -56,6 +56,8 @@ import {
   useMarketplaceGroups,
   useMarketplaceModels,
   useMarketplaceRoutePool,
+  useMarketplaceRoutePoolUpdate,
+  useMarketplaceAutoRoutePoolUpdate,
   useMarketplaceTokens,
   useMarketplaceMultiplierNotices,
   useReadMarketplaceMultiplierNotice,
@@ -253,13 +255,19 @@ export function DawnMarket() {
       })
   }, [authed, navigate, queryClient])
 
-  const groupsQuery = useMarketplaceGroups(filters)
-  const marketplaceModels = useMarketplaceModels()
-  const groups = useMemo(
-    () =>
-      mockMode ? MOCK_MARKETPLACE_GROUPS : (groupsQuery.data?.items ?? []),
-    [groupsQuery.data, mockMode]
+  const hasSearch = Boolean(filters.search.trim() || filters.models?.length)
+  const groupsQuery = useMarketplaceGroups(
+    { ...filters, separate_official: !hasSearch },
+    { enabled: !mockMode && perspective === 'user' }
   )
+  const marketplaceModels = useMarketplaceModels()
+  const groups = useMemo(() => {
+    if (mockMode) return MOCK_MARKETPLACE_GROUPS
+    return [
+      ...(groupsQuery.data?.official_items ?? []),
+      ...(groupsQuery.data?.items ?? []),
+    ]
+  }, [groupsQuery.data, mockMode])
   const pricing = usePricingData()
 
   const filterModels = useMemo(() => {
@@ -458,6 +466,9 @@ export function DawnMarket() {
     return pool?.name
   }, [isAutoPool, pools.data, activePoolID])
 
+  const updatePool = useMarketplaceRoutePoolUpdate()
+  const updateAutoPool = useMarketplaceAutoRoutePoolUpdate()
+
   const joinPool = async (group: MarketplaceGroup) => {
     if (!activePoolID) {
       toast.error('先创建或选择一个路由池')
@@ -468,25 +479,18 @@ export function DawnMarket() {
     const nextIDs = [...currentIDs, group.id]
     try {
       if (isAutoPool) {
-        const { updateMarketplaceAutoRoutePool } =
-          await import('@/features/marketplace/api')
-        await updateMarketplaceAutoRoutePool({ groupIds: nextIDs })
+        await updateAutoPool.mutateAsync({
+          groupIds: nextIDs,
+          config: autoPool.data?.config,
+        })
       } else {
-        const { updateMarketplaceRoutePool } =
-          await import('@/features/marketplace/api')
-        await updateMarketplaceRoutePool({
+        await updatePool.mutateAsync({
           id: activePoolID,
           groupIds: nextIDs,
-          config: { strategy: 'priority' },
+          config: poolDetail.data?.config,
         })
       }
       toast.success(`已加入路由池（${activePoolName ?? '当前池'}）`)
-      await queryClient.invalidateQueries({
-        queryKey: ['marketplace-route-pools'],
-      })
-      await queryClient.invalidateQueries({
-        queryKey: ['marketplace-auto-route-pool'],
-      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加入失败')
     }

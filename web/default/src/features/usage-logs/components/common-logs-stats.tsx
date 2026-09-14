@@ -50,10 +50,11 @@ export function CommonLogsStats() {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
   const searchParams = route.useSearch()
+  const statsFilters = { ...searchParams, page: undefined, pageSize: undefined }
   const { sensitiveVisible } = useUsageLogsContext()
 
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['usage-logs-stats', isAdmin, searchParams],
+    queryKey: ['usage-logs-stats', isAdmin, statsFilters],
     queryFn: async () => {
       const params = buildApiParams({
         page: 1,
@@ -72,6 +73,8 @@ export function CommonLogsStats() {
         : DEFAULT_LOG_STATS
     },
     placeholderData: (previousData) => previousData,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   })
 
   if (isLoading) {

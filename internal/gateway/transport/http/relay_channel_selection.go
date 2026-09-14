@@ -80,6 +80,9 @@ func selectRelayRetryChannel(c *gin.Context, info *gatewayruntime.RelayInfo, ret
 		return nil, noRetryChannelError(c, selectGroup, info.OriginModelName, err)
 	}
 	if channel == nil {
+		if c.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)) && info.LastError != nil {
+			return nil, info.LastError
+		}
 		return nil, noRetryChannelError(c, selectGroup, info.OriginModelName, nil)
 	}
 	if setupErr := gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, info.OriginModelName); setupErr != nil {

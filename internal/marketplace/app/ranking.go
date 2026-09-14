@@ -85,7 +85,10 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 			return nil, err
 		}
 	}
-	items := filterAndSortGroups(groups, channels, snapshots, recentSeries, query)
+	items, err := filterAndSortGroups(groups, channels, snapshots, recentSeries, query)
+	if err != nil {
+		return nil, err
+	}
 	// Official routing groups participate in the same filtering, sorting and
 	// pagination pipeline as marketplace groups so users can compare every
 	// available source in one ranked list.
@@ -109,6 +112,20 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		}
 	}
 	highlights := marketplaceHighlights(items)
+	var officialItems []GroupListItem
+	if query.SeparateOfficial {
+		thirdParty := make([]GroupListItem, 0, len(items))
+		for _, item := range items {
+			if item.SourceType == marketplacedomain.SourceTypeOfficial {
+				if query.Page == 1 {
+					officialItems = append(officialItems, item)
+				}
+			} else {
+				thirdParty = append(thirdParty, item)
+			}
+		}
+		items = thirdParty
+	}
 	total := len(items)
 	ranked := 0
 	for _, item := range items {
@@ -120,7 +137,7 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	if err := attachChannelFeedback(items, channels, query.ViewerUserID); err != nil {
 		return nil, err
 	}
-	result := &GroupListResult{Items: items, Highlights: highlights, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}
+	result := &GroupListResult{Items: items, OfficialItems: officialItems, Highlights: highlights, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}
 	marketplaceListCache.Lock()
 	marketplaceListCache.at, marketplaceListCache.key, marketplaceListCache.result = time.Now(), cacheKey, result
 	marketplaceListCache.Unlock()
@@ -194,7 +211,10 @@ func GetMarketplaceGroup(slug string, windowHours, viewerUserID int) (*GroupList
 	if err != nil {
 		return nil, err
 	}
-	items := filterAndSortGroups(groups, channels, snapshots, recent, query)
+	items, err := filterAndSortGroups(groups, channels, snapshots, recent, query)
+	if err != nil {
+		return nil, err
+	}
 	if len(items) == 1 {
 		if err := attachChannelFeedback(items, channels, viewerUserID); err != nil {
 			return nil, err

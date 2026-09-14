@@ -56,6 +56,24 @@ func TestListUsedLogGroupsScopesUserOptions(t *testing.T) {
 	require.Contains(t, adminGroups, "Private Group")
 }
 
+func TestUserLogCountBoundsInputAndPreservesPageRows(t *testing.T) {
+	db := setupLogQueryTestDB(t)
+	logs := make([]auditschema.Log, logSearchCountLimit+25)
+	for i := range logs {
+		logs[i] = auditschema.Log{UserId: 7, Type: auditschema.LogTypeConsume, Group: "test"}
+	}
+	require.NoError(t, db.CreateInBatches(logs, 200).Error)
+	items, total, err := ListUserLogs(7, auditdomain.LogListQuery{PageSize: 20})
+	require.NoError(t, err)
+	require.EqualValues(t, logSearchCountLimit, total)
+	require.Len(t, items, 20)
+	require.Equal(t, "test", items[0].Group, "count projection must not leak into the row query")
+	items, total, err = ListUserLogs(8, auditdomain.LogListQuery{PageSize: 20})
+	require.NoError(t, err)
+	require.Zero(t, total)
+	require.Empty(t, items)
+}
+
 func TestUsageLogQueriesDoNotMixUsersWithOverlappingNames(t *testing.T) {
 	db := setupLogQueryTestDB(t)
 	now := time.Now().Unix()

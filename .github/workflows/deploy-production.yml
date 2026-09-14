@@ -21,6 +21,11 @@ jobs:
       contents: read
 
     steps:
+      - name: Check out built revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
       - name: Resolve deploy configuration
         id: config
         shell: bash

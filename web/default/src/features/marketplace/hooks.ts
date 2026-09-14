@@ -47,6 +47,8 @@ import type {
   AdminMarketplaceChannelFilters,
   GroupFilters,
   MarketplaceOwnerUsageLogFilters,
+  MarketplaceRoutePool,
+  MarketplaceRoutePoolSummary,
   SecurityAuditEventFilters,
 } from './types'
 
@@ -159,9 +161,9 @@ export function useMarketplaceAutoRoutePoolUpdate() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: updateMarketplaceAutoRoutePool,
-    onSuccess: async (data) => {
+    onSuccess: (data) => {
       queryClient.setQueryData(['marketplace-auto-route-pool'], data)
-      await queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ['api-key-group-options'],
       })
     },
@@ -204,20 +206,39 @@ export function useMarketplaceRoutePoolCreate() {
   })
 }
 
+function cacheUpdatedRoutePool(
+  queryClient: ReturnType<typeof useQueryClient>,
+  pool: MarketplaceRoutePool
+) {
+  queryClient.setQueryData(['marketplace-route-pools', pool.id], pool)
+  queryClient.setQueryData<MarketplaceRoutePoolSummary[]>(
+    ['marketplace-route-pools'],
+    (current) =>
+      current?.map((item) =>
+        item.id === pool.id
+          ? {
+              ...item,
+              name: pool.name,
+              member_count: pool.selected_count,
+              models: [
+                ...new Set(
+                  pool.items
+                    .filter((member) => member.selected)
+                    .flatMap((member) => member.models)
+                ),
+              ],
+            }
+          : item
+      )
+  )
+  void queryClient.invalidateQueries({ queryKey: ['api-key-group-options'] })
+}
+
 export function useMarketplaceRoutePoolUpdate() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: updateMarketplaceRoutePool,
-    onSuccess: (pool) => {
-      queryClient.setQueryData(['marketplace-route-pools', pool.id], pool)
-      void queryClient.invalidateQueries({
-        queryKey: ['marketplace-route-pools'],
-        refetchType: 'inactive',
-      })
-      void queryClient.invalidateQueries({
-        queryKey: ['api-key-group-options'],
-      })
-    },
+    onSuccess: (pool) => cacheUpdatedRoutePool(queryClient, pool),
   })
 }
 
@@ -225,12 +246,7 @@ export function useMarketplaceRoutePoolAutoBuildRun() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: runMarketplaceRoutePoolAutoBuild,
-    onSuccess: (pool) => {
-      queryClient.setQueryData(['marketplace-route-pools', pool.id], pool)
-      void queryClient.invalidateQueries({
-        queryKey: ['marketplace-route-pools'],
-      })
-    },
+    onSuccess: (pool) => cacheUpdatedRoutePool(queryClient, pool),
   })
 }
 

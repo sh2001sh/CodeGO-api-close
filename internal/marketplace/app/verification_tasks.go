@@ -7,7 +7,6 @@ import (
 
 const (
 	verificationTaskConnectivity = "connectivity"
-	verificationTaskGPT56Mapping = "gpt56_mapping"
 )
 
 type verificationTaskKey struct {

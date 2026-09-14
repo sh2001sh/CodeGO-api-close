@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useMarketplaceFailedModelRemoval } from '../hooks'
-import { hasGPT56Model } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
 import {
   ConnectivityTestStatusView,
@@ -29,7 +28,7 @@ export function ChannelVerificationStatus(props: {
         results={channel.model_verification_results}
         checkedAt={channel.connectivity_test_checked_at}
         summary={channel.verification_summary}
-        required={!hasGPT56Model(channel.declared_models)}
+        required
         showErrors
         onRemoveModel={(model) => void removeModel(model)}
         removingModel={removal.isPending ? removal.variables?.model : undefined}

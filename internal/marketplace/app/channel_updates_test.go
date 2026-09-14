@@ -17,7 +17,7 @@ func TestAdminCanUpdateMarketplaceChannelContent(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(
 		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
-		&marketplaceschema.VerificationRun{}, &marketplaceschema.GPT56MappingRun{},
+		&marketplaceschema.VerificationRun{},
 	))
 
 	channel := marketplaceschema.Channel{
@@ -113,7 +113,6 @@ func TestAddingChannelModelPreservesExistingVerificationState(t *testing.T) {
 		ID: "edit-without-verification", ProviderType: "openai_compatible",
 		DeclaredModels: `["gpt-4.1"]`, Status: marketplacedomain.LifecycleActive,
 		ModelVerificationResults: `[{"model":"gpt-4.1","status":"passed","listed":true}]`, ConnectivityTestStatus: marketplacedomain.VerificationPassed,
-		GPT56MappingResults: `[{}]`, GPT56MappingStatus: GPT56MappingStatusMatched,
 	}
 	group := &marketplaceschema.Group{
 		ID: "edit-without-verification-group", Multiplier: 1,
@@ -131,7 +130,6 @@ func TestAddingChannelModelPreservesExistingVerificationState(t *testing.T) {
 	require.Equal(t, marketplacedomain.VerificationPassed, group.VerificationStatus)
 	require.Equal(t, marketplacedomain.VerificationPassed, channel.ConnectivityTestStatus)
 	require.Contains(t, channel.ModelVerificationResults, "gpt-4.1")
-	require.Equal(t, GPT56MappingStatusMatched, channel.GPT56MappingStatus)
 }
 
 func TestReplacingChannelModelsDropsStalePricesAndReassignsProbe(t *testing.T) {
@@ -219,20 +217,7 @@ func TestValidateConcurrencyLimitRejectsOutOfRangeValues(t *testing.T) {
 	require.Error(t, validateConcurrencyLimit(10001))
 }
 
-func TestRequiredVerificationStateUsesDetectionForGPT56(t *testing.T) {
-	channel := &marketplaceschema.Channel{
-		DeclaredModels:         `["gpt-5.6-sol"]`,
-		GPT56MappingStatus:     GPT56MappingStatusMatched,
-		ConnectivityTestStatus: "",
-	}
-
-	verification, lifecycle := requiredVerificationState(channel)
-
-	require.Equal(t, marketplacedomain.VerificationPassed, verification)
-	require.Equal(t, marketplacedomain.LifecycleActive, lifecycle)
-}
-
-func TestRequiredVerificationStateUsesConnectivityWithoutGPT56(t *testing.T) {
+func TestRequiredVerificationStateUsesConnectivity(t *testing.T) {
 	channel := &marketplaceschema.Channel{
 		DeclaredModels:         `["gpt-4.1"]`,
 		ConnectivityTestStatus: marketplacedomain.VerificationPassed,

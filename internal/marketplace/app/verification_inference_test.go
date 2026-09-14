@@ -128,21 +128,6 @@ func TestInferenceProbeRejectsHTTP200ErrorPayload(t *testing.T) {
 	require.EqualError(t, err, "上游返回失败内容: model unavailable")
 }
 
-func TestReportedModelProbeRejectsHTTP200ErrorPayload(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"model":"gpt-5.6-sol","status":"failed","message":"probe rejected"}`))
-	}))
-	defer server.Close()
-
-	_, reported, err := probeMarketplaceInferenceReportedModelWithVariantContext(
-		context.Background(), "openai_compatible", server.URL, "test-key", "gpt-5.6-sol",
-		gpt56ProbeVariant{Name: "error-payload", Prompt: "Reply with OK.", MaxOutputTokens: marketplaceProbeOutputTokens},
-	)
-	require.Empty(t, reported)
-	require.EqualError(t, err, "上游返回失败内容: probe rejected")
-}
-
 func TestVerifyDeclaredModelsRejectsUnadvertisedModels(t *testing.T) {
 	require.NoError(t, verifyDeclaredModels([]string{"gpt-5.2"}, []string{"gpt-5.2", "gpt-4.1"}))
 	require.EqualError(t,

@@ -20,10 +20,10 @@ func TestKeyGroupOptionsAccessPoolsAndBoundedQueries(t *testing.T) {
 		&marketplaceschema.RoutePool{}, &marketplaceschema.RoutePoolMember{}, &marketplaceschema.AutoRoutePoolMember{}))
 	const userID = 10
 	channelID := 1
-	addGroup := func(id, visibility, status, verification, mapping string, owner int) {
+	addGroup := func(id, visibility, status, verification string, owner int) {
 		require.NoError(t, db.Create(&marketplaceschema.Channel{
 			ID: id, OwnerUserID: owner, InternalChannelID: &channelID, DeclaredModels: `["gpt-5.6"]`,
-			ApprovedSourceLabel: "Test", SourceLabelStatus: marketplacedomain.SourceLabelApproved, GPT56MappingStatus: mapping,
+			ApprovedSourceLabel: "Test", SourceLabelStatus: marketplacedomain.SourceLabelApproved,
 		}).Error)
 		require.NoError(t, db.Create(&marketplaceschema.Group{
 			ID: id, ChannelID: id, OwnerUserID: owner, PublicSlug: id, InternalGroupName: id,
@@ -32,16 +32,15 @@ func TestKeyGroupOptionsAccessPoolsAndBoundedQueries(t *testing.T) {
 			CreditPoolPolicy: marketplacedomain.CreditPolicySubscriptionAndUniversal,
 		}).Error)
 	}
-	addGroup("public", "public", "active", "passed", "", 20)
-	addGroup("invited", "private", "degraded", "passed", "", 20)
-	addGroup("owned", "private", "active", "passed", "", userID)
-	addGroup("hidden", "private", "active", "passed", "", 20)
-	addGroup("disabled", "public", "disabled", "passed", "", 20)
-	addGroup("suspended", "public", "suspended", "passed", "", 20)
-	addGroup("unverified", "public", "active", "pending", "", 20)
-	addGroup("mismatch", "public", "active", "passed", "mismatch", 20)
-	addGroup("blocked", "public", "active", "passed", "", 20)
-	addGroup("deleted", "public", "active", "passed", "", 20)
+	addGroup("public", "public", "active", "passed", 20)
+	addGroup("invited", "private", "degraded", "passed", 20)
+	addGroup("owned", "private", "active", "passed", userID)
+	addGroup("hidden", "private", "active", "passed", 20)
+	addGroup("disabled", "public", "disabled", "passed", 20)
+	addGroup("suspended", "public", "suspended", "passed", 20)
+	addGroup("unverified", "public", "active", "pending", 20)
+	addGroup("blocked", "public", "active", "passed", 20)
+	addGroup("deleted", "public", "active", "passed", 20)
 	require.NoError(t, db.Delete(&marketplaceschema.Group{}, "id = ?", "deleted").Error)
 	require.NoError(t, db.Create(&marketplaceschema.GroupAccess{GroupID: "invited", UserID: userID}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.ChannelUserBlock{ChannelID: "blocked", UserID: userID}).Error)
@@ -76,7 +75,7 @@ func TestKeyGroupOptionsAccessPoolsAndBoundedQueries(t *testing.T) {
 	require.True(t, byValue["market:public"].SubscriptionEnabled)
 	baselineQueries := queryCount
 	for i := 0; i < 65; i++ {
-		addGroup(fmt.Sprintf("more-%d", i), "public", "active", "passed", "", 20)
+		addGroup(fmt.Sprintf("more-%d", i), "public", "active", "passed", 20)
 	}
 	queryCount = 0
 	options, err = ListKeyGroupOptions(userID)

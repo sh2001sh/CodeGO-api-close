@@ -84,7 +84,7 @@ func ReconcileMarketplaceChannels() error {
 }
 
 func backfillConnectivityTestStatus(channel *marketplaceschema.Channel) error {
-	if isGPT56MappingEligible(channel) || channel.ConnectivityTestStatus != "" {
+	if channel.ConnectivityTestStatus != "" {
 		return nil
 	}
 	var latest marketplaceschema.VerificationRun
@@ -104,9 +104,6 @@ func backfillConnectivityTestStatus(channel *marketplaceschema.Channel) error {
 }
 
 func needsVerificationUpgrade(channel *marketplaceschema.Channel) (bool, error) {
-	if isGPT56MappingEligible(channel) {
-		return channel.GPT56MappingCheckedAt == nil, nil
-	}
 	var latest marketplaceschema.VerificationRun
 	err := platformdb.DB.Where("channel_id = ?", channel.ID).Order("created_at desc").First(&latest).Error
 	if err != nil {

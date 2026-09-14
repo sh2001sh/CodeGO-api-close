@@ -67,39 +67,6 @@ type ModelVerificationResult struct {
 	TestedAt  time.Time `json:"tested_at"`
 }
 
-type GPT56MappingResult struct {
-	RequestedModel string               `json:"requested_model"`
-	ReportedModel  string               `json:"reported_model,omitempty"`
-	Status         string               `json:"status"`
-	LatencyMS      int64                `json:"latency_ms"`
-	SampleCount    int                  `json:"sample_count"`
-	MatchedSamples int                  `json:"matched_samples"`
-	Samples        []GPT56MappingSample `json:"samples,omitempty"`
-	Error          string               `json:"error,omitempty"`
-	TestedAt       time.Time            `json:"tested_at"`
-}
-
-type GPT56MappingSample struct {
-	Index         int       `json:"index"`
-	Variant       string    `json:"variant,omitempty"`
-	Status        string    `json:"status"`
-	ReportedModel string    `json:"reported_model,omitempty"`
-	LatencyMS     int64     `json:"latency_ms"`
-	Error         string    `json:"error,omitempty"`
-	TestedAt      time.Time `json:"tested_at"`
-}
-
-type GPT56MappingRunView struct {
-	ID          string               `json:"id"`
-	ParentRunID string               `json:"parent_run_id,omitempty"`
-	Level       string               `json:"level"`
-	Trigger     string               `json:"trigger"`
-	Status      string               `json:"status"`
-	Results     []GPT56MappingResult `json:"results"`
-	StartedAt   time.Time            `json:"started_at"`
-	CompletedAt *time.Time           `json:"completed_at"`
-}
-
 type ChannelView struct {
 	ID                               string                       `json:"id"`
 	OwnerUserID                      int                          `json:"owner_user_id"`
@@ -120,12 +87,6 @@ type ChannelView struct {
 	ConnectivityTestStatus           string                       `json:"connectivity_test_status"`
 	ConnectivityTestCheckedAt        *time.Time                   `json:"connectivity_test_checked_at"`
 	ModelConsistencyStatus           string                       `json:"model_consistency_status"`
-	GPT56MappingResults              []GPT56MappingResult         `json:"gpt56_mapping_results"`
-	GPT56MappingStatus               string                       `json:"gpt56_mapping_status"`
-	GPT56MappingCheckedAt            *time.Time                   `json:"gpt56_mapping_checked_at"`
-	GPT56MappingLevel                string                       `json:"gpt56_mapping_level"`
-	GPT56MappingTrigger              string                       `json:"gpt56_mapping_trigger"`
-	GPT56MappingHistory              []GPT56MappingRunView        `json:"gpt56_mapping_history"`
 	AutoProbeEnabled                 bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         int                          `json:"auto_probe_interval_minutes"`
 	AutoProbeModel                   string                       `json:"auto_probe_model"`
@@ -167,7 +128,6 @@ type AdminChannelQuery struct {
 	Source         string
 	Provider       string
 	Verification   string
-	MappingStatus  string
 	OwnerSearch    string
 	StartTimestamp int64
 	EndTimestamp   int64
@@ -253,11 +213,6 @@ type GroupListItem struct {
 	Models                     []string                     `json:"models"`
 	ModelVerificationResults   []ModelVerificationResult    `json:"model_verification_results"`
 	ModelConsistencyStatus     string                       `json:"model_consistency_status"`
-	GPT56MappingResults        []GPT56MappingResult         `json:"gpt56_mapping_results"`
-	GPT56MappingStatus         string                       `json:"gpt56_mapping_status"`
-	GPT56MappingCheckedAt      *time.Time                   `json:"gpt56_mapping_checked_at"`
-	GPT56MappingLevel          string                       `json:"gpt56_mapping_level"`
-	GPT56MappingTrigger        string                       `json:"gpt56_mapping_trigger"`
 	ConnectivityTestStatus     string                       `json:"connectivity_test_status"`
 	ConnectivityTestCheckedAt  *time.Time                   `json:"connectivity_test_checked_at"`
 	RemoteCompactionSupport    string                       `json:"remote_compaction_support,omitempty"`

@@ -19,7 +19,6 @@ type KeyGroupOption struct {
 	Multiplier             *float64 `json:"multiplier,omitempty"`
 	SubscriptionEnabled    bool     `json:"subscription_enabled,omitempty"`
 	SubscriptionMultiplier float64  `json:"subscription_multiplier,omitempty"`
-	MappingStatus          string   `json:"mapping_status,omitempty"`
 	Models                 []string `json:"models"`
 	MemberCount            int      `json:"member_count,omitempty"`
 	SuccessRate            *float64 `json:"success_rate,omitempty"`
@@ -42,7 +41,7 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 	var channels []marketplaceschema.Channel
 	var overrides []marketplaceschema.UserMultiplier
 	if len(ids) > 0 {
-		if err := platformdb.DB.Select("id, approved_source_label, source_label_status, declared_models, gpt56_mapping_status, internal_channel_id").Where("id IN ?", ids).Find(&channels).Error; err != nil {
+		if err := platformdb.DB.Select("id, approved_source_label, source_label_status, declared_models, internal_channel_id").Where("id IN ?", ids).Find(&channels).Error; err != nil {
 			return nil, err
 		}
 		// One query for all personal prices, rather than one query per option.
@@ -70,7 +69,7 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 	for _, group := range groups {
 		channel, exists := channelsByID[group.ChannelID]
 		_, isBlocked := blocked[group.ChannelID]
-		if !exists || isBlocked || channel.GPT56MappingStatus == "mismatch" ||
+		if !exists || isBlocked ||
 			(group.LifecycleStatus != marketplacedomain.LifecycleActive && group.LifecycleStatus != marketplacedomain.LifecycleDegraded) {
 			continue
 		}
@@ -82,7 +81,7 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 		}
 		option := KeyGroupOption{
 			Value: "market:" + group.ID, Label: label, Category: "marketplace",
-			Multiplier: &multiplier, Models: models, MappingStatus: channel.GPT56MappingStatus,
+			Multiplier: &multiplier, Models: models,
 			SubscriptionEnabled:    group.CreditPoolPolicy == marketplacedomain.CreditPolicySubscriptionAndUniversal,
 			SubscriptionMultiplier: marketplacedomain.SubscriptionMultiplier(multiplier),
 		}

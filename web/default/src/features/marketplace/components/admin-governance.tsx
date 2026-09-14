@@ -12,14 +12,12 @@ import {
   useMarketplaceFailedModelRemoval,
 } from '../hooks'
 import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
-import { hasGPT56Model } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
 import { AdminChannelActions } from './admin-channel-actions'
 import type { AdminIncomeRange } from './admin-income-filter'
 import { AdminOwnerIncomePanel } from './admin-owner-income-panel'
 import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
-import { GPT56MappingStatusView } from './gpt56-mapping-report'
 import {
   ConnectivityTestStatusView,
   ModelConsistencyBadge,
@@ -36,7 +34,6 @@ export function AdminGovernance() {
   const [channelSource, setChannelSource] = useState('')
   const [channelProvider, setChannelProvider] = useState('')
   const [channelVerification, setChannelVerification] = useState('')
-  const [mappingStatus, setMappingStatus] = useState('')
   const deferredOwnerSearch = useDeferredValue(ownerSearch.trim())
   const deferredChannelSearch = useDeferredValue(channelSearch.trim())
   const query = useAdminMarketplaceChannels(
@@ -46,7 +43,6 @@ export function AdminGovernance() {
       source: channelSource,
       provider: channelProvider,
       verification: channelVerification,
-      mappingStatus,
       ownerSearch: deferredOwnerSearch,
       startTimestamp: toTimestamp(incomeRange.start),
       endTimestamp: toTimestamp(incomeRange.end),
@@ -135,17 +131,6 @@ export function AdminGovernance() {
           <option value='paused'>{t('已暂停')}</option>
           <option value='failed'>{t('检测未通过')}</option>
         </NativeSelect>
-        <NativeSelect
-          value={mappingStatus}
-          onChange={(event) => setMappingStatus(event.target.value)}
-          aria-label={t('映射状态')}
-          className='bg-background'
-        >
-          <option value=''>{t('全部映射状态')}</option>
-          <option value='matched'>{t('映射通过')}</option>
-          <option value='insufficient_evidence'>{t('证据不足')}</option>
-          <option value='mismatch'>{t('映射不一致')}</option>
-        </NativeSelect>
       </div>
       <section className='border-border overflow-hidden rounded-md border'>
         {query.isLoading ? (
@@ -232,21 +217,12 @@ export function AdminGovernance() {
                     </span>
                   </div>
                   <SensitiveWordPolicyControl channel={channel} admin />
-                  <GPT56MappingStatusView
-                    models={channel.declared_models}
-                    status={channel.gpt56_mapping_status}
-                    results={channel.gpt56_mapping_results}
-                    checkedAt={channel.gpt56_mapping_checked_at}
-                    level={channel.gpt56_mapping_level}
-                    trigger={channel.gpt56_mapping_trigger}
-                    history={channel.gpt56_mapping_history}
-                  />
                   <ConnectivityTestStatusView
                     status={channel.connectivity_test_status}
                     results={channel.model_verification_results}
                     checkedAt={channel.connectivity_test_checked_at}
                     summary={channel.verification_summary}
-                    required={!hasGPT56Model(channel.declared_models)}
+                    required
                     showErrors
                     onRemoveModel={(model) =>
                       failedModelRemoval.mutate(

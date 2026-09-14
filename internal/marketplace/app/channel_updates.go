@@ -161,11 +161,6 @@ func invalidateChannelVerification(channel *marketplaceschema.Channel, group *ma
 	channel.ModelVerificationResults = "[]"
 	channel.ConnectivityTestStatus = ""
 	channel.ConnectivityTestCheckedAt = nil
-	channel.GPT56MappingResults = "[]"
-	channel.GPT56MappingStatus = ""
-	channel.GPT56MappingCheckedAt = nil
-	channel.GPT56MappingLevel = ""
-	channel.GPT56MappingTrigger = ""
 	channel.Status = marketplacedomain.LifecycleDraft
 	group.LifecycleStatus = marketplacedomain.LifecycleDraft
 	group.VerificationStatus = marketplacedomain.VerificationQueued

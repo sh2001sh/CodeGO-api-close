@@ -71,6 +71,10 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 	if err != nil {
 		return nil, err
 	}
+	latestRuns, err := latestVerifications(channelIDs(channels))
+	if err != nil {
+		return nil, err
+	}
 	result := make([]ChannelView, 0, len(channels))
 	for index := range channels {
 		if group := groups[channels[index].ID]; group != nil {
@@ -87,10 +91,7 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 			if verification := strings.TrimSpace(input.Verification); verification != "" && group.VerificationStatus != verification {
 				continue
 			}
-			if mappingStatus := strings.TrimSpace(input.MappingStatus); mappingStatus != "" && channels[index].GPT56MappingStatus != mappingStatus {
-				continue
-			}
-			view := channelView(&channels[index], group)
+			view := channelViewWithLatestVerification(&channels[index], group, latestRuns[channels[index].ID])
 			view.OwnerExternalID = externalIDs[channels[index].OwnerUserID]
 			view.RequestCount = earnings[group.ID].RequestCount
 			view.TotalIncome = earnings[group.ID].TotalIncome

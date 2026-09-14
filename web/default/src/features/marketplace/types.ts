@@ -9,15 +9,6 @@ export type MarketplaceStatus =
 
 export type ModelConsistencyStatus = '' | 'passed' | 'failed' | 'questionable'
 
-export type GPT56MappingStatus =
-  | ''
-  | 'queued'
-  | 'running'
-  | 'matched'
-  | 'mismatch'
-  | 'insufficient_evidence'
-  | 'paused'
-
 export type ConnectivityTestStatus =
   | ''
   | 'queued'
@@ -41,47 +32,6 @@ export interface GroupModelRequestStatus {
   success_rate: number
   recent_request_bucket_seconds: number
   recent_request_series: MarketplaceGroup['recent_request_series']
-}
-
-export interface GPT56MappingResult {
-  requested_model: string
-  reported_model?: string
-  status: Exclude<GPT56MappingStatus, ''>
-  latency_ms: number
-  sample_count: number
-  matched_samples: number
-  samples?: GPT56MappingSample[]
-  error?: string
-  tested_at: string
-}
-
-export interface GPT56MappingSample {
-  index: number
-  variant?: string
-  status: 'matched' | 'mismatch' | 'error' | 'missing_model'
-  reported_model?: string
-  latency_ms: number
-  error?: string
-  tested_at: string
-}
-
-export type GPT56MappingLevel = 'daily_light' | 'confirmation'
-
-export type GPT56MappingTrigger =
-  | 'scheduled'
-  | 'manual'
-  | 'initial'
-  | 'confirmation'
-
-export interface GPT56MappingRun {
-  id: string
-  parent_run_id?: string
-  level: GPT56MappingLevel
-  trigger: GPT56MappingTrigger
-  status: Exclude<GPT56MappingStatus, ''>
-  results: GPT56MappingResult[]
-  started_at: string
-  completed_at?: string | null
 }
 
 export interface MarketplaceGroup {
@@ -113,11 +63,6 @@ export interface MarketplaceGroup {
   connectivity_test_checked_at?: string | null
   remote_compaction_support?: 'v1' | 'v1_v2' | 'v2' | ''
   model_consistency_status: ModelConsistencyStatus
-  gpt56_mapping_results: GPT56MappingResult[]
-  gpt56_mapping_status: GPT56MappingStatus
-  gpt56_mapping_checked_at?: string | null
-  gpt56_mapping_level?: GPT56MappingLevel | ''
-  gpt56_mapping_trigger?: GPT56MappingTrigger | ''
   auto_probe_enabled: boolean
   auto_probe_interval_minutes: number
   auto_probe_model: string
@@ -238,12 +183,6 @@ export interface MarketplaceChannel {
   connectivity_test_status: ConnectivityTestStatus
   connectivity_test_checked_at?: string | null
   model_consistency_status: ModelConsistencyStatus
-  gpt56_mapping_results: GPT56MappingResult[]
-  gpt56_mapping_status: GPT56MappingStatus
-  gpt56_mapping_checked_at?: string | null
-  gpt56_mapping_level?: GPT56MappingLevel | ''
-  gpt56_mapping_trigger?: GPT56MappingTrigger | ''
-  gpt56_mapping_history: GPT56MappingRun[]
   auto_probe_enabled: boolean
   auto_probe_interval_minutes: number
   auto_probe_model: string
@@ -276,7 +215,6 @@ export interface AdminMarketplaceChannelFilters {
   source?: string
   provider?: string
   verification?: string
-  mappingStatus?: string
   ownerSearch?: string
   ownerUserIds?: number[]
   startTimestamp?: number

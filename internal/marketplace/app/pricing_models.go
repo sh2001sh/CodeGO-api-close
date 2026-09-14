@@ -39,7 +39,7 @@ func ListAvailablePricingModels(userID int) ([]string, error) {
 		return result, nil
 	}
 	var channels []marketplaceschema.Channel
-	if err := platformdb.DB.Select("id, internal_channel_id, declared_models, gpt56_mapping_status").Where("id IN ?", ids).Find(&channels).Error; err != nil {
+	if err := platformdb.DB.Select("id, internal_channel_id, declared_models").Where("id IN ?", ids).Find(&channels).Error; err != nil {
 		return nil, err
 	}
 	type memberModels struct {
@@ -49,7 +49,7 @@ func ListAvailablePricingModels(userID int) ([]string, error) {
 	eligible := make(map[int]memberModels, len(channels))
 	internalIDs := make([]int, 0, len(channels))
 	for _, channel := range channels {
-		if channel.InternalChannelID == nil || channel.GPT56MappingStatus == "mismatch" {
+		if channel.InternalChannelID == nil {
 			continue
 		}
 		models := map[string]bool{}

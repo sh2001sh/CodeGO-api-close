@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	"github.com/stretchr/testify/require"
@@ -11,8 +12,9 @@ import (
 func TestOwnerCanRemoveOnlyFailedModelAndRetainEvidence(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(
+		&gatewayschema.Channel{}, &gatewayschema.Ability{},
 		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
-		&marketplaceschema.VerificationRun{}, &marketplaceschema.GPT56MappingRun{},
+		&marketplaceschema.VerificationRun{},
 	))
 	channel := marketplaceschema.Channel{
 		ID: "remove-failed-model", OwnerUserID: 42, ProviderType: "openai_compatible",
@@ -42,7 +44,7 @@ func TestOwnerCanRemoveOnlyFailedModelAndRetainEvidence(t *testing.T) {
 	require.Equal(t, "gpt-5.6-sol", view.AutoProbeModel)
 	require.NotContains(t, view.ModelPrices, "broken-model")
 	require.Equal(t, marketplacedomain.VerificationPassed, view.ConnectivityTestStatus)
-	require.Equal(t, marketplacedomain.VerificationQueued, view.VerificationStatus)
+	require.Equal(t, marketplacedomain.VerificationPassed, view.VerificationStatus)
 }
 
 func TestFailedModelRemovalRejectsPassedAndLastModel(t *testing.T) {

@@ -2,8 +2,8 @@ package bootstrap
 
 import (
 	"context"
+
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
-	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	workflowapp "github.com/sh2001sh/new-api/internal/workflow/app"
@@ -40,6 +40,5 @@ func startWorkflowWorkerBackgroundTasks() error {
 	}
 	workflowapp.StartSubscriptionResetScheduler(context.Background())
 	commerceapp.StartPendingOrderFulfillmentScheduler(context.Background())
-	marketplaceapp.StartGPT56MappingScheduler(context.Background())
 	return nil
 }

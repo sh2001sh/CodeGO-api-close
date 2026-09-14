@@ -387,10 +387,6 @@ func VerifyChannel(c *gin.Context) {
 	queueOwnedChannelAction(c, marketplaceapp.QueueRequiredVerification)
 }
 
-func DetectChannel(c *gin.Context) {
-	queueOwnedChannelAction(c, marketplaceapp.QueueGPT56MappingVerification)
-}
-
 func TestChannelConnectivity(c *gin.Context) {
 	queueOwnedChannelAction(c, marketplaceapp.QueueConnectivityTest)
 }
@@ -498,7 +494,6 @@ func ListAdminChannels(c *gin.Context) {
 		Source:         c.Query("source"),
 		Provider:       c.Query("provider"),
 		Verification:   c.Query("verification"),
-		MappingStatus:  c.Query("mapping_status"),
 		OwnerSearch:    c.Query("owner_search"),
 		StartTimestamp: queryInt64(c, "start_timestamp"),
 		EndTimestamp:   queryInt64(c, "end_timestamp"),
@@ -590,10 +585,6 @@ func UpdateAdminChannel(c *gin.Context) {
 
 func VerifyAdminChannel(c *gin.Context) {
 	queueAdminChannelAction(c, marketplaceapp.QueueRequiredVerification)
-}
-
-func DetectAdminChannel(c *gin.Context) {
-	queueAdminChannelAction(c, marketplaceapp.QueueGPT56MappingVerification)
 }
 
 func TestAdminChannelConnectivity(c *gin.Context) {

@@ -640,13 +640,6 @@ export async function queueMarketplaceVerification(
   return requireData(response.data)
 }
 
-export async function queueMarketplaceDetection(
-  channelId: string,
-  admin = false
-) {
-  return queueMarketplaceChannelAction(channelId, 'detect', admin)
-}
-
 export async function queueMarketplaceConnectivityTest(
   channelId: string,
   admin = false
@@ -783,7 +776,6 @@ export async function getAdminMarketplaceChannels(
   if (filters.source) search.set('source', filters.source)
   if (filters.provider) search.set('provider', filters.provider)
   if (filters.verification) search.set('verification', filters.verification)
-  if (filters.mappingStatus) search.set('mapping_status', filters.mappingStatus)
   if (filters.ownerSearch) search.set('owner_search', filters.ownerSearch)
   if (filters.startTimestamp) {
     search.set('start_timestamp', String(filters.startTimestamp))

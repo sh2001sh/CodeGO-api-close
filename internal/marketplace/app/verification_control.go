@@ -39,17 +39,12 @@ func PauseChannelVerification(channelID string) error {
 }
 
 func verificationInProgress(channel *marketplaceschema.Channel) bool {
-	return channel != nil && (statusInProgress(channel.ConnectivityTestStatus) ||
-		mappingStatusInProgress(channel.GPT56MappingStatus))
+	return channel != nil && statusInProgress(channel.ConnectivityTestStatus)
 }
 
 func statusInProgress(status string) bool {
 	return status == marketplacedomain.VerificationQueued ||
 		status == marketplacedomain.VerificationRunning
-}
-
-func mappingStatusInProgress(status string) bool {
-	return status == GPT56MappingStatusQueued || status == GPT56MappingStatusRunning
 }
 
 func pauseChannelVerificationState(channel *marketplaceschema.Channel) error {
@@ -61,9 +56,6 @@ func pauseChannelVerificationState(channel *marketplaceschema.Channel) error {
 		channelUpdates := map[string]any{"status": marketplacedomain.LifecycleDraft}
 		if statusInProgress(channel.ConnectivityTestStatus) {
 			channelUpdates["connectivity_test_status"] = marketplacedomain.VerificationPaused
-		}
-		if mappingStatusInProgress(channel.GPT56MappingStatus) {
-			channelUpdates["gpt56_mapping_status"] = GPT56MappingStatusPaused
 		}
 		if err := tx.Model(channel).Updates(channelUpdates).Error; err != nil {
 			return err
@@ -86,21 +78,14 @@ func pauseActiveVerificationRunsWithDB(tx *gorm.DB, channelID string, now time.T
 	}).Error; err != nil {
 		return err
 	}
-	return tx.Model(&marketplaceschema.GPT56MappingRun{}).
-		Where("channel_id = ? AND status IN ?", channelID, []string{
-			GPT56MappingStatusQueued, GPT56MappingStatusRunning,
-		}).Updates(map[string]any{
-		"status": GPT56MappingStatusPaused, "completed_at": now,
-	}).Error
+	return nil
 }
 
 func reconcileInterruptedVerifications() error {
 	var channels []marketplaceschema.Channel
-	if err := platformdb.DB.Where(
-		"connectivity_test_status IN ? OR gpt56_mapping_status IN ?",
-		[]string{marketplacedomain.VerificationQueued, marketplacedomain.VerificationRunning},
-		[]string{GPT56MappingStatusQueued, GPT56MappingStatusRunning},
-	).Find(&channels).Error; err != nil {
+	if err := platformdb.DB.Where("connectivity_test_status IN ?", []string{
+		marketplacedomain.VerificationQueued, marketplacedomain.VerificationRunning,
+	}).Find(&channels).Error; err != nil {
 		return err
 	}
 	for index := range channels {

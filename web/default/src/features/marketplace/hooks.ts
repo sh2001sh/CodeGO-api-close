@@ -23,7 +23,6 @@ import {
   getMyMarketplaceUsageLogs,
   getTokenOptions,
   pauseMarketplaceVerification,
-  queueMarketplaceDetection,
   queueMarketplaceConnectivityTest,
   removeMarketplaceFailedModel,
   reviewMarketplaceChannel,
@@ -80,7 +79,6 @@ function verificationRefetchInterval(
   channels: {
     lifecycle_status: string
     verification_status: string
-    gpt56_mapping_status?: string
     connectivity_test_status?: string
     deleted_at?: string | null
   }[]
@@ -90,7 +88,6 @@ function verificationRefetchInterval(
       !channel.deleted_at &&
       (channel.lifecycle_status === 'verifying' ||
         ['queued', 'running'].includes(channel.verification_status) ||
-        ['queued', 'running'].includes(channel.gpt56_mapping_status ?? '') ||
         ['queued', 'running'].includes(channel.connectivity_test_status ?? ''))
   )
     ? 2000
@@ -372,10 +369,6 @@ export function useMarketplaceMutations() {
       onSuccess: invalidateChannels,
     }),
     fetchModels: useMutation({ mutationFn: fetchMarketplaceModels }),
-    detect: useMutation({
-      mutationFn: (channelId: string) => queueMarketplaceDetection(channelId),
-      onSuccess: invalidateChannels,
-    }),
     testConnectivity: useMutation({
       mutationFn: (channelId: string) =>
         queueMarketplaceConnectivityTest(channelId),
@@ -497,15 +490,11 @@ export function useAdminMarketplaceReview() {
 }
 
 export function useAdminMarketplaceVerification(
-  action: 'detect' | 'test' | 'retry-test' | 'pause'
+  action: 'test' | 'retry-test' | 'pause'
 ) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (channelId: string) => {
-      if (action === 'detect') {
-        await queueMarketplaceDetection(channelId, true)
-        return
-      }
       if (action === 'test') {
         await queueMarketplaceConnectivityTest(channelId, true)
         return

@@ -25,7 +25,6 @@ import type { MarketplaceChannel } from '../types'
 import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
 import { ChannelVerificationStatus } from './channel-verification-status'
-import { GPT56MappingStatusView } from './gpt56-mapping-report'
 import { AutoProbeStatusView } from './model-verification'
 import { OwnerChannelActions } from './owner-channel-actions'
 import { IncomeMetric } from './owner-channel-metric'
@@ -288,15 +287,6 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                           {!channel.deleted_at && (
                             <SensitiveWordPolicyControl channel={channel} />
                           )}
-                          <GPT56MappingStatusView
-                            models={channel.declared_models}
-                            status={channel.gpt56_mapping_status}
-                            results={channel.gpt56_mapping_results}
-                            checkedAt={channel.gpt56_mapping_checked_at}
-                            level={channel.gpt56_mapping_level}
-                            trigger={channel.gpt56_mapping_trigger}
-                            history={channel.gpt56_mapping_history}
-                          />
                           <AutoProbeStatusView
                             enabled={channel.auto_probe_enabled}
                             intervalMinutes={

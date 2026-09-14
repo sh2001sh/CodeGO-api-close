@@ -67,7 +67,6 @@ func removeFailedChannelModel(
 	if !containsFold(remaining, channel.AutoProbeModel) {
 		channel.AutoProbeModel = remaining[0]
 	}
-	refreshMappingAfterModelRemoval(channel)
 	applyRetainedVerificationState(channel, group, retainedResults)
 
 	if channel.InternalChannelID == nil && group.VerificationStatus == marketplacedomain.VerificationPassed {
@@ -120,42 +119,6 @@ func applyRetainedVerificationState(
 	} else {
 		group.VerificationDueAt = nil
 	}
-}
-
-func refreshMappingAfterModelRemoval(channel *marketplaceschema.Channel) {
-	if !isGPT56MappingEligible(channel) {
-		channel.GPT56MappingResults = "[]"
-		channel.GPT56MappingStatus = ""
-		channel.GPT56MappingCheckedAt = nil
-		channel.GPT56MappingLevel = ""
-		channel.GPT56MappingTrigger = ""
-		return
-	}
-	declared := gpt56MappingModelsForChannel(channel)
-	retained := make([]GPT56MappingResult, 0, len(declared))
-	byModel := make(map[string]GPT56MappingResult)
-	for _, result := range decodeGPT56MappingResults(channel.GPT56MappingResults) {
-		byModel[strings.ToLower(strings.TrimSpace(result.RequestedModel))] = result
-	}
-	for _, model := range declared {
-		if result, ok := byModel[strings.ToLower(model)]; ok {
-			retained = append(retained, result)
-		}
-	}
-	channel.GPT56MappingResults = encodeGPT56MappingResults(retained)
-	if len(retained) == len(declared) {
-		channel.GPT56MappingStatus = gpt56MappingStatus(retained)
-	} else {
-		channel.GPT56MappingStatus = ""
-	}
-}
-
-func encodeGPT56MappingResults(results []GPT56MappingResult) string {
-	encoded, err := json.Marshal(results)
-	if err != nil {
-		return "[]"
-	}
-	return string(encoded)
 }
 
 func canonicalDeclaredModel(models []string, requested string) (string, bool) {

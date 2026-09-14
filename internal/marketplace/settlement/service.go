@@ -246,26 +246,14 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 			result = ReclaimResult{Count: existing.Count, Amount: existing.Amount}
 			return nil
 		}
-		query := tx.Model(&marketplaceschema.Settlement{}).
-			Where("status = ? AND owner_net_amount > reclaimed_amount", statusReleased)
-		if len(filter.OwnerUserIDs) > 0 {
-			query = query.Where("owner_user_id IN ?", filter.OwnerUserIDs)
-		}
-		if filter.StartTimestamp > 0 {
-			query = query.Where("created_at >= ?", time.Unix(filter.StartTimestamp, 0))
-		}
-		if filter.EndTimestamp > 0 {
-			query = query.Where("created_at < ?", time.Unix(filter.EndTimestamp+1, 0))
-		}
 		ownerAmounts := make(map[int]int64)
 		var cursor *marketplaceschema.Settlement
 		for {
-			batchQuery := query.Clauses(clause.Locking{Strength: "UPDATE"}).Order("created_at ASC, id ASC").Limit(500)
-			if cursor != nil {
-				batchQuery = batchQuery.Where("created_at > ? OR (created_at = ? AND id > ?)", cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
-			}
 			var items []marketplaceschema.Settlement
-			if err := batchQuery.Find(&items).Error; err != nil {
+			if err := reclaimableSettlementsQuery(tx, filter, cursor).
+				Clauses(clause.Locking{Strength: "UPDATE"}).
+				Select("id", "owner_user_id", "owner_net_amount", "reclaimed_amount", "created_at").
+				Order("created_at ASC, id ASC").Limit(500).Find(&items).Error; err != nil {
 				return err
 			}
 			if len(items) == 0 {
@@ -324,6 +312,24 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 		return ReclaimResult{}, err
 	}
 	return result, nil
+}
+
+func reclaimableSettlementsQuery(tx *gorm.DB, filter ReleaseFilter, cursor *marketplaceschema.Settlement) *gorm.DB {
+	query := tx.Session(&gorm.Session{NewDB: true}).Model(&marketplaceschema.Settlement{}).
+		Where("status = ? AND owner_net_amount > reclaimed_amount", statusReleased)
+	if len(filter.OwnerUserIDs) > 0 {
+		query = query.Where("owner_user_id IN ?", filter.OwnerUserIDs)
+	}
+	if filter.StartTimestamp > 0 {
+		query = query.Where("created_at >= ?", time.Unix(filter.StartTimestamp, 0))
+	}
+	if filter.EndTimestamp > 0 {
+		query = query.Where("created_at < ?", time.Unix(filter.EndTimestamp+1, 0))
+	}
+	if cursor != nil {
+		query = query.Where("created_at > ? OR (created_at = ? AND id > ?)", cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
+	}
+	return query
 }
 
 // ForfeitChannelPending clears frozen pending earnings when a channel is shut down.

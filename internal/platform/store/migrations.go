@@ -184,6 +184,7 @@ func V2MigrationIDs() []string {
 		"20260911_security_audit_events",
 		"20260911_security_audit_delivery_status",
 		"20260912_marketplace_settlement_due_index",
+		"20260914_marketplace_settlement_reclaim_index",
 	}
 }
 
@@ -354,6 +355,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&gatewayschema.SecurityAuditEvent{})
 		}},
 		{ID: "20260912_marketplace_settlement_due_index", RunOutsideTx: migrateMarketplaceSettlementDueIndex},
+		{ID: "20260914_marketplace_settlement_reclaim_index", RunOutsideTx: migrateMarketplaceSettlementReclaimIndex},
 		{ID: "20260903_marketplace_owner_operations", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{})
 		}},
@@ -691,6 +693,28 @@ func migrateMarketplaceSettlementDueIndex(_ *gorm.DB) error {
 	}
 	if err := primary.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 		return fmt.Errorf("create marketplace settlement due index: %w", err)
+	}
+	return nil
+}
+
+// migrateMarketplaceSettlementReclaimIndex keeps administrator reclaim scans
+// on the small set of still-reclaimable rows and in cursor order.
+func migrateMarketplaceSettlementReclaimIndex(_ *gorm.DB) error {
+	primary := platformdb.DB
+	if primary == nil || !primary.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+		return nil
+	}
+	var statement string
+	switch strings.ToLower(primary.Dialector.Name()) {
+	case "postgres":
+		statement = "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_settlements_reclaim ON marketplace.settlements (owner_user_id, created_at ASC, id ASC) WHERE status = 'released' AND owner_net_amount > reclaimed_amount"
+	case "mysql":
+		statement = "CREATE INDEX idx_marketplace_settlements_reclaim ON marketplace_settlements (owner_user_id, status, created_at, id)"
+	default:
+		statement = "CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_reclaim ON marketplace_settlements (owner_user_id, status, created_at, id)"
+	}
+	if err := primary.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		return fmt.Errorf("create marketplace settlement reclaim index: %w", err)
 	}
 	return nil
 }

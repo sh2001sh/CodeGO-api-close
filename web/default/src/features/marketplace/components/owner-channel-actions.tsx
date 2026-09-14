@@ -6,7 +6,6 @@ import {
   Pause,
   Pencil,
   Play,
-  ShieldCheck,
   ShieldBan,
   Trash2,
 } from 'lucide-react'
@@ -16,7 +15,7 @@ import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useMarketplaceMutations } from '../hooks'
-import { failedConnectivityModels, hasGPT56Model } from '../lib/verification'
+import { failedConnectivityModels } from '../lib/verification'
 import { isImageGenerationModel } from '../lib/model-capabilities'
 import type { MarketplaceChannel } from '../types'
 
@@ -29,7 +28,6 @@ export function OwnerChannelActions(props: {
   const mutations = useMarketplaceMutations()
   const channel = props.channel
 
-  const needsDetection = hasGPT56Model(channel.declared_models)
   const failedConnectivityCount = failedConnectivityModels(
     channel.model_verification_results
   ).length
@@ -41,12 +39,11 @@ export function OwnerChannelActions(props: {
     (channel.connectivity_test_status === 'failed' && verifiableDeclaredCount > 0)
   const retryConnectivityCount =
     failedConnectivityCount > 0 ? failedConnectivityCount : verifiableDeclaredCount
-  const verificationRunning =
-    ['queued', 'running'].includes(channel.gpt56_mapping_status) ||
-    ['queued', 'running'].includes(channel.connectivity_test_status)
+  const verificationRunning = ['queued', 'running'].includes(
+    channel.connectivity_test_status
+  )
   const act = async (
     action:
-      | 'detect'
       | 'test-connectivity'
       | 'retry-connectivity'
       | 'pause-verification'
@@ -63,11 +60,6 @@ export function OwnerChannelActions(props: {
         const copied = await copyToClipboard(url)
         if (!copied) throw new Error(t('复制邀请链接失败，请手动复制'))
         toast.success(t('邀请链接已复制；有效期 30 天'))
-        return
-      }
-      if (action === 'detect') {
-        await mutations.detect.mutateAsync(channel.id)
-        toast.info(t('GPT-5.6 检测已开始，页面会自动更新结果'))
         return
       }
       if (action === 'test-connectivity') {
@@ -136,27 +128,6 @@ export function OwnerChannelActions(props: {
         <Link2 />
         {mutations.createInvite.isPending ? t('生成中') : t('邀请链接')}
       </Button>
-      {needsDetection && (
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={() => void act('detect')}
-          disabled={
-            mutations.detect.isPending ||
-            ['queued', 'running'].includes(channel.gpt56_mapping_status)
-          }
-        >
-          <ShieldCheck
-            className={cn(
-              ['queued', 'running'].includes(channel.gpt56_mapping_status) &&
-                'animate-pulse'
-            )}
-          />
-          {['queued', 'running'].includes(channel.gpt56_mapping_status)
-            ? t('检测中')
-            : t('GPT-5.6 一致性检测')}
-        </Button>
-      )}
       <Button
         variant='default'
         size='sm'
@@ -229,7 +200,6 @@ export function OwnerChannelActions(props: {
         {t('删除')}
       </Button>
       {(mutations.pause.isPending ||
-        mutations.detect.isPending ||
         mutations.testConnectivity.isPending ||
         mutations.retryConnectivity.isPending ||
         mutations.pauseVerification.isPending) && (

@@ -190,7 +190,7 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	if len(rejectedModels) > 0 && probeErr == nil {
 		probeErr = fmt.Errorf("%d 个声明模型未通过连通性检测", len(rejectedModels))
 	}
-	if probeErr == nil && !isGPT56MappingEligible(channel) {
+	if probeErr == nil {
 		if channel.InternalChannelID == nil {
 			probeErr = createInternalChannel(channel, group)
 		} else {
@@ -203,14 +203,11 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 		summary = verificationSummary(results, probeErr)
 	}
 	connectivityStatus := status
-	if isGPT56MappingEligible(channel) {
-		status, lifecycle = requiredVerificationState(channel)
-	} else if connectivityStatus == marketplacedomain.VerificationPassed {
+	if connectivityStatus == marketplacedomain.VerificationPassed {
 		lifecycle = marketplacedomain.LifecycleActive
 	}
 	// A manual connectivity test must not unpublish a channel that is already
-	// serving traffic. GPT-5.6 mapping is an additional evidence gate for new
-	// channels; its pending state must not downgrade an existing publication.
+	// serving traffic.
 	if probeErr == nil && connectivityStatus == marketplacedomain.VerificationPassed &&
 		(channel.Status == marketplacedomain.LifecycleActive ||
 			group.LifecycleStatus == marketplacedomain.LifecycleActive) {
@@ -247,20 +244,6 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 }
 
 func requiredVerificationState(channel *marketplaceschema.Channel) (string, string) {
-	if isGPT56MappingEligible(channel) {
-		switch channel.GPT56MappingStatus {
-		case GPT56MappingStatusMatched:
-			return marketplacedomain.VerificationPassed, marketplacedomain.LifecycleActive
-		case GPT56MappingStatusRunning:
-			return marketplacedomain.VerificationRunning, marketplacedomain.LifecycleVerifying
-		case GPT56MappingStatusPaused:
-			return marketplacedomain.VerificationPaused, marketplacedomain.LifecycleDraft
-		case GPT56MappingStatusMismatch, GPT56MappingStatusInsufficientEvidence:
-			return marketplacedomain.VerificationFailed, marketplacedomain.LifecycleDraft
-		default:
-			return marketplacedomain.VerificationQueued, marketplacedomain.LifecycleDraft
-		}
-	}
 	switch channel.ConnectivityTestStatus {
 	case marketplacedomain.VerificationPassed:
 		return marketplacedomain.VerificationPassed, marketplacedomain.LifecycleActive

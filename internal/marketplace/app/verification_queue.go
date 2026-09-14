@@ -20,9 +20,6 @@ func QueueRequiredVerification(channelID string) error {
 	if err != nil {
 		return err
 	}
-	if isGPT56MappingEligible(channel) {
-		return QueueGPT56MappingVerification(channelID)
-	}
 	if len(verifiableMarketplaceModels(decodeModels(channel.DeclaredModels))) == 0 {
 		return publishImageOnlyChannel(channel)
 	}
@@ -68,36 +65,6 @@ func publishImageOnlyChannel(channel *marketplaceschema.Channel) error {
 			"published_at":        now,
 		}).Error
 	})
-}
-
-// QueueGPT56MappingVerification collects independent mapping evidence for GPT-5.6 models.
-func QueueGPT56MappingVerification(channelID string) error {
-	channel, _, err := loadChannelGroup(channelID)
-	if err != nil {
-		return err
-	}
-	if !isGPT56MappingEligible(channel) {
-		return errors.New("该渠道未声明需要检测的 GPT-5.6 模型")
-	}
-	ctx, finish, started := marketplaceVerificationTasks.begin(
-		context.Background(), channelID, verificationTaskGPT56Mapping,
-	)
-	if !started {
-		return errors.New("GPT-5.6 检测正在进行")
-	}
-	if err := prepareGPT56MappingVerification(channelID); err != nil {
-		finish()
-		return err
-	}
-	trigger := GPT56MappingTriggerManual
-	if channel.InternalChannelID == nil {
-		trigger = GPT56MappingTriggerInitial
-	}
-	go func() {
-		defer finish()
-		executeGPT56MappingVerification(ctx, channelID, trigger)
-	}()
-	return nil
 }
 
 // QueueConnectivityTest persists a run before testing each declared model.
@@ -246,36 +213,7 @@ func prepareConnectivityTest(run *marketplaceschema.VerificationRun, retained []
 			}).Error; err != nil {
 			return err
 		}
-		channel, _, err := loadChannelGroupWithDB(tx, run.ChannelID)
-		if err != nil {
-			return err
-		}
-		if isGPT56MappingEligible(channel) {
-			return nil
-		}
 		return setRequiredVerificationQueuedWithDB(tx, run.ChannelID)
-	})
-}
-
-func prepareGPT56MappingVerification(channelID string) error {
-	now := time.Now().UTC()
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&marketplaceschema.GPT56MappingRun{}).
-			Where("channel_id = ? AND status IN ?", channelID, []string{
-				GPT56MappingStatusQueued, GPT56MappingStatusRunning,
-			}).Updates(map[string]any{
-			"status": GPT56MappingStatusPaused, "completed_at": now,
-		}).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&marketplaceschema.Channel{}).Where("id = ?", channelID).
-			Updates(map[string]any{
-				"gpt56_mapping_status":  GPT56MappingStatusQueued,
-				"gpt56_mapping_results": "[]",
-			}).Error; err != nil {
-			return err
-		}
-		return setRequiredVerificationQueuedWithDB(tx, channelID)
 	})
 }
 
@@ -342,64 +280,6 @@ func executeNativeVerification(ctx context.Context, runID string, models []strin
 	})
 	merged := mergeModelVerificationResults(decodeModels(channel.DeclaredModels), retained, results)
 	completeVerification(run, channel, group, merged, err)
-}
-
-func executeGPT56MappingVerification(ctx context.Context, channelID, trigger string) {
-	if ctx.Err() != nil {
-		return
-	}
-	channel, group, err := loadChannelGroup(channelID)
-	if err != nil || !isGPT56MappingEligible(channel) {
-		return
-	}
-	_, err = runGPT56MappingCheckWithRequest(ctx, channel, gpt56CheckRequest{
-		Level: GPT56MappingLevelConfirmation, Trigger: trigger,
-	})
-	if err != nil {
-		return
-	}
-	if err := platformdb.DB.First(channel, "id = ?", channelID).Error; err != nil {
-		return
-	}
-	completeGPT56MappingVerification(channel, group)
-}
-
-func completeGPT56MappingVerification(channel *marketplaceschema.Channel, group *marketplaceschema.Group) {
-	if channel == nil || channel.GPT56MappingStatus == GPT56MappingStatusPaused ||
-		mappingStatusInProgress(channel.GPT56MappingStatus) {
-		return
-	}
-	now := time.Now().UTC()
-	lifecycle := marketplacedomain.LifecycleDraft
-	verification := marketplacedomain.VerificationFailed
-	if channel.GPT56MappingStatus == GPT56MappingStatusMatched {
-		if channel.InternalChannelID == nil {
-			if err := createInternalChannel(channel, group); err == nil {
-				lifecycle = marketplacedomain.LifecycleActive
-				verification = marketplacedomain.VerificationPassed
-			}
-		} else if err := syncInternalChannel(channel, group); err == nil {
-			lifecycle = marketplacedomain.LifecycleActive
-			verification = marketplacedomain.VerificationPassed
-		}
-	}
-	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(channel).
-			Where("gpt56_mapping_status <> ?", GPT56MappingStatusPaused).
-			Update("status", lifecycle)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return errVerificationNotRunning
-		}
-		updates := map[string]any{"lifecycle_status": lifecycle, "verification_status": verification}
-		if verification == marketplacedomain.VerificationPassed {
-			updates["verification_due_at"] = now.Add(7 * 24 * time.Hour)
-			updates["published_at"] = now
-		}
-		return tx.Model(group).Updates(updates).Error
-	})
 }
 
 func loadChannelGroupWithDB(db *gorm.DB, channelID string) (*marketplaceschema.Channel, *marketplaceschema.Group, error) {

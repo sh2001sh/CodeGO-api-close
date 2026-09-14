@@ -2,7 +2,6 @@ import {
   Activity,
   CirclePause,
   Pencil,
-  ShieldCheck,
   Trash2,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -12,7 +11,7 @@ import {
   useAdminMarketplaceVerification,
   useMarketplaceMutations,
 } from '../hooks'
-import { failedConnectivityModels, hasGPT56Model } from '../lib/verification'
+import { failedConnectivityModels } from '../lib/verification'
 import { isImageGenerationModel } from '../lib/model-capabilities'
 import type { MarketplaceChannel } from '../types'
 
@@ -22,7 +21,6 @@ export function AdminChannelActions(props: {
   onDelete: () => void
 }) {
   const { t } = useTranslation()
-  const detection = useAdminMarketplaceVerification('detect')
   const connectivityTest = useAdminMarketplaceVerification('test')
   const connectivityRetry = useAdminMarketplaceVerification('retry-test')
   const verificationPause = useAdminMarketplaceVerification('pause')
@@ -60,22 +58,6 @@ export function AdminChannelActions(props: {
 
   return (
     <div className='flex shrink-0 flex-wrap items-center gap-2'>
-      {hasGPT56Model(channel.declared_models) && (
-        <Button
-          variant='outline'
-          size='sm'
-          disabled={
-            detection.isPending ||
-            ['queued', 'running'].includes(channel.gpt56_mapping_status)
-          }
-          onClick={() => detection.mutate(channel.id)}
-        >
-          <ShieldCheck />
-          {['queued', 'running'].includes(channel.gpt56_mapping_status)
-            ? t('检测中')
-            : t('GPT-5.6 一致性检测')}
-        </Button>
-      )}
       <Button
         variant='default'
         size='sm'
@@ -185,8 +167,5 @@ export function AdminChannelActions(props: {
 }
 
 function isVerificationRunning(channel: MarketplaceChannel) {
-  return (
-    ['queued', 'running'].includes(channel.gpt56_mapping_status) ||
-    ['queued', 'running'].includes(channel.connectivity_test_status)
-  )
+  return ['queued', 'running'].includes(channel.connectivity_test_status)
 }

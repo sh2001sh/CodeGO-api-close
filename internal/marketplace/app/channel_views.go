@@ -11,6 +11,15 @@ import (
 )
 
 func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Group) *ChannelView {
+	latest, _ := LatestVerification(channel.ID)
+	return channelViewWithLatestVerification(channel, group, latest)
+}
+
+func channelViewWithLatestVerification(
+	channel *marketplaceschema.Channel,
+	group *marketplaceschema.Group,
+	latest *marketplaceschema.VerificationRun,
+) *ChannelView {
 	view := &ChannelView{
 		ID: channel.ID, OwnerUserID: channel.OwnerUserID, GroupID: group.ID, PublicSlug: group.PublicSlug,
 		SystemDisplayName:    marketplaceDisplayName(channel.SubmittedSourceLabel, group.Multiplier, channel.ID),
@@ -24,12 +33,6 @@ func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Gr
 		ConnectivityTestStatus:    channel.ConnectivityTestStatus,
 		ConnectivityTestCheckedAt: channel.ConnectivityTestCheckedAt,
 		ModelConsistencyStatus:    channel.ModelConsistencyStatus,
-		GPT56MappingResults:       decodeGPT56MappingResults(channel.GPT56MappingResults),
-		GPT56MappingStatus:        channel.GPT56MappingStatus,
-		GPT56MappingCheckedAt:     channel.GPT56MappingCheckedAt,
-		GPT56MappingLevel:         channel.GPT56MappingLevel,
-		GPT56MappingTrigger:       channel.GPT56MappingTrigger,
-		GPT56MappingHistory:       latestGPT56MappingRuns(channel.ID, gpt56MappingHistoryLimit),
 		AutoProbeEnabled:          channel.AutoProbeEnabled,
 		AutoProbeIntervalMinutes:  channel.AutoProbeIntervalMinutes,
 		AutoProbeModel:            channel.AutoProbeModel,
@@ -49,7 +52,7 @@ func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Gr
 		deletedAt := channel.DeletedAt.Time
 		view.DeletedAt = &deletedAt
 	}
-	if latest, err := LatestVerification(channel.ID); err == nil && latest != nil {
+	if latest != nil {
 		view.VerificationStage = latest.Stage
 		view.VerificationSummary = latest.Summary
 		view.VerificationDetectorVersion = latest.DetectorVersion
@@ -57,6 +60,27 @@ func channelView(channel *marketplaceschema.Channel, group *marketplaceschema.Gr
 		view.VerificationCompletedAt = latest.CompletedAt
 	}
 	return view
+}
+
+func latestVerifications(channelIDs []string) (map[string]*marketplaceschema.VerificationRun, error) {
+	result := make(map[string]*marketplaceschema.VerificationRun, len(channelIDs))
+	if len(channelIDs) == 0 {
+		return result, nil
+	}
+	table := marketplaceschema.VerificationRun{}.TableName()
+	query := "SELECT * FROM (SELECT vr.*, ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC, id DESC) AS row_num FROM " + table + " vr WHERE channel_id IN ?) ranked WHERE row_num = 1"
+	var runs []marketplaceschema.VerificationRun
+	if err := platformdb.DB.Raw(query, channelIDs).Scan(&runs).Error; err != nil {
+		message := strings.ToLower(err.Error())
+		if strings.Contains(message, "no such table") || strings.Contains(message, "does not exist") {
+			return result, nil
+		}
+		return nil, err
+	}
+	for index := range runs {
+		result[runs[index].ChannelID] = &runs[index]
+	}
+	return result, nil
 }
 
 func loadOwnerDisplayName(userID int) string {

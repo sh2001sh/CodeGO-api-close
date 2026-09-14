@@ -2,6 +2,7 @@ package settlement
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -204,6 +205,12 @@ func openSettlementTestDB(t *testing.T) *gorm.DB {
 
 func TestReclaimAllIncludesMoreThanFiveThousandRecordsAndRespectsFilters(t *testing.T) {
 	db := openSettlementTestDB(t)
+	maxCursorPredicates := 0
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("track_reclaim_cursor_predicates", func(tx *gorm.DB) {
+		if tx.Statement.Table == (marketplaceschema.Settlement{}).TableName() {
+			maxCursorPredicates = max(maxCursorPredicates, strings.Count(strings.ToLower(tx.Statement.SQL.String()), "(created_at >"))
+		}
+	}))
 	// Match the timestamp convention used by GORM's CreatedAt writer.
 	reference := db.NowFunc().Truncate(time.Second)
 	items := make([]marketplaceschema.Settlement, 5001)
@@ -229,6 +236,7 @@ func TestReclaimAllIncludesMoreThanFiveThousandRecordsAndRespectsFilters(t *test
 	require.Equal(t, 5001, result.Count)
 	require.Equal(t, 1, transfers)
 	require.EqualValues(t, 5001, result.Amount)
+	require.LessOrEqual(t, maxCursorPredicates, 1, "each page must contain only its own cursor predicate")
 	var untouched int64
 	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Where("status <> ?", statusReclaimed).Count(&untouched).Error)
 	require.EqualValues(t, 3, untouched)

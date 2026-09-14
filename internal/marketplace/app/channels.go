@@ -143,11 +143,15 @@ func ListOwnerChannels(ownerUserID int) ([]ChannelView, error) {
 	if err != nil {
 		return nil, err
 	}
+	latestRuns, err := latestVerifications(channelIDs(channels))
+	if err != nil {
+		return nil, err
+	}
 	result := make([]ChannelView, 0, len(channels))
 	for index := range channels {
 		group := groups[channels[index].ID]
 		if group != nil {
-			view := channelView(&channels[index], group)
+			view := channelViewWithLatestVerification(&channels[index], group, latestRuns[channels[index].ID])
 			view.RequestCount = earnings[group.ID].RequestCount
 			view.TotalIncome = earnings[group.ID].TotalIncome
 			view.PendingIncome = earnings[group.ID].PendingIncome

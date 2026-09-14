@@ -13,7 +13,7 @@ func TestAvailablePricingModelsRequireAccessibleLiveGroupAndAbility(t *testing.T
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &marketplaceschema.Channel{},
 		&marketplaceschema.GroupAccess{}, &marketplaceschema.ChannelUserBlock{},
 		&gatewayschema.Channel{}, &gatewayschema.Ability{}))
-	ids := []string{"public", "private", "invited", "disabled", "unverified", "mismatch", "blocked", "offline", "no-ability", "orphan"}
+	ids := []string{"public", "private", "invited", "disabled", "unverified", "blocked", "offline", "no-ability", "orphan"}
 	for i, id := range ids {
 		internalID := i + 1
 		group := marketplaceschema.Group{
@@ -31,9 +31,6 @@ func TestAvailablePricingModelsRequireAccessibleLiveGroupAndAbility(t *testing.T
 		}
 		require.NoError(t, db.Create(&group).Error)
 		channel := marketplaceschema.Channel{ID: id, OwnerUserID: 20, InternalChannelID: &internalID, DeclaredModels: `["` + id + `"]`}
-		if id == "mismatch" {
-			channel.GPT56MappingStatus = "mismatch"
-		}
 		require.NoError(t, db.Create(&channel).Error)
 		if id != "orphan" {
 			status := 1

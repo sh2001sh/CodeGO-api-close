@@ -425,7 +425,7 @@ export function DawnMarket() {
       const map: Record<string, string> = {}
       group.models.forEach((name) => {
         const fee = modelFees.get(group.id)?.[name]
-        if (fee) map[name] = fee.input
+        if (fee) map[name] = fee.mode === 'percall' ? `${fee.input}/次` : fee.input
       })
       result.set(group.id, map)
     })

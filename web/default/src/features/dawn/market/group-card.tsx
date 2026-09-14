@@ -236,10 +236,10 @@ export function MarketGroupCard(props: {
         <div className='mlist cache-prices'>
           <div className='mh'>
             <span>模型</span>
-            <span style={{ textAlign: 'right' }}>输入 /1M</span>
-            <span style={{ textAlign: 'right' }}>输出 /1M</span>
-            <span className='mp'>{t('缓存写入')} /1M</span>
-            <span className='mp'>{t('缓存读取')} /1M</span>
+            <span style={{ textAlign: 'right' }}>输入</span>
+            <span style={{ textAlign: 'right' }}>输出</span>
+            <span className='mp'>{t('缓存写入')}</span>
+            <span className='mp'>{t('缓存读取')}</span>
             <span style={{ textAlign: 'right' }}>延迟</span>
           </div>
           {group.models.map((model) => {
@@ -281,8 +281,14 @@ export function MarketGroupCard(props: {
                       </i>
                     ) : null}
                   </span>
-                  <span className='mp'>{fee?.input ?? '—'}</span>
-                  <span className='mp'>{fee?.output ?? '—'}</span>
+                  <span className='mp'>
+                    {fee?.mode === 'percall' && fee.input !== '—'
+                      ? `${fee.input} /次`
+                      : fee?.input ?? '—'}
+                  </span>
+                  <span className='mp'>
+                    {fee?.mode === 'percall' ? '按次计费' : fee?.output ?? '—'}
+                  </span>
                   <span className='mp'>{fee?.cacheWrite ?? '—'}</span>
                   <span className='mp'>{fee?.cacheRead ?? '—'}</span>
                   <span className='mp'>

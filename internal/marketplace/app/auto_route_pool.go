@@ -59,18 +59,10 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 		return nil, err
 	}
 	config := loadAutoRoutePoolConfig(ownerUserID)
-	blockedChannels, err := loadBlockedChannelIDs(ownerUserID, groups)
-	if err != nil {
-		return nil, err
-	}
-
 	items := make([]AutoRoutePoolItem, 0, len(groups))
 	selectedCount := 0
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
-		if _, blocked := blockedChannels[group.ChannelID]; blocked {
-			continue
-		}
 		priority, isSelected := selected[group.ID]
 		if isSelected {
 			selectedCount++
@@ -508,6 +500,19 @@ func loadAutoRouteGroupsForIDs(ownerUserID int, groupIDs []string) ([]marketplac
 	if err != nil {
 		return nil, nil, err
 	}
+	// Recheck blocks when resolving saved pools, not just when editing them.
+	// This shared loader also keeps model discovery and pool views consistent.
+	blockedChannels, err := loadBlockedChannelIDs(ownerUserID, groups)
+	if err != nil {
+		return nil, nil, err
+	}
+	accessible := groups[:0]
+	for _, group := range groups {
+		if _, blocked := blockedChannels[group.ChannelID]; !blocked {
+			accessible = append(accessible, group)
+		}
+	}
+	groups = accessible
 	channels, err := channelMap(groups)
 	if err != nil {
 		return nil, nil, err

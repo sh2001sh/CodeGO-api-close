@@ -7,6 +7,7 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 )
 
@@ -33,6 +34,14 @@ func syncInternalChannel(channel *marketplaceschema.Channel, group *marketplaces
 	internal.MultiplierCardUserEnabled = channel.MultiplierCardUserEnabled
 	internal.ChannelInfo.ResponsesCapabilities = decodeMarketplaceCapabilities(channel.TransportCapabilities)
 	if err := gatewaystore.UpdateChannel(internal); err != nil {
+		return err
+	}
+	// The generic partial update skips zero values. Marketplace limits are
+	// authoritative, and zero explicitly removes a previously configured cap.
+	if err := platformdb.DB.Model(internal).Updates(map[string]interface{}{
+		"marketplace_max_concurrency":      channel.MaxConcurrency,
+		"marketplace_user_max_concurrency": channel.UserMaxConcurrency,
+	}).Error; err != nil {
 		return err
 	}
 	// UpdateChannel persists the credential but intentionally does not rebuild

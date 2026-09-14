@@ -109,19 +109,20 @@ export function useMarketplaceChannelFeedback() {
 
 export function useMarketplaceGroups(
   filters: GroupFilters,
-  options: { enabled?: boolean } = {}
+  options: { enabled?: boolean; live?: boolean } = {}
 ) {
   return useQuery({
     queryKey: ['marketplace-groups', filters],
     queryFn: () => getMarketplaceGroups(filters),
     enabled: options.enabled ?? true,
     placeholderData: (previousData) => previousData,
-    // Marketplace rankings are refreshed asynchronously on the server. Keep
-    // the last page warm long enough to avoid refetching while users switch
-    // between filters or return from a detail view.
-    staleTime: 5 * 60_000,
+    // Only the visible market polls for concurrency snapshots. Other consumers
+    // retain the longer cache without generating background list requests.
+    staleTime: options.live ? 30_000 : 5 * 60_000,
     gcTime: 15 * 60_000,
-    refetchOnWindowFocus: false,
+    refetchInterval: options.live ? 30_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: options.live ?? false,
   })
 }
 

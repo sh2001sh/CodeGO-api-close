@@ -8,6 +8,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
@@ -104,12 +105,28 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		metrics[summary.Group] = summary
 	}
 	series := buildMarketplaceRecentRequestSeries(start, groupIndices, rows)
-	cards, err := officialMultiplierCardGroups(names)
+	capabilities, err := loadOfficialGroupCapabilities(names)
 	if err != nil {
 		return nil, err
 	}
+	channelIDs := make([]int, 0)
+	seen := make(map[int]bool)
+	for _, capability := range capabilities {
+		for _, id := range capability.ChannelIDs {
+			if !seen[id] {
+				channelIDs = append(channelIDs, id)
+				seen[id] = true
+			}
+		}
+	}
+	active := gatewayruntime.ActiveChannelRequestsForChannels(channelIDs)
 	items := make([]GroupListItem, 0, len(names))
 	for _, name := range names {
+		capability := capabilities[name]
+		currentConcurrency := 0
+		for _, id := range capability.ChannelIDs {
+			currentConcurrency += active[id]
+		}
 		key := officialAutoRoutePrefix + name
 		summary := metrics[name]
 		recent := series[groupIndices[name]]
@@ -124,31 +141,11 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 			Score: summary.SuccessRate*0.35 + inverseMetricScore(float64(summary.AvgTtftMs), 3000)*0.2 + inverseMetricScore(1, 3)*0.2, CacheHitRate: summary.CacheHitRate,
 			RecentRequestSeries: recent, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 			LatestRequestStatus:     latestRequestStatus(recent),
-			MultiplierCardSupported: cards[name], MultiplierCardUserEnabled: cards[name],
+			MultiplierCardSupported: capability.MultiplierCard, MultiplierCardUserEnabled: capability.MultiplierCard,
+			CurrentConcurrency: currentConcurrency,
 		})
 	}
 	return items, nil
-}
-
-// Read only the public capability flag, without loading channel credentials
-// separately for every official group.
-func officialMultiplierCardGroups(names []string) (map[string]bool, error) {
-	result := make(map[string]bool)
-	if len(names) == 0 {
-		return result, nil
-	}
-	groupColumn := "abilities.`group`"
-	if platformdb.UsingPostgreSQL {
-		groupColumn = `abilities."group"`
-	}
-	var enabled []string
-	err := platformdb.DB.Table("abilities").Joins("JOIN channels ON channels.id = abilities.channel_id").
-		Where(groupColumn+" IN ? AND abilities.enabled = ? AND channels.status = ? AND channels.multiplier_card_user_enabled = ?", names, true, constant.ChannelStatusEnabled, true).
-		Distinct().Pluck(groupColumn, &enabled).Error
-	for _, name := range enabled {
-		result[name] = true
-	}
-	return result, err
 }
 
 type officialGroupCapability struct {

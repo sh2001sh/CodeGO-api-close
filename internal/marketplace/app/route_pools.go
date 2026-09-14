@@ -494,16 +494,9 @@ func nextRoutePoolAutoBuild(pool marketplaceschema.RoutePool, now time.Time) tim
 }
 
 func buildRoutePoolItems(ownerUserID int, groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, series map[int][]RecentRequestBucket, selected map[string]int, config AutoRoutePoolConfig) ([]AutoRoutePoolItem, error) {
-	blockedChannels, err := loadBlockedChannelIDs(ownerUserID, groups)
-	if err != nil {
-		return nil, err
-	}
 	items := make([]AutoRoutePoolItem, 0, len(groups))
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
-		if _, blocked := blockedChannels[group.ChannelID]; blocked {
-			continue
-		}
 		if config.MaxMultiplier > 0 && !MultiplierWithinLimit(group.Multiplier, config.MaxMultiplier) {
 			// Keep the editor consistent with runtime resolution: a group above
 			// the configured ceiling must not remain selectable after its public

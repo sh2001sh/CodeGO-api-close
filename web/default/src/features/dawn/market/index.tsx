@@ -260,7 +260,7 @@ export function DawnMarket() {
   const hasSearch = Boolean(filters.search.trim() || filters.models?.length)
   const groupsQuery = useMarketplaceGroups(
     { ...filters, separate_official: !hasSearch },
-    { enabled: !mockMode && perspective === 'user' }
+    { enabled: !mockMode && perspective === 'user', live: true }
   )
   const marketplaceModels = useMarketplaceModels()
   const groups = useMemo(() => {

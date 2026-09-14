@@ -6,6 +6,7 @@ import (
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	"sync"
 	"time"
 
 	auditdomain "github.com/sh2001sh/new-api/internal/audit/domain"
@@ -16,6 +17,18 @@ import (
 
 const logSearchCountLimit = 10000
 const logGroupOptionLimit = 200
+
+var usedLogGroupsCache struct {
+	sync.RWMutex
+	items map[int]cachedLogGroups
+}
+
+type cachedLogGroups struct {
+	groups []string
+	at     time.Time
+}
+
+const usedLogGroupsCacheTTL = 30 * time.Second
 
 func GetLogByTokenID(tokenID int) ([]*auditschema.Log, error) {
 	var logs []*auditschema.Log
@@ -165,6 +178,13 @@ func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {
 
 // ListUsedLogGroups returns distinct groups visible to an administrator or user.
 func ListUsedLogGroups(userID int) ([]string, error) {
+	usedLogGroupsCache.RLock()
+	if item, ok := usedLogGroupsCache.items[userID]; ok && time.Since(item.at) < usedLogGroupsCacheTTL {
+		groups := append([]string(nil), item.groups...)
+		usedLogGroupsCache.RUnlock()
+		return groups, nil
+	}
+	usedLogGroupsCache.RUnlock()
 	groups := make([]string, 0)
 	groupCol := logGroupColumn()
 	query := platformdb.LogDB.Table("logs").
@@ -176,6 +196,14 @@ func ListUsedLogGroups(userID int) ([]string, error) {
 	err := query.Order(groupCol+" ASC").
 		Limit(logGroupOptionLimit).
 		Pluck(groupCol, &groups).Error
+	if err == nil {
+		usedLogGroupsCache.Lock()
+		if usedLogGroupsCache.items == nil {
+			usedLogGroupsCache.items = make(map[int]cachedLogGroups)
+		}
+		usedLogGroupsCache.items[userID] = cachedLogGroups{groups: append([]string(nil), groups...), at: time.Now()}
+		usedLogGroupsCache.Unlock()
+	}
 	return groups, err
 }
 

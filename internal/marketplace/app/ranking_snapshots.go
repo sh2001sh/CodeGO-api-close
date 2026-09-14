@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
@@ -17,6 +18,27 @@ import (
 )
 
 var marketplaceRankingRefreshes singleflight.Group
+
+var rankingRefreshTriggers struct {
+	sync.Mutex
+	at map[string]time.Time
+}
+
+const rankingRefreshTriggerCooldown = 30 * time.Second
+
+func allowRankingRefreshTrigger(key string) bool {
+	now := time.Now()
+	rankingRefreshTriggers.Lock()
+	defer rankingRefreshTriggers.Unlock()
+	if rankingRefreshTriggers.at == nil {
+		rankingRefreshTriggers.at = make(map[string]time.Time)
+	}
+	if previous, ok := rankingRefreshTriggers.at[key]; ok && now.Sub(previous) < rankingRefreshTriggerCooldown {
+		return false
+	}
+	rankingRefreshTriggers.at[key] = now
+	return true
+}
 
 func rankingSnapshotsForRequest(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) (map[string]marketplaceschema.RankingSnapshot, error) {
 	return rankingSnapshotsForRequestMode(groups, channels, hours, true)
@@ -148,6 +170,9 @@ func rankingSnapshotMaxAge(hours int) time.Duration {
 
 func refreshMarketplaceRankingsAsync(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, hours int) {
 	if len(groups) == 0 {
+		return
+	}
+	if !allowRankingRefreshTrigger(rankingRefreshKey(groups, hours)) {
 		return
 	}
 	go func() {

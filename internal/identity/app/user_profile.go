@@ -9,8 +9,11 @@ import (
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"golang.org/x/sync/singleflight"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 type SelfProfileResponse struct {
@@ -43,8 +46,60 @@ type SelfProfileResponse struct {
 	Permissions     map[string]any `json:"permissions"`
 }
 
+// The profile endpoint is called by several layout components at startup.
+// Keep a very short cache and coalesce concurrent loads so one browser tab
+// cannot fan out the expensive ledger aggregation into many identical queries.
+var selfProfileCache struct {
+	sync.RWMutex
+	items map[string]cachedSelfProfile
+}
+var selfProfileLoads singleflight.Group
+
+type cachedSelfProfile struct {
+	profile *SelfProfileResponse
+	at      time.Time
+}
+
+const selfProfileCacheTTL = 5 * time.Second
+
 // GetSelfProfile loads the authenticated user's profile payload for /api/user/self.
 func GetSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
+	if userID <= 0 {
+		return nil, fmt.Errorf("invalid user id")
+	}
+	cacheKey := fmt.Sprintf("%d:%d", userID, userRole)
+	selfProfileCache.RLock()
+	if item, ok := selfProfileCache.items[cacheKey]; ok && time.Since(item.at) < selfProfileCacheTTL {
+		selfProfileCache.RUnlock()
+		return item.profile, nil
+	}
+	selfProfileCache.RUnlock()
+	value, err, _ := selfProfileLoads.Do(cacheKey, func() (any, error) {
+		selfProfileCache.RLock()
+		if item, ok := selfProfileCache.items[cacheKey]; ok && time.Since(item.at) < selfProfileCacheTTL {
+			selfProfileCache.RUnlock()
+			return item.profile, nil
+		}
+		selfProfileCache.RUnlock()
+		profile, loadErr := loadSelfProfile(userID, userRole)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		selfProfileCache.Lock()
+		if selfProfileCache.items == nil {
+			selfProfileCache.items = make(map[string]cachedSelfProfile)
+		}
+		selfProfileCache.items[cacheKey] = cachedSelfProfile{profile: profile, at: time.Now()}
+		selfProfileCache.Unlock()
+		return profile, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return value.(*SelfProfileResponse), nil
+}
+
+func loadSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 	user, err := LoadUserByID(userID, false)
 	if err != nil {
 		return nil, err

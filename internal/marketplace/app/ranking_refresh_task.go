@@ -36,6 +36,9 @@ func StartMarketplaceRankingTask() {
 }
 
 func refreshPublicMarketplaceRankingsAsync(hours int) {
+	if !allowRankingRefreshTrigger(fmt.Sprintf("public:%d", hours)) {
+		return
+	}
 	go func() {
 		if _, err := refreshPublicMarketplaceRankingSnapshots(hours); err != nil {
 			platformobservability.SysError(fmt.Sprintf("refresh public marketplace rankings window=%d: %s", hours, err.Error()))

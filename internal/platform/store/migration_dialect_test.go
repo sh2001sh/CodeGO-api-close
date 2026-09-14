@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/glebarez/sqlite"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -62,16 +62,17 @@ func TestChannelWindowLogIndexStatementUsesDialect(t *testing.T) {
 
 func TestQueryPathIndexStatementsUseDialect(t *testing.T) {
 	postgres := queryPathIndexStatements("postgres")
-	require.Len(t, postgres, 4)
+	require.Len(t, postgres, 5)
 	require.Contains(t, postgres[0].SQL, "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
 	require.Contains(t, postgres[0].SQL, "WHERE type IN")
-	require.Contains(t, postgres[1].SQL, "gateway.request_attempt_audits")
-	require.Contains(t, postgres[2].SQL, "marketplace.settlements")
-	require.Contains(t, postgres[3].SQL, "marketplace.groups")
+	require.Contains(t, postgres[1].SQL, "idx_logs_user_group_created")
+	require.Contains(t, postgres[2].SQL, "gateway.request_attempt_audits")
+	require.Contains(t, postgres[3].SQL, "marketplace.settlements")
+	require.Contains(t, postgres[4].SQL, "marketplace.groups")
 
 	mysql := queryPathIndexStatements("mysql")
-	require.Len(t, mysql, 4)
-	require.NotContains(t, strings.Join([]string{mysql[0].SQL, mysql[1].SQL, mysql[2].SQL, mysql[3].SQL}, "\n"), "CONCURRENTLY")
+	require.Len(t, mysql, 5)
+	require.NotContains(t, strings.Join([]string{mysql[0].SQL, mysql[1].SQL, mysql[2].SQL, mysql[3].SQL, mysql[4].SQL}, "\n"), "CONCURRENTLY")
 
 	sqliteStatements := queryPathIndexStatements("sqlite")
 	require.Contains(t, sqliteStatements[0].SQL, "CREATE INDEX IF NOT EXISTS")
@@ -95,6 +96,7 @@ func TestMigrateQueryPathIndexesSQLiteIsIdempotent(t *testing.T) {
 	require.NoError(t, migrateQueryPathIndexes(db))
 	require.NoError(t, migrateQueryPathIndexes(db))
 	require.True(t, db.Migrator().HasIndex("logs", "idx_logs_channel_type_created_id"))
+	require.True(t, db.Migrator().HasIndex("logs", "idx_logs_user_group_created"))
 	require.True(t, db.Migrator().HasIndex(&gatewayschema.RequestAttemptAudit{}, "idx_request_attempt_audit_channel_started"))
 	require.True(t, db.Migrator().HasIndex(&marketplaceschema.Settlement{}, "idx_marketplace_settlements_owner_group_created"))
 	require.True(t, db.Migrator().HasIndex(&marketplaceschema.Group{}, "idx_marketplace_groups_visibility_lifecycle_updated"))

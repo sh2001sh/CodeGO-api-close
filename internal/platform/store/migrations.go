@@ -715,6 +715,8 @@ func queryPathTableExists(db *gorm.DB, item queryPathIndexStatement) bool {
 	switch item.Name {
 	case "idx_logs_channel_type_created_id":
 		return db.Migrator().HasTable("logs")
+	case "idx_logs_user_group_created":
+		return db.Migrator().HasTable("logs")
 	case "idx_request_attempt_audit_channel_started":
 		return db.Migrator().HasTable(&gatewayschema.RequestAttemptAudit{})
 	case "idx_marketplace_settlements_owner_group_created":
@@ -740,6 +742,7 @@ func queryPathIndexStatements(dialect string) []queryPathIndexStatement {
 	case "postgres":
 		return []queryPathIndexStatement{
 			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_channel_type_created_id ON logs (channel_id, type, created_at DESC, id DESC) WHERE type IN (%d, %d)`, auditschema.LogTypeConsume, auditschema.LogTypeError)},
+			{Name: "idx_logs_user_group_created", Database: queryPathDatabaseLogs, Table: "logs", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_user_group_created ON logs (user_id, "group", created_at DESC, id DESC)`},
 			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway.request_attempt_audits", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_request_attempt_audit_channel_started ON gateway.request_attempt_audits (channel_id, started_at DESC)`},
 			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace.settlements", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_settlements_owner_group_created ON marketplace.settlements (owner_user_id, group_id, created_at DESC)`},
 			{Name: "idx_marketplace_groups_visibility_lifecycle_updated", Table: "marketplace.groups", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_groups_visibility_lifecycle_updated ON marketplace.groups (visibility, lifecycle_status, updated_at DESC, id)`},
@@ -747,6 +750,7 @@ func queryPathIndexStatements(dialect string) []queryPathIndexStatement {
 	case "mysql":
 		return []queryPathIndexStatement{
 			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX idx_logs_channel_type_created_id ON logs (channel_id, type, created_at, id)"},
+			{Name: "idx_logs_user_group_created", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX idx_logs_user_group_created ON logs (user_id, `group`, created_at, id)"},
 			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway_request_attempt_audits", SQL: "CREATE INDEX idx_request_attempt_audit_channel_started ON gateway_request_attempt_audits (channel_id, started_at)"},
 			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace_settlements", SQL: "CREATE INDEX idx_marketplace_settlements_owner_group_created ON marketplace_settlements (owner_user_id, group_id, created_at)"},
 			{Name: "idx_marketplace_groups_visibility_lifecycle_updated", Table: "marketplace_groups", SQL: "CREATE INDEX idx_marketplace_groups_visibility_lifecycle_updated ON marketplace_groups (visibility, lifecycle_status, updated_at, id)"},
@@ -754,6 +758,7 @@ func queryPathIndexStatements(dialect string) []queryPathIndexStatement {
 	default:
 		return []queryPathIndexStatement{
 			{Name: "idx_logs_channel_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX IF NOT EXISTS idx_logs_channel_type_created_id ON logs (channel_id, type, created_at, id)"},
+			{Name: "idx_logs_user_group_created", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX IF NOT EXISTS idx_logs_user_group_created ON logs (user_id, `group`, created_at, id)"},
 			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway_request_attempt_audits", SQL: "CREATE INDEX IF NOT EXISTS idx_request_attempt_audit_channel_started ON gateway_request_attempt_audits (channel_id, started_at)"},
 			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace_settlements", SQL: "CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_owner_group_created ON marketplace_settlements (owner_user_id, group_id, created_at)"},
 			{Name: "idx_marketplace_groups_visibility_lifecycle_updated", Table: "marketplace_groups", SQL: "CREATE INDEX IF NOT EXISTS idx_marketplace_groups_visibility_lifecycle_updated ON marketplace_groups (visibility, lifecycle_status, updated_at, id)"},

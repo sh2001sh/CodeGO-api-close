@@ -25,7 +25,6 @@ export interface KeyGroupOptionResponse {
   multiplier?: number
   subscription_enabled?: boolean
   subscription_multiplier?: number
-  mapping_status?: ApiKeyGroupOption['mappingStatus']
   models: string[]
   member_count?: number
   success_rate?: number
@@ -47,7 +46,6 @@ export function toApiKeyGroupOptions(
     ratio: option.category === 'marketplace' ? option.multiplier : '动态',
     subscriptionEnabled: option.subscription_enabled,
     subscriptionRatio: option.subscription_multiplier,
-    mappingStatus: option.mapping_status,
     category: option.category,
     models: option.models,
     successRate: option.success_rate,

@@ -53,7 +53,6 @@ export type ApiKeyGroupOption = {
     | 'marketplace_pool'
   disabled?: boolean
   models?: string[]
-  mappingStatus?: 'matched' | 'mismatch' | 'insufficient_evidence' | ''
 }
 
 type ApiKeyGroupComboboxProps = {
@@ -129,30 +128,7 @@ function GroupRatioBadges({ option }: { option?: ApiKeyGroupOption }) {
           首字 {(option.avgTTFTMs / 1000).toFixed(2)}s
         </Badge>
       )}
-      <MappingStatusBadge option={option} />
     </span>
-  )
-}
-
-function MappingStatusBadge({ option }: { option?: ApiKeyGroupOption }) {
-  const { t } = useTranslation()
-  if (!option?.mappingStatus || option.mappingStatus === 'matched') return null
-  const label =
-    option.mappingStatus === 'insufficient_evidence'
-      ? t('映射证据不足')
-      : t('映射不一致')
-  return (
-    <Badge
-      variant='outline'
-      className={cn(
-        'shrink-0 text-[10px] sm:text-xs',
-        option.mappingStatus === 'insufficient_evidence'
-          ? 'border-warning/35 bg-warning/10 text-warning-foreground'
-          : 'border-destructive/35 bg-destructive/10 text-destructive'
-      )}
-    >
-      {label}
-    </Badge>
   )
 }
 

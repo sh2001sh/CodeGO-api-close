@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -265,34 +266,45 @@ export function Invoices() {
                   {eligibleOrders.map((order) => (
                     <div
                       key={order.source_type + '-' + order.trade_no}
-                      className='bg-background/75 border-border/80 flex flex-col gap-3 rounded-2xl border px-4 py-4 sm:flex-row sm:items-start sm:justify-between'
-                    >
-                      <Checkbox
-                        checked={selectedOrderKeys.includes(
+                      className={cn(
+                        'bg-background/75 border-border/80 flex flex-col gap-3 rounded-2xl border px-4 py-4 transition-colors sm:flex-row sm:items-start',
+                        selectedOrderKeys.includes(
                           order.source_type + '-' + order.trade_no
-                        )}
-                        disabled={order.requested}
-                        onCheckedChange={() => toggleOrder(order)}
-                        aria-label={`选择${order.order_title}`}
-                      />
-                      <div className='min-w-0 space-y-2'>
-                        <div className='flex flex-wrap items-center gap-2'>
-                          <h3 className='font-medium'>{order.order_title}</h3>
-                          <Badge
-                            variant={order.requested ? 'secondary' : 'default'}
-                          >
-                            {order.requested ? '已申请' : '可申请'}
-                          </Badge>
-                          <Badge variant='outline'>
-                            {getOrderSourceLabel(order.source_type)}
-                          </Badge>
-                        </div>
-                        <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm'>
-                          <span>{formatMoney(order)}</span>
-                          <span>{formatDate(order.paid_at)}</span>
-                          <span className='truncate font-mono text-xs'>
-                            {order.trade_no}
-                          </span>
+                        ) &&
+                          'border-primary/70 bg-primary/5 ring-primary/15 ring-2'
+                      )}
+                    >
+                      <div className='flex min-w-0 flex-1 items-start gap-3'>
+                        <Checkbox
+                          checked={selectedOrderKeys.includes(
+                            order.source_type + '-' + order.trade_no
+                          )}
+                          disabled={order.requested}
+                          onCheckedChange={() => toggleOrder(order)}
+                          aria-label={`选择${order.order_title}`}
+                          className='border-foreground/60 bg-background data-checked:border-primary data-checked:bg-primary mt-0.5 size-6 rounded-md border-2 shadow-sm after:-inset-y-2.5 [&_svg]:size-4.5'
+                        />
+                        <div className='min-w-0 space-y-2'>
+                          <div className='flex flex-wrap items-center gap-2'>
+                            <h3 className='font-medium'>{order.order_title}</h3>
+                            <Badge
+                              variant={
+                                order.requested ? 'secondary' : 'default'
+                              }
+                            >
+                              {order.requested ? '已申请' : '可申请'}
+                            </Badge>
+                            <Badge variant='outline'>
+                              {getOrderSourceLabel(order.source_type)}
+                            </Badge>
+                          </div>
+                          <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm'>
+                            <span>{formatMoney(order)}</span>
+                            <span>{formatDate(order.paid_at)}</span>
+                            <span className='truncate font-mono text-xs'>
+                              {order.trade_no}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <Button

@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 )
@@ -16,7 +17,13 @@ func requiredMarketplaceImagePrice(c *gin.Context, modelName string) (float64, b
 		return 0, false, nil
 	}
 	price, ok := marketplaceChannelModelPrice(c, modelName)
-	if !ok || price.EffectiveBillingMode() != marketplacedomain.ChannelBillingModePerCall || price.PricePerCall <= 0 {
+	if !ok {
+		if sitePrice, configured := gatewaystore.GetModelPrice(modelName, false); configured {
+			return sitePrice, true, nil
+		}
+		return 0, true, fmt.Errorf("市场生图模型 %s 未配置有效的按次价格", modelName)
+	}
+	if price.EffectiveBillingMode() != marketplacedomain.ChannelBillingModePerCall || price.PricePerCall <= 0 {
 		return 0, true, fmt.Errorf("市场生图模型 %s 未配置有效的按次价格", modelName)
 	}
 	return price.PricePerCall, true, nil

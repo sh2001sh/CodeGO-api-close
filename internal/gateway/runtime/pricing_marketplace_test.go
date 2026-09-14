@@ -46,7 +46,36 @@ func TestMarketplaceImagePriceOverridesGlobalPrice(t *testing.T) {
 	require.InDelta(t, 0.03, price.ModelPrice, 0.000001)
 }
 
-func TestMarketplaceImageWithoutChannelPriceIsRejected(t *testing.T) {
+func TestMarketplaceImageFallsBackToGlobalPrice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalPrices := gatewaystore.ModelPrice2JSONString()
+	var prices map[string]float64
+	require.NoError(t, json.Unmarshal([]byte(originalPrices), &prices))
+	prices["grok-imagine-image"] = 0.2
+	updatedPrices, err := json.Marshal(prices)
+	require.NoError(t, err)
+	require.NoError(t, gatewaystore.UpdateModelPriceByJSONString(string(updatedPrices)))
+	t.Cleanup(func() { require.NoError(t, gatewaystore.UpdateModelPriceByJSONString(originalPrices)) })
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, "market-site-priced-image")
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, 1.0)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceModelPrices, map[string]marketplacedomain.ChannelModelPrice{})
+	info := &RelayInfo{OriginModelName: "grok-imagine-image", UsingGroup: "market_dynamic", UserGroup: "default"}
+
+	price, err := ModelPriceHelper(ctx, info, 0, &types.TokenCountMeta{})
+
+	require.NoError(t, err)
+	require.True(t, price.UsePrice)
+	require.InDelta(t, 0.2, price.ModelPrice, 0.000001)
+	perCallPrice, err := ModelPriceHelperPerCall(ctx, info)
+	require.NoError(t, err)
+	require.True(t, perCallPrice.UsePrice)
+	require.InDelta(t, 0.2, perCallPrice.ModelPrice, 0.000001)
+}
+
+func TestMarketplaceImageWithoutChannelOrGlobalPriceIsRejected(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)

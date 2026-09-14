@@ -41,7 +41,7 @@ import {
 import { DataTableToolbar } from '@/components/data-table'
 import { LOG_TYPES } from '../constants'
 import { buildSearchParams } from '../lib/filter'
-import { getDefaultTimeRange } from '../lib/utils'
+import { buildApiParams, getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -126,19 +126,34 @@ export function CommonLogsFilterBar<TData>(
         { ...filters, ...overrides },
         'common'
       )
-      navigate({
+      const nextSearch = {
+        ...filterParams,
+        ...(logType ? { type: [logType] } : {}),
+        page: 1,
+      }
+      const [currentQuery, nextQuery] = [searchParams, nextSearch].map(
+        (search) =>
+          JSON.stringify(
+            buildApiParams({
+              page: search.page ?? 1,
+              pageSize: 1,
+              searchParams: search,
+              isAdmin,
+            })
+          )
+      )
+      if (currentQuery === nextQuery) {
+        void queryClient.invalidateQueries({ queryKey: ['logs'] })
+        void queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+        return
+      }
+      void navigate({
         to: '/usage-logs/$section',
         params: { section: 'common' },
-        search: {
-          ...filterParams,
-          ...(logType ? { type: [logType] } : {}),
-          page: 1,
-        },
+        search: nextSearch,
       })
-      queryClient.invalidateQueries({ queryKey: ['logs'] })
-      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
     },
-    [filters, logType, navigate, queryClient]
+    [filters, logType, navigate, searchParams, isAdmin, queryClient]
   )
 
   const handleReset = useCallback(() => {
@@ -156,9 +171,7 @@ export function CommonLogsFilterBar<TData>(
         endTime: end.getTime(),
       },
     })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-    queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [navigate, queryClient])
+  }, [navigate])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

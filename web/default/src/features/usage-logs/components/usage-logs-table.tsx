@@ -29,9 +29,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -58,7 +56,6 @@ interface UsageLogsTableProps {
 export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
-  const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
 
   const {
@@ -70,7 +67,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   } = useTableUrlState({
     search: route.useSearch(),
     navigate: route.useNavigate(),
-    pagination: { defaultPage: 1, defaultPageSize: isMobile ? 20 : 100 },
+    pagination: { defaultPage: 1, defaultPageSize: 20 },
     globalFilter: { enabled: false },
     columnFilters: [
       { columnId: 'created_at', searchKey: 'type', type: 'array' as const },
@@ -101,7 +98,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       isAdmin,
       pagination.pageIndex + 1,
       pagination.pageSize,
-      columnFilters,
       searchParams,
     ],
     queryFn: async () => {
@@ -111,12 +107,13 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         page: pagination.pageIndex + 1,
         pageSize: pagination.pageSize,
         searchParams,
-        columnFilters,
+        // URL filters are authoritative. The table synchronizes its local
+        // column filters in an effect, which can briefly retain old values.
+        columnFilters: [],
       })
 
       if (!result?.success) {
-        toast.error(result?.message || t('Failed to load logs'))
-        return DEFAULT_LOGS_DATA
+        throw new Error(result?.message || 'Failed to load logs')
       }
 
       return result.data || DEFAULT_LOGS_DATA

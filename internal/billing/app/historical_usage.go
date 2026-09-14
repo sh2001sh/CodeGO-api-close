@@ -7,6 +7,7 @@ import (
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -26,6 +27,31 @@ type historicalUsageEntry struct {
 var historicalUsageLoads singleflight.Group
 
 const historicalUsageTTL = 30 * time.Second
+
+// GetUserHistoricalUsedQuotaForDisplay serves the last aggregate (or the
+// existing usage counter on a cold cache) while refreshing it asynchronously.
+// A profile must not wait for a scan of millions of historical settlements.
+// Financial API callers continue to use GetUserHistoricalUsedQuota below.
+func GetUserHistoricalUsedQuotaForDisplay(userID int, legacyUsedQuota int) (int, error) {
+	if userID <= 0 {
+		return 0, fmt.Errorf("invalid user id")
+	}
+	key := fmt.Sprintf("%p:%d", platformdb.DB, userID)
+	historicalUsageCache.Lock()
+	cached, ok := historicalUsageCache.items[key]
+	historicalUsageCache.Unlock()
+	if !ok || time.Since(cached.at) >= historicalUsageTTL {
+		go func() {
+			if _, err := GetUserLedgerConsumedQuota(userID); err != nil {
+				platformobservability.SysError("refresh profile historical usage: " + err.Error())
+			}
+		}()
+	}
+	if cached.amount > int64(legacyUsedQuota) {
+		return int(cached.amount), nil
+	}
+	return legacyUsedQuota, nil
+}
 
 // GetUserLedgerConsumedQuota returns request-backed settled usage from the
 // user's wallet and subscription billing accounts. Non-request balance moves

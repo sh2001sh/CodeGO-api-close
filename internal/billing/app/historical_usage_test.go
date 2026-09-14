@@ -10,7 +10,50 @@ import (
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+func TestHistoricalUsageDisplayDoesNotWaitForColdAggregate(t *testing.T) {
+	truncate(t)
+	seedUser(t, 9601, 0)
+	account := &billingschema.BillingAccount{AccountID: "display-history", AccountType: "wallet", OwnerType: "user", OwnerID: 9601, QuotaUnit: "quota", Status: "active"}
+	require.NoError(t, platformdb.DB.Create(account).Error)
+	createHistoricalUsageSettlement(t, account.AccountID, "display-usage", 80, true)
+	entered, release := make(chan struct{}, 1), make(chan struct{})
+	require.NoError(t, platformdb.DB.Callback().Query().Before("gorm:query").Register("test:block_display_aggregate", func(tx *gorm.DB) {
+		if tx.Statement.Table == "billing_accounts" {
+			entered <- struct{}{}
+			<-release
+		}
+	}))
+	t.Cleanup(func() { platformdb.DB.Callback().Query().Remove("test:block_display_aggregate") })
+	result := make(chan int, 1)
+	go func() {
+		value, _ := GetUserHistoricalUsedQuotaForDisplay(9601, 50)
+		result <- value
+	}()
+	select {
+	case value := <-result:
+		require.Equal(t, 50, value)
+	case <-time.After(time.Second):
+		close(release)
+		t.Fatal("profile waited for historical billing aggregation")
+	}
+	<-entered
+	close(release)
+	key := fmt.Sprintf("%p:%d", platformdb.DB, 9601)
+	require.Eventually(t, func() bool {
+		historicalUsageCache.Lock()
+		defer historicalUsageCache.Unlock()
+		return historicalUsageCache.items[key].amount == 80
+	}, time.Second, time.Millisecond)
+	value, err := GetUserHistoricalUsedQuotaForDisplay(9601, 50)
+	require.NoError(t, err)
+	require.Equal(t, 80, value)
+	value, err = GetUserHistoricalUsedQuotaForDisplay(9601, 90)
+	require.NoError(t, err)
+	require.Equal(t, 90, value, "fresh legacy usage cannot go backwards")
+}
 
 func TestHistoricalUsageCacheIsScopedAndExpires(t *testing.T) {
 	truncate(t)

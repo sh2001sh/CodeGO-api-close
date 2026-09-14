@@ -108,7 +108,7 @@ func loadSelfProfile(userID int, userRole int) (*SelfProfileResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	historicalUsedQuota, err := billingapp.GetUserHistoricalUsedQuota(user.Id, user.UsedQuota)
+	historicalUsedQuota, err := billingapp.GetUserHistoricalUsedQuotaForDisplay(user.Id, user.UsedQuota)
 	if err != nil {
 		return nil, err
 	}

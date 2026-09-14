@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { QUOTA_TYPE_VALUES, TOKEN_UNIT_DIVISORS } from '../constants'
 import type { PricingModel, TokenUnit, PriceType } from '../types'
+import { getDynamicPricingTiers, isDynamicPricingModel } from './dynamic-price'
 
 // ----------------------------------------------------------------------------
 // Price Calculation Utilities
@@ -84,6 +85,22 @@ function calculateTokenPrice(
   type: PriceType,
   ratio: number
 ): number {
+  if (isDynamicPricingModel(model)) {
+    const fields: Record<PriceType, string> = {
+      input: 'inputPrice',
+      output: 'outputPrice',
+      cache: 'cacheReadPrice',
+      create_cache: 'cacheCreatePrice',
+      image: 'imagePrice',
+      audio_input: 'audioInputPrice',
+      audio_output: 'audioOutputPrice',
+    }
+    // Summary prices use the first tier; the detail table lists every tier.
+    const value = getDynamicPricingTiers(model)[0]?.[fields[type]]
+    return typeof value === 'number' && Number.isFinite(value)
+      ? value * ratio
+      : NaN
+  }
   const base = model.model_ratio * 2 * ratio
 
   switch (type) {
@@ -211,7 +228,7 @@ export function formatGroupPrice(
     return '-'
   }
 
-  const ratio = groupRatio[group] || 1
+  const ratio = groupRatio[group] ?? 1
   let priceInUSD = calculateTokenPrice(model, type, ratio)
 
   priceInUSD = applyRechargeRate(

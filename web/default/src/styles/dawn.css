@@ -3569,6 +3569,43 @@ For commercial licensing, please contact support@quantumnous.com.
   }
 }
 
+/* Keep all billing columns available on narrow screens via horizontal scroll. */
+.dawn .mlist.cache-prices,
+.dawn .gtable.cache-prices,
+.dawn .gtab.cache-prices,
+.dawn .gtab.cache-tiers {
+  overflow-x: auto;
+}
+
+.dawn .mlist.cache-prices .mh,
+.dawn .mlist.cache-prices .mr {
+  min-width: 660px;
+  grid-template-columns:
+    minmax(160px, 1fr) repeat(2, 75px) repeat(2, 105px)
+    65px;
+}
+
+.dawn .gtable.cache-prices .tr {
+  min-width: 920px;
+  grid-template-columns:
+    minmax(190px, 1.4fr) repeat(4, 110px) minmax(140px, 1fr)
+    55px;
+}
+
+.dawn .gtable.cache-prices .tr > :nth-child(n) {
+  display: block;
+}
+
+.dawn .gtab.cache-prices .gr {
+  min-width: 820px;
+  grid-template-columns: minmax(190px, 1fr) 60px repeat(4, 105px) 65px;
+}
+
+.dawn .gtab.cache-tiers .gr {
+  min-width: 740px;
+  grid-template-columns: 75px minmax(160px, 1fr) repeat(4, 105px);
+}
+
 /* ══════════════════════════════════════════════════════════════════
    DAWN CONSOLE OVERVIEW
    ══════════════════════════════════════════════════════════════════ */

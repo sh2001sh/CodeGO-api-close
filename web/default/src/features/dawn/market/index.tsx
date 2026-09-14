@@ -71,7 +71,9 @@ import type {
 } from '@/features/marketplace/types'
 import { QUOTA_TYPE_VALUES } from '@/features/pricing/constants'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
+import { isDynamicPricingModel } from '@/features/pricing/lib/dynamic-price'
 import { mergePricingModels } from '@/features/pricing/lib/merge-pricing-models'
+import { formatGroupPrice } from '@/features/pricing/lib/price'
 import type { PricingModel } from '@/features/pricing/types'
 import { DawnModal, ModalHead } from '../components/dawn-modal'
 import { DawnNav } from '../components/dawn-nav'
@@ -313,19 +315,23 @@ export function DawnMarket() {
           mode: 'free' | 'percall' | 'token'
           input: string
           output: string
-          cache: string
+          cacheWrite: string
+          cacheRead: string
+          tiered: boolean
         }
       >
     >()
     groups.forEach((group) => {
-      const multiplier = group.multiplier || 1
+      const multiplier = group.multiplier ?? 1
       const map: Record<
         string,
         {
           mode: 'free' | 'percall' | 'token'
           input: string
           output: string
-          cache: string
+          cacheWrite: string
+          cacheRead: string
+          tiered: boolean
         }
       > = {}
       group.models.forEach((name) => {
@@ -333,13 +339,16 @@ export function DawnMarket() {
         if (!model) return
         if (
           model.quota_type === QUOTA_TYPE_VALUES.TOKEN &&
-          model.model_ratio === 0
+          model.model_ratio === 0 &&
+          !isDynamicPricingModel(model)
         ) {
           map[name] = {
             mode: 'free',
             input: '免费',
             output: '免费',
-            cache: '—',
+            cacheWrite: model.create_cache_ratio != null ? '免费' : '—',
+            cacheRead: model.cache_ratio != null ? '免费' : '—',
+            tiered: false,
           }
           return
         }
@@ -349,31 +358,23 @@ export function DawnMarket() {
             mode: 'percall',
             input: fmtUsd(price),
             output: '按量',
-            cache: '—',
+            cacheWrite: '—',
+            cacheRead: '—',
+            tiered: false,
           }
           return
         }
-        const input = model.model_ratio * 2 * multiplier
-        if (!Number.isFinite(input) || input <= 0) return
-        const output = input * (model.completion_ratio || 1)
-        const cacheWrite =
-          model.create_cache_ratio != null &&
-          Number.isFinite(Number(model.create_cache_ratio))
-            ? input * Number(model.create_cache_ratio)
-            : null
-        const cacheRead =
-          model.cache_ratio != null &&
-          Number.isFinite(Number(model.cache_ratio))
-            ? input * Number(model.cache_ratio)
-            : null
+        const price = (type: 'input' | 'output' | 'create_cache' | 'cache') =>
+          formatGroupPrice(model, group.id, type, 'M', false, 1, 1, {
+            [group.id]: multiplier,
+          })
         map[name] = {
           mode: 'token',
-          input: fmtUsd(input),
-          output: fmtUsd(output),
-          cache:
-            cacheRead == null && cacheWrite == null
-              ? '不支持'
-              : `${cacheWrite != null ? fmtUsd(cacheWrite) : '—'} / ${cacheRead != null ? fmtUsd(cacheRead) : '—'}`,
+          input: price('input'),
+          output: price('output'),
+          cacheWrite: price('create_cache'),
+          cacheRead: price('cache'),
+          tiered: isDynamicPricingModel(model),
         }
       })
       result.set(group.id, map)
@@ -647,7 +648,7 @@ export function DawnMarket() {
               </div>
             </div>
 
-            <div>
+            <div className='min-w-0'>
               {(filters.search || (filters.models?.length ?? 0) > 0) &&
                 !groupsQuery.isLoading &&
                 (!groupsQuery.isError || mockMode) && (

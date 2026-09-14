@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com.
 */
 import { BadgeCheck, ChevronDown, CircleDashed } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { classifyRequestHealth } from '@/lib/request-health'
 import { cn } from '@/lib/utils'
 import { RecentRequestStrip } from '@/features/marketplace/components/recent-request-strip'
@@ -46,10 +47,13 @@ export function MarketGroupCard(props: {
       mode: 'free' | 'percall' | 'token'
       input: string
       output: string
-      cache: string
+      cacheWrite: string
+      cacheRead: string
+      tiered: boolean
     }
   >
 }) {
+  const { t } = useTranslation()
   const { group } = props
   const isOfficial = group.source_type === 'official'
   const hasTraffic = group.request_count > 0
@@ -229,11 +233,13 @@ export function MarketGroupCard(props: {
       </div>
 
       {props.expanded && (
-        <div className='mlist'>
+        <div className='mlist cache-prices'>
           <div className='mh'>
             <span>模型</span>
             <span style={{ textAlign: 'right' }}>输入 /1M</span>
             <span style={{ textAlign: 'right' }}>输出 /1M</span>
+            <span className='mp'>{t('缓存写入')} /1M</span>
+            <span className='mp'>{t('缓存读取')} /1M</span>
             <span style={{ textAlign: 'right' }}>延迟</span>
           </div>
           {group.models.map((model) => {
@@ -255,6 +261,14 @@ export function MarketGroupCard(props: {
                   <span className='mn'>
                     {result.model}
                     {free ? <i className='ftag'>免费</i> : null}
+                    {fee?.tiered ? (
+                      <i
+                        className='ftag'
+                        title={t('展示首档价格，完整阶梯价格见模型详情')}
+                      >
+                        {t('首档')}
+                      </i>
+                    ) : null}
                     {failed ? (
                       <i
                         className='ftag'
@@ -269,6 +283,8 @@ export function MarketGroupCard(props: {
                   </span>
                   <span className='mp'>{fee?.input ?? '—'}</span>
                   <span className='mp'>{fee?.output ?? '—'}</span>
+                  <span className='mp'>{fee?.cacheWrite ?? '—'}</span>
+                  <span className='mp'>{fee?.cacheRead ?? '—'}</span>
                   <span className='mp'>
                     {result.latency_ms > 0 ? `${result.latency_ms}ms` : '—'}
                   </span>

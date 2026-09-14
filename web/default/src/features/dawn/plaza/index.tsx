@@ -28,6 +28,7 @@ import {
   Waypoints,
   X,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { SiteSeo } from '@/components/seo'
 import { useMarketplaceGroups } from '@/features/marketplace/hooks'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
@@ -83,6 +84,7 @@ function guessVendor(name: string): string {
 }
 
 export function DawnPlaza() {
+  const { t } = useTranslation()
   const pricing = usePricingData()
   const marketplaceGroupsQuery = useMarketplaceGroups({
     search: '',
@@ -147,15 +149,19 @@ export function DawnPlaza() {
     () =>
       Object.entries(pricing.usableGroup)
         .filter(([name]) => !EXCLUDED_GROUPS.includes(name))
-        .map(([name, meta]) => ({ name, ratio: meta.ratio, desc: meta.desc })),
-    [pricing.usableGroup]
+        .map(([name, meta]) => ({
+          name,
+          ratio: pricing.groupRatio[name] ?? 1,
+          desc: typeof meta === 'string' ? meta : meta.desc,
+        })),
+    [pricing.usableGroup, pricing.groupRatio]
   )
 
   const marketplaceGroups = useMemo(
     () =>
       (marketplaceGroupsQuery.data?.items ?? []).map((group) => ({
         name: group.system_display_name,
-        ratio: group.multiplier || 1,
+        ratio: group.multiplier ?? 1,
         desc: group.source_label || group.source_type,
         sourceLabel:
           group.source_label ||
@@ -343,12 +349,17 @@ export function DawnPlaza() {
             <b>无匹配模型</b>
           </div>
         ) : view === 'table' ? (
-          <div className='gtable' style={{ marginTop: 16 }}>
+          <div className='gtable cache-prices' style={{ marginTop: 16 }}>
             <div className='tr th'>
               <span>模型</span>
               <span>输入 /{unit}</span>
               <span>输出 /{unit}</span>
-              <span>缓存 写/读</span>
+              <span>
+                {t('缓存写入')} /{unit}
+              </span>
+              <span>
+                {t('缓存读取')} /{unit}
+              </span>
               <span>可用分组</span>
               <span style={{ textAlign: 'right' }}>详情</span>
             </div>
@@ -406,6 +417,14 @@ export function DawnPlaza() {
                     ? '按量计费'
                     : `输出 ${formatPrice(model, 'output', unit)} /${unit}`}
                 </div>
+                {model.quota_type !== QUOTA_TYPE_VALUES.REQUEST && (
+                  <div className='sub'>
+                    {t('缓存写入')} {cacheText(model, unit, 'create_cache')} /
+                    {unit}
+                    <br />
+                    {t('缓存读取')} {cacheText(model, unit, 'cache')} /{unit}
+                  </div>
+                )}
                 <div className='gtags' style={{ marginTop: 12 }}>
                   {groupsFor(
                     model,
@@ -523,13 +542,23 @@ export function DawnPlaza() {
               各分组价格（含分组倍率）
             </div>
             {isDynamicPricingModel(detailModel) && (
-              <div className='gtab' style={{ marginBottom: 12 }}>
+              <p className='text-muted-foreground mb-3 text-xs'>
+                {t('概览和分组价格展示首档单价，完整阶梯价格如下。')}
+              </p>
+            )}
+            {isDynamicPricingModel(detailModel) && (
+              <div className='gtab cache-tiers' style={{ marginBottom: 12 }}>
                 <div className='gr gh'>
                   <span>阶梯</span>
                   <span>条件</span>
                   <span>输入 /{unit}</span>
                   <span>输出 /{unit}</span>
-                  <span />
+                  <span>
+                    {t('缓存写入')} /{unit}
+                  </span>
+                  <span>
+                    {t('缓存读取')} /{unit}
+                  </span>
                 </div>
                 {getDynamicPricingTiers(detailModel).map((tier, index) => (
                   <div className='gr' key={`tier-${index}`}>
@@ -550,17 +579,28 @@ export function DawnPlaza() {
                     <span className='num'>
                       {dynamicTierPrice(tier.outputPrice, unit)}
                     </span>
-                    <span />
+                    <span className='num'>
+                      {dynamicTierPrice(tier.cacheCreatePrice, unit)}
+                    </span>
+                    <span className='num'>
+                      {dynamicTierPrice(tier.cacheReadPrice, unit)}
+                    </span>
                   </div>
                 ))}
               </div>
             )}
-            <div className='gtab'>
+            <div className='gtab cache-prices'>
               <div className='gr gh'>
                 <span>分组</span>
                 <span>倍率</span>
                 <span>输入 /{unit}</span>
                 <span>输出 /{unit}</span>
+                <span>
+                  {t('缓存写入')} /{unit}
+                </span>
+                <span>
+                  {t('缓存读取')} /{unit}
+                </span>
                 <span />
               </div>
               {detailGroups.map((group) => (
@@ -578,6 +618,8 @@ export function DawnPlaza() {
                         <b>{formatPrice(detailModel, 'input', unit)}</b>
                       </span>
                       <span className='num'>按量</span>
+                      <span className='num'>—</span>
+                      <span className='num'>—</span>
                     </>
                   ) : (
                     <>
@@ -627,6 +669,30 @@ export function DawnPlaza() {
                       </span>
                     </>
                   )}
+                  {detailModel.quota_type !== QUOTA_TYPE_VALUES.REQUEST &&
+                    (['create_cache', 'cache'] as const).map((type) => (
+                      <span className='num' key={type}>
+                        <b>
+                          {group.sourceType === 'official'
+                            ? formatGroupPrice(
+                                detailModel,
+                                group.name,
+                                type,
+                                unit,
+                                false,
+                                1,
+                                1,
+                                pricing.groupRatio
+                              )
+                            : marketplaceGroupPrice(
+                                detailModel,
+                                group.ratio,
+                                type,
+                                unit
+                              )}
+                        </b>
+                      </span>
+                    ))}
                   <Link
                     to='/market'
                     style={{
@@ -675,11 +741,11 @@ function cacheText(
 function marketplaceGroupPrice(
   model: PricingModel,
   ratio: number,
-  type: 'input' | 'output',
+  type: PriceType,
   unit: TokenUnit
 ): string {
   return formatGroupPrice(model, '_marketplace', type, unit, false, 1, 1, {
-    _marketplace: ratio || 1,
+    _marketplace: ratio ?? 1,
   })
 }
 
@@ -696,7 +762,7 @@ function baseModelPrice(
 
 function dynamicTierPrice(value: unknown, unit: TokenUnit): string {
   const numeric = Number(value)
-  if (!Number.isFinite(numeric) || numeric <= 0) return '—'
+  if (value == null || !Number.isFinite(numeric) || numeric < 0) return '—'
   return formatDynamicUnitPrice(numeric, { tokenUnit: unit })
 }
 
@@ -784,9 +850,10 @@ function ModelRow(props: {
         <span className='u'>{metered ? '' : ` /${unit}`}</span>
       </span>
       <span className='cw'>
-        {metered
-          ? '—'
-          : `${cacheText(model, unit, 'create_cache')} / ${cacheText(model, unit, 'cache')}`}
+        {metered ? '—' : cacheText(model, unit, 'create_cache')}
+      </span>
+      <span className='cw'>
+        {metered ? '—' : cacheText(model, unit, 'cache')}
       </span>
       <span className='gtags'>
         {groupsFor(model, groups)

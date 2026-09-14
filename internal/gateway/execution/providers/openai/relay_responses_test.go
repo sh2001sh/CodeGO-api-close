@@ -466,6 +466,94 @@ func TestOaiResponsesStreamHandlerRepairsMissingTextPartAfterReasoning(t *testin
 	require.Contains(t, output[partAdded:text], `"type":"output_text"`)
 }
 
+func TestOaiResponsesStreamHandlerForwardsTextLifecycleAfterReasoningBeforeDelta(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_opencode_order"}}`,
+		``,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_opencode_order","type":"reasoning","summary":[]}}`,
+		``,
+		`data: {"type":"response.reasoning_summary_text.delta","output_index":0,"item_id":"rs_opencode_order","summary_index":0,"delta":"thinking"}`,
+		``,
+		`data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_opencode_order","type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}]}}`,
+		``,
+		`data: {"type":"response.output_item.added","output_index":1,"item":{"id":"msg_opencode_order","type":"message","status":"in_progress","role":"assistant","content":[]}}`,
+		``,
+		`data: {"type":"response.content_part.added","output_index":1,"item_id":"msg_opencode_order","content_index":0,"part":{"type":"output_text","text":"","annotations":[]}}`,
+		``,
+		`data: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_opencode_order","content_index":0,"delta":"answer"}`,
+		``,
+		`data: {"type":"response.output_item.done","output_index":1,"item":{"id":"msg_opencode_order","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"answer","annotations":[]}]}}`,
+		``,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+
+	require.Nil(t, err)
+	require.Equal(t, 15, usage.TotalTokens)
+	output := recorder.Body.String()
+	reasoning := strings.Index(output, `"delta":"thinking"`)
+	require.GreaterOrEqual(t, reasoning, 0)
+	itemAddedOffset := strings.Index(output[reasoning:], `event: response.output_item.added`)
+	itemAdded := reasoning + itemAddedOffset
+	partAdded := strings.Index(output, `event: response.content_part.added`)
+	text := strings.Index(output, `"delta":"answer"`)
+	itemDone := strings.LastIndex(output, `event: response.output_item.done`)
+	require.Greater(t, itemAddedOffset, 0)
+	require.Greater(t, partAdded, itemAdded)
+	require.Contains(t, output[itemAdded:partAdded], `"id":"msg_opencode_order"`)
+	require.Greater(t, text, partAdded)
+	require.Greater(t, itemDone, text)
+	require.Equal(t, 2, strings.Count(output, `event: response.output_item.added`))
+}
+
+func TestOaiResponsesStreamHandlerRepairsMissingTextStartBeforeMessageDone(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_opencode_done"}}`,
+		``,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_opencode_done","type":"reasoning","summary":[]}}`,
+		``,
+		`data: {"type":"response.reasoning_summary_text.delta","output_index":0,"item_id":"rs_opencode_done","summary_index":0,"delta":"thinking"}`,
+		``,
+		`data: {"type":"response.output_item.done","output_index":1,"item":{"id":"msg_opencode_done","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"answer","annotations":[]}]}}`,
+		``,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+
+	require.Nil(t, err)
+	require.Equal(t, 15, usage.TotalTokens)
+	output := recorder.Body.String()
+	reasoning := strings.Index(output, `"delta":"thinking"`)
+	require.GreaterOrEqual(t, reasoning, 0)
+	itemAddedOffset := strings.Index(output[reasoning:], `event: response.output_item.added`)
+	itemAdded := reasoning + itemAddedOffset
+	itemDone := strings.Index(output, `event: response.output_item.done`)
+	require.Greater(t, itemAddedOffset, 0)
+	require.Greater(t, itemDone, itemAdded)
+	require.Contains(t, output[itemAdded:itemDone], `"id":"msg_opencode_done"`)
+	require.Equal(t, 2, strings.Count(output, `event: response.output_item.added`))
+}
+
 func TestOaiResponsesStreamHandlerRejectsStructuralLifecycleOverflowBeforeWriting(t *testing.T) {
 	setResponsesTestStreamingTimeout(t)
 

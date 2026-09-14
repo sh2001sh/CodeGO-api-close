@@ -188,7 +188,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		}
 		if len(repairEvents) > 0 {
 			repairedTextLifecycleEvents += len(repairEvents)
-			logger.LogWarn(c, "repaired missing Responses text lifecycle before output delta")
+			logger.LogWarn(c, "repaired missing Responses text lifecycle")
 		}
 		if isResponsesFailureEvent(streamResponse) {
 			if cyberErr := cyberPolicyAPIError([]byte(data), resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
@@ -286,7 +286,27 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				return
 			}
 			preOutputEvents = nil
+		} else if sawSemanticOutput.Load() {
+			// Once any model-visible output has been sent, every following
+			// lifecycle event must stay in wire order. Buffering a message's
+			// output_item.added/content_part.added after reasoning while sending
+			// its text delta immediately makes strict clients observe delta/end
+			// before text-start.
+			if err := flushBufferedResponsesStreamEvents(c, info, repairEvents, &streamResponse, data); err != nil {
+				logger.LogError(c, "failed to write responses lifecycle event after semantic output: "+err.Error())
+				sr.Stop(err)
+				return
+			}
 		} else {
+			for _, event := range repairEvents {
+				dropped, bufferErr := appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, event.response, event.data)
+				preOutputEventsDropped += dropped
+				if bufferErr != nil {
+					preOutputBufferErr = bufferErr
+					sr.Stop(bufferErr)
+					return
+				}
+			}
 			dropped, bufferErr := appendBufferedResponsesStreamEvent(&preOutputEvents, &preOutputBytes, streamResponse, data)
 			preOutputEventsDropped += dropped
 			preOutputEventsBuffered = len(preOutputEvents)
@@ -529,16 +549,26 @@ func observeResponsesStreamLifecycle(response dto.ResponsesStreamResponse, items
 }
 
 func missingResponsesTextLifecycleEvents(response dto.ResponsesStreamResponse, items map[string]struct{}, parts map[string]struct{}) ([]bufferedResponsesStreamEvent, error) {
-	if !isResponsesTextDelta(response) || strings.TrimSpace(response.ItemID) == "" || response.ContentIndex == nil {
+	itemID := ""
+	contentIndex := 0
+	repairContentPart := false
+	switch {
+	case isResponsesTextDelta(response) && strings.TrimSpace(response.ItemID) != "" && response.ContentIndex != nil:
+		itemID = strings.TrimSpace(response.ItemID)
+		contentIndex = *response.ContentIndex
+		repairContentPart = true
+	case response.Type == dto.ResponsesOutputTypeItemDone && response.Item != nil &&
+		strings.TrimSpace(response.Item.Type) == "message":
+		itemID = strings.TrimSpace(response.Item.ID)
+	}
+	if itemID == "" {
 		return nil, nil
 	}
 
-	itemID := strings.TrimSpace(response.ItemID)
 	outputIndex := 0
 	if response.OutputIndex != nil {
 		outputIndex = *response.OutputIndex
 	}
-	contentIndex := *response.ContentIndex
 	events := make([]bufferedResponsesStreamEvent, 0, 2)
 	if _, found := items[itemID]; !found {
 		data, err := platformencoding.Marshal(map[string]any{
@@ -560,6 +590,10 @@ func missingResponsesTextLifecycleEvents(response dto.ResponsesStreamResponse, i
 			data:     string(data),
 		})
 		items[itemID] = struct{}{}
+	}
+
+	if !repairContentPart {
+		return events, nil
 	}
 
 	partKey := responsesContentPartKey(itemID, contentIndex)

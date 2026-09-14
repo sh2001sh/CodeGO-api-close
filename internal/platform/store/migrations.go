@@ -176,6 +176,7 @@ func V2MigrationIDs() []string {
 		"20260903_marketplace_owner_operations",
 		"20260905_query_path_indexes",
 		"20260905_marketplace_group_query_index",
+		"20260914_account_request_abuse",
 		"20260909_marketplace_route_pool_auto_build",
 		"20260909_marketplace_multiplier_card_policy",
 		"20260910_nowpayments_topup",
@@ -451,6 +452,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		// databases that already recorded 20260905_query_path_indexes still
 		// receive the later query path optimization.
 		{ID: "20260905_marketplace_group_query_index", RunOutsideTx: migrateMarketplaceGroupQueryIndex},
+		{ID: "20260914_account_request_abuse", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&gatewayschema.AccountRequestAbuseState{})
+		}},
 	}
 	for _, step := range steps {
 		var applied schemaMigration

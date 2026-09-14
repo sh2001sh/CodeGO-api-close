@@ -52,6 +52,8 @@ var RelayMaxConcurrentRequests int
 // across tokens, models and channels. Missing accounts are unrestricted.
 var UserMaxConcurrentRequests map[int]int
 
+var RequestAbuseGuardEnabled bool
+
 // RelayMaxConcurrentUploads limits requests whose bodies are still being read.
 // Keeping this separate prevents slow clients from occupying upstream slots.
 var RelayMaxConcurrentUploads int

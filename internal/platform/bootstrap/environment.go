@@ -20,6 +20,7 @@ import (
 
 func initEnvironment() {
 	flag.Parse()
+	platformconfig.RequestAbuseGuardEnabled = os.Getenv("REQUEST_ABUSE_GUARD_ENABLED") == "true"
 	if raw := os.Getenv("USER_MAX_CONCURRENT_REQUESTS"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &platformconfig.UserMaxConcurrentRequests); err != nil {
 			log.Fatal("USER_MAX_CONCURRENT_REQUESTS must be a JSON object of positive user IDs and limits")

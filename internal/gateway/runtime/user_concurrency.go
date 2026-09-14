@@ -15,6 +15,13 @@ import (
 // are reused with a separate namespace; no channel telemetry is affected.
 func TryBeginUserRequest(ctx context.Context, userID int) (context.Context, func(), ChannelConcurrencyAdmission) {
 	limit := platformconfig.UserMaxConcurrentRequests[userID]
+	restricted, admission := checkAccountRequestAbuse(ctx, userID)
+	if admission != ChannelConcurrencyAdmitted {
+		return ctx, func() {}, admission
+	}
+	if restricted && (limit <= 0 || limit > 2) {
+		limit = 2
+	}
 	if limit <= 0 {
 		return ctx, func() {}, ChannelConcurrencyAdmitted
 	}

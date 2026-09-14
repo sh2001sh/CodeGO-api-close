@@ -512,6 +512,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	})
 	gopool.Go(func() {
 		cacheWriteTokens := cacheWriteTokensTotal(summary)
+		gatewayruntime.RecordAccountRequestSample(relayInfo.UserId, relayInfo.ChannelId, logModel,
+			performanceInputTokens(summary.PromptTokens, summary.CacheTokens, cacheWriteTokens, summary.IsClaudeUsageSemantic),
+			int64(summary.CacheTokens))
 		auditprojection.RecordRelayUsageSample(
 			relayInfo,
 			true,

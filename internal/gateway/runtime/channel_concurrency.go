@@ -23,6 +23,8 @@ const (
 	ChannelConcurrencyAdmitted ChannelConcurrencyAdmission = iota
 	ChannelConcurrencyCapacityReached
 	ChannelConcurrencyDependencyUnavailable
+	AccountRequestRPMReached
+	AccountRequestDisabled
 )
 
 // BeginChannelRequest tracks one process-local in-flight upstream request.

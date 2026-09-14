@@ -74,6 +74,13 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		if userAdmission == relaycommon.ChannelConcurrencyDependencyUnavailable {
 			status, message = http.StatusServiceUnavailable, "Account concurrency check unavailable. Please retry later."
 		}
+		if userAdmission == relaycommon.AccountRequestRPMReached {
+			message = "Account request rate restricted to 10 RPM for 24 hours after abnormal request activity."
+			c.Header("Retry-After", "60")
+		}
+		if userAdmission == relaycommon.AccountRequestDisabled {
+			status, message = http.StatusForbidden, "Account disabled after repeated abnormal request activity."
+		}
 		newAPIError = types.NewErrorWithStatusCode(errors.New(message), types.ErrorCodeServiceBusy, status, types.ErrOptionWithSkipRetry())
 		return
 	}

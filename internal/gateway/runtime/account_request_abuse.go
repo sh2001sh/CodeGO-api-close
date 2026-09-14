@@ -21,7 +21,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Three complete consecutive minutes, per account/model across all tokens.
+// Two complete consecutive minutes, per account/model across all tokens.
 // Cache support is established by a real positive hit on that channel/model
 // within 24h; an unverified provider is never classified as zero-cache abuse.
 var accountSampleScript = redis.NewScript(`
@@ -35,7 +35,7 @@ redis.call('HINCRBY',key,'cache',ARGV[2])
 redis.call('HINCRBY',key,'unknown',tonumber(ARGV[3]) == 1 and 0 or 1)
 redis.call('EXPIRE',key,300)
 local evidence = {}
-for i=3,1,-1 do
+for i=2,1,-1 do
  local v=redis.call('HMGET',KEYS[1]..':'..(minute-i),'n','short','input','cache','unknown')
  local n=tonumber(v[1]) or 0
  local short=tonumber(v[2]) or 0

@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -19,6 +20,16 @@ import (
 
 func initEnvironment() {
 	flag.Parse()
+	if raw := os.Getenv("USER_MAX_CONCURRENT_REQUESTS"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &platformconfig.UserMaxConcurrentRequests); err != nil {
+			log.Fatal("USER_MAX_CONCURRENT_REQUESTS must be a JSON object of positive user IDs and limits")
+		}
+		for userID, limit := range platformconfig.UserMaxConcurrentRequests {
+			if userID <= 0 || limit <= 0 {
+				log.Fatal("USER_MAX_CONCURRENT_REQUESTS requires positive user IDs and limits")
+			}
+		}
+	}
 
 	if envVersion := os.Getenv("VERSION"); envVersion != "" {
 		platformconfig.Version = envVersion

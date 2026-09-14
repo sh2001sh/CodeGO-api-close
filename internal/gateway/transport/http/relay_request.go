@@ -67,6 +67,19 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		finalizeRelayError(c, relayFormat, ws, newAPIError, requestID)
 	}()
 
+	userCtx, releaseUserSlot, userAdmission := relaycommon.TryBeginUserRequest(c.Request.Context(), c.GetInt("id"))
+	if userAdmission != relaycommon.ChannelConcurrencyAdmitted {
+		c.Header("Retry-After", "2")
+		status, message := http.StatusTooManyRequests, "Account concurrent request limit reached. Wait for an active request to finish."
+		if userAdmission == relaycommon.ChannelConcurrencyDependencyUnavailable {
+			status, message = http.StatusServiceUnavailable, "Account concurrency check unavailable. Please retry later."
+		}
+		newAPIError = types.NewErrorWithStatusCode(errors.New(message), types.ErrorCodeServiceBusy, status, types.ErrOptionWithSkipRetry())
+		return
+	}
+	defer releaseUserSlot()
+	c.Request = c.Request.WithContext(userCtx)
+
 	releaseUploadSlot, uploadAdmitted, uploadStats := platformconcurrency.TryAcquireRelayUploadSlot()
 	if !uploadAdmitted {
 		if uploadStats.Rejected == 1 || uploadStats.Rejected%100 == 0 {

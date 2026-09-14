@@ -290,16 +290,20 @@ function BillingBreakdown(props: {
   }
 
   if (other.web_search && other.web_search_call_count) {
+    const totalPrice =
+      (other.web_search_price || 0) * other.web_search_call_count
     rows.push({
       label: t('Web Search'),
-      value: `${other.web_search_call_count}x${other.web_search_price ? ` (${fmtPrice(other.web_search_price)})` : ''}`,
+      value: `${other.web_search_call_count}x${other.web_search_price ? ` · ${fmtPrice(other.web_search_price)}/1K = ${fmtPrice(totalPrice / 1000)}` : ''}`,
     })
   }
 
   if (other.file_search && other.file_search_call_count) {
+    const totalPrice =
+      (other.file_search_price || 0) * other.file_search_call_count
     rows.push({
       label: t('File Search'),
-      value: `${other.file_search_call_count}x${other.file_search_price ? ` (${fmtPrice(other.file_search_price)})` : ''}`,
+      value: `${other.file_search_call_count}x${other.file_search_price ? ` · ${fmtPrice(other.file_search_price)}/1K = ${fmtPrice(totalPrice / 1000)}` : ''}`,
     })
   }
 

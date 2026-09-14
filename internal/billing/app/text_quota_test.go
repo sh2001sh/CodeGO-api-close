@@ -467,6 +467,39 @@ func TestCalculateTextQuotaSummaryBillsToolCallWithoutTokens(t *testing.T) {
 	require.Greater(t, summary.Quota, 0)
 }
 
+func TestTextToolCallSurchargeIgnoresGroupRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	calculate := func(groupRatio float64) textQuotaSummary {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Set("image_generation_call", true)
+		ctx.Set("image_generation_call_quality", "low")
+		ctx.Set("image_generation_call_size", "1024x1024")
+		relayInfo := &relaycommon.RelayInfo{
+			OriginModelName: "gpt-5.6-sol",
+			PriceData: types.PriceData{
+				ModelRatio:      1,
+				CompletionRatio: 1,
+				GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: groupRatio},
+			},
+			ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+				BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+					dto.BuildInToolWebSearchPreview: {CallCount: 1},
+					dto.BuildInToolFileSearch:       {CallCount: 2},
+				},
+			},
+			StartTime: time.Now(),
+		}
+		return calculateTextQuotaSummary(ctx, relayInfo, &dto.Usage{})
+	}
+
+	lowRatio := calculate(0.1)
+	highRatio := calculate(2)
+	require.True(t, lowRatio.hasBillableUsage())
+	require.True(t, highRatio.hasBillableUsage())
+	require.True(t, lowRatio.ToolCallSurchargeQuota.Equal(highRatio.ToolCallSurchargeQuota))
+	require.Equal(t, lowRatio.Quota, highRatio.Quota)
+}
+
 func TestComposeTieredTextQuotaFallbackKeepsToolCallSurcharges(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -497,8 +530,8 @@ func TestComposeTieredTextQuotaFallbackKeepsToolCallSurcharges(t *testing.T) {
 	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
 	quota := composeTieredTextQuota(relayInfo, summary, 1250, nil)
 
-	require.Equal(t, int64(12500), summary.ToolCallSurchargeQuota.Round(0).IntPart())
-	require.Equal(t, 13750, quota)
+	require.Equal(t, int64(10000), summary.ToolCallSurchargeQuota.Round(0).IntPart())
+	require.Equal(t, 11250, quota)
 }
 
 func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
@@ -536,6 +569,6 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 	preConsumedFallback := 2000
 	quota := composeTieredTextQuota(relayInfo, summary, preConsumedFallback, nil)
 
-	require.Equal(t, int64(12500), summary.ToolCallSurchargeQuota.Round(0).IntPart())
-	require.Equal(t, 14500, quota)
+	require.Equal(t, int64(10000), summary.ToolCallSurchargeQuota.Round(0).IntPart())
+	require.Equal(t, 12000, quota)
 }

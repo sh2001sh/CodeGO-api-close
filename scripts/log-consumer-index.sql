@@ -4,3 +4,7 @@
 -- before considering the index installed; IF NOT EXISTS cannot repair it.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_consumer_window
     ON public.logs (created_at, channel_id, user_id) WHERE type = 2;
+
+-- User-visible log filter options must not fetch every historical log body.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_user_group
+    ON public.logs (user_id, "group");

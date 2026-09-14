@@ -132,6 +132,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var terminalFailure error
 	var preOutputBufferErr error
 	var cyberPolicyErr *types.NewAPIError
+	seenOutputItems := make(map[string]struct{})
+	seenContentParts := make(map[string]struct{})
+	repairedTextLifecycleEvents := 0
 	var preOutputEvents []bufferedResponsesStreamEvent
 	preOutputEventsBuffered := 0
 	preOutputEventsDropped := 0
@@ -176,6 +179,16 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
 			sr.Error(err)
 			return
+		}
+		observeResponsesStreamLifecycle(streamResponse, seenOutputItems, seenContentParts)
+		repairEvents, repairErr := missingResponsesTextLifecycleEvents(streamResponse, seenOutputItems, seenContentParts)
+		if repairErr != nil {
+			sr.Error(repairErr)
+			return
+		}
+		if len(repairEvents) > 0 {
+			repairedTextLifecycleEvents += len(repairEvents)
+			logger.LogWarn(c, "repaired missing Responses text lifecycle before output delta")
 		}
 		if isResponsesFailureEvent(streamResponse) {
 			if cyberErr := cyberPolicyAPIError([]byte(data), resp.StatusCode, resp.Header.Get("Content-Type")); cyberErr != nil {
@@ -230,6 +243,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			helper.MarkSemanticCommitted(c)
 			var err error
 			if firstSemanticOutput {
+				preOutputEvents = append(preOutputEvents, repairEvents...)
 				if canBatchResponsesFirstEvent(info, streamResponse) {
 					err = flushBufferedResponsesStreamEvents(c, info, preOutputEvents, &streamResponse, data)
 					if err == nil {
@@ -243,6 +257,12 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					}
 				}
 			} else {
+				for _, event := range repairEvents {
+					if err := helper.ResponseChunkDataNoFlush(c, event.response, event.data); err != nil {
+						sr.Stop(err)
+						return
+					}
+				}
 				err = sendResponsesStreamData(c, info, streamResponse, data)
 			}
 			if err != nil {
@@ -346,6 +366,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		"response_completed_seen":    sawResponseCompleted.Load(),
 		"pre_output_events_buffered": preOutputEventsBuffered,
 		"pre_output_events_dropped":  preOutputEventsDropped,
+		"repaired_text_lifecycle":    repairedTextLifecycleEvents,
 		"first_output_timeout_ms":    firstOutputTimeout.Milliseconds(),
 		"first_output_timed_out":     firstOutputTimedOut.Load(),
 		"stream_end_reason":          streamEndReason,
@@ -490,6 +511,84 @@ func isDroppableResponsesPreOutputEvent(response dto.ResponsesStreamResponse) bo
 	default:
 		return false
 	}
+}
+
+func observeResponsesStreamLifecycle(response dto.ResponsesStreamResponse, items map[string]struct{}, parts map[string]struct{}) {
+	switch response.Type {
+	case dto.ResponsesOutputTypeItemAdded:
+		if response.Item != nil {
+			if itemID := strings.TrimSpace(response.Item.ID); itemID != "" {
+				items[itemID] = struct{}{}
+			}
+		}
+	case "response.content_part.added":
+		if itemID := strings.TrimSpace(response.ItemID); itemID != "" && response.ContentIndex != nil {
+			parts[responsesContentPartKey(itemID, *response.ContentIndex)] = struct{}{}
+		}
+	}
+}
+
+func missingResponsesTextLifecycleEvents(response dto.ResponsesStreamResponse, items map[string]struct{}, parts map[string]struct{}) ([]bufferedResponsesStreamEvent, error) {
+	if !isResponsesTextDelta(response) || strings.TrimSpace(response.ItemID) == "" || response.ContentIndex == nil {
+		return nil, nil
+	}
+
+	itemID := strings.TrimSpace(response.ItemID)
+	outputIndex := 0
+	if response.OutputIndex != nil {
+		outputIndex = *response.OutputIndex
+	}
+	contentIndex := *response.ContentIndex
+	events := make([]bufferedResponsesStreamEvent, 0, 2)
+	if _, found := items[itemID]; !found {
+		data, err := platformencoding.Marshal(map[string]any{
+			"type":         dto.ResponsesOutputTypeItemAdded,
+			"output_index": outputIndex,
+			"item": map[string]any{
+				"id":      itemID,
+				"type":    "message",
+				"status":  "in_progress",
+				"role":    "assistant",
+				"content": []any{},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, bufferedResponsesStreamEvent{
+			response: dto.ResponsesStreamResponse{Type: dto.ResponsesOutputTypeItemAdded},
+			data:     string(data),
+		})
+		items[itemID] = struct{}{}
+	}
+
+	partKey := responsesContentPartKey(itemID, contentIndex)
+	if _, found := parts[partKey]; !found {
+		data, err := platformencoding.Marshal(map[string]any{
+			"type":          "response.content_part.added",
+			"output_index":  outputIndex,
+			"item_id":       itemID,
+			"content_index": contentIndex,
+			"part": map[string]any{
+				"type":        "output_text",
+				"text":        "",
+				"annotations": []any{},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, bufferedResponsesStreamEvent{
+			response: dto.ResponsesStreamResponse{Type: "response.content_part.added"},
+			data:     string(data),
+		})
+		parts[partKey] = struct{}{}
+	}
+	return events, nil
+}
+
+func responsesContentPartKey(itemID string, contentIndex int) string {
+	return itemID + ":" + strconv.Itoa(contentIndex)
 }
 
 func flushBufferedResponsesStreamEvents(c *gin.Context, info *relaycommon.RelayInfo, events []bufferedResponsesStreamEvent, current *dto.ResponsesStreamResponse, currentData string) error {

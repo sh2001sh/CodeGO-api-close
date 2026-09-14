@@ -416,9 +416,54 @@ func TestOaiResponsesStreamHandlerPreservesTextPartLifecycleWhenBufferOverflows(
 	require.Greater(t, itemAdded, created)
 	require.Greater(t, partAdded, itemAdded)
 	require.Greater(t, delta, partAdded)
+	require.Equal(t, 1, strings.Count(output, `event: response.output_item.added`))
+	require.Equal(t, 1, strings.Count(output, `event: response.content_part.added`))
 	lifecycle, ok := c.Get("responses_stream_lifecycle")
 	require.True(t, ok)
 	require.Greater(t, lifecycle.(map[string]interface{})["pre_output_events_dropped"].(int), 0)
+}
+
+func TestOaiResponsesStreamHandlerRepairsMissingTextPartAfterReasoning(t *testing.T) {
+	setResponsesTestStreamingTimeout(t)
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_opencode"}}`,
+		``,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_opencode","type":"reasoning","summary":[]}}`,
+		``,
+		`data: {"type":"response.reasoning_summary_part.added","output_index":0,"item_id":"rs_opencode","summary_index":0,"part":{"type":"summary_text","text":""}}`,
+		``,
+		`data: {"type":"response.reasoning_summary_text.delta","output_index":0,"item_id":"rs_opencode","summary_index":0,"delta":"thinking"}`,
+		``,
+		`data: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_opencode_missing","content_index":0,"delta":"answer"}`,
+		``,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+
+	require.Nil(t, err)
+	require.Equal(t, 15, usage.TotalTokens)
+	output := recorder.Body.String()
+	reasoning := strings.Index(output, `"delta":"thinking"`)
+	itemAdded := strings.Index(output, `"id":"msg_opencode_missing","role":"assistant"`)
+	require.GreaterOrEqual(t, reasoning, 0)
+	require.Greater(t, itemAdded, reasoning)
+	partOffset := strings.Index(output[itemAdded:], `event: response.content_part.added`)
+	require.GreaterOrEqual(t, partOffset, 0)
+	partAdded := itemAdded + partOffset
+	text := strings.Index(output, `"delta":"answer"`)
+	require.Greater(t, partAdded, itemAdded)
+	require.Greater(t, text, partAdded)
+	require.Contains(t, output[partAdded:text], `"item_id":"msg_opencode_missing"`)
+	require.Contains(t, output[partAdded:text], `"type":"output_text"`)
 }
 
 func TestOaiResponsesStreamHandlerRejectsStructuralLifecycleOverflowBeforeWriting(t *testing.T) {

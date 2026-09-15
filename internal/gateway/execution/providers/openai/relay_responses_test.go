@@ -320,6 +320,7 @@ func TestOaiResponsesStreamHandlerFlushesRemoteCompactionOutput(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("X-Codex-Beta-Features", "remote_compaction_v2")
 	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
 
 	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
@@ -333,6 +334,8 @@ func TestOaiResponsesStreamHandlerFlushesRemoteCompactionOutput(t *testing.T) {
 	require.GreaterOrEqual(t, created, 0)
 	require.Greater(t, compaction, created)
 	require.Greater(t, completed, compaction)
+	require.Contains(t, output, `"id":"ctc_123"`)
+	require.NotContains(t, output, `"id":"cmp_ctc_123"`)
 	require.True(t, c.GetBool(string(constant.ContextKeyStreamContentDelivered)))
 }
 
@@ -790,6 +793,26 @@ func TestOaiResponsesHandlerPreservesCacheWriteTokens(t *testing.T) {
 			CachedCreationTokens: 20,
 		},
 	}, usage)
+}
+
+func TestOaiResponsesHandlerPreservesRemoteCompactionOutputID(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("X-Codex-Beta-Features", "remote_compaction_v2")
+	responseBody := `{"id":"resp_1","output":[{"id":"ctc_123","type":"compaction"}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(responseBody)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+	}
+
+	usage, err := OaiResponsesHandler(c, &relaycommon.RelayInfo{}, resp)
+
+	require.Nil(t, err)
+	require.Equal(t, 2, usage.TotalTokens)
+	require.JSONEq(t, responseBody, recorder.Body.String())
+	require.NotContains(t, recorder.Body.String(), `"id":"cmp_ctc_123"`)
 }
 
 func TestOaiResponsesHandlerNormalizesCompatibleCacheWriteFields(t *testing.T) {

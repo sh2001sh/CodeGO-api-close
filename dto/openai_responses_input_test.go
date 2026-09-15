@@ -112,7 +112,7 @@ func TestNormalizeCodexAgentMessagesPreservesStringInput(t *testing.T) {
 	require.JSONEq(t, `"hello"`, string(req.Input))
 }
 
-func TestOpenAIResponsesRequestNormalizesRemoteCompactionItemIDs(t *testing.T) {
+func TestOpenAIResponsesRequestStripsServerOwnedRemoteCompactionItemIDs(t *testing.T) {
 	request := &OpenAIResponsesRequest{
 		Input: json.RawMessage(`[
 			{"type":"message","id":"item_message","role":"user","content":[]},
@@ -126,10 +126,10 @@ func TestOpenAIResponsesRequestNormalizesRemoteCompactionItemIDs(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.JSONEq(t, `[
-		{"type":"message","id":"msg_message","role":"user","content":[]},
-		{"type":"custom_tool_call","id":"ctc_call","call_id":"call_1","name":"shell","input":"{}"},
-		{"type":"custom_tool_call_output","id":"ctco_output","call_id":"call_1","output":"ok"},
-		{"type":"function_call","id":"fc_existing","call_id":"call_2","name":"read","arguments":"{}"}
+		{"type":"message","role":"user","content":[]},
+		{"type":"custom_tool_call","call_id":"call_1","name":"shell","input":"{}"},
+		{"type":"custom_tool_call_output","call_id":"call_1","output":"ok"},
+		{"type":"function_call","call_id":"call_2","name":"read","arguments":"{}"}
 	]`, string(request.Input))
 }
 
@@ -140,7 +140,25 @@ func TestOpenAIResponsesRequestNormalizesRemoteCompactionInputIdempotently(t *te
 
 	changed, err := request.NormalizeCodexRemoteCompactionInput()
 	require.NoError(t, err)
-	require.False(t, changed)
+	require.True(t, changed)
+	require.JSONEq(t, `[{"type":"custom_tool_call","call_id":"call_1","name":"shell","input":"{}"}]`, string(request.Input))
+}
+
+func TestOpenAIResponsesRequestStripsSyntacticallyValidForeignMessageID(t *testing.T) {
+	request := &OpenAIResponsesRequest{Input: json.RawMessage(`[
+		{"type":"message","id":"msg_0707148ece7e1dd8016aa8019f172087d1b1d111cf7def5267","role":"assistant","content":[{"type":"output_text","text":"done"}]},
+		{"type":"function_call_output","call_id":"call_1","output":"ok"},
+		{"type":"compaction_trigger"}
+	]`)}
+
+	changed, err := request.NormalizeCodexRemoteCompactionInput()
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `[
+		{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]},
+		{"type":"function_call_output","call_id":"call_1","output":"ok"},
+		{"type":"compaction_trigger"}
+	]`, string(request.Input))
 }
 
 func TestNormalizeCodexInputItemIDsRepairsWrongToolPrefixes(t *testing.T) {
@@ -159,42 +177,4 @@ func TestNormalizeCodexInputItemIDsRepairsWrongToolPrefixes(t *testing.T) {
 		{"type":"custom_tool_call_output","id":"ctco_fco_result","call_id":"call_1","output":"done"},
 		{"type":"function_call","id":"fc_valid","call_id":"call_2","name":"read","arguments":"{}"}
 	]`, string(request.Input))
-}
-
-func TestNormalizeCodexRemoteCompactionResponseAndStreamEvent(t *testing.T) {
-	response, changed, err := NormalizeCodexRemoteCompactionResponse([]byte(`{
-		"id":"resp_1",
-		"output":[{"type":"custom_tool_call","id":"item_call","call_id":"call_1","name":"shell","input":"{}"}]
-	}`))
-	require.NoError(t, err)
-	require.True(t, changed)
-	require.JSONEq(t, `{
-		"id":"resp_1",
-		"output":[{"type":"custom_tool_call","id":"ctc_call","call_id":"call_1","name":"shell","input":"{}"}]
-	}`, string(response))
-
-	rewrites := make(map[string]string)
-	itemAdded, changed, err := NormalizeCodexRemoteCompactionStreamEvent([]byte(`{
-		"type":"response.output_item.added",
-		"item":{"type":"custom_tool_call","id":"item_call","call_id":"call_1","name":"shell","input":"{}"}
-	}`), rewrites)
-	require.NoError(t, err)
-	require.True(t, changed)
-	require.JSONEq(t, `{
-		"type":"response.output_item.added",
-		"item":{"type":"custom_tool_call","id":"ctc_call","call_id":"call_1","name":"shell","input":"{}"}
-	}`, string(itemAdded))
-
-	delta, changed, err := NormalizeCodexRemoteCompactionStreamEvent([]byte(`{
-		"type":"response.custom_tool_call_input.delta",
-		"item_id":"item_call",
-		"delta":"{}"
-	}`), rewrites)
-	require.NoError(t, err)
-	require.True(t, changed)
-	require.JSONEq(t, `{
-		"type":"response.custom_tool_call_input.delta",
-		"item_id":"ctc_call",
-		"delta":"{}"
-	}`, string(delta))
 }

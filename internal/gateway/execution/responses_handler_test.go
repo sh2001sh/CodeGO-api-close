@@ -202,11 +202,26 @@ func TestRemoteCompactionV2BodyCanBeNormalizedForPortableUpstream(t *testing.T) 
 	}`, string(body))
 }
 
-func TestNormalizeRemoteCompactionV1BodyRemovesStreamOnly(t *testing.T) {
-	body, changed, err := normalizeRemoteCompactionV1Body([]byte(`{"model":"gpt-5","stream":true,"input":"history","previous_response_id":"resp_1"}`))
+func TestNormalizeRemoteCompactionV1BodyRemovesStreamAndServerOwnedInputIDs(t *testing.T) {
+	body, changed, err := normalizeRemoteCompactionV1Body([]byte(`{
+		"model":"gpt-5",
+		"stream":true,
+		"input":[
+			{"type":"message","id":"msg_0707148ece7e1dd8016aa8019f172087d1b1d111cf7def5267","role":"assistant","content":[]},
+			{"type":"function_call_output","id":"fc_foreign","call_id":"call_1","output":"ok"}
+		],
+		"previous_response_id":"resp_1"
+	}`))
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.JSONEq(t, `{"model":"gpt-5","input":"history","previous_response_id":"resp_1"}`, string(body))
+	require.JSONEq(t, `{
+		"model":"gpt-5",
+		"input":[
+			{"type":"message","role":"assistant","content":[]},
+			{"type":"function_call_output","call_id":"call_1","output":"ok"}
+		],
+		"previous_response_id":"resp_1"
+	}`, string(body))
 }
 
 func TestNormalizePreviousResponseIDRetryRemovesStaleAnchor(t *testing.T) {

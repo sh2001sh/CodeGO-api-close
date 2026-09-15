@@ -109,7 +109,13 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			logger.LogInfo(c, "stripped Codex client metadata for portable Responses upstream")
 		}
 	}
-	if changed, normalizeErr := request.NormalizeCodexInputItemIDs(); normalizeErr != nil {
+	if info.RelayMode == gatewaycontract.RelayModeResponsesCompact {
+		if changed, normalizeErr := normalizeRemoteCompactionInput(request); normalizeErr != nil {
+			return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		} else if changed {
+			logger.LogInfo(c, "removed server-owned Responses item IDs from remote compaction input")
+		}
+	} else if changed, normalizeErr := request.NormalizeCodexInputItemIDs(); normalizeErr != nil {
 		return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	} else if changed {
 		logger.LogInfo(c, "normalized Codex Responses input item IDs")
@@ -153,7 +159,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		if normalized, normalizeErr := normalizeRemoteCompactionInput(responsesReq); normalizeErr != nil {
 			return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		} else if normalized {
-			logger.LogInfo(c, "normalized legacy Codex Responses item IDs for remote compaction")
+			logger.LogInfo(c, "removed server-owned Responses item IDs from remote compaction input")
 		}
 		body, size, err := buildRemoteCompactionV2Body(c, responsesReq.Model, request.Model, responsesReq.Input)
 		if err != nil {

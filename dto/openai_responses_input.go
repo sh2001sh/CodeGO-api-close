@@ -270,21 +270,61 @@ func mustJSONRaw(value any) json.RawMessage {
 	return encoded
 }
 
-// NormalizeCodexRemoteCompactionInput converts legacy generic item IDs in a
-// Codex Responses history to the type-specific identifiers required by the
-// remote-compaction protocol. Tool pairing continues to use call_id, which is
-// intentionally never changed here.
+// NormalizeCodexRemoteCompactionInput makes a replayed Codex history portable
+// across upstream accounts. Responses item IDs are server-owned: an ID that
+// was returned by another upstream can look syntactically valid while still
+// being rejected as an unknown item. Full input items do not need those IDs,
+// so remote compaction removes them and keeps call_id for tool pairing.
 func (r *OpenAIResponsesRequest) NormalizeCodexRemoteCompactionInput() (bool, error) {
 	if r == nil || len(r.Input) == 0 {
 		return false, nil
 	}
 
-	items, changed, err := normalizeCodexResponseItems(r.Input, true)
+	items, changed, err := sanitizeCodexRemoteCompactionItems(r.Input)
 	if err != nil || !changed {
 		return changed, err
 	}
 	r.Input = items
 	return true, nil
+}
+
+func sanitizeCodexRemoteCompactionItems(input json.RawMessage) (json.RawMessage, bool, error) {
+	var items []json.RawMessage
+	if err := json.Unmarshal(input, &items); err != nil {
+		return input, false, nil
+	}
+
+	changed := false
+	for index, raw := range items {
+		var item map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &item); err != nil {
+			continue
+		}
+		itemChanged := false
+		for _, field := range []string{"id", "namespace"} {
+			if _, found := item[field]; found {
+				delete(item, field)
+				itemChanged = true
+			}
+		}
+		if !itemChanged {
+			continue
+		}
+		normalized, err := json.Marshal(item)
+		if err != nil {
+			return input, false, err
+		}
+		items[index] = normalized
+		changed = true
+	}
+	if !changed {
+		return input, false, nil
+	}
+	normalized, err := json.Marshal(items)
+	if err != nil {
+		return input, false, err
+	}
+	return normalized, true, nil
 }
 
 // NormalizeCodexInputItemIDs gives every known Responses input item an ID
@@ -300,72 +340,6 @@ func (r *OpenAIResponsesRequest) NormalizeCodexInputItemIDs() (bool, error) {
 	}
 	r.Input = items
 	return true, nil
-}
-
-// NormalizeCodexRemoteCompactionResponse normalizes item IDs in a non-stream
-// Responses payload before it is returned to a remote-compaction client.
-func NormalizeCodexRemoteCompactionResponse(body []byte) ([]byte, bool, error) {
-	var response map[string]json.RawMessage
-	if err := json.Unmarshal(body, &response); err != nil {
-		return body, false, err
-	}
-	output, found := response["output"]
-	if !found {
-		return body, false, nil
-	}
-	normalizedOutput, changed, err := normalizeCodexResponseItems(output, false)
-	if err != nil || !changed {
-		return body, changed, err
-	}
-	response["output"] = normalizedOutput
-	normalizedBody, err := json.Marshal(response)
-	if err != nil {
-		return body, false, err
-	}
-	return normalizedBody, true, nil
-}
-
-// NormalizeCodexRemoteCompactionStreamEvent normalizes one Responses SSE
-// payload. The ID map keeps subsequent delta events aligned with a rewritten
-// output-item event without altering call_id.
-func NormalizeCodexRemoteCompactionStreamEvent(body []byte, rewrites map[string]string) ([]byte, bool, error) {
-	var event map[string]json.RawMessage
-	if err := json.Unmarshal(body, &event); err != nil {
-		return body, false, err
-	}
-
-	changed := false
-	if item, found := event["item"]; found {
-		normalizedItem, itemChanged, oldID, newID, err := normalizeCodexResponseItem(item, false)
-		if err != nil {
-			return body, false, err
-		}
-		if itemChanged {
-			event["item"] = normalizedItem
-			changed = true
-			if oldID != "" && newID != "" && rewrites != nil {
-				rewrites[oldID] = newID
-			}
-		}
-	}
-	if itemID, found := jsonRawString(event["item_id"]); found {
-		if replacement, exists := rewrites[itemID]; exists {
-			raw, err := json.Marshal(replacement)
-			if err != nil {
-				return body, false, err
-			}
-			event["item_id"] = raw
-			changed = true
-		}
-	}
-	if !changed {
-		return body, false, nil
-	}
-	normalizedBody, err := json.Marshal(event)
-	if err != nil {
-		return body, false, err
-	}
-	return normalizedBody, true, nil
 }
 
 func normalizeCodexResponseItems(input json.RawMessage, stripNamespace bool) (json.RawMessage, bool, error) {

@@ -91,16 +91,29 @@ func normalizeRemoteCompactionV2Body(body []byte, originalModel, mappedModel str
 }
 
 func normalizeRemoteCompactionV1Body(body []byte) ([]byte, bool, error) {
-	var payload map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.UseNumber()
-	if err := decoder.Decode(&payload); err != nil {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, false, fmt.Errorf("decode remote compaction v1 body: %w", err)
 	}
-	if _, ok := payload["stream"]; !ok {
+	changed := false
+	if input, ok := payload["input"]; ok {
+		request := &dto.OpenAIResponsesRequest{Input: input}
+		inputChanged, err := normalizeRemoteCompactionInput(request)
+		if err != nil {
+			return nil, false, fmt.Errorf("normalize remote compaction v1 input: %w", err)
+		}
+		if inputChanged {
+			payload["input"] = request.Input
+			changed = true
+		}
+	}
+	if _, ok := payload["stream"]; ok {
+		delete(payload, "stream")
+		changed = true
+	}
+	if !changed {
 		return body, false, nil
 	}
-	delete(payload, "stream")
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, false, fmt.Errorf("encode remote compaction v1 body: %w", err)

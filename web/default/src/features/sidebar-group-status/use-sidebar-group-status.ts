@@ -26,8 +26,7 @@ export function useSidebarGroupStatus() {
 
   return useQuery({
     queryKey: ['sidebar-group-status', userId],
-    queryFn: getSidebarGroupStatus,
-    enabled: userId > 0,
+    queryFn: () => getSidebarGroupStatus(userId > 0),
     placeholderData: (previousData) => previousData,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,

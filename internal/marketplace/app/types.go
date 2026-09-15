@@ -262,6 +262,25 @@ type RecentRequestBucket struct {
 	RequestCount int64   `json:"request_count"`
 }
 
+// GroupStatusListItem is the compact status-page projection. Marketplace
+// cards use GroupListItem; sending those pricing, verification and feedback
+// fields to the read-only status page made its all-groups response needlessly
+// large.
+type GroupStatusListItem struct {
+	ID                         string                `json:"id"`
+	PublicSlug                 string                `json:"public_slug"`
+	SystemDisplayName          string                `json:"system_display_name"`
+	SourceType                 string                `json:"source_type"`
+	SourceLabel                string                `json:"source_label"`
+	Models                     []string              `json:"models"`
+	SuccessRate                float64               `json:"success_rate"`
+	CacheHitRate               float64               `json:"cache_hit_rate"`
+	LatestRequestStatus        string                `json:"latest_request_status"`
+	RecentRequestSeries        []RecentRequestBucket `json:"recent_request_series"`
+	RecentRequestBucketSeconds int64                 `json:"recent_request_bucket_seconds"`
+	RequestCount               int64                 `json:"request_count"`
+}
+
 type GroupHighlight struct {
 	GroupID           string  `json:"group_id"`
 	SystemDisplayName string  `json:"system_display_name"`

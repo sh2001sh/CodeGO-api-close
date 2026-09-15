@@ -45,7 +45,7 @@ const TOP_NAV_ITEMS = [
   { id: 'home', icon: Home, label: '首页', path: '/' },
   { id: 'market', icon: Store, label: '市场', path: '/market' },
   { id: 'pricing', icon: TrendingUp, label: '模型', path: '/pricing' },
-  { id: 'status', icon: Activity, label: '状态', path: '/status' },
+  { id: 'status', icon: Activity, label: '状态', path: '/group-status' },
 ]
 
 export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {

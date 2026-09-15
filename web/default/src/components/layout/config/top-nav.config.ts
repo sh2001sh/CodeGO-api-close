@@ -32,5 +32,5 @@ export const defaultTopNavLinks: TopNavLink[] = [
   { title: '市场', href: '/market' },
   { title: '模型', href: '/pricing' },
   { title: '控制台', href: '/dashboard', requiresAuth: true },
-  { title: '状态', href: '/status' },
+  { title: '状态', href: '/group-status' },
 ]

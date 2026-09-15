@@ -12,7 +12,7 @@ import type {
   MarketplaceRoutePoolAutoBuild,
   MarketplaceRoutePoolSummary,
   MarketplaceGroupList,
-  MarketplaceGroup,
+  MarketplaceGroupStatus,
   MarketplaceOwnerUsageLogResult,
   MarketplaceOwnerUsageLogFilters,
   MarketplaceMultiplierTrend,
@@ -219,7 +219,7 @@ function requireData<T>(response: ApiResponse<T>): T {
 }
 
 export async function getMarketplaceGroupStatus() {
-  const response = await api.get<ApiResponse<MarketplaceGroup[]>>(
+  const response = await api.get<ApiResponse<MarketplaceGroupStatus[]>>(
     '/api/marketplace/group-status'
   )
   return requireData(response.data)

@@ -105,6 +105,22 @@ export interface ChannelFeedbackSummary {
   viewer_status: ModelConsistencyStatus
 }
 
+export type MarketplaceGroupStatus = Pick<
+  MarketplaceGroup,
+  | 'id'
+  | 'public_slug'
+  | 'system_display_name'
+  | 'source_type'
+  | 'source_label'
+  | 'models'
+  | 'success_rate'
+  | 'cache_hit_rate'
+  | 'latest_request_status'
+  | 'recent_request_series'
+  | 'recent_request_bucket_seconds'
+  | 'request_count'
+>
+
 export interface MarketplaceGroupList {
   official_items?: MarketplaceGroup[]
   items: MarketplaceGroup[]

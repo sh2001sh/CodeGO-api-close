@@ -201,11 +201,15 @@ func resolveGroupStatusDisplayNames(groupNames []string) map[string]string {
 
 func resolveVisibleGroupStatusGroups(userID int, hasUser bool, pricing []gatewaydomain.Pricing) ([]string, error) {
 	if !hasUser || userID <= 0 {
-		groups := collectPricingGroups(pricing)
+		groups := make(map[string]struct{})
+		for _, groupName := range collectPricingGroups(pricing) {
+			addGroupStatusName(groups, groupName)
+		}
+		addMarketplaceStatusGroups(groups)
 		if len(groups) == 0 {
 			return gatewaystore.ListGroupStatusGroups()
 		}
-		return groups, nil
+		return sortedGroupStatusNames(groups), nil
 	}
 
 	userGroup, err := identitystore.LoadUserGroup(userID, false)

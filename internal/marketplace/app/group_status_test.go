@@ -92,7 +92,7 @@ func TestMarketplaceStatusIncludesOfficialGroupsWithoutMarketplaceRows(t *testin
 	require.Equal(t, "official", items[0].SourceType)
 	require.Equal(t, []string{"model-a"}, items[0].Models)
 	require.Equal(t, "unknown", items[0].LatestRequestStatus)
-	require.NotNil(t, items[0].ModelVerificationResults)
+	require.Len(t, items[0].RecentRequestSeries, groupStatusWindowSegments)
 	models, err := GetMarketplaceGroupModelStatus(items[0].PublicSlug, 0)
 	require.NoError(t, err)
 	require.Len(t, models, 1)
@@ -106,4 +106,21 @@ func TestMarketplaceStatusIncludesOfficialGroupsWithoutMarketplaceRows(t *testin
 		_, err = GetMarketplaceGroupModelStatus("official:"+name, 0)
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	}
+}
+
+func TestAggregateRecentRequestSeriesBuildsWeightedHourlyBuckets(t *testing.T) {
+	series := make([]RecentRequestBucket, 24)
+	for index := range series {
+		series[index].Ts = int64(1_000 + index*900)
+	}
+	series[0].RequestCount, series[0].SuccessRate = 3, 100
+	series[1].RequestCount, series[1].SuccessRate = 1, 0
+
+	result := aggregateRecentRequestSeries(series, 6)
+
+	require.Len(t, result, 6)
+	require.Equal(t, int64(1_000), result[0].Ts)
+	require.Equal(t, int64(4), result[0].RequestCount)
+	require.Equal(t, 75.0, result[0].SuccessRate)
+	require.Equal(t, int64(1_000+4*900), result[1].Ts)
 }

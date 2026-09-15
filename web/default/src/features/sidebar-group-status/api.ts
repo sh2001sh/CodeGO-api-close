@@ -19,9 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import type { SidebarGroupStatusResponse } from './types'
 
-export async function getSidebarGroupStatus(): Promise<SidebarGroupStatusResponse> {
+export async function getSidebarGroupStatus(
+  authenticated: boolean
+): Promise<SidebarGroupStatusResponse> {
   const res = await api.get<SidebarGroupStatusResponse>(
-    '/api/user/self/group-status',
+    authenticated ? '/api/user/self/group-status' : '/api/group-status',
     // The query owns its error state and retries transient failures. Avoid a
     // global toast for each attempt while the control service is warming up.
     { skipErrorHandler: true } as Record<string, unknown>

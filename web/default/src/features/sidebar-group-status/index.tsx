@@ -43,8 +43,8 @@ export function SidebarGroupStatusPage() {
   const [search, setSearch] = useState('')
   const [modelFilter, setModelFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  // groups render expanded by default; this set only tracks explicit collapses
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+  // Large status boards keep model grids out of the DOM until requested.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => new Set()
   )
   const deferredSearch = useDeferredValue(search)
@@ -65,7 +65,7 @@ export function SidebarGroupStatusPage() {
   const modelOptions = useMemo(() => collectModelOptions(allItems), [allItems])
   const summary = useMemo(() => summarizeGroups(allItems), [allItems])
   const toggleGroup = (group: string) => {
-    setCollapsedGroups((current) => {
+    setExpandedGroups((current) => {
       const next = new Set(current)
       if (next.has(group)) next.delete(group)
       else next.add(group)
@@ -75,122 +75,118 @@ export function SidebarGroupStatusPage() {
 
   return (
     <div className='demo-status-page'>
-    <SectionPageLayout>
-      <SectionPageLayout.Title>
-        <span className='demo-status-title'>分组状态，<em>实时</em>。</span>
-      </SectionPageLayout.Title>
-      <SectionPageLayout.Actions>
-        <Button
-          variant='outline'
-          size='sm'
-          render={
-            <Link to='/marketplace' />
-          }
-        >
-          前往分组市场
-        </Button>
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={() => void query.refetch()}
-          disabled={query.isFetching}
-        >
-          <RefreshCcw
-            className={cn('size-3.5', query.isFetching && 'animate-spin')}
-          />
-          刷新
-        </Button>
-      </SectionPageLayout.Actions>
-      <SectionPageLayout.Content>
-        <div className='mx-auto flex w-full max-w-[1700px] flex-col gap-5'>
-          <OverviewPanel summary={summary} loading={query.isLoading} />
+      <SectionPageLayout>
+        <SectionPageLayout.Title>
+          <span className='demo-status-title'>
+            分组状态，<em>实时</em>。
+          </span>
+        </SectionPageLayout.Title>
+        <SectionPageLayout.Actions>
+          <Button variant='outline' size='sm' render={<Link to='/market' />}>
+            前往分组市场
+          </Button>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => void query.refetch()}
+            disabled={query.isFetching}
+          >
+            <RefreshCcw
+              className={cn('size-3.5', query.isFetching && 'animate-spin')}
+            />
+            刷新
+          </Button>
+        </SectionPageLayout.Actions>
+        <SectionPageLayout.Content>
+          <div className='mx-auto flex w-full max-w-[1700px] flex-col gap-5'>
+            <OverviewPanel summary={summary} loading={query.isLoading} />
 
-          <div className='border-border flex flex-col gap-3 border-b pb-3'>
-            <div
-              className='border-border/70 flex w-fit items-center gap-4 border-b'
-              aria-label='分组来源筛选'
-            >
-              {(
-                [
-                  ['all', '全部'],
-                  ['official', '官方渠道'],
-                  ['marketplace_user', '第三方渠道'],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type='button'
-                  onClick={() => setSource(value)}
-                  className={`-mb-px border-b-2 pb-2.5 text-[13px] transition-colors ${
-                    source === value
-                      ? 'border-primary text-foreground font-semibold'
-                      : 'text-muted-foreground hover:text-foreground border-transparent'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className='flex flex-col gap-2 xl:flex-row xl:items-center'>
-              <label className='relative min-w-0 flex-1 xl:max-w-xl'>
-                <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder='搜索分组名称、内部 ID 或模型'
-                  aria-label='搜索分组名称、内部 ID 或模型'
-                  className='bg-background pl-9'
-                />
-              </label>
-              <NativeSelect
-                value={modelFilter}
-                onChange={(event) => setModelFilter(event.target.value)}
-                aria-label='按模型筛选'
-                className='bg-background xl:w-52'
+            <div className='border-border flex flex-col gap-3 border-b pb-3'>
+              <div
+                className='border-border/70 flex w-fit items-center gap-4 border-b'
+                aria-label='分组来源筛选'
               >
-                <option value=''>全部模型</option>
-                {modelOptions.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
+                {(
+                  [
+                    ['all', '全部'],
+                    ['official', '官方渠道'],
+                    ['marketplace_user', '第三方渠道'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type='button'
+                    onClick={() => setSource(value)}
+                    className={`-mb-px border-b-2 pb-2.5 text-[13px] transition-colors ${
+                      source === value
+                        ? 'border-primary text-foreground font-semibold'
+                        : 'text-muted-foreground hover:text-foreground border-transparent'
+                    }`}
+                  >
+                    {label}
+                  </button>
                 ))}
-              </NativeSelect>
-              <NativeSelect
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                aria-label='按状态筛选'
-                className='bg-background xl:w-40'
-              >
-                <option value=''>全部状态</option>
-                <option value='healthy'>稳定</option>
-                <option value='unstable'>波动</option>
-                <option value='failed'>异常</option>
-                <option value='unknown'>暂无近期请求</option>
-              </NativeSelect>
+              </div>
+              <div className='flex flex-col gap-2 xl:flex-row xl:items-center'>
+                <label className='relative min-w-0 flex-1 xl:max-w-xl'>
+                  <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder='搜索分组名称、内部 ID 或模型'
+                    aria-label='搜索分组名称、内部 ID 或模型'
+                    className='bg-background pl-9'
+                  />
+                </label>
+                <NativeSelect
+                  value={modelFilter}
+                  onChange={(event) => setModelFilter(event.target.value)}
+                  aria-label='按模型筛选'
+                  className='bg-background xl:w-52'
+                >
+                  <option value=''>全部模型</option>
+                  {modelOptions.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </NativeSelect>
+                <NativeSelect
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                  aria-label='按状态筛选'
+                  className='bg-background xl:w-40'
+                >
+                  <option value=''>全部状态</option>
+                  <option value='healthy'>稳定</option>
+                  <option value='unstable'>波动</option>
+                  <option value='failed'>异常</option>
+                  <option value='unknown'>暂无近期请求</option>
+                </NativeSelect>
+              </div>
             </div>
-          </div>
 
-          {query.isLoading ? (
-            <BoardSkeleton />
-          ) : query.isError && !query.data ? (
-            <ErrorPanel onRetry={() => void query.refetch()} />
-          ) : items.length === 0 ? (
-            <EmptyPanel />
-          ) : (
-            <div className='flex flex-col gap-5'>
-              {items.map((group) => (
-                <GroupStatusSection
-                  key={group.group}
-                  group={group}
-                  expanded={!collapsedGroups.has(group.group)}
-                  onToggle={() => toggleGroup(group.group)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </SectionPageLayout.Content>
-    </SectionPageLayout>
+            {query.isLoading ? (
+              <BoardSkeleton />
+            ) : query.isError && !query.data ? (
+              <ErrorPanel onRetry={() => void query.refetch()} />
+            ) : items.length === 0 ? (
+              <EmptyPanel />
+            ) : (
+              <div className='flex flex-col gap-5'>
+                {items.map((group) => (
+                  <GroupStatusSection
+                    key={group.group}
+                    group={group}
+                    expanded={expandedGroups.has(group.group)}
+                    onToggle={() => toggleGroup(group.group)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </SectionPageLayout.Content>
+      </SectionPageLayout>
     </div>
   )
 }

@@ -24,16 +24,20 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
     'recent_request_series' | 'recent_request_bucket_seconds'
   >
   compact?: boolean
+  segmentCount?: number
 }) {
   const { t, i18n } = useTranslation()
   const bucketSeconds = props.group.recent_request_bucket_seconds || 900
+  const segmentCount = props.segmentCount ?? 24
   const series = useMemo(
     () =>
       normalizeRecentRequestSeries(
         props.group.recent_request_series,
-        bucketSeconds
+        bucketSeconds,
+        undefined,
+        segmentCount
       ),
-    [bucketSeconds, props.group.recent_request_series]
+    [bucketSeconds, props.group.recent_request_series, segmentCount]
   )
   const formatter = useMemo(
     () =>
@@ -45,8 +49,10 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
     [i18n.language]
   )
   const latestStatus = resolveRecentRequestStatus(series)
+  const bucketLabel = formatBucketDuration(bucketSeconds, t)
   const threshold = t(
-    '每个色块代表 15 分钟：大于 90% 绿色，75% 至 90% 黄色，低于 75% 红色，灰色表示无请求'
+    '每个色块代表 {{duration}}：大于 90% 绿色，75% 至 90% 黄色，低于 75% 红色，灰色表示无请求',
+    { duration: bucketLabel }
   )
 
   return (
@@ -58,7 +64,7 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
       {!props.compact && (
         <div className='mb-1 flex items-center justify-between gap-2 text-[11px]'>
           <span className='text-muted-foreground'>
-            {t('近 6 小时 · 每格 15 分钟')}
+            {t('近 6 小时 · 每格 {{duration}}', { duration: bucketLabel })}
           </span>
           <RequestStatus status={latestStatus} t={t} />
         </div>
@@ -97,6 +103,15 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
     </div>
   )
 })
+
+function formatBucketDuration(bucketSeconds: number, t: TFunction) {
+  if (bucketSeconds % 3600 === 0) {
+    return t('{{count}} 小时', { count: bucketSeconds / 3600 })
+  }
+  return t('{{count}} 分钟', {
+    count: Math.max(1, Math.round(bucketSeconds / 60)),
+  })
+}
 
 function RequestStatus(props: { status: RequestHealthStatus; t: TFunction }) {
   const label = props.t(getRequestHealthLabel(props.status))

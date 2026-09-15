@@ -34,4 +34,33 @@ describe('recent request series', () => {
 
     assert.equal(status, 'unstable')
   })
+
+  test('keeps server buckets visible when the browser clock is far ahead', () => {
+    const bucketSeconds = 900
+    const series = normalizeRecentRequestSeries(
+      [{ ts: 10 * bucketSeconds, success_rate: 100, request_count: 2 }],
+      bucketSeconds,
+      100 * bucketSeconds
+    )
+
+    assert.equal(series.at(-1)?.request_count, 2)
+  })
+
+  test('accepts millisecond timestamps from older marketplace payloads', () => {
+    const bucketSeconds = 900
+    const currentBucket = 1_789_460_100
+    const series = normalizeRecentRequestSeries(
+      [
+        {
+          ts: (currentBucket - bucketSeconds) * 1000,
+          success_rate: 95,
+          request_count: 4,
+        },
+      ],
+      bucketSeconds,
+      currentBucket
+    )
+
+    assert.equal(series.at(-2)?.request_count, 4)
+  })
 })

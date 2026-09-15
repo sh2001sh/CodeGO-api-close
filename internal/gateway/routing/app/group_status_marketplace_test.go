@@ -81,3 +81,38 @@ func TestResolveGroupStatusSourcesKeepsMarketplaceOfficialGroupsOfficial(t *test
 	require.Equal(t, marketplacedomain.SourceTypeMarketplaceUser, sources["market-group"])
 	require.Equal(t, marketplacedomain.SourceTypeOfficial, sources["unlisted-group"])
 }
+
+func TestResolveVisibleGroupStatusGroupsIncludesPublicMarketplaceGroupsForAnonymousUsers(t *testing.T) {
+	originalDB := platformdb.DB
+	originalSQLite := platformdb.UsingSQLite
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformdb.UsingSQLite = originalSQLite
+	})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	platformdb.DB = db
+	platformdb.UsingSQLite = true
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}))
+
+	require.NoError(t, db.Create(&marketplaceschema.Group{
+		ID: "public-market", ChannelID: "market-channel", OwnerUserID: 2,
+		PublicSlug: "public-market", SystemDisplayName: "公开第三方分组",
+		InternalGroupName: "public-market-group", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: "marketplace_universal_only", Multiplier: 1,
+		LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: "passed", Visibility: marketplacedomain.VisibilityPublic,
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{
+		ID: "private-market", ChannelID: "private-channel", OwnerUserID: 3,
+		PublicSlug: "private-market", SystemDisplayName: "私有第三方分组",
+		InternalGroupName: "private-market-group", SourceType: marketplacedomain.SourceTypeMarketplaceUser,
+		CreditPoolPolicy: "marketplace_universal_only", Multiplier: 1,
+		LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: "passed", Visibility: "private",
+	}).Error)
+
+	groups, err := resolveVisibleGroupStatusGroups(0, false, nil)
+
+	require.NoError(t, err)
+	require.Contains(t, groups, "public-market-group")
+	require.NotContains(t, groups, "private-market-group")
+}

@@ -22,6 +22,7 @@ import { Route as SetupIndexRouteImport } from './routes/setup/index'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as MarketIndexRouteImport } from './routes/market/index'
 import { Route as GuideIndexRouteImport } from './routes/guide/index'
+import { Route as GroupStatusIndexRouteImport } from './routes/group-status/index'
 import { Route as DownloadIndexRouteImport } from './routes/download/index'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as TopicsSlugRouteImport } from './routes/topics/$slug'
@@ -49,7 +50,6 @@ import { Route as AuthenticatedUsageLogsIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedSystemSettingsIndexRouteImport } from './routes/_authenticated/system-settings/index'
 import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
 import { Route as AuthenticatedSecurityAuditIndexRouteImport } from './routes/_authenticated/security-audit/index'
-import { Route as AuthenticatedRoutePoolsIndexRouteImport } from './routes/_authenticated/route-pools/index'
 import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/_authenticated/redemption-codes/index'
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile/index'
 import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_authenticated/playground/index'
@@ -61,7 +61,6 @@ import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authentica
 import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices/index'
 import { Route as AuthenticatedInviteRewardsIndexRouteImport } from './routes/_authenticated/invite-rewards/index'
 import { Route as AuthenticatedImagesIndexRouteImport } from './routes/_authenticated/images/index'
-import { Route as AuthenticatedGroupStatusIndexRouteImport } from './routes/_authenticated/group-status/index'
 import { Route as AuthenticatedGroupBuyIndexRouteImport } from './routes/_authenticated/group-buy/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDailyLuckyNumberIndexRouteImport } from './routes/_authenticated/daily-lucky-number/index'
@@ -150,6 +149,11 @@ const MarketIndexRoute = MarketIndexRouteImport.update({
 const GuideIndexRoute = GuideIndexRouteImport.update({
   id: '/guide/',
   path: '/guide/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupStatusIndexRoute = GroupStatusIndexRouteImport.update({
+  id: '/group-status/',
+  path: '/group-status/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DownloadIndexRoute = DownloadIndexRouteImport.update({
@@ -293,12 +297,6 @@ const AuthenticatedSecurityAuditIndexRoute =
     path: '/security-audit/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedRoutePoolsIndexRoute =
-  AuthenticatedRoutePoolsIndexRouteImport.update({
-    id: '/route-pools/',
-    path: '/route-pools/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedRedemptionCodesIndexRoute =
   AuthenticatedRedemptionCodesIndexRouteImport.update({
     id: '/redemption-codes/',
@@ -362,12 +360,6 @@ const AuthenticatedImagesIndexRoute =
   AuthenticatedImagesIndexRouteImport.update({
     id: '/images/',
     path: '/images/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedGroupStatusIndexRoute =
-  AuthenticatedGroupStatusIndexRouteImport.update({
-    id: '/group-status/',
-    path: '/group-status/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedGroupBuyIndexRoute =
@@ -551,6 +543,7 @@ export interface FileRoutesByFullPath {
   '/topics/$slug': typeof TopicsSlugRoute
   '/about/': typeof AboutIndexRoute
   '/download/': typeof DownloadIndexRoute
+  '/group-status/': typeof GroupStatusIndexRoute
   '/guide/': typeof GuideIndexRoute
   '/market/': typeof MarketIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -569,7 +562,6 @@ export interface FileRoutesByFullPath {
   '/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/group-buy/': typeof AuthenticatedGroupBuyIndexRoute
-  '/group-status/': typeof AuthenticatedGroupStatusIndexRoute
   '/images/': typeof AuthenticatedImagesIndexRoute
   '/invite-rewards/': typeof AuthenticatedInviteRewardsIndexRoute
   '/invoices/': typeof AuthenticatedInvoicesIndexRoute
@@ -581,7 +573,6 @@ export interface FileRoutesByFullPath {
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/profile/': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
-  '/route-pools/': typeof AuthenticatedRoutePoolsIndexRoute
   '/security-audit/': typeof AuthenticatedSecurityAuditIndexRoute
   '/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
@@ -629,6 +620,7 @@ export interface FileRoutesByTo {
   '/topics/$slug': typeof TopicsSlugRoute
   '/about': typeof AboutIndexRoute
   '/download': typeof DownloadIndexRoute
+  '/group-status': typeof GroupStatusIndexRoute
   '/guide': typeof GuideIndexRoute
   '/market': typeof MarketIndexRoute
   '/pricing': typeof PricingIndexRoute
@@ -647,7 +639,6 @@ export interface FileRoutesByTo {
   '/daily-lucky-number': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/group-buy': typeof AuthenticatedGroupBuyIndexRoute
-  '/group-status': typeof AuthenticatedGroupStatusIndexRoute
   '/images': typeof AuthenticatedImagesIndexRoute
   '/invite-rewards': typeof AuthenticatedInviteRewardsIndexRoute
   '/invoices': typeof AuthenticatedInvoicesIndexRoute
@@ -659,7 +650,6 @@ export interface FileRoutesByTo {
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
   '/profile': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes': typeof AuthenticatedRedemptionCodesIndexRoute
-  '/route-pools': typeof AuthenticatedRoutePoolsIndexRoute
   '/security-audit': typeof AuthenticatedSecurityAuditIndexRoute
   '/subscriptions': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-settings': typeof AuthenticatedSystemSettingsIndexRoute
@@ -711,6 +701,7 @@ export interface FileRoutesById {
   '/topics/$slug': typeof TopicsSlugRoute
   '/about/': typeof AboutIndexRoute
   '/download/': typeof DownloadIndexRoute
+  '/group-status/': typeof GroupStatusIndexRoute
   '/guide/': typeof GuideIndexRoute
   '/market/': typeof MarketIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -729,7 +720,6 @@ export interface FileRoutesById {
   '/_authenticated/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/group-buy/': typeof AuthenticatedGroupBuyIndexRoute
-  '/_authenticated/group-status/': typeof AuthenticatedGroupStatusIndexRoute
   '/_authenticated/images/': typeof AuthenticatedImagesIndexRoute
   '/_authenticated/invite-rewards/': typeof AuthenticatedInviteRewardsIndexRoute
   '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
@@ -741,7 +731,6 @@ export interface FileRoutesById {
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
   '/_authenticated/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
-  '/_authenticated/route-pools/': typeof AuthenticatedRoutePoolsIndexRoute
   '/_authenticated/security-audit/': typeof AuthenticatedSecurityAuditIndexRoute
   '/_authenticated/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/_authenticated/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
@@ -792,6 +781,7 @@ export interface FileRouteTypes {
     | '/topics/$slug'
     | '/about/'
     | '/download/'
+    | '/group-status/'
     | '/guide/'
     | '/market/'
     | '/pricing/'
@@ -810,7 +800,6 @@ export interface FileRouteTypes {
     | '/daily-lucky-number/'
     | '/dashboard/'
     | '/group-buy/'
-    | '/group-status/'
     | '/images/'
     | '/invite-rewards/'
     | '/invoices/'
@@ -822,7 +811,6 @@ export interface FileRouteTypes {
     | '/playground/'
     | '/profile/'
     | '/redemption-codes/'
-    | '/route-pools/'
     | '/security-audit/'
     | '/subscriptions/'
     | '/system-settings/'
@@ -870,6 +858,7 @@ export interface FileRouteTypes {
     | '/topics/$slug'
     | '/about'
     | '/download'
+    | '/group-status'
     | '/guide'
     | '/market'
     | '/pricing'
@@ -888,7 +877,6 @@ export interface FileRouteTypes {
     | '/daily-lucky-number'
     | '/dashboard'
     | '/group-buy'
-    | '/group-status'
     | '/images'
     | '/invite-rewards'
     | '/invoices'
@@ -900,7 +888,6 @@ export interface FileRouteTypes {
     | '/playground'
     | '/profile'
     | '/redemption-codes'
-    | '/route-pools'
     | '/security-audit'
     | '/subscriptions'
     | '/system-settings'
@@ -951,6 +938,7 @@ export interface FileRouteTypes {
     | '/topics/$slug'
     | '/about/'
     | '/download/'
+    | '/group-status/'
     | '/guide/'
     | '/market/'
     | '/pricing/'
@@ -969,7 +957,6 @@ export interface FileRouteTypes {
     | '/_authenticated/daily-lucky-number/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/group-buy/'
-    | '/_authenticated/group-status/'
     | '/_authenticated/images/'
     | '/_authenticated/invite-rewards/'
     | '/_authenticated/invoices/'
@@ -981,7 +968,6 @@ export interface FileRouteTypes {
     | '/_authenticated/playground/'
     | '/_authenticated/profile/'
     | '/_authenticated/redemption-codes/'
-    | '/_authenticated/route-pools/'
     | '/_authenticated/security-audit/'
     | '/_authenticated/subscriptions/'
     | '/_authenticated/system-settings/'
@@ -1025,6 +1011,7 @@ export interface RootRouteChildren {
   TopicsSlugRoute: typeof TopicsSlugRoute
   AboutIndexRoute: typeof AboutIndexRoute
   DownloadIndexRoute: typeof DownloadIndexRoute
+  GroupStatusIndexRoute: typeof GroupStatusIndexRoute
   GuideIndexRoute: typeof GuideIndexRoute
   MarketIndexRoute: typeof MarketIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
@@ -1125,6 +1112,13 @@ declare module '@tanstack/react-router' {
       path: '/guide'
       fullPath: '/guide/'
       preLoaderRoute: typeof GuideIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/group-status/': {
+      id: '/group-status/'
+      path: '/group-status'
+      fullPath: '/group-status/'
+      preLoaderRoute: typeof GroupStatusIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/download/': {
@@ -1316,13 +1310,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSecurityAuditIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/route-pools/': {
-      id: '/_authenticated/route-pools/'
-      path: '/route-pools'
-      fullPath: '/route-pools/'
-      preLoaderRoute: typeof AuthenticatedRoutePoolsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/redemption-codes/': {
       id: '/_authenticated/redemption-codes/'
       path: '/redemption-codes'
@@ -1398,13 +1385,6 @@ declare module '@tanstack/react-router' {
       path: '/images'
       fullPath: '/images/'
       preLoaderRoute: typeof AuthenticatedImagesIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/group-status/': {
-      id: '/_authenticated/group-status/'
-      path: '/group-status'
-      fullPath: '/group-status/'
-      preLoaderRoute: typeof AuthenticatedGroupStatusIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/group-buy/': {
@@ -1687,7 +1667,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDailyLuckyNumberIndexRoute: typeof AuthenticatedDailyLuckyNumberIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedGroupBuyIndexRoute: typeof AuthenticatedGroupBuyIndexRoute
-  AuthenticatedGroupStatusIndexRoute: typeof AuthenticatedGroupStatusIndexRoute
   AuthenticatedImagesIndexRoute: typeof AuthenticatedImagesIndexRoute
   AuthenticatedInviteRewardsIndexRoute: typeof AuthenticatedInviteRewardsIndexRoute
   AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
@@ -1699,7 +1678,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
   AuthenticatedRedemptionCodesIndexRoute: typeof AuthenticatedRedemptionCodesIndexRoute
-  AuthenticatedRoutePoolsIndexRoute: typeof AuthenticatedRoutePoolsIndexRoute
   AuthenticatedSecurityAuditIndexRoute: typeof AuthenticatedSecurityAuditIndexRoute
   AuthenticatedSubscriptionsIndexRoute: typeof AuthenticatedSubscriptionsIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
@@ -1724,7 +1702,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedDailyLuckyNumberIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedGroupBuyIndexRoute: AuthenticatedGroupBuyIndexRoute,
-  AuthenticatedGroupStatusIndexRoute: AuthenticatedGroupStatusIndexRoute,
   AuthenticatedImagesIndexRoute: AuthenticatedImagesIndexRoute,
   AuthenticatedInviteRewardsIndexRoute: AuthenticatedInviteRewardsIndexRoute,
   AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
@@ -1737,7 +1714,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
-  AuthenticatedRoutePoolsIndexRoute: AuthenticatedRoutePoolsIndexRoute,
   AuthenticatedSecurityAuditIndexRoute: AuthenticatedSecurityAuditIndexRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
@@ -1768,6 +1744,7 @@ const rootRouteChildren: RootRouteChildren = {
   TopicsSlugRoute: TopicsSlugRoute,
   AboutIndexRoute: AboutIndexRoute,
   DownloadIndexRoute: DownloadIndexRoute,
+  GroupStatusIndexRoute: GroupStatusIndexRoute,
   GuideIndexRoute: GuideIndexRoute,
   MarketIndexRoute: MarketIndexRoute,
   PricingIndexRoute: PricingIndexRoute,

@@ -29,7 +29,7 @@ const NAV_ITEMS = [
   { title: '市场', href: '/market' },
   { title: '模型', href: '/pricing' },
   { title: '控制台', href: '/dashboard' },
-  { title: '状态', href: '/status' },
+  { title: '状态', href: '/group-status' },
 ]
 
 /** 悬浮胶囊导航：logo 居左、胶囊居中、账户区居右，下滑隐藏。 */

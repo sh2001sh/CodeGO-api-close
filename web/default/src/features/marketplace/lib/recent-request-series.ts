@@ -10,21 +10,43 @@ type RecentRequestBucket = MarketplaceGroup['recent_request_series'][number]
 export function normalizeRecentRequestSeries(
   series: MarketplaceGroup['recent_request_series'] | null | undefined,
   bucketSeconds: number,
-  nowSeconds = Math.floor(Date.now() / 1000)
+  nowSeconds = Math.floor(Date.now() / 1000),
+  segmentCount = RECENT_REQUEST_SEGMENTS
 ): RecentRequestBucket[] {
   const size = bucketSeconds > 0 ? bucketSeconds : DEFAULT_BUCKET_SECONDS
-  const currentBucketStart = nowSeconds - (nowSeconds % size)
-  const windowStart = currentBucketStart - (RECENT_REQUEST_SEGMENTS - 1) * size
+  const count = Math.max(1, segmentCount)
+  const normalizedInput = (series ?? []).map((bucket) => ({
+    ...bucket,
+    ts: normalizeTimestamp(bucket.ts, size),
+  }))
+  const newestServerBucket = normalizedInput.reduce(
+    (latest, bucket) => Math.max(latest, bucket.ts),
+    0
+  )
+  const browserBucket = nowSeconds - (nowSeconds % size)
+  const maximumClockDrift = count * size
+  const currentBucketStart =
+    newestServerBucket > 0 &&
+    Math.abs(browserBucket - newestServerBucket) > maximumClockDrift
+      ? newestServerBucket
+      : browserBucket
+  const windowStart = currentBucketStart - (count - 1) * size
   const bucketsByTimestamp = new Map(
-    (series ?? []).map((bucket) => [bucket.ts, bucket])
+    normalizedInput.map((bucket) => [bucket.ts, bucket])
   )
 
-  return Array.from({ length: RECENT_REQUEST_SEGMENTS }, (_, index) => {
+  return Array.from({ length: count }, (_, index) => {
     const ts = windowStart + index * size
     return (
       bucketsByTimestamp.get(ts) ?? { ts, success_rate: 0, request_count: 0 }
     )
   })
+}
+
+function normalizeTimestamp(timestamp: number, bucketSeconds: number) {
+  const seconds =
+    timestamp > 10_000_000_000 ? Math.floor(timestamp / 1000) : timestamp
+  return seconds - (seconds % bucketSeconds)
 }
 
 /** Resolves the latest visible health state when an older API omits it. */

@@ -10,6 +10,7 @@ import (
 )
 
 var heavyGlobalAPIRateLimitedRequests = map[string]struct{}{
+	"GET /api/group-status":                         {},
 	"GET /api/user/self":                            {},
 	"GET /api/user/self/groups":                     {},
 	"GET /api/user/self/group-status":               {},

@@ -27,6 +27,7 @@ func RegisterUserRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gi
 		userRoute.GET("/xunhu/notify", commercehttp.XunhuNotify)
 		userRoute.GET("/xunhu/return", commercehttp.XunhuReturn)
 		userRoute.GET("/groups", gatewayhttp.GetUserGroups)
+		apiRouter.GET("/group-status", middleware.DisableCache(), gatewayhttp.GetUserGroupStatus)
 
 		selfRoute := userRoute.Group("/")
 		selfRoute.Use(middleware.UserAuth())

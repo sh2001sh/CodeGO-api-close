@@ -35,6 +35,18 @@ func TestRemoteCompactionCapabilityRank(t *testing.T) {
 	require.Equal(t, 1, remoteCompactionCapabilityRank(ctx, supported, "gpt-5.5"))
 }
 
+func TestRemoteCompactionV1RequirementAcceptsV2Bridge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set(string(constant.ContextKeyResponsesCompactionRequirement), string(RemoteCompactionRequirementV1))
+	channel := &gatewayschema.Channel{ChannelInfo: gatewayschema.ChannelInfo{ResponsesCapabilities: gatewayschema.ResponsesCapabilities{
+		RemoteCompactionV1: gatewayschema.CapabilityProbeState{Status: gatewayschema.CapabilityStatusUnsupported},
+		RemoteCompactionV2: gatewayschema.CapabilityProbeState{Status: gatewayschema.CapabilityStatusSupported, Model: "gpt-6-astra"},
+	}}}
+
+	require.Equal(t, 0, remoteCompactionCapabilityRank(ctx, channel, "gpt-6-astra"))
+}
+
 func TestRemoteCompactionModelMismatchIsUnverifiedInsteadOfUnsupported(t *testing.T) {
 	capabilities := gatewayschema.ResponsesCapabilities{
 		RemoteCompactionV1: gatewayschema.CapabilityProbeState{

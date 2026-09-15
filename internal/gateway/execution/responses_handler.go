@@ -133,8 +133,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	if err := relaycommon.ModelMappedHelper(c, info, request); err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
+	bridgeCompactionV1ToV2 := false
 	if info.ChannelMeta != nil && info.RelayMode == gatewaycontract.RelayModeResponsesCompact && !info.ResponsesCapabilities.AllowsRemoteCompactionV1For(request.Model, info.ChannelMultiKeyIndex) {
-		return types.NewErrorWithStatusCode(fmt.Errorf("remote Responses compaction v1 is unsupported by channel %d", info.ChannelId), types.ErrorCodeDoRequestFailed, http.StatusServiceUnavailable)
+		if info.ResponsesCapabilities.AllowsRemoteCompactionV2For(request.Model, info.ChannelMultiKeyIndex) {
+			bridgeCompactionV1ToV2 = true
+			c.Set(remoteCompactionV1ViaV2ContextKey, true)
+		} else {
+			return types.NewErrorWithStatusCode(fmt.Errorf("remote Responses compaction is unsupported by channel %d", info.ChannelId), types.ErrorCodeDoRequestFailed, http.StatusServiceUnavailable)
+		}
 	}
 	if info.ChannelMeta != nil && info.RelayMode == gatewaycontract.RelayModeResponses && gatewaycontract.HasRemoteCompactionV2(c.Request.Header) && hasRemoteCompactionTrigger(responsesReq.Input) && !info.ResponsesCapabilities.AllowsRemoteCompactionV2For(request.Model, info.ChannelMultiKeyIndex) {
 		return types.NewErrorWithStatusCode(fmt.Errorf("remote Responses compaction v2 is unsupported by channel %d", info.ChannelId), types.ErrorCodeDoRequestFailed, http.StatusServiceUnavailable)
@@ -256,6 +262,15 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			if changed {
 				outboundJSON = normalized
 			}
+			if bridgeCompactionV1ToV2 {
+				outboundJSON, err = buildRemoteCompactionV1ViaV2Body(outboundJSON)
+				if err != nil {
+					return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+				}
+				info.RequestURLPath = "/v1/responses"
+				addRemoteCompactionV2Header(c.Request.Header)
+				logger.LogInfo(c, "bridging remote compaction v1 request through v2 upstream")
+			}
 		}
 		// Native Codex upstreams keep their private v2 envelope because
 		// portableResponses is false. OpenAI upstreams must still remove Codex
@@ -313,13 +328,22 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return newAPIError
 	}
 
-	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
-	if newAPIError != nil {
-		platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
-		return newAPIError
+	var usageDTO *dto.Usage
+	if c.GetBool(remoteCompactionV1ViaV2ContextKey) {
+		responseBody, bridgeUsage, bridgeErr := remoteCompactionV2AsV1Response(httpResp)
+		if bridgeErr != nil {
+			return types.NewOpenAIError(bridgeErr, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		}
+		c.Data(http.StatusOK, "application/json; charset=utf-8", responseBody)
+		usageDTO = bridgeUsage
+	} else {
+		usage, responseErr := adaptor.DoResponse(c, httpResp, info)
+		if responseErr != nil {
+			platformhttpx.ResetStatusCode(responseErr, statusCodeMappingStr)
+			return responseErr
+		}
+		usageDTO = usage.(*dto.Usage)
 	}
-
-	usageDTO := usage.(*dto.Usage)
 	if info.RelayMode == gatewaycontract.RelayModeResponsesCompact {
 		originModelName := info.OriginModelName
 		originPriceData := info.PriceData

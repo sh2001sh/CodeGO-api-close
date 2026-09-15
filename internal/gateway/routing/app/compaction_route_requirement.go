@@ -70,7 +70,15 @@ func remoteCompactionCapabilityRank(c *gin.Context, channel *gatewayschema.Chann
 	}
 	switch remoteCompactionRequirement(c) {
 	case RemoteCompactionRequirementV1:
-		return capabilityRank(channel.ChannelInfo.ResponsesCapabilities.RemoteCompactionV1, modelName)
+		capabilities := channel.ChannelInfo.ResponsesCapabilities
+		v1Rank := capabilityRank(capabilities.RemoteCompactionV1, modelName)
+		if v1Rank >= 0 {
+			return v1Rank
+		}
+		// A v1 client can use a v2-only upstream through the gateway bridge.
+		// Keep such routes eligible when the native /responses/compact endpoint
+		// is definitively unavailable.
+		return capabilityRank(capabilities.RemoteCompactionV2, modelName)
 	case RemoteCompactionRequirementV2:
 		return capabilityRank(channel.ChannelInfo.ResponsesCapabilities.RemoteCompactionV2, modelName)
 	default:

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -172,6 +173,28 @@ func TestNormalizeRemoteCompactionV2BodyMovesTriggerToEndAndForcesStream(t *test
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.JSONEq(t, `{"model":"gpt-5","stream":true,"input":[{"type":"message","role":"user","content":"tail"},{"type":"compaction_trigger"}]}`, string(body))
+}
+
+func TestBuildRemoteCompactionV1ViaV2BodyAddsSingleTerminalTrigger(t *testing.T) {
+	body, err := buildRemoteCompactionV1ViaV2Body([]byte(`{"model":"gpt-6-astra","input":[{"type":"message","role":"user","content":"hello"},{"type":"compaction_trigger"}],"stream":false}`))
+	require.NoError(t, err)
+	require.JSONEq(t, `{"model":"gpt-6-astra","input":[{"type":"message","role":"user","content":"hello"},{"type":"compaction_trigger"}],"stream":true,"store":false}`, string(body))
+}
+
+func TestRemoteCompactionV2AsV1ResponseExtractsCompletedEnvelope(t *testing.T) {
+	response := &http.Response{Body: io.NopCloser(strings.NewReader(
+		"data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"compaction\"}}\n\n" +
+			"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"object\":\"response\",\"output\":[{\"type\":\"compaction\",\"encrypted_content\":\"opaque\"}],\"usage\":{\"input_tokens\":12,\"output_tokens\":3,\"total_tokens\":15}}}\n\n",
+	))}
+
+	body, usage, err := remoteCompactionV2AsV1Response(response)
+	require.NoError(t, err)
+	require.Equal(t, 12, usage.InputTokens)
+	require.Equal(t, 3, usage.OutputTokens)
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(body, &result))
+	require.Equal(t, "response.compaction", result["object"])
+	require.Len(t, result["output"], 1)
 }
 
 func TestRemoteCompactionV2BodyCanBeNormalizedForPortableUpstream(t *testing.T) {

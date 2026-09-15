@@ -57,3 +57,36 @@ func TestValidatePelicanProbe(t *testing.T) {
 	require.Error(t, validatePelicanProbe(true, 1440, "gpt-test", []string{"gpt-test"}))
 	require.Error(t, validatePelicanProbe(true, 60, "missing", []string{"gpt-test"}))
 }
+
+func TestPelicanSlotLimitsAllGroupsToOneConcurrentTest(t *testing.T) {
+	acquired, groupBusy := tryAcquirePelicanSlot("group-a")
+	require.True(t, acquired)
+	require.False(t, groupBusy)
+	t.Cleanup(func() { releasePelicanSlot("group-a") })
+
+	acquired, groupBusy = tryAcquirePelicanSlot("group-b")
+	require.False(t, acquired)
+	require.False(t, groupBusy)
+}
+
+func TestPelicanSlotStillReportsSameGroupAsBusy(t *testing.T) {
+	acquired, groupBusy := tryAcquirePelicanSlot("same-group")
+	require.True(t, acquired)
+	require.False(t, groupBusy)
+	t.Cleanup(func() { releasePelicanSlot("same-group") })
+
+	acquired, groupBusy = tryAcquirePelicanSlot("same-group")
+	require.False(t, acquired)
+	require.True(t, groupBusy)
+}
+
+func TestPelicanSlotCanBeReusedAfterRelease(t *testing.T) {
+	acquired, _ := tryAcquirePelicanSlot("first-group")
+	require.True(t, acquired)
+	releasePelicanSlot("first-group")
+
+	acquired, groupBusy := tryAcquirePelicanSlot("next-group")
+	require.True(t, acquired)
+	require.False(t, groupBusy)
+	releasePelicanSlot("next-group")
+}

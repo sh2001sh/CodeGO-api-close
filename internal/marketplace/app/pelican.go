@@ -70,7 +70,25 @@ var pelicanTests = struct {
 }{items: map[string]*PelicanTestView{}}
 
 var pelicanRunning sync.Map
-var pelicanScheduleSlots = make(chan struct{}, 2)
+var pelicanSlots = make(chan struct{}, 1)
+
+func tryAcquirePelicanSlot(groupID string) (acquired bool, groupBusy bool) {
+	if _, loaded := pelicanRunning.LoadOrStore(groupID, struct{}{}); loaded {
+		return false, true
+	}
+	select {
+	case pelicanSlots <- struct{}{}:
+		return true, false
+	default:
+		pelicanRunning.Delete(groupID)
+		return false, false
+	}
+}
+
+func releasePelicanSlot(groupID string) {
+	pelicanRunning.Delete(groupID)
+	<-pelicanSlots
+}
 
 func StartPelicanTest(userID int, req PelicanTestRequest) (*PelicanTestView, error) {
 	if userID <= 0 {
@@ -84,8 +102,12 @@ func StartPelicanTest(userID int, req PelicanTestRequest) (*PelicanTestView, err
 	if err != nil {
 		return nil, err
 	}
-	if _, loaded := pelicanRunning.LoadOrStore(target.GroupID, struct{}{}); loaded {
-		return nil, errors.New("该分组正在生成鹈鹕作品")
+	acquired, groupBusy := tryAcquirePelicanSlot(target.GroupID)
+	if !acquired {
+		if groupBusy {
+			return nil, errors.New("该分组正在生成鹈鹕作品")
+		}
+		return nil, errors.New("当前鹈鹕测试繁忙，请稍后重试")
 	}
 	now := time.Now().UTC()
 	view := &PelicanTestView{ID: platformruntime.GetUUID(), OwnerUserID: userID, GroupID: target.GroupID, Model: model, Status: "queued", CreatedAt: now, UpdatedAt: now}
@@ -171,7 +193,7 @@ func resolvePelicanTarget(userID int, groupID, model string) (pelicanTarget, err
 }
 
 func executePelicanTest(id string, target pelicanTarget, userID int, billUser bool, trigger string) {
-	defer pelicanRunning.Delete(target.GroupID)
+	defer releasePelicanSlot(target.GroupID)
 	updatePelicanTest(id, func(view *PelicanTestView) { view.Status = "running" })
 	started := time.Now()
 	text, report, _, err := gatewayexecutionapp.GenerateMarketplaceChannelContentByID(target.InternalChannelID, pelicanModel(id), gatewayexecutionapp.MarketplaceContentGenerationOptions{
@@ -389,14 +411,13 @@ func runDuePelicanSchedules(now time.Time) {
 		if channel.InternalChannelID == nil || *channel.InternalChannelID <= 0 || !containsFold(decodeModels(channel.DeclaredModels), channel.PelicanProbeModel) {
 			continue
 		}
-		if _, loaded := pelicanRunning.LoadOrStore(group.ID, struct{}{}); loaded {
+		acquired, _ := tryAcquirePelicanSlot(group.ID)
+		if !acquired {
 			continue
 		}
 		target := pelicanTarget{InternalChannelID: *channel.InternalChannelID, GroupID: group.ID, MarketplaceGroupID: group.ID, ChannelID: channel.ID, InternalGroup: group.InternalGroupName, OwnerUserID: group.OwnerUserID, CreditPoolPolicy: group.CreditPoolPolicy, Multiplier: group.Multiplier, ModelPrices: decodeChannelModelPrices(channel.ModelPrices)}
 		model := channel.PelicanProbeModel
 		go func() {
-			pelicanScheduleSlots <- struct{}{}
-			defer func() { <-pelicanScheduleSlots }()
 			// A scheduled owner test is an operational cost, never a user charge or self-settlement.
 			executeScheduledPelican(target, model)
 		}()
@@ -404,7 +425,7 @@ func runDuePelicanSchedules(now time.Time) {
 }
 
 func executeScheduledPelican(target pelicanTarget, model string) {
-	defer pelicanRunning.Delete(target.GroupID)
+	defer releasePelicanSlot(target.GroupID)
 	started := time.Now()
 	text, report, _, err := gatewayexecutionapp.GenerateMarketplaceChannelContentByID(target.InternalChannelID, model, gatewayexecutionapp.MarketplaceContentGenerationOptions{MarketplaceChannelTestOptions: gatewayexecutionapp.MarketplaceChannelTestOptions{UserID: target.OwnerUserID, MarketplaceGroupID: target.MarketplaceGroupID, InternalGroup: target.InternalGroup, MarketplaceOwnerID: target.OwnerUserID, CreditPoolPolicy: target.CreditPoolPolicy, Multiplier: target.Multiplier, ModelPrices: target.ModelPrices}, Prompt: pelicanPrompt, MaxOutputTokens: pelicanMaxOutputTokens, BillUser: false})
 	if err != nil {

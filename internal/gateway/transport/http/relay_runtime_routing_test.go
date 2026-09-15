@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -18,6 +19,16 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRelayRoutingModelNameRemovesCompactBillingSuffix(t *testing.T) {
+	info := &gatewayruntime.RelayInfo{
+		RelayMode:       gatewaycontract.RelayModeResponsesCompact,
+		OriginModelName: "gpt-6-astra-openai-compact",
+	}
+	require.Equal(t, "gpt-6-astra", relayRoutingModelName(info))
+	info.RelayMode = gatewaycontract.RelayModeResponses
+	require.Equal(t, "gpt-6-astra-openai-compact", relayRoutingModelName(info))
+}
 
 func TestAutoRetryStopsWhenIncomingContextIsCancelled(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

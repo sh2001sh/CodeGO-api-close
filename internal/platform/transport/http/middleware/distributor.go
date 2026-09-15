@@ -213,7 +213,7 @@ func distributeWithHandler(next gin.HandlerFunc) gin.HandlerFunc {
 				}
 			}
 		}
-		gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, modelRequest.Model)
+		gatewayexecutionapp.SetupContextForSelectedChannel(c, channel, selectedChannelModelName(c.Request.URL.Path, modelRequest.Model))
 		if next != nil {
 			next(c)
 		} else {
@@ -423,10 +423,14 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		modelRequest.Group = strings.TrimSpace(c.Query("group"))
 	}
 
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") && modelRequest.Model != "" {
-		modelRequest.Model = gatewaystore.WithCompactModelSuffix(modelRequest.Model)
-	}
 	return &modelRequest, shouldSelectChannel, nil
+}
+
+func selectedChannelModelName(requestPath, routeModelName string) string {
+	if strings.HasSuffix(strings.TrimSuffix(requestPath, "/"), "/responses/compact") && routeModelName != "" {
+		return gatewaystore.WithCompactModelSuffix(routeModelName)
+	}
+	return routeModelName
 }
 
 // extractModelNameFromGeminiPath 浠?Gemini API URL 璺緞涓彁鍙栨ā鍨嬪悕

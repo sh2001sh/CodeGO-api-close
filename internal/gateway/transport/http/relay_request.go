@@ -220,7 +220,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	retryParam := &gatewayroutingapp.RetryParam{
 		Ctx:        c,
 		TokenGroup: relayInfo.TokenGroup,
-		ModelName:  relayInfo.OriginModelName,
+		ModelName:  relayRoutingModelName(relayInfo),
 		Retry:      platformruntime.GetPointer(0),
 	}
 	relayInfo.RetryIndex = 0

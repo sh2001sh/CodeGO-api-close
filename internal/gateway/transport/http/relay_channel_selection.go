@@ -3,9 +3,11 @@ package http
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
 	"github.com/sh2001sh/new-api/internal/gateway/routepin"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
@@ -35,7 +37,7 @@ func getChannel(c *gin.Context, info *gatewayruntime.RelayInfo, retryParam *gate
 }
 
 func loadPinnedChannel(c *gin.Context, info *gatewayruntime.RelayInfo, channelID int) (*gatewayschema.Channel, *types.NewAPIError) {
-	if err := marketplaceapp.RequireChannelInBoundRoutePool(c, info.OriginModelName, channelID); err != nil {
+	if err := marketplaceapp.RequireChannelInBoundRoutePool(c, relayRoutingModelName(info), channelID); err != nil {
 		return nil, types.NewError(err, types.ErrorCodeAccessDenied, types.ErrOptionWithSkipRetry())
 	}
 	channel, err := gatewaystore.LoadChannelByID(channelID, true)
@@ -125,7 +127,7 @@ func nextUnifiedAutoChannel(c *gin.Context, info *gatewayruntime.RelayInfo, retr
 	}
 	start := httpctx.GetContextKeyInt(c, constant.ContextKeyUnifiedAutoIndex) + 1
 	if start < len(bindings) {
-		bindings = append(append([]marketplaceapp.RoutingBinding(nil), bindings[:start]...), marketplaceapp.PrioritizeAutoRouteBindings(c, bindings[start:], info.OriginModelName)...)
+		bindings = append(append([]marketplaceapp.RoutingBinding(nil), bindings[:start]...), marketplaceapp.PrioritizeAutoRouteBindings(c, bindings[start:], retryParam.ModelName)...)
 		httpctx.SetContextKey(c, constant.ContextKeyUnifiedAutoBindings, bindings)
 	}
 	for _, healthyOnly := range []bool{true, false} {
@@ -133,7 +135,7 @@ func nextUnifiedAutoChannel(c *gin.Context, info *gatewayruntime.RelayInfo, retr
 			binding := bindings[index]
 			candidateRetry := 0
 			channel, _, err := selectUnifiedAutoRetryChannel(&gatewayroutingapp.RetryParam{
-				Ctx: c, TokenGroup: binding.InternalGroup, ModelName: info.OriginModelName, Retry: &candidateRetry, HealthyOnly: healthyOnly,
+				Ctx: c, TokenGroup: binding.InternalGroup, ModelName: retryParam.ModelName, Retry: &candidateRetry, HealthyOnly: healthyOnly,
 			})
 			if err != nil || channel == nil {
 				gatewayruntime.ExcludeRouteDecisionCandidate(c, "unified_auto_unavailable")
@@ -165,6 +167,17 @@ func nextUnifiedAutoChannel(c *gin.Context, info *gatewayruntime.RelayInfo, retr
 		types.ErrorCodeGetChannelFailed,
 		types.ErrOptionWithSkipRetry(),
 	)
+}
+
+func relayRoutingModelName(info *gatewayruntime.RelayInfo) string {
+	if info == nil {
+		return ""
+	}
+	modelName := info.OriginModelName
+	if info.RelayMode == gatewaycontract.RelayModeResponsesCompact {
+		modelName = strings.TrimSuffix(modelName, gatewaystore.CompactModelSuffix)
+	}
+	return modelName
 }
 
 func applyUnifiedAutoBinding(c *gin.Context, info *gatewayruntime.RelayInfo, binding marketplaceapp.RoutingBinding) {

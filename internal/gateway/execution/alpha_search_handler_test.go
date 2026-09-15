@@ -25,3 +25,24 @@ func TestBuildAlphaSearchRequestBodyKeepsRawBytesWithoutMapping(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, raw, result)
 }
+
+func TestBuildPortableAlphaSearchResponsesBodyUsesStandardWebSearchTool(t *testing.T) {
+	raw := []byte(`{
+		"id":"search-1",
+		"model":"gpt-6-astra",
+		"commands":{"search_query":[{"q":"OpenAI Codex"}],"response_length":"short"},
+		"settings":{"search_context_size":"high","filters":{"allowed_domains":["openai.com"]}},
+		"max_output_tokens":1200
+	}`)
+
+	result, err := buildPortableAlphaSearchResponsesBody(raw, "gpt-6-astra-upstream")
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"model":"gpt-6-astra-upstream",
+		"input":"Execute this standalone web search request using the web search tool. Follow every command in order and return the useful results with source URLs. Request JSON:\n{\n\t\t\"id\":\"search-1\",\n\t\t\"model\":\"gpt-6-astra\",\n\t\t\"commands\":{\"search_query\":[{\"q\":\"OpenAI Codex\"}],\"response_length\":\"short\"},\n\t\t\"settings\":{\"search_context_size\":\"high\",\"filters\":{\"allowed_domains\":[\"openai.com\"]}},\n\t\t\"max_output_tokens\":1200\n\t}",
+		"tools":[{"type":"web_search","search_context_size":"high","filters":{"allowed_domains":["openai.com"]}}],
+		"stream":false,
+		"store":false,
+		"max_output_tokens":1200
+	}`, string(result))
+}

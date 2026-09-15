@@ -205,20 +205,24 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 		if len(subs) == 0 {
 			return commerceschema.ErrSubscriptionResetOpportunityNoActiveSub
 		}
-		convertedIDs := make([]int, 0, len(subs))
 		activeIDs := make([]int, 0, len(subs))
+		activeCycleStarts := make(map[int]int64, len(subs))
 		for _, candidate := range subs {
 			activeIDs = append(activeIDs, candidate.Id)
+			activeCycleStarts[candidate.Id] = candidate.StartTime
 		}
-		if err := tx.Model(&commerceschema.SubscriptionClaudeConversion{}).
+		var conversions []commerceschema.SubscriptionClaudeConversion
+		if err := tx.
 			Where("user_subscription_id IN ? AND status = ?", activeIDs, commerceschema.SubscriptionClaudeConversionStatusCompleted).
-			Distinct().
-			Pluck("user_subscription_id", &convertedIDs).Error; err != nil {
+			Find(&conversions).Error; err != nil {
 			return err
 		}
-		converted := make(map[int]struct{}, len(convertedIDs))
-		for _, id := range convertedIDs {
-			converted[id] = struct{}{}
+		converted := make(map[int]struct{}, len(conversions))
+		for _, conversion := range conversions {
+			cycleStart, active := activeCycleStarts[conversion.UserSubscriptionId]
+			if active && conversion.CreatedAt >= cycleStart {
+				converted[conversion.UserSubscriptionId] = struct{}{}
+			}
 		}
 		eligibleSubs := subs[:0]
 		for _, candidate := range subs {

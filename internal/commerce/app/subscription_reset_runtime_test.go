@@ -321,6 +321,34 @@ func TestUseUserSubscriptionResetOpportunitySkipsConvertedPass(t *testing.T) {
 	assert.Zero(t, reset.AmountUsed)
 }
 
+func TestUseUserSubscriptionResetOpportunityIgnoresConversionFromPreviousRenewalCycle(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	insertSubscriptionResetAppTestUser(t, 7212, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 7212, 0, 1000)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{
+		Id: 7313, UserId: 7212, PlanId: plan.Id, AmountTotal: 1000, AmountUsed: 200,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}
+	require.NoError(t, db.Create(sub).Error)
+	conversion := &commerceschema.SubscriptionClaudeConversion{
+		UserId: 7212, UserSubscriptionId: sub.Id, RequestId: "converted-before-renewal",
+		Status: commerceschema.SubscriptionClaudeConversionStatusCompleted, ConversionPercent: 20,
+	}
+	require.NoError(t, db.Create(conversion).Error)
+	require.NoError(t, db.Model(conversion).Update("created_at", sub.StartTime-86400).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityAccount{
+		UserId: 7212, EarnedTotal: 1, AvailableTotal: 1,
+	}).Error)
+	require.NoError(t, restoreSubscriptionLedgerBalanceAfterResetTx(db, sub, "previous-conversion-test"))
+
+	result, err := UseUserSubscriptionResetOpportunity(7212)
+	require.NoError(t, err)
+	assert.Equal(t, sub.Id, result.UserSubscriptionId)
+	assert.EqualValues(t, 200, result.ClearedUsedAmount)
+	assert.Equal(t, 0, result.ResetOpportunity.AvailableCount)
+}
+
 func TestUseUserSubscriptionResetOpportunityRejectsWhenAllPassesConverted(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	insertSubscriptionResetAppTestUser(t, 7221, 0)

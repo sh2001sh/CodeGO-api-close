@@ -995,12 +995,27 @@ function PelicanDialog(props: {
     }
   }
 
-  const artifactURL = task?.artifact_url
-    ? `${task.artifact_url}${task.artifact_url.includes('?') ? '&' : '?'}v=${encodeURIComponent(task.generated_at ?? '')}`
-    : props.group.pelican_artifact_url
-      ? `${props.group.pelican_artifact_url}${props.group.pelican_artifact_url.includes('?') ? '&' : '?'}v=${encodeURIComponent(props.group.pelican_generated_at ?? '')}`
+  const modelArtifact = props.group.pelican_artifacts?.find(
+    (artifact) => artifact.model === model
+  )
+  const completedTask =
+    task?.status === 'completed' && task.model === model ? task : null
+  const storedArtifactURL =
+    modelArtifact?.artifact_url ??
+    (props.group.pelican_model === model
+      ? props.group.pelican_artifact_url
+      : '')
+  const storedGeneratedAt =
+    modelArtifact?.generated_at ??
+    (props.group.pelican_model === model
+      ? props.group.pelican_generated_at
+      : null)
+  const artifactURL = completedTask?.artifact_url
+    ? `${completedTask.artifact_url}${completedTask.artifact_url.includes('?') ? '&' : '?'}v=${encodeURIComponent(completedTask.generated_at ?? '')}`
+    : storedArtifactURL
+      ? `${storedArtifactURL}${storedArtifactURL.includes('?') ? '&' : '?'}v=${encodeURIComponent(storedGeneratedAt ?? '')}`
       : ''
-  const generatedAt = task?.generated_at ?? props.group.pelican_generated_at
+  const generatedAt = completedTask?.generated_at ?? storedGeneratedAt
   return (
     <DawnModal open onClose={props.onClose} variant='narrow' label='鹈鹕测试'>
       <div className='m-main'>

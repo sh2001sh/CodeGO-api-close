@@ -230,6 +230,7 @@ type GroupListItem struct {
 	PelicanGeneratedAt         *time.Time                   `json:"pelican_generated_at,omitempty"`
 	PelicanModel               string                       `json:"pelican_model,omitempty"`
 	PelicanArtifactURL         string                       `json:"pelican_artifact_url,omitempty"`
+	PelicanArtifacts           []PelicanArtifactSummary     `json:"pelican_artifacts,omitempty"`
 	ChannelFeedback            ChannelFeedbackSummary       `json:"channel_feedback"`
 	CanSubmitChannelFeedback   bool                         `json:"can_submit_channel_feedback"`
 	ChannelFeedbackPermission  string                       `json:"channel_feedback_permission"`
@@ -256,6 +257,12 @@ type GroupListItem struct {
 	IndependentConsumers       int64                        `json:"-"`
 	Observing                  bool                         `json:"observing"`
 	UpdatedAt                  time.Time                    `json:"updated_at"`
+}
+
+type PelicanArtifactSummary struct {
+	Model       string    `json:"model"`
+	GeneratedAt time.Time `json:"generated_at"`
+	ArtifactURL string    `json:"artifact_url"`
 }
 
 type ChannelFeedbackRequest struct {

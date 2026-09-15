@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -107,7 +106,7 @@ func GetPelicanTest(userID int, id string) (*PelicanTestView, error) {
 	return view, nil
 }
 
-func GetPelicanArtifact(groupID string, viewerUserID int) (*marketplaceschema.PelicanArtifact, error) {
+func GetPelicanArtifact(groupID, model string, viewerUserID int) (*marketplaceschema.PelicanArtifact, error) {
 	groupID = strings.TrimSpace(groupID)
 	if !strings.HasPrefix(groupID, officialAutoRoutePrefix) {
 		var count int64
@@ -119,7 +118,11 @@ func GetPelicanArtifact(groupID string, viewerUserID int) (*marketplaceschema.Pe
 		}
 	}
 	var artifact marketplaceschema.PelicanArtifact
-	if err := platformdb.DB.First(&artifact, "group_id = ?", groupID).Error; err != nil {
+	query := platformdb.DB.Where("group_id = ?", groupID)
+	if model = strings.TrimSpace(model); model != "" {
+		query = query.Where("model = ?", model)
+	}
+	if err := query.Order("generated_at DESC").First(&artifact).Error; err != nil {
 		return nil, err
 	}
 	return &artifact, nil
@@ -181,15 +184,16 @@ func executePelicanTest(id string, target pelicanTarget, userID int, billUser bo
 		svg, err = sanitizePelicanSVG(text)
 		if err == nil {
 			now := time.Now().UTC()
-			artifact := marketplaceschema.PelicanArtifact{GroupID: target.GroupID, ChannelID: target.ChannelID, Model: pelicanModel(id), SVG: svg, Trigger: trigger, TriggerUserID: userID, RequestID: report.RequestID, DurationMS: duration, GeneratedAt: now}
-			err = platformdb.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "group_id"}}, DoUpdates: clause.AssignmentColumns([]string{"channel_id", "model", "svg", "trigger", "trigger_user_id", "request_id", "duration_ms", "generated_at", "updated_at"})}).Create(&artifact).Error
+			model := pelicanModel(id)
+			artifact := marketplaceschema.PelicanArtifact{GroupID: target.GroupID, ChannelID: target.ChannelID, Model: model, SVG: svg, Trigger: trigger, TriggerUserID: userID, RequestID: report.RequestID, DurationMS: duration, GeneratedAt: now}
+			err = platformdb.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "group_id"}, {Name: "model"}}, DoUpdates: clause.AssignmentColumns([]string{"channel_id", "svg", "trigger", "trigger_user_id", "request_id", "duration_ms", "generated_at", "updated_at"})}).Create(&artifact).Error
 			if err == nil {
 				invalidateMarketplaceListCache()
 			}
 			if err == nil && id != "" {
 				updatePelicanTest(id, func(view *PelicanTestView) {
 					view.GeneratedAt = &now
-					view.ArtifactURL = "/api/marketplace/pelican-artifact.svg?group_id=" + url.QueryEscape(target.GroupID)
+					view.ArtifactURL = pelicanArtifactURL(target.GroupID, model)
 				})
 			}
 		}
@@ -319,7 +323,38 @@ func sanitizePelicanSVG(raw string) (string, error) {
 }
 
 func unsafePelicanStyle(value string) bool {
-	return strings.Contains(value, "url(") || strings.Contains(value, "@import") || strings.Contains(value, "expression(") || strings.Contains(value, "javascript:") || strings.Contains(value, "data:")
+	value = strings.ToLower(value)
+	if strings.Contains(value, "@import") || strings.Contains(value, "expression(") || strings.Contains(value, "javascript:") || strings.Contains(value, "data:") {
+		return true
+	}
+	for {
+		start := strings.Index(value, "url(")
+		if start < 0 {
+			return false
+		}
+		value = value[start+len("url("):]
+		end := strings.IndexByte(value, ')')
+		if end < 0 || !safePelicanLocalReference(value[:end]) {
+			return true
+		}
+		value = value[end+1:]
+	}
+}
+
+func safePelicanLocalReference(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && ((value[0] == '\'' && value[len(value)-1] == '\'') || (value[0] == '"' && value[len(value)-1] == '"')) {
+		value = strings.TrimSpace(value[1 : len(value)-1])
+	}
+	if len(value) < 2 || value[0] != '#' {
+		return false
+	}
+	for _, char := range value[1:] {
+		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '_' && char != '-' && char != ':' && char != '.' {
+			return false
+		}
+	}
+	return true
 }
 
 // StartMarketplacePelicanScheduleTask generates at most once per local day for
@@ -383,7 +418,7 @@ func executeScheduledPelican(target pelicanTarget, model string) {
 	}
 	now := time.Now().UTC()
 	artifact := marketplaceschema.PelicanArtifact{GroupID: target.GroupID, ChannelID: target.ChannelID, Model: model, SVG: svg, Trigger: "scheduled", TriggerUserID: target.OwnerUserID, RequestID: report.RequestID, DurationMS: time.Since(started).Milliseconds(), GeneratedAt: now}
-	if err := platformdb.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "group_id"}}, DoUpdates: clause.AssignmentColumns([]string{"channel_id", "model", "svg", "trigger", "trigger_user_id", "request_id", "duration_ms", "generated_at", "updated_at"})}).Create(&artifact).Error; err != nil {
+	if err := platformdb.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "group_id"}, {Name: "model"}}, DoUpdates: clause.AssignmentColumns([]string{"channel_id", "svg", "trigger", "trigger_user_id", "request_id", "duration_ms", "generated_at", "updated_at"})}).Create(&artifact).Error; err != nil {
 		platformobservability.SysError("save scheduled pelican: " + err.Error())
 		return
 	}

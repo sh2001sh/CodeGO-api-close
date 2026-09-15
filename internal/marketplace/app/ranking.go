@@ -165,22 +165,32 @@ func attachPelicanArtifacts(groups ...[]GroupListItem) error {
 		}
 		return err
 	}
-	byID := make(map[string]marketplaceschema.PelicanArtifact, len(artifacts))
+	byID := make(map[string][]PelicanArtifactSummary, len(artifacts))
 	for _, artifact := range artifacts {
-		byID[artifact.GroupID] = artifact
+		byID[artifact.GroupID] = append(byID[artifact.GroupID], PelicanArtifactSummary{
+			Model: artifact.Model, GeneratedAt: artifact.GeneratedAt,
+			ArtifactURL: pelicanArtifactURL(artifact.GroupID, artifact.Model),
+		})
 	}
 	for _, items := range groups {
 		for index := range items {
-			if artifact, ok := byID[items[index].ID]; ok {
-				generatedAt := artifact.GeneratedAt
+			if summaries := byID[items[index].ID]; len(summaries) > 0 {
+				sort.Slice(summaries, func(i, j int) bool { return summaries[i].GeneratedAt.After(summaries[j].GeneratedAt) })
+				latest := summaries[0]
+				generatedAt := latest.GeneratedAt
 				items[index].PelicanAvailable = true
 				items[index].PelicanGeneratedAt = &generatedAt
-				items[index].PelicanModel = artifact.Model
-				items[index].PelicanArtifactURL = "/api/marketplace/pelican-artifact.svg?group_id=" + url.QueryEscape(items[index].ID)
+				items[index].PelicanModel = latest.Model
+				items[index].PelicanArtifactURL = latest.ArtifactURL
+				items[index].PelicanArtifacts = summaries
 			}
 		}
 	}
 	return nil
+}
+
+func pelicanArtifactURL(groupID, model string) string {
+	return "/api/marketplace/pelican-artifact.svg?group_id=" + url.QueryEscape(groupID) + "&model=" + url.QueryEscape(model)
 }
 
 func matchesGroupListItemQuery(item GroupListItem, query GroupQuery) bool {

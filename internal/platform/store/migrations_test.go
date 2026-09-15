@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
@@ -524,6 +525,35 @@ func TestMigrateMarketplaceModelVerificationUpgradesExistingSQLiteTable(t *testi
 		require.True(t, db.Migrator().HasColumn(&marketplaceschema.Channel{}, field), field)
 	}
 	require.NoError(t, migrateMarketplaceModelVerification(db))
+}
+
+func TestMigrateMarketplacePelicanArtifactsByModelPreservesExistingArtifact(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE marketplace_pelican_artifacts (
+		group_id text PRIMARY KEY,
+		channel_id text,
+		model text NOT NULL,
+		svg text NOT NULL,
+		trigger text NOT NULL,
+		trigger_user_id integer,
+		request_id text,
+		duration_ms integer NOT NULL,
+		generated_at datetime NOT NULL,
+		updated_at datetime
+	)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO marketplace_pelican_artifacts
+		(group_id, channel_id, model, svg, trigger, trigger_user_id, request_id, duration_ms, generated_at, updated_at)
+		VALUES ('group-1', 'channel-1', 'model-a', '<svg/>', 'manual', 1, 'request-1', 12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).Error)
+
+	require.NoError(t, db.Transaction(migrateMarketplacePelicanArtifactsByModel))
+	require.NoError(t, db.Create(&marketplaceschema.PelicanArtifact{
+		GroupID: "group-1", Model: "model-b", SVG: "<svg><rect/></svg>", Trigger: "manual", DurationMS: 15, GeneratedAt: time.Now(),
+	}).Error)
+	var artifacts []marketplaceschema.PelicanArtifact
+	require.NoError(t, db.Where("group_id = ?", "group-1").Order("model").Find(&artifacts).Error)
+	require.Len(t, artifacts, 2)
+	require.Equal(t, []string{"model-a", "model-b"}, []string{artifacts[0].Model, artifacts[1].Model})
 }
 
 func TestMigrateMarketplaceChannelProbeFieldsUpgradesExistingSQLiteTable(t *testing.T) {

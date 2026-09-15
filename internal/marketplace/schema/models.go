@@ -97,11 +97,11 @@ type Group struct {
 
 func (Group) TableName() string { return tableName("groups") }
 
-// PelicanArtifact stores only the latest successful, sanitized SVG per group.
+// PelicanArtifact stores the latest successful, sanitized SVG per group and model.
 type PelicanArtifact struct {
 	GroupID       string    `json:"group_id" gorm:"column:group_id;primaryKey;size:128"`
 	ChannelID     string    `json:"channel_id" gorm:"column:channel_id;size:64;index"`
-	Model         string    `json:"model" gorm:"column:model;size:128;not null"`
+	Model         string    `json:"model" gorm:"column:model;primaryKey;size:128"`
 	SVG           string    `json:"-" gorm:"column:svg;type:text;not null"`
 	Trigger       string    `json:"trigger" gorm:"column:trigger;size:16;not null"`
 	TriggerUserID int       `json:"-" gorm:"column:trigger_user_id;index"`

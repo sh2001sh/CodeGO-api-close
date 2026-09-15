@@ -99,6 +99,13 @@ export interface MarketplaceGroup {
   pelican_generated_at?: string | null
   pelican_model?: string
   pelican_artifact_url?: string
+  pelican_artifacts?: MarketplacePelicanArtifact[]
+}
+
+export interface MarketplacePelicanArtifact {
+  model: string
+  generated_at: string
+  artifact_url: string
 }
 
 export interface ChannelFeedbackSummary {

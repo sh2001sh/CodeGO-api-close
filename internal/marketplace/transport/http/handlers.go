@@ -164,7 +164,7 @@ func GetPelicanTest(c *gin.Context) {
 }
 
 func GetPelicanArtifact(c *gin.Context) {
-	artifact, err := marketplaceapp.GetPelicanArtifact(c.Query("group_id"), c.GetInt("id"))
+	artifact, err := marketplaceapp.GetPelicanArtifact(c.Query("group_id"), c.Query("model"), c.GetInt("id"))
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

@@ -186,6 +186,7 @@ func V2MigrationIDs() []string {
 		"20260912_marketplace_settlement_due_index",
 		"20260914_marketplace_settlement_reclaim_index",
 		"20260915_marketplace_pelican_artifacts",
+		"20260915_marketplace_pelican_artifacts_by_model",
 	}
 }
 
@@ -360,6 +361,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260915_marketplace_pelican_artifacts", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.PelicanArtifact{})
 		}},
+		{ID: "20260915_marketplace_pelican_artifacts_by_model", Run: migrateMarketplacePelicanArtifactsByModel},
 		{ID: "20260903_marketplace_owner_operations", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{})
 		}},
@@ -1091,6 +1093,50 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			!db.Migrator().HasColumn(&commerceschema.BlindBoxPropDiscountUsage{}, "EffectiveMultiplier")
 	default:
 		return false
+	}
+}
+
+func migrateMarketplacePelicanArtifactsByModel(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&marketplaceschema.PelicanArtifact{}) {
+		return tx.AutoMigrate(&marketplaceschema.PelicanArtifact{})
+	}
+	switch strings.ToLower(tx.Dialector.Name()) {
+	case "postgres":
+		if err := tx.Exec(`ALTER TABLE marketplace.pelican_artifacts DROP CONSTRAINT IF EXISTS pelican_artifacts_pkey`).Error; err != nil {
+			return err
+		}
+		return tx.Exec(`ALTER TABLE marketplace.pelican_artifacts ADD CONSTRAINT pelican_artifacts_pkey PRIMARY KEY (group_id, model)`).Error
+	case "sqlite":
+		statements := []string{
+			`CREATE TABLE marketplace_pelican_artifacts_v2 (
+				group_id text NOT NULL,
+				channel_id text,
+				model text NOT NULL,
+				svg text NOT NULL,
+				trigger text NOT NULL,
+				trigger_user_id integer,
+				request_id text,
+				duration_ms integer NOT NULL,
+				generated_at datetime NOT NULL,
+				updated_at datetime,
+				PRIMARY KEY (group_id, model)
+			)`,
+			`INSERT INTO marketplace_pelican_artifacts_v2 (group_id, channel_id, model, svg, trigger, trigger_user_id, request_id, duration_ms, generated_at, updated_at)
+			 SELECT group_id, channel_id, model, svg, trigger, trigger_user_id, request_id, duration_ms, generated_at, updated_at FROM marketplace_pelican_artifacts`,
+			`DROP TABLE marketplace_pelican_artifacts`,
+			`ALTER TABLE marketplace_pelican_artifacts_v2 RENAME TO marketplace_pelican_artifacts`,
+			`CREATE INDEX idx_marketplace_pelican_artifacts_channel_id ON marketplace_pelican_artifacts(channel_id)`,
+			`CREATE INDEX idx_marketplace_pelican_artifacts_trigger_user_id ON marketplace_pelican_artifacts(trigger_user_id)`,
+			`CREATE INDEX idx_marketplace_pelican_artifacts_generated_at ON marketplace_pelican_artifacts(generated_at)`,
+		}
+		for _, statement := range statements {
+			if err := tx.Exec(statement).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return tx.Exec(`ALTER TABLE marketplace_pelican_artifacts DROP PRIMARY KEY, ADD PRIMARY KEY (group_id, model)`).Error
 	}
 }
 

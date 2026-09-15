@@ -19,6 +19,23 @@ func TestSanitizePelicanSVGKeepsAnimationAndRemovesActiveContent(t *testing.T) {
 	require.NotContains(t, svg, "evil.example")
 }
 
+func TestSanitizePelicanSVGKeepsLocalPaintReferences(t *testing.T) {
+	raw := `<html><body><svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="sky"><stop offset="0" stop-color="#123456"/></linearGradient><filter id="soft"><feGaussianBlur stdDeviation="2"/></filter></defs><rect width="100" height="100" fill="url(#sky)" style="filter: url('#soft')"/><style>.wheel { fill: url("#sky"); }</style></svg></body></html>`
+	svg, err := sanitizePelicanSVG(raw)
+	require.NoError(t, err)
+	require.Contains(t, svg, `fill="url(#sky)"`)
+	require.Contains(t, svg, `url(&#34;#sky&#34;)`)
+}
+
+func TestSanitizePelicanSVGRemovesExternalPaintReferences(t *testing.T) {
+	raw := `<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(https://evil.example/paint.svg#x)"/><circle style="fill:url(data:image/svg+xml,bad)"/><path stroke="javascript:alert(1)"/><ellipse fill="url(#safe) url(https://evil.example/x)"/></svg>`
+	svg, err := sanitizePelicanSVG(raw)
+	require.NoError(t, err)
+	require.NotContains(t, svg, "evil.example")
+	require.NotContains(t, svg, "data:")
+	require.NotContains(t, svg, "javascript:")
+}
+
 func TestOfficialGroupCannotEnableScheduledPelicanTest(t *testing.T) {
 	enabled := true
 	channel := &marketplaceschema.Channel{DeclaredModels: `["gpt-test"]`}

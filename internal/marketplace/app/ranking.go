@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"math"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -134,6 +135,9 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		}
 	}
 	items = paginateGroups(items, query.Page, query.PageSize)
+	if err := attachPelicanArtifacts(items, officialItems); err != nil {
+		return nil, err
+	}
 	if err := attachChannelFeedback(items, channels, query.ViewerUserID); err != nil {
 		return nil, err
 	}
@@ -142,6 +146,41 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	marketplaceListCache.at, marketplaceListCache.key, marketplaceListCache.result = time.Now(), cacheKey, result
 	marketplaceListCache.Unlock()
 	return result, nil
+}
+
+func attachPelicanArtifacts(groups ...[]GroupListItem) error {
+	ids := make([]string, 0)
+	for _, items := range groups {
+		for _, item := range items {
+			ids = append(ids, item.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	var artifacts []marketplaceschema.PelicanArtifact
+	if err := platformdb.DB.Select("group_id", "model", "generated_at").Where("group_id IN ?", ids).Find(&artifacts).Error; err != nil {
+		if message := strings.ToLower(err.Error()); strings.Contains(message, "no such table") || strings.Contains(message, "does not exist") {
+			return nil
+		}
+		return err
+	}
+	byID := make(map[string]marketplaceschema.PelicanArtifact, len(artifacts))
+	for _, artifact := range artifacts {
+		byID[artifact.GroupID] = artifact
+	}
+	for _, items := range groups {
+		for index := range items {
+			if artifact, ok := byID[items[index].ID]; ok {
+				generatedAt := artifact.GeneratedAt
+				items[index].PelicanAvailable = true
+				items[index].PelicanGeneratedAt = &generatedAt
+				items[index].PelicanModel = artifact.Model
+				items[index].PelicanArtifactURL = "/api/marketplace/pelican-artifact.svg?group_id=" + url.QueryEscape(items[index].ID)
+			}
+		}
+	}
+	return nil
 }
 
 func matchesGroupListItemQuery(item GroupListItem, query GroupQuery) bool {
@@ -216,6 +255,9 @@ func GetMarketplaceGroup(slug string, windowHours, viewerUserID int) (*GroupList
 		return nil, err
 	}
 	if len(items) == 1 {
+		if err := attachPelicanArtifacts(items); err != nil {
+			return nil, err
+		}
 		if err := attachChannelFeedback(items, channels, viewerUserID); err != nil {
 			return nil, err
 		}

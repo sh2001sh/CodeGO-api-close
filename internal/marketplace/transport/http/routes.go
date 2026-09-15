@@ -20,6 +20,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		publicMarketplaceRoute.GET("/multiplier-trends", ListMultiplierTrends)
 		publicMarketplaceRoute.GET("/groups/:slug", GetGroup)
 		publicMarketplaceRoute.GET("/groups/:slug/model-status", GetGroupModelStatus)
+		publicMarketplaceRoute.GET("/pelican-artifact.svg", GetPelicanArtifact)
 	}
 
 	marketplaceRoute := apiRouter.Group("/marketplace")
@@ -41,6 +42,8 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.POST("/route-pools/:id/bind-token", middleware.CriticalRateLimit(), BindRoutePoolToken)
 		marketplaceRoute.POST("/batch-tests", middleware.CriticalRateLimit(), StartBatchTest)
 		marketplaceRoute.GET("/batch-tests/:id", GetBatchTest)
+		marketplaceRoute.POST("/pelican-tests", middleware.CriticalRateLimit(), StartPelicanTest)
+		marketplaceRoute.GET("/pelican-tests/:id", GetPelicanTest)
 		marketplaceRoute.POST("/channels", middleware.CriticalRateLimit(), CreateChannel)
 		marketplaceRoute.POST("/channels/fetch-models", middleware.CriticalRateLimit(), FetchModels)
 		marketplaceRoute.GET("/channels/mine", ListMyChannels)

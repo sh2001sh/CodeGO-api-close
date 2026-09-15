@@ -37,6 +37,7 @@ export function MarketGroupCard(props: {
   onUse: (group: MarketplaceGroup) => void
   onBindKey: (group: MarketplaceGroup) => void
   onTest: (group: MarketplaceGroup) => void
+  onPelicanTest: (group: MarketplaceGroup) => void
   onBargain: (group: MarketplaceGroup) => void
   onJoinPool: (group: MarketplaceGroup) => void
   priceInfo?: { input: string; output: string; freeCount: number }
@@ -305,6 +306,66 @@ export function MarketGroupCard(props: {
 
       <RecentRequestStrip group={group} />
 
+      <div
+        className='pelican-preview'
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '72px minmax(0, 1fr)',
+          gap: 10,
+          alignItems: 'center',
+          marginTop: 10,
+          padding: 8,
+          border: '1px solid var(--dawn-line)',
+          borderRadius: 8,
+        }}
+      >
+        {group.pelican_available && group.pelican_artifact_url ? (
+          <img
+            src={`${group.pelican_artifact_url}${group.pelican_artifact_url.includes('?') ? '&' : '?'}v=${encodeURIComponent(group.pelican_generated_at ?? '')}`}
+            alt={`${group.system_display_name} 最新鹈鹕作品`}
+            loading='lazy'
+            decoding='async'
+            style={{
+              width: 72,
+              height: 54,
+              objectFit: 'contain',
+              borderRadius: 6,
+              background: 'var(--dawn-panel)',
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 72,
+              height: 54,
+              borderRadius: 6,
+              background: 'var(--dawn-panel)',
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 11,
+              color: 'var(--dawn-muted)',
+            }}
+          >
+            暂无作品
+          </div>
+        )}
+        <div style={{ minWidth: 0 }}>
+          <b style={{ display: 'block', fontSize: 12 }}>鹈鹕骑自行车</b>
+          <span
+            style={{
+              display: 'block',
+              marginTop: 3,
+              fontSize: 11,
+              color: 'var(--dawn-muted)',
+            }}
+          >
+            {group.pelican_generated_at
+              ? `生成于 ${new Date(group.pelican_generated_at).toLocaleString('zh-CN', { hour12: false })}`
+              : '尚未生成'}
+          </span>
+        </div>
+      </div>
+
       <div className='gact' onClick={(event) => event.stopPropagation()}>
         {lifecycleOn && props.authed && (
           <button className='btn mini' onClick={() => props.onBindKey(group)}>
@@ -314,6 +375,14 @@ export function MarketGroupCard(props: {
         {props.authed && (
           <button className='btn mini' onClick={() => props.onTest(group)}>
             连通性测试
+          </button>
+        )}
+        {props.authed && (
+          <button
+            className='btn mini'
+            onClick={() => props.onPelicanTest(group)}
+          >
+            鹈鹕测试
           </button>
         )}
         {!isOfficial && lifecycleOn && props.authed && (

@@ -328,6 +328,7 @@ func migratePrimaryDB() error {
 		&marketplaceschema.RankingSnapshot{},
 		&marketplaceschema.MultiplierTrendSnapshot{},
 		&marketplaceschema.ChannelFeedback{},
+		&marketplaceschema.PelicanArtifact{},
 		&marketplaceschema.Settlement{},
 		&marketplaceschema.IncomeReclaim{},
 		&marketplaceschema.AutoRoutePoolMember{},

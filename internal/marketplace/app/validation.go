@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 )
 
 const maxMarketplaceMultiplier = 1_000_000
@@ -55,6 +55,22 @@ func validateCreateRequest(req CreateChannelRequest) error {
 	}
 	if err := validateAutoProbe(req.AutoProbeEnabled, req.AutoProbeIntervalMinutes, req.AutoProbeModel, req.DeclaredModels); err != nil {
 		return err
+	}
+	if err := validatePelicanProbe(req.PelicanProbeEnabled, req.PelicanProbeDailyMinute, req.PelicanProbeModel, req.DeclaredModels); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validatePelicanProbe(enabled bool, dailyMinute int, model string, models []string) error {
+	if !enabled {
+		return nil
+	}
+	if dailyMinute < 0 || dailyMinute > 1439 {
+		return errors.New("鹈鹕定时生成时间无效")
+	}
+	if strings.TrimSpace(model) == "" || !containsFold(normalizeModels(models), model) {
+		return errors.New("鹈鹕测试模型必须来自渠道已声明模型")
 	}
 	return nil
 }

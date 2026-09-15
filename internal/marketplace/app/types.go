@@ -30,6 +30,9 @@ type CreateChannelRequest struct {
 	AutoProbeEnabled                 bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         int                          `json:"auto_probe_interval_minutes"`
 	AutoProbeModel                   string                       `json:"auto_probe_model"`
+	PelicanProbeEnabled              bool                         `json:"pelican_probe_enabled"`
+	PelicanProbeDailyMinute          int                          `json:"pelican_probe_daily_minute"`
+	PelicanProbeModel                string                       `json:"pelican_probe_model"`
 }
 
 type UpdateChannelRequest struct {
@@ -48,6 +51,9 @@ type UpdateChannelRequest struct {
 	AutoProbeEnabled                 *bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         *int                          `json:"auto_probe_interval_minutes"`
 	AutoProbeModel                   *string                       `json:"auto_probe_model"`
+	PelicanProbeEnabled              *bool                         `json:"pelican_probe_enabled"`
+	PelicanProbeDailyMinute          *int                          `json:"pelican_probe_daily_minute"`
+	PelicanProbeModel                *string                       `json:"pelican_probe_model"`
 	BaseURL                          *string                       `json:"base_url"`
 	APIKey                           *string                       `json:"api_key"`
 	SourceLabel                      *string                       `json:"source_label"`
@@ -92,6 +98,10 @@ type ChannelView struct {
 	AutoProbeModel                   string                       `json:"auto_probe_model"`
 	AutoProbeLastStatus              string                       `json:"auto_probe_last_status"`
 	AutoProbeLastAt                  *time.Time                   `json:"auto_probe_last_at"`
+	PelicanProbeEnabled              bool                         `json:"pelican_probe_enabled"`
+	PelicanProbeDailyMinute          int                          `json:"pelican_probe_daily_minute"`
+	PelicanProbeModel                string                       `json:"pelican_probe_model"`
+	PelicanProbeLastAt               *time.Time                   `json:"pelican_probe_last_at"`
 	Multiplier                       float64                      `json:"multiplier"`
 	LifecycleStatus                  string                       `json:"lifecycle_status"`
 	VerificationStatus               string                       `json:"verification_status"`
@@ -216,6 +226,10 @@ type GroupListItem struct {
 	ConnectivityTestStatus     string                       `json:"connectivity_test_status"`
 	ConnectivityTestCheckedAt  *time.Time                   `json:"connectivity_test_checked_at"`
 	RemoteCompactionSupport    string                       `json:"remote_compaction_support,omitempty"`
+	PelicanAvailable           bool                         `json:"pelican_available"`
+	PelicanGeneratedAt         *time.Time                   `json:"pelican_generated_at,omitempty"`
+	PelicanModel               string                       `json:"pelican_model,omitempty"`
+	PelicanArtifactURL         string                       `json:"pelican_artifact_url,omitempty"`
 	ChannelFeedback            ChannelFeedbackSummary       `json:"channel_feedback"`
 	CanSubmitChannelFeedback   bool                         `json:"can_submit_channel_feedback"`
 	ChannelFeedbackPermission  string                       `json:"channel_feedback_permission"`

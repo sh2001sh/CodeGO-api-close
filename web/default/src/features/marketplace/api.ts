@@ -508,6 +508,26 @@ export async function getMarketplaceBatchTest(id: string) {
   return requireData(response.data)
 }
 
+export async function startMarketplacePelicanTest(input: {
+  groupId: string
+  model: string
+}) {
+  const response = await api.post<
+    ApiResponse<import('./types').MarketplacePelicanTest>
+  >('/api/marketplace/pelican-tests', {
+    group_id: input.groupId,
+    model: input.model,
+  })
+  return requireData(response.data)
+}
+
+export async function getMarketplacePelicanTest(id: string) {
+  const response = await api.get<
+    ApiResponse<import('./types').MarketplacePelicanTest>
+  >(`/api/marketplace/pelican-tests/${encodeURIComponent(id)}`)
+  return requireData(response.data)
+}
+
 export async function getMarketplaceObservability(input?: {
   startTimestamp?: number
   endTimestamp?: number
@@ -569,16 +589,27 @@ export async function exportMyMarketplaceUsageLogs(
   if (params.status) search.set('status', params.status)
   if (params.modelName) search.set('model_name', params.modelName)
   if (params.requestId) search.set('request_id', params.requestId)
-  if (params.upstreamRequestId) search.set('upstream_request_id', params.upstreamRequestId)
-  if (params.externalUserId) search.set('external_user_id', params.externalUserId)
+  if (params.upstreamRequestId)
+    search.set('upstream_request_id', params.upstreamRequestId)
+  if (params.externalUserId)
+    search.set('external_user_id', params.externalUserId)
   if (params.search) search.set('search', params.search)
-  if (params.startTimestamp) search.set('start_timestamp', String(params.startTimestamp))
-  if (params.endTimestamp) search.set('end_timestamp', String(params.endTimestamp))
+  if (params.startTimestamp)
+    search.set('start_timestamp', String(params.startTimestamp))
+  if (params.endTimestamp)
+    search.set('end_timestamp', String(params.endTimestamp))
   const response = await api.get<Blob>(
     `/api/marketplace/channels/mine/logs/export?${search.toString()}`,
-    { responseType: 'blob', disableDuplicate: true, skipBusinessError: true, skipErrorHandler: true } as Record<string, unknown>
+    {
+      responseType: 'blob',
+      disableDuplicate: true,
+      skipBusinessError: true,
+      skipErrorHandler: true,
+    } as Record<string, unknown>
   )
-  if (String(response.headers['content-type'] ?? '').includes('application/json')) {
+  if (
+    String(response.headers['content-type'] ?? '').includes('application/json')
+  ) {
     const payload = JSON.parse(await response.data.text()) as ApiResponse
     throw new Error(payload.message || '渠道日志导出失败')
   }

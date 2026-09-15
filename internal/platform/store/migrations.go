@@ -185,6 +185,7 @@ func V2MigrationIDs() []string {
 		"20260911_security_audit_delivery_status",
 		"20260912_marketplace_settlement_due_index",
 		"20260914_marketplace_settlement_reclaim_index",
+		"20260915_marketplace_pelican_artifacts",
 	}
 }
 
@@ -356,6 +357,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260912_marketplace_settlement_due_index", RunOutsideTx: migrateMarketplaceSettlementDueIndex},
 		{ID: "20260914_marketplace_settlement_reclaim_index", RunOutsideTx: migrateMarketplaceSettlementReclaimIndex},
+		{ID: "20260915_marketplace_pelican_artifacts", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.PelicanArtifact{})
+		}},
 		{ID: "20260903_marketplace_owner_operations", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{})
 		}},
@@ -997,6 +1001,12 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	switch migrationID {
 	case "20260831_gateway_upstream_files":
 		return !db.Migrator().HasTable(&gatewayschema.UpstreamFileMapping{})
+	case "20260915_marketplace_pelican_artifacts":
+		return !db.Migrator().HasTable(&marketplaceschema.PelicanArtifact{}) ||
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "PelicanProbeEnabled") ||
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "PelicanProbeDailyMinute") ||
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "PelicanProbeModel") ||
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "PelicanProbeLastAt")
 	case "20260715_blind_box_admin_grants":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxOrder{}) ||
 			!db.Migrator().HasTable(&commerceschema.BlindBoxGrant{})

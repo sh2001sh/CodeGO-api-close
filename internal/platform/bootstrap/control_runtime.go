@@ -38,6 +38,7 @@ func startControlBackgroundTasks() {
 	marketplaceapp.StartMarketplaceRankingTask()
 	marketplaceapp.StartMarketplaceRoutePoolAutoBuildTask()
 	marketplaceapp.StartMarketplaceTransportCapabilityBackfill()
+	marketplaceapp.StartMarketplacePelicanScheduleTask()
 	gatewayexecutionapp.StartCodexCredentialAutoRefreshTask()
 	gatewayroutingapp.StartChannelUpstreamModelUpdateTask()
 	gatewayroutingapp.StartChannelTransportCapabilityBackfill()

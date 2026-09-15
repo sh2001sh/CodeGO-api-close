@@ -142,7 +142,67 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
       <ChannelInterceptionPolicy form={form} />
       <ChannelMultiplierCardPolicy form={form} />
       <ChannelAutoProbePolicy form={form} />
+      <ChannelPelicanProbePolicy form={form} />
     </FormSection>
+  )
+}
+
+function ChannelPelicanProbePolicy({ form }: { form: ChannelForm }) {
+  const { t } = useTranslation()
+  const enabled = form.watch('pelican_probe_enabled')
+  const minute = form.watch('pelican_probe_daily_minute')
+  const models = form.watch('declared_models')
+  const hours = String(Math.floor((minute || 0) / 60)).padStart(2, '0')
+  const minutes = String((minute || 0) % 60).padStart(2, '0')
+  return (
+    <div className='border-border grid gap-3 rounded-md border p-3 sm:grid-cols-[minmax(0,1fr)_130px_180px_auto] sm:items-end'>
+      <div>
+        <p className='text-sm font-medium'>{t('每日鹈鹕测试')}</p>
+        <p className='text-muted-foreground mt-1 text-xs leading-5'>
+          {t('仅第三方分组可设置；每天生成一张新作品并替换旧作品。')}
+        </p>
+      </div>
+      <FormField label={t('生成时间')}>
+        <Input
+          type='time'
+          disabled={!enabled}
+          value={`${hours}:${minutes}`}
+          onChange={(event) => {
+            const [hour, minutePart] = event.target.value.split(':').map(Number)
+            form.setValue(
+              'pelican_probe_daily_minute',
+              hour * 60 + minutePart,
+              { shouldDirty: true }
+            )
+          }}
+        />
+      </FormField>
+      <FormField label={t('生成模型')}>
+        <NativeSelect
+          disabled={!enabled || models.length === 0}
+          {...form.register('pelican_probe_model')}
+        >
+          <option value=''>{t('选择模型')}</option>
+          {models.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
+        </NativeSelect>
+      </FormField>
+      <Switch
+        checked={enabled}
+        onCheckedChange={(checked) => {
+          form.setValue('pelican_probe_enabled', checked, { shouldDirty: true })
+          if (checked && !form.getValues('pelican_probe_model') && models[0]) {
+            form.setValue('pelican_probe_model', models[0], {
+              shouldDirty: true,
+            })
+          }
+        }}
+        aria-label={t('每日鹈鹕测试')}
+      />
+    </div>
   )
 }
 

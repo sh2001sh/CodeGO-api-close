@@ -36,6 +36,10 @@ type Channel struct {
 	AutoProbeModel                   string         `json:"auto_probe_model" gorm:"column:auto_probe_model;size:128"`
 	AutoProbeLastStatus              string         `json:"auto_probe_last_status" gorm:"column:auto_probe_last_status;size:24;index"`
 	AutoProbeLastAt                  *time.Time     `json:"auto_probe_last_at" gorm:"column:auto_probe_last_at;index"`
+	PelicanProbeEnabled              bool           `json:"pelican_probe_enabled" gorm:"column:pelican_probe_enabled;not null;default:false;index"`
+	PelicanProbeDailyMinute          int            `json:"pelican_probe_daily_minute" gorm:"column:pelican_probe_daily_minute;not null;default:0"`
+	PelicanProbeModel                string         `json:"pelican_probe_model" gorm:"column:pelican_probe_model;size:128"`
+	PelicanProbeLastAt               *time.Time     `json:"pelican_probe_last_at" gorm:"column:pelican_probe_last_at;index"`
 	MaxConcurrency                   int            `json:"max_concurrency" gorm:"column:max_concurrency;not null;default:1"`
 	UserMaxConcurrency               int            `json:"user_max_concurrency" gorm:"column:user_max_concurrency;not null;default:0"`
 	QPS                              float64        `json:"qps" gorm:"column:qps;not null;default:1"`
@@ -92,6 +96,22 @@ type Group struct {
 }
 
 func (Group) TableName() string { return tableName("groups") }
+
+// PelicanArtifact stores only the latest successful, sanitized SVG per group.
+type PelicanArtifact struct {
+	GroupID       string    `json:"group_id" gorm:"column:group_id;primaryKey;size:128"`
+	ChannelID     string    `json:"channel_id" gorm:"column:channel_id;size:64;index"`
+	Model         string    `json:"model" gorm:"column:model;size:128;not null"`
+	SVG           string    `json:"-" gorm:"column:svg;type:text;not null"`
+	Trigger       string    `json:"trigger" gorm:"column:trigger;size:16;not null"`
+	TriggerUserID int       `json:"-" gorm:"column:trigger_user_id;index"`
+	RequestID     string    `json:"request_id" gorm:"column:request_id;size:64"`
+	DurationMS    int64     `json:"duration_ms" gorm:"column:duration_ms;not null"`
+	GeneratedAt   time.Time `json:"generated_at" gorm:"column:generated_at;index;not null"`
+	UpdatedAt     time.Time `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (PelicanArtifact) TableName() string { return tableName("pelican_artifacts") }
 
 // GroupInvite is a revocable, hashed invitation for a non-public marketplace group.
 type GroupInvite struct {

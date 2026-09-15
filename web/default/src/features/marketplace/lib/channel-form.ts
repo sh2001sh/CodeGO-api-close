@@ -84,6 +84,9 @@ export const channelFormSchema = z.object({
   auto_probe_enabled: z.boolean(),
   auto_probe_interval_minutes: z.number().int().min(1).max(1440),
   auto_probe_model: z.string().max(128),
+  pelican_probe_enabled: z.boolean(),
+  pelican_probe_daily_minute: z.number().int().min(0).max(1439),
+  pelican_probe_model: z.string().max(128),
   model_consistency_status: z.enum([
     'none',
     'passed',
@@ -118,6 +121,9 @@ export const channelFormDefaults: ChannelFormInput = {
   auto_probe_enabled: false,
   auto_probe_interval_minutes: 10,
   auto_probe_model: '',
+  pelican_probe_enabled: false,
+  pelican_probe_daily_minute: 0,
+  pelican_probe_model: '',
   model_consistency_status: 'none',
 }
 
@@ -131,28 +137,39 @@ export function channelFormDefaultsForEdit(
     : 'CC其它'
   const declaredModels = channel.declared_models ?? []
   return {
-    provider_type: (channel.provider_type || channelFormDefaults.provider_type) as ChannelFormInput['provider_type'],
+    provider_type: (channel.provider_type ||
+      channelFormDefaults.provider_type) as ChannelFormInput['provider_type'],
     source_label: source,
     base_url: '',
     api_key: '',
     declared_models: declaredModels,
     model_prices: channel.model_prices ?? {},
-    multiplier: channel.multiplier > 0 ? channel.multiplier : channelFormDefaults.multiplier,
-    visibility: (channel.visibility || channelFormDefaults.visibility) as ChannelFormInput['visibility'],
-    max_concurrency: channel.max_concurrency ?? channelFormDefaults.max_concurrency,
+    multiplier:
+      channel.multiplier > 0
+        ? channel.multiplier
+        : channelFormDefaults.multiplier,
+    visibility: (channel.visibility ||
+      channelFormDefaults.visibility) as ChannelFormInput['visibility'],
+    max_concurrency:
+      channel.max_concurrency ?? channelFormDefaults.max_concurrency,
     user_max_concurrency: channel.user_max_concurrency ?? 0,
     qps: channel.qps > 0 ? channel.qps : channelFormDefaults.qps,
     maintenance_window: channel.maintenance_window ?? '',
     sensitive_word_interception_enabled:
-      channel.sensitive_word_interception_enabled ?? channelFormDefaults.sensitive_word_interception_enabled,
+      channel.sensitive_word_interception_enabled ??
+      channelFormDefaults.sensitive_word_interception_enabled,
     multiplier_card_supported: channel.multiplier_card_supported ?? false,
     multiplier_card_user_enabled: channel.multiplier_card_user_enabled ?? false,
-    auto_probe_enabled: channel.auto_probe_enabled ?? channelFormDefaults.auto_probe_enabled,
-    auto_probe_interval_minutes: channel.auto_probe_interval_minutes > 0
-      ? channel.auto_probe_interval_minutes
-      : channelFormDefaults.auto_probe_interval_minutes,
-    auto_probe_model:
-      channel.auto_probe_model || declaredModels[0] || '',
+    auto_probe_enabled:
+      channel.auto_probe_enabled ?? channelFormDefaults.auto_probe_enabled,
+    auto_probe_interval_minutes:
+      channel.auto_probe_interval_minutes > 0
+        ? channel.auto_probe_interval_minutes
+        : channelFormDefaults.auto_probe_interval_minutes,
+    auto_probe_model: channel.auto_probe_model || declaredModels[0] || '',
+    pelican_probe_enabled: channel.pelican_probe_enabled ?? false,
+    pelican_probe_daily_minute: channel.pelican_probe_daily_minute ?? 0,
+    pelican_probe_model: channel.pelican_probe_model || declaredModels[0] || '',
     model_consistency_status: channel.model_consistency_status || 'none',
   }
 }

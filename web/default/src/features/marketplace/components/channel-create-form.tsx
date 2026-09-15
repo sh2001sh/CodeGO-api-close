@@ -87,6 +87,15 @@ export function ChannelEditorForm(props: {
       ),
       { shouldDirty: true, shouldValidate: true }
     )
+    form.setValue(
+      'pelican_probe_model',
+      reconcileAutoProbeModel(
+        form.getValues('pelican_probe_model'),
+        next,
+        form.getValues('pelican_probe_enabled')
+      ),
+      { shouldDirty: true, shouldValidate: true }
+    )
   }
 
   const fetchModels = async () => {
@@ -164,6 +173,9 @@ export function ChannelEditorForm(props: {
             auto_probe_enabled: values.auto_probe_enabled,
             auto_probe_interval_minutes: values.auto_probe_interval_minutes,
             auto_probe_model: values.auto_probe_model,
+            pelican_probe_enabled: values.pelican_probe_enabled,
+            pelican_probe_daily_minute: values.pelican_probe_daily_minute,
+            pelican_probe_model: values.pelican_probe_model,
             ...(values.base_url ? { base_url: values.base_url } : {}),
             ...(values.api_key ? { api_key: values.api_key } : {}),
             ...(props.admin
@@ -180,7 +192,9 @@ export function ChannelEditorForm(props: {
       } else {
         await mutations.create.mutateAsync(values)
         toast.success(
-          t('渠道已提交，请先点击“测试连通性”确认可用；GPT-5.6 一致性检测仅用于核对模型映射')
+          t(
+            '渠道已提交，请先点击“测试连通性”确认可用；GPT-5.6 一致性检测仅用于核对模型映射'
+          )
         )
         form.reset(channelFormDefaults)
         setAvailableModels([])
@@ -214,9 +228,7 @@ export function ChannelEditorForm(props: {
       <div className='border-border bg-muted/15 flex justify-end border-t px-4 py-4 sm:px-5'>
         <Button type='submit' disabled={pending}>
           {pending && <Loader2 className='animate-spin' />}
-          {editing
-            ? t('保存修改（留空保持原值）')
-            : t('提交并执行必做校验')}
+          {editing ? t('保存修改（留空保持原值）') : t('提交并执行必做校验')}
         </Button>
       </div>
     </form>

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/bytedance/gopkg/util/gopool"
@@ -8,6 +9,7 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	gatewaytranslation "github.com/sh2001sh/new-api/internal/gateway/translation"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	"github.com/sh2001sh/new-api/internal/platform/notifyx"
@@ -54,6 +56,44 @@ type MarketplaceChannelTestOptions struct {
 	CreditPoolPolicy   string
 	Multiplier         float64
 	ModelPrices        map[string]marketplacedomain.ChannelModelPrice
+}
+
+type MarketplaceContentGenerationOptions struct {
+	MarketplaceChannelTestOptions
+	Prompt          string
+	MaxOutputTokens uint
+	BillUser        bool
+}
+
+// GenerateMarketplaceChannelContentByID runs a non-streaming Responses request
+// against the exact selected marketplace channel and returns its output text.
+func GenerateMarketplaceChannelContentByID(channelID int, model string, options MarketplaceContentGenerationOptions) (string, ChannelTestReport, *types.NewAPIError, error) {
+	channel, err := getChannelForTest(channelID)
+	if err != nil {
+		return "", ChannelTestReport{}, nil, err
+	}
+	if options.UserID <= 0 {
+		return "", ChannelTestReport{}, nil, errors.New("用户 ID 无效")
+	}
+	result := testChannelWithOptions(channel, model, string(constant.EndpointTypeOpenAIResponse), false, channelTestOptions{
+		UserID: options.UserID, BillUser: options.BillUser,
+		MarketplaceGroupID: options.MarketplaceGroupID, InternalGroup: options.InternalGroup,
+		MarketplaceOwnerID: options.MarketplaceOwnerID, CreditPoolPolicy: options.CreditPoolPolicy,
+		MarketplaceMultiplier: options.Multiplier, MarketplaceModelPrices: options.ModelPrices,
+		Prompt: options.Prompt, MaxOutputTokens: options.MaxOutputTokens,
+	})
+	if result.localErr != nil {
+		return "", result.report, result.newAPIError, result.localErr
+	}
+	var response dto.OpenAIResponsesResponse
+	if err := json.Unmarshal(result.responseBody, &response); err != nil {
+		return "", result.report, result.newAPIError, fmt.Errorf("解析 Responses 结果失败: %w", err)
+	}
+	text := gatewaytranslation.ExtractOutputTextFromResponses(&response)
+	if text == "" {
+		return "", result.report, result.newAPIError, errors.New("模型没有返回文本内容")
+	}
+	return text, result.report, result.newAPIError, nil
 }
 
 // TestMarketplaceChannelByID executes a real upstream request as a user and

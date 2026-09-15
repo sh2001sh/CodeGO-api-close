@@ -80,9 +80,7 @@ func TestOfficialWalletConsumerStatsSeparatesModelsAndExcludesSubscriptions(t *t
 		{UserId: 5, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-b", ModelName: "model-a", Quota: 700, PromptTokens: 1400, Other: `{"billing_source":"wallet"}`},
 	}).Error)
 	officialWalletStatsCache.Lock()
-	officialWalletStatsCache.at = time.Time{}
-	officialWalletStatsCache.key = ""
-	officialWalletStatsCache.values = nil
+	officialWalletStatsCache.entries = nil
 	officialWalletStatsCache.Unlock()
 
 	stats, err := officialWalletConsumerStats([]string{"official-a", "official-b"}, 24)

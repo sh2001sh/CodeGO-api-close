@@ -86,11 +86,7 @@ func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int
 		for _, summary := range summaries {
 			metricsByChannel[summary.ChannelID] = summary
 		}
-		walletStats, err = officialWalletConsumerStats(groupNames, 24)
-		if err != nil {
-			platformobservability.SysError("load official route pool wallet costs: " + err.Error())
-			walletStats = make(map[string]channelConsumerStats)
-		}
+		walletStats = officialWalletConsumerStatsCached(groupNames, 24)
 	}
 	items := make([]AutoRoutePoolItem, 0, len(usable))
 	for _, groupName := range groupNames {

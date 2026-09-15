@@ -17,15 +17,22 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
 var officialWalletStatsCache struct {
 	sync.Mutex
+	entries map[string]officialWalletStatsCacheEntry
+}
+
+type officialWalletStatsCacheEntry struct {
 	at     time.Time
-	key    string
 	values map[string]channelConsumerStats
 }
+
+var officialWalletStatsRefreshes singleflight.Group
 
 // Status discovery shares routing permissions, but never depends on an official
 // group having a marketplace row. Third-party rows cannot bypass market review.
@@ -129,10 +136,7 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		}
 	}
 	active := gatewayruntime.ActiveChannelRequestsForChannels(channelIDs)
-	walletStats, err := officialWalletConsumerStats(names, 24)
-	if err != nil {
-		return nil, err
-	}
+	walletStats := officialWalletConsumerStatsCached(names, 24)
 	items := make([]GroupListItem, 0, len(names))
 	for _, name := range names {
 		capability := capabilities[name]
@@ -165,18 +169,77 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 }
 
 func officialWalletConsumerStats(names []string, hours int) (map[string]channelConsumerStats, error) {
-	result := make(map[string]channelConsumerStats, len(names))
 	if len(names) == 0 || platformdb.LogDB == nil {
-		return result, nil
+		return make(map[string]channelConsumerStats), nil
 	}
 	key := fmt.Sprintf("%d:%s", hours, strings.Join(names, "\x00"))
 	officialWalletStatsCache.Lock()
-	if officialWalletStatsCache.key == key && time.Since(officialWalletStatsCache.at) < 5*time.Minute {
-		values := officialWalletStatsCache.values
+	entry, exists := officialWalletStatsCache.entries[key]
+	if exists && time.Since(entry.at) < 5*time.Minute {
 		officialWalletStatsCache.Unlock()
-		return values, nil
+		return entry.values, nil
 	}
 	officialWalletStatsCache.Unlock()
+	value, err, _ := officialWalletStatsRefreshes.Do(key, func() (any, error) {
+		result, queryErr := queryOfficialWalletConsumerStats(names, hours)
+		if queryErr != nil {
+			return nil, queryErr
+		}
+		storeOfficialWalletStats(key, result)
+		return result, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return value.(map[string]channelConsumerStats), nil
+}
+
+// List and route-pool requests must never wait for a 24-hour log aggregation.
+// Return the last cache entry (or empty values after a restart) and let one
+// singleflight refresh populate the next request.
+func officialWalletConsumerStatsCached(names []string, hours int) map[string]channelConsumerStats {
+	if len(names) == 0 || platformdb.LogDB == nil {
+		return make(map[string]channelConsumerStats)
+	}
+	key := fmt.Sprintf("%d:%s", hours, strings.Join(names, "\x00"))
+	officialWalletStatsCache.Lock()
+	entry, exists := officialWalletStatsCache.entries[key]
+	officialWalletStatsCache.Unlock()
+	if exists && time.Since(entry.at) < 5*time.Minute {
+		return entry.values
+	}
+	go func() {
+		if _, err := officialWalletConsumerStats(names, hours); err != nil {
+			platformobservability.SysError("refresh official wallet costs: " + err.Error())
+		}
+	}()
+	if exists {
+		return entry.values
+	}
+	return make(map[string]channelConsumerStats)
+}
+
+func storeOfficialWalletStats(key string, values map[string]channelConsumerStats) {
+	officialWalletStatsCache.Lock()
+	defer officialWalletStatsCache.Unlock()
+	if officialWalletStatsCache.entries == nil {
+		officialWalletStatsCache.entries = make(map[string]officialWalletStatsCacheEntry)
+	}
+	if len(officialWalletStatsCache.entries) >= 64 {
+		oldestKey := ""
+		var oldest time.Time
+		for candidateKey, candidate := range officialWalletStatsCache.entries {
+			if oldestKey == "" || candidate.at.Before(oldest) {
+				oldestKey, oldest = candidateKey, candidate.at
+			}
+		}
+		delete(officialWalletStatsCache.entries, oldestKey)
+	}
+	officialWalletStatsCache.entries[key] = officialWalletStatsCacheEntry{at: time.Now(), values: values}
+}
+
+func queryOfficialWalletConsumerStats(names []string, hours int) (map[string]channelConsumerStats, error) {
+	result := make(map[string]channelConsumerStats, len(names))
 
 	groupColumn := "`group`"
 	if platformdb.UsingPostgreSQL {
@@ -213,11 +276,6 @@ func officialWalletConsumerStats(names []string, hours int) (map[string]channelC
 		}
 		result[row.GroupName] = stats
 	}
-	officialWalletStatsCache.Lock()
-	officialWalletStatsCache.at = time.Now()
-	officialWalletStatsCache.key = key
-	officialWalletStatsCache.values = result
-	officialWalletStatsCache.Unlock()
 	return result, nil
 }
 

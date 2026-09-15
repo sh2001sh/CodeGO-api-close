@@ -9,7 +9,7 @@ import (
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 )
 
-const marketplaceRankingRefreshInterval = time.Minute
+const marketplaceRankingRefreshInterval = 5 * time.Minute
 
 var marketplaceRankingTaskOnce sync.Once
 
@@ -23,11 +23,11 @@ func StartMarketplaceRankingTask() {
 			cycles := 0
 			for range ticker.C {
 				cycles++
-				refreshPublicMarketplaceRankings(24, cycles%30 == 0)
-				if cycles%15 == 0 {
+				refreshPublicMarketplaceRankings(24, cycles%6 == 0)
+				if cycles%3 == 0 {
 					refreshPublicMarketplaceRankings(24*7, false)
 				}
-				if cycles%60 == 0 {
+				if cycles%12 == 0 {
 					refreshPublicMarketplaceRankings(24*30, false)
 				}
 			}

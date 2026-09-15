@@ -167,7 +167,7 @@ func rankingSnapshotMaxAge(hours int) time.Duration {
 	case hours >= 24*7:
 		return 20 * time.Minute
 	default:
-		return 2 * time.Minute
+		return 10 * time.Minute
 	}
 }
 

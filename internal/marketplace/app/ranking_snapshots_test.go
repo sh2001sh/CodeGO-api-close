@@ -62,7 +62,7 @@ func TestRankingSnapshotsForRequestUsesFreshPersistedRows(t *testing.T) {
 func TestRankingSnapshotsStaleUsesWindowSpecificFreshness(t *testing.T) {
 	now := time.Now().UTC()
 	snapshots := map[string]marketplaceschema.RankingSnapshot{
-		"group-a": {CalculatedAt: now.Add(-3 * time.Minute)},
+		"group-a": {CalculatedAt: now.Add(-11 * time.Minute)},
 	}
 
 	require.True(t, rankingSnapshotsStale(snapshots, 24, now))

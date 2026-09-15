@@ -38,6 +38,47 @@ func TestShouldNormalizeResponsesCompatibilityBodyFastRejectsOrdinaryBody(t *tes
 	require.False(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","stream":true,"input":"hello"}`)))
 	require.True(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","include":["usage"]}`)))
 	require.True(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","input":[{"type":"agent_message"}]}`)))
+	require.True(t, shouldNormalizeResponsesCompatibilityBody([]byte(`{"model":"gpt-5","input":[{"type":"compaction"}]}`)))
+}
+
+func TestNormalizeResponsesCompatibilityBodyPrunesBeforeLatestCompaction(t *testing.T) {
+	body := []byte(`{
+		"model":"gpt-6-astra",
+		"input":[
+			{"type":"message","role":"user","content":"old"},
+			{"type":"compaction","encrypted_content":"opaque"},
+			{"type":"message","role":"user","content":"new"}
+		]
+	}`)
+
+	normalized, changed, err := normalizeResponsesCompatibilityBody(body)
+
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{
+		"model":"gpt-6-astra",
+		"input":[
+			{"type":"compaction","encrypted_content":"opaque"},
+			{"type":"message","role":"user","content":"new"}
+		]
+	}`, string(normalized))
+}
+
+func TestNormalizeResponsesCompatibilityBodyKeepsFullInputWithPreviousResponseID(t *testing.T) {
+	body := []byte(`{
+		"model":"gpt-6-astra",
+		"previous_response_id":"resp_1",
+		"input":[
+			{"type":"message","role":"user","content":"old"},
+			{"type":"compaction","encrypted_content":"opaque"}
+		]
+	}`)
+
+	normalized, changed, err := normalizeResponsesCompatibilityBody(body)
+
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, body, normalized)
 }
 
 func TestNormalizeResponsesCompatibilityBodyConvertsAgentMessage(t *testing.T) {

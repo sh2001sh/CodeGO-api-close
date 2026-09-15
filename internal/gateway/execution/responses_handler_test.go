@@ -174,6 +174,34 @@ func TestNormalizeRemoteCompactionV2BodyMovesTriggerToEndAndForcesStream(t *test
 	require.JSONEq(t, `{"model":"gpt-5","stream":true,"input":[{"type":"message","role":"user","content":"tail"},{"type":"compaction_trigger"}]}`, string(body))
 }
 
+func TestRemoteCompactionV2BodyCanBeNormalizedForPortableUpstream(t *testing.T) {
+	body, changed, err := normalizeRemoteCompactionV2Body([]byte(`{
+		"model":"gpt-6-astra",
+		"stream":false,
+		"client_metadata":{"thread_id":"private"},
+		"input":[
+			{"type":"additional_tools","tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}]},
+			{"type":"agent_message","author":"/root/worker","content":[{"type":"input_text","text":"done"}]},
+			{"type":"compaction_trigger"}
+		]
+	}`), "gpt-6-astra", "gpt-6-astra")
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	body, changed, err = normalizeResponsesCompatibilityBody(body)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{
+		"model":"gpt-6-astra",
+		"stream":true,
+		"tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}],
+		"input":[
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"done"}]},
+			{"type":"compaction_trigger"}
+		]
+	}`, string(body))
+}
+
 func TestNormalizeRemoteCompactionV1BodyRemovesStreamOnly(t *testing.T) {
 	body, changed, err := normalizeRemoteCompactionV1Body([]byte(`{"model":"gpt-5","stream":true,"input":"history","previous_response_id":"resp_1"}`))
 	require.NoError(t, err)

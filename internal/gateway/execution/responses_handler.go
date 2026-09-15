@@ -148,7 +148,6 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 
 	var requestBody io.Reader
 	var outboundJSON []byte
-	preserveRemoteCompactionV2Body := false
 	nativeRemoteCompactionV2 := info.RelayMode == gatewaycontract.RelayModeResponses && gatewaycontract.HasRemoteCompactionV2(c.Request.Header) && hasRemoteCompactionTrigger(responsesReq.Input)
 	if nativeRemoteCompactionV2 {
 		if normalized, normalizeErr := normalizeRemoteCompactionInput(responsesReq); normalizeErr != nil {
@@ -166,7 +165,6 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
 		requestBody = bytes.NewReader(outboundJSON)
-		preserveRemoteCompactionV2Body = true
 	} else if originalBodyFastPath {
 		outboundJSON = originalBody
 		if info.FirstByteTrace != nil {
@@ -243,7 +241,11 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				outboundJSON = normalized
 			}
 		}
-		if portableResponses && !preserveRemoteCompactionV2Body && shouldNormalizeResponsesCompatibilityBody(outboundJSON) {
+		// Native Codex upstreams keep their private v2 envelope because
+		// portableResponses is false. OpenAI upstreams must still remove Codex
+		// client metadata and normalize multi-agent input items, including when
+		// remote_compaction_v2 selected the original-body preservation path.
+		if portableResponses && shouldNormalizeResponsesCompatibilityBody(outboundJSON) {
 			normalized, changed, err := normalizeResponsesCompatibilityBody(outboundJSON)
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())

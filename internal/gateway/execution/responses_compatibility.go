@@ -37,7 +37,8 @@ func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {
 		bytes.Contains(body, []byte(`"custom_tool_call_output"`)) ||
 		bytes.Contains(body, []byte(`"tool_search_output"`)) ||
 		bytes.Contains(body, []byte(`"additional_tools"`)) ||
-		bytes.Contains(body, []byte(`"agent_message"`))
+		bytes.Contains(body, []byte(`"agent_message"`)) ||
+		bytes.Contains(body, []byte(`"compaction"`))
 }
 
 func summarizeResponsesRequestShape(body []byte) string {
@@ -254,8 +255,23 @@ func normalizeResponsesInput(raw json.RawMessage, hasPreviousResponse bool) (jso
 	if err := platformencoding.Unmarshal(raw, &items); err != nil {
 		return raw, false, nil
 	}
-	callIDs := make(map[string]struct{})
 	changed := false
+	if !hasPreviousResponse {
+		// The latest official compaction item carries the state of everything
+		// before it. Replaying that prefix defeats compaction and can make strict
+		// upstreams reject a multi-megabyte request with a generic 400.
+		latestCompaction := -1
+		for index, item := range items {
+			if itemType := rawString(item["type"]); itemType == "compaction" || itemType == "compaction_summary" {
+				latestCompaction = index
+			}
+		}
+		if latestCompaction > 0 {
+			items = items[latestCompaction:]
+			changed = true
+		}
+	}
+	callIDs := make(map[string]struct{})
 	for _, item := range items {
 		itemType := rawString(item["type"])
 		if isResponsesFunctionCall(itemType) {

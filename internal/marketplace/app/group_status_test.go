@@ -97,7 +97,7 @@ func TestMarketplaceStatusIncludesOfficialGroupsWithoutMarketplaceRows(t *testin
 	require.NoError(t, err)
 	require.Len(t, models, 1)
 	require.Equal(t, "model-a", models[0].Model)
-	require.Len(t, models[0].RecentRequestSeries, 24)
+	require.Len(t, models[0].RecentRequestSeries, 6)
 	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "official-metadata", ChannelID: "official-metadata", PublicSlug: "official-metadata", InternalGroupName: "official-visible", SourceType: "official", Visibility: "public", LifecycleStatus: "active", VerificationStatus: "passed"}).Error)
 	items, err = ListMarketplaceGroupStatus(0)
 	require.NoError(t, err)
@@ -106,21 +106,4 @@ func TestMarketplaceStatusIncludesOfficialGroupsWithoutMarketplaceRows(t *testin
 		_, err = GetMarketplaceGroupModelStatus("official:"+name, 0)
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	}
-}
-
-func TestAggregateRecentRequestSeriesBuildsWeightedHourlyBuckets(t *testing.T) {
-	series := make([]RecentRequestBucket, 24)
-	for index := range series {
-		series[index].Ts = int64(1_000 + index*900)
-	}
-	series[0].RequestCount, series[0].SuccessRate = 3, 100
-	series[1].RequestCount, series[1].SuccessRate = 1, 0
-
-	result := aggregateRecentRequestSeries(series, 6)
-
-	require.Len(t, result, 6)
-	require.Equal(t, int64(1_000), result[0].Ts)
-	require.Equal(t, int64(4), result[0].RequestCount)
-	require.Equal(t, 75.0, result[0].SuccessRate)
-	require.Equal(t, int64(1_000+4*900), result[1].Ts)
 }

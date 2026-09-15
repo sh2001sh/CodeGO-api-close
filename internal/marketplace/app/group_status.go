@@ -51,7 +51,7 @@ func ListMarketplaceGroupStatus(viewerUserID int) ([]GroupStatusListItem, error)
 	return result, nil
 }
 
-const groupStatusWindowSegments = 6
+const groupStatusWindowSegments = marketplaceRecentWindowSegments
 
 func compactGroupStatusItem(item GroupListItem) GroupStatusListItem {
 	return GroupStatusListItem{
@@ -59,29 +59,8 @@ func compactGroupStatusItem(item GroupListItem) GroupStatusListItem {
 		SourceType: item.SourceType, SourceLabel: item.SourceLabel, Models: item.Models,
 		SuccessRate: item.SuccessRate, CacheHitRate: item.CacheHitRate,
 		LatestRequestStatus:        item.LatestRequestStatus,
-		RecentRequestSeries:        aggregateRecentRequestSeries(item.RecentRequestSeries, groupStatusWindowSegments),
-		RecentRequestBucketSeconds: marketplaceRecentBucketSeconds * (marketplaceRecentWindowSegments / groupStatusWindowSegments),
+		RecentRequestSeries:        item.RecentRequestSeries,
+		RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 		RequestCount:               item.RequestCount,
 	}
-}
-
-func aggregateRecentRequestSeries(series []RecentRequestBucket, segments int) []RecentRequestBucket {
-	if segments <= 0 || len(series) == 0 || len(series)%segments != 0 {
-		return series
-	}
-	width := len(series) / segments
-	result := make([]RecentRequestBucket, 0, segments)
-	for start := 0; start < len(series); start += width {
-		bucket := RecentRequestBucket{Ts: series[start].Ts}
-		var weightedSuccess float64
-		for _, source := range series[start : start+width] {
-			bucket.RequestCount += source.RequestCount
-			weightedSuccess += source.SuccessRate * float64(source.RequestCount)
-		}
-		if bucket.RequestCount > 0 {
-			bucket.SuccessRate = round2(weightedSuccess / float64(bucket.RequestCount))
-		}
-		result = append(result, bucket)
-	}
-	return result
 }

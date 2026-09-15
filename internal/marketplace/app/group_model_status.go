@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
@@ -17,7 +17,7 @@ type GroupModelRequestStatus struct {
 	RecentRequestSeries        []RecentRequestBucket `json:"recent_request_series"`
 }
 
-// GetMarketplaceGroupModelStatus shares the overview's cached group/model scan.
+// GetMarketplaceGroupModelStatus shares the overview's pre-aggregated metrics.
 // Visibility is checked before reading statistics, including on cache hits.
 func GetMarketplaceGroupModelStatus(slug string, viewerUserID int) ([]GroupModelRequestStatus, error) {
 	if strings.HasPrefix(slug, officialAutoRoutePrefix) {
@@ -32,12 +32,12 @@ func GetMarketplaceGroupModelStatus(slug string, viewerUserID int) ([]GroupModel
 	if err := platformdb.DB.Select("id, declared_models").Where("id = ?", group.ChannelID).First(&channel).Error; err != nil {
 		return nil, err
 	}
-	start, end := marketplaceRecentWindow(time.Now().Unix())
-	var rows []gatewaystore.GroupModelRequestBucket
+	start, _ := marketplaceRecentWindow(time.Now().Unix())
+	var rows []auditprojection.GroupModelSeries
 	groupName := strings.TrimSpace(group.InternalGroupName)
-	if groupName != "" && platformdb.LogDB != nil {
+	if groupName != "" && platformdb.DB != nil && platformdb.LogDB != nil {
 		var err error
-		rows, err = gatewaystore.LoadGroupModelRequestBuckets(start, end, marketplaceRecentBucketSeconds, []string{groupName})
+		rows, err = auditprojection.QuerySeriesByGroupModels(marketplaceRecentWindowHours, []string{groupName})
 		if err != nil {
 			return nil, err
 		}
@@ -45,7 +45,7 @@ func GetMarketplaceGroupModelStatus(slug string, viewerUserID int) ([]GroupModel
 	return buildGroupModelRequestStatus(start, groupName, decodeModels(channel.DeclaredModels), rows), nil
 }
 
-func buildGroupModelRequestStatus(start int64, groupName string, models []string, rows []gatewaystore.GroupModelRequestBucket) []GroupModelRequestStatus {
+func buildGroupModelRequestStatus(start int64, groupName string, models []string, rows []auditprojection.GroupModelSeries) []GroupModelRequestStatus {
 	result := make([]GroupModelRequestStatus, 0, len(models))
 	indices := make(map[string]int, len(models))
 	for _, model := range models {
@@ -55,27 +55,36 @@ func buildGroupModelRequestStatus(start int64, groupName string, models []string
 		indices[model] = len(result)
 		result = append(result, GroupModelRequestStatus{Model: model, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds, RecentRequestSeries: newMarketplaceRecentRequestSeries(start)})
 	}
-	successes := make([][marketplaceRecentWindowSegments]int64, len(result))
+	weightedSuccess := make([][]float64, len(result))
+	for index := range weightedSuccess {
+		weightedSuccess[index] = make([]float64, marketplaceRecentWindowSegments)
+	}
 	for _, row := range rows {
 		index, exists := indices[row.ModelName]
-		if !exists || row.GroupName != groupName || row.BucketIndex < 0 || row.BucketIndex >= marketplaceRecentWindowSegments || row.RequestCount <= 0 {
+		if !exists || row.Group != groupName {
 			continue
 		}
-		result[index].RecentRequestSeries[row.BucketIndex].RequestCount += row.RequestCount
-		successes[index][row.BucketIndex] += row.SuccessCount
+		for _, point := range row.Series {
+			bucketIndex := (point.Ts - start) / marketplaceRecentBucketSeconds
+			if point.Ts < start || bucketIndex < 0 || bucketIndex >= marketplaceRecentWindowSegments || point.RequestCount <= 0 {
+				continue
+			}
+			result[index].RecentRequestSeries[bucketIndex].RequestCount += point.RequestCount
+			weightedSuccess[index][bucketIndex] += point.SuccessRate * float64(point.RequestCount)
+		}
 	}
 	for index := range result {
-		var totalSuccess int64
+		var totalWeightedSuccess float64
 		for bucketIndex := range result[index].RecentRequestSeries {
 			bucket := &result[index].RecentRequestSeries[bucketIndex]
 			if bucket.RequestCount > 0 {
-				bucket.SuccessRate = round2(float64(successes[index][bucketIndex]) / float64(bucket.RequestCount) * 100)
+				bucket.SuccessRate = round2(weightedSuccess[index][bucketIndex] / float64(bucket.RequestCount))
 			}
 			result[index].RequestCount += bucket.RequestCount
-			totalSuccess += successes[index][bucketIndex]
+			totalWeightedSuccess += weightedSuccess[index][bucketIndex]
 		}
 		if result[index].RequestCount > 0 {
-			result[index].SuccessRate = round2(float64(totalSuccess) / float64(result[index].RequestCount) * 100)
+			result[index].SuccessRate = round2(totalWeightedSuccess / float64(result[index].RequestCount))
 		}
 	}
 	return result

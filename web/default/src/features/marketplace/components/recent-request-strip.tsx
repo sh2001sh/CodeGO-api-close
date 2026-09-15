@@ -28,7 +28,8 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
 }) {
   const { t, i18n } = useTranslation()
   const bucketSeconds = props.group.recent_request_bucket_seconds || 900
-  const segmentCount = props.segmentCount ?? 24
+  const segmentCount =
+    props.segmentCount ?? props.group.recent_request_series?.length ?? 24
   const series = useMemo(
     () =>
       normalizeRecentRequestSeries(
@@ -50,6 +51,7 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
   )
   const latestStatus = resolveRecentRequestStatus(series)
   const bucketLabel = formatBucketDuration(bucketSeconds, t)
+  const windowLabel = formatBucketDuration(bucketSeconds * segmentCount, t)
   const threshold = t(
     '每个色块代表 {{duration}}：大于 90% 绿色，75% 至 90% 黄色，低于 75% 红色，灰色表示无请求',
     { duration: bucketLabel }
@@ -64,14 +66,17 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
       {!props.compact && (
         <div className='mb-1 flex items-center justify-between gap-2 text-[11px]'>
           <span className='text-muted-foreground'>
-            {t('近 6 小时 · 每格 {{duration}}', { duration: bucketLabel })}
+            {t('近 {{window}} · 每格 {{duration}}', {
+              window: windowLabel,
+              duration: bucketLabel,
+            })}
           </span>
           <RequestStatus status={latestStatus} t={t} />
         </div>
       )}
       <div
         className='flex w-full gap-0.5'
-        aria-label={`${t('近 6 小时请求状态')}。${threshold}`}
+        aria-label={`${t('近 {{window}}请求状态', { window: windowLabel })}。${threshold}`}
       >
         {series.map((bucket, index) => {
           const range = formatBucketRange(bucket.ts, bucketSeconds, formatter)

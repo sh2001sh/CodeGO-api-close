@@ -63,4 +63,25 @@ describe('recent request series', () => {
 
     assert.equal(series.at(-2)?.request_count, 4)
   })
+
+  test('keeps a six-bucket hourly API series at six visible hours', () => {
+    const bucketSeconds = 3600
+    const now = 20 * bucketSeconds
+    const input = Array.from({ length: 6 }, (_, index) => ({
+      ts: (15 + index) * bucketSeconds,
+      success_rate: 95,
+      request_count: 10,
+    }))
+
+    const series = normalizeRecentRequestSeries(
+      input,
+      bucketSeconds,
+      now,
+      input.length
+    )
+
+    assert.equal(series.length, 6)
+    assert.equal(series[0].ts, 15 * bucketSeconds)
+    assert.equal(series.at(-1)?.ts, 20 * bucketSeconds)
+  })
 })

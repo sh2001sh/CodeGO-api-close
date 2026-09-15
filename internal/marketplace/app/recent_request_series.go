@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
-	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
@@ -20,8 +20,8 @@ var recentSeriesCache struct {
 
 const (
 	marketplaceRecentWindowHours    = 6
-	marketplaceRecentWindowSegments = 24
-	marketplaceRecentBucketSeconds  = int64(marketplaceRecentWindowHours * 3600 / marketplaceRecentWindowSegments)
+	marketplaceRecentWindowSegments = 6
+	marketplaceRecentBucketSeconds  = int64(3600)
 )
 
 func marketplaceRecentRequestSeries(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel) (map[int][]RecentRequestBucket, error) {
@@ -36,6 +36,7 @@ func marketplaceRecentRequestSeries(groups []marketplaceschema.Group, channels m
 		return data, nil
 	}
 	recentSeriesCache.Unlock()
+
 	groupChannelIDs := make(map[string]int, len(groups))
 	groupNames := make([]string, 0, len(groups))
 	for _, group := range groups {
@@ -51,16 +52,11 @@ func marketplaceRecentRequestSeries(groups []marketplaceschema.Group, channels m
 		return map[int][]RecentRequestBucket{}, nil
 	}
 
-	windowStart, windowEnd := marketplaceRecentWindow(time.Now().Unix())
-	if platformdb.LogDB == nil {
+	windowStart, _ := marketplaceRecentWindow(time.Now().Unix())
+	if platformdb.DB == nil || platformdb.LogDB == nil {
 		return buildMarketplaceRecentRequestSeries(windowStart, groupChannelIDs, nil), nil
 	}
-	rows, err := gatewaystore.LoadCachedGroupModelRequestBuckets(
-		windowStart,
-		windowEnd,
-		marketplaceRecentBucketSeconds,
-		groupNames,
-	)
+	rows, err := auditprojection.QuerySeriesByGroupModels(marketplaceRecentWindowHours, groupNames)
 	if err != nil {
 		return nil, err
 	}
@@ -90,31 +86,39 @@ func newMarketplaceRecentRequestSeries(windowStart int64) []RecentRequestBucket 
 	return series
 }
 
-func buildMarketplaceRecentRequestSeries(windowStart int64, groupChannelIDs map[string]int, rows []gatewaystore.GroupModelRequestBucket) map[int][]RecentRequestBucket {
+// buildMarketplaceRecentRequestSeries combines every model in a group by
+// request volume. It only consumes the compact perf_metrics projection and
+// never falls back to scanning the raw audit log.
+func buildMarketplaceRecentRequestSeries(windowStart int64, groupChannelIDs map[string]int, rows []auditprojection.GroupModelSeries) map[int][]RecentRequestBucket {
 	result := make(map[int][]RecentRequestBucket, len(groupChannelIDs))
-	successCounts := make(map[int][]int64, len(groupChannelIDs))
+	weightedSuccess := make(map[int][]float64, len(groupChannelIDs))
 	for _, channelID := range groupChannelIDs {
 		if _, exists := result[channelID]; exists {
 			continue
 		}
 		result[channelID] = newMarketplaceRecentRequestSeries(windowStart)
-		successCounts[channelID] = make([]int64, marketplaceRecentWindowSegments)
+		weightedSuccess[channelID] = make([]float64, marketplaceRecentWindowSegments)
 	}
 
 	for _, row := range rows {
-		channelID, exists := groupChannelIDs[row.GroupName]
-		if !exists || row.BucketIndex < 0 || row.BucketIndex >= marketplaceRecentWindowSegments {
+		channelID, exists := groupChannelIDs[row.Group]
+		if !exists {
 			continue
 		}
-		index := int(row.BucketIndex)
-		bucket := &result[channelID][index]
-		bucket.RequestCount += row.RequestCount
-		successCounts[channelID][index] += row.SuccessCount
+		for _, point := range row.Series {
+			bucketIndex := (point.Ts - windowStart) / marketplaceRecentBucketSeconds
+			if point.Ts < windowStart || bucketIndex < 0 || bucketIndex >= marketplaceRecentWindowSegments || point.RequestCount <= 0 {
+				continue
+			}
+			bucket := &result[channelID][bucketIndex]
+			bucket.RequestCount += point.RequestCount
+			weightedSuccess[channelID][bucketIndex] += point.SuccessRate * float64(point.RequestCount)
+		}
 	}
 	for channelID, series := range result {
 		for index := range series {
 			if series[index].RequestCount > 0 {
-				series[index].SuccessRate = round2(float64(successCounts[channelID][index]) / float64(series[index].RequestCount) * 100)
+				series[index].SuccessRate = round2(weightedSuccess[channelID][index] / float64(series[index].RequestCount))
 			}
 		}
 	}
@@ -123,43 +127,41 @@ func buildMarketplaceRecentRequestSeries(windowStart int64, groupChannelIDs map[
 
 func loadOfficialGroupRecentRequestStatuses(groupNames []string) map[string]string {
 	statuses := buildRecentRequestStatusesByGroup(groupNames, nil)
-	if len(groupNames) == 0 || platformdb.LogDB == nil {
+	if len(groupNames) == 0 || platformdb.DB == nil || platformdb.LogDB == nil {
 		return statuses
 	}
-
-	windowStart, windowEnd := marketplaceRecentWindow(time.Now().Unix())
-	rows, err := gatewaystore.LoadCachedGroupModelRequestBuckets(
-		windowStart,
-		windowEnd,
-		marketplaceRecentBucketSeconds,
-		groupNames,
-	)
+	rows, err := auditprojection.QuerySeriesByGroupModels(marketplaceRecentWindowHours, groupNames)
 	if err != nil {
 		return statuses
 	}
 	return buildRecentRequestStatusesByGroup(groupNames, rows)
 }
 
-func buildRecentRequestStatusesByGroup(groupNames []string, rows []gatewaystore.GroupModelRequestBucket) map[string]string {
+func buildRecentRequestStatusesByGroup(groupNames []string, rows []auditprojection.GroupModelSeries) map[string]string {
 	statuses := make(map[string]string, len(groupNames))
 	for _, groupName := range groupNames {
 		statuses[groupName] = gatewaydomain.RequestHealthUnknown
 	}
+
+	windowStart, _ := marketplaceRecentWindow(time.Now().Unix())
 	type bucketCounts struct {
-		requests int64
-		success  int64
+		requests        int64
+		weightedSuccess float64
 	}
 	counts := make(map[string][]bucketCounts, len(groupNames))
 	for _, row := range rows {
-		if row.BucketIndex < 0 || row.BucketIndex >= marketplaceRecentWindowSegments {
-			continue
+		if _, ok := counts[row.Group]; !ok {
+			counts[row.Group] = make([]bucketCounts, marketplaceRecentWindowSegments)
 		}
-		if _, ok := counts[row.GroupName]; !ok {
-			counts[row.GroupName] = make([]bucketCounts, marketplaceRecentWindowSegments)
+		for _, point := range row.Series {
+			index := (point.Ts - windowStart) / marketplaceRecentBucketSeconds
+			if point.Ts < windowStart || index < 0 || index >= marketplaceRecentWindowSegments || point.RequestCount <= 0 {
+				continue
+			}
+			bucket := &counts[row.Group][index]
+			bucket.requests += point.RequestCount
+			bucket.weightedSuccess += point.SuccessRate * float64(point.RequestCount)
 		}
-		bucket := &counts[row.GroupName][row.BucketIndex]
-		bucket.requests += row.RequestCount
-		bucket.success += row.SuccessCount
 	}
 	for groupName, buckets := range counts {
 		for index := len(buckets) - 1; index >= 0; index-- {
@@ -167,8 +169,7 @@ func buildRecentRequestStatusesByGroup(groupNames []string, rows []gatewaystore.
 			if bucket.requests <= 0 {
 				continue
 			}
-			successRate := float64(bucket.success) / float64(bucket.requests) * 100
-			statuses[groupName] = gatewaydomain.ClassifyRequestHealth(successRate, bucket.requests)
+			statuses[groupName] = gatewaydomain.ClassifyRequestHealth(bucket.weightedSuccess/float64(bucket.requests), bucket.requests)
 			break
 		}
 	}

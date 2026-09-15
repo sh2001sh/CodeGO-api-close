@@ -8,7 +8,6 @@ import (
 
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
-	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 )
 
 func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segmentCount int) (map[string]*float64, map[string][]UserGroupStatusBucket, map[string]int64, float64, int64) {
@@ -35,7 +34,7 @@ func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segment
 	now := time.Now().Unix()
 	windowStart, windowEnd, alignedSegments := buildAlignedStatusWindow(now, windowSeconds, requestedBucketSeconds)
 
-	if actualBucketSeconds, ok := fillGroupModelPerfHealth(
+	actualBucketSeconds, _ := fillGroupModelPerfHealth(
 		rates,
 		seriesByModel,
 		requestCounts,
@@ -44,12 +43,8 @@ func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segment
 		requestedBucketSeconds,
 		alignedSegments,
 		groupNames,
-	); ok {
-		return rates, seriesByModel, requestCounts, sampleWindowHours, actualBucketSeconds
-	}
-
-	fillGroupModelLogHealth(rates, seriesByModel, requestCounts, windowStart, windowEnd, requestedBucketSeconds, alignedSegments, groupNames)
-	return rates, seriesByModel, requestCounts, sampleWindowHours, requestedBucketSeconds
+	)
+	return rates, seriesByModel, requestCounts, sampleWindowHours, actualBucketSeconds
 }
 
 func fillGroupModelPerfHealth(
@@ -62,6 +57,10 @@ func fillGroupModelPerfHealth(
 	segmentCount int,
 	groupNames []string,
 ) (int64, bool) {
+	actualBucketSeconds := auditprojection.PerfMetricsBucketSeconds()
+	if actualBucketSeconds <= 0 {
+		actualBucketSeconds = bucketSeconds
+	}
 	hours := int(math.Ceil(float64(windowEnd-windowStart) / 3600))
 	if hours <= 0 {
 		hours = 1
@@ -69,25 +68,19 @@ func fillGroupModelPerfHealth(
 
 	summaryRows, err := auditprojection.QuerySummaryByGroupModels(hours, groupNames)
 	if err != nil {
-		return bucketSeconds, false
+		return actualBucketSeconds, false
 	}
 	seriesRows, err := auditprojection.QuerySeriesByGroupModels(hours, groupNames)
 	if err != nil && len(summaryRows) == 0 {
-		return bucketSeconds, false
+		return actualBucketSeconds, false
 	}
 	if len(summaryRows) == 0 && len(seriesRows) == 0 {
-		return bucketSeconds, false
+		return actualBucketSeconds, false
 	}
 
 	applyPerfSummaryRows(rates, requestCounts, summaryRows)
 
-	actualBucketSeconds := auditprojection.PerfMetricsBucketSeconds()
-	if actualBucketSeconds <= 0 {
-		actualBucketSeconds = bucketSeconds
-	}
-
 	applyPerfSeriesRows(seriesByModel, seriesRows, windowStart, windowEnd, actualBucketSeconds)
-	overlayLiveGroupModelLogHealth(seriesByModel, windowStart, windowEnd, actualBucketSeconds, groupNames)
 	return actualBucketSeconds, len(requestCounts) > 0 || len(seriesByModel) > 0
 }
 
@@ -125,52 +118,6 @@ func applyPerfSeriesRows(seriesByModel map[string][]UserGroupStatusBucket, rows 
 	}
 }
 
-func fillGroupModelLogHealth(
-	rates map[string]*float64,
-	seriesByModel map[string][]UserGroupStatusBucket,
-	requestCounts map[string]int64,
-	windowStart int64,
-	windowEnd int64,
-	bucketSeconds int64,
-	segmentCount int,
-	groupNames []string,
-) bool {
-	rows, err := gatewaystore.LoadGroupModelRequestBuckets(windowStart, windowEnd, bucketSeconds, groupNames)
-	if err != nil {
-		return false
-	}
-
-	successCounts := make(map[string]int64)
-	for _, row := range rows {
-		if row.BucketIndex < 0 || row.BucketIndex >= int64(segmentCount) {
-			continue
-		}
-		key := row.GroupName + "::" + row.ModelName
-		if _, ok := seriesByModel[key]; !ok {
-			seriesByModel[key] = buildStatusSeries(windowStart, segmentCount, bucketSeconds)
-		}
-		bucket := &seriesByModel[key][row.BucketIndex]
-		bucket.RequestCount += row.RequestCount
-		if row.RequestCount > 0 {
-			rate := float64(row.SuccessCount) / float64(row.RequestCount) * 100
-			bucket.SuccessRate = &rate
-			requestCounts[key] += row.RequestCount
-			successCounts[key] += row.SuccessCount
-		}
-	}
-	applyGroupModelRates(rates, requestCounts, successCounts)
-	return len(requestCounts) > 0 || len(seriesByModel) > 0
-}
-
-func applyGroupModelRates(rates map[string]*float64, requestCounts map[string]int64, successCounts map[string]int64) {
-	for key, requestCount := range requestCounts {
-		if requestCount > 0 {
-			rate := float64(successCounts[key]) / float64(requestCount) * 100
-			rates[key] = &rate
-		}
-	}
-}
-
 func modelStatusWeight(status string) int {
 	switch status {
 	case gatewaydomain.RequestHealthFailed:
@@ -192,7 +139,6 @@ func classifyGroupModelRequestHealth(successRate *float64, requestCount int64) s
 }
 
 func summarizeGroupModelRequestHealth(items []UserGroupModelStatusItem) (string, int64, *float64) {
-	status := gatewaydomain.RequestHealthUnknown
 	requestCount := int64(0)
 	weightedSuccess := float64(0)
 	weightedRequests := int64(0)
@@ -201,17 +147,14 @@ func summarizeGroupModelRequestHealth(items []UserGroupModelStatusItem) (string,
 		if item.RequestCount <= 0 || item.SuccessRate == nil {
 			continue
 		}
-		if status == gatewaydomain.RequestHealthUnknown || modelStatusWeight(item.Status) < modelStatusWeight(status) {
-			status = item.Status
-		}
 		weightedSuccess += *item.SuccessRate * float64(item.RequestCount)
 		weightedRequests += item.RequestCount
 	}
 	if weightedRequests == 0 {
-		return status, requestCount, nil
+		return gatewaydomain.RequestHealthUnknown, requestCount, nil
 	}
 	rate := weightedSuccess / float64(weightedRequests)
-	return status, requestCount, &rate
+	return gatewaydomain.ClassifyRequestHealth(rate, weightedRequests), requestCount, &rate
 }
 
 func latestNonEmptyGroupStatusBucket(series []UserGroupStatusBucket) (*float64, int64) {

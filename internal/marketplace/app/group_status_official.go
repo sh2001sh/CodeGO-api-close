@@ -10,7 +10,6 @@ import (
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
-	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -87,11 +86,11 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 	for index, name := range names {
 		groupIndices[name] = index + 1
 	}
-	start, end := marketplaceRecentWindow(time.Now().Unix())
-	var rows []gatewaystore.GroupModelRequestBucket
+	start, _ := marketplaceRecentWindow(time.Now().Unix())
+	var rows []auditprojection.GroupModelSeries
 	var summaries []auditprojection.GroupSummary
-	if platformdb.LogDB != nil {
-		rows, err = gatewaystore.LoadCachedGroupModelRequestBuckets(start, end, marketplaceRecentBucketSeconds, names)
+	if platformdb.DB != nil && platformdb.LogDB != nil {
+		rows, err = auditprojection.QuerySeriesByGroupModels(marketplaceRecentWindowHours, names)
 		if err != nil {
 			return nil, err
 		}
@@ -206,10 +205,10 @@ func getOfficialGroupModelStatus(name string, viewerUserID int) ([]GroupModelReq
 	if !exists {
 		return nil, gorm.ErrRecordNotFound
 	}
-	start, end := marketplaceRecentWindow(time.Now().Unix())
-	var rows []gatewaystore.GroupModelRequestBucket
-	if platformdb.LogDB != nil {
-		rows, err = gatewaystore.LoadCachedGroupModelRequestBuckets(start, end, marketplaceRecentBucketSeconds, []string{name})
+	start, _ := marketplaceRecentWindow(time.Now().Unix())
+	var rows []auditprojection.GroupModelSeries
+	if platformdb.DB != nil && platformdb.LogDB != nil {
+		rows, err = auditprojection.QuerySeriesByGroupModels(marketplaceRecentWindowHours, []string{name})
 		if err != nil {
 			return nil, err
 		}

@@ -2,7 +2,6 @@ package app
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -40,9 +39,6 @@ type channelTestOptions struct {
 	CreditPoolPolicy       string
 	MarketplaceMultiplier  float64
 	MarketplaceModelPrices map[string]marketplacedomain.ChannelModelPrice
-	Prompt                 string
-	MaxOutputTokens        uint
-	CaptureFullStreamBody  bool
 }
 
 func testChannel(channel *gatewayschema.Channel, testModel string, endpointType string, isStream bool) channelTestResult {
@@ -155,19 +151,6 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 
 	relayFormat := resolveChannelTestRelayFormat(endpointType, ctx.Request.URL.Path)
 	request := buildTestRequest(testModel, endpointType, channel, isStream)
-	if options.Prompt != "" {
-		input, marshalErr := platformencoding.Marshal([]map[string]string{{"role": "user", "content": options.Prompt}})
-		if marshalErr != nil {
-			return channelTestResult{context: ctx, localErr: marshalErr}
-		}
-		maxOutputTokens := options.MaxOutputTokens
-		if maxOutputTokens == 0 {
-			maxOutputTokens = 6000
-		}
-		request = buildPromptedResponsesTestRequest(testModel, input, maxOutputTokens, isStream)
-		endpointType = string(constant.EndpointTypeOpenAIResponse)
-		ctx.Request.URL = buildChannelTestRequestURL(resolveChannelTestRequestPath(channel, testModel, endpointType))
-	}
 	info, err := relaycommon.GenRelayInfo(ctx, relayFormat, request, nil)
 	if err != nil {
 		return channelTestResult{
@@ -337,7 +320,7 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 	}
 
 	responseResult := writer.Result()
-	respBody, err := readTestResponseBody(responseResult.Body, isStream, options.CaptureFullStreamBody)
+	respBody, err := readTestResponseBody(responseResult.Body, isStream)
 	if err != nil {
 		return channelTestResult{
 			context:     ctx,
@@ -408,14 +391,7 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 		})
 	}
 	platformobservability.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
-	result.responseBody = append([]byte(nil), respBody...)
 	return result
-}
-
-func buildPromptedResponsesTestRequest(model string, input json.RawMessage, maxOutputTokens uint, isStream bool) *dto.OpenAIResponsesRequest {
-	return &dto.OpenAIResponsesRequest{
-		Model: model, Input: input, Stream: lo.ToPtr(isStream), MaxOutputTokens: &maxOutputTokens,
-	}
 }
 
 func convertChannelTestRequest(ctx *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, request dto.Request) (any, error) {

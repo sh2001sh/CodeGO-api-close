@@ -84,9 +84,6 @@ export const channelFormSchema = z.object({
   auto_probe_enabled: z.boolean(),
   auto_probe_interval_minutes: z.number().int().min(1).max(1440),
   auto_probe_model: z.string().max(128),
-  pelican_probe_enabled: z.boolean(),
-  pelican_probe_daily_minute: z.number().int().min(0).max(1439),
-  pelican_probe_model: z.string().max(128),
   model_consistency_status: z.enum([
     'none',
     'passed',
@@ -121,9 +118,6 @@ export const channelFormDefaults: ChannelFormInput = {
   auto_probe_enabled: false,
   auto_probe_interval_minutes: 10,
   auto_probe_model: '',
-  pelican_probe_enabled: false,
-  pelican_probe_daily_minute: 0,
-  pelican_probe_model: '',
   model_consistency_status: 'none',
 }
 
@@ -167,9 +161,6 @@ export function channelFormDefaultsForEdit(
         ? channel.auto_probe_interval_minutes
         : channelFormDefaults.auto_probe_interval_minutes,
     auto_probe_model: channel.auto_probe_model || declaredModels[0] || '',
-    pelican_probe_enabled: channel.pelican_probe_enabled ?? false,
-    pelican_probe_daily_minute: channel.pelican_probe_daily_minute ?? 0,
-    pelican_probe_model: channel.pelican_probe_model || declaredModels[0] || '',
     model_consistency_status: channel.model_consistency_status || 'none',
   }
 }

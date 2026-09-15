@@ -2,9 +2,7 @@ package http
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/csv"
-	"encoding/hex"
 	"mime"
 	"net/http"
 	"strconv"
@@ -146,40 +144,6 @@ func StartBatchTest(c *gin.Context) {
 func GetBatchTest(c *gin.Context) {
 	result, err := marketplaceapp.GetBatchMarketplaceTest(c.GetInt("id"), c.Param("id"))
 	respond(c, result, err)
-}
-
-func StartPelicanTest(c *gin.Context) {
-	var req marketplaceapp.PelicanTestRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpapi.ApiError(c, err)
-		return
-	}
-	result, err := marketplaceapp.StartPelicanTest(c.GetInt("id"), req)
-	respond(c, result, err)
-}
-
-func GetPelicanTest(c *gin.Context) {
-	result, err := marketplaceapp.GetPelicanTest(c.GetInt("id"), c.Param("id"))
-	respond(c, result, err)
-}
-
-func GetPelicanArtifact(c *gin.Context) {
-	artifact, err := marketplaceapp.GetPelicanArtifact(c.Query("group_id"), c.Query("model"), c.GetInt("id"))
-	if err != nil {
-		httpapi.ApiError(c, err)
-		return
-	}
-	digest := sha256.Sum256([]byte(artifact.SVG))
-	etag := `"` + hex.EncodeToString(digest[:12]) + `"`
-	if c.GetHeader("If-None-Match") == etag {
-		c.Status(http.StatusNotModified)
-		return
-	}
-	c.Header("ETag", etag)
-	c.Header("Cache-Control", "public, max-age=86400, immutable")
-	c.Header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:")
-	c.Header("X-Content-Type-Options", "nosniff")
-	c.Data(http.StatusOK, "image/svg+xml; charset=utf-8", []byte(artifact.SVG))
 }
 
 func CreateChannel(c *gin.Context) {

@@ -508,26 +508,6 @@ export async function getMarketplaceBatchTest(id: string) {
   return requireData(response.data)
 }
 
-export async function startMarketplacePelicanTest(input: {
-  groupId: string
-  model: string
-}) {
-  const response = await api.post<
-    ApiResponse<import('./types').MarketplacePelicanTest>
-  >('/api/marketplace/pelican-tests', {
-    group_id: input.groupId,
-    model: input.model,
-  })
-  return requireData(response.data)
-}
-
-export async function getMarketplacePelicanTest(id: string) {
-  const response = await api.get<
-    ApiResponse<import('./types').MarketplacePelicanTest>
-  >(`/api/marketplace/pelican-tests/${encodeURIComponent(id)}`)
-  return requireData(response.data)
-}
-
 export async function getMarketplaceObservability(input?: {
   startTimestamp?: number
   endTimestamp?: number

@@ -1,13 +1,10 @@
 package app
 
 import (
-	"encoding/json"
 	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
-	"io"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -17,65 +14,6 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
-
-func TestExtractMarketplaceContentFromResponsesStream(t *testing.T) {
-	body := []byte("event: response.output_text.delta\n" +
-		`data: {"type":"response.output_text.delta","delta":"<svg>"}` + "\n\n" +
-		`data: {"type":"response.output_text.delta","delta":"<rect/></svg>"}` + "\n\n" +
-		`data: {"type":"response.completed","response":{"status":"completed"}}` + "\n\n")
-
-	text, err := extractMarketplaceContentFromResponsesStream(body)
-	require.NoError(t, err)
-	require.Equal(t, "<svg><rect/></svg>", text)
-}
-
-func TestExtractMarketplaceContentFromResponsesStreamRejectsIncompleteOutput(t *testing.T) {
-	body := []byte(`data: {"type":"response.output_text.delta","delta":"<svg>"}` + "\n\n" +
-		`data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reasoning":"max_output_tokens"}}}` + "\n\n")
-
-	_, err := extractMarketplaceContentFromResponsesStream(body)
-	require.EqualError(t, err, "模型输出达到长度上限，未生成完整内容")
-}
-
-func TestExtractMarketplaceContentFromResponsesStreamRequiresTerminalEvent(t *testing.T) {
-	body := []byte(`data: {"type":"response.output_text.delta","delta":"<svg>"}` + "\n\n")
-
-	_, err := extractMarketplaceContentFromResponsesStream(body)
-	require.EqualError(t, err, "模型流式输出未正常完成")
-}
-
-func TestBuildPromptedResponsesTestRequestEnablesStreaming(t *testing.T) {
-	request := buildPromptedResponsesTestRequest("gpt-test", json.RawMessage(`[]`), 12000, true)
-	require.NotNil(t, request.Stream)
-	require.True(t, *request.Stream)
-	require.Equal(t, uint(12000), *request.MaxOutputTokens)
-}
-
-func TestReadTestResponseBodyCapturesFullMarketplaceStream(t *testing.T) {
-	body := strings.Repeat("x", 12<<10)
-	captured, err := readTestResponseBody(io.NopCloser(strings.NewReader(body)), true, true)
-	require.NoError(t, err)
-	require.Len(t, captured, len(body))
-
-	logOnly, err := readTestResponseBody(io.NopCloser(strings.NewReader(body)), true, false)
-	require.NoError(t, err)
-	require.Len(t, logOnly, 8<<10)
-}
-
-func TestValidateMarketplaceContentResponseRejectsTokenLimit(t *testing.T) {
-	response := &dto.OpenAIResponsesResponse{
-		Status:            json.RawMessage(`"incomplete"`),
-		IncompleteDetails: &dto.IncompleteDetails{Reasoning: "max_output_tokens"},
-	}
-
-	err := validateMarketplaceContentResponse(response)
-	require.EqualError(t, err, "模型输出达到长度上限，未生成完整内容")
-}
-
-func TestValidateMarketplaceContentResponseAcceptsCompletedResponse(t *testing.T) {
-	response := &dto.OpenAIResponsesResponse{Status: json.RawMessage(`"completed"`)}
-	require.NoError(t, validateMarketplaceContentResponse(response))
-}
 
 func TestAutomaticChannelTestSkipsManuallyDisabledChannel(t *testing.T) {
 	require.False(t, shouldAutomaticallyTestChannel(&gatewayschema.Channel{

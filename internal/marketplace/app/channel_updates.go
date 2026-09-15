@@ -26,9 +26,6 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	if err := applyAutoProbeUpdate(channel, req); err != nil {
 		return false, err
 	}
-	if err := applyPelicanProbeUpdate(channel, group, req); err != nil {
-		return false, err
-	}
 	if req.SensitiveWordInterceptionEnabled != nil {
 		channel.SensitiveWordInterceptionEnabled = req.SensitiveWordInterceptionEnabled
 	}
@@ -52,35 +49,6 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	}
 	normalizeInternalGroupName(group, channel.ID, channel.SubmittedSourceLabel)
 	return reverify, nil
-}
-
-func applyPelicanProbeUpdate(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest) error {
-	enabled := channel.PelicanProbeEnabled
-	dailyMinute := channel.PelicanProbeDailyMinute
-	model := channel.PelicanProbeModel
-	if req.PelicanProbeEnabled != nil {
-		enabled = *req.PelicanProbeEnabled
-	}
-	if enabled && group.SourceType != marketplacedomain.SourceTypeMarketplaceUser {
-		return fmt.Errorf("官方分组不支持定时鹈鹕测试")
-	}
-	if req.PelicanProbeDailyMinute != nil {
-		dailyMinute = *req.PelicanProbeDailyMinute
-	}
-	if req.PelicanProbeModel != nil {
-		model = strings.TrimSpace(*req.PelicanProbeModel)
-	}
-	models := decodeModels(channel.DeclaredModels)
-	if enabled && !containsFold(models, model) && len(models) > 0 && req.DeclaredModels != nil {
-		model = models[0]
-	}
-	if err := validatePelicanProbe(enabled, dailyMinute, model, models); err != nil {
-		return err
-	}
-	channel.PelicanProbeEnabled = enabled
-	channel.PelicanProbeDailyMinute = dailyMinute
-	channel.PelicanProbeModel = model
-	return nil
 }
 
 func applyChannelModelUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) (bool, error) {

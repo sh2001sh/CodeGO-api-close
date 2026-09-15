@@ -29,7 +29,6 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { formatQuota } from '@/lib/format'
 import {
   Command,
   CommandEmpty,
@@ -49,10 +48,8 @@ import {
   bindMarketplaceToken,
   createMarketplaceBargainRequest,
   getMarketplaceBatchTest,
-  getMarketplacePelicanTest,
   getMarketplaceRoutePools,
   startMarketplaceBatchTest,
-  startMarketplacePelicanTest,
 } from '@/features/marketplace/api'
 import {
   useMarketplaceAutoRoutePool,
@@ -208,9 +205,6 @@ export function DawnMarket() {
     null
   )
   const [testGroup, setTestGroup] = useState<MarketplaceGroup | null>(null)
-  const [pelicanGroup, setPelicanGroup] = useState<MarketplaceGroup | null>(
-    null
-  )
   const [mockMode, setMockMode] = useState(
     () => new URLSearchParams(window.location.search).get('mock') === '1'
   )
@@ -801,9 +795,6 @@ export function DawnMarket() {
                               onUse={(target) => setUseGroup(target)}
                               onBindKey={(target) => setUseGroup(target)}
                               onTest={(target) => setTestGroup(target)}
-                              onPelicanTest={(target) =>
-                                setPelicanGroup(target)
-                              }
                               onBargain={(target) => setBargainGroup(target)}
                               onJoinPool={(target) => void joinPool(target)}
                               priceInfo={groupPrices.get(group.id)}
@@ -942,197 +933,7 @@ export function DawnMarket() {
           onClose={() => setTestGroup(null)}
         />
       )}
-      {pelicanGroup && (
-        <PelicanDialog
-          group={pelicanGroup}
-          onClose={() => setPelicanGroup(null)}
-          onCompleted={() =>
-            void queryClient.invalidateQueries({ queryKey: ['marketplace'] })
-          }
-        />
-      )}
     </div>
-  )
-}
-
-function PelicanDialog(props: {
-  group: MarketplaceGroup
-  onClose: () => void
-  onCompleted: () => void
-}) {
-  const [model, setModel] = useState(props.group.models[0] ?? '')
-  const [task, setTask] = useState<
-    import('@/features/marketplace/types').MarketplacePelicanTest | null
-  >(null)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (!task || (task.status !== 'queued' && task.status !== 'running')) return
-    const timer = window.setTimeout(async () => {
-      try {
-        const next = await getMarketplacePelicanTest(task.id)
-        setTask(next)
-        if (next.status === 'completed') props.onCompleted()
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : '读取鹈鹕测试状态失败'
-        )
-      }
-    }, 1200)
-    return () => window.clearTimeout(timer)
-  }, [task, props])
-
-  const run = async () => {
-    setBusy(true)
-    try {
-      setTask(
-        await startMarketplacePelicanTest({ groupId: props.group.id, model })
-      )
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '鹈鹕测试启动失败')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const modelArtifact = props.group.pelican_artifacts?.find(
-    (artifact) => artifact.model === model
-  )
-  const completedTask =
-    task?.status === 'completed' && task.model === model ? task : null
-  const storedArtifactURL =
-    modelArtifact?.artifact_url ??
-    (props.group.pelican_model === model
-      ? props.group.pelican_artifact_url
-      : '')
-  const storedGeneratedAt =
-    modelArtifact?.generated_at ??
-    (props.group.pelican_model === model
-      ? props.group.pelican_generated_at
-      : null)
-  const artifactURL = completedTask?.artifact_url
-    ? `${completedTask.artifact_url}${completedTask.artifact_url.includes('?') ? '&' : '?'}v=${encodeURIComponent(completedTask.generated_at ?? '')}`
-    : storedArtifactURL
-      ? `${storedArtifactURL}${storedArtifactURL.includes('?') ? '&' : '?'}v=${encodeURIComponent(storedGeneratedAt ?? '')}`
-      : ''
-  const generatedAt = completedTask?.generated_at ?? storedGeneratedAt
-  return (
-    <DawnModal open onClose={props.onClose} variant='narrow' label='鹈鹕测试'>
-      <div className='m-main'>
-        <ModalHead
-          title={`鹈鹕测试 · ${props.group.system_display_name}`}
-          onClose={props.onClose}
-        />
-        <p
-          style={{
-            margin: '0 0 12px',
-            color: 'var(--dawn-muted)',
-            fontSize: 12,
-          }}
-        >
-          手动测试按正常模型调用计费，使用当前用户自己的额度。
-        </p>
-        <div className='field'>
-          <label>测试模型</label>
-          <select
-            value={model}
-            onChange={(event) => setModel(event.target.value)}
-            disabled={task?.status === 'queued' || task?.status === 'running'}
-          >
-            {props.group.models.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </div>
-        {artifactURL ? (
-          <img
-            src={artifactURL}
-            alt='最新鹈鹕骑自行车作品'
-            style={{
-              width: '100%',
-              maxHeight: 360,
-              objectFit: 'contain',
-              marginTop: 14,
-              borderRadius: 8,
-              background: 'var(--dawn-panel)',
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              marginTop: 14,
-              padding: 32,
-              textAlign: 'center',
-              color: 'var(--dawn-muted)',
-              border: '1px dashed var(--dawn-line)',
-              borderRadius: 8,
-            }}
-          >
-            暂无鹈鹕作品
-          </div>
-        )}
-        {generatedAt && (
-          <div className='kv'>
-            <span>生成时间</span>
-            <b>
-              {new Date(generatedAt).toLocaleString('zh-CN', { hour12: false })}
-            </b>
-          </div>
-        )}
-        {task && (
-          <>
-            <div className='kv'>
-              <span>状态</span>
-              <b>
-                {task.status === 'completed'
-                  ? '生成成功'
-                  : task.status === 'failed'
-                    ? '生成失败'
-                    : '生成中'}
-              </b>
-            </div>
-            {task.duration_ms > 0 && (
-              <div className='kv'>
-                <span>耗时</span>
-                <b>{(task.duration_ms / 1000).toFixed(1)} 秒</b>
-              </div>
-            )}
-            {task.status === 'completed' && (
-              <div className='kv'>
-                <span>实际扣费</span>
-                <b>{formatQuota(task.quota_charged)}</b>
-              </div>
-            )}
-            {task.error && (
-              <p style={{ color: 'var(--dawn-bad)', fontSize: 12 }}>
-                {task.error}（旧作品已保留）
-              </p>
-            )}
-          </>
-        )}
-        <div className='m-foot'>
-          <button className='btn' onClick={props.onClose}>
-            关闭
-          </button>
-          <button
-            className='btn primary'
-            disabled={
-              !model ||
-              busy ||
-              task?.status === 'queued' ||
-              task?.status === 'running'
-            }
-            onClick={() => void run()}
-          >
-            {busy || task?.status === 'queued' || task?.status === 'running'
-              ? '生成中…'
-              : '生成新作品'}
-          </button>
-        </div>
-      </div>
-    </DawnModal>
   )
 }
 

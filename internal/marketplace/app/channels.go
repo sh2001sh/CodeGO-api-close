@@ -92,9 +92,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		MultiplierCardSupported:          req.MultiplierCardSupported,
 		MultiplierCardUserEnabled:        req.MultiplierCardUserEnabled,
 		AutoProbeEnabled:                 req.AutoProbeEnabled, AutoProbeIntervalMinutes: req.AutoProbeIntervalMinutes,
-		AutoProbeModel:      strings.TrimSpace(req.AutoProbeModel),
-		PelicanProbeEnabled: req.PelicanProbeEnabled, PelicanProbeDailyMinute: req.PelicanProbeDailyMinute,
-		PelicanProbeModel: strings.TrimSpace(req.PelicanProbeModel),
+		AutoProbeModel: strings.TrimSpace(req.AutoProbeModel),
 	}
 	if !channel.MultiplierCardSupported {
 		channel.MultiplierCardUserEnabled = false

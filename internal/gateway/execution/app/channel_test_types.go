@@ -6,11 +6,10 @@ import (
 )
 
 type channelTestResult struct {
-	context      *gin.Context
-	localErr     error
-	newAPIError  *types.NewAPIError
-	report       ChannelTestReport
-	responseBody []byte
+	context     *gin.Context
+	localErr    error
+	newAPIError *types.NewAPIError
+	report      ChannelTestReport
 }
 
 // ChannelTestReport contains the billing and audit result of a user-initiated

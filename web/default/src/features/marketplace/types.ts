@@ -95,17 +95,6 @@ export interface MarketplaceGroup {
   current_concurrency: number
   observing: boolean
   updated_at: string
-  pelican_available?: boolean
-  pelican_generated_at?: string | null
-  pelican_model?: string
-  pelican_artifact_url?: string
-  pelican_artifacts?: MarketplacePelicanArtifact[]
-}
-
-export interface MarketplacePelicanArtifact {
-  model: string
-  generated_at: string
-  artifact_url: string
 }
 
 export interface ChannelFeedbackSummary {
@@ -199,10 +188,6 @@ export interface MarketplaceChannel {
   auto_probe_model: string
   auto_probe_last_status: ConnectivityTestStatus
   auto_probe_last_at?: string | null
-  pelican_probe_enabled: boolean
-  pelican_probe_daily_minute: number
-  pelican_probe_model: string
-  pelican_probe_last_at?: string | null
   visibility: string
   max_concurrency: number
   user_max_concurrency: number
@@ -277,9 +262,6 @@ export interface ChannelFormValues {
   auto_probe_enabled: boolean
   auto_probe_interval_minutes: number
   auto_probe_model: string
-  pelican_probe_enabled: boolean
-  pelican_probe_daily_minute: number
-  pelican_probe_model: string
 }
 
 export interface ChannelUpdateValues {
@@ -302,23 +284,6 @@ export interface ChannelUpdateValues {
   auto_probe_enabled?: boolean
   auto_probe_interval_minutes?: number
   auto_probe_model?: string
-  pelican_probe_enabled?: boolean
-  pelican_probe_daily_minute?: number
-  pelican_probe_model?: string
-}
-
-export interface MarketplacePelicanTest {
-  id: string
-  group_id: string
-  model: string
-  status: 'queued' | 'running' | 'completed' | 'failed'
-  error?: string
-  quota_charged: number
-  billing_source?: string
-  request_id?: string
-  duration_ms: number
-  generated_at?: string
-  artifact_url?: string
 }
 
 export interface ChannelModelPrice {

@@ -75,6 +75,21 @@ func TestGPT54SnapshotUsesCurrentPricing(t *testing.T) {
 	}
 }
 
+func TestCompactModelInheritsBaseTieredBilling(t *testing.T) {
+	model := "gpt-5.6-sol" + CompactModelSuffix
+	if mode := GetBillingMode(model); mode != BillingModeTieredExpr {
+		t.Fatalf("%s billing mode = %q, want %q", model, mode, BillingModeTieredExpr)
+	}
+	compactExpr, ok := GetBillingExpr(model)
+	if !ok {
+		t.Fatalf("%s is missing its inherited billing expression", model)
+	}
+	baseExpr, ok := GetBillingExpr("gpt-5.6-sol")
+	if !ok || compactExpr != baseExpr {
+		t.Fatal("compact model did not inherit the base model billing expression")
+	}
+}
+
 func TestMergeMissingDefaultBillingRulesPreservesOverrides(t *testing.T) {
 	setting := BillingSetting{
 		BillingMode: map[string]string{

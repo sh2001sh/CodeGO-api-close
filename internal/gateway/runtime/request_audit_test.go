@@ -78,3 +78,34 @@ func TestRequestAuditClassifiesPreUpstreamFailureAsRejected(t *testing.T) {
 			request.Status == gatewayschema.RequestAuditStatusRejected
 	}, time.Second, 10*time.Millisecond)
 }
+
+func TestRequestAuditHandlesSelectionFailureBeforeChannelMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:request-audit-no-channel-test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.RequestAudit{}))
+	previousDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() { platformdb.DB = previousDB })
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set(constant.RequestIdKey, "request-audit-no-channel")
+	ctx.Set("channel_id", 0)
+	info := &RelayInfo{
+		OriginModelName: "gpt-6-astra",
+		UsingGroup:      "OpenAI满血官Key",
+		UserId:          42,
+		TokenId:         7,
+		ChannelMeta:     nil,
+	}
+	apiErr := types.NewError(errors.New("no channel available"), types.ErrorCodeGetChannelFailed)
+
+	require.NotPanics(t, func() {
+		FinalizeRequestAudit(ctx, info, apiErr, false, false)
+	})
+	require.Eventually(t, func() bool {
+		var request gatewayschema.RequestAudit
+		return db.Where("request_id = ?", "request-audit-no-channel").First(&request).Error == nil &&
+			request.Status == gatewayschema.RequestAuditStatusRejected && request.FinalChannelID == 0
+	}, time.Second, 10*time.Millisecond)
+}

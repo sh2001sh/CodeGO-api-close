@@ -89,13 +89,25 @@ func GetBillingMode(model string) string {
 	if mode, ok := billingSetting.BillingMode[model]; ok {
 		return mode
 	}
+	if strings.HasSuffix(model, CompactModelSuffix) {
+		baseModel := strings.TrimSuffix(model, CompactModelSuffix)
+		if mode, ok := billingSetting.BillingMode[baseModel]; ok {
+			return mode
+		}
+	}
 	return BillingModeRatio
 }
 
 func GetBillingExpr(model string) (string, bool) {
 	model = FormatMatchingModelName(model)
-	expr, ok := billingSetting.BillingExpr[model]
-	return expr, ok
+	if expr, ok := billingSetting.BillingExpr[model]; ok {
+		return expr, true
+	}
+	if strings.HasSuffix(model, CompactModelSuffix) {
+		expr, ok := billingSetting.BillingExpr[strings.TrimSuffix(model, CompactModelSuffix)]
+		return expr, ok
+	}
+	return "", false
 }
 
 func GetBillingModeCopy() map[string]string {

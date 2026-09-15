@@ -83,7 +83,12 @@ func FinalizeRequestAudit(c *gin.Context, info *RelayInfo, apiErr *types.NewAPIE
 		group = info.UsingGroup
 		userID = info.UserId
 		tokenID = info.TokenId
-		finalChannelID = info.ChannelId
+		// ChannelMeta is initialized only after channel selection. Selection can
+		// fail before that point, so keep the context fallback instead of
+		// dereferencing the embedded nil metadata while recording the real error.
+		if info.ChannelMeta != nil {
+			finalChannelID = info.ChannelId
+		}
 		quota = int64(info.BillingSettledQuota)
 		billable = info.BillingSettled
 	}

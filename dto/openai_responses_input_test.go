@@ -102,6 +102,10 @@ func TestNormalizePortableReasoningEffort(t *testing.T) {
 	req := &OpenAIResponsesRequest{Reasoning: &Reasoning{Effort: "ultra"}}
 	require.True(t, req.NormalizePortableReasoningEffort())
 	require.Equal(t, "xhigh", req.Reasoning.Effort)
+
+	req.Reasoning.Effort = "max"
+	require.True(t, req.NormalizePortableReasoningEffort())
+	require.Equal(t, "xhigh", req.Reasoning.Effort)
 }
 
 func TestNormalizeCodexAgentMessagesPreservesStringInput(t *testing.T) {

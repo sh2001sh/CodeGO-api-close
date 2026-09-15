@@ -168,11 +168,12 @@ export function useMarketplaceAutoRoutePoolUpdate() {
   })
 }
 
-export function useMarketplaceRoutePools() {
+export function useMarketplaceRoutePools(enabled = true) {
   return useQuery({
     queryKey: ['marketplace-route-pools'],
     queryFn: getMarketplaceRoutePools,
     staleTime: 30_000,
+    enabled,
   })
 }
 

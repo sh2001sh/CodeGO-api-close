@@ -167,6 +167,28 @@ func TestNormalizeResponsesCompatibilityBodyRemovesOutputWithoutLocalCall(t *tes
     }`, string(normalized))
 }
 
+func TestNormalizeResponsesCompatibilityBodyRepairsAssistantInputText(t *testing.T) {
+	body := []byte(`{
+      "model":"gpt-5.6-luna",
+      "input":[
+        {"type":"message","role":"assistant","content":[{"type":"input_text","text":"previous answer"}]},
+        {"type":"message","role":"user","content":[{"type":"input_text","text":"continue"}]}
+      ]
+    }`)
+
+	normalized, changed, err := normalizeResponsesCompatibilityBody(body)
+
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{
+      "model":"gpt-5.6-luna",
+      "input":[
+        {"type":"message","role":"assistant","content":[{"type":"output_text","text":"previous answer"}]},
+        {"type":"message","role":"user","content":[{"type":"input_text","text":"continue"}]}
+      ]
+    }`, string(normalized))
+}
+
 func TestNormalizeRejectedResponsesFieldRemovesExplicitUnsupportedField(t *testing.T) {
 	body := []byte(`{
       "model":"gpt-5.6-sol",
@@ -235,6 +257,19 @@ func TestNormalizeRejectedResponsesFieldAcceptsGenericInvalidRequestCode(t *test
 	require.True(t, changed)
 	require.Equal(t, "max_output_tokens", field)
 	require.NotContains(t, string(normalized), "max_output_tokens")
+}
+
+func TestNormalizeRejectedResponsesFieldRemovesMaxToolCallsWithUnknownCode(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.6-luna","max_tool_calls":8,"input":"hello"}`)
+	apiErr := types.WithOpenAIError(types.OpenAIError{
+		Message: "Unsupported parameter: max_tool_calls",
+	}, http.StatusBadRequest)
+
+	normalized, field, changed := normalizeRejectedResponsesField(body, apiErr)
+
+	require.True(t, changed)
+	require.Equal(t, "max_tool_calls", field)
+	require.NotContains(t, string(normalized), "max_tool_calls")
 }
 
 func TestIsGenericInvalidRequestParametersError(t *testing.T) {

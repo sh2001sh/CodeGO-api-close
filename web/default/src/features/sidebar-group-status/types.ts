@@ -41,6 +41,7 @@ export type SidebarGroupStatusBucket = {
 }
 
 export type SidebarGroupStatusItem = {
+  group_id: string
   group: string
   display_name?: string
   source_type?: 'official' | 'marketplace_user'

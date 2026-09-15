@@ -225,10 +225,14 @@ func (r *OpenAIResponsesRequest) StripCodexMessageMetadata() (bool, error) {
 	return true, nil
 }
 
-// NormalizePortableReasoningEffort handles clients that send Codex's UI-only
-// ultra level directly. xhigh is the closest portable wire-level fallback.
+// NormalizePortableReasoningEffort handles clients that send Codex UI-only
+// effort levels directly. xhigh is the closest portable wire-level fallback.
 func (r *OpenAIResponsesRequest) NormalizePortableReasoningEffort() bool {
-	if r == nil || r.Reasoning == nil || !strings.EqualFold(strings.TrimSpace(r.Reasoning.Effort), "ultra") {
+	if r == nil || r.Reasoning == nil {
+		return false
+	}
+	effort := strings.ToLower(strings.TrimSpace(r.Reasoning.Effort))
+	if effort != "max" && effort != "ultra" {
 		return false
 	}
 	r.Reasoning.Effort = "xhigh"

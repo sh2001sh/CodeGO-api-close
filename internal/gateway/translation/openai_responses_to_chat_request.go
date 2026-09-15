@@ -174,6 +174,11 @@ func responsesInputToChatMessages(raw json.RawMessage, meta *ResponsesChatBridge
 				builder.flushPendingAssistant()
 				builder.messages = append(builder.messages, dto.Message{Role: "user", Content: text})
 			}
+		case "image_generation_call":
+			// Image generation output is server-owned Responses state and has no
+			// lossless Chat Completions representation. It does not form a tool
+			// call pair, so omit it when using the explicit protocol bridge.
+			continue
 		default:
 			return nil, nil, fmt.Errorf("unsupported responses input item type %q", itemType)
 		}

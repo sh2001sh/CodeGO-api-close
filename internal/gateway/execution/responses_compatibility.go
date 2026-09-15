@@ -38,7 +38,8 @@ func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {
 		bytes.Contains(body, []byte(`"tool_search_output"`)) ||
 		bytes.Contains(body, []byte(`"additional_tools"`)) ||
 		bytes.Contains(body, []byte(`"agent_message"`)) ||
-		bytes.Contains(body, []byte(`"compaction"`))
+		bytes.Contains(body, []byte(`"compaction"`)) ||
+		(bytes.Contains(body, []byte(`"input_text"`)) && bytes.Contains(body, []byte(`"assistant"`)))
 }
 
 func summarizeResponsesRequestShape(body []byte) string {
@@ -274,6 +275,22 @@ func normalizeResponsesInput(raw json.RawMessage, hasPreviousResponse bool) (jso
 	callIDs := make(map[string]struct{})
 	for _, item := range items {
 		itemType := rawString(item["type"])
+		if itemType == "message" && strings.EqualFold(rawString(item["role"]), "assistant") {
+			var parts []map[string]json.RawMessage
+			if platformencoding.Unmarshal(item["content"], &parts) == nil {
+				contentChanged := false
+				for _, part := range parts {
+					if rawString(part["type"]) == "input_text" {
+						part["type"] = json.RawMessage(`"output_text"`)
+						contentChanged = true
+					}
+				}
+				if contentChanged {
+					item["content"], _ = platformencoding.Marshal(parts)
+					changed = true
+				}
+			}
+		}
 		if isResponsesFunctionCall(itemType) {
 			if _, ok := item["arguments"]; !ok && itemType == "function_call" {
 				item["arguments"] = json.RawMessage(`"{}"`)
@@ -318,9 +335,6 @@ func normalizeRejectedResponsesField(body []byte, apiErr *types.NewAPIError) ([]
 		return nil, "", false
 	}
 	code := strings.ToLower(fmt.Sprint(openAIError.Code))
-	if code != "unknown_parameter" && code != "unsupported_parameter" && code != "invalid_request_error" {
-		return nil, "", false
-	}
 	field := strings.TrimSpace(openAIError.Param)
 	if field == "" {
 		matches := rejectedResponsesFieldPattern.FindStringSubmatch(openAIError.Message)
@@ -328,7 +342,12 @@ func normalizeRejectedResponsesField(body []byte, apiErr *types.NewAPIError) ([]
 			field = matches[1]
 		}
 	}
-	if code == "invalid_request_error" && !strings.Contains(strings.ToLower(openAIError.Message), "unsupported parameter") && !strings.Contains(strings.ToLower(openAIError.Message), "unknown parameter") {
+	message := strings.ToLower(openAIError.Message)
+	explicitUnsupported := strings.Contains(message, "unsupported parameter") || strings.Contains(message, "unknown parameter")
+	if code != "unknown_parameter" && code != "unsupported_parameter" && code != "invalid_request_error" && !explicitUnsupported {
+		return nil, "", false
+	}
+	if code == "invalid_request_error" && !explicitUnsupported {
 		return nil, "", false
 	}
 	if !isAllowedResponsesRejectedField(field) {
@@ -343,7 +362,7 @@ func removeResponsesRejectedField(body []byte, field string) ([]byte, bool) {
 	if platformencoding.Unmarshal(body, &payload) != nil {
 		return nil, false
 	}
-	if field == "max_output_tokens" || field == "transformer_metadata" {
+	if field == "max_output_tokens" || field == "max_tool_calls" || field == "transformer_metadata" {
 		if _, ok := payload[field]; !ok {
 			return nil, false
 		}
@@ -376,7 +395,7 @@ func removeResponsesRejectedField(body []byte, field string) ([]byte, bool) {
 }
 
 func isAllowedResponsesRejectedField(field string) bool {
-	return field == "max_output_tokens" || field == "transformer_metadata" || regexp.MustCompile(`^input\[\d+\]\.namespace$`).MatchString(field)
+	return field == "max_output_tokens" || field == "max_tool_calls" || field == "transformer_metadata" || regexp.MustCompile(`^input\[\d+\]\.namespace$`).MatchString(field)
 }
 
 func isResponsesFunctionCall(itemType string) bool {

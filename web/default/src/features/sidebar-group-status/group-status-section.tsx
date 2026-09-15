@@ -1,16 +1,20 @@
 import { useId } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, ListPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { GroupStatusMonitorCard } from './group-status-monitor-card'
 import { getStatusMeta } from './presentation'
 import type { SidebarGroupStatusItem } from './types'
 
-/** Collapses model grids until the user asks for a group's details. */
+/** Shows model health by default while retaining per-group collapse controls. */
 export function GroupStatusSection(props: {
   group: SidebarGroupStatusItem
   expanded: boolean
   onToggle: () => void
+  poolName?: string
+  inCurrentPool: boolean
+  joining: boolean
+  onJoinCurrentPool: () => void
 }) {
   const contentId = useId()
   const group = props.group
@@ -59,6 +63,22 @@ export function GroupStatusSection(props: {
                 : `${group.cache_hit_rate.toFixed(1)}%`}
             </div>
           </div>
+          <Button
+            variant='outline'
+            size='sm'
+            disabled={
+              props.inCurrentPool || props.joining || !props.group.group_id
+            }
+            onClick={props.onJoinCurrentPool}
+            title={props.poolName ? `当前路由池：${props.poolName}` : undefined}
+          >
+            <ListPlus className='size-3.5' />
+            {props.inCurrentPool
+              ? '已在当前池'
+              : props.joining
+                ? '加入中'
+                : '加入当前池'}
+          </Button>
           <Button
             variant='ghost'
             size='icon-sm'

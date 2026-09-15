@@ -16,9 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { RefreshCcw, Search } from 'lucide-react'
+import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,6 +28,17 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionPageLayout } from '@/components/layout'
+import {
+  useMarketplaceAutoRoutePool,
+  useMarketplaceAutoRoutePoolUpdate,
+  useMarketplaceRoutePool,
+  useMarketplaceRoutePools,
+  useMarketplaceRoutePoolUpdate,
+} from '@/features/marketplace/hooks'
+import {
+  persistActiveRoutePoolID,
+  readActiveRoutePoolID,
+} from '@/features/marketplace/lib/active-route-pool'
 import { GroupStatusSection } from './group-status-section'
 import {
   collectModelOptions,
@@ -36,6 +49,8 @@ import {
 import { useSidebarGroupStatus } from './use-sidebar-group-status'
 
 export function SidebarGroupStatusPage() {
+  const user = useAuthStore((state) => state.auth.user)
+  const authed = !!user
   const query = useSidebarGroupStatus()
   const [source, setSource] = useState<'all' | 'official' | 'marketplace_user'>(
     'all'
@@ -43,10 +58,49 @@ export function SidebarGroupStatusPage() {
   const [search, setSearch] = useState('')
   const [modelFilter, setModelFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  // Large status boards keep model grids out of the DOM until requested.
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set()
   )
+  const [activePoolID, setActivePoolID] = useState(readActiveRoutePoolID)
+  const pools = useMarketplaceRoutePools(authed)
+  const autoPool = useMarketplaceAutoRoutePool(authed)
+  const isAutoPool = activePoolID === 'auto'
+  const poolDetail = useMarketplaceRoutePool(
+    authed && activePoolID && !isAutoPool ? activePoolID : ''
+  )
+  const updatePool = useMarketplaceRoutePoolUpdate()
+  const updateAutoPool = useMarketplaceAutoRoutePoolUpdate()
+  const poolOptions = useMemo(() => {
+    const auto = autoPool.data ? [{ id: 'auto', name: 'AUTO 池' }] : []
+    const custom = (pools.data ?? []).map((pool) => ({
+      id: pool.id,
+      name: pool.name,
+    }))
+    return [...auto, ...custom]
+  }, [autoPool.data, pools.data])
+  const poolMemberIDs = useMemo(
+    () =>
+      new Set(
+        ((isAutoPool ? autoPool.data?.items : poolDetail.data?.items) ?? [])
+          .filter((item) => item.selected)
+          .map((item) => item.group_id)
+      ),
+    [autoPool.data?.items, isAutoPool, poolDetail.data?.items]
+  )
+  const activePoolName = poolOptions.find(
+    (pool) => pool.id === activePoolID
+  )?.name
+
+  useEffect(() => {
+    if (!authed || pools.isLoading || autoPool.isLoading) return
+    if (activePoolID && poolOptions.some((pool) => pool.id === activePoolID))
+      return
+    setActivePoolID(poolOptions[0]?.id ?? '')
+  }, [activePoolID, authed, autoPool.isLoading, poolOptions, pools.isLoading])
+
+  useEffect(() => {
+    persistActiveRoutePoolID(activePoolID)
+  }, [activePoolID])
   const deferredSearch = useDeferredValue(search)
   const allItems = useMemo(
     () => sortItems(query.data?.data ?? []),
@@ -65,12 +119,49 @@ export function SidebarGroupStatusPage() {
   const modelOptions = useMemo(() => collectModelOptions(allItems), [allItems])
   const summary = useMemo(() => summarizeGroups(allItems), [allItems])
   const toggleGroup = (group: string) => {
-    setExpandedGroups((current) => {
+    setCollapsedGroups((current) => {
       const next = new Set(current)
       if (next.has(group)) next.delete(group)
       else next.add(group)
       return next
     })
+  }
+  const joinCurrentPool = async (groupID: string) => {
+    if (!authed) {
+      toast.error('登录后才能添加到路由池')
+      return
+    }
+    if (!activePoolID) {
+      toast.error('请先在分组市场创建路由池')
+      return
+    }
+    if (isAutoPool && !autoPool.data) {
+      toast.error('当前路由池仍在加载，请稍后重试')
+      return
+    }
+    if (!isAutoPool && !poolDetail.data) {
+      toast.error('当前路由池仍在加载，请稍后重试')
+      return
+    }
+    if (!groupID || poolMemberIDs.has(groupID)) return
+    const nextIDs = [...poolMemberIDs, groupID]
+    try {
+      if (isAutoPool) {
+        await updateAutoPool.mutateAsync({
+          groupIds: nextIDs,
+          config: autoPool.data?.config,
+        })
+      } else {
+        await updatePool.mutateAsync({
+          id: activePoolID,
+          groupIds: nextIDs,
+          config: poolDetail.data?.config,
+        })
+      }
+      toast.success(`已加入路由池（${activePoolName ?? '当前池'}）`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '加入失败')
+    }
   }
 
   return (
@@ -178,8 +269,14 @@ export function SidebarGroupStatusPage() {
                   <GroupStatusSection
                     key={group.group}
                     group={group}
-                    expanded={expandedGroups.has(group.group)}
+                    expanded={!collapsedGroups.has(group.group)}
                     onToggle={() => toggleGroup(group.group)}
+                    poolName={activePoolName}
+                    inCurrentPool={poolMemberIDs.has(group.group_id)}
+                    joining={updatePool.isPending || updateAutoPool.isPending}
+                    onJoinCurrentPool={() =>
+                      void joinCurrentPool(group.group_id)
+                    }
                   />
                 ))}
               </div>

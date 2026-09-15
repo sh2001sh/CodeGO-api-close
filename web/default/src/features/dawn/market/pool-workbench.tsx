@@ -117,8 +117,9 @@ export function PoolWorkbench(props: {
 
   useEffect(() => {
     if (!authed) return
-    if (activePoolID) return
-    if (poolOptions.length) onActivePoolChange(poolOptions[0].id)
+    if (activePoolID && poolOptions.some((pool) => pool.id === activePoolID))
+      return
+    onActivePoolChange(poolOptions[0]?.id ?? '')
   }, [authed, activePoolID, poolOptions, onActivePoolChange])
 
   const isAuto = activePoolID === AUTO_ID

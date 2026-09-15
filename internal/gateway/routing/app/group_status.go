@@ -33,6 +33,7 @@ type UserGroupModelStatusItem struct {
 }
 
 type UserGroupStatusItem struct {
+	GroupID      string                     `json:"group_id"`
 	Group        string                     `json:"group"`
 	DisplayName  string                     `json:"display_name"`
 	SourceType   string                     `json:"source_type"`
@@ -46,6 +47,7 @@ type UserGroupStatusItem struct {
 type groupStatusBuildContext struct {
 	groupSources      map[string]string
 	groupDisplayNames map[string]string
+	groupRouteIDs     map[string]string
 	groupSummaries    map[string][]*GroupModelStatusSummary
 	seriesByModel     map[string][]UserGroupStatusBucket
 	groupCacheRates   map[string]*float64
@@ -66,6 +68,7 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 	}
 	groupSources := resolveGroupStatusSources(groupNames)
 	groupDisplayNames := resolveGroupStatusDisplayNames(groupNames)
+	groupRouteIDs := resolveGroupStatusRouteIDs(groupNames)
 
 	groupSummaries := buildPricingGroupModelSummaries(pricing, groupNames)
 	mergeMarketplaceGroupModels(groupSummaries, groupNames)
@@ -77,7 +80,7 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 	groupCacheRates, modelCacheRates := queryGroupCacheHitRates(groupNames, 24)
 
 	context := groupStatusBuildContext{
-		groupSources: groupSources, groupDisplayNames: groupDisplayNames, groupSummaries: groupSummaries,
+		groupSources: groupSources, groupDisplayNames: groupDisplayNames, groupRouteIDs: groupRouteIDs, groupSummaries: groupSummaries,
 		seriesByModel: seriesByModel, groupCacheRates: groupCacheRates,
 		modelCacheRates: modelCacheRates, sampleWindowHours: float64(bucketSeconds) / 3600,
 		seriesWindowHours: seriesWindowHours, bucketSeconds: bucketSeconds,
@@ -115,8 +118,30 @@ func buildUserGroupStatusItem(groupName string, context groupStatusBuildContext)
 		return modelItems[i].Model < modelItems[j].Model
 	})
 	groupStatus, groupRequestCount, successRate := summarizeGroupModelRequestHealth(modelItems)
-	return UserGroupStatusItem{Group: groupName, DisplayName: context.groupDisplayNames[groupName], SourceType: context.groupSources[groupName], Status: groupStatus,
+	return UserGroupStatusItem{GroupID: context.groupRouteIDs[groupName], Group: groupName, DisplayName: context.groupDisplayNames[groupName], SourceType: context.groupSources[groupName], Status: groupStatus,
 		RequestCount: groupRequestCount, SuccessRate: successRate, CacheHitRate: context.groupCacheRates[groupName], Models: modelItems}
+}
+
+func resolveGroupStatusRouteIDs(groupNames []string) map[string]string {
+	result := make(map[string]string, len(groupNames))
+	for _, groupName := range groupNames {
+		result[groupName] = "official:" + groupName
+	}
+	if platformdb.DB == nil || len(groupNames) == 0 {
+		return result
+	}
+	var groups []marketplaceschema.Group
+	if err := platformdb.DB.Select("id", "internal_group_name").
+		Where("internal_group_name IN ? AND source_type = ?", groupNames, marketplacedomain.SourceTypeMarketplaceUser).
+		Find(&groups).Error; err != nil {
+		return result
+	}
+	for _, group := range groups {
+		if group.ID != "" {
+			result[group.InternalGroupName] = group.ID
+		}
+	}
+	return result
 }
 
 func buildUserGroupModelStatusItem(groupName string, summary *GroupModelStatusSummary, context groupStatusBuildContext) UserGroupModelStatusItem {

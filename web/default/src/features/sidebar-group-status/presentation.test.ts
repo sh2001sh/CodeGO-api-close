@@ -10,6 +10,7 @@ import type { SidebarGroupStatusItem } from './types'
 
 const GROUPS: SidebarGroupStatusItem[] = [
   {
+    group_id: 'official:official-default',
     group: 'official-default',
     display_name: '官方默认',
     source_type: 'official',
@@ -24,6 +25,7 @@ const GROUPS: SidebarGroupStatusItem[] = [
     ],
   },
   {
+    group_id: 'marketplace-fast-id',
     group: 'marketplace-fast',
     display_name: '快速线路',
     source_type: 'marketplace_user',

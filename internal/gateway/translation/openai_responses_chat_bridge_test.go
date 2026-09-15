@@ -109,6 +109,22 @@ func TestResponsesRequestToChatCompletionsConvertsAgentMessageEncryptedContent(t
 	require.Equal(t, "delegated task", chat.Messages[0].Content)
 }
 
+func TestResponsesRequestToChatCompletionsOmitsImageGenerationState(t *testing.T) {
+	request := &dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Input: json.RawMessage(`[
+			{"type":"image_generation_call","id":"ig_1","status":"completed","result":"opaque"},
+			{"type":"message","role":"user","content":"continue"}
+		]`),
+	}
+
+	chat, _, err := ResponsesRequestToChatCompletionsRequest(request)
+
+	require.NoError(t, err)
+	require.Len(t, chat.Messages, 1)
+	require.Equal(t, "continue", chat.Messages[0].Content)
+}
+
 func TestChatCompletionsResponseToResponsesPreservesMixedOutput(t *testing.T) {
 	message := dto.Message{Role: "assistant", Content: "I will call the tool."}
 	reasoning := "tool required"

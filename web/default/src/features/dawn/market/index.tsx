@@ -62,6 +62,10 @@ import {
   useMarketplaceMultiplierNotices,
   useReadMarketplaceMultiplierNotice,
 } from '@/features/marketplace/hooks'
+import {
+  persistActiveRoutePoolID,
+  readActiveRoutePoolID,
+} from '@/features/marketplace/lib/active-route-pool'
 import { MARKETPLACE_SOURCE_OPTIONS } from '@/features/marketplace/lib/channel-form'
 import { MOCK_MARKETPLACE_GROUPS } from '@/features/marketplace/lib/mock-data'
 import type {
@@ -196,7 +200,7 @@ export function DawnMarket() {
   const [perspective, setPerspective] = useState<Perspective>('user')
   const [filters, setFilters] = useState<GroupFilters>(DEFAULT_FILTERS)
   const [search, setSearch] = useState('')
-  const [activePoolID, setActivePoolID] = useState('')
+  const [activePoolID, setActivePoolID] = useState(readActiveRoutePoolID)
   const [poolPanelMode, setPoolPanelMode] = useState<PoolPanelMode>('pool')
   const [selected, setSelected] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -210,6 +214,10 @@ export function DawnMarket() {
   )
   const inviteHandledRef = useRef(false)
   const marketListRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    persistActiveRoutePoolID(activePoolID)
+  }, [activePoolID])
 
   useEffect(() => {
     if (filters.page <= 1) return

@@ -18,6 +18,7 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -89,11 +90,38 @@ func GenerateMarketplaceChannelContentByID(channelID int, model string, options 
 	if err := json.Unmarshal(result.responseBody, &response); err != nil {
 		return "", result.report, result.newAPIError, fmt.Errorf("解析 Responses 结果失败: %w", err)
 	}
+	if err := validateMarketplaceContentResponse(&response); err != nil {
+		return "", result.report, result.newAPIError, err
+	}
 	text := gatewaytranslation.ExtractOutputTextFromResponses(&response)
 	if text == "" {
 		return "", result.report, result.newAPIError, errors.New("模型没有返回文本内容")
 	}
 	return text, result.report, result.newAPIError, nil
+}
+
+func validateMarketplaceContentResponse(response *dto.OpenAIResponsesResponse) error {
+	if response == nil {
+		return errors.New("模型没有返回 Responses 结果")
+	}
+	var status string
+	if len(response.Status) > 0 {
+		_ = json.Unmarshal(response.Status, &status)
+	}
+	if status != "incomplete" && response.IncompleteDetails == nil {
+		return nil
+	}
+	reason := ""
+	if response.IncompleteDetails != nil {
+		reason = strings.TrimSpace(response.IncompleteDetails.Reasoning)
+	}
+	if reason == "max_output_tokens" {
+		return errors.New("模型输出达到长度上限，未生成完整内容")
+	}
+	if reason == "" {
+		reason = "unknown"
+	}
+	return fmt.Errorf("模型输出不完整（%s）", reason)
 }
 
 // TestMarketplaceChannelByID executes a real upstream request as a user and

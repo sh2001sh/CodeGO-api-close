@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -14,6 +15,21 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+func TestValidateMarketplaceContentResponseRejectsTokenLimit(t *testing.T) {
+	response := &dto.OpenAIResponsesResponse{
+		Status:            json.RawMessage(`"incomplete"`),
+		IncompleteDetails: &dto.IncompleteDetails{Reasoning: "max_output_tokens"},
+	}
+
+	err := validateMarketplaceContentResponse(response)
+	require.EqualError(t, err, "模型输出达到长度上限，未生成完整内容")
+}
+
+func TestValidateMarketplaceContentResponseAcceptsCompletedResponse(t *testing.T) {
+	response := &dto.OpenAIResponsesResponse{Status: json.RawMessage(`"completed"`)}
+	require.NoError(t, validateMarketplaceContentResponse(response))
+}
 
 func TestAutomaticChannelTestSkipsManuallyDisabledChannel(t *testing.T) {
 	require.False(t, shouldAutomaticallyTestChannel(&gatewayschema.Channel{

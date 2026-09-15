@@ -24,8 +24,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const pelicanPrompt = `生成单文件 HTML，内容使用内联 SVG 绘制“鹈鹕骑自行车”的 2D 动画。禁止外部资源、网络请求和脚本工具。仅输出完整 HTML，不要解释，不要执行测试。`
-const maxPelicanSVGBytes = 512 * 1024
+const pelicanPrompt = `生成单文件 HTML，内容使用内联 SVG 绘制“鹈鹕骑自行车”的 2D 动画。画面需要清晰、美观并包含可见动画，但 SVG 源码不得超过 18 KiB、图形元素不得超过 60 个；优先复用 defs、g、use 和简洁 path。禁止外部资源、网络请求、脚本工具、注释、说明文字和 Markdown 代码围栏。只输出完整 HTML，并务必在输出上限前闭合 </svg></body></html>，不要执行测试。`
+
+const (
+	pelicanMaxOutputTokens = 8000
+	maxPelicanSVGBytes     = 512 * 1024
+)
 
 type PelicanTestRequest struct {
 	GroupID string `json:"group_id"`
@@ -169,7 +173,7 @@ func executePelicanTest(id string, target pelicanTarget, userID int, billUser bo
 	started := time.Now()
 	text, report, _, err := gatewayexecutionapp.GenerateMarketplaceChannelContentByID(target.InternalChannelID, pelicanModel(id), gatewayexecutionapp.MarketplaceContentGenerationOptions{
 		MarketplaceChannelTestOptions: gatewayexecutionapp.MarketplaceChannelTestOptions{UserID: userID, MarketplaceGroupID: target.MarketplaceGroupID, InternalGroup: target.InternalGroup, MarketplaceOwnerID: target.OwnerUserID, CreditPoolPolicy: target.CreditPoolPolicy, Multiplier: target.Multiplier, ModelPrices: target.ModelPrices},
-		Prompt:                        pelicanPrompt, MaxOutputTokens: 6000, BillUser: billUser,
+		Prompt:                        pelicanPrompt, MaxOutputTokens: pelicanMaxOutputTokens, BillUser: billUser,
 	})
 	duration := time.Since(started).Milliseconds()
 	if err == nil {
@@ -367,7 +371,7 @@ func runDuePelicanSchedules(now time.Time) {
 func executeScheduledPelican(target pelicanTarget, model string) {
 	defer pelicanRunning.Delete(target.GroupID)
 	started := time.Now()
-	text, report, _, err := gatewayexecutionapp.GenerateMarketplaceChannelContentByID(target.InternalChannelID, model, gatewayexecutionapp.MarketplaceContentGenerationOptions{MarketplaceChannelTestOptions: gatewayexecutionapp.MarketplaceChannelTestOptions{UserID: target.OwnerUserID, MarketplaceGroupID: target.MarketplaceGroupID, InternalGroup: target.InternalGroup, MarketplaceOwnerID: target.OwnerUserID, CreditPoolPolicy: target.CreditPoolPolicy, Multiplier: target.Multiplier, ModelPrices: target.ModelPrices}, Prompt: pelicanPrompt, MaxOutputTokens: 6000, BillUser: false})
+	text, report, _, err := gatewayexecutionapp.GenerateMarketplaceChannelContentByID(target.InternalChannelID, model, gatewayexecutionapp.MarketplaceContentGenerationOptions{MarketplaceChannelTestOptions: gatewayexecutionapp.MarketplaceChannelTestOptions{UserID: target.OwnerUserID, MarketplaceGroupID: target.MarketplaceGroupID, InternalGroup: target.InternalGroup, MarketplaceOwnerID: target.OwnerUserID, CreditPoolPolicy: target.CreditPoolPolicy, Multiplier: target.Multiplier, ModelPrices: target.ModelPrices}, Prompt: pelicanPrompt, MaxOutputTokens: pelicanMaxOutputTokens, BillUser: false})
 	if err != nil {
 		platformobservability.SysError("scheduled pelican test: " + err.Error())
 		return

@@ -150,7 +150,7 @@ func TestScoreGroupPreservesCalculatedScorePrecision(t *testing.T) {
 		cacheHitRate:   50,
 	}, channelConsumerStats{IndependentConsumers: 10}, 24)
 
-	require.Equal(t, 67.53, snapshot.Score)
+	require.Equal(t, 57.53, snapshot.Score)
 }
 
 func TestAssignRanksUsesStableTieBreaker(t *testing.T) {
@@ -190,6 +190,25 @@ func TestSortGroupItemsPutsMissingTTFTSamplesLast(t *testing.T) {
 		sortGroupItems(items, "ttft", direction)
 		require.Equal(t, "measured", items[0].ID)
 		require.Equal(t, "missing", items[1].ID)
+	}
+}
+
+func TestSortGroupItemsUsesSelectedModelConsumerAmountAndPutsMissingLast(t *testing.T) {
+	t.Parallel()
+
+	for _, direction := range []string{"asc", "desc"} {
+		items := []GroupListItem{
+			{ID: "missing", AvgConsumerAmount: 1, AvgConsumerAmountByModel: map[string]int64{}},
+			{ID: "cheap", AvgConsumerAmountByModel: map[string]int64{"gpt-x": 100}},
+			{ID: "expensive", AvgConsumerAmountByModel: map[string]int64{"gpt-x": 300}},
+		}
+		sortGroupItems(items, "model_consumer_amount", direction, "GPT-X")
+		require.Equal(t, "missing", items[2].ID)
+		if direction == "asc" {
+			require.Equal(t, []string{"cheap", "expensive", "missing"}, []string{items[0].ID, items[1].ID, items[2].ID})
+		} else {
+			require.Equal(t, []string{"expensive", "cheap", "missing"}, []string{items[0].ID, items[1].ID, items[2].ID})
+		}
 	}
 }
 

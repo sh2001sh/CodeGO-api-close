@@ -100,6 +100,37 @@ func TestNormalizeAutoRoutePoolConfigClampsPositiveMultiplierCeiling(t *testing.
 	}
 }
 
+func TestScoreAutoBuildCandidatesUsesSelectedModelCost(t *testing.T) {
+	t.Parallel()
+
+	items := []AutoRoutePoolItem{
+		{GroupID: "cheap", SuccessRate: 90, CacheHitRate: 50, AvgTTFTMs: 1000, AvgConsumerAmountByModel: map[string]int64{"gpt-x": 100}},
+		{GroupID: "expensive", SuccessRate: 90, CacheHitRate: 50, AvgTTFTMs: 1000, AvgConsumerAmountByModel: map[string]int64{"gpt-x": 500}},
+		{GroupID: "missing", SuccessRate: 90, CacheHitRate: 50, AvgTTFTMs: 1000},
+	}
+	scores := scoreAutoBuildCandidates(items, RoutePoolAutoBuildConfig{Models: []string{"GPT-X"}, ConsumerWeight: 100})
+
+	require.Greater(t, scores["cheap"], scores["expensive"])
+	require.Greater(t, scores["expensive"], scores["missing"])
+}
+
+func TestRoutePoolAutoBuildConfigPersistsMultipleModelsAndWeights(t *testing.T) {
+	t.Parallel()
+
+	pool := marketplaceschema.RoutePool{}
+	applyRoutePoolAutoBuild(&pool, RoutePoolAutoBuildConfig{
+		Models: []string{"gpt-b", "GPT-A", "gpt-b"}, ConsumerWeight: 40,
+		SuccessWeight: 30, TTFTWeight: 20, CacheWeight: 10, Size: 3, Explore: 1,
+	})
+	config := routePoolAutoBuildConfig(pool)
+
+	require.Equal(t, []string{"GPT-A", "gpt-b"}, config.Models)
+	require.Equal(t, 40, config.ConsumerWeight)
+	require.Equal(t, 30, config.SuccessWeight)
+	require.Equal(t, 20, config.TTFTWeight)
+	require.Equal(t, 10, config.CacheWeight)
+}
+
 func TestLoadAutoRouteGroupsForIDsOnlyLoadsSelectedGroups(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))

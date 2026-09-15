@@ -68,7 +68,11 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 		item.CurrentConcurrency = currentConcurrency[channelID]
 		items = append(items, item)
 	}
-	sortGroupItems(items, query.Sort, query.Direction)
+	modelFilters := query.Models
+	if len(modelFilters) == 0 && strings.TrimSpace(query.Model) != "" {
+		modelFilters = []string{query.Model}
+	}
+	sortGroupItems(items, query.Sort, query.Direction, modelFilters...)
 	return items, nil
 }
 
@@ -241,14 +245,14 @@ func marketplaceHighlights(items []GroupListItem) GroupHighlights {
 		item := items[index]
 		highlight := GroupHighlight{
 			GroupID: item.ID, SystemDisplayName: item.SystemDisplayName,
-			Score: item.Score, Multiplier: item.Multiplier, AvgTTFTMs: item.AvgTTFTMs,
+			Score: item.Score, Multiplier: item.Multiplier, AvgConsumerAmount: item.AvgConsumerAmount, AvgTTFTMs: item.AvgTTFTMs,
 			AttemptTTFTP50Ms: item.AttemptTTFTP50Ms,
 		}
 		if !item.Observing && betterBest(result.Best, highlight) {
 			value := highlight
 			result.Best = &value
 		}
-		if betterCheapest(result.Cheapest, highlight) {
+		if highlight.AvgConsumerAmount > 0 && betterCheapest(result.Cheapest, highlight) {
 			value := highlight
 			result.Cheapest = &value
 		}
@@ -266,8 +270,8 @@ func betterBest(current *GroupHighlight, candidate GroupHighlight) bool {
 }
 
 func betterCheapest(current *GroupHighlight, candidate GroupHighlight) bool {
-	return current == nil || candidate.Multiplier < current.Multiplier ||
-		(candidate.Multiplier == current.Multiplier && candidate.GroupID < current.GroupID)
+	return current == nil || candidate.AvgConsumerAmount < current.AvgConsumerAmount ||
+		(candidate.AvgConsumerAmount == current.AvgConsumerAmount && candidate.GroupID < current.GroupID)
 }
 
 func betterFastest(current *GroupHighlight, candidate GroupHighlight) bool {
@@ -282,7 +286,7 @@ func publicSourceLabel(channel marketplaceschema.Channel) string {
 	return strings.TrimSpace(channel.ApprovedSourceLabel)
 }
 
-func sortGroupItems(items []GroupListItem, field, direction string) {
+func sortGroupItems(items []GroupListItem, field, direction string, models ...string) {
 	desc := direction != "asc"
 	sort.SliceStable(items, func(i, j int) bool {
 		left, right := items[i].Score, items[j].Score
@@ -300,6 +304,17 @@ func sortGroupItems(items []GroupListItem, field, direction string) {
 			left, right = items[i].AvgLatencyMs, items[j].AvgLatencyMs
 		case "multiplier":
 			left, right = items[i].Multiplier, items[j].Multiplier
+		case "consumer_amount", "model_consumer_amount":
+			selectedModels := models
+			if field == "consumer_amount" {
+				selectedModels = nil
+			}
+			leftAmount, leftPresent := groupConsumerAmount(items[i], selectedModels)
+			rightAmount, rightPresent := groupConsumerAmount(items[j], selectedModels)
+			if leftPresent != rightPresent {
+				return leftPresent
+			}
+			left, right = leftAmount, rightAmount
 		case "requests":
 			if items[i].RequestCount != items[j].RequestCount {
 				if desc {
@@ -325,6 +340,27 @@ func sortGroupItems(items []GroupListItem, field, direction string) {
 		}
 		return items[i].ID < items[j].ID
 	})
+}
+
+func groupConsumerAmount(item GroupListItem, models []string) (float64, bool) {
+	if len(models) == 0 {
+		return float64(item.AvgConsumerAmount), item.AvgConsumerAmount > 0
+	}
+	var sum int64
+	count := int64(0)
+	for _, target := range models {
+		for model, amount := range item.AvgConsumerAmountByModel {
+			if strings.EqualFold(strings.TrimSpace(model), strings.TrimSpace(target)) && amount > 0 {
+				sum += amount
+				count++
+				break
+			}
+		}
+	}
+	if count == 0 {
+		return 0, false
+	}
+	return float64(sum) / float64(count), true
 }
 
 func paginateGroups(items []GroupListItem, page, size int) []GroupListItem {

@@ -144,6 +144,7 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		summary := metrics[name]
 		consumerStats := walletStats[name]
 		recent := series[groupIndices[name]]
+		averageConsumerAmount := consumerStats.averageConsumerAmount()
 		items = append(items, GroupListItem{
 			ID: key, PublicSlug: key, SystemDisplayName: name,
 			SourceType: marketplacedomain.SourceTypeOfficial, SourceLabel: "官方",
@@ -152,8 +153,8 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 			ModelVerificationResults: []ModelVerificationResult{},
 			RequestCount:             summary.RequestCount, SuccessRate: summary.SuccessRate, WilsonSuccessRate: summary.SuccessRate,
 			AvgTTFTMs: float64(summary.AvgTtftMs), LatencySampleCount: summary.RequestCount,
-			Score: summary.SuccessRate*0.35 + inverseMetricScore(float64(summary.AvgTtftMs), 3000)*0.2 + inverseMetricScore(1, 3)*0.2, CacheHitRate: summary.CacheHitRate,
-			AvgConsumerAmount: consumerStats.averageConsumerAmount(), AvgConsumerAmountByModel: consumerStats.averageConsumerAmountsByModel(),
+			Score: summary.SuccessRate*0.35 + inverseMetricScore(float64(summary.AvgTtftMs), 3000)*0.2 + consumerAmountScore(averageConsumerAmount)*0.2, CacheHitRate: summary.CacheHitRate,
+			AvgConsumerAmount: averageConsumerAmount, AvgConsumerAmountByModel: consumerStats.averageConsumerAmountsByModel(),
 			RecentRequestSeries: recent, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 			LatestRequestStatus:     latestRequestStatus(recent),
 			MultiplierCardSupported: capability.MultiplierCard, MultiplierCardUserEnabled: capability.MultiplierCard,

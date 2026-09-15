@@ -61,12 +61,22 @@ export function MarketGroupCard(props: {
   const hasTraffic = group.request_count > 0
   const health = classifyRequestHealth(group.success_rate, group.request_count)
   const lifecycleOn = group.lifecycle_status === 'active'
-  const selectedModelAverage =
-    props.selectedModels.length === 1
-      ? (group.avg_consumer_amount_by_model?.[props.selectedModels[0]] ?? 0)
-      : 0
+  const selectedModelAmounts = props.selectedModels
+    .map(
+      (selected) =>
+        Object.entries(group.avg_consumer_amount_by_model ?? {}).find(
+          ([model]) => model.toLowerCase() === selected.toLowerCase()
+        )?.[1]
+    )
+    .filter(
+      (amount): amount is number => typeof amount === 'number' && amount > 0
+    )
+  const selectedModelAverage = selectedModelAmounts.length
+    ? selectedModelAmounts.reduce((sum, amount) => sum + amount, 0) /
+      selectedModelAmounts.length
+    : 0
   const displayedAverage =
-    props.selectedModels.length === 1
+    props.selectedModels.length > 0
       ? selectedModelAverage
       : group.avg_consumer_amount
   const verification = group.models.length

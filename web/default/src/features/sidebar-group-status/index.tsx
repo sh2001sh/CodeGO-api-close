@@ -233,7 +233,7 @@ export function SidebarGroupStatusPage() {
                   value={modelFilter}
                   onChange={(event) => setModelFilter(event.target.value)}
                   aria-label='按模型筛选'
-                  className='bg-background xl:w-52'
+                  className='xl:w-52'
                 >
                   <option value=''>全部模型</option>
                   {modelOptions.map((model) => (
@@ -246,7 +246,7 @@ export function SidebarGroupStatusPage() {
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value)}
                   aria-label='按状态筛选'
-                  className='bg-background xl:w-40'
+                  className='xl:w-40'
                 >
                   <option value=''>全部状态</option>
                   <option value='healthy'>稳定</option>

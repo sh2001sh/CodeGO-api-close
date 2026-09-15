@@ -13,11 +13,12 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
-const rankingVersion = "marketplace-v6-model-wallet"
+const rankingVersion = "marketplace-v7-consumer-cost"
 
 var marketplaceListCache struct {
 	sync.Mutex
@@ -101,7 +102,11 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 				items = append(items, item)
 			}
 		}
-		sortGroupItems(items, query.Sort, query.Direction)
+		modelFilters := query.Models
+		if len(modelFilters) == 0 && strings.TrimSpace(query.Model) != "" {
+			modelFilters = []string{query.Model}
+		}
+		sortGroupItems(items, query.Sort, query.Direction, modelFilters...)
 		rank := 0
 		for index := range items {
 			if items[index].Observing {
@@ -367,7 +372,7 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumerStat
 	score += inverseMetricScore(weighted(total.latencyTotal, total.latencyWeight), 30000) * 0.1
 	score += cappedMetricScore(weighted(total.tpsTotal, total.tpsWeight), 100) * 0.1
 	score += cappedMetricScore(total.cacheHitRate, 100) * 0.05
-	score += inverseMetricScore(group.Multiplier, 3) * 0.2
+	score += consumerAmountScore(consumerStats.averageConsumerAmount()) * 0.2
 	// Give recently published channels a small discovery boost so mature channels
 	// do not permanently monopolize the top of the marketplace.
 	if !group.CreatedAt.IsZero() {
@@ -469,6 +474,14 @@ func inverseMetricScore(value, ceiling float64) float64 {
 		return 0
 	}
 	return math.Max(0, 100-math.Min(value/ceiling*100, 100))
+}
+func consumerAmountScore(amount int64) float64 {
+	if amount <= 0 || platformruntime.QuotaPerUnit <= 0 {
+		return 0
+	}
+	// A smooth cost curve keeps unusually expensive models comparable without
+	// treating missing samples as free. At $5 per 1M tokens the score is 50.
+	return 100 / (1 + float64(amount)/(platformruntime.QuotaPerUnit*5))
 }
 func cappedMetricScore(value, ceiling float64) float64 {
 	return math.Min(math.Max(value/ceiling*100, 0), 100)

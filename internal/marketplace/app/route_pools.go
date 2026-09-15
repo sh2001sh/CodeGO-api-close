@@ -1,7 +1,9 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -362,7 +364,12 @@ func routePoolConfig(pool marketplaceschema.RoutePool) AutoRoutePoolConfig {
 }
 
 func routePoolAutoBuildConfig(pool marketplaceschema.RoutePool) RoutePoolAutoBuildConfig {
-	return RoutePoolAutoBuildConfig{Enabled: pool.AutoBuildEnabled, Schedule: pool.AutoBuildSchedule, IntervalMinutes: pool.AutoBuildInterval, DailyTime: pool.AutoBuildDailyTime, Model: pool.AutoBuildModel, Size: pool.AutoBuildSize, Explore: pool.AutoBuildExplore, LastBuiltAt: pool.AutoBuildLastAt, NextBuildAt: pool.AutoBuildNextAt, LastError: pool.AutoBuildLastError}
+	models := decodeModels(pool.AutoBuildModels)
+	if len(models) == 0 && strings.TrimSpace(pool.AutoBuildModel) != "" {
+		models = []string{strings.TrimSpace(pool.AutoBuildModel)}
+	}
+	consumerWeight, successWeight, ttftWeight, cacheWeight := normalizeAutoBuildWeights(pool.AutoBuildConsumerWeight, pool.AutoBuildSuccessWeight, pool.AutoBuildTTFTWeight, pool.AutoBuildCacheWeight)
+	return RoutePoolAutoBuildConfig{Enabled: pool.AutoBuildEnabled, Schedule: pool.AutoBuildSchedule, IntervalMinutes: pool.AutoBuildInterval, DailyTime: pool.AutoBuildDailyTime, Models: models, ConsumerWeight: consumerWeight, SuccessWeight: successWeight, TTFTWeight: ttftWeight, CacheWeight: cacheWeight, Size: pool.AutoBuildSize, Explore: pool.AutoBuildExplore, LastBuiltAt: pool.AutoBuildLastAt, NextBuildAt: pool.AutoBuildNextAt, LastError: pool.AutoBuildLastError}
 }
 
 func applyRoutePoolAutoBuild(pool *marketplaceschema.RoutePool, cfg RoutePoolAutoBuildConfig) {
@@ -382,7 +389,17 @@ func applyRoutePoolAutoBuild(pool *marketplaceschema.RoutePool, cfg RoutePoolAut
 	if len(pool.AutoBuildDailyTime) != 5 {
 		pool.AutoBuildDailyTime = "03:00"
 	}
-	pool.AutoBuildModel = strings.TrimSpace(cfg.Model)
+	models := normalizeAutoBuildModels(cfg.Models)
+	if len(models) == 0 && strings.TrimSpace(cfg.Model) != "" {
+		models = normalizeAutoBuildModels([]string{cfg.Model})
+	}
+	encodedModels, _ := json.Marshal(models)
+	pool.AutoBuildModels = string(encodedModels)
+	pool.AutoBuildModel = ""
+	if len(models) == 1 {
+		pool.AutoBuildModel = models[0]
+	}
+	pool.AutoBuildConsumerWeight, pool.AutoBuildSuccessWeight, pool.AutoBuildTTFTWeight, pool.AutoBuildCacheWeight = normalizeAutoBuildWeights(cfg.ConsumerWeight, cfg.SuccessWeight, cfg.TTFTWeight, cfg.CacheWeight)
 	pool.AutoBuildSize = cfg.Size
 	if pool.AutoBuildSize < 1 {
 		pool.AutoBuildSize = 1
@@ -415,14 +432,20 @@ func RunRoutePoolAutoBuild(ownerUserID int, poolID string) (*RoutePoolView, erro
 	if err != nil {
 		return nil, err
 	}
-	model := strings.ToLower(strings.TrimSpace(pool.AutoBuildModel))
+	config := routePoolAutoBuildConfig(pool)
 	candidates := make([]AutoRoutePoolItem, 0, len(all.Items))
 	for _, item := range all.Items {
-		if model == "" || containsModel(item.Models, model) {
+		if len(config.Models) == 0 || containsAnyModel(item.Models, config.Models) {
 			candidates = append(candidates, item)
 		}
 	}
-	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].RouteScore < candidates[j].RouteScore })
+	scores := scoreAutoBuildCandidates(candidates, config)
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if scores[candidates[i].GroupID] != scores[candidates[j].GroupID] {
+			return scores[candidates[i].GroupID] > scores[candidates[j].GroupID]
+		}
+		return candidates[i].GroupID < candidates[j].GroupID
+	})
 	size := pool.AutoBuildSize
 	if size < 1 {
 		size = 3
@@ -464,6 +487,109 @@ func containsModel(models []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func containsAnyModel(models, targets []string) bool {
+	for _, target := range targets {
+		if containsModel(models, strings.ToLower(strings.TrimSpace(target))) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeAutoBuildModels(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		key := strings.ToLower(value)
+		if value == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func normalizeAutoBuildWeights(consumer, success, ttft, cache int) (int, int, int, int) {
+	consumer = min(max(consumer, 0), 100)
+	success = min(max(success, 0), 100)
+	ttft = min(max(ttft, 0), 100)
+	cache = min(max(cache, 0), 100)
+	if consumer+success+ttft+cache == 0 {
+		return 25, 35, 20, 20
+	}
+	return consumer, success, ttft, cache
+}
+
+func selectedConsumerAmount(item AutoRoutePoolItem, models []string) (float64, bool) {
+	if len(models) == 0 {
+		if item.AvgConsumerAmount <= 0 {
+			return 0, false
+		}
+		return float64(item.AvgConsumerAmount), true
+	}
+	var sum int64
+	count := int64(0)
+	for _, target := range models {
+		for model, amount := range item.AvgConsumerAmountByModel {
+			if strings.EqualFold(strings.TrimSpace(model), strings.TrimSpace(target)) && amount > 0 {
+				sum += amount
+				count++
+				break
+			}
+		}
+	}
+	if count == 0 {
+		return 0, false
+	}
+	return float64(sum) / float64(count), true
+}
+
+func scoreAutoBuildCandidates(items []AutoRoutePoolItem, config RoutePoolAutoBuildConfig) map[string]float64 {
+	consumerWeight, successWeight, ttftWeight, cacheWeight := normalizeAutoBuildWeights(config.ConsumerWeight, config.SuccessWeight, config.TTFTWeight, config.CacheWeight)
+	totalWeight := float64(consumerWeight + successWeight + ttftWeight + cacheWeight)
+	amounts := make([]float64, 0, len(items))
+	for _, item := range items {
+		if amount, ok := selectedConsumerAmount(item, config.Models); ok {
+			amounts = append(amounts, amount)
+		}
+	}
+	minAmount, maxAmount := 0.0, 0.0
+	if len(amounts) > 0 {
+		minAmount, maxAmount = amounts[0], amounts[0]
+		for _, amount := range amounts[1:] {
+			minAmount, maxAmount = math.Min(minAmount, amount), math.Max(maxAmount, amount)
+		}
+	}
+	normalize := func(value, ceiling float64) float64 {
+		if ceiling <= 0 {
+			return 0
+		}
+		return math.Max(0, math.Min(value/ceiling, 1))
+	}
+	result := make(map[string]float64, len(items))
+	for _, item := range items {
+		consumerScore := 0.0
+		if amount, ok := selectedConsumerAmount(item, config.Models); ok {
+			if maxAmount == minAmount {
+				consumerScore = 1
+			} else {
+				consumerScore = 0.05 + 0.95*(1-(amount-minAmount)/(maxAmount-minAmount))
+			}
+		}
+		successScore := normalize(item.SuccessRate, 100)
+		cacheScore := normalize(item.CacheHitRate, 100)
+		ttftScore := 0.0
+		if item.AvgTTFTMs > 0 {
+			ttftScore = 1 / (1 + item.AvgTTFTMs/1000)
+		}
+		result[item.GroupID] = (consumerScore*float64(consumerWeight) + successScore*float64(successWeight) + ttftScore*float64(ttftWeight) + cacheScore*float64(cacheWeight)) / totalWeight
+	}
+	return result
 }
 func replaceRoutePoolMembers(poolID string, ids []string) error {
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
@@ -510,7 +636,7 @@ func buildRoutePoolItems(ownerUserID int, groups []marketplaceschema.Group, chan
 			channelID = *channel.InternalChannelID
 		}
 		snapshot := snapshots[group.ID]
-		items = append(items, AutoRoutePoolItem{GroupID: group.ID, SourceType: marketplacedomain.SourceTypeMarketplaceUser, PublicSlug: group.PublicSlug, SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID), SourceLabel: publicSourceLabel(channel), LifecycleStatus: group.LifecycleStatus, Multiplier: group.Multiplier, Availability: round2(availability * 100), SuccessRate: round2(snapshot.RawSuccessRate), CacheHitRate: round2(snapshot.CacheHitRate), AvgTTFTMs: round2(snapshot.AvgTTFTMs), AvgLatencyMS: round2(snapshot.AvgLatencyMs), LatestRequestStatus: latestRequestStatus(series[channelID]), MetricsAvailable: snapshot.RequestCount > 0, RouteScore: round2(score), Observing: snapshot.Observing, RequestCount: snapshot.RequestCount, Models: decodeModels(channel.DeclaredModels), MultiplierCardSupported: channel.MultiplierCardSupported, MultiplierCardUserEnabled: channel.MultiplierCardUserEnabled, Selected: isSelected, Priority: priority})
+		items = append(items, AutoRoutePoolItem{GroupID: group.ID, SourceType: marketplacedomain.SourceTypeMarketplaceUser, PublicSlug: group.PublicSlug, SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID), SourceLabel: publicSourceLabel(channel), LifecycleStatus: group.LifecycleStatus, Multiplier: group.Multiplier, Availability: round2(availability * 100), SuccessRate: round2(snapshot.RawSuccessRate), CacheHitRate: round2(snapshot.CacheHitRate), AvgTTFTMs: round2(snapshot.AvgTTFTMs), AvgLatencyMS: round2(snapshot.AvgLatencyMs), LatestRequestStatus: latestRequestStatus(series[channelID]), MetricsAvailable: snapshot.RequestCount > 0, RouteScore: round2(score), Observing: snapshot.Observing, RequestCount: snapshot.RequestCount, Models: decodeModels(channel.DeclaredModels), AvgConsumerAmount: snapshot.AvgConsumerAmount, AvgConsumerAmountByModel: decodeConsumerAmountsByModel(snapshot.AvgConsumerAmountByModel), MultiplierCardSupported: channel.MultiplierCardSupported, MultiplierCardUserEnabled: channel.MultiplierCardUserEnabled, Selected: isSelected, Priority: priority})
 	}
 	items = append(items, loadOfficialAutoRouteItems(ownerUserID, selected)...)
 	sort.SliceStable(items, func(i, j int) bool {

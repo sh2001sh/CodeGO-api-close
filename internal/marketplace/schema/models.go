@@ -378,25 +378,30 @@ func (AutoRoutePoolConfig) TableName() string { return tableName("auto_route_poo
 // intentionally separate from the legacy Auto pool so existing Auto keys keep
 // their current behavior while newly created keys bind to an explicit pool.
 type RoutePool struct {
-	ID                     string     `json:"id" gorm:"primaryKey;size:64"`
-	OwnerUserID            int        `json:"owner_user_id" gorm:"not null;index;uniqueIndex:uq_marketplace_route_pool_name,priority:1"`
-	Name                   string     `json:"name" gorm:"size:64;not null;uniqueIndex:uq_marketplace_route_pool_name,priority:2"`
-	Strategy               string     `json:"strategy" gorm:"size:16;not null;default:priority"`
-	MaxAttempts            int        `json:"max_attempts;not null;default:3"`
-	FailureCooldownSeconds int        `json:"failure_cooldown_seconds;not null;default:30"`
-	MaxMultiplier          float64    `json:"max_multiplier;not null;default:0"`
-	CreatedAt              time.Time  `json:"created_at;autoCreateTime"`
-	UpdatedAt              time.Time  `json:"updated_at;autoUpdateTime"`
-	AutoBuildEnabled       bool       `json:"auto_build_enabled" gorm:"column:auto_build_enabled;not null;default:false"`
-	AutoBuildSchedule      string     `json:"auto_build_schedule" gorm:"column:auto_build_schedule;size:16;not null;default:interval"`
-	AutoBuildInterval      int        `json:"auto_build_interval" gorm:"column:auto_build_interval;not null;default:60"`
-	AutoBuildDailyTime     string     `json:"auto_build_daily_time" gorm:"column:auto_build_daily_time;size:5;not null;default:03:00"`
-	AutoBuildModel         string     `json:"auto_build_model" gorm:"column:auto_build_model;size:128;not null;default:''"`
-	AutoBuildSize          int        `json:"auto_build_size" gorm:"column:auto_build_size;not null;default:3"`
-	AutoBuildExplore       int        `json:"auto_build_explore" gorm:"column:auto_build_explore;not null;default:1"`
-	AutoBuildLastAt        *time.Time `json:"auto_build_last_at,omitempty"`
-	AutoBuildNextAt        *time.Time `json:"auto_build_next_at,omitempty"`
-	AutoBuildLastError     string     `json:"auto_build_last_error,omitempty" gorm:"column:auto_build_last_error;size:512"`
+	ID                      string     `json:"id" gorm:"primaryKey;size:64"`
+	OwnerUserID             int        `json:"owner_user_id" gorm:"not null;index;uniqueIndex:uq_marketplace_route_pool_name,priority:1"`
+	Name                    string     `json:"name" gorm:"size:64;not null;uniqueIndex:uq_marketplace_route_pool_name,priority:2"`
+	Strategy                string     `json:"strategy" gorm:"size:16;not null;default:priority"`
+	MaxAttempts             int        `json:"max_attempts;not null;default:3"`
+	FailureCooldownSeconds  int        `json:"failure_cooldown_seconds;not null;default:30"`
+	MaxMultiplier           float64    `json:"max_multiplier;not null;default:0"`
+	CreatedAt               time.Time  `json:"created_at;autoCreateTime"`
+	UpdatedAt               time.Time  `json:"updated_at;autoUpdateTime"`
+	AutoBuildEnabled        bool       `json:"auto_build_enabled" gorm:"column:auto_build_enabled;not null;default:false"`
+	AutoBuildSchedule       string     `json:"auto_build_schedule" gorm:"column:auto_build_schedule;size:16;not null;default:interval"`
+	AutoBuildInterval       int        `json:"auto_build_interval" gorm:"column:auto_build_interval;not null;default:60"`
+	AutoBuildDailyTime      string     `json:"auto_build_daily_time" gorm:"column:auto_build_daily_time;size:5;not null;default:03:00"`
+	AutoBuildModel          string     `json:"auto_build_model" gorm:"column:auto_build_model;size:128;not null;default:''"`
+	AutoBuildModels         string     `json:"auto_build_models" gorm:"column:auto_build_models;type:text;not null;default:'[]'"`
+	AutoBuildConsumerWeight int        `json:"auto_build_consumer_weight" gorm:"column:auto_build_consumer_weight;not null;default:25"`
+	AutoBuildSuccessWeight  int        `json:"auto_build_success_weight" gorm:"column:auto_build_success_weight;not null;default:35"`
+	AutoBuildTTFTWeight     int        `json:"auto_build_ttft_weight" gorm:"column:auto_build_ttft_weight;not null;default:20"`
+	AutoBuildCacheWeight    int        `json:"auto_build_cache_weight" gorm:"column:auto_build_cache_weight;not null;default:20"`
+	AutoBuildSize           int        `json:"auto_build_size" gorm:"column:auto_build_size;not null;default:3"`
+	AutoBuildExplore        int        `json:"auto_build_explore" gorm:"column:auto_build_explore;not null;default:1"`
+	AutoBuildLastAt         *time.Time `json:"auto_build_last_at,omitempty"`
+	AutoBuildNextAt         *time.Time `json:"auto_build_next_at,omitempty"`
+	AutoBuildLastError      string     `json:"auto_build_last_error,omitempty" gorm:"column:auto_build_last_error;size:512"`
 }
 
 func (RoutePool) TableName() string { return tableName("route_pools") }

@@ -66,6 +66,7 @@ func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int
 	}
 	var recentStatuses map[string]string
 	metricsByChannel := make(map[int]auditprojection.ChannelSummary)
+	walletStats := make(map[string]channelConsumerStats)
 	if includeMetrics {
 		recentStatuses = loadOfficialGroupRecentRequestStatuses(groupNames)
 		channelIDs := make([]int, 0)
@@ -85,6 +86,11 @@ func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int
 		for _, summary := range summaries {
 			metricsByChannel[summary.ChannelID] = summary
 		}
+		walletStats, err = officialWalletConsumerStats(groupNames, 24)
+		if err != nil {
+			platformobservability.SysError("load official route pool wallet costs: " + err.Error())
+			walletStats = make(map[string]channelConsumerStats)
+		}
 	}
 	items := make([]AutoRoutePoolItem, 0, len(usable))
 	for _, groupName := range groupNames {
@@ -98,6 +104,7 @@ func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int
 		priority, isSelected := selected[routeKey]
 		multiplier := gatewayroutingapp.GetUserGroupRatio(userGroup, groupName)
 		metrics := officialGroupMetrics{Availability: 100, Status: recentStatuses[groupName]}
+		consumerStats := walletStats[groupName]
 		if includeMetrics {
 			metrics = aggregateOfficialGroupMetrics(capability.ChannelIDs, metricsByChannel, recentStatuses[groupName])
 		}
@@ -111,7 +118,7 @@ func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int
 			MetricsAvailable:    metrics.RequestCount > 0,
 			LatestRequestStatus: metrics.Status,
 			RouteScore:          round2(math.Max(multiplier, 0.000001)),
-			Models:              models, Selected: isSelected, Priority: priority,
+			Models:              models, AvgConsumerAmount: consumerStats.averageConsumerAmount(), AvgConsumerAmountByModel: consumerStats.averageConsumerAmountsByModel(), Selected: isSelected, Priority: priority,
 			MultiplierCardSupported: capability.MultiplierCard, MultiplierCardUserEnabled: capability.MultiplierCard,
 		})
 	}

@@ -621,8 +621,18 @@ export function DawnMarket() {
                   }}
                 >
                   <option value='score:desc'>综合评分</option>
-                  <option value='multiplier:asc'>倍率最低</option>
-                  <option value='multiplier:desc'>倍率最高</option>
+                  <option value='consumer_amount:asc'>综合实扣最低</option>
+                  <option value='consumer_amount:desc'>综合实扣最高</option>
+                  {(filters.models?.length ?? 0) > 0 && (
+                    <option value='model_consumer_amount:asc'>
+                      所选模型实扣最低
+                    </option>
+                  )}
+                  {(filters.models?.length ?? 0) > 0 && (
+                    <option value='model_consumer_amount:desc'>
+                      所选模型实扣最高
+                    </option>
+                  )}
                   <option value='success_rate:desc'>成功率最高</option>
                   <option value='success_rate:asc'>成功率最低</option>
                   <option value='ttft:asc'>首字最快</option>
@@ -633,7 +643,16 @@ export function DawnMarket() {
                   models={filterModels}
                   selected={filters.models ?? []}
                   onChange={(models) =>
-                    setFilters((current) => ({ ...current, models, page: 1 }))
+                    setFilters((current) => ({
+                      ...current,
+                      models,
+                      sort:
+                        models.length === 0 &&
+                        current.sort === 'model_consumer_amount'
+                          ? 'consumer_amount'
+                          : current.sort,
+                      page: 1,
+                    }))
                   }
                 />
                 <select

@@ -421,6 +421,8 @@ export interface MarketplaceAutoRoutePoolItem {
   observing: boolean
   request_count: number
   models: string[]
+  avg_consumer_amount: number
+  avg_consumer_amount_by_model: Record<string, number>
   multiplier_card_supported?: boolean
   multiplier_card_user_enabled?: boolean
   selected: boolean
@@ -464,7 +466,12 @@ export interface MarketplaceRoutePoolAutoBuild {
   schedule: 'interval' | 'daily'
   interval_minutes: number
   daily_time: string
-  model: string
+  model?: string
+  models: string[]
+  consumer_weight: number
+  success_weight: number
+  ttft_weight: number
+  cache_weight: number
   size: number
   explore: number
   last_built_at?: string | null

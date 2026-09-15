@@ -23,6 +23,7 @@ import {
   BadgeCheck,
   ChevronDown,
   ChevronUp,
+  ChevronsUpDown,
   GripVertical,
   Info,
   Plus,
@@ -32,7 +33,21 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { getMarketplaceRoutePools } from '@/features/marketplace/api'
 import {
   useMarketplaceAutoRoutePool,
@@ -57,6 +72,8 @@ const STRATEGY_LABEL: Record<string, string> = {
 }
 
 const AUTO_ID = 'auto'
+const autoBuildControlClass =
+  'mt-1 h-9 w-full rounded-md border border-border bg-background px-2.5 text-foreground shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
 
 type PanelMode = 'pool' | 'create' | 'autobuild'
 
@@ -728,6 +745,79 @@ function CreatePanel(props: {
   )
 }
 
+function AutoBuildModelPicker(props: {
+  models: string[]
+  selected: string[]
+  onChange: (models: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = new Set(props.selected.map((model) => model.toLowerCase()))
+  const toggle = (model: string) => {
+    const key = model.toLowerCase()
+    props.onChange(
+      selected.has(key)
+        ? props.selected.filter((item) => item.toLowerCase() !== key)
+        : [...props.selected, model]
+    )
+  }
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type='button'
+            className={cn(
+              autoBuildControlClass,
+              'flex items-center justify-between'
+            )}
+            role='combobox'
+            aria-expanded={open}
+          />
+        }
+      >
+        <span className='truncate'>
+          {props.selected.length
+            ? `已选 ${props.selected.length} 个模型`
+            : '全部模型'}
+        </span>
+        <ChevronsUpDown size={14} className='text-muted-foreground' />
+      </PopoverTrigger>
+      <PopoverContent
+        className='w-[min(360px,calc(100vw-32px))] p-0'
+        align='start'
+      >
+        <Command>
+          <CommandInput placeholder='搜索模型' />
+          <CommandList className='max-h-72'>
+            <CommandEmpty>没有匹配的模型</CommandEmpty>
+            <CommandGroup>
+              {props.models.map((model) => (
+                <CommandItem
+                  key={model}
+                  value={model}
+                  data-checked={selected.has(model.toLowerCase())}
+                  onSelect={() => toggle(model)}
+                >
+                  <span className='truncate font-mono text-xs'>{model}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+          {props.selected.length > 0 && (
+            <button
+              type='button'
+              className='text-muted-foreground hover:text-foreground flex w-full items-center justify-center gap-1.5 border-t px-3 py-2 text-xs'
+              onClick={() => props.onChange([])}
+            >
+              <X size={13} /> 清空模型筛选
+            </button>
+          )}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function RoutePoolAutoBuildSettings(props: {
   value: MarketplaceRoutePoolAutoBuild
   groups: MarketplaceGroup[]
@@ -735,13 +825,14 @@ function RoutePoolAutoBuildSettings(props: {
   onSave: (value: MarketplaceRoutePoolAutoBuild) => Promise<void>
   onRun: () => Promise<void>
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [value, setValue] = useState<MarketplaceRoutePoolAutoBuild>(props.value)
   useEffect(() => setValue(props.value), [props.value])
   const models = useMemo(
     () => Array.from(new Set(props.groups.flatMap((g) => g.models))).sort(),
     [props.groups]
   )
+  const selectedModels = value.models ?? (value.model ? [value.model] : [])
   const summary = value.enabled
     ? value.schedule === 'daily'
       ? `每天 ${value.daily_time || '03:00'}`
@@ -793,7 +884,7 @@ function RoutePoolAutoBuildSettings(props: {
           <label>
             调度方式
             <select
-              className='mt-1 w-full'
+              className={autoBuildControlClass}
               value={value.schedule}
               onChange={(e) =>
                 setValue({
@@ -810,7 +901,7 @@ function RoutePoolAutoBuildSettings(props: {
             <label>
               执行时间
               <input
-                className='mt-1 w-full'
+                className={autoBuildControlClass}
                 type='time'
                 value={value.daily_time || '03:00'}
                 onChange={(e) =>
@@ -822,7 +913,7 @@ function RoutePoolAutoBuildSettings(props: {
             <label>
               间隔（分钟）
               <input
-                className='mt-1 w-full'
+                className={autoBuildControlClass}
                 type='number'
                 min={15}
                 max={10080}
@@ -836,25 +927,20 @@ function RoutePoolAutoBuildSettings(props: {
               />
             </label>
           )}
-          <label>
-            模型筛选
-            <select
-              className='mt-1 w-full'
-              value={value.model}
-              onChange={(e) => setValue({ ...value, model: e.target.value })}
-            >
-              <option value=''>全部模型</option>
-              {models.map((model) => (
-                <option key={model} value={model}>
-                  {model}
-                </option>
-              ))}
-            </select>
+          <label className='col-span-2'>
+            模型筛选（可多选，匹配任一模型）
+            <AutoBuildModelPicker
+              models={models}
+              selected={selectedModels}
+              onChange={(nextModels) =>
+                setValue({ ...value, model: undefined, models: nextModels })
+              }
+            />
           </label>
           <label>
             主选数量
             <input
-              className='mt-1 w-full'
+              className={autoBuildControlClass}
               type='number'
               min={1}
               max={10}
@@ -867,7 +953,7 @@ function RoutePoolAutoBuildSettings(props: {
           <label>
             探索位
             <input
-              className='mt-1 w-full'
+              className={autoBuildControlClass}
               type='number'
               min={0}
               max={10}
@@ -877,6 +963,42 @@ function RoutePoolAutoBuildSettings(props: {
               }
             />
           </label>
+          <div className='border-border bg-background/70 col-span-2 rounded-md border p-3'>
+            <div className='mb-2 font-medium'>评分权重</div>
+            {WEIGHTS.map((weight) => {
+              const key = `${weight.key}_weight` as const
+              const current = value[key] ?? weight.defaultValue
+              const weightTotal = WEIGHTS.reduce(
+                (sum, item) =>
+                  sum +
+                  (value[`${item.key}_weight` as const] ?? item.defaultValue),
+                0
+              )
+              return (
+                <div
+                  className='grid grid-cols-[minmax(0,1fr)_1fr_42px] items-center gap-2 py-1'
+                  key={weight.key}
+                >
+                  <span className='truncate'>{weight.label}</span>
+                  <input
+                    type='range'
+                    min={0}
+                    max={100}
+                    value={current}
+                    onChange={(event) =>
+                      setValue({ ...value, [key]: Number(event.target.value) })
+                    }
+                  />
+                  <b className='text-right tabular-nums'>
+                    {weightTotal > 0
+                      ? Math.round((current / weightTotal) * 100)
+                      : 0}
+                    %
+                  </b>
+                </div>
+              )
+            })}
+          </div>
           <div className='col-span-2 flex justify-end gap-2 pt-1'>
             <button
               className='btn mini'
@@ -903,13 +1025,35 @@ function RoutePoolAutoBuildSettings(props: {
 }
 
 const WEIGHTS = [
-  { key: 'multiplier', label: '倍率（低好）' },
-  { key: 'success', label: '成功率' },
-  { key: 'ttft', label: '首字（低好）' },
-  { key: 'cache', label: '缓存命中率' },
+  { key: 'consumer', label: '平均实扣/1M tokens（低好）', defaultValue: 25 },
+  { key: 'success', label: '成功率', defaultValue: 35 },
+  { key: 'ttft', label: '首字（低好）', defaultValue: 20 },
+  { key: 'cache', label: '缓存命中率', defaultValue: 20 },
 ] as const
 
 type WeightKey = (typeof WEIGHTS)[number]['key']
+
+function selectedAverageConsumerAmount(
+  group: MarketplaceGroup,
+  models: string[]
+): number | null {
+  if (models.length === 0)
+    return group.avg_consumer_amount > 0 ? group.avg_consumer_amount : null
+  const entries = Object.entries(group.avg_consumer_amount_by_model ?? {})
+  const amounts = models
+    .map(
+      (target) =>
+        entries.find(
+          ([model]) => model.toLowerCase() === target.toLowerCase()
+        )?.[1]
+    )
+    .filter(
+      (amount): amount is number => typeof amount === 'number' && amount > 0
+    )
+  return amounts.length
+    ? amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length
+    : null
+}
 
 function AutoBuildPanel(props: {
   groups: MarketplaceGroup[]
@@ -922,14 +1066,14 @@ function AutoBuildPanel(props: {
 }) {
   const [name, setName] = useState('自动池')
   const [weights, setWeights] = useState<Record<WeightKey, number>>({
-    multiplier: 25,
+    consumer: 25,
     success: 35,
     ttft: 20,
     cache: 20,
   })
   const [size, setSize] = useState(3)
   const [explore, setExplore] = useState(1)
-  const [model, setModel] = useState('')
+  const [models, setModels] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
 
   const total =
@@ -944,11 +1088,18 @@ function AutoBuildPanel(props: {
           group.lifecycle_status === 'degraded') &&
         group.verification_status === 'passed' &&
         group.models.length > 0 &&
-        (!model || group.models.includes(model))
+        (models.length === 0 ||
+          group.models.some((model) =>
+            models.some(
+              (selected) => selected.toLowerCase() === model.toLowerCase()
+            )
+          ))
     )
     if (!candidates.length) return []
     const values = {
-      multiplier: candidates.map((g) => g.multiplier),
+      consumer: candidates
+        .map((g) => selectedAverageConsumerAmount(g, models))
+        .filter((value): value is number => value != null),
       success: candidates.map((g) => g.success_rate * 100),
       ttft: candidates.map((g) => g.avg_ttft_ms),
       cache: candidates.map((g) => g.cache_hit_rate * 100),
@@ -960,9 +1111,13 @@ function AutoBuildPanel(props: {
     }
     return candidates
       .map((group) => {
+        const consumerAmount = selectedAverageConsumerAmount(group, models)
+        const consumerScore =
+          consumerAmount == null || values.consumer.length === 0
+            ? 0
+            : 0.05 + 0.95 * (1 - norm(consumerAmount, values.consumer))
         const score =
-          ((weights.multiplier *
-            (1 - norm(group.multiplier, values.multiplier)) +
+          ((weights.consumer * consumerScore +
             weights.success * norm(group.success_rate * 100, values.success) +
             weights.ttft * (1 - norm(group.avg_ttft_ms, values.ttft)) +
             weights.cache * norm(group.cache_hit_rate * 100, values.cache)) /
@@ -971,7 +1126,7 @@ function AutoBuildPanel(props: {
         return { group, score }
       })
       .sort((a, b) => b.score - a.score)
-  }, [props.groups, weights, total, model])
+  }, [props.groups, weights, total, models])
 
   const exploration = useMemo(
     () =>
@@ -982,9 +1137,15 @@ function AutoBuildPanel(props: {
             group.lifecycle_status === 'degraded') &&
           group.verification_status === 'passed' &&
           group.models.length > 0 &&
-          (group.observing || group.request_count === 0)
+          (group.observing || group.request_count === 0) &&
+          (models.length === 0 ||
+            group.models.some((model) =>
+              models.some(
+                (selected) => selected.toLowerCase() === model.toLowerCase()
+              )
+            ))
       ),
-    [props.groups]
+    [props.groups, models]
   )
 
   const main = scored.slice(0, Math.max(1, size))
@@ -993,20 +1154,14 @@ function AutoBuildPanel(props: {
   return (
     <>
       <div className='field'>
-        <label>按模型筛选（可选）</label>
-        <select
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-        >
-          <option value=''>全部模型</option>
-          {Array.from(new Set(props.groups.flatMap((group) => group.models)))
-            .sort()
-            .map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-        </select>
+        <label>按模型筛选（可多选）</label>
+        <AutoBuildModelPicker
+          models={Array.from(
+            new Set(props.groups.flatMap((group) => group.models))
+          ).sort()}
+          selected={models}
+          onChange={setModels}
+        />
       </div>
       <div className='field'>
         <label>路由池名称</label>
@@ -1075,7 +1230,10 @@ function AutoBuildPanel(props: {
               <span className='rk'>{String(index + 1).padStart(2, '0')}</span>
               <span className='nm'>{entry.group.system_display_name}</span>
               <span className='mt'>
-                {entry.group.multiplier}× · {pct(entry.group.success_rate)}% ·{' '}
+                {selectedAverageConsumerAmount(entry.group, models) != null
+                  ? `${formatQuota(selectedAverageConsumerAmount(entry.group, models) ?? 0)}/1M`
+                  : '实扣暂无'}{' '}
+                · {pct(entry.group.success_rate)}% ·{' '}
                 {sec(entry.group.avg_ttft_ms)}s
               </span>
               <span className='bar'>
@@ -1100,7 +1258,7 @@ function AutoBuildPanel(props: {
                     {group.observing ? '观测中' : '无流量'}
                   </span>
                 </span>
-                <span className='mt'>{group.multiplier}×</span>
+                <span className='mt'>实扣待观测</span>
                 <span className='bar'>
                   <i style={{ width: '18%' }} />
                 </span>
@@ -1125,7 +1283,7 @@ function AutoBuildPanel(props: {
                   ...main.map((entry) => entry.group.id),
                   ...explorer.map((group) => group.id),
                 ],
-                weights.multiplier >= 30 ? 'cost' : 'priority'
+                'priority'
               )
             } catch (error) {
               toast.error(

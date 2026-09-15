@@ -15,8 +15,8 @@ import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useMarketplaceMutations } from '../hooks'
-import { failedConnectivityModels } from '../lib/verification'
 import { isImageGenerationModel } from '../lib/model-capabilities'
+import { failedConnectivityModels } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
 
 export function OwnerChannelActions(props: {
@@ -36,9 +36,12 @@ export function OwnerChannelActions(props: {
   ).length
   const retryConnectivity =
     failedConnectivityCount > 0 ||
-    (channel.connectivity_test_status === 'failed' && verifiableDeclaredCount > 0)
+    (channel.connectivity_test_status === 'failed' &&
+      verifiableDeclaredCount > 0)
   const retryConnectivityCount =
-    failedConnectivityCount > 0 ? failedConnectivityCount : verifiableDeclaredCount
+    failedConnectivityCount > 0
+      ? failedConnectivityCount
+      : verifiableDeclaredCount
   const verificationRunning = ['queued', 'running'].includes(
     channel.connectivity_test_status
   )
@@ -92,10 +95,19 @@ export function OwnerChannelActions(props: {
   }
 
   const blockUser = () => {
-    const userId = Number(window.prompt(t('请输入要拉黑的用户 ID')))
-    if (!Number.isInteger(userId) || userId <= 0) return
+    const identifier = window.prompt(t('请输入要拉黑的用户编号或数字 ID'))
+    if (!identifier?.trim()) return
+    const normalized = identifier.trim()
+    const numericUserId = /^\d+$/.test(normalized)
+      ? Number(normalized)
+      : undefined
     mutations.userBlock.mutate(
-      { channelId: channel.id, userId, blocked: true },
+      {
+        channelId: channel.id,
+        userId: numericUserId,
+        userExternalId: numericUserId ? undefined : normalized,
+        blocked: true,
+      },
       {
         onSuccess: () => toast.success(t('用户已被拉黑')),
         onError: (error) =>
@@ -133,9 +145,7 @@ export function OwnerChannelActions(props: {
         size='sm'
         onClick={() =>
           void act(
-            retryConnectivity
-              ? 'retry-connectivity'
-              : 'test-connectivity'
+            retryConnectivity ? 'retry-connectivity' : 'test-connectivity'
           )
         }
         disabled={

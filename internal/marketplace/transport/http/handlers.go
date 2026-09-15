@@ -442,14 +442,21 @@ func ResumeChannel(c *gin.Context) {
 
 func SetChannelUserBlock(c *gin.Context) {
 	var req struct {
-		UserID  int  `json:"user_id"`
-		Blocked bool `json:"blocked"`
+		UserID         int    `json:"user_id"`
+		UserExternalID string `json:"user_external_id"`
+		Blocked        bool   `json:"blocked"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respond(c, nil, err)
 		return
 	}
-	respond(c, gin.H{"blocked": req.Blocked}, marketplaceapp.SetChannelUserBlock(c.GetInt("id"), c.Param("id"), req.UserID, req.Blocked))
+	var err error
+	if req.UserID > 0 {
+		err = marketplaceapp.SetChannelUserBlock(c.GetInt("id"), c.Param("id"), req.UserID, req.Blocked)
+	} else {
+		err = marketplaceapp.SetChannelUserBlockByExternalID(c.GetInt("id"), c.Param("id"), req.UserExternalID, req.Blocked)
+	}
+	respond(c, gin.H{"blocked": req.Blocked}, err)
 }
 
 func BindToken(c *gin.Context) {

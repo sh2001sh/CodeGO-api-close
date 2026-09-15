@@ -10,6 +10,7 @@ import (
 
 	"github.com/sh2001sh/new-api/constant"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -328,6 +329,21 @@ func SetChannelUserBlock(ownerUserID int, channelID string, targetUserID int, bl
 		return platformdb.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&marketplaceschema.ChannelUserBlock{ChannelID: channelID, UserID: targetUserID}).Error
 	}
 	return platformdb.DB.Where("channel_id = ? AND user_id = ?", channelID, targetUserID).Delete(&marketplaceschema.ChannelUserBlock{}).Error
+}
+
+func SetChannelUserBlockByExternalID(ownerUserID int, channelID string, targetExternalID string, blocked bool) error {
+	targetExternalID = strings.ToUpper(strings.TrimSpace(targetExternalID))
+	if targetExternalID == "" {
+		return errors.New("用户编号不能为空")
+	}
+	var user identityschema.User
+	if err := platformdb.DB.Select("id").Where("external_id = ?", targetExternalID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("用户编号不存在")
+		}
+		return err
+	}
+	return SetChannelUserBlock(ownerUserID, channelID, user.Id, blocked)
 }
 
 func loadOwnedChannelGroup(ownerUserID int, channelID string) (*marketplaceschema.Channel, *marketplaceschema.Group, error) {

@@ -715,12 +715,17 @@ export async function setMarketplaceChannelPaused(
 
 export async function setMarketplaceChannelUserBlock(input: {
   channelId: string
-  userId: number
+  userId?: number
+  userExternalId?: string
   blocked: boolean
 }) {
   const response = await api.post<ApiResponse>(
     `/api/marketplace/channels/${input.channelId}/user-block`,
-    { user_id: input.userId, blocked: input.blocked }
+    {
+      user_id: input.userId,
+      user_external_id: input.userExternalId,
+      blocked: input.blocked,
+    }
   )
   if (!response.data.success)
     throw new Error(response.data.message || '操作失败')

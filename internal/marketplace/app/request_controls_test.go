@@ -8,6 +8,7 @@ import (
 	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -79,6 +80,18 @@ func TestSavedPoolsRecheckChannelUserBlocks(t *testing.T) {
 	bindings, _, err := ResolveRoutePoolBindings(20, "saved", "gpt-5", 0)
 	require.ErrorIs(t, err, lookupErr)
 	require.Empty(t, bindings)
+}
+
+func TestSetChannelUserBlockByExternalID(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}, &marketplaceschema.ChannelUserBlock{}))
+	require.NoError(t, db.Create(&identityschema.User{Id: 20, ExternalId: "JLW7UE", Username: "blocked-user", Password: "password"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "420", OwnerUserID: 11}).Error)
+
+	require.NoError(t, SetChannelUserBlockByExternalID(11, "420", " jlw7ue ", true))
+	var block marketplaceschema.ChannelUserBlock
+	require.NoError(t, db.Where("channel_id = ? AND user_id = ?", "420", 20).First(&block).Error)
+	require.ErrorContains(t, SetChannelUserBlockByExternalID(11, "420", "missing", true), "用户编号不存在")
 }
 
 func TestSyncInternalChannelClearsZeroConcurrencyLimits(t *testing.T) {

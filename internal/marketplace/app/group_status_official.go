@@ -186,13 +186,15 @@ func officialWalletConsumerStats(names []string, hours int) (map[string]channelC
 		ModelName            string `gorm:"column:model_name"`
 		WalletRequestCount   int64  `gorm:"column:wallet_request_count"`
 		WalletConsumerAmount int64  `gorm:"column:wallet_consumer_amount"`
+		WalletTokenCount     int64  `gorm:"column:wallet_token_count"`
 	}
 	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
 	err := platformdb.LogDB.Model(&auditschema.Log{}).
 		Select(groupColumn+` AS group_name, model_name,
 			COUNT(*) AS wallet_request_count,
-			COALESCE(SUM(quota), 0) AS wallet_consumer_amount`).
-		Where("type = ? AND created_at >= ? AND "+groupColumn+" IN ? AND other LIKE ?", auditschema.LogTypeConsume, cutoff, names, walletBillingSourcePattern).
+			COALESCE(SUM(quota), 0) AS wallet_consumer_amount,
+			COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS wallet_token_count`).
+		Where("type = ? AND created_at >= ? AND "+groupColumn+" IN ? AND other LIKE ? AND prompt_tokens + completion_tokens > 0", auditschema.LogTypeConsume, cutoff, names, walletBillingSourcePattern).
 		Group(groupColumn + ", model_name").Scan(&rows).Error
 	if err != nil {
 		return nil, err
@@ -201,11 +203,12 @@ func officialWalletConsumerStats(names []string, hours int) (map[string]channelC
 		stats := result[row.GroupName]
 		stats.WalletRequestCount += row.WalletRequestCount
 		stats.WalletConsumerAmount += row.WalletConsumerAmount
+		stats.WalletTokenCount += row.WalletTokenCount
 		if strings.TrimSpace(row.ModelName) != "" {
 			if stats.ByModel == nil {
 				stats.ByModel = make(map[string]consumerAmountStats)
 			}
-			stats.ByModel[row.ModelName] = consumerAmountStats{RequestCount: row.WalletRequestCount, Amount: row.WalletConsumerAmount}
+			stats.ByModel[row.ModelName] = consumerAmountStats{TokenCount: row.WalletTokenCount, Amount: row.WalletConsumerAmount}
 		}
 		result[row.GroupName] = stats
 	}

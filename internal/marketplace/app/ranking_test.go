@@ -39,9 +39,9 @@ func TestChannelConsumerStatsByChannelAcrossGroups(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&auditschema.Log{}))
 	now := time.Now().Unix()
 	require.NoError(t, db.Create([]auditschema.Log{
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ModelName: "model-a", ChannelId: 501, Quota: 100, Other: `{"billing_source":"wallet"}`},
-		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "plus", ModelName: "model-b", ChannelId: 501, Quota: 300, Other: `{ "billing_source" : "wallet" }`},
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "pro", ModelName: "model-a", ChannelId: 501, Quota: 500, Other: `{"billing_source":"subscription"}`},
+		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ModelName: "model-a", ChannelId: 501, Quota: 100, PromptTokens: 800, CompletionTokens: 200, Other: `{"billing_source":"wallet"}`},
+		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "plus", ModelName: "model-b", ChannelId: 501, Quota: 300, PromptTokens: 1500, CompletionTokens: 500, Other: `{ "billing_source" : "wallet" }`},
+		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "pro", ModelName: "model-a", ChannelId: 501, Quota: 500, PromptTokens: 1000, Other: `{"billing_source":"subscription"}`},
 		{UserId: 3, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ModelName: "model-a", ChannelId: 502, Quota: 200, Other: `{"billing_source":"subscription"}`},
 		{UserId: 4, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ModelName: "model-b", ChannelId: 502, Quota: 700, Other: `{}`},
 	}).Error)
@@ -50,8 +50,8 @@ func TestChannelConsumerStatsByChannelAcrossGroups(t *testing.T) {
 	require.EqualValues(t, 2, stats[501].IndependentConsumers)
 	require.EqualValues(t, 2, stats[501].WalletRequestCount)
 	require.EqualValues(t, 400, stats[501].WalletConsumerAmount)
-	require.EqualValues(t, 200, stats[501].averageConsumerAmount())
-	require.Equal(t, map[string]int64{"model-a": 100, "model-b": 300}, stats[501].averageConsumerAmountsByModel())
+	require.EqualValues(t, 133333, stats[501].averageConsumerAmount())
+	require.Equal(t, map[string]int64{"model-a": 100000, "model-b": 150000}, stats[501].averageConsumerAmountsByModel())
 	require.EqualValues(t, 2, stats[502].IndependentConsumers)
 	require.Zero(t, stats[502].WalletRequestCount)
 	require.Zero(t, stats[502].WalletConsumerAmount)
@@ -73,11 +73,11 @@ func TestOfficialWalletConsumerStatsSeparatesModelsAndExcludesSubscriptions(t *t
 	require.NoError(t, db.AutoMigrate(&auditschema.Log{}))
 	now := time.Now().Unix()
 	require.NoError(t, db.Create([]auditschema.Log{
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 100, Other: `{"billing_source":"wallet"}`},
-		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 300, Other: `{"billing_source":"wallet"}`},
-		{UserId: 3, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-b", Quota: 900, Other: `{"billing_source":"wallet"}`},
-		{UserId: 4, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 5000, Other: `{"billing_source":"subscription"}`},
-		{UserId: 5, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-b", ModelName: "model-a", Quota: 700, Other: `{"billing_source":"wallet"}`},
+		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 100, PromptTokens: 1000, Other: `{"billing_source":"wallet"}`},
+		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 300, PromptTokens: 3000, Other: `{"billing_source":"wallet"}`},
+		{UserId: 3, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-b", Quota: 900, PromptTokens: 2500, CompletionTokens: 500, Other: `{"billing_source":"wallet"}`},
+		{UserId: 4, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 5000, PromptTokens: 1000, Other: `{"billing_source":"subscription"}`},
+		{UserId: 5, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-b", ModelName: "model-a", Quota: 700, PromptTokens: 1400, Other: `{"billing_source":"wallet"}`},
 	}).Error)
 	officialWalletStatsCache.Lock()
 	officialWalletStatsCache.at = time.Time{}
@@ -87,9 +87,9 @@ func TestOfficialWalletConsumerStatsSeparatesModelsAndExcludesSubscriptions(t *t
 
 	stats, err := officialWalletConsumerStats([]string{"official-a", "official-b"}, 24)
 	require.NoError(t, err)
-	require.EqualValues(t, 433, stats["official-a"].averageConsumerAmount())
-	require.Equal(t, map[string]int64{"model-a": 200, "model-b": 900}, stats["official-a"].averageConsumerAmountsByModel())
-	require.EqualValues(t, 700, stats["official-b"].averageConsumerAmount())
+	require.EqualValues(t, 185714, stats["official-a"].averageConsumerAmount())
+	require.Equal(t, map[string]int64{"model-a": 100000, "model-b": 300000}, stats["official-a"].averageConsumerAmountsByModel())
+	require.EqualValues(t, 500000, stats["official-b"].averageConsumerAmount())
 }
 
 func TestAggregateChannelRankingRowsKeepsChannelsSeparate(t *testing.T) {
@@ -120,17 +120,17 @@ func TestScoreGroupDoesNotPromoteLegacyTTFTToPercentile(t *testing.T) {
 	require.Zero(t, snapshot.LatencySampleCount)
 }
 
-func TestScoreGroupPublishesAverageConsumerAmount(t *testing.T) {
+func TestScoreGroupPublishesConsumerAmountPerMillionTokens(t *testing.T) {
 	t.Parallel()
 
 	snapshot := scoreGroup(
 		marketplaceschema.Group{ID: "priced", Multiplier: 1},
 		rankingTotals{requestCount: 3, successWeight: 3, successTotal: 300},
-		channelConsumerStats{IndependentConsumers: 2, WalletRequestCount: 3, WalletConsumerAmount: 901},
+		channelConsumerStats{IndependentConsumers: 2, WalletRequestCount: 3, WalletConsumerAmount: 901, WalletTokenCount: 3000},
 		24,
 	)
 
-	require.EqualValues(t, 300, snapshot.AvgConsumerAmount)
+	require.EqualValues(t, 300333, snapshot.AvgConsumerAmount)
 	require.Equal(t, map[string]int64{}, decodeConsumerAmountsByModel(snapshot.AvgConsumerAmountByModel))
 }
 

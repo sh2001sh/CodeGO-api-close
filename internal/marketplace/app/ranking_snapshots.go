@@ -274,28 +274,29 @@ type channelConsumerStats struct {
 	IndependentConsumers int64                          `gorm:"column:independent_consumers"`
 	WalletRequestCount   int64                          `gorm:"column:wallet_request_count"`
 	WalletConsumerAmount int64                          `gorm:"column:wallet_consumer_amount"`
+	WalletTokenCount     int64                          `gorm:"column:wallet_token_count"`
 	ByModel              map[string]consumerAmountStats `gorm:"-"`
 }
 
 type consumerAmountStats struct {
-	RequestCount int64
-	Amount       int64
+	TokenCount int64
+	Amount     int64
 }
 
 func (stats channelConsumerStats) averageConsumerAmount() int64 {
-	if stats.WalletRequestCount <= 0 || stats.WalletConsumerAmount <= 0 {
+	if stats.WalletTokenCount <= 0 || stats.WalletConsumerAmount <= 0 {
 		return 0
 	}
-	return int64(math.Round(float64(stats.WalletConsumerAmount) / float64(stats.WalletRequestCount)))
+	return int64(math.Round(float64(stats.WalletConsumerAmount) * 1_000_000 / float64(stats.WalletTokenCount)))
 }
 
 func (stats channelConsumerStats) averageConsumerAmountsByModel() map[string]int64 {
 	result := make(map[string]int64, len(stats.ByModel))
 	for model, values := range stats.ByModel {
-		if values.RequestCount <= 0 || values.Amount <= 0 {
+		if values.TokenCount <= 0 || values.Amount <= 0 {
 			continue
 		}
-		result[model] = int64(math.Round(float64(values.Amount) / float64(values.RequestCount)))
+		result[model] = int64(math.Round(float64(values.Amount) * 1_000_000 / float64(values.TokenCount)))
 	}
 	return result
 }
@@ -311,14 +312,15 @@ func channelConsumerStatsByChannel(channelIDs []int, hours int) map[int]channelC
 		IndependentConsumers int64  `gorm:"column:independent_consumers"`
 		WalletRequestCount   int64  `gorm:"column:wallet_request_count"`
 		WalletConsumerAmount int64  `gorm:"column:wallet_consumer_amount"`
+		WalletTokenCount     int64  `gorm:"column:wallet_token_count"`
 	}
 	var rows []row
 	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
 	// Consume logs store the settled billing source in Other. Keep the
 	// independent-consumer threshold based on all successful requests, while
-	// the displayed average only reflects quota actually deducted from the
-	// user's wallet. Subscription quota is therefore never presented as an
-	// out-of-pocket per-request charge.
+	// the displayed normalized price only reflects quota actually deducted
+	// from the user's wallet. Subscription quota is never presented as an
+	// out-of-pocket cost, and zero-token task records cannot distort the rate.
 	base := platformdb.LogDB.Model(&auditschema.Log{}).
 		Where("type = ? AND created_at >= ? AND channel_id IN ?", auditschema.LogTypeConsume, cutoff, channelIDs)
 	channelRows := base.Session(&gorm.Session{}).
@@ -327,14 +329,16 @@ func channelConsumerStatsByChannel(channelIDs []int, hours int) map[int]channelC
 	modelRows := base.Session(&gorm.Session{}).
 		Select(`channel_id, model_name,
 			COUNT(*) AS wallet_request_count,
-			COALESCE(SUM(quota), 0) AS wallet_consumer_amount`).
-		Where("other LIKE ?", walletBillingSourcePattern).
+			COALESCE(SUM(quota), 0) AS wallet_consumer_amount,
+			COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS wallet_token_count`).
+		Where("other LIKE ? AND prompt_tokens + completion_tokens > 0", walletBillingSourcePattern).
 		Group("channel_id, model_name")
 	if err := platformdb.LogDB.Table("(?) AS channel_stats", channelRows).
 		Select(`channel_stats.channel_id, channel_stats.independent_consumers,
 			COALESCE(model_stats.model_name, '') AS model_name,
 			COALESCE(model_stats.wallet_request_count, 0) AS wallet_request_count,
-			COALESCE(model_stats.wallet_consumer_amount, 0) AS wallet_consumer_amount`).
+			COALESCE(model_stats.wallet_consumer_amount, 0) AS wallet_consumer_amount,
+			COALESCE(model_stats.wallet_token_count, 0) AS wallet_token_count`).
 		Joins("LEFT JOIN (?) AS model_stats ON model_stats.channel_id = channel_stats.channel_id", modelRows).
 		Scan(&rows).Error; err != nil {
 		platformobservability.SysError(fmt.Sprintf("aggregate marketplace wallet consumer stats: %s", err.Error()))
@@ -345,11 +349,12 @@ func channelConsumerStatsByChannel(channelIDs []int, hours int) map[int]channelC
 		stats.IndependentConsumers = item.IndependentConsumers
 		stats.WalletRequestCount += item.WalletRequestCount
 		stats.WalletConsumerAmount += item.WalletConsumerAmount
-		if strings.TrimSpace(item.ModelName) != "" && item.WalletRequestCount > 0 {
+		stats.WalletTokenCount += item.WalletTokenCount
+		if strings.TrimSpace(item.ModelName) != "" && item.WalletTokenCount > 0 {
 			if stats.ByModel == nil {
 				stats.ByModel = make(map[string]consumerAmountStats)
 			}
-			stats.ByModel[item.ModelName] = consumerAmountStats{RequestCount: item.WalletRequestCount, Amount: item.WalletConsumerAmount}
+			stats.ByModel[item.ModelName] = consumerAmountStats{TokenCount: item.WalletTokenCount, Amount: item.WalletConsumerAmount}
 		}
 		result[item.ChannelID] = stats
 	}

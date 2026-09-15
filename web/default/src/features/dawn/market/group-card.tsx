@@ -169,16 +169,10 @@ export function MarketGroupCard(props: {
         </div>
         <div
           className='m'
-          title='近 24 小时钱包/通用额度成功请求的平均实际扣费；套餐请求不计入'
+          title='近 24 小时钱包/通用额度成功请求每 100 万实际 token 的平均扣费；套餐请求和无 token 记录不计入。这是按真实输入、输出与缓存结构形成的综合单价，不等于官方输入单价。'
         >
-          <b>
-            {displayedAverage > 0 ? formatQuota(displayedAverage) : '—'}
-          </b>
-          <span>
-            {props.selectedModels.length === 1
-              ? '该模型平均实扣'
-              : '平均实扣/次'}
-          </span>
+          <b>{displayedAverage > 0 ? formatQuota(displayedAverage) : '—'}</b>
+          <span>平均实扣/1M tokens</span>
         </div>
       </div>
 
@@ -263,7 +257,7 @@ export function MarketGroupCard(props: {
             <span style={{ textAlign: 'right' }}>输出 /1M</span>
             <span className='mp'>{t('缓存写入')} /1M</span>
             <span className='mp'>{t('缓存读取')} /1M</span>
-            <span style={{ textAlign: 'right' }}>平均实扣/次</span>
+            <span style={{ textAlign: 'right' }}>平均实扣/1M tokens</span>
             <span style={{ textAlign: 'right' }}>延迟</span>
           </div>
           {group.models.map((model) => {
@@ -319,7 +313,7 @@ export function MarketGroupCard(props: {
                   <span className='mp'>{fee?.cacheRead ?? '—'}</span>
                   <span
                     className='mp'
-                    title='近 24 小时该模型钱包/通用额度成功请求的平均实际扣费；套餐请求不计入'
+                    title='近 24 小时该模型钱包/通用额度成功请求每 100 万实际 token 的平均扣费；套餐请求和无 token 记录不计入'
                   >
                     {(group.avg_consumer_amount_by_model?.[result.model] ?? 0) >
                     0

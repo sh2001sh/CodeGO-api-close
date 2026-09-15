@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -16,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const rankingVersion = "marketplace-v5-wallet-avg"
+const rankingVersion = "marketplace-v6-model-wallet"
 
 var marketplaceListCache struct {
 	sync.Mutex
@@ -387,10 +388,33 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumerStat
 		E2ETTFTP95Ms:       round2(total.e2eTtftP95),
 		LatencySampleCount: total.latencySamples,
 		AvgLatencyMs:       round2(weighted(total.latencyTotal, total.latencyWeight)), AvgTPS: round2(weighted(total.tpsTotal, total.tpsWeight)),
-		CacheHitRate:      round2(total.cacheHitRate),
-		AvgConsumerAmount: consumerStats.averageConsumerAmount(),
-		RequestCount:      total.requestCount, IndependentConsumers: consumerStats.IndependentConsumers, Observing: observing, CalculatedAt: time.Now().UTC(),
+		CacheHitRate:             round2(total.cacheHitRate),
+		AvgConsumerAmount:        consumerStats.averageConsumerAmount(),
+		AvgConsumerAmountByModel: encodeConsumerAmountsByModel(consumerStats.averageConsumerAmountsByModel()),
+		RequestCount:             total.requestCount, IndependentConsumers: consumerStats.IndependentConsumers, Observing: observing, CalculatedAt: time.Now().UTC(),
 	}
+}
+
+func encodeConsumerAmountsByModel(values map[string]int64) string {
+	if len(values) == 0 {
+		return "{}"
+	}
+	encoded, err := json.Marshal(values)
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
+}
+
+func decodeConsumerAmountsByModel(value string) map[string]int64 {
+	result := make(map[string]int64)
+	if strings.TrimSpace(value) == "" {
+		return result
+	}
+	if err := json.Unmarshal([]byte(value), &result); err != nil {
+		return make(map[string]int64)
+	}
+	return result
 }
 
 func assignRanks(snapshots []marketplaceschema.RankingSnapshot) {

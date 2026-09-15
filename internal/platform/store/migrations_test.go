@@ -80,7 +80,7 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.True(t, db.Migrator().HasColumn(&commerceschema.BlindBoxProp{}, "RemainingSeconds"))
 	require.True(t, db.Migrator().HasColumn(&commerceschema.TopUp{}, "ExternalPaymentID"))
 	for _, column := range []string{
-		"AttemptTTFTP50Ms", "AttemptTTFTP95Ms", "E2ETTFTP50Ms", "E2ETTFTP95Ms", "LatencySampleCount", "AvgConsumerAmount",
+		"AttemptTTFTP50Ms", "AttemptTTFTP95Ms", "E2ETTFTP50Ms", "E2ETTFTP95Ms", "LatencySampleCount", "AvgConsumerAmount", "AvgConsumerAmountByModel",
 	} {
 		require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, column), column)
 	}
@@ -100,6 +100,10 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.True(t, appliedMigrationNeedsRepair(db, "20260915_marketplace_average_consumer_amount"))
 	require.NoError(t, ApplyV2Migrations(context.Background(), false))
 	require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AvgConsumerAmount"))
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.RankingSnapshot{}, "AvgConsumerAmountByModel"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260915_marketplace_average_consumer_amount_by_model"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AvgConsumerAmountByModel"))
 	for _, table := range []string{
 		"billing_outbox_events",
 		"billing_funding_source_policies",

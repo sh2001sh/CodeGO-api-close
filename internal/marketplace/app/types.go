@@ -233,6 +233,7 @@ type GroupListItem struct {
 	AvgTPS                     float64                      `json:"avg_tps"`
 	CacheHitRate               float64                      `json:"cache_hit_rate"`
 	AvgConsumerAmount          int64                        `json:"avg_consumer_amount"`
+	AvgConsumerAmountByModel   map[string]int64             `json:"avg_consumer_amount_by_model"`
 	LatestRequestStatus        string                       `json:"latest_request_status"`
 	RecentRequestSeries        []RecentRequestBucket        `json:"recent_request_series"`
 	RecentRequestBucketSeconds int64                        `json:"recent_request_bucket_seconds"`

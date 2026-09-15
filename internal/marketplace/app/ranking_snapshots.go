@@ -15,6 +15,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"golang.org/x/sync/singleflight"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -26,6 +27,7 @@ var rankingRefreshTriggers struct {
 }
 
 const rankingRefreshTriggerCooldown = 30 * time.Second
+const walletBillingSourcePattern = `%"billing_source"%:%"wallet"%`
 
 func allowRankingRefreshTrigger(key string) bool {
 	now := time.Now()
@@ -263,15 +265,21 @@ func persistRankingSnapshots(snapshots []marketplaceschema.RankingSnapshot) erro
 		DoUpdates: clause.AssignmentColumns([]string{
 			"rank", "score", "raw_success_rate", "wilson_success_rate", "avg_ttft_ms",
 			"attempt_ttft_p50_ms", "attempt_ttft_p95_ms", "e2e_ttft_p50_ms", "e2e_ttft_p95_ms", "latency_sample_count",
-			"avg_latency_ms", "avg_tps", "cache_hit_rate", "avg_consumer_amount", "request_count", "independent_consumers", "observing", "calculated_at",
+			"avg_latency_ms", "avg_tps", "cache_hit_rate", "avg_consumer_amount", "avg_consumer_amount_by_model", "request_count", "independent_consumers", "observing", "calculated_at",
 		}),
 	}).CreateInBatches(&snapshots, 100).Error
 }
 
 type channelConsumerStats struct {
-	IndependentConsumers int64 `gorm:"column:independent_consumers"`
-	WalletRequestCount   int64 `gorm:"column:wallet_request_count"`
-	WalletConsumerAmount int64 `gorm:"column:wallet_consumer_amount"`
+	IndependentConsumers int64                          `gorm:"column:independent_consumers"`
+	WalletRequestCount   int64                          `gorm:"column:wallet_request_count"`
+	WalletConsumerAmount int64                          `gorm:"column:wallet_consumer_amount"`
+	ByModel              map[string]consumerAmountStats `gorm:"-"`
+}
+
+type consumerAmountStats struct {
+	RequestCount int64
+	Amount       int64
 }
 
 func (stats channelConsumerStats) averageConsumerAmount() int64 {
@@ -281,16 +289,28 @@ func (stats channelConsumerStats) averageConsumerAmount() int64 {
 	return int64(math.Round(float64(stats.WalletConsumerAmount) / float64(stats.WalletRequestCount)))
 }
 
+func (stats channelConsumerStats) averageConsumerAmountsByModel() map[string]int64 {
+	result := make(map[string]int64, len(stats.ByModel))
+	for model, values := range stats.ByModel {
+		if values.RequestCount <= 0 || values.Amount <= 0 {
+			continue
+		}
+		result[model] = int64(math.Round(float64(values.Amount) / float64(values.RequestCount)))
+	}
+	return result
+}
+
 func channelConsumerStatsByChannel(channelIDs []int, hours int) map[int]channelConsumerStats {
 	result := make(map[int]channelConsumerStats)
 	if len(channelIDs) == 0 || platformdb.LogDB == nil {
 		return result
 	}
 	type row struct {
-		ChannelID            int   `gorm:"column:channel_id"`
-		IndependentConsumers int64 `gorm:"column:independent_consumers"`
-		WalletRequestCount   int64 `gorm:"column:wallet_request_count"`
-		WalletConsumerAmount int64 `gorm:"column:wallet_consumer_amount"`
+		ChannelID            int    `gorm:"column:channel_id"`
+		ModelName            string `gorm:"column:model_name"`
+		IndependentConsumers int64  `gorm:"column:independent_consumers"`
+		WalletRequestCount   int64  `gorm:"column:wallet_request_count"`
+		WalletConsumerAmount int64  `gorm:"column:wallet_consumer_amount"`
 	}
 	var rows []row
 	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
@@ -299,24 +319,39 @@ func channelConsumerStatsByChannel(channelIDs []int, hours int) map[int]channelC
 	// the displayed average only reflects quota actually deducted from the
 	// user's wallet. Subscription quota is therefore never presented as an
 	// out-of-pocket per-request charge.
-	walletBillingSource := `%"billing_source"%:%"wallet"%`
-	if err := platformdb.LogDB.Model(&auditschema.Log{}).
-		Select(`channel_id,
-			COUNT(DISTINCT user_id) AS independent_consumers,
-			COALESCE(SUM(CASE WHEN other LIKE ? THEN 1 ELSE 0 END), 0) AS wallet_request_count,
-			COALESCE(SUM(CASE WHEN other LIKE ? THEN quota ELSE 0 END), 0) AS wallet_consumer_amount`,
-			walletBillingSource, walletBillingSource).
-		Where("type = ? AND created_at >= ? AND channel_id IN ?", auditschema.LogTypeConsume, cutoff, channelIDs).
-		Group("channel_id").Scan(&rows).Error; err != nil {
+	base := platformdb.LogDB.Model(&auditschema.Log{}).
+		Where("type = ? AND created_at >= ? AND channel_id IN ?", auditschema.LogTypeConsume, cutoff, channelIDs)
+	channelRows := base.Session(&gorm.Session{}).
+		Select("channel_id, COUNT(DISTINCT user_id) AS independent_consumers").
+		Group("channel_id")
+	modelRows := base.Session(&gorm.Session{}).
+		Select(`channel_id, model_name,
+			COUNT(*) AS wallet_request_count,
+			COALESCE(SUM(quota), 0) AS wallet_consumer_amount`).
+		Where("other LIKE ?", walletBillingSourcePattern).
+		Group("channel_id, model_name")
+	if err := platformdb.LogDB.Table("(?) AS channel_stats", channelRows).
+		Select(`channel_stats.channel_id, channel_stats.independent_consumers,
+			COALESCE(model_stats.model_name, '') AS model_name,
+			COALESCE(model_stats.wallet_request_count, 0) AS wallet_request_count,
+			COALESCE(model_stats.wallet_consumer_amount, 0) AS wallet_consumer_amount`).
+		Joins("LEFT JOIN (?) AS model_stats ON model_stats.channel_id = channel_stats.channel_id", modelRows).
+		Scan(&rows).Error; err != nil {
 		platformobservability.SysError(fmt.Sprintf("aggregate marketplace wallet consumer stats: %s", err.Error()))
 		return result
 	}
 	for _, item := range rows {
-		result[item.ChannelID] = channelConsumerStats{
-			IndependentConsumers: item.IndependentConsumers,
-			WalletRequestCount:   item.WalletRequestCount,
-			WalletConsumerAmount: item.WalletConsumerAmount,
+		stats := result[item.ChannelID]
+		stats.IndependentConsumers = item.IndependentConsumers
+		stats.WalletRequestCount += item.WalletRequestCount
+		stats.WalletConsumerAmount += item.WalletConsumerAmount
+		if strings.TrimSpace(item.ModelName) != "" && item.WalletRequestCount > 0 {
+			if stats.ByModel == nil {
+				stats.ByModel = make(map[string]consumerAmountStats)
+			}
+			stats.ByModel[item.ModelName] = consumerAmountStats{RequestCount: item.WalletRequestCount, Amount: item.WalletConsumerAmount}
 		}
+		result[item.ChannelID] = stats
 	}
 	return result
 }

@@ -286,7 +286,7 @@ export function PoolWorkbench(props: {
           {mode === 'create'
             ? '新建路由池'
             : mode === 'autobuild'
-              ? '自动构建'
+              ? '智能新建池'
               : isAuto
                 ? 'AUTO 池'
                 : (poolDetail.data?.name ?? '路由池工作台')}
@@ -423,7 +423,7 @@ export function PoolWorkbench(props: {
                 </button>
                 <button
                   className='btn mini'
-                  title='自动构建'
+                  title='智能新建一个路由池'
                   onClick={() => onModeChange('autobuild')}
                 >
                   <Sparkles size={14} />
@@ -735,7 +735,7 @@ function RoutePoolAutoBuildSettings(props: {
   onSave: (value: MarketplaceRoutePoolAutoBuild) => Promise<void>
   onRun: () => Promise<void>
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [value, setValue] = useState<MarketplaceRoutePoolAutoBuild>(props.value)
   useEffect(() => setValue(props.value), [props.value])
   const models = useMemo(
@@ -748,22 +748,38 @@ function RoutePoolAutoBuildSettings(props: {
       : `每 ${value.interval_minutes || 60} 分钟`
     : '已停用'
   return (
-    <div className='border-border/60 mb-3 rounded-md border px-3 py-2'>
+    <div className='mb-3 rounded-md border border-amber-500/45 bg-amber-500/5 px-3 py-2 shadow-sm'>
       <button
-        className='flex w-full items-center justify-between text-left text-xs'
+        className='flex w-full items-center justify-between gap-2 text-left text-xs'
         onClick={() => setOpen((v) => !v)}
       >
-        <span className='flex items-center gap-1.5'>
-          <Sparkles size={13} />
-          自动智能构建 · {summary}
-          {value.next_build_at
-            ? ` · 下次 ${new Date(value.next_build_at).toLocaleString()}`
-            : ''}
+        <span className='flex min-w-0 items-center gap-1.5 font-medium'>
+          <Sparkles className='shrink-0 text-amber-600' size={14} />
+          <span>自动重新构建</span>
+          <span
+            className={cn(
+              'shrink-0 rounded px-1.5 py-0.5 text-[10px]',
+              value.enabled
+                ? 'bg-emerald-500/15 text-emerald-700'
+                : 'bg-amber-500/15 text-amber-700'
+            )}
+          >
+            {value.enabled ? summary : '未启用'}
+          </span>
         </span>
-        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        <span className='flex shrink-0 items-center gap-1 text-amber-700'>
+          {open ? '收起参数' : '配置参数'}
+          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </span>
       </button>
       {open && (
         <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
+          <p className='text-muted-foreground col-span-2'>
+            定时按模型、主选数量和探索位重新替换当前池成员。
+            {value.next_build_at
+              ? ` 下次执行：${new Date(value.next_build_at).toLocaleString()}`
+              : ''}
+          </p>
           <label className='col-span-2 flex items-center gap-2'>
             <input
               type='checkbox'
@@ -772,7 +788,7 @@ function RoutePoolAutoBuildSettings(props: {
                 setValue({ ...value, enabled: e.target.checked })
               }
             />
-            启用自动构建
+            启用自动重新构建
           </label>
           <label>
             调度方式

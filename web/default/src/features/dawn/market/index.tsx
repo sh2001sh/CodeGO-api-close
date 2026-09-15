@@ -691,7 +691,7 @@ export function DawnMarket() {
                     }}
                   >
                     <Sparkles size={14} />
-                    自动构建
+                    智能新建池
                   </button>
                 </div>
               </div>
@@ -787,6 +787,7 @@ export function DawnMarket() {
                               poolName={activePoolName}
                               authed={authed}
                               expanded={expanded.has(group.id)}
+                              selectedModels={filters.models ?? []}
                               onToggleSelect={() =>
                                 setSelected((current) =>
                                   current === group.id ? null : group.id

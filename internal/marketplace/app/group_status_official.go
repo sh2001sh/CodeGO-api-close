@@ -1,12 +1,15 @@
 package app
 
 import (
+	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sh2001sh/new-api/constant"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -16,6 +19,13 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
 )
+
+var officialWalletStatsCache struct {
+	sync.Mutex
+	at     time.Time
+	key    string
+	values map[string]channelConsumerStats
+}
 
 // Status discovery shares routing permissions, but never depends on an official
 // group having a marketplace row. Third-party rows cannot bypass market review.
@@ -119,6 +129,10 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		}
 	}
 	active := gatewayruntime.ActiveChannelRequestsForChannels(channelIDs)
+	walletStats, err := officialWalletConsumerStats(names, 24)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]GroupListItem, 0, len(names))
 	for _, name := range names {
 		capability := capabilities[name]
@@ -128,6 +142,7 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		}
 		key := officialAutoRoutePrefix + name
 		summary := metrics[name]
+		consumerStats := walletStats[name]
 		recent := series[groupIndices[name]]
 		items = append(items, GroupListItem{
 			ID: key, PublicSlug: key, SystemDisplayName: name,
@@ -138,6 +153,7 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 			RequestCount:             summary.RequestCount, SuccessRate: summary.SuccessRate, WilsonSuccessRate: summary.SuccessRate,
 			AvgTTFTMs: float64(summary.AvgTtftMs), LatencySampleCount: summary.RequestCount,
 			Score: summary.SuccessRate*0.35 + inverseMetricScore(float64(summary.AvgTtftMs), 3000)*0.2 + inverseMetricScore(1, 3)*0.2, CacheHitRate: summary.CacheHitRate,
+			AvgConsumerAmount: consumerStats.averageConsumerAmount(), AvgConsumerAmountByModel: consumerStats.averageConsumerAmountsByModel(),
 			RecentRequestSeries: recent, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 			LatestRequestStatus:     latestRequestStatus(recent),
 			MultiplierCardSupported: capability.MultiplierCard, MultiplierCardUserEnabled: capability.MultiplierCard,
@@ -145,6 +161,60 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 		})
 	}
 	return items, nil
+}
+
+func officialWalletConsumerStats(names []string, hours int) (map[string]channelConsumerStats, error) {
+	result := make(map[string]channelConsumerStats, len(names))
+	if len(names) == 0 || platformdb.LogDB == nil {
+		return result, nil
+	}
+	key := fmt.Sprintf("%d:%s", hours, strings.Join(names, "\x00"))
+	officialWalletStatsCache.Lock()
+	if officialWalletStatsCache.key == key && time.Since(officialWalletStatsCache.at) < 5*time.Minute {
+		values := officialWalletStatsCache.values
+		officialWalletStatsCache.Unlock()
+		return values, nil
+	}
+	officialWalletStatsCache.Unlock()
+
+	groupColumn := "`group`"
+	if platformdb.UsingPostgreSQL {
+		groupColumn = `"group"`
+	}
+	var rows []struct {
+		GroupName            string `gorm:"column:group_name"`
+		ModelName            string `gorm:"column:model_name"`
+		WalletRequestCount   int64  `gorm:"column:wallet_request_count"`
+		WalletConsumerAmount int64  `gorm:"column:wallet_consumer_amount"`
+	}
+	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
+	err := platformdb.LogDB.Model(&auditschema.Log{}).
+		Select(groupColumn+` AS group_name, model_name,
+			COUNT(*) AS wallet_request_count,
+			COALESCE(SUM(quota), 0) AS wallet_consumer_amount`).
+		Where("type = ? AND created_at >= ? AND "+groupColumn+" IN ? AND other LIKE ?", auditschema.LogTypeConsume, cutoff, names, walletBillingSourcePattern).
+		Group(groupColumn + ", model_name").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		stats := result[row.GroupName]
+		stats.WalletRequestCount += row.WalletRequestCount
+		stats.WalletConsumerAmount += row.WalletConsumerAmount
+		if strings.TrimSpace(row.ModelName) != "" {
+			if stats.ByModel == nil {
+				stats.ByModel = make(map[string]consumerAmountStats)
+			}
+			stats.ByModel[row.ModelName] = consumerAmountStats{RequestCount: row.WalletRequestCount, Amount: row.WalletConsumerAmount}
+		}
+		result[row.GroupName] = stats
+	}
+	officialWalletStatsCache.Lock()
+	officialWalletStatsCache.at = time.Now()
+	officialWalletStatsCache.key = key
+	officialWalletStatsCache.values = result
+	officialWalletStatsCache.Unlock()
+	return result, nil
 }
 
 type officialGroupCapability struct {

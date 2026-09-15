@@ -3579,10 +3579,10 @@ For commercial licensing, please contact support@quantumnous.com.
 
 .dawn .mlist.cache-prices .mh,
 .dawn .mlist.cache-prices .mr {
-  min-width: 660px;
+  min-width: 760px;
   grid-template-columns:
     minmax(160px, 1fr) repeat(2, 75px) repeat(2, 105px)
-    65px;
+    95px 65px;
 }
 
 .dawn .gtable.cache-prices .tr {

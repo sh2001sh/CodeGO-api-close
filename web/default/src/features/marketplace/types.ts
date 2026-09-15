@@ -83,6 +83,7 @@ export interface MarketplaceGroup {
   avg_tps: number
   cache_hit_rate: number
   avg_consumer_amount: number
+  avg_consumer_amount_by_model: Record<string, number>
   latest_request_status: 'healthy' | 'unstable' | 'failed' | 'unknown'
   recent_request_series: Array<{
     ts: number

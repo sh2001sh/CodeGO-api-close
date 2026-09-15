@@ -33,6 +33,7 @@ export function MarketGroupCard(props: {
   poolName?: string
   authed: boolean
   expanded: boolean
+  selectedModels: string[]
   onToggleSelect: () => void
   onToggleExpand: () => void
   onUse: (group: MarketplaceGroup) => void
@@ -60,6 +61,14 @@ export function MarketGroupCard(props: {
   const hasTraffic = group.request_count > 0
   const health = classifyRequestHealth(group.success_rate, group.request_count)
   const lifecycleOn = group.lifecycle_status === 'active'
+  const selectedModelAverage =
+    props.selectedModels.length === 1
+      ? (group.avg_consumer_amount_by_model?.[props.selectedModels[0]] ?? 0)
+      : 0
+  const displayedAverage =
+    props.selectedModels.length === 1
+      ? selectedModelAverage
+      : group.avg_consumer_amount
   const verification = group.models.length
     ? group.model_verification_results
     : []
@@ -163,11 +172,13 @@ export function MarketGroupCard(props: {
           title='近 24 小时钱包/通用额度成功请求的平均实际扣费；套餐请求不计入'
         >
           <b>
-            {group.avg_consumer_amount > 0
-              ? formatQuota(group.avg_consumer_amount)
-              : '—'}
+            {displayedAverage > 0 ? formatQuota(displayedAverage) : '—'}
           </b>
-          <span>平均实扣/次</span>
+          <span>
+            {props.selectedModels.length === 1
+              ? '该模型平均实扣'
+              : '平均实扣/次'}
+          </span>
         </div>
       </div>
 
@@ -252,6 +263,7 @@ export function MarketGroupCard(props: {
             <span style={{ textAlign: 'right' }}>输出 /1M</span>
             <span className='mp'>{t('缓存写入')} /1M</span>
             <span className='mp'>{t('缓存读取')} /1M</span>
+            <span style={{ textAlign: 'right' }}>平均实扣/次</span>
             <span style={{ textAlign: 'right' }}>延迟</span>
           </div>
           {group.models.map((model) => {
@@ -305,6 +317,17 @@ export function MarketGroupCard(props: {
                   </span>
                   <span className='mp'>{fee?.cacheWrite ?? '—'}</span>
                   <span className='mp'>{fee?.cacheRead ?? '—'}</span>
+                  <span
+                    className='mp'
+                    title='近 24 小时该模型钱包/通用额度成功请求的平均实际扣费；套餐请求不计入'
+                  >
+                    {(group.avg_consumer_amount_by_model?.[result.model] ?? 0) >
+                    0
+                      ? formatQuota(
+                          group.avg_consumer_amount_by_model[result.model]
+                        )
+                      : '—'}
+                  </span>
                   <span className='mp'>
                     {result.latency_ms > 0 ? `${result.latency_ms}ms` : '—'}
                   </span>

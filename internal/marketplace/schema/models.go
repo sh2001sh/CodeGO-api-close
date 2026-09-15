@@ -196,28 +196,29 @@ func (run *GPT56MappingRun) BeforeCreate(_ *gorm.DB) error {
 }
 
 type RankingSnapshot struct {
-	ID                   string    `json:"id" gorm:"column:id;primaryKey;size:64"`
-	GroupID              string    `json:"group_id" gorm:"column:group_id;size:64;uniqueIndex:uq_marketplace_rank_snapshot,priority:1"`
-	WindowHours          int       `json:"window_hours" gorm:"column:window_hours;uniqueIndex:uq_marketplace_rank_snapshot,priority:2"`
-	RankingVersion       string    `json:"ranking_version" gorm:"column:ranking_version;size:32;uniqueIndex:uq_marketplace_rank_snapshot,priority:3"`
-	Rank                 int       `json:"rank" gorm:"column:rank;index"`
-	Score                float64   `json:"score" gorm:"column:score"`
-	RawSuccessRate       float64   `json:"raw_success_rate" gorm:"column:raw_success_rate"`
-	WilsonSuccessRate    float64   `json:"wilson_success_rate" gorm:"column:wilson_success_rate"`
-	AvgTTFTMs            float64   `json:"avg_ttft_ms" gorm:"column:avg_ttft_ms"`
-	AttemptTTFTP50Ms     float64   `json:"attempt_ttft_p50_ms" gorm:"column:attempt_ttft_p50_ms"`
-	AttemptTTFTP95Ms     float64   `json:"attempt_ttft_p95_ms" gorm:"column:attempt_ttft_p95_ms"`
-	E2ETTFTP50Ms         float64   `json:"e2e_ttft_p50_ms" gorm:"column:e2e_ttft_p50_ms"`
-	E2ETTFTP95Ms         float64   `json:"e2e_ttft_p95_ms" gorm:"column:e2e_ttft_p95_ms"`
-	LatencySampleCount   int64     `json:"latency_sample_count" gorm:"column:latency_sample_count"`
-	AvgLatencyMs         float64   `json:"avg_latency_ms" gorm:"column:avg_latency_ms"`
-	AvgTPS               float64   `json:"avg_tps" gorm:"column:avg_tps"`
-	CacheHitRate         float64   `json:"cache_hit_rate" gorm:"column:cache_hit_rate"`
-	AvgConsumerAmount    int64     `json:"avg_consumer_amount" gorm:"column:avg_consumer_amount;not null;default:0"`
-	RequestCount         int64     `json:"request_count" gorm:"column:request_count"`
-	IndependentConsumers int64     `json:"independent_consumers" gorm:"column:independent_consumers"`
-	Observing            bool      `json:"observing" gorm:"column:observing;index"`
-	CalculatedAt         time.Time `json:"calculated_at" gorm:"column:calculated_at;index"`
+	ID                       string    `json:"id" gorm:"column:id;primaryKey;size:64"`
+	GroupID                  string    `json:"group_id" gorm:"column:group_id;size:64;uniqueIndex:uq_marketplace_rank_snapshot,priority:1"`
+	WindowHours              int       `json:"window_hours" gorm:"column:window_hours;uniqueIndex:uq_marketplace_rank_snapshot,priority:2"`
+	RankingVersion           string    `json:"ranking_version" gorm:"column:ranking_version;size:32;uniqueIndex:uq_marketplace_rank_snapshot,priority:3"`
+	Rank                     int       `json:"rank" gorm:"column:rank;index"`
+	Score                    float64   `json:"score" gorm:"column:score"`
+	RawSuccessRate           float64   `json:"raw_success_rate" gorm:"column:raw_success_rate"`
+	WilsonSuccessRate        float64   `json:"wilson_success_rate" gorm:"column:wilson_success_rate"`
+	AvgTTFTMs                float64   `json:"avg_ttft_ms" gorm:"column:avg_ttft_ms"`
+	AttemptTTFTP50Ms         float64   `json:"attempt_ttft_p50_ms" gorm:"column:attempt_ttft_p50_ms"`
+	AttemptTTFTP95Ms         float64   `json:"attempt_ttft_p95_ms" gorm:"column:attempt_ttft_p95_ms"`
+	E2ETTFTP50Ms             float64   `json:"e2e_ttft_p50_ms" gorm:"column:e2e_ttft_p50_ms"`
+	E2ETTFTP95Ms             float64   `json:"e2e_ttft_p95_ms" gorm:"column:e2e_ttft_p95_ms"`
+	LatencySampleCount       int64     `json:"latency_sample_count" gorm:"column:latency_sample_count"`
+	AvgLatencyMs             float64   `json:"avg_latency_ms" gorm:"column:avg_latency_ms"`
+	AvgTPS                   float64   `json:"avg_tps" gorm:"column:avg_tps"`
+	CacheHitRate             float64   `json:"cache_hit_rate" gorm:"column:cache_hit_rate"`
+	AvgConsumerAmount        int64     `json:"avg_consumer_amount" gorm:"column:avg_consumer_amount;not null;default:0"`
+	AvgConsumerAmountByModel string    `json:"-" gorm:"column:avg_consumer_amount_by_model;type:text;not null;default:'{}'"`
+	RequestCount             int64     `json:"request_count" gorm:"column:request_count"`
+	IndependentConsumers     int64     `json:"independent_consumers" gorm:"column:independent_consumers"`
+	Observing                bool      `json:"observing" gorm:"column:observing;index"`
+	CalculatedAt             time.Time `json:"calculated_at" gorm:"column:calculated_at;index"`
 }
 
 func (RankingSnapshot) TableName() string { return tableName("ranking_snapshots") }

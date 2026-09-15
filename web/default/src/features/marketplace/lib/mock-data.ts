@@ -54,6 +54,9 @@ function group(input: Partial<MarketplaceGroup> & Pick<MarketplaceGroup, 'id' | 
     updated_at: new Date(now - 600_000).toISOString(),
     ...input,
     avg_consumer_amount: input.avg_consumer_amount ?? 0,
+    avg_consumer_amount_by_model:
+      input.avg_consumer_amount_by_model ??
+      Object.fromEntries(input.models.map((model) => [model, 0])),
   }
 }
 

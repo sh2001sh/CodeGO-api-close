@@ -53,6 +53,7 @@ function group(input: Partial<MarketplaceGroup> & Pick<MarketplaceGroup, 'id' | 
     observing: false,
     updated_at: new Date(now - 600_000).toISOString(),
     ...input,
+    avg_consumer_amount: input.avg_consumer_amount ?? 0,
   }
 }
 

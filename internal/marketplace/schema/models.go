@@ -213,6 +213,7 @@ type RankingSnapshot struct {
 	AvgLatencyMs         float64   `json:"avg_latency_ms" gorm:"column:avg_latency_ms"`
 	AvgTPS               float64   `json:"avg_tps" gorm:"column:avg_tps"`
 	CacheHitRate         float64   `json:"cache_hit_rate" gorm:"column:cache_hit_rate"`
+	AvgConsumerAmount    int64     `json:"avg_consumer_amount" gorm:"column:avg_consumer_amount;not null;default:0"`
 	RequestCount         int64     `json:"request_count" gorm:"column:request_count"`
 	IndependentConsumers int64     `json:"independent_consumers" gorm:"column:independent_consumers"`
 	Observing            bool      `json:"observing" gorm:"column:observing;index"`

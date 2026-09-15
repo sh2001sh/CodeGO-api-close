@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -211,8 +212,8 @@ func buildRanking(groups []marketplaceschema.Group, channels map[string]marketpl
 	totals := aggregateChannelRankingRows(rows)
 	// Percentiles are already aggregated from persisted and active histograms.
 	// Re-reading 24 hours of raw payloads here stalls unrelated gateway queries.
-	consumers := independentConsumerCountsByChannel(channelIDs, hours)
-	snapshots := scoreMarketplaceGroups(groups, channels, totals, consumers, hours)
+	consumerStats := channelConsumerStatsByChannel(channelIDs, hours)
+	snapshots := scoreMarketplaceGroups(groups, channels, totals, consumerStats, hours)
 	if err := persistRankingSnapshots(snapshots); err != nil {
 		return nil, err
 	}
@@ -240,14 +241,14 @@ func marketplaceInternalChannelIDs(groups []marketplaceschema.Group, channels ma
 	return result
 }
 
-func scoreMarketplaceGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, totals map[int]rankingTotals, consumers map[int]int64, hours int) []marketplaceschema.RankingSnapshot {
+func scoreMarketplaceGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, totals map[int]rankingTotals, consumerStats map[int]channelConsumerStats, hours int) []marketplaceschema.RankingSnapshot {
 	snapshots := make([]marketplaceschema.RankingSnapshot, 0, len(groups))
 	for _, group := range groups {
 		channelID := 0
 		if value := channels[group.ChannelID].InternalChannelID; value != nil {
 			channelID = *value
 		}
-		snapshots = append(snapshots, scoreGroup(group, totals[channelID], consumers[channelID], hours))
+		snapshots = append(snapshots, scoreGroup(group, totals[channelID], consumerStats[channelID], hours))
 	}
 	assignRanks(snapshots)
 	return snapshots
@@ -262,28 +263,60 @@ func persistRankingSnapshots(snapshots []marketplaceschema.RankingSnapshot) erro
 		DoUpdates: clause.AssignmentColumns([]string{
 			"rank", "score", "raw_success_rate", "wilson_success_rate", "avg_ttft_ms",
 			"attempt_ttft_p50_ms", "attempt_ttft_p95_ms", "e2e_ttft_p50_ms", "e2e_ttft_p95_ms", "latency_sample_count",
-			"avg_latency_ms", "avg_tps", "cache_hit_rate", "request_count", "independent_consumers", "observing", "calculated_at",
+			"avg_latency_ms", "avg_tps", "cache_hit_rate", "avg_consumer_amount", "request_count", "independent_consumers", "observing", "calculated_at",
 		}),
 	}).CreateInBatches(&snapshots, 100).Error
 }
 
-func independentConsumerCountsByChannel(channelIDs []int, hours int) map[int]int64 {
-	result := make(map[int]int64)
+type channelConsumerStats struct {
+	IndependentConsumers int64 `gorm:"column:independent_consumers"`
+	WalletRequestCount   int64 `gorm:"column:wallet_request_count"`
+	WalletConsumerAmount int64 `gorm:"column:wallet_consumer_amount"`
+}
+
+func (stats channelConsumerStats) averageConsumerAmount() int64 {
+	if stats.WalletRequestCount <= 0 || stats.WalletConsumerAmount <= 0 {
+		return 0
+	}
+	return int64(math.Round(float64(stats.WalletConsumerAmount) / float64(stats.WalletRequestCount)))
+}
+
+func channelConsumerStatsByChannel(channelIDs []int, hours int) map[int]channelConsumerStats {
+	result := make(map[int]channelConsumerStats)
 	if len(channelIDs) == 0 || platformdb.LogDB == nil {
 		return result
 	}
 	type row struct {
-		ChannelID int `gorm:"column:channel_id"`
-		Count     int64
+		ChannelID            int   `gorm:"column:channel_id"`
+		IndependentConsumers int64 `gorm:"column:independent_consumers"`
+		WalletRequestCount   int64 `gorm:"column:wallet_request_count"`
+		WalletConsumerAmount int64 `gorm:"column:wallet_consumer_amount"`
 	}
 	var rows []row
 	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
-	_ = platformdb.LogDB.Model(&auditschema.Log{}).
-		Select("channel_id, COUNT(DISTINCT user_id) AS count").
+	// Consume logs store the settled billing source in Other. Keep the
+	// independent-consumer threshold based on all successful requests, while
+	// the displayed average only reflects quota actually deducted from the
+	// user's wallet. Subscription quota is therefore never presented as an
+	// out-of-pocket per-request charge.
+	walletBillingSource := `%"billing_source"%:%"wallet"%`
+	if err := platformdb.LogDB.Model(&auditschema.Log{}).
+		Select(`channel_id,
+			COUNT(DISTINCT user_id) AS independent_consumers,
+			COALESCE(SUM(CASE WHEN other LIKE ? THEN 1 ELSE 0 END), 0) AS wallet_request_count,
+			COALESCE(SUM(CASE WHEN other LIKE ? THEN quota ELSE 0 END), 0) AS wallet_consumer_amount`,
+			walletBillingSource, walletBillingSource).
 		Where("type = ? AND created_at >= ? AND channel_id IN ?", auditschema.LogTypeConsume, cutoff, channelIDs).
-		Group("channel_id").Scan(&rows).Error
+		Group("channel_id").Scan(&rows).Error; err != nil {
+		platformobservability.SysError(fmt.Sprintf("aggregate marketplace wallet consumer stats: %s", err.Error()))
+		return result
+	}
 	for _, item := range rows {
-		result[item.ChannelID] = item.Count
+		result[item.ChannelID] = channelConsumerStats{
+			IndependentConsumers: item.IndependentConsumers,
+			WalletRequestCount:   item.WalletRequestCount,
+			WalletConsumerAmount: item.WalletConsumerAmount,
+		}
 	}
 	return result
 }

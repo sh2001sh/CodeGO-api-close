@@ -25,7 +25,7 @@ func TestWilsonLowerBoundPenalizesSmallSamples(t *testing.T) {
 	require.Zero(t, wilsonLowerBound(0, 0, 1.96))
 }
 
-func TestIndependentConsumerCountsByChannelAcrossGroups(t *testing.T) {
+func TestChannelConsumerStatsByChannelAcrossGroups(t *testing.T) {
 	originalLogDB := platformdb.LogDB
 	t.Cleanup(func() { platformdb.LogDB = originalLogDB })
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -34,15 +34,22 @@ func TestIndependentConsumerCountsByChannelAcrossGroups(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&auditschema.Log{}))
 	now := time.Now().Unix()
 	require.NoError(t, db.Create([]auditschema.Log{
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ChannelId: 501},
-		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "plus", ChannelId: 501},
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "pro", ChannelId: 501},
-		{UserId: 3, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ChannelId: 502},
+		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ChannelId: 501, Quota: 100, Other: `{"billing_source":"wallet"}`},
+		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "plus", ChannelId: 501, Quota: 300, Other: `{ "billing_source" : "wallet" }`},
+		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "pro", ChannelId: 501, Quota: 500, Other: `{"billing_source":"subscription"}`},
+		{UserId: 3, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ChannelId: 502, Quota: 200, Other: `{"billing_source":"subscription"}`},
+		{UserId: 4, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ChannelId: 502, Quota: 700, Other: `{}`},
 	}).Error)
 
-	counts := independentConsumerCountsByChannel([]int{501, 502}, 24)
-	require.EqualValues(t, 2, counts[501])
-	require.EqualValues(t, 1, counts[502])
+	stats := channelConsumerStatsByChannel([]int{501, 502}, 24)
+	require.EqualValues(t, 2, stats[501].IndependentConsumers)
+	require.EqualValues(t, 2, stats[501].WalletRequestCount)
+	require.EqualValues(t, 400, stats[501].WalletConsumerAmount)
+	require.EqualValues(t, 200, stats[501].averageConsumerAmount())
+	require.EqualValues(t, 2, stats[502].IndependentConsumers)
+	require.Zero(t, stats[502].WalletRequestCount)
+	require.Zero(t, stats[502].WalletConsumerAmount)
+	require.Zero(t, stats[502].averageConsumerAmount())
 }
 
 func TestAggregateChannelRankingRowsKeepsChannelsSeparate(t *testing.T) {
@@ -66,11 +73,24 @@ func TestScoreGroupDoesNotPromoteLegacyTTFTToPercentile(t *testing.T) {
 
 	snapshot := scoreGroup(marketplaceschema.Group{ID: "fresh", Multiplier: 1}, rankingTotals{
 		requestCount: 10, successWeight: 10, successTotal: 1000,
-	}, 2, 24)
+	}, channelConsumerStats{IndependentConsumers: 2}, 24)
 
 	require.Zero(t, snapshot.AvgTTFTMs)
 	require.Zero(t, snapshot.AttemptTTFTP50Ms)
 	require.Zero(t, snapshot.LatencySampleCount)
+}
+
+func TestScoreGroupPublishesAverageConsumerAmount(t *testing.T) {
+	t.Parallel()
+
+	snapshot := scoreGroup(
+		marketplaceschema.Group{ID: "priced", Multiplier: 1},
+		rankingTotals{requestCount: 3, successWeight: 3, successTotal: 300},
+		channelConsumerStats{IndependentConsumers: 2, WalletRequestCount: 3, WalletConsumerAmount: 901},
+		24,
+	)
+
+	require.EqualValues(t, 300, snapshot.AvgConsumerAmount)
 }
 
 func TestScoreGroupPreservesCalculatedScorePrecision(t *testing.T) {
@@ -87,7 +107,7 @@ func TestScoreGroupPreservesCalculatedScorePrecision(t *testing.T) {
 		tpsWeight:      10000,
 		tpsTotal:       504000,
 		cacheHitRate:   50,
-	}, 10, 24)
+	}, channelConsumerStats{IndependentConsumers: 10}, 24)
 
 	require.Equal(t, 67.53, snapshot.Score)
 }

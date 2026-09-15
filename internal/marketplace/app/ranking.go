@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const rankingVersion = "marketplace-v4-score-precision"
+const rankingVersion = "marketplace-v5-average-consumer-amount"
 
 var marketplaceListCache struct {
 	sync.Mutex
@@ -355,12 +355,12 @@ func metricWeight(value float64, requestCount int64) int64 {
 	return requestCount
 }
 
-func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers int64, hours int) marketplaceschema.RankingSnapshot {
+func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumerStats channelConsumerStats, hours int) marketplaceschema.RankingSnapshot {
 	successRate := weighted(total.successTotal, total.successWeight)
 	successCount := int64(math.Round(successRate / 100 * float64(total.requestCount)))
 	wilson := wilsonLowerBound(successCount, total.requestCount, 1.96) * 100
 	requestMin, consumerMin := rankingThresholds(hours)
-	observing := total.requestCount < requestMin || consumers < consumerMin || group.VerificationStatus != marketplacedomain.VerificationPassed
+	observing := total.requestCount < requestMin || consumerStats.IndependentConsumers < consumerMin || group.VerificationStatus != marketplacedomain.VerificationPassed
 	score := wilson * 0.35
 	score += inverseMetricScore(total.attemptTtftP50, 3000) * 0.2
 	score += inverseMetricScore(weighted(total.latencyTotal, total.latencyWeight), 30000) * 0.1
@@ -387,8 +387,9 @@ func scoreGroup(group marketplaceschema.Group, total rankingTotals, consumers in
 		E2ETTFTP95Ms:       round2(total.e2eTtftP95),
 		LatencySampleCount: total.latencySamples,
 		AvgLatencyMs:       round2(weighted(total.latencyTotal, total.latencyWeight)), AvgTPS: round2(weighted(total.tpsTotal, total.tpsWeight)),
-		CacheHitRate: round2(total.cacheHitRate),
-		RequestCount: total.requestCount, IndependentConsumers: consumers, Observing: observing, CalculatedAt: time.Now().UTC(),
+		CacheHitRate:      round2(total.cacheHitRate),
+		AvgConsumerAmount: consumerStats.averageConsumerAmount(),
+		RequestCount:      total.requestCount, IndependentConsumers: consumerStats.IndependentConsumers, Observing: observing, CalculatedAt: time.Now().UTC(),
 	}
 }
 

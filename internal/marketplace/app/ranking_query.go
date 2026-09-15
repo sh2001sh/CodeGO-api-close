@@ -155,7 +155,7 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		E2ETTFTP50Ms: snapshot.E2ETTFTP50Ms, E2ETTFTP95Ms: snapshot.E2ETTFTP95Ms,
 		LatencySampleCount: snapshot.LatencySampleCount,
 		AvgLatencyMs:       snapshot.AvgLatencyMs, AvgTPS: snapshot.AvgTPS,
-		CacheHitRate: snapshot.CacheHitRate, LatestRequestStatus: latestRequestStatus(recentSeries),
+		CacheHitRate: snapshot.CacheHitRate, AvgConsumerAmount: snapshot.AvgConsumerAmount, LatestRequestStatus: latestRequestStatus(recentSeries),
 		RecentRequestSeries: recentSeries, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 		RequestCount: snapshot.RequestCount, MaxConcurrency: channel.MaxConcurrency,
 		UserMaxConcurrency:   channel.UserMaxConcurrency,

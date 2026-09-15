@@ -187,6 +187,7 @@ func V2MigrationIDs() []string {
 		"20260914_marketplace_settlement_reclaim_index",
 		"20260915_marketplace_pelican_artifacts",
 		"20260915_marketplace_pelican_artifacts_by_model",
+		"20260915_marketplace_average_consumer_amount",
 	}
 }
 
@@ -362,6 +363,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.PelicanArtifact{})
 		}},
 		{ID: "20260915_marketplace_pelican_artifacts_by_model", Run: migrateMarketplacePelicanArtifactsByModel},
+		{ID: "20260915_marketplace_average_consumer_amount", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.RankingSnapshot{})
+		}},
 		{ID: "20260903_marketplace_owner_operations", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.UserMultiplier{}, &marketplaceschema.TimeRangeMultiplier{}, &marketplaceschema.BargainRequest{})
 		}},
@@ -1009,6 +1013,8 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "PelicanProbeDailyMinute") ||
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "PelicanProbeModel") ||
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "PelicanProbeLastAt")
+	case "20260915_marketplace_average_consumer_amount":
+		return !db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AvgConsumerAmount")
 	case "20260715_blind_box_admin_grants":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxOrder{}) ||
 			!db.Migrator().HasTable(&commerceschema.BlindBoxGrant{})

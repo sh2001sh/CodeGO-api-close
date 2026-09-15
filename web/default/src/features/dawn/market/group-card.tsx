@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com.
 */
 import { BadgeCheck, ChevronDown, CircleDashed } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { formatQuota } from '@/lib/format'
 import { classifyRequestHealth } from '@/lib/request-health'
 import { cn } from '@/lib/utils'
 import { RecentRequestStrip } from '@/features/marketplace/components/recent-request-strip'
@@ -156,6 +157,17 @@ export function MarketGroupCard(props: {
         <div className='m'>
           <b>{compactCount(hasTraffic ? group.request_count : null)}</b>
           <span>24H 请求</span>
+        </div>
+        <div
+          className='m'
+          title='近 24 小时钱包/通用额度成功请求的平均实际扣费；套餐请求不计入'
+        >
+          <b>
+            {group.avg_consumer_amount > 0
+              ? formatQuota(group.avg_consumer_amount)
+              : '—'}
+          </b>
+          <span>平均实扣/次</span>
         </div>
       </div>
 

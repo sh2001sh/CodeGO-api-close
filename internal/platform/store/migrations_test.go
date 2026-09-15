@@ -104,6 +104,15 @@ func TestApplyV2MigrationsIsIdempotent(t *testing.T) {
 	require.True(t, appliedMigrationNeedsRepair(db, "20260915_marketplace_average_consumer_amount_by_model"))
 	require.NoError(t, ApplyV2Migrations(context.Background(), false))
 	require.True(t, db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AvgConsumerAmountByModel"))
+	for _, column := range []string{
+		"AutoBuildModels", "AutoBuildConsumerWeight", "AutoBuildSuccessWeight", "AutoBuildTTFTWeight", "AutoBuildCacheWeight",
+	} {
+		require.True(t, db.Migrator().HasColumn(&marketplaceschema.RoutePool{}, column), column)
+	}
+	require.NoError(t, db.Migrator().DropColumn(&marketplaceschema.RoutePool{}, "AutoBuildModels"))
+	require.True(t, appliedMigrationNeedsRepair(db, "20260915_marketplace_route_pool_auto_build_models"))
+	require.NoError(t, ApplyV2Migrations(context.Background(), false))
+	require.True(t, db.Migrator().HasColumn(&marketplaceschema.RoutePool{}, "AutoBuildModels"))
 	for _, table := range []string{
 		"billing_outbox_events",
 		"billing_funding_source_policies",

@@ -178,6 +178,7 @@ func V2MigrationIDs() []string {
 		"20260905_marketplace_group_query_index",
 		"20260914_account_request_abuse",
 		"20260909_marketplace_route_pool_auto_build",
+		"20260915_marketplace_route_pool_auto_build_models",
 		"20260909_marketplace_multiplier_card_policy",
 		"20260910_nowpayments_topup",
 		"20260912_jianpay_partial_refunds",
@@ -343,6 +344,12 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260815_marketplace_auto_route_pool", Run: migrateMarketplaceAutoRoutePool},
 		{ID: "20260903_marketplace_named_route_pools", Run: migrateMarketplaceNamedRoutePools},
 		{ID: "20260909_marketplace_route_pool_auto_build", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.RoutePool{})
+		}},
+		// Keep multi-model selection and its scoring weights in a separate
+		// migration. Databases that already applied the original auto-build
+		// migration must still receive these later additive columns.
+		{ID: "20260915_marketplace_route_pool_auto_build_models", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.RoutePool{})
 		}},
 		{ID: "20260909_marketplace_multiplier_card_policy", Run: func(tx *gorm.DB) error {
@@ -1021,6 +1028,12 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 		return !db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AvgConsumerAmount")
 	case "20260915_marketplace_average_consumer_amount_by_model":
 		return !db.Migrator().HasColumn(&marketplaceschema.RankingSnapshot{}, "AvgConsumerAmountByModel")
+	case "20260915_marketplace_route_pool_auto_build_models":
+		return !db.Migrator().HasColumn(&marketplaceschema.RoutePool{}, "AutoBuildModels") ||
+			!db.Migrator().HasColumn(&marketplaceschema.RoutePool{}, "AutoBuildConsumerWeight") ||
+			!db.Migrator().HasColumn(&marketplaceschema.RoutePool{}, "AutoBuildSuccessWeight") ||
+			!db.Migrator().HasColumn(&marketplaceschema.RoutePool{}, "AutoBuildTTFTWeight") ||
+			!db.Migrator().HasColumn(&marketplaceschema.RoutePool{}, "AutoBuildCacheWeight")
 	case "20260715_blind_box_admin_grants":
 		return !db.Migrator().HasTable(&commerceschema.BlindBoxOrder{}) ||
 			!db.Migrator().HasTable(&commerceschema.BlindBoxGrant{})

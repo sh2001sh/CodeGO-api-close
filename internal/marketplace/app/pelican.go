@@ -24,10 +24,10 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const pelicanPrompt = `生成单文件 HTML，内容使用内联 SVG 绘制“鹈鹕骑自行车”的 2D 动画。画面需要清晰、美观并包含可见动画，但 SVG 源码不得超过 18 KiB、图形元素不得超过 60 个；优先复用 defs、g、use 和简洁 path。禁止外部资源、网络请求、脚本工具、注释、说明文字和 Markdown 代码围栏。只输出完整 HTML，并务必在输出上限前闭合 </svg></body></html>，不要执行测试。`
+const pelicanPrompt = `生成单文件 HTML，内容使用内联 SVG 绘制“鹈鹕骑自行车”的 2D 动画。画面需要清晰、美观并包含可见动画，不限制 SVG 的复杂度。禁止外部资源、网络请求和脚本工具。只输出完整 HTML，不要解释、不要使用 Markdown 代码围栏，并务必在输出上限前闭合 </svg></body></html>，不要执行测试。`
 
 const (
-	pelicanMaxOutputTokens = 8000
+	pelicanMaxOutputTokens = 12000
 	maxPelicanSVGBytes     = 512 * 1024
 )
 

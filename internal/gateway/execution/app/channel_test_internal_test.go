@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/sh2001sh/new-api/constant"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +14,15 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAutomaticChannelTestSkipsManuallyDisabledChannel(t *testing.T) {
+	require.False(t, shouldAutomaticallyTestChannel(&gatewayschema.Channel{
+		Status: constant.ChannelStatusManuallyDisabled,
+	}))
+	require.True(t, shouldAutomaticallyTestChannel(&gatewayschema.Channel{
+		Status: constant.ChannelStatusAutoDisabled,
+	}))
+}
 
 func TestSettleTestQuotaUsesTieredBilling(t *testing.T) {
 	info := &relaycommon.RelayInfo{

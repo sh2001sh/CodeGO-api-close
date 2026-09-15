@@ -123,3 +123,12 @@ func TestProbeAndPersistChannelCapabilities(t *testing.T) {
 	require.True(t, channel.ChannelInfo.ResponsesCapabilities.SupportsWebSocket())
 	require.True(t, channel.ChannelInfo.ResponsesCapabilities.SupportsNativeBackground())
 }
+
+func TestAutomaticCapabilityProbeSkipsManuallyDisabledChannel(t *testing.T) {
+	require.False(t, channelAllowsAutomaticCapabilityProbe(&gatewayschema.Channel{
+		Status: constant.ChannelStatusManuallyDisabled,
+	}))
+	require.True(t, channelAllowsAutomaticCapabilityProbe(&gatewayschema.Channel{
+		Status: constant.ChannelStatusAutoDisabled,
+	}))
+}

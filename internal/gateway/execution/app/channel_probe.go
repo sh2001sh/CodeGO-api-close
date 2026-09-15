@@ -123,6 +123,14 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 	ctx.Set("channel", channel.Type)
 	ctx.Set("base_url", channel.GetBaseURL())
 
+	if options.InternalGroup != "" {
+		httpctx.SetContextKey(ctx, constant.ContextKeyUsingGroup, options.InternalGroup)
+		httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, options.InternalGroup)
+		ctx.Set("group", options.InternalGroup)
+	} else {
+		group, _ := loadGatewayUserGroup(options.UserID, false)
+		ctx.Set("group", group)
+	}
 	if options.MarketplaceGroupID != "" {
 		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, options.MarketplaceGroupID)
 		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceOwnerID, options.MarketplaceOwnerID)
@@ -130,12 +138,6 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceCreditPolicy, options.CreditPoolPolicy)
 		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, options.MarketplaceMultiplier)
 		httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceModelPrices, options.MarketplaceModelPrices)
-		httpctx.SetContextKey(ctx, constant.ContextKeyUsingGroup, options.InternalGroup)
-		httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, options.InternalGroup)
-		ctx.Set("group", options.InternalGroup)
-	} else {
-		group, _ := loadGatewayUserGroup(options.UserID, false)
-		ctx.Set("group", group)
 	}
 
 	newAPIError := SetupContextForSelectedChannel(ctx, channel, testModel)

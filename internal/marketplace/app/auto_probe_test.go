@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMarketplaceAutoProbeDueUsesStableJitter(t *testing.T) {
@@ -34,4 +36,21 @@ func TestMarketplaceAutoProbeDueRunsInitialProbeImmediately(t *testing.T) {
 	if !marketplaceAutoProbeDue(channel, time.Now().UTC()) {
 		t.Fatal("initial probe should be due")
 	}
+}
+
+func TestMarketplaceAutoProbeRechecksSuspendedChannelBeforeRequest(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
+	channel := marketplaceschema.Channel{
+		ID: "suspended-auto-probe", Status: marketplacedomain.LifecycleSuspended,
+		AutoProbeEnabled: true, AutoProbeModel: "gpt-5", DeclaredModels: `["gpt-5"]`,
+	}
+	require.NoError(t, db.Create(&channel).Error)
+
+	staleActive := channel
+	staleActive.Status = marketplacedomain.LifecycleActive
+	runMarketplaceModelProbe(&staleActive)
+
+	require.NoError(t, db.First(&channel, "id = ?", channel.ID).Error)
+	require.Nil(t, channel.AutoProbeLastAt)
 }

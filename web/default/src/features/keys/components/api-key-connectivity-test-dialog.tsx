@@ -54,7 +54,7 @@ export function ApiKeyConnectivityTestDialog(props: {
         <DialogHeader>
           <DialogTitle>{t('测试 API Key 连通性')}</DialogTitle>
           <DialogDescription>
-            {t('使用该 Key 当前分组可路由的模型进行一次不计费连接测试。')}
+            {t('使用该 Key 当前分组可路由的模型发起一次真实请求，并按正常模型调用计费。')}
           </DialogDescription>
         </DialogHeader>
         <div className='grid gap-2 py-2'>

@@ -10,6 +10,7 @@ import (
 	gatewaycapability "github.com/sh2001sh/new-api/internal/gateway/capability"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -34,7 +35,10 @@ var (
 func StartMarketplaceTransportCapabilityBackfill() {
 	go func() {
 		var channels []marketplaceschema.Channel
-		if err := platformdb.DB.Find(&channels).Error; err != nil {
+		if err := platformdb.DB.Where("status NOT IN ?", []string{
+			marketplacedomain.LifecycleSuspended,
+			marketplacedomain.LifecycleDisabled,
+		}).Find(&channels).Error; err != nil {
 			platformobservability.SysLog("failed to load marketplace transport capability backfill: " + err.Error())
 			return
 		}
@@ -73,6 +77,9 @@ func probeAndPersistMarketplaceCapabilities(ctx context.Context, channelID strin
 	if err := platformdb.DB.First(&channel, "id = ?", channelID).Error; err != nil {
 		return err
 	}
+	if !marketplaceBackgroundProbeAllowed(channel.Status) {
+		return nil
+	}
 	result := probeMarketplaceCandidates(ctx, marketplaceProbeCandidates(&channel))
 	capabilities := gatewayschema.ResponsesCapabilities{
 		WebSocket:          result.WebSocket,
@@ -100,6 +107,10 @@ func probeAndPersistMarketplaceCapabilities(ctx context.Context, channelID strin
 		})
 	}
 	return nil
+}
+
+func marketplaceBackgroundProbeAllowed(status string) bool {
+	return status != marketplacedomain.LifecycleSuspended && status != marketplacedomain.LifecycleDisabled
 }
 
 func marketplaceCapabilitiesHaveTransientFailure(capabilities gatewayschema.ResponsesCapabilities) bool {

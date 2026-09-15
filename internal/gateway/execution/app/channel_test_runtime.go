@@ -6,6 +6,7 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
@@ -41,9 +42,10 @@ func TestChannelByID(channelID int, testModel string, endpointType string, isStr
 	return float64(milliseconds) / 1000.0, result.newAPIError, nil
 }
 
-// MarketplaceChannelTestOptions binds a user test to the exact market group
-// selected in the UI. It is deliberately separate from automatic probes so a
-// background health check can never spend a user's balance.
+// MarketplaceChannelTestOptions binds a billed user test to the exact group
+// selected in the UI. Marketplace metadata is optional for official groups.
+// It is deliberately separate from automatic probes so a background health
+// check can never spend a user's balance.
 type MarketplaceChannelTestOptions struct {
 	UserID             int
 	MarketplaceGroupID string
@@ -55,7 +57,9 @@ type MarketplaceChannelTestOptions struct {
 }
 
 // TestMarketplaceChannelByID executes a real upstream request as a user and
-// settles it through the normal wallet/subscription billing pipeline.
+// settles it through the normal wallet/subscription billing pipeline. Despite
+// the historical name, callers may also use it for an official group by
+// leaving MarketplaceGroupID empty and providing InternalGroup.
 func TestMarketplaceChannelByID(channelID int, testModel string, endpointType string, isStream bool, options MarketplaceChannelTestOptions) (float64, ChannelTestReport, *types.NewAPIError, error) {
 	channel, err := getChannelForTest(channelID)
 	if err != nil {
@@ -114,9 +118,11 @@ func TestAllChannels(notify bool) error {
 		}()
 
 		for _, channel := range channels {
-			if channel.Status == constant.ChannelStatusManuallyDisabled {
+			current, err := gatewaystore.LoadChannelByID(channel.Id, true)
+			if err != nil || !shouldAutomaticallyTestChannel(current) {
 				continue
 			}
+			channel = current
 
 			isChannelEnabled := channel.Status == constant.ChannelStatusEnabled
 			tik := time.Now()
@@ -163,6 +169,10 @@ func TestAllChannels(notify bool) error {
 	})
 
 	return nil
+}
+
+func shouldAutomaticallyTestChannel(channel *gatewayschema.Channel) bool {
+	return channel != nil && channel.Status != constant.ChannelStatusManuallyDisabled
 }
 
 // StartAutomaticChannelTestTask starts the periodic automatic channel testing loop once.

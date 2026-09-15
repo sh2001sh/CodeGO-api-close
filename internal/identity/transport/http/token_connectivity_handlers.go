@@ -11,6 +11,7 @@ import (
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
+	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 )
 
@@ -48,12 +49,14 @@ func TestTokenConnectivity(c *gin.Context) {
 		}
 		return
 	}
-	channelID, groupName, err := resolveTokenTestChannel(c, token, modelName)
+	channelID, binding, err := resolveTokenTestChannel(c, token, modelName)
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
-	seconds, apiErr, testErr := gatewayexecutionapp.TestChannelByID(channelID, modelName, "", false)
+	seconds, report, apiErr, testErr := gatewayexecutionapp.TestMarketplaceChannelByID(
+		channelID, modelName, "", false, tokenConnectivityBillingOptions(token, binding),
+	)
 	if testErr != nil {
 		httpapi.ApiError(c, testErr)
 		return
@@ -62,7 +65,25 @@ func TestTokenConnectivity(c *gin.Context) {
 		httpapi.ApiError(c, apiErr)
 		return
 	}
-	httpapi.ApiSuccess(c, gin.H{"model": modelName, "group": groupName, "channel_id": channelID, "latency_ms": int64(seconds * 1000)})
+	httpapi.ApiSuccess(c, gin.H{
+		"model": modelName, "group": binding.InternalGroup, "channel_id": channelID,
+		"latency_ms": int64(seconds * 1000), "quota_charged": report.QuotaCharged,
+		"billing_source": report.BillingSource, "request_id": report.RequestID,
+	})
+}
+
+func tokenConnectivityBillingOptions(token *identityschema.Token, binding *marketplaceapp.RoutingBinding) gatewayexecutionapp.MarketplaceChannelTestOptions {
+	options := gatewayexecutionapp.MarketplaceChannelTestOptions{
+		UserID: token.UserId, InternalGroup: binding.InternalGroup,
+	}
+	if binding.SourceType == marketplacedomain.SourceTypeMarketplaceUser {
+		options.MarketplaceGroupID = binding.GroupID
+		options.MarketplaceOwnerID = binding.OwnerUserID
+		options.CreditPoolPolicy = binding.CreditPoolPolicy
+		options.Multiplier = binding.Multiplier
+		options.ModelPrices = binding.ModelPrices
+	}
+	return options
 }
 
 func tokenTestModels(token *identityschema.Token) ([]string, error) {
@@ -103,42 +124,56 @@ func tokenTestModels(token *identityschema.Token) ([]string, error) {
 	return identityapp.ListUserModelsForGroup(token.UserId, group)
 }
 
-func resolveTokenTestChannel(c *gin.Context, token *identityschema.Token, modelName string) (int, string, error) {
+func resolveTokenTestChannel(c *gin.Context, token *identityschema.Token, modelName string) (int, *marketplaceapp.RoutingBinding, error) {
 	tokenGroup := gatewayroutingapp.NormalizeTokenGroup(token.Group)
 	if marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup) {
 		bindings, _, err := marketplaceapp.ResolveRoutePoolBindings(token.UserId, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup), modelName, token.MarketplaceMultiplierLimit)
 		if err != nil {
-			return 0, "", err
+			return 0, nil, err
 		}
 		for _, binding := range bindings {
 			if channelID, groupName, selectErr := selectTokenTestChannel(c, binding.InternalGroup, modelName); selectErr == nil {
-				return channelID, groupName, nil
+				binding.InternalGroup = groupName
+				return channelID, &binding, nil
 			}
 		}
-		return 0, "", fmt.Errorf("路由池当前没有可用于测试的渠道")
+		return 0, nil, fmt.Errorf("路由池当前没有可用于测试的渠道")
 	}
 	if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) && !marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
 		binding, err := marketplaceapp.ResolveTokenGroupBinding(tokenGroup, token.UserId)
 		if err != nil {
-			return 0, "", err
+			return 0, nil, err
 		}
-		return selectTokenTestChannel(c, binding.InternalGroup, modelName)
+		channelID, groupName, err := selectTokenTestChannel(c, binding.InternalGroup, modelName)
+		if err != nil {
+			return 0, nil, err
+		}
+		binding.InternalGroup = groupName
+		return channelID, binding, nil
 	}
 	if tokenGroup == gatewayroutingapp.AutoGroupName || marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
 		if marketplaceapp.HasConfiguredAutoRoutePool(token.UserId) || marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) {
 			bindings, err := marketplaceapp.ResolveAutoRouteBindings(token.UserId, modelName, token.MarketplaceMultiplierLimit)
 			if err != nil {
-				return 0, "", err
+				return 0, nil, err
 			}
 			for _, binding := range bindings {
 				if channelID, groupName, selectErr := selectTokenTestChannel(c, binding.InternalGroup, modelName); selectErr == nil {
-					return channelID, groupName, nil
+					binding.InternalGroup = groupName
+					return channelID, &binding, nil
 				}
 			}
-			return 0, "", fmt.Errorf("Auto 路由池当前没有可用于测试的渠道")
+			return 0, nil, fmt.Errorf("Auto 路由池当前没有可用于测试的渠道")
 		}
 	}
-	return selectTokenTestChannel(c, tokenGroup, modelName)
+	channelID, groupName, err := selectTokenTestChannel(c, tokenGroup, modelName)
+	if err != nil {
+		return 0, nil, err
+	}
+	return channelID, &marketplaceapp.RoutingBinding{
+		InternalGroup: groupName, SourceType: marketplacedomain.SourceTypeOfficial,
+		CreditPoolPolicy: marketplacedomain.CreditPolicyOfficialDefault, Multiplier: 1,
+	}, nil
 }
 
 func selectTokenTestChannel(c *gin.Context, groupName, modelName string) (int, string, error) {

@@ -114,6 +114,10 @@ func marketplaceAutoProbeDue(channel marketplaceschema.Channel, now time.Time) b
 	return !channel.AutoProbeLastAt.Add(time.Duration(interval)*time.Minute + autoProbeJitter(channel.ID, interval)).After(now)
 }
 
+func marketplaceAutoProbeEligible(channel *marketplaceschema.Channel) bool {
+	return channel != nil && channel.AutoProbeEnabled && marketplacedomain.AcceptsTraffic(channel.Status)
+}
+
 func autoProbeJitter(channelID string, intervalMinutes int) time.Duration {
 	maxSeconds := intervalMinutes * 60 / 4
 	if maxSeconds < 1 {
@@ -155,6 +159,18 @@ func claimMarketplaceAutoProbeLease(channelID string) (func(), bool) {
 }
 
 func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
+	if channel == nil || platformdb.DB == nil {
+		return
+	}
+	var current marketplaceschema.Channel
+	if err := platformdb.DB.First(&current, "id = ?", channel.ID).Error; err != nil {
+		return
+	}
+	if !marketplaceAutoProbeEligible(&current) {
+		return
+	}
+	channel = &current
+
 	status := marketplacedomain.VerificationFailed
 	var failure error
 	model := strings.TrimSpace(channel.AutoProbeModel)

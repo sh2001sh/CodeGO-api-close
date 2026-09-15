@@ -140,6 +140,9 @@ export async function testApiKeyConnectivity(
     group: string
     channel_id: number
     latency_ms: number
+    quota_charged: number
+    billing_source: string
+    request_id: string
   }>
 > {
   const res = await api.post(`/api/token/${id}/test`, { model })

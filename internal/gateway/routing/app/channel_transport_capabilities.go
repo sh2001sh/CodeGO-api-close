@@ -39,7 +39,7 @@ func StartChannelTransportCapabilityBackfill() {
 			return
 		}
 		for _, channel := range channels {
-			if channel == nil || !channel.IsOfficial() || !responsesCapabilitiesNeedProbe(channel.ChannelInfo.ResponsesCapabilities, time.Now()) {
+			if !channelAllowsAutomaticCapabilityProbe(channel) || !channel.IsOfficial() || !responsesCapabilitiesNeedProbe(channel.ChannelInfo.ResponsesCapabilities, time.Now()) {
 				continue
 			}
 			markChannelCapabilitiesPending(channel)
@@ -68,6 +68,9 @@ func probeAndPersistChannelCapabilities(ctx context.Context, channelID int) erro
 	if err != nil {
 		return err
 	}
+	if !channelAllowsAutomaticCapabilityProbe(channel) {
+		return nil
+	}
 	candidates := channelProbeCandidates(channel)
 	result := probeChannelCandidates(ctx, candidates)
 	channel.ChannelInfo.ResponsesCapabilities = gatewayschema.ResponsesCapabilities{
@@ -88,6 +91,10 @@ func probeAndPersistChannelCapabilities(ctx context.Context, channelID int) erro
 		})
 	}
 	return nil
+}
+
+func channelAllowsAutomaticCapabilityProbe(channel *gatewayschema.Channel) bool {
+	return channel != nil && channel.Status != constant.ChannelStatusManuallyDisabled
 }
 
 func responsesCapabilitiesHaveTransientFailure(capabilities gatewayschema.ResponsesCapabilities) bool {

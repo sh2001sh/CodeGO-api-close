@@ -88,6 +88,27 @@ func TestMarketplaceProbePersistsAndSyncsInternalCapabilities(t *testing.T) {
 	require.True(t, internal.ChannelInfo.ResponsesCapabilities.SupportsRemoteCompactionV1For("gpt-5", 0))
 }
 
+func TestMarketplaceCapabilityProbeSkipsSuspendedChannel(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
+	channel := marketplaceschema.Channel{
+		ID: "suspended-transport-channel", Status: marketplacedomain.LifecycleSuspended,
+		ProviderType: "openai_compatible", DeclaredModels: `["gpt-5"]`,
+	}
+	require.NoError(t, db.Create(&channel).Error)
+
+	probeCalls := 0
+	originalProbe := probeMarketplaceCandidates
+	probeMarketplaceCandidates = func(context.Context, []gatewaycapability.ProbeInput) gatewaycapability.ProbeResult {
+		probeCalls++
+		return gatewaycapability.ProbeResult{}
+	}
+	t.Cleanup(func() { probeMarketplaceCandidates = originalProbe })
+
+	require.NoError(t, probeAndPersistMarketplaceCapabilities(context.Background(), channel.ID))
+	require.Zero(t, probeCalls)
+}
+
 func TestMarketplaceNativeProviderCapabilitiesAreNotApplicable(t *testing.T) {
 	channel := &marketplaceschema.Channel{ProviderType: "anthropic", DeclaredModels: `["claude-opus-4-6"]`}
 	candidates := marketplaceProbeCandidates(channel)

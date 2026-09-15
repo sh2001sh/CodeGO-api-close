@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const rankingVersion = "marketplace-v5-average-consumer-amount"
+const rankingVersion = "marketplace-v5-wallet-avg"
 
 var marketplaceListCache struct {
 	sync.Mutex

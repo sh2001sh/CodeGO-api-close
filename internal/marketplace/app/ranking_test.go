@@ -25,6 +25,11 @@ func TestWilsonLowerBoundPenalizesSmallSamples(t *testing.T) {
 	require.Zero(t, wilsonLowerBound(0, 0, 1.96))
 }
 
+func TestRankingVersionFitsPersistedColumn(t *testing.T) {
+	t.Parallel()
+	require.LessOrEqual(t, len(rankingVersion), 32)
+}
+
 func TestChannelConsumerStatsByChannelAcrossGroups(t *testing.T) {
 	originalLogDB := platformdb.LogDB
 	t.Cleanup(func() { platformdb.LogDB = originalLogDB })

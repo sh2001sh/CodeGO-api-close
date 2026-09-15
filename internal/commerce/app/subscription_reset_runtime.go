@@ -240,7 +240,12 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 		result.AmountUsedBefore = sub.AmountUsed
 		result.PeriodUsedBefore = sub.PeriodUsed
 
-		sub.AmountUsed = 0
+		plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)
+		if err != nil {
+			return err
+		}
+		baseQuota := min(max(plan.TotalAmount, 0), sub.AmountTotal)
+		sub.AmountUsed = max(sub.AmountUsed-baseQuota, 0)
 		sub.PeriodUsed = 0
 		sub.ModelUsage = ""
 		if err := restoreSubscriptionLedgerBalanceAfterResetTx(tx, &sub, fmt.Sprintf("opportunity:%d:%s", userID, currentMonth)); err != nil {
@@ -275,7 +280,7 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 
 		result.AmountUsedAfter = sub.AmountUsed
 		result.PeriodUsedAfter = sub.PeriodUsed
-		result.ClearedUsedAmount = result.AmountUsedBefore
+		result.ClearedUsedAmount = result.AmountUsedBefore - result.AmountUsedAfter
 		result.ResetOpportunity = buildSubscriptionResetOpportunitySummary(account)
 		return nil
 	})

@@ -349,6 +349,39 @@ func TestUseUserSubscriptionResetOpportunityIgnoresConversionFromPreviousRenewal
 	assert.Equal(t, 0, result.ResetOpportunity.AvailableCount)
 }
 
+func TestUseUserSubscriptionResetOpportunityRestoresOnlyBaseQuotaAfterFuel(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	insertSubscriptionResetAppTestUser(t, 7213, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 7213, 0, 1000)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{
+		Id: 7314, UserId: 7213, PlanId: plan.Id, AmountTotal: 1200, AmountUsed: 1200,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}
+	require.NoError(t, db.Create(sub).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityAccount{
+		UserId: 7213, EarnedTotal: 1, AvailableTotal: 1,
+	}).Error)
+	require.NoError(t, restoreSubscriptionLedgerBalanceAfterResetTx(db, sub, "fuel-reset-initial"))
+
+	result, err := UseUserSubscriptionResetOpportunity(7213)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1000, result.ClearedUsedAmount)
+	assert.EqualValues(t, 200, result.AmountUsedAfter)
+
+	var current commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", sub.Id).First(&current).Error)
+	assert.EqualValues(t, 1200, current.AmountTotal)
+	assert.EqualValues(t, 200, current.AmountUsed)
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(sub.Id), QuotaUnit: "quota",
+	})
+	require.NoError(t, err)
+	var snapshot billingschema.BillingBalanceSnapshot
+	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
+	assert.EqualValues(t, 1000, snapshot.AvailableBalance)
+}
+
 func TestUseUserSubscriptionResetOpportunityRejectsWhenAllPassesConverted(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	insertSubscriptionResetAppTestUser(t, 7221, 0)

@@ -443,7 +443,7 @@ func TestUseSubscriptionResetOpportunityResetsUsage(t *testing.T) {
 		t.Fatalf("failed to seed user: %v", err)
 	}
 	if err := db.Create(&commerceschema.SubscriptionPlan{
-		Id:            1,
+		Id:            19301,
 		Title:         "Standard月卡",
 		Enabled:       true,
 		PriceAmount:   30,
@@ -456,7 +456,7 @@ func TestUseSubscriptionResetOpportunityResetsUsage(t *testing.T) {
 	if err := db.Create(&commerceschema.UserSubscription{
 		Id:          1,
 		UserId:      user.Id,
-		PlanId:      1,
+		PlanId:      19301,
 		AmountTotal: 100,
 		AmountUsed:  20,
 		PeriodUsed:  10,

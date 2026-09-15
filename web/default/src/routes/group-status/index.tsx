@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com.
 */
 import { createFileRoute } from '@tanstack/react-router'
-import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
+import { DawnNav } from '@/features/dawn/components/dawn-nav'
 import { SidebarGroupStatusPage } from '@/features/sidebar-group-status'
 
 export const Route = createFileRoute('/group-status/')({
@@ -27,15 +27,18 @@ export const Route = createFileRoute('/group-status/')({
 
 function GroupStatusPage() {
   return (
-    <PublicLayout showMainContainer={false}>
+    <div className='bg-background text-foreground relative min-h-svh overflow-x-clip'>
       <SiteSeo
         title='分组状态 | Code Go'
         description='分组状态 · 近 6 小时真实请求可用率'
         canonicalPath='/group-status'
       />
-      <div className='h-svh pt-16'>
+      <div className='dawn !min-h-0 !bg-transparent'>
+        <DawnNav />
+      </div>
+      <div className='h-svh pt-28 md:pt-16'>
         <SidebarGroupStatusPage />
       </div>
-    </PublicLayout>
+    </div>
   )
 }

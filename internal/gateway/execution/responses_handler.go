@@ -115,6 +115,16 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		} else if changed {
 			logger.LogInfo(c, "removed server-owned Responses item IDs from remote compaction input")
 		}
+	} else if portableResponses {
+		// Full Responses input items are self-contained. Their top-level IDs are
+		// owned by the upstream account that created them and cannot be replayed
+		// reliably after routing to another account. Keep call_id, which is the
+		// portable key used to pair tool calls and outputs.
+		if changed, normalizeErr := normalizeRemoteCompactionInput(request); normalizeErr != nil {
+			return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		} else if changed {
+			logger.LogInfo(c, "removed server-owned Responses item IDs from portable input")
+		}
 	} else if changed, normalizeErr := request.NormalizeCodexInputItemIDs(); normalizeErr != nil {
 		return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	} else if changed {

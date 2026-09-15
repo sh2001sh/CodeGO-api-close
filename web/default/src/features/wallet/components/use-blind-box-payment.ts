@@ -140,24 +140,35 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
         )
       const payload = isRecord(response.data) ? response.data : {}
       const formFields = isRecord(payload.form) ? payload.form : null
+      const payUrl = String(payload.pay_url || '')
+      const formUrl = formFields ? String(response.url || '') : ''
+      if (!(formUrl && formFields) && !payUrl) {
+        throw new Error('支付网关未返回可打开的支付页面')
+      }
       setPaymentState({
-        open: true,
+        open: false,
         stage: 'pending',
         orderId: String(payload.order_id || ''),
         amountDue: Number(payload.amount_due || options.amountDue),
         methodLabel: getBlindBoxMethodLabel(method),
-        payUrl: String(payload.pay_url || response.url || ''),
+        payUrl,
         qrCodeUrl: String(payload.qrcode_url || ''),
-        formUrl: formFields ? String(response.url || '') : '',
+        formUrl,
         formFields,
         quantity: Number(payload.quantity || options.selectedQuantity),
-        message: '请在当前弹窗内扫码支付，付款完成后这里会自动显示结果。',
+        message: '支付页已打开，付款完成后结果会自动同步。',
         pollingStartTime: Date.now(),
         retryPayload: {
           quantity: options.selectedQuantity,
           paymentMethod: method.type,
         },
       })
+      if (formUrl && formFields) {
+        submitPaymentForm(formUrl, formFields)
+      } else {
+        window.open(payUrl, '_blank', 'noopener,noreferrer')
+      }
+      toast.success('正在跳转到支付页…')
     } catch (error) {
       const message = error instanceof Error ? error.message : '发起支付失败'
       toast.error(message)

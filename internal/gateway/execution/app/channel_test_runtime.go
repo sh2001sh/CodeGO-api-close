@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,8 +67,8 @@ type MarketplaceContentGenerationOptions struct {
 	BillUser        bool
 }
 
-// GenerateMarketplaceChannelContentByID runs a non-streaming Responses request
-// against the exact selected marketplace channel and returns its output text.
+// GenerateMarketplaceChannelContentByID runs a streaming Responses request
+// against the exact selected marketplace channel and returns its collected output text.
 func GenerateMarketplaceChannelContentByID(channelID int, model string, options MarketplaceContentGenerationOptions) (string, ChannelTestReport, *types.NewAPIError, error) {
 	channel, err := getChannelForTest(channelID)
 	if err != nil {
@@ -76,28 +77,86 @@ func GenerateMarketplaceChannelContentByID(channelID int, model string, options 
 	if options.UserID <= 0 {
 		return "", ChannelTestReport{}, nil, errors.New("用户 ID 无效")
 	}
-	result := testChannelWithOptions(channel, model, string(constant.EndpointTypeOpenAIResponse), false, channelTestOptions{
+	result := testChannelWithOptions(channel, model, string(constant.EndpointTypeOpenAIResponse), true, channelTestOptions{
 		UserID: options.UserID, BillUser: options.BillUser,
 		MarketplaceGroupID: options.MarketplaceGroupID, InternalGroup: options.InternalGroup,
 		MarketplaceOwnerID: options.MarketplaceOwnerID, CreditPoolPolicy: options.CreditPoolPolicy,
 		MarketplaceMultiplier: options.Multiplier, MarketplaceModelPrices: options.ModelPrices,
-		Prompt: options.Prompt, MaxOutputTokens: options.MaxOutputTokens,
+		Prompt: options.Prompt, MaxOutputTokens: options.MaxOutputTokens, CaptureFullStreamBody: true,
 	})
 	if result.localErr != nil {
 		return "", result.report, result.newAPIError, result.localErr
 	}
-	var response dto.OpenAIResponsesResponse
-	if err := json.Unmarshal(result.responseBody, &response); err != nil {
-		return "", result.report, result.newAPIError, fmt.Errorf("解析 Responses 结果失败: %w", err)
-	}
-	if err := validateMarketplaceContentResponse(&response); err != nil {
+	text, err := extractMarketplaceContentFromResponsesStream(result.responseBody)
+	if err != nil {
 		return "", result.report, result.newAPIError, err
 	}
-	text := gatewaytranslation.ExtractOutputTextFromResponses(&response)
-	if text == "" {
-		return "", result.report, result.newAPIError, errors.New("模型没有返回文本内容")
-	}
 	return text, result.report, result.newAPIError, nil
+}
+
+func extractMarketplaceContentFromResponsesStream(body []byte) (string, error) {
+	var text strings.Builder
+	var completedResponse *dto.OpenAIResponsesResponse
+	terminalSeen := false
+	for _, line := range bytes.Split(body, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+			continue
+		}
+		var event dto.ResponsesStreamResponse
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return "", fmt.Errorf("解析 Responses 流事件失败: %w", err)
+		}
+		switch event.Type {
+		case "response.output_text.delta":
+			text.WriteString(event.Delta)
+		case "response.completed", "response.done":
+			terminalSeen = true
+			completedResponse = event.Response
+			if event.Response != nil {
+				if err := validateMarketplaceContentResponse(event.Response); err != nil {
+					return "", err
+				}
+			}
+		case "response.incomplete":
+			if event.Response != nil {
+				if err := validateMarketplaceContentResponse(event.Response); err != nil {
+					return "", err
+				}
+			}
+			return "", errors.New("模型输出不完整（unknown）")
+		case "response.failed", "error":
+			message := ""
+			if event.Response != nil {
+				if responseErr := event.Response.GetOpenAIError(); responseErr != nil {
+					message = strings.TrimSpace(responseErr.Message)
+				}
+			}
+			if message == "" {
+				if responseErr := dto.GetOpenAIError(event.Error); responseErr != nil {
+					message = strings.TrimSpace(responseErr.Message)
+				}
+			}
+			if message == "" {
+				message = event.Type
+			}
+			return "", fmt.Errorf("模型流式生成失败: %s", message)
+		}
+	}
+	if !terminalSeen {
+		return "", errors.New("模型流式输出未正常完成")
+	}
+	if text.Len() == 0 && completedResponse != nil {
+		text.WriteString(gatewaytranslation.ExtractOutputTextFromResponses(completedResponse))
+	}
+	if text.Len() == 0 {
+		return "", errors.New("模型没有返回文本内容")
+	}
+	return text.String(), nil
 }
 
 func validateMarketplaceContentResponse(response *dto.OpenAIResponsesResponse) error {

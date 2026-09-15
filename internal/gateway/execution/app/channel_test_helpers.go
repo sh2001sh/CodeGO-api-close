@@ -120,10 +120,10 @@ func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dt
 	return usage, nil
 }
 
-func readTestResponseBody(body io.ReadCloser, isStream bool) ([]byte, error) {
+func readTestResponseBody(body io.ReadCloser, isStream, captureFullStream bool) ([]byte, error) {
 	defer func() { _ = body.Close() }()
 	const maxStreamLogBytes = 8 << 10
-	if isStream {
+	if isStream && !captureFullStream {
 		return io.ReadAll(io.LimitReader(body, maxStreamLogBytes))
 	}
 	return io.ReadAll(body)

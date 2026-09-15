@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -41,6 +42,7 @@ type channelTestOptions struct {
 	MarketplaceModelPrices map[string]marketplacedomain.ChannelModelPrice
 	Prompt                 string
 	MaxOutputTokens        uint
+	CaptureFullStreamBody  bool
 }
 
 func testChannel(channel *gatewayschema.Channel, testModel string, endpointType string, isStream bool) channelTestResult {
@@ -162,9 +164,7 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 		if maxOutputTokens == 0 {
 			maxOutputTokens = 6000
 		}
-		request = &dto.OpenAIResponsesRequest{
-			Model: testModel, Input: input, Stream: lo.ToPtr(false), MaxOutputTokens: &maxOutputTokens,
-		}
+		request = buildPromptedResponsesTestRequest(testModel, input, maxOutputTokens, isStream)
 		endpointType = string(constant.EndpointTypeOpenAIResponse)
 		ctx.Request.URL = buildChannelTestRequestURL(resolveChannelTestRequestPath(channel, testModel, endpointType))
 	}
@@ -337,7 +337,7 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 	}
 
 	responseResult := writer.Result()
-	respBody, err := readTestResponseBody(responseResult.Body, isStream)
+	respBody, err := readTestResponseBody(responseResult.Body, isStream, options.CaptureFullStreamBody)
 	if err != nil {
 		return channelTestResult{
 			context:     ctx,
@@ -410,6 +410,12 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 	platformobservability.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
 	result.responseBody = append([]byte(nil), respBody...)
 	return result
+}
+
+func buildPromptedResponsesTestRequest(model string, input json.RawMessage, maxOutputTokens uint, isStream bool) *dto.OpenAIResponsesRequest {
+	return &dto.OpenAIResponsesRequest{
+		Model: model, Input: input, Stream: lo.ToPtr(isStream), MaxOutputTokens: &maxOutputTokens,
+	}
 }
 
 func convertChannelTestRequest(ctx *gin.Context, info *relaycommon.RelayInfo, adaptor gatewayproviders.SyncAdaptor, request dto.Request) (any, error) {

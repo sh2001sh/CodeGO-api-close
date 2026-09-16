@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	"slices"
@@ -139,10 +140,7 @@ func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeRele
 	if err != nil {
 		return nil, err
 	}
-	return &AdminOwnerIncomeReleaseResult{
-		OperationID: task.ID, Status: task.Status, ReclaimedCount: task.Count,
-		ReclaimedAmount: task.Amount, ErrorMessage: task.ErrorMessage,
-	}, nil
+	return adminOwnerIncomeReclaimResult(task)
 }
 
 func GetAdminOwnerIncomeReclaim(operationID string) (*AdminOwnerIncomeReleaseResult, error) {
@@ -153,8 +151,18 @@ func GetAdminOwnerIncomeReclaim(operationID string) (*AdminOwnerIncomeReleaseRes
 	if task.Status == "completed" {
 		invalidateAdminMarketplaceStatsCache()
 	}
+	return adminOwnerIncomeReclaimResult(task)
+}
+
+func adminOwnerIncomeReclaimResult(task marketplaceschema.IncomeReclaim) (*AdminOwnerIncomeReleaseResult, error) {
+	var filter marketplacesettlement.ReleaseFilter
+	if err := json.Unmarshal([]byte(task.Filter), &filter); err != nil {
+		return nil, fmt.Errorf("decode income reclaim task filter: %w", err)
+	}
 	return &AdminOwnerIncomeReleaseResult{
 		OperationID: task.ID, Status: task.Status, ReclaimedCount: task.Count,
-		ReclaimedAmount: task.Amount, ErrorMessage: task.ErrorMessage,
+		ReclaimedAmount: task.Amount, TargetAmount: filter.MaxAmount,
+		BatchNumber: task.BatchNumber, ErrorMessage: task.ErrorMessage,
+		CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
 	}, nil
 }

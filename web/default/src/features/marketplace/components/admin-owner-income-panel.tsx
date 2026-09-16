@@ -2,12 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
+import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import {
   useAdminOwnerIncome,
   useAdminOwnerIncomeReclaim,
   useAdminOwnerIncomeRelease,
 } from '../hooks'
 import { AdminIncomeFilter, type AdminIncomeRange } from './admin-income-filter'
+
+const RECLAIM_OPERATION_STORAGE_KEY = 'admin-owner-income-reclaim-operation'
 
 export function AdminOwnerIncomePanel(props: {
   ownerSearch: string
@@ -18,7 +22,14 @@ export function AdminOwnerIncomePanel(props: {
   const { t } = useTranslation()
   const [selectedIDs, setSelectedIDs] = useState<number[]>([])
   const [amount, setAmount] = useState('')
-  const [reclaimOperationID, setReclaimOperationID] = useState<string>()
+  const [runningElapsedSeconds, setRunningElapsedSeconds] = useState(0)
+  const [reclaimOperationID, setReclaimOperationID] = useState<
+    string | undefined
+  >(() =>
+    typeof window === 'undefined'
+      ? undefined
+      : sessionStorage.getItem(RECLAIM_OPERATION_STORAGE_KEY) || undefined
+  )
   const pendingOperation = useRef<{ signature: string; id: string } | null>(
     null
   )
@@ -30,6 +41,7 @@ export function AdminOwnerIncomePanel(props: {
       props.range.end && Math.floor(props.range.end.getTime() / 1000),
   }
   const query = useAdminOwnerIncome(filters)
+  const refetchIncome = query.refetch
   const reclaim = useAdminOwnerIncomeRelease()
   const reclaimTask = useAdminOwnerIncomeReclaim(reclaimOperationID)
   const completedOperation = useRef<string | undefined>(undefined)
@@ -40,6 +52,32 @@ export function AdminOwnerIncomePanel(props: {
     (sum, item) => sum + item.reclaimable_quota,
     0
   )
+  const taskElapsedSeconds =
+    reclaimTask.data &&
+    ['completed', 'failed'].includes(reclaimTask.data.status)
+      ? Math.max(
+          0,
+          Math.floor(
+            (new Date(reclaimTask.data.updated_at).getTime() -
+              new Date(reclaimTask.data.created_at).getTime()) /
+              1000
+          )
+        )
+      : runningElapsedSeconds
+
+  useEffect(() => {
+    const task = reclaimTask.data
+    if (!task || !['pending', 'running'].includes(task.status)) return
+    const timer = window.setInterval(() => {
+      setRunningElapsedSeconds(
+        Math.max(
+          0,
+          Math.floor((Date.now() - new Date(task.created_at).getTime()) / 1000)
+        )
+      )
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [reclaimTask.data])
 
   useEffect(() => {
     const task = reclaimTask.data
@@ -47,10 +85,7 @@ export function AdminOwnerIncomePanel(props: {
     if (task.status === 'completed') {
       completedOperation.current = task.operation_id
       pendingOperation.current = null
-      setReclaimOperationID(undefined)
-      setSelectedIDs([])
-      setAmount('')
-      void query.refetch()
+      void refetchIncome()
       toast.success(
         t('实际回收 {{count}} 条收益，共 {{amount}}', {
           count: task.reclaimed_count,
@@ -60,10 +95,9 @@ export function AdminOwnerIncomePanel(props: {
     }
     if (task.status === 'failed') {
       completedOperation.current = task.operation_id
-      setReclaimOperationID(undefined)
       toast.error(task.error_message || t('额度回收失败'))
     }
-  }, [reclaimTask.data, t])
+  }, [reclaimTask.data, refetchIncome, t])
 
   const submit = () => {
     if (
@@ -77,7 +111,7 @@ export function AdminOwnerIncomePanel(props: {
     const partial = amount.trim() !== ''
     const maxAmount = partial
       ? parseQuotaFromDollars(Number(amount))
-      : undefined
+      : available
     if (
       partial &&
       (!Number.isFinite(Number(amount)) ||
@@ -88,7 +122,7 @@ export function AdminOwnerIncomePanel(props: {
       toast.error(t('请输入有效的正数回收金额'))
       return
     }
-    if (maxAmount && maxAmount > available) {
+    if (maxAmount > available) {
       toast.error(t('输入金额超过所选渠道主当前可回收额度'))
       return
     }
@@ -126,7 +160,12 @@ export function AdminOwnerIncomePanel(props: {
       {
         onSuccess: (result) => {
           completedOperation.current = undefined
+          setRunningElapsedSeconds(0)
           setReclaimOperationID(result.operation_id)
+          sessionStorage.setItem(
+            RECLAIM_OPERATION_STORAGE_KEY,
+            result.operation_id
+          )
           if (result.status === 'pending' || result.status === 'running') {
             toast.success(t('回收任务已创建，正在后台处理'))
           }
@@ -169,17 +208,87 @@ export function AdminOwnerIncomePanel(props: {
       />
       <p className='text-muted-foreground text-xs'>
         {t(
-          '金额单位与上方收益显示一致。留空回收全部；输入金额将按所选渠道主合计精确回收，优先扣除较早收益。任何一位渠道主额度不足时，本次操作全部取消。'
+          '金额单位与上方收益显示一致。留空回收当前可回收额度；输入金额将按所选渠道主合计精确回收，优先扣除较早收益。任何一位渠道主额度不足时，本次操作全部取消。'
         )}
       </p>
       {reclaimTask.data && (
-        <p className='text-muted-foreground text-xs' aria-live='polite'>
-          {t('回收任务 {{status}}：已处理 {{count}} 条，共 {{amount}}', {
-            status: reclaimTask.data.status,
-            count: reclaimTask.data.reclaimed_count,
-            amount: formatQuota(reclaimTask.data.reclaimed_amount),
-          })}
-        </p>
+        <div
+          className='border-border bg-muted/30 space-y-3 border p-4'
+          aria-live='polite'
+        >
+          <div className='flex items-start justify-between gap-3'>
+            <div>
+              <p className='font-medium'>
+                {reclaimTask.data.status === 'completed'
+                  ? t('回收完成')
+                  : reclaimTask.data.status === 'failed'
+                    ? t('回收失败')
+                    : t('正在回收')}
+              </p>
+              <p className='text-muted-foreground mt-1 text-xs'>
+                {t('已处理 {{count}} 条 · 已提交 {{batches}} 批', {
+                  count: reclaimTask.data.reclaimed_count,
+                  batches: reclaimTask.data.batch_number,
+                })}
+              </p>
+            </div>
+            {!['pending', 'running'].includes(reclaimTask.data.status) && (
+              <Button
+                type='button'
+                variant='ghost'
+                size='sm'
+                onClick={() => {
+                  sessionStorage.removeItem(RECLAIM_OPERATION_STORAGE_KEY)
+                  setReclaimOperationID(undefined)
+                }}
+              >
+                {t('关闭结果')}
+              </Button>
+            )}
+          </div>
+          <Progress
+            value={
+              reclaimTask.data.target_amount > 0
+                ? Math.min(
+                    100,
+                    (reclaimTask.data.reclaimed_amount /
+                      reclaimTask.data.target_amount) *
+                      100
+                  )
+                : null
+            }
+          />
+          <div className='text-muted-foreground grid gap-1 text-xs sm:grid-cols-4'>
+            <span>
+              {t('已回收：{{amount}}', {
+                amount: formatQuota(reclaimTask.data.reclaimed_amount),
+              })}
+            </span>
+            <span>
+              {t('目标：{{amount}}', {
+                amount: formatQuota(reclaimTask.data.target_amount),
+              })}
+            </span>
+            <span>
+              {t('最近更新：{{time}}', {
+                time: new Date(
+                  reclaimTask.data.updated_at
+                ).toLocaleTimeString(),
+              })}
+            </span>
+            <span>
+              {t('已运行：{{minutes}}分 {{seconds}}秒', {
+                minutes: Math.floor(taskElapsedSeconds / 60),
+                seconds: taskElapsedSeconds % 60,
+              })}
+            </span>
+          </div>
+          {reclaimTask.data.error_message && (
+            <p className='text-destructive text-xs'>
+              {reclaimTask.data.error_message}
+            </p>
+          )}
+        </div>
       )}
     </section>
   )

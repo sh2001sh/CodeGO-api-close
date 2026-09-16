@@ -75,7 +75,7 @@ const (
 	reclaimTaskRunning   = "running"
 	reclaimTaskCompleted = "completed"
 	reclaimTaskFailed    = "failed"
-	reclaimBatchSize     = 2000
+	reclaimBatchSize     = 5000
 	reclaimAdvisoryClass = int32(0x52434c4d) // RCLM
 )
 
@@ -374,7 +374,9 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 				return nil
 			}
 		}
-		query := reclaimSettlementQuery(tx, filter).Order("created_at ASC, id ASC").Limit(reclaimBatchSize)
+		query := reclaimSettlementQuery(tx, filter).
+			Select("id", "owner_user_id", "owner_net_amount", "reclaimed_amount", "created_at").
+			Order("created_at ASC, id ASC").Limit(reclaimBatchSize)
 		if platformdb.UsingPostgreSQL {
 			query = query.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
 		} else {
@@ -435,7 +437,7 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 		}
 		newCount, newAmount, newBatchNumber := task.Count+batchCount, task.Amount+batchAmount, task.BatchNumber+1
 		updates := map[string]any{"status": reclaimTaskRunning, "count": newCount, "amount": newAmount, "batch_number": newBatchNumber, "error_message": ""}
-		if filter.MaxAmount > 0 && newAmount == filter.MaxAmount {
+		if (filter.MaxAmount > 0 && newAmount == filter.MaxAmount) || len(items) < reclaimBatchSize {
 			updates["status"] = reclaimTaskCompleted
 		}
 		if err := tx.Model(&marketplaceschema.IncomeReclaim{}).Where("id = ?", task.ID).Updates(updates).Error; err != nil {

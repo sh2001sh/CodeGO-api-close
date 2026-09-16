@@ -266,7 +266,11 @@ export interface AdminOwnerIncomeReclaimTask {
   status: 'pending' | 'running' | 'completed' | 'failed'
   reclaimed_count: number
   reclaimed_amount: number
+  target_amount: number
+  batch_number: number
   error_message?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface ChannelFormValues {

@@ -240,32 +240,20 @@ func TestIncomeReclaimTaskIsCreatedWithoutProcessingAndCommitsInBatches(t *testi
 	task, err = ProcessIncomeReclaimTask(task.ID)
 	require.NoError(t, err)
 	require.Equal(t, reclaimTaskRunning, task.Status)
-	require.Equal(t, 2000, task.Count)
-	require.EqualValues(t, 2000, task.Amount)
+	require.Equal(t, 5000, task.Count)
+	require.EqualValues(t, 5000, task.Amount)
 	require.Equal(t, 1, transfers)
 
 	task, err = ProcessIncomeReclaimTask(task.ID)
 	require.NoError(t, err)
-	require.Equal(t, reclaimTaskRunning, task.Status)
-	require.Equal(t, 4000, task.Count)
-	require.EqualValues(t, 4000, task.Amount)
-	require.Equal(t, 2, transfers)
-
-	task, err = ProcessIncomeReclaimTask(task.ID)
-	require.NoError(t, err)
-	require.Equal(t, reclaimTaskRunning, task.Status)
+	require.Equal(t, reclaimTaskCompleted, task.Status)
 	require.Equal(t, 5001, task.Count)
 	require.EqualValues(t, 5001, task.Amount)
-	require.Equal(t, 3, transfers)
-
-	task, err = ProcessIncomeReclaimTask(task.ID)
-	require.NoError(t, err)
-	require.Equal(t, reclaimTaskCompleted, task.Status)
+	require.Equal(t, 2, transfers)
 	require.Equal(t, 5001, transferredAmount)
 	require.Equal(t, []string{
 		"marketplace-reclaim:large-batch:batch:1:owner:10",
 		"marketplace-reclaim:large-batch:batch:2:owner:10",
-		"marketplace-reclaim:large-batch:batch:3:owner:10",
 	}, transferKeys)
 	var untouched int64
 	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Where("status <> ?", statusReclaimed).Count(&untouched).Error)

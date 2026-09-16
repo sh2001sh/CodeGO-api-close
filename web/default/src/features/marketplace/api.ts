@@ -19,6 +19,7 @@ import type {
   ChannelFeedbackSummary,
   AdminMarketplaceChannelFilters,
   AdminOwnerIncomeResult,
+  AdminOwnerIncomeReclaimTask,
   TokenOption,
   MarketplaceBatchTest,
   MarketplaceObservability,
@@ -842,9 +843,16 @@ export async function releaseAdminOwnerIncome(
   if (filters.maxAmount && filters.maxAmount > 0)
     search.set('max_amount', String(filters.maxAmount))
   search.set('operation_id', filters.operationId)
-  const response = await api.post<
-    ApiResponse<{ reclaimed_count: number; reclaimed_amount: number }>
-  >(`/api/marketplace/admin/owner-income/release?${search.toString()}`)
+  const response = await api.post<ApiResponse<AdminOwnerIncomeReclaimTask>>(
+    `/api/marketplace/admin/owner-income/release?${search.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function getAdminOwnerIncomeReclaim(operationId: string) {
+  const response = await api.get<ApiResponse<AdminOwnerIncomeReclaimTask>>(
+    `/api/marketplace/admin/owner-income/reclaims/${encodeURIComponent(operationId)}`
+  )
   return requireData(response.data)
 }
 

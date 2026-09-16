@@ -130,7 +130,7 @@ func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeRele
 			}
 		}
 	}
-	result, err := marketplacesettlement.ReclaimPending(marketplacesettlement.ReleaseFilter{
+	task, err := marketplacesettlement.CreateIncomeReclaimTask(marketplacesettlement.ReleaseFilter{
 		OwnerUserIDs: ownerIDs, StartTimestamp: input.StartTimestamp,
 		EndTimestamp: input.EndTimestamp,
 		MaxAmount:    input.MaxAmount,
@@ -139,8 +139,22 @@ func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeRele
 	if err != nil {
 		return nil, err
 	}
-	invalidateAdminMarketplaceStatsCache()
 	return &AdminOwnerIncomeReleaseResult{
-		ReclaimedCount: result.Count, ReclaimedAmount: result.Amount,
+		OperationID: task.ID, Status: task.Status, ReclaimedCount: task.Count,
+		ReclaimedAmount: task.Amount, ErrorMessage: task.ErrorMessage,
+	}, nil
+}
+
+func GetAdminOwnerIncomeReclaim(operationID string) (*AdminOwnerIncomeReleaseResult, error) {
+	task, err := marketplacesettlement.GetIncomeReclaimTask(operationID)
+	if err != nil {
+		return nil, err
+	}
+	if task.Status == "completed" {
+		invalidateAdminMarketplaceStatsCache()
+	}
+	return &AdminOwnerIncomeReleaseResult{
+		OperationID: task.ID, Status: task.Status, ReclaimedCount: task.Count,
+		ReclaimedAmount: task.Amount, ErrorMessage: task.ErrorMessage,
 	}, nil
 }

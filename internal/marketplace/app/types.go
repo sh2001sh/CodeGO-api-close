@@ -143,8 +143,11 @@ type AdminOwnerIncomeQuery struct {
 }
 
 type AdminOwnerIncomeReleaseResult struct {
-	ReclaimedCount  int   `json:"reclaimed_count"`
-	ReclaimedAmount int64 `json:"reclaimed_amount"`
+	OperationID     string `json:"operation_id"`
+	Status          string `json:"status"`
+	ReclaimedCount  int    `json:"reclaimed_count"`
+	ReclaimedAmount int64  `json:"reclaimed_amount"`
+	ErrorMessage    string `json:"error_message,omitempty"`
 }
 
 type AdminOwnerIncomeItem struct {

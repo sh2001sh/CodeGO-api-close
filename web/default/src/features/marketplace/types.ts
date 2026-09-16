@@ -261,6 +261,14 @@ export interface AdminOwnerIncomeResult {
   reclaimed_income: number
 }
 
+export interface AdminOwnerIncomeReclaimTask {
+  operation_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  reclaimed_count: number
+  reclaimed_amount: number
+  error_message?: string
+}
+
 export interface ChannelFormValues {
   provider_type: string
   source_label: string

@@ -517,6 +517,11 @@ func ListAdminOwnerIncome(c *gin.Context) {
 	respond(c, result, err)
 }
 
+func GetAdminOwnerIncomeReclaim(c *gin.Context) {
+	result, err := marketplaceapp.GetAdminOwnerIncomeReclaim(c.Param("id"))
+	respond(c, result, err)
+}
+
 func ReleaseAdminOwnerIncome(c *gin.Context) {
 	// Never let a malformed selection or time filter widen a financial action.
 	values := c.Request.URL.Query()

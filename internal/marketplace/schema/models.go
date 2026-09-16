@@ -290,13 +290,20 @@ type Settlement struct {
 
 func (Settlement) TableName() string { return tableName("settlements") }
 
-// IncomeReclaim records a committed operation so retries cannot deduct twice.
+// IncomeReclaim records a reclaim task and its committed progress. Each batch
+// commits its settlement changes and wallet transfer together, allowing a task
+// to resume safely after a worker or request interruption.
 type IncomeReclaim struct {
-	ID          string    `gorm:"primaryKey;size:64"`
-	Fingerprint string    `gorm:"size:64;not null"`
-	Count       int       `gorm:"not null;default:0"`
-	Amount      int64     `gorm:"not null;default:0"`
-	CreatedAt   time.Time `gorm:"autoCreateTime"`
+	ID           string    `gorm:"primaryKey;size:64"`
+	Fingerprint  string    `gorm:"size:64;not null"`
+	Filter       string    `gorm:"type:text;not null;default:''"`
+	Status       string    `gorm:"size:16;not null;default:pending;index"`
+	Count        int       `gorm:"not null;default:0"`
+	Amount       int64     `gorm:"not null;default:0"`
+	BatchNumber  int       `gorm:"not null;default:0"`
+	ErrorMessage string    `gorm:"type:text;not null;default:''"`
+	CreatedAt    time.Time `gorm:"autoCreateTime"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
 }
 
 func (IncomeReclaim) TableName() string { return tableName("income_reclaims") }

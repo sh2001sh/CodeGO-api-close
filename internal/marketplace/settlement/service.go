@@ -63,10 +63,20 @@ type ReclaimResult struct {
 }
 
 var (
-	releaseHook ReleaseHook
-	reclaimHook ReclaimHook
-	forfeitHook ForfeitHook
-	workerOnce  sync.Once
+	releaseHook       ReleaseHook
+	reclaimHook       ReclaimHook
+	forfeitHook       ForfeitHook
+	workerOnce        sync.Once
+	reclaimWorkerOnce sync.Once
+)
+
+const (
+	reclaimTaskPending   = "pending"
+	reclaimTaskRunning   = "running"
+	reclaimTaskCompleted = "completed"
+	reclaimTaskFailed    = "failed"
+	reclaimBatchSize     = 2000
+	reclaimAdvisoryClass = int32(0x52434c4d) // RCLM
 )
 
 func RegisterReleaseHook(hook ReleaseHook) { releaseHook = hook }
@@ -149,6 +159,33 @@ func StartReleaseWorker(ctx context.Context) {
 	})
 }
 
+// StartReclaimWorker processes administrator income-reclaim tasks in bounded
+// transactions. A single worker per process keeps work fair; row locks on the
+// task itself keep multiple control-plane processes from processing a task at
+// the same time.
+func StartReclaimWorker(ctx context.Context) {
+	reclaimWorkerOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				processed, err := processNextIncomeReclaimTask()
+				if err != nil {
+					platformobservability.SysError("process marketplace income reclaim: " + err.Error())
+				}
+				if processed {
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+	})
+}
+
 func ReleaseDue(limit int) error {
 	if releaseHook == nil {
 		return errors.New("marketplace settlement release hook is not registered")
@@ -204,17 +241,15 @@ func ReleasePending(filter ReleaseFilter) (ReleaseResult, error) {
 	return result, nil
 }
 
-// ReclaimPending transfers released earnings atomically, including partial records.
-// OperationID must be reused when retrying the same administrator action.
-func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
+// CreateIncomeReclaimTask creates or resumes an idempotent reclaim task. It
+// deliberately does not process settlements in the HTTP request transaction.
+func CreateIncomeReclaimTask(filter ReleaseFilter) (marketplaceschema.IncomeReclaim, error) {
 	if filter.MaxAmount < 0 || len(filter.OperationID) > 64 {
-		return ReclaimResult{}, errors.New("invalid income reclaim amount or operation ID")
+		return marketplaceschema.IncomeReclaim{}, errors.New("invalid income reclaim amount or operation ID")
 	}
 	if reclaimHook == nil {
-		return ReclaimResult{}, errors.New("marketplace settlement reclaim hook is not registered")
+		return marketplaceschema.IncomeReclaim{}, errors.New("marketplace settlement reclaim hook is not registered")
 	}
-	// Legacy callers can still reclaim all without an operation ID. New clients
-	// supply one to make retries safe after a lost response, including partials.
 	operationID := filter.OperationID
 	if operationID == "" {
 		operationID = platformruntime.GetUUID()
@@ -226,10 +261,12 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 	filter.Limit = 0
 	payload, err := json.Marshal(filter)
 	if err != nil {
-		return ReclaimResult{}, err
+		return marketplaceschema.IncomeReclaim{}, err
 	}
-	operation := marketplaceschema.IncomeReclaim{ID: operationID, Fingerprint: fmt.Sprintf("%x", sha256.Sum256(payload))}
-	result := ReclaimResult{}
+	operation := marketplaceschema.IncomeReclaim{
+		ID: operationID, Fingerprint: fmt.Sprintf("%x", sha256.Sum256(payload)),
+		Filter: string(payload), Status: reclaimTaskPending,
+	}
 	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		inserted := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&operation)
 		if inserted.Error != nil {
@@ -243,58 +280,148 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 			if existing.Fingerprint != operation.Fingerprint {
 				return errors.New("回收操作标识已用于其他筛选条件或金额")
 			}
-			result = ReclaimResult{Count: existing.Count, Amount: existing.Amount}
+			if existing.Status == reclaimTaskFailed {
+				if err := tx.Model(&existing).Updates(map[string]any{"status": reclaimTaskPending, "error_message": ""}).Error; err != nil {
+					return err
+				}
+				existing.Status = reclaimTaskPending
+				existing.ErrorMessage = ""
+			}
+			operation = existing
+			return nil
+		}
+		return nil
+	})
+	if err != nil {
+		return marketplaceschema.IncomeReclaim{}, err
+	}
+	return operation, nil
+}
+
+func GetIncomeReclaimTask(operationID string) (marketplaceschema.IncomeReclaim, error) {
+	var task marketplaceschema.IncomeReclaim
+	if err := platformdb.DB.First(&task, "id = ?", operationID).Error; err != nil {
+		return marketplaceschema.IncomeReclaim{}, err
+	}
+	return task, nil
+}
+
+// ReclaimPending remains for command-line and legacy callers. Unlike the old
+// implementation, every pass is a separate short transaction.
+func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
+	task, err := CreateIncomeReclaimTask(filter)
+	if err != nil {
+		return ReclaimResult{}, err
+	}
+	for task.Status == reclaimTaskPending || task.Status == reclaimTaskRunning {
+		task, err = ProcessIncomeReclaimTask(task.ID)
+		if err != nil {
+			return ReclaimResult{}, err
+		}
+	}
+	if task.Status == reclaimTaskFailed {
+		return ReclaimResult{}, errors.New(task.ErrorMessage)
+	}
+	return ReclaimResult{Count: task.Count, Amount: task.Amount}, nil
+}
+
+func processNextIncomeReclaimTask() (bool, error) {
+	var task marketplaceschema.IncomeReclaim
+	query := platformdb.DB.Where("status IN ?", []string{reclaimTaskPending, reclaimTaskRunning}).Order("updated_at ASC").Limit(1)
+	if err := query.First(&task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	_, err := ProcessIncomeReclaimTask(task.ID)
+	return err == nil, err
+}
+
+// ProcessIncomeReclaimTask commits at most reclaimBatchSize settlements and
+// their wallet transfers. The task row is locked as the cross-process mutex.
+func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeReclaim, error) {
+	var result marketplaceschema.IncomeReclaim
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		lock := clause.Locking{Strength: "UPDATE"}
+		var task marketplaceschema.IncomeReclaim
+		if err := tx.Clauses(lock).First(&task, "id = ?", operationID).Error; err != nil {
+			return err
+		}
+		if task.Status == reclaimTaskCompleted || task.Status == reclaimTaskFailed {
+			result = task
+			return nil
+		}
+		var filter ReleaseFilter
+		if err := json.Unmarshal([]byte(task.Filter), &filter); err != nil {
+			return err
+		}
+		if err := lockReclaimOwnersTx(tx, filter.OwnerUserIDs); err != nil {
+			return err
+		}
+		if task.BatchNumber == 0 && filter.MaxAmount > 0 {
+			available, err := reclaimableAmountTx(tx, filter)
+			if err != nil {
+				return err
+			}
+			if available < filter.MaxAmount {
+				if err := tx.Model(&task).Updates(map[string]any{"status": reclaimTaskFailed, "error_message": "所选范围的可回收收益不足，未扣除额度，请刷新后重试"}).Error; err != nil {
+					return err
+				}
+				task.Status = reclaimTaskFailed
+				task.ErrorMessage = "所选范围的可回收收益不足，未扣除额度，请刷新后重试"
+				result = task
+				return nil
+			}
+		}
+		query := reclaimSettlementQuery(tx, filter).Order("created_at ASC, id ASC").Limit(reclaimBatchSize)
+		if platformdb.UsingPostgreSQL {
+			query = query.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
+		} else {
+			query = query.Clauses(lock)
+		}
+		var items []marketplaceschema.Settlement
+		if err := query.Find(&items).Error; err != nil {
+			return err
+		}
+		if len(items) == 0 {
+			if err := tx.Model(&task).Update("status", reclaimTaskCompleted).Error; err != nil {
+				return err
+			}
+			task.Status = reclaimTaskCompleted
+			result = task
 			return nil
 		}
 		ownerAmounts := make(map[int]int64)
-		var cursor *marketplaceschema.Settlement
-		for {
-			var items []marketplaceschema.Settlement
-			if err := reclaimableSettlementsQuery(tx, filter, cursor).
-				Clauses(clause.Locking{Strength: "UPDATE"}).
-				Select("id", "owner_user_id", "owner_net_amount", "reclaimed_amount", "created_at").
-				Order("created_at ASC, id ASC").Limit(500).Find(&items).Error; err != nil {
+		fullIDs := make([]string, 0, len(items))
+		batchAmount, batchCount := int64(0), 0
+		now := time.Now().UTC()
+		for _, item := range items {
+			amount := item.OwnerNetAmount - item.ReclaimedAmount
+			if filter.MaxAmount > 0 {
+				amount = min(amount, filter.MaxAmount-task.Amount-batchAmount)
+			}
+			if amount <= 0 {
+				break
+			}
+			ownerAmounts[item.OwnerUserID] += amount
+			if item.ReclaimedAmount+amount == item.OwnerNetAmount {
+				fullIDs = append(fullIDs, item.ID)
+			} else if err := tx.Model(&item).Updates(map[string]any{"reclaimed_amount": item.ReclaimedAmount + amount, "reclaimed_at": now}).Error; err != nil {
 				return err
 			}
-			if len(items) == 0 {
+			batchCount++
+			batchAmount += amount
+			if filter.MaxAmount > 0 && task.Amount+batchAmount == filter.MaxAmount {
 				break
 			}
-			fullIDs := make([]string, 0, len(items))
-			for _, item := range items {
-				amount := item.OwnerNetAmount - item.ReclaimedAmount
-				if filter.MaxAmount > 0 {
-					amount = min(amount, filter.MaxAmount-result.Amount)
-				}
-				if amount <= 0 {
-					continue
-				}
-				ownerAmounts[item.OwnerUserID] += amount
-				updates := map[string]any{"reclaimed_amount": item.ReclaimedAmount + amount, "reclaimed_at": time.Now().UTC()}
-				if item.ReclaimedAmount+amount == item.OwnerNetAmount {
-					fullIDs = append(fullIDs, item.ID)
-				} else if err := tx.Model(&item).Updates(updates).Error; err != nil {
-					return err
-				}
-				result.Count++
-				result.Amount += amount
-				if filter.MaxAmount > 0 && result.Amount == filter.MaxAmount {
-					break
-				}
-			}
-			if len(fullIDs) > 0 {
-				if err := tx.Model(&marketplaceschema.Settlement{}).Where("id IN ?", fullIDs).Updates(map[string]any{
-					"reclaimed_amount": gorm.Expr("owner_net_amount"), "reclaimed_at": time.Now().UTC(), "status": statusReclaimed,
-				}).Error; err != nil {
-					return err
-				}
-			}
-			if filter.MaxAmount > 0 && result.Amount == filter.MaxAmount {
-				break
-			}
-			cursor = &items[len(items)-1]
 		}
-		if filter.MaxAmount > 0 && result.Amount < filter.MaxAmount {
-			return errors.New("所选范围的可回收收益不足，未扣除额度，请刷新后重试")
+		if len(fullIDs) > 0 {
+			if err := tx.Model(&marketplaceschema.Settlement{}).Where("id IN ?", fullIDs).Updates(map[string]any{
+				"reclaimed_amount": gorm.Expr("owner_net_amount"), "reclaimed_at": now, "status": statusReclaimed,
+			}).Error; err != nil {
+				return err
+			}
 		}
 		owners := make([]int, 0, len(ownerAmounts))
 		for owner := range ownerAmounts {
@@ -302,19 +429,35 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 		}
 		slices.Sort(owners)
 		for _, owner := range owners {
-			if err := reclaimHook(tx, owner, 1, int(ownerAmounts[owner]), fmt.Sprintf("marketplace-reclaim:%s:owner:%d", operationID, owner)); err != nil {
+			if err := reclaimHook(tx, owner, 1, int(ownerAmounts[owner]), fmt.Sprintf("marketplace-reclaim:%s:batch:%d:owner:%d", task.ID, task.BatchNumber+1, owner)); err != nil {
 				return err
 			}
 		}
-		return tx.Model(&operation).Updates(map[string]any{"count": result.Count, "amount": result.Amount}).Error
+		newCount, newAmount, newBatchNumber := task.Count+batchCount, task.Amount+batchAmount, task.BatchNumber+1
+		updates := map[string]any{"status": reclaimTaskRunning, "count": newCount, "amount": newAmount, "batch_number": newBatchNumber, "error_message": ""}
+		if filter.MaxAmount > 0 && newAmount == filter.MaxAmount {
+			updates["status"] = reclaimTaskCompleted
+		}
+		if err := tx.Model(&marketplaceschema.IncomeReclaim{}).Where("id = ?", task.ID).Updates(updates).Error; err != nil {
+			return err
+		}
+		task.Count = newCount
+		task.Amount = newAmount
+		task.BatchNumber = newBatchNumber
+		task.Status = updates["status"].(string)
+		result = task
+		return nil
 	})
 	if err != nil {
-		return ReclaimResult{}, err
+		// All financial mutations above have rolled back. Record the failure in a
+		// separate short transaction so the same operation ID can resume later.
+		_ = platformdb.DB.Model(&marketplaceschema.IncomeReclaim{}).Where("id = ?", operationID).Updates(map[string]any{"status": reclaimTaskFailed, "error_message": err.Error()}).Error
+		return marketplaceschema.IncomeReclaim{}, err
 	}
 	return result, nil
 }
 
-func reclaimableSettlementsQuery(tx *gorm.DB, filter ReleaseFilter, cursor *marketplaceschema.Settlement) *gorm.DB {
+func reclaimSettlementQuery(tx *gorm.DB, filter ReleaseFilter) *gorm.DB {
 	query := tx.Session(&gorm.Session{NewDB: true}).Model(&marketplaceschema.Settlement{}).
 		Where("status = ? AND owner_net_amount > reclaimed_amount", statusReleased)
 	if len(filter.OwnerUserIDs) > 0 {
@@ -326,10 +469,34 @@ func reclaimableSettlementsQuery(tx *gorm.DB, filter ReleaseFilter, cursor *mark
 	if filter.EndTimestamp > 0 {
 		query = query.Where("created_at < ?", time.Unix(filter.EndTimestamp+1, 0))
 	}
-	if cursor != nil {
-		query = query.Where("created_at > ? OR (created_at = ? AND id > ?)", cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
-	}
 	return query
+}
+
+func reclaimableAmountTx(tx *gorm.DB, filter ReleaseFilter) (int64, error) {
+	var amount int64
+	err := reclaimSettlementQuery(tx, filter).Select("COALESCE(SUM(owner_net_amount - reclaimed_amount), 0)").Scan(&amount).Error
+	return amount, err
+}
+
+// Explicit-owner tasks share the global gate and lock only their owners, so
+// unrelated owners can progress concurrently. An unscoped task takes the
+// global gate exclusively because it can touch every owner.
+func lockReclaimOwnersTx(tx *gorm.DB, ownerUserIDs []int) error {
+	if !platformdb.UsingPostgreSQL {
+		return nil
+	}
+	if len(ownerUserIDs) == 0 {
+		return tx.Exec("SELECT pg_advisory_xact_lock(?, ?)", reclaimAdvisoryClass, int32(0)).Error
+	}
+	if err := tx.Exec("SELECT pg_advisory_xact_lock_shared(?, ?)", reclaimAdvisoryClass, int32(0)).Error; err != nil {
+		return err
+	}
+	for _, ownerUserID := range ownerUserIDs {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?, ?)", reclaimAdvisoryClass, int32(ownerUserID)).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ForfeitChannelPending clears frozen pending earnings when a channel is shut down.

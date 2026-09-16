@@ -35,6 +35,17 @@ type legacyWalletTransferForFeeFieldsMigration struct {
 	SenderBalanceAt int64
 }
 
+type legacyIncomeReclaimTaskMigration struct {
+	ID          string `gorm:"primaryKey;size:64"`
+	Fingerprint string `gorm:"size:64;not null"`
+	Count       int
+	Amount      int64
+}
+
+func (legacyIncomeReclaimTaskMigration) TableName() string {
+	return "marketplace_income_reclaims"
+}
+
 func (legacyWalletTransferForFeeFieldsMigration) TableName() string {
 	return "wallet_transfers"
 }
@@ -690,4 +701,21 @@ func TestPartialIncomeReclaimMigrationPreservesExistingSettlements(t *testing.T)
 	require.Equal(t, "released", rows[1].Status)
 	require.Zero(t, rows[1].ReclaimedAmount)
 	require.False(t, appliedMigrationNeedsRepair(db, "20260907_marketplace_partial_income_reclaim"))
+}
+
+func TestIncomeReclaimTaskMigrationMarksLegacyOperationsCompleted(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&legacyIncomeReclaimTaskMigration{}))
+	require.NoError(t, db.Create(&legacyIncomeReclaimTaskMigration{
+		ID: "legacy-operation", Fingerprint: "fingerprint", Count: 12, Amount: 345,
+	}).Error)
+
+	require.NoError(t, migrateMarketplaceIncomeReclaimTasks(db))
+	var operation marketplaceschema.IncomeReclaim
+	require.NoError(t, db.First(&operation, "id = ?", "legacy-operation").Error)
+	require.Equal(t, "completed", operation.Status)
+	require.Empty(t, operation.Filter)
+	require.Equal(t, 12, operation.Count)
+	require.EqualValues(t, 345, operation.Amount)
 }

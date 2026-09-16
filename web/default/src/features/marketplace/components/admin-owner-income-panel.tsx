@@ -1,8 +1,12 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
-import { useAdminOwnerIncome, useAdminOwnerIncomeRelease } from '../hooks'
+import {
+  useAdminOwnerIncome,
+  useAdminOwnerIncomeReclaim,
+  useAdminOwnerIncomeRelease,
+} from '../hooks'
 import { AdminIncomeFilter, type AdminIncomeRange } from './admin-income-filter'
 
 export function AdminOwnerIncomePanel(props: {
@@ -14,6 +18,7 @@ export function AdminOwnerIncomePanel(props: {
   const { t } = useTranslation()
   const [selectedIDs, setSelectedIDs] = useState<number[]>([])
   const [amount, setAmount] = useState('')
+  const [reclaimOperationID, setReclaimOperationID] = useState<string>()
   const pendingOperation = useRef<{ signature: string; id: string } | null>(
     null
   )
@@ -26,6 +31,8 @@ export function AdminOwnerIncomePanel(props: {
   }
   const query = useAdminOwnerIncome(filters)
   const reclaim = useAdminOwnerIncomeRelease()
+  const reclaimTask = useAdminOwnerIncomeReclaim(reclaimOperationID)
+  const completedOperation = useRef<string | undefined>(undefined)
   const selected = (query.data?.items ?? []).filter((item) =>
     selectedIDs.includes(item.owner_user_id)
   )
@@ -33,6 +40,30 @@ export function AdminOwnerIncomePanel(props: {
     (sum, item) => sum + item.reclaimable_quota,
     0
   )
+
+  useEffect(() => {
+    const task = reclaimTask.data
+    if (!task || completedOperation.current === task.operation_id) return
+    if (task.status === 'completed') {
+      completedOperation.current = task.operation_id
+      pendingOperation.current = null
+      setReclaimOperationID(undefined)
+      setSelectedIDs([])
+      setAmount('')
+      void query.refetch()
+      toast.success(
+        t('实际回收 {{count}} 条收益，共 {{amount}}', {
+          count: task.reclaimed_count,
+          amount: formatQuota(task.reclaimed_amount),
+        })
+      )
+    }
+    if (task.status === 'failed') {
+      completedOperation.current = task.operation_id
+      setReclaimOperationID(undefined)
+      toast.error(task.error_message || t('额度回收失败'))
+    }
+  }, [reclaimTask.data, t])
 
   const submit = () => {
     if (
@@ -94,15 +125,11 @@ export function AdminOwnerIncomePanel(props: {
       },
       {
         onSuccess: (result) => {
-          pendingOperation.current = null
-          toast.success(
-            t('实际回收 {{count}} 条收益，共 {{amount}}', {
-              count: result.reclaimed_count,
-              amount: formatQuota(result.reclaimed_amount),
-            })
-          )
-          setSelectedIDs([])
-          setAmount('')
+          completedOperation.current = undefined
+          setReclaimOperationID(result.operation_id)
+          if (result.status === 'pending' || result.status === 'running') {
+            toast.success(t('回收任务已创建，正在后台处理'))
+          }
         },
         onError: (error) =>
           toast.error(
@@ -145,6 +172,15 @@ export function AdminOwnerIncomePanel(props: {
           '金额单位与上方收益显示一致。留空回收全部；输入金额将按所选渠道主合计精确回收，优先扣除较早收益。任何一位渠道主额度不足时，本次操作全部取消。'
         )}
       </p>
+      {reclaimTask.data && (
+        <p className='text-muted-foreground text-xs' aria-live='polite'>
+          {t('回收任务 {{status}}：已处理 {{count}} 条，共 {{amount}}', {
+            status: reclaimTask.data.status,
+            count: reclaimTask.data.reclaimed_count,
+            amount: formatQuota(reclaimTask.data.reclaimed_amount),
+          })}
+        </p>
+      )}
     </section>
   )
 }

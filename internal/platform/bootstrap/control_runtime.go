@@ -21,6 +21,7 @@ func startControlBackgroundTasks() {
 	marketplacesettlement.RegisterReclaimHook(billingapp.ReclaimMarketplaceOwnerEarningsTx)
 	marketplacesettlement.RegisterForfeitHook(billingapp.ForfeitMarketplacePendingEarningsTx)
 	marketplacesettlement.StartReleaseWorker(context.Background())
+	marketplacesettlement.StartReclaimWorker(context.Background())
 
 	startOptionSyncLoop()
 

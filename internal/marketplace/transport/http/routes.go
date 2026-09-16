@@ -84,6 +84,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		adminRoute.GET("/security-audit/events", ListAdminSecurityAuditEvents)
 		adminRoute.PATCH("/security-audit/events/:id", UpdateAdminSecurityAuditEvent)
 		adminRoute.POST("/owner-income/release", middleware.CriticalRateLimit(), ReleaseAdminOwnerIncome)
+		adminRoute.GET("/owner-income/reclaims/:id", GetAdminOwnerIncomeReclaim)
 		adminRoute.PATCH("/channels/:id", UpdateAdminChannel)
 		adminRoute.POST("/channels/:id/verify", middleware.CriticalRateLimit(), VerifyAdminChannel)
 		adminRoute.POST("/channels/:id/test", middleware.CriticalRateLimit(), TestAdminChannelConnectivity)

@@ -155,6 +155,7 @@ func V2MigrationIDs() []string {
 		"20260906_marketplace_multiplier_notices",
 		"20260828_marketplace_settlement_terminal_timestamps",
 		"20260907_marketplace_partial_income_reclaim",
+		"20260916_marketplace_income_reclaim_tasks",
 		"20260817_marketplace_transport_capabilities",
 		"20260817_responses_background",
 		"20260818_multiplier_precision",
@@ -425,6 +426,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260828_marketplace_settlement_terminal_timestamps", Run: migrateMarketplaceSettlementTerminalTimestamps},
 		{ID: "20260907_marketplace_partial_income_reclaim", Run: migrateMarketplacePartialIncomeReclaim},
+		{ID: "20260916_marketplace_income_reclaim_tasks", Run: migrateMarketplaceIncomeReclaimTasks},
 		{ID: "20260817_marketplace_transport_capabilities", Run: migrateMarketplaceTransportCapabilities},
 		{ID: "20260817_responses_background", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.ResponsesBackgroundJob{}, &gatewayschema.ResponsesBackgroundEvent{})
@@ -1105,6 +1107,13 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	case "20260907_marketplace_partial_income_reclaim":
 		return !db.Migrator().HasColumn(&marketplaceschema.Settlement{}, "ReclaimedAmount") ||
 			!db.Migrator().HasTable(&marketplaceschema.IncomeReclaim{})
+	case "20260916_marketplace_income_reclaim_tasks":
+		return !db.Migrator().HasTable(&marketplaceschema.IncomeReclaim{}) ||
+			!db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "Filter") ||
+			!db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "Status") ||
+			!db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "BatchNumber") ||
+			!db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "ErrorMessage") ||
+			!db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "UpdatedAt")
 	case "20260817_marketplace_transport_capabilities":
 		return db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "TransportCapabilities")
@@ -1215,6 +1224,18 @@ func migrateMarketplacePartialIncomeReclaim(tx *gorm.DB) error {
 	}
 	// Old fully reclaimed rows remain valid without rewriting their amounts.
 	return tx.AutoMigrate(&marketplaceschema.IncomeReclaim{})
+}
+
+func migrateMarketplaceIncomeReclaimTasks(tx *gorm.DB) error {
+	if err := tx.AutoMigrate(&marketplaceschema.IncomeReclaim{}); err != nil {
+		return err
+	}
+	// Rows created by the former synchronous implementation are already
+	// complete. The newly added columns otherwise default them to pending,
+	// causing the worker to retry an operation that has no serialized filter.
+	return tx.Model(&marketplaceschema.IncomeReclaim{}).
+		Where("filter = ?", "").
+		Updates(map[string]any{"status": "completed"}).Error
 }
 
 func marketplaceSubscriptionBillingNeedsRepair(db *gorm.DB) bool {

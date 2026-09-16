@@ -7,6 +7,7 @@ import {
   fetchMarketplaceModels,
   getAdminMarketplaceChannels,
   getAdminOwnerIncome,
+  getAdminOwnerIncomeReclaim,
   releaseAdminOwnerIncome,
   getMarketplaceGroups,
   getMarketplaceModels,
@@ -454,7 +455,6 @@ export function useAdminOwnerIncome(filters: AdminMarketplaceChannelFilters) {
 }
 
 export function useAdminOwnerIncomeRelease() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (
       filters: Pick<
@@ -462,17 +462,20 @@ export function useAdminOwnerIncomeRelease() {
         'ownerSearch' | 'ownerUserIds' | 'startTimestamp' | 'endTimestamp'
       > & { maxAmount?: number; operationId: string }
     ) => releaseAdminOwnerIncome(filters),
-    onSuccess: () => {
-      void Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ['marketplace-owner-income', 'admin'],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['marketplace-channels', 'admin'],
-        }),
-        queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] }),
-      ])
-    },
+  })
+}
+
+export function useAdminOwnerIncomeReclaim(operationId?: string) {
+  return useQuery({
+    queryKey: ['marketplace-owner-income-reclaim', operationId],
+    queryFn: () => getAdminOwnerIncomeReclaim(operationId!),
+    enabled: Boolean(operationId),
+    refetchInterval: (query) =>
+      query.state.data?.status === 'pending' ||
+      query.state.data?.status === 'running'
+        ? 2_000
+        : false,
+    refetchOnWindowFocus: false,
   })
 }
 

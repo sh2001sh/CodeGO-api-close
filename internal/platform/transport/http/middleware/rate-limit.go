@@ -216,6 +216,17 @@ func CriticalRateLimit() func(c *gin.Context) {
 	}
 }
 
+// RoutePoolMutationRateLimit keeps routine route-pool editing out of the
+// shared critical-operation bucket. A separate, shorter window prevents a
+// payment, token reveal, or channel test from making route-pool settings
+// temporarily read-only while still bounding accidental write loops.
+func RoutePoolMutationRateLimit() func(c *gin.Context) {
+	if !platformconfig.CriticalRateLimitEnable {
+		return defNext
+	}
+	return userRateLimitFactory(60, 60, "RPM")
+}
+
 // BlindBoxOpenRateLimit limits opening by authenticated user rather than the
 // shared client IP. Opening a batch one at a time is an expected workflow, so
 // a user must be able to reveal a large granted batch without waiting for a

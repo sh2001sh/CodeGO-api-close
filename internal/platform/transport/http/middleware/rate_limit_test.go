@@ -127,6 +127,52 @@ func TestCriticalRateLimitScopesAuthenticatedRequestsToUser(t *testing.T) {
 	require.True(t, limited.IsAborted())
 }
 
+func TestRoutePoolMutationRateLimitUsesIndependentBucket(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalRedisEnabled := platformcache.RedisEnabled
+	originalEnabled := platformconfig.CriticalRateLimitEnable
+	originalLimit := platformconfig.CriticalRateLimitNum
+	originalDuration := platformconfig.CriticalRateLimitDuration
+	platformcache.RedisEnabled = false
+	platformconfig.CriticalRateLimitEnable = true
+	platformconfig.CriticalRateLimitNum = 1
+	platformconfig.CriticalRateLimitDuration = 600
+	t.Cleanup(func() {
+		platformcache.RedisEnabled = originalRedisEnabled
+		platformconfig.CriticalRateLimitEnable = originalEnabled
+		platformconfig.CriticalRateLimitNum = originalLimit
+		platformconfig.CriticalRateLimitDuration = originalDuration
+	})
+
+	critical := CriticalRateLimit()
+	criticalRequest := newRateLimitContext(http.MethodPost, "/api/wallet/transfers", "198.51.100.86", "")
+	criticalRequest.Set("id", 5201)
+	critical(criticalRequest)
+	require.False(t, criticalRequest.IsAborted())
+
+	limitedCritical := newRateLimitContext(http.MethodPost, "/api/wallet/transfers", "198.51.100.86", "")
+	limitedCritical.Set("id", 5201)
+	critical(limitedCritical)
+	require.True(t, limitedCritical.IsAborted())
+
+	routePoolLimiter := RoutePoolMutationRateLimit()
+	routePoolRequest := newRateLimitContext(http.MethodPut, "/api/marketplace/route-pools/pool-1", "198.51.100.86", "")
+	routePoolRequest.Set("id", 5201)
+	routePoolLimiter(routePoolRequest)
+	require.False(t, routePoolRequest.IsAborted())
+
+	for index := 1; index < 60; index++ {
+		request := newRateLimitContext(http.MethodPut, "/api/marketplace/route-pools/pool-1", "198.51.100.86", "")
+		request.Set("id", 5201)
+		routePoolLimiter(request)
+		require.False(t, request.IsAborted(), "request %d should fit in the route-pool bucket", index+1)
+	}
+	limitedRoutePool := newRateLimitContext(http.MethodPut, "/api/marketplace/route-pools/pool-1", "198.51.100.86", "")
+	limitedRoutePool.Set("id", 5201)
+	routePoolLimiter(limitedRoutePool)
+	require.True(t, limitedRoutePool.IsAborted())
+}
+
 func TestAuthenticatedRateLimitReturnsRetryMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	originalRedisEnabled := platformcache.RedisEnabled

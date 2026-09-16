@@ -276,10 +276,17 @@ export function PoolWorkbench(props: {
   }
 
   const rename = async (name: string) => {
-    if (isAuto || !name.trim()) return
+    const trimmedName = name.trim()
+    if (
+      isAuto ||
+      !trimmedName ||
+      trimmedName === poolDetail.data?.name ||
+      updatePool.isPending
+    )
+      return
     await updatePool.mutateAsync({
       id: activePoolID,
-      name: name.trim(),
+      name: trimmedName,
       groupIds: members.map((m) => m.id),
       config: currentConfig,
     })
@@ -451,11 +458,12 @@ export function PoolWorkbench(props: {
                   className='iname'
                   defaultValue={isAuto ? 'AUTO 池' : poolDetail.data?.name}
                   key={`${activePoolID}-${poolDetail.data?.name}`}
-                  disabled={isAuto}
+                  disabled={isAuto || updatePool.isPending}
                   onBlur={(event) => void rename(event.target.value)}
                 />
                 <select
                   value={config?.strategy ?? 'priority'}
+                  disabled={updatePool.isPending || updateAutoPool.isPending}
                   onChange={(event) => void setStrategy(event.target.value)}
                   title='路由方式'
                 >
@@ -469,6 +477,7 @@ export function PoolWorkbench(props: {
                   <button
                     className='btn mini'
                     title='删除池'
+                    disabled={deletePool.isPending || updatePool.isPending}
                     onClick={() => void removePool()}
                   >
                     <X size={14} />

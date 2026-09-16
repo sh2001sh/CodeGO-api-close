@@ -74,6 +74,12 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 	if req.Model == "" {
 		return nil, errors.New("model is required")
 	}
+	requestCopy := *req
+	requestCopy.Tools = append([]dto.ToolCallRequest(nil), req.Tools...)
+	if _, err := requestCopy.NormalizeToolSchemas(); err != nil {
+		return nil, fmt.Errorf("normalize tool schemas: %w", err)
+	}
+	req = &requestCopy
 	if lo.FromPtrOr(req.N, 1) > 1 {
 		return nil, fmt.Errorf("n>1 is not supported in responses translation mode")
 	}
@@ -225,6 +231,10 @@ func buildResponsesRequest(req *dto.GeneralOpenAIRequest, input json.RawMessage,
 		maxOutputTokens = maxCompletionTokens
 	}
 
+	parallelToolCalls := json.RawMessage(nil)
+	if req.HasToolDefinitions() {
+		parallelToolCalls = convertParallelToolCalls(req.ParallelTooCalls)
+	}
 	request := &dto.OpenAIResponsesRequest{
 		Model:                req.Model,
 		Input:                input,
@@ -238,7 +248,7 @@ func buildResponsesRequest(req *dto.GeneralOpenAIRequest, input json.RawMessage,
 		Tools:                convertChatTools(req.Tools),
 		TopP:                 copyTopP(req.TopP),
 		User:                 req.User,
-		ParallelToolCalls:    convertParallelToolCalls(req.ParallelTooCalls),
+		ParallelToolCalls:    parallelToolCalls,
 		Store:                req.Store,
 		Metadata:             req.Metadata,
 		ServiceTier:          rawString(req.ServiceTier),

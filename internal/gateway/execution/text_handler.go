@@ -70,7 +70,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if info.RelayMode == gatewaycontract.RelayModeChatCompletions &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		shouldBridgeBeforeNative(info, bridgeChatToResponses) {
+		(shouldBridgeBeforeNative(info, bridgeChatToResponses) || shouldBridgeChatReasoningTools(info, request)) {
 		request, err = platformcopy.DeepCopy(request)
 		if err != nil {
 			return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())

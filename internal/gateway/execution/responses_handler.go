@@ -104,6 +104,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		if request.NormalizePortableReasoningEffort() {
 			logger.LogInfo(c, "normalized unsupported Codex ultra reasoning effort to xhigh")
 		}
+		if changed, normalizeErr := request.NormalizeToolSchemas(); normalizeErr != nil {
+			return types.NewError(normalizeErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		} else if changed {
+			logger.LogInfo(c, "normalized top-level union in function tool schema")
+		}
+		if len(request.Tools) == 0 {
+			request.ParallelToolCalls = nil
+		}
 		if len(request.ClientMetadata) > 0 {
 			request.ClientMetadata = nil
 			logger.LogInfo(c, "stripped Codex client metadata for portable Responses upstream")
@@ -454,6 +462,18 @@ func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo,
 			}
 		}
 		logger.LogInfo(c, "retrying Responses request without stale previous_response_id")
+		resp, err = doResponsesRequest(c, info, adaptor, bytes.NewReader(retryJSON), retryJSON)
+		if err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+		}
+		httpResp, _ = resp.(*http.Response)
+		if httpResp == nil || httpResp.StatusCode == http.StatusOK {
+			return httpResp, nil
+		}
+		return nil, platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
+	}
+	if retryJSON, ok := normalizeUndecryptableReasoningRetry(jsonBody, apiErr); ok {
+		logger.LogInfo(c, "retrying Responses request without undecryptable reasoning items")
 		resp, err = doResponsesRequest(c, info, adaptor, bytes.NewReader(retryJSON), retryJSON)
 		if err != nil {
 			return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)

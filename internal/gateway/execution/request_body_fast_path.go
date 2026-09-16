@@ -70,7 +70,13 @@ func sameStreamOptions(left, right *dto.StreamOptions) bool {
 }
 
 func chatRequestNeedsOpenAIRewrite(model string, request *dto.GeneralOpenAIRequest) bool {
-	if request == nil || (!strings.HasPrefix(model, "o") && !strings.HasPrefix(model, "gpt-5")) {
+	if request == nil {
+		return false
+	}
+	if request.ParallelTooCalls != nil && !request.HasToolDefinitions() {
+		return true
+	}
+	if !strings.HasPrefix(model, "o") && !strings.HasPrefix(model, "gpt-5") {
 		return false
 	}
 	if lo.FromPtrOr(request.MaxCompletionTokens, uint(0)) == 0 && lo.FromPtrOr(request.MaxTokens, uint(0)) != 0 {

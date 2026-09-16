@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
@@ -296,10 +297,6 @@ func normalizeResponsesInput(raw json.RawMessage, hasPreviousResponse bool) (jso
 				item["arguments"] = json.RawMessage(`"{}"`)
 				changed = true
 			}
-			if _, ok := item["namespace"]; ok {
-				delete(item, "namespace")
-				changed = true
-			}
 			if callID := rawString(item["call_id"]); callID != "" {
 				callIDs[callID] = struct{}{}
 			}
@@ -355,6 +352,40 @@ func normalizeRejectedResponsesField(body []byte, apiErr *types.NewAPIError) ([]
 	}
 	normalized, changed := removeResponsesRejectedField(body, field)
 	return normalized, field, changed
+}
+
+func normalizeUndecryptableReasoningRetry(body []byte, apiErr *types.NewAPIError) ([]byte, bool) {
+	if apiErr == nil || apiErr.StatusCode != http.StatusBadRequest || len(body) == 0 {
+		return nil, false
+	}
+	message := strings.ToLower(apiErr.Error())
+	if !strings.Contains(message, "encrypted content") ||
+		(!strings.Contains(message, "could not be verified") && !strings.Contains(message, "could not be decrypted")) {
+		return nil, false
+	}
+	var payload map[string]json.RawMessage
+	if platformencoding.Unmarshal(body, &payload) != nil {
+		return nil, false
+	}
+	var items []map[string]json.RawMessage
+	if platformencoding.Unmarshal(payload["input"], &items) != nil {
+		return nil, false
+	}
+	filtered := make([]map[string]json.RawMessage, 0, len(items))
+	changed := false
+	for _, item := range items {
+		if rawString(item["type"]) == "reasoning" && len(item["encrypted_content"]) > 0 {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	if !changed {
+		return nil, false
+	}
+	payload["input"], _ = platformencoding.Marshal(filtered)
+	normalized, err := platformencoding.Marshal(payload)
+	return normalized, err == nil
 }
 
 func removeResponsesRejectedField(body []byte, field string) ([]byte, bool) {

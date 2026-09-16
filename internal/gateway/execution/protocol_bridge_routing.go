@@ -3,6 +3,7 @@ package execution
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +64,40 @@ func shouldBridgeBeforeNative(info *relaycommon.RelayInfo, direction protocolBri
 			gatewaycontract.IsOpenAIResponseOnlyModel(info.UpstreamModelName))
 }
 
+func shouldBridgeChatReasoningTools(info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) bool {
+	if info == nil || request == nil || !request.HasToolDefinitions() ||
+		strings.EqualFold(strings.TrimSpace(request.ReasoningEffort), "none") || strings.TrimSpace(request.ReasoningEffort) == "" ||
+		protocolBridgeMode(info, bridgeChatToResponses) == gatewaystore.ProtocolBridgeModeDisabled {
+		return false
+	}
+	models := []string{info.OriginModelName}
+	if info.ChannelMeta != nil {
+		models = append(models, info.UpstreamModelName)
+	}
+	for _, model := range models {
+		if gptModelUsesResponsesForReasoningTools(model) {
+			return true
+		}
+	}
+	return false
+}
+
+func gptModelUsesResponsesForReasoningTools(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if strings.HasPrefix(model, "gpt-6") {
+		return true
+	}
+	if !strings.HasPrefix(model, "gpt-5.") {
+		return false
+	}
+	minorText := strings.TrimPrefix(model, "gpt-5.")
+	if separator := strings.IndexFunc(minorText, func(r rune) bool { return r < '0' || r > '9' }); separator >= 0 {
+		minorText = minorText[:separator]
+	}
+	minor, err := strconv.Atoi(minorText)
+	return err == nil && minor >= 4
+}
+
 func shouldFallbackAfterConversion(info *relaycommon.RelayInfo, direction protocolBridgeDirection, err error) bool {
 	if protocolBridgeMode(info, direction) != gatewaystore.ProtocolBridgeModeAuto || err == nil {
 		return false
@@ -79,6 +114,13 @@ func shouldFallbackAfterStatus(info *relaycommon.RelayInfo, direction protocolBr
 	}
 	if upstreamError == nil {
 		return false
+	}
+	if direction == bridgeChatToResponses && upstreamError.StatusCode == http.StatusBadRequest {
+		message := strings.ToLower(upstreamError.Error())
+		if strings.Contains(message, "function tools with reasoning_effort are not supported") &&
+			strings.Contains(message, "/v1/responses") {
+			return true
+		}
 	}
 	if upstreamError.StatusCode == http.StatusMethodNotAllowed || upstreamError.StatusCode == http.StatusNotImplemented {
 		return true

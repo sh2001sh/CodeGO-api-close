@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
@@ -28,7 +29,7 @@ func TestNormalizeResponsesCompatibilityBodyRepairsToolHistory(t *testing.T) {
       "model":"gpt-5.6-sol",
       "include":["reasoning.encrypted_content"],
       "input":[
-        {"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}"},
+        {"type":"function_call","call_id":"call_1","name":"lookup","namespace":"tools","arguments":"{}"},
         {"type":"function_call_output","call_id":"call_1","output":"ok"}
       ]
     }`, string(normalized))
@@ -208,6 +209,38 @@ func TestNormalizeRejectedResponsesFieldRemovesExplicitUnsupportedField(t *testi
       "model":"gpt-5.6-sol",
       "input":[{"type":"message","role":"user","content":"hello"}]
     }`, string(normalized))
+}
+
+func TestNormalizeUndecryptableReasoningRetryDropsOnlyReasoningItems(t *testing.T) {
+	body := []byte(`{
+		"model":"gpt-5.6-sol",
+		"input":[
+			{"type":"message","role":"user","content":"continue"},
+			{"type":"reasoning","encrypted_content":"foreign-ciphertext"},
+			{"type":"compaction","encrypted_content":"conversation-state"},
+			{"type":"function_call_output","call_id":"call_1","output":"ok"}
+		]
+	}`)
+	apiErr := types.NewOpenAIError(errors.New("The encrypted content gAAA... could not be verified. Reason: Encrypted content could not be decrypted or parsed."), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest)
+
+	normalized, changed := normalizeUndecryptableReasoningRetry(body, apiErr)
+	require.True(t, changed)
+	require.JSONEq(t, `{
+		"model":"gpt-5.6-sol",
+		"input":[
+			{"type":"message","role":"user","content":"continue"},
+			{"type":"compaction","encrypted_content":"conversation-state"},
+			{"type":"function_call_output","call_id":"call_1","output":"ok"}
+		]
+	}`, string(normalized))
+}
+
+func TestNormalizeUndecryptableReasoningRetryDoesNotDiscardCompaction(t *testing.T) {
+	body := []byte(`{"input":[{"type":"compaction","encrypted_content":"conversation-state"}]}`)
+	apiErr := types.NewOpenAIError(errors.New("encrypted content could not be decrypted"), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest)
+
+	_, changed := normalizeUndecryptableReasoningRetry(body, apiErr)
+	require.False(t, changed)
 }
 
 func TestNormalizeRejectedResponsesFieldUsesIndexedNamespaceMessage(t *testing.T) {

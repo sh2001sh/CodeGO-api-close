@@ -277,8 +277,9 @@ func mustJSONRaw(value any) json.RawMessage {
 // NormalizeCodexRemoteCompactionInput makes a replayed Codex history portable
 // across upstream accounts. Responses item IDs are server-owned: an ID that
 // was returned by another upstream can look syntactically valid while still
-// being rejected as an unknown item. Full input items do not need those IDs,
-// so remote compaction removes them and keeps call_id for tool pairing.
+// being rejected as an unknown item. Full input items do not need those IDs.
+// Keep call_id for tool pairing and namespace because namespaced tools require
+// it when their calls are replayed.
 func (r *OpenAIResponsesRequest) NormalizeCodexRemoteCompactionInput() (bool, error) {
 	if r == nil || len(r.Input) == 0 {
 		return false, nil
@@ -305,7 +306,7 @@ func sanitizeCodexRemoteCompactionItems(input json.RawMessage) (json.RawMessage,
 			continue
 		}
 		itemChanged := false
-		for _, field := range []string{"id", "namespace"} {
+		for _, field := range []string{"id"} {
 			if _, found := item[field]; found {
 				delete(item, field)
 				itemChanged = true

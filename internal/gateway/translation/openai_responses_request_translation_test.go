@@ -59,6 +59,36 @@ func TestChatCompletionsToResponsesAllowsEmptyToolCallList(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestChatCompletionsToResponsesDropsParallelFlagWithoutTools(t *testing.T) {
+	parallel := true
+	request := chatRequestWithMessages(dto.Message{Role: "user", Content: "hello"})
+	request.ParallelTooCalls = &parallel
+
+	converted, err := ChatCompletionsRequestToResponsesRequest(request)
+	require.NoError(t, err)
+	require.Empty(t, converted.ParallelToolCalls)
+}
+
+func TestChatCompletionsToResponsesNormalizesUnionToolSchema(t *testing.T) {
+	request := chatRequestWithMessages(dto.Message{Role: "user", Content: "schedule"})
+	request.Tools = []dto.ToolCallRequest{{
+		Type: "function",
+		Function: dto.FunctionRequest{Name: "automation_update", Parameters: map[string]any{
+			"oneOf": []any{
+				map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}}},
+				map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}},
+			},
+		}},
+	}}
+
+	converted, err := ChatCompletionsRequestToResponsesRequest(request)
+	require.NoError(t, err)
+	var tools []map[string]any
+	require.NoError(t, json.Unmarshal(converted.Tools, &tools))
+	require.Equal(t, "object", tools[0]["parameters"].(map[string]any)["type"])
+	require.Equal(t, false, tools[0]["strict"])
+}
+
 func TestChatCompletionsToResponsesPreservesPenalties(t *testing.T) {
 	frequencyPenalty := 0.4
 	presencePenalty := -0.2

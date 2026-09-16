@@ -120,7 +120,7 @@ func TestOpenAIResponsesRequestStripsServerOwnedRemoteCompactionItemIDs(t *testi
 	request := &OpenAIResponsesRequest{
 		Input: json.RawMessage(`[
 			{"type":"message","id":"item_message","role":"user","content":[]},
-			{"type":"custom_tool_call","id":"item_call","call_id":"call_1","name":"shell","input":"{}"},
+			{"type":"custom_tool_call","id":"item_call","call_id":"call_1","namespace":"codex","name":"shell","input":"{}"},
 			{"type":"custom_tool_call_output","id":"item_output","call_id":"call_1","output":"ok"},
 			{"type":"function_call","id":"fc_existing","call_id":"call_2","name":"read","arguments":"{}"}
 		]`),
@@ -131,7 +131,7 @@ func TestOpenAIResponsesRequestStripsServerOwnedRemoteCompactionItemIDs(t *testi
 	require.True(t, changed)
 	require.JSONEq(t, `[
 		{"type":"message","role":"user","content":[]},
-		{"type":"custom_tool_call","call_id":"call_1","name":"shell","input":"{}"},
+		{"type":"custom_tool_call","call_id":"call_1","namespace":"codex","name":"shell","input":"{}"},
 		{"type":"custom_tool_call_output","call_id":"call_1","output":"ok"},
 		{"type":"function_call","call_id":"call_2","name":"read","arguments":"{}"}
 	]`, string(request.Input))

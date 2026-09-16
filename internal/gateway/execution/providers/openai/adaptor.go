@@ -222,6 +222,12 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
+	if !request.HasToolDefinitions() {
+		request.ParallelTooCalls = nil
+	}
+	if _, err := request.NormalizeToolSchemas(); err != nil {
+		return nil, fmt.Errorf("normalize tool schemas: %w", err)
+	}
 	if info.ChannelType != constant.ChannelTypeOpenAI && info.ChannelType != constant.ChannelTypeAzure {
 		request.StreamOptions = nil
 	}

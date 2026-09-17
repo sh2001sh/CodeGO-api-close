@@ -1,6 +1,7 @@
 package http
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -49,7 +50,11 @@ func TestExternalChannelControlsPromptSensitiveInterception(t *testing.T) {
 	official := &gatewayschema.Channel{ChannelScope: gatewayschema.ChannelScopeOfficial, SensitiveWordInterceptionEnabled: &disabledValue}
 
 	require.Nil(t, checkPromptSensitiveForChannel(ctx, types.RelayFormatOpenAI, disabled, meta))
-	require.NotNil(t, checkPromptSensitiveForChannel(ctx, types.RelayFormatOpenAI, enabled, meta))
+	blocked := checkPromptSensitiveForChannel(ctx, types.RelayFormatOpenAI, enabled, meta)
+	require.NotNil(t, blocked)
+	require.Equal(t, http.StatusForbidden, blocked.StatusCode)
+	require.Equal(t, types.ErrorCodeSensitiveWordsDetected, blocked.GetErrorCode())
+	require.True(t, types.IsSkipRetryError(blocked))
 	require.Nil(t, checkPromptSensitiveForChannel(ctx, types.RelayFormatOpenAI, official, meta))
 }
 

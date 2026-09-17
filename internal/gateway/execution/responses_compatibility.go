@@ -29,6 +29,17 @@ func isGenericInvalidRequestParametersError(apiErr *types.NewAPIError) bool {
 		message == "invalid request parameters"
 }
 
+// isOpaqueResponsesUpstreamFailure identifies compatibility gateways that
+// reject a Responses request without exposing any actionable client error.
+// Before semantic output, another provider may still support the same body.
+func isOpaqueResponsesUpstreamFailure(apiErr *types.NewAPIError) bool {
+	if apiErr == nil || apiErr.StatusCode != http.StatusBadRequest {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(apiErr.Error()))
+	return message == "upstream request failed" || message == "upstream request failed."
+}
+
 func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {
 	return bytes.Contains(body, []byte(`"transformer_metadata"`)) ||
 		bytes.Contains(body, []byte(`"client_metadata"`)) ||

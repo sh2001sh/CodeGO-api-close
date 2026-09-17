@@ -92,7 +92,12 @@ func checkPromptSensitiveForChannel(
 	}
 	logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
 	if shouldBlockSensitiveWords() {
-		return types.NewError(errors.New("sensitive words detected"), types.ErrorCodeSensitiveWordsDetected)
+		return types.NewErrorWithStatusCode(
+			errors.New("sensitive words detected"),
+			types.ErrorCodeSensitiveWordsDetected,
+			http.StatusForbidden,
+			types.ErrOptionWithSkipRetry(),
+		)
 	}
 	return nil
 }

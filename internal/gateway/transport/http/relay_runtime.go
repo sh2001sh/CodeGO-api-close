@@ -219,10 +219,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		return false
 	}
 	if c.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)) && openaiErr.StatusCode == http.StatusBadRequest {
-		message := strings.ToLower(strings.TrimSpace(openaiErr.Error()))
-		if message == "invalid request parameters. check the request and try again." || message == "invalid request parameters" {
-			return true
-		}
+		// The Responses handler only sets this flag for a small allowlist of
+		// non-actionable compatibility errors. Explicit client errors never set it.
+		return true
 	}
 	if gatewayexecutionapp.IsModelScopedUpstreamFailure(openaiErr) {
 		return c.GetBool("model_unavailable_with_alternative")
@@ -440,10 +439,8 @@ func shouldCountRelayFailureInSuccessRate(apiErr *types.NewAPIError) bool {
 		return false
 	}
 	// Local sensitive-word interception is a policy decision made before the
-	// upstream is contacted. Its status code is intentionally unset, so the
-	// generic status-code fallback would otherwise count it as a route failure.
-	// Keep this explicit error-code check shared by final logs and all callers
-	// that decide whether a failure should affect route health.
+	// upstream is contacted. Keep this explicit error-code check shared by final
+	// logs and all callers that decide whether a failure affects route health.
 	if apiErr.GetErrorCode() == types.ErrorCodeSensitiveWordsDetected {
 		return false
 	}

@@ -447,10 +447,10 @@ func sendResponsesWithCompatibility(c *gin.Context, info *relaycommon.RelayInfo,
 		return httpResp, nil
 	}
 	apiErr := platformhttpx.RelayErrorHandler(c.Request.Context(), httpResp, false)
-	// A generic validation rejection has no safe field-level rewrite. Let the
+	// A generic or opaque rejection has no safe field-level rewrite. Let the
 	// bounded outer retry choose an alternative provider before any content is
 	// delivered, rather than replaying the same unsupported body here.
-	if isGenericInvalidRequestParametersError(apiErr) && len(jsonBody) > 0 {
+	if (isGenericInvalidRequestParametersError(apiErr) || isOpaqueResponsesUpstreamFailure(apiErr)) && len(jsonBody) > 0 {
 		logger.LogInfo(c, "Responses generic 400 request shape: "+summarizeResponsesRequestShape(jsonBody))
 		c.Set(string(appconstant.ContextKeyResponsesGenericUpstream400), true)
 		return nil, apiErr

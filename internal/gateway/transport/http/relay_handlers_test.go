@@ -45,9 +45,23 @@ func TestGenericResponsesUpstream400RetriesOnlyBeforeContentWithinBudget(t *test
 	require.Nil(t, fallback)
 	require.False(t, shouldRetry(ctx, err, 0))
 	explicit := types.WithOpenAIError(types.OpenAIError{Message: "Invalid request parameters: input is required"}, http.StatusBadRequest)
+	ctx.Set(string(constant.ContextKeyResponsesGenericUpstream400), false)
 	require.False(t, shouldRetry(ctx, explicit, 2))
 	ctx.Set(string(constant.ContextKeyStreamContentDelivered), true)
 	require.False(t, shouldRetry(ctx, err, 2), "tool calls or output already delivered must never replay")
+}
+
+func TestOpaqueResponsesUpstream400RetriesOnlyWhenHandlerClassifiedIt(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	err := types.WithOpenAIError(types.OpenAIError{Message: "Upstream request failed"}, http.StatusBadRequest)
+
+	require.False(t, shouldRetry(ctx, err, 2))
+	ctx.Set(string(constant.ContextKeyResponsesGenericUpstream400), true)
+	require.True(t, shouldRetry(ctx, err, 2))
+
+	ctx.Set(string(constant.ContextKeyStreamContentDelivered), true)
+	require.False(t, shouldRetry(ctx, err, 2))
 }
 
 func TestRefundRelayBillingSkipsRequestsWithoutRelayInfo(t *testing.T) {
@@ -73,11 +87,19 @@ func TestRelayFailureSampleRequiresUpstreamAttempt(t *testing.T) {
 }
 
 func TestSensitiveWordInterceptionNeverCountsAsRouteFailure(t *testing.T) {
-	sensitive := types.NewError(errors.New("sensitive words detected"), types.ErrorCodeSensitiveWordsDetected)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	sensitive := types.NewErrorWithStatusCode(
+		errors.New("sensitive words detected"),
+		types.ErrorCodeSensitiveWordsDetected,
+		http.StatusForbidden,
+		types.ErrOptionWithSkipRetry(),
+	)
 
 	require.False(t, shouldCountRelayFailureInSuccessRate(sensitive))
 	require.False(t, shouldRecordRelayFailureSample(true, sensitive))
 	require.False(t, shouldRecordFinalRelayFailureLog(nil, sensitive))
+	require.False(t, shouldRetry(ctx, sensitive, 2))
 
 	upstreamUnauthorized := types.NewOpenAIError(errors.New("unauthorized"), types.ErrorCodeBadResponseStatusCode, http.StatusUnauthorized)
 	require.True(t, shouldCountRelayFailureInSuccessRate(upstreamUnauthorized))

@@ -23,12 +23,18 @@ type rejectingResponsesAdaptor struct {
 	gatewayproviders.SyncAdaptor
 	requests int
 	body     []byte
+	message  string
 }
 
 func (a *rejectingResponsesAdaptor) DoRequest(_ *gin.Context, _ *relaycommon.RelayInfo, body io.Reader) (any, error) {
 	a.requests++
 	a.body, _ = io.ReadAll(body)
-	return &http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header), Body: io.NopCloser(bytes.NewBufferString(`{"error":{"message":"Invalid request parameters. Check the request and try again.","type":"invalid_request_error"}}`))}, nil
+	message := a.message
+	if message == "" {
+		message = "Invalid request parameters. Check the request and try again."
+	}
+	payload, _ := json.Marshal(map[string]any{"error": map[string]any{"message": message, "type": "invalid_request_error"}})
+	return &http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(payload))}, nil
 }
 
 func TestGenericResponses400DoesNotReplayOrRewriteRejectedBody(t *testing.T) {
@@ -42,6 +48,33 @@ func TestGenericResponses400DoesNotReplayOrRewriteRejectedBody(t *testing.T) {
 	require.Equal(t, 1, adaptor.requests)
 	require.Equal(t, payload, adaptor.body)
 	require.True(t, ctx.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)))
+}
+
+func TestOpaqueResponses400AllowsOuterRouteFallback(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	payload := []byte(`{"model":"gpt-5.6-sol","input":"hello","stream":true}`)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(payload))
+	adaptor := &rejectingResponsesAdaptor{message: "Upstream request failed"}
+
+	_, apiErr := sendResponsesWithCompatibility(ctx, &relaycommon.RelayInfo{}, adaptor, bytes.NewReader(payload), payload)
+
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.Equal(t, 1, adaptor.requests)
+	require.Equal(t, payload, adaptor.body)
+	require.True(t, ctx.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)))
+}
+
+func TestExplicitResponses400DoesNotAllowOuterRouteFallback(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	payload := []byte(`{"model":"gpt-5.6-sol","input":"hello","stream":true}`)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(payload))
+	adaptor := &rejectingResponsesAdaptor{message: "Invalid request parameters: input is required"}
+
+	_, apiErr := sendResponsesWithCompatibility(ctx, &relaycommon.RelayInfo{}, adaptor, bytes.NewReader(payload), payload)
+
+	require.NotNil(t, apiErr)
+	require.False(t, ctx.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)))
 }
 
 func TestTryResponsesOriginalBodyFastPathReusesExactBody(t *testing.T) {

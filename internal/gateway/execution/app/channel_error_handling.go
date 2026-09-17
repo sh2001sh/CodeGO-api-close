@@ -1,9 +1,12 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -22,6 +25,16 @@ import (
 
 var hasAlternativeSelectableRoute = gatewaystore.HasAlternativeSelectableRoute
 
+func IsClientCancellationError(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return true
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	return message == context.Canceled.Error() ||
+		message == "stream worker context done: "+context.Canceled.Error() ||
+		message == "request context done: "+context.Canceled.Error()
+}
+
 // ProcessChannelError applies shared disable/logging behavior for channel failures.
 func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, platformtext.LocalLogPreview(err.Error())))
@@ -30,9 +43,11 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	failureClass := classifyUpstreamFailure(err)
 	gatewayruntime.FinishRouteDecisionAttempt(c, false, err.StatusCode, string(failureClass), string(gatewaystream.AttemptStageFromContext(c)))
 	localMaxDuration := isLocalStreamMaxDuration(c)
-	if c.Request != nil && c.Request.Context().Err() != nil {
+	if (c.Request != nil && c.Request.Context().Err() != nil) || IsClientCancellationError(err) {
 		// Header waits may end before the stream handler observes disconnect.
-		// Do not punish healthy fallback routes for a cancelled parent request.
+		// Stream workers may also preserve the cancellation only in the returned
+		// error after the ingress context has already been wrapped. In either case,
+		// do not punish or retry healthy fallback routes for a cancelled client.
 		c.Set(string(constant.ContextKeyClientGone), true)
 	}
 	clientGone := c.GetBool(string(constant.ContextKeyClientGone))

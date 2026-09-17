@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -39,6 +40,21 @@ func TestAutoRetryStopsWhenIncomingContextIsCancelled(t *testing.T) {
 	cancel()
 	err := types.NewOpenAIError(context.Canceled, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	require.False(t, shouldRetry(ctx, err, 3), "cancelled ingress cannot make any fallback request succeed")
+}
+
+func TestAutoRetryStopsWhenStreamWorkerCarriesWrappedCancellation(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	gatewayruntime.MarkAutoRouteRequest(ctx)
+	gatewayruntime.MarkRemainingCrossGroupRoutes(ctx, 3)
+	err := types.NewOpenAIError(
+		fmt.Errorf("stream worker context done: %w", context.Canceled),
+		types.ErrorCodeBadResponse,
+		http.StatusInternalServerError,
+	)
+
+	require.False(t, shouldRetry(ctx, err, 3))
+	require.True(t, ctx.GetBool(string(constant.ContextKeyClientGone)))
 }
 
 func TestSingleBindingAutoUsesNormalGroupRecovery(t *testing.T) {

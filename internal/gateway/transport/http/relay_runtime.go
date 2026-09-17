@@ -172,6 +172,12 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if openaiErr == nil {
 		return false
 	}
+	if gatewayexecutionapp.IsClientCancellationError(openaiErr) {
+		if c != nil {
+			c.Set(string(constant.ContextKeyClientGone), true)
+		}
+		return false
+	}
 	if gatewayexecutionapp.IsUpstreamContentPolicyError(openaiErr) {
 		return false
 	}

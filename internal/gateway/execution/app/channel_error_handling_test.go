@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -32,6 +33,29 @@ func TestCancelledHeaderWaitDoesNotRecordChannelFailure(t *testing.T) {
 	require.True(t, ctx.GetBool(string(constant.ContextKeyClientGone)))
 	_, shared := relaycommon.GetChannelHealth(924991, "gpt-cancelled-header-test")
 	_, user := relaycommon.GetUserChannelHealth(ctx, 924991, "gpt-cancelled-header-test")
+	require.False(t, shared)
+	require.False(t, user)
+}
+
+func TestWrappedStreamCancellationMarksClientGoneWithoutContextCancellation(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ctx.Set("original_model", "gpt-cancelled-stream-test")
+	ctx.Set(constant.RequestIdKey, t.Name())
+	httpctx.SetContextKey(ctx, constant.ContextKeyUserId, 924993)
+	relaycommon.MarkAutoRouteRequest(ctx)
+	relaycommon.MarkRemainingCrossGroupRoutes(ctx, 3)
+
+	err := types.NewOpenAIError(
+		fmt.Errorf("stream worker context done: %w", context.Canceled),
+		types.ErrorCodeBadResponse,
+		http.StatusInternalServerError,
+	)
+	ProcessChannelError(ctx, *types.NewChannelError(924993, constant.ChannelTypeOpenAI, "cancelled", false, "", false), err)
+
+	require.True(t, ctx.GetBool(string(constant.ContextKeyClientGone)))
+	_, shared := relaycommon.GetChannelHealth(924993, "gpt-cancelled-stream-test")
+	_, user := relaycommon.GetUserChannelHealth(ctx, 924993, "gpt-cancelled-stream-test")
 	require.False(t, shared)
 	require.False(t, user)
 }

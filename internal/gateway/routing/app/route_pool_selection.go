@@ -86,7 +86,7 @@ func selectAutomaticPoolChannel(c *gin.Context, group, modelName string, retry i
 		if sticky := getRoutePoolStickyCandidate(c, healthy, modelName); sticky != nil {
 			return selectRoutePoolCandidate(c, detail.Pool.ID, sticky), true, nil
 		}
-		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy)), true, nil
+		return selectRoutePoolCandidate(c, detail.Pool.ID, chooseRoutePoolHealthyCandidate(healthy, routePoolExploreRateForRequest(c))), true, nil
 	}
 	return selectAutomaticPoolFallback(c, detail.Pool.ID, group, modelName, retry, allowLastResort, requestType, probes, lastResortProbes), true, nil
 }
@@ -194,13 +194,17 @@ func SetRoutePoolSelectionSnapshot(c *gin.Context, selection RoutePoolSelection,
 	}
 }
 
-func chooseRoutePoolHealthyCandidate(candidates []scoredRoutePoolCandidate) *scoredRoutePoolCandidate {
+func chooseRoutePoolHealthyCandidate(candidates []scoredRoutePoolCandidate, exploreRates ...float64) *scoredRoutePoolCandidate {
 	if len(candidates) == 0 {
 		return nil
 	}
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].score < candidates[j].score })
 	best := candidates[0]
-	if len(candidates) == 1 || rand.Float64() >= routePoolExploreRate {
+	exploreRate := routePoolExploreRate
+	if len(exploreRates) > 0 {
+		exploreRate = exploreRates[0]
+	}
+	if len(candidates) == 1 || exploreRate <= 0 || rand.Float64() >= exploreRate {
 		return &best
 	}
 	limit := best.score * 1.15
@@ -217,19 +221,66 @@ func chooseRoutePoolHealthyCandidate(candidates []scoredRoutePoolCandidate) *sco
 	return &selected
 }
 
-// routePoolPreferredHealthTier keeps cost inside the selected stability tier.
-// A degraded cheap route must not mask a healthy, more expensive alternative.
+func routePoolExploreRateForRequest(c *gin.Context) float64 {
+	profile, found := gatewayruntime.RequestProfileFromContext(c)
+	if !found {
+		return routePoolExploreRate
+	}
+	if profile.RequestType == gatewayruntime.RequestTypeChatLongStream ||
+		profile.RequestType == gatewayruntime.RequestTypeToolCallStream ||
+		profile.PromptSizeBucket == gatewayruntime.PromptSizeMedium ||
+		profile.PromptSizeBucket == gatewayruntime.PromptSizeLarge ||
+		profile.PromptSizeBucket == gatewayruntime.PromptSizeVeryLarge {
+		return 0
+	}
+	return routePoolExploreRate
+}
+
+// routePoolPreferredHealthTier keeps cost inside the best available stability
+// tier. Shared soft failures do not change State, so rolling reliability must
+// also participate or one successful request can make an unstable route look
+// healthy again.
 func routePoolPreferredHealthTier(candidates []scoredRoutePoolCandidate) []scoredRoutePoolCandidate {
-	stable := make([]scoredRoutePoolCandidate, 0, len(candidates))
+	if len(candidates) < 2 {
+		return candidates
+	}
+	bestTier := 3
 	for _, candidate := range candidates {
-		if candidate.health.State != gatewayruntime.ChannelHealthDegraded {
-			stable = append(stable, candidate)
+		if tier := routePoolReliabilityTier(candidate.health); tier < bestTier {
+			bestTier = tier
 		}
 	}
-	if len(stable) > 0 {
-		return stable
+	preferred := make([]scoredRoutePoolCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if routePoolReliabilityTier(candidate.health) == bestTier {
+			preferred = append(preferred, candidate)
+		}
 	}
-	return candidates
+	return preferred
+}
+
+func routePoolReliabilityTier(health gatewayruntime.ChannelHealth) int {
+	if health.State == gatewayruntime.ChannelHealthDegraded {
+		return 2
+	}
+	if health.Window5Requests >= 10 {
+		rate := routePoolConservativeSuccessRate(health)
+		if rate < 85 {
+			return 2
+		}
+		if rate < 90 {
+			return 1
+		}
+	}
+	if health.Window15Requests >= 30 {
+		if health.SuccessRate15m < 90 {
+			return 2
+		}
+		if health.SuccessRate15m < 94 {
+			return 1
+		}
+	}
+	return 0
 }
 
 // routePoolRecoveryProbeRate lets a clearly cheaper model route demonstrate

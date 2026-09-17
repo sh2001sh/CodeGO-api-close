@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	"github.com/stretchr/testify/assert"
@@ -125,6 +126,131 @@ func TestRoutePoolPreferredHealthTierChoosesStabilityBeforeCost(t *testing.T) {
 
 	assert.Len(t, candidates, 1)
 	assert.Equal(t, 51, candidates[0].channel.Id)
+}
+
+func TestRoutePoolPreferredHealthTierUsesRecentReliabilityAfterStateRecovers(t *testing.T) {
+	candidates := routePoolPreferredHealthTier([]scoredRoutePoolCandidate{
+		{
+			channel: &gatewayschema.Channel{Id: 340},
+			cost:    0.05,
+			health: gatewayruntime.ChannelHealth{
+				State:             gatewayruntime.ChannelHealthHealthy,
+				Window5Requests:   20,
+				Window5Successes:  15,
+				SuccessRate5m:     75,
+				Window15Requests:  60,
+				Window15Successes: 45,
+				SuccessRate15m:    75,
+			},
+		},
+		{
+			channel: &gatewayschema.Channel{Id: 341},
+			cost:    0.08,
+			health: gatewayruntime.ChannelHealth{
+				State:             gatewayruntime.ChannelHealthHealthy,
+				Window5Requests:   40,
+				Window5Successes:  40,
+				SuccessRate5m:     100,
+				Window15Requests:  100,
+				Window15Successes: 99,
+				SuccessRate15m:    99,
+			},
+		},
+	})
+
+	assert.Len(t, candidates, 1)
+	assert.Equal(t, 341, candidates[0].channel.Id)
+}
+
+func TestRoutePoolPreferredHealthTierDoesNotExcludeNewCandidateWithoutEvidence(t *testing.T) {
+	candidates := routePoolPreferredHealthTier([]scoredRoutePoolCandidate{
+		{
+			channel: &gatewayschema.Channel{Id: 350},
+			health: gatewayruntime.ChannelHealth{
+				State:            gatewayruntime.ChannelHealthHealthy,
+				Window5Requests:  4,
+				Window5Successes: 3,
+				SuccessRate5m:    75,
+			},
+		},
+		{
+			channel: &gatewayschema.Channel{Id: 351},
+			health: gatewayruntime.ChannelHealth{
+				State:            gatewayruntime.ChannelHealthHealthy,
+				Window5Requests:  40,
+				Window5Successes: 40,
+				SuccessRate5m:    100,
+			},
+		},
+	})
+
+	assert.Len(t, candidates, 2)
+}
+
+func TestRoutePoolPreferredHealthTierDoesNotPreferUnknownOverReliableHistory(t *testing.T) {
+	candidates := routePoolPreferredHealthTier([]scoredRoutePoolCandidate{
+		{
+			channel: &gatewayschema.Channel{Id: 352},
+			health:  gatewayruntime.ChannelHealth{State: gatewayruntime.ChannelHealthHealthy},
+		},
+		{
+			channel: &gatewayschema.Channel{Id: 353},
+			health: gatewayruntime.ChannelHealth{
+				State:             gatewayruntime.ChannelHealthHealthy,
+				Window5Requests:   100,
+				Window5Successes:  98,
+				SuccessRate5m:     98,
+				Window15Requests:  100,
+				Window15Successes: 98,
+				SuccessRate15m:    98,
+			},
+		},
+	})
+
+	assert.Len(t, candidates, 2)
+}
+
+func TestRoutePoolPreferredHealthTierKeepsBestAvailableUnstableTier(t *testing.T) {
+	candidates := routePoolPreferredHealthTier([]scoredRoutePoolCandidate{
+		{
+			channel: &gatewayschema.Channel{Id: 360},
+			health:  gatewayruntime.ChannelHealth{State: gatewayruntime.ChannelHealthDegraded},
+		},
+		{
+			channel: &gatewayschema.Channel{Id: 361},
+			health:  gatewayruntime.ChannelHealth{State: gatewayruntime.ChannelHealthDegraded},
+		},
+	})
+
+	assert.Len(t, candidates, 2)
+}
+
+func TestRoutePoolExploreRateDisabledForExpensiveRequestProfiles(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, profile := range []gatewayruntime.RequestProfileHint{
+		{IsStream: true, HasTools: true},
+		{IsStream: true, HasCacheAffinity: true},
+	} {
+		context, _ := gin.CreateTestContext(nil)
+		gatewayruntime.InitializeRequestProfile(context, "gpt-test", "/v1/responses", profile)
+		assert.Zero(t, routePoolExploreRateForRequest(context))
+	}
+
+	context, _ := gin.CreateTestContext(nil)
+	gatewayruntime.InitializeRequestProfile(context, "gpt-test", "/v1/responses", gatewayruntime.RequestProfileHint{IsStream: true})
+	assert.Equal(t, routePoolExploreRate, routePoolExploreRateForRequest(context))
+}
+
+func TestChooseRoutePoolHealthyCandidateWithoutExplorationAlwaysChoosesBest(t *testing.T) {
+	candidates := []scoredRoutePoolCandidate{
+		{channel: &gatewayschema.Channel{Id: 370}, score: 1},
+		{channel: &gatewayschema.Channel{Id: 371}, score: 1.1},
+	}
+	for range 100 {
+		selected := chooseRoutePoolHealthyCandidate(candidates, 0)
+		assert.NotNil(t, selected)
+		assert.Equal(t, 370, selected.channel.Id)
+	}
 }
 
 func TestRoutePoolLastResortProbeRejectsConcurrentProbeWhenLeaseIsBusy(t *testing.T) {

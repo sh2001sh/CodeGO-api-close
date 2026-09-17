@@ -332,6 +332,7 @@ export interface GroupFilters {
   models?: string[]
   source: string
   provider: string
+  multiplier_card?: '' | 'supported' | 'unsupported'
   status: string
   verification: string
   sort: string

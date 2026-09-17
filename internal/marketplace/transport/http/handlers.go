@@ -23,7 +23,7 @@ func ListGroups(c *gin.Context) {
 		SeparateOfficial: c.Query("separate_official") == "true",
 		ViewerUserID:     c.GetInt("id"),
 		Search:           c.Query("search"), Model: c.Query("model"), Models: c.QueryArray("model"), Source: c.Query("source"),
-		Provider: c.Query("provider"), Status: c.Query("status"),
+		Provider: c.Query("provider"), MultiplierCard: strings.TrimSpace(c.Query("multiplier_card")), Status: c.Query("status"),
 		IncludeAccess: c.Query("include_access") == "true",
 		Verification:  c.Query("verification"), Sort: c.Query("sort"), Direction: c.Query("direction"),
 		WindowHours: queryInt(c, "window_hours", 24), Page: queryInt(c, "page", 1),

@@ -92,6 +92,7 @@ const DEFAULT_FILTERS: GroupFilters = {
   models: [],
   source: '',
   provider: '',
+  multiplier_card: '',
   status: '',
   verification: '',
   sort: 'score',
@@ -265,9 +266,14 @@ export function DawnMarket() {
       })
   }, [authed, navigate, queryClient])
 
-  const hasSearch = Boolean(filters.search.trim() || filters.models?.length)
+  const hasListFilter = Boolean(
+    filters.search.trim() ||
+    filters.models?.length ||
+    filters.source ||
+    filters.multiplier_card
+  )
   const groupsQuery = useMarketplaceGroups(
-    { ...filters, separate_official: !hasSearch },
+    { ...filters, separate_official: !hasListFilter },
     { enabled: !mockMode && perspective === 'user', live: true }
   )
   const marketplaceModels = useMarketplaceModels()
@@ -675,6 +681,25 @@ export function DawnMarket() {
                     </option>
                   ))}
                 </select>
+                <select
+                  className='fsel'
+                  value={filters.multiplier_card ?? ''}
+                  aria-label='倍率卡支持'
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      multiplier_card: event.target.value as
+                        | ''
+                        | 'supported'
+                        | 'unsupported',
+                      page: 1,
+                    }))
+                  }
+                >
+                  <option value=''>倍率卡：全部</option>
+                  <option value='supported'>支持倍率卡</option>
+                  <option value='unsupported'>不支持倍率卡</option>
+                </select>
                 <div className='market-actions'>
                   {import.meta.env.DEV && (
                     <button
@@ -717,7 +742,7 @@ export function DawnMarket() {
             </div>
 
             <div className='min-w-0'>
-              {(filters.search || (filters.models?.length ?? 0) > 0) &&
+              {hasListFilter &&
                 !groupsQuery.isLoading &&
                 (!groupsQuery.isError || mockMode) && (
                   <div className='market-search-status' role='status'>
@@ -725,6 +750,12 @@ export function DawnMarket() {
                     {(filters.models?.length ?? 0) > 0
                       ? ` · ${filters.models?.length} 个模型`
                       : ''}
+                    {filters.source ? ` · ${filters.source}` : ''}
+                    {filters.multiplier_card === 'supported'
+                      ? ' · 支持倍率卡'
+                      : filters.multiplier_card === 'unsupported'
+                        ? ' · 不支持倍率卡'
+                        : ''}
                     {' · 找到 '}
                     {groupsQuery.data?.total ?? groups.length} 个分组
                     <button
@@ -735,6 +766,8 @@ export function DawnMarket() {
                           ...current,
                           search: '',
                           models: [],
+                          source: '',
+                          multiplier_card: '',
                           page: 1,
                         }))
                       }}
@@ -760,9 +793,6 @@ export function DawnMarket() {
               ) : groups.length ? (
                 <>
                   {(() => {
-                    const hasSearch =
-                      Boolean(filters.search.trim()) ||
-                      (filters.models?.length ?? 0) > 0
                     const official = groups.filter(
                       (group) => group.source_type === 'official'
                     )
@@ -770,7 +800,7 @@ export function DawnMarket() {
                       (group) => group.source_type !== 'official'
                     )
                     // 搜索/筛选时只显示匹配结果，避免固定官方区块把结果推到首屏以下。
-                    const sections = hasSearch
+                    const sections = hasListFilter
                       ? [{ key: 'results', title: '筛选结果', items: groups }]
                       : [
                           {
@@ -903,16 +933,16 @@ export function DawnMarket() {
                     <Store size={20} />
                   </span>
                   <b>
-                    {filters.search || (filters.models?.length ?? 0) > 0
+                    {hasListFilter
                       ? '没有找到符合当前筛选的分组'
                       : '市场分组上架中'}
                   </b>
                   <span>
-                    {filters.search || (filters.models?.length ?? 0) > 0
+                    {hasListFilter
                       ? '请尝试其他关键词或清除搜索条件'
                       : '渠道检测通过后自动上架'}
                   </span>
-                  {(filters.search || (filters.models?.length ?? 0) > 0) && (
+                  {hasListFilter && (
                     <button
                       className='btn mini'
                       onClick={() => {
@@ -921,6 +951,8 @@ export function DawnMarket() {
                           ...current,
                           search: '',
                           models: [],
+                          source: '',
+                          multiplier_card: '',
                           page: 1,
                         }))
                       }}

@@ -76,6 +76,7 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	channel := marketplaceschema.Channel{
 		ID: "123456789012", ProviderType: "openai_compatible",
 		ApprovedSourceLabel: "Codex Plus", SourceLabelStatus: marketplacedomain.SourceLabelApproved,
+		MultiplierCardSupported: true,
 	}
 	models := []string{"gpt-5.2-codex", "gpt-4.1"}
 
@@ -90,6 +91,13 @@ func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *test
 	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{Provider: "openai_compatible"}))
 	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Source: "CC-Kiro"}))
 	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{Provider: "anthropic"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{MultiplierCard: "supported"}))
+	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{MultiplierCard: "unsupported"}))
+
+	channel.MultiplierCardSupported = false
+	require.False(t, matchesGroupQuery(group, channel, models, GroupQuery{MultiplierCard: "supported"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{MultiplierCard: "unsupported"}))
+	require.True(t, matchesGroupQuery(group, channel, models, GroupQuery{}))
 
 	item := groupListItem(group, channel, models, marketplaceschema.RankingSnapshot{}, nil)
 	require.Equal(t, channel.ID, item.ChannelID)

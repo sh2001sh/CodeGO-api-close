@@ -187,6 +187,7 @@ type GroupQuery struct {
 	Models           []string
 	Source           string
 	Provider         string
+	MultiplierCard   string
 	Status           string
 	Verification     string
 	Sort             string

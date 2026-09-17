@@ -100,6 +100,16 @@ func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.
 	if query.Provider != "" && !strings.EqualFold(channel.ProviderType, query.Provider) {
 		return false
 	}
+	switch query.MultiplierCard {
+	case "supported":
+		if !channel.MultiplierCardSupported {
+			return false
+		}
+	case "unsupported":
+		if channel.MultiplierCardSupported {
+			return false
+		}
+	}
 	return channel.ID != ""
 }
 

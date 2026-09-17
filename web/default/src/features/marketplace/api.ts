@@ -267,6 +267,16 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
       if (search && !searchable.includes(search)) return false
       if (filters.source && item.source_label !== filters.source) return false
       if (
+        filters.multiplier_card === 'supported' &&
+        !item.multiplier_card_supported
+      )
+        return false
+      if (
+        filters.multiplier_card === 'unsupported' &&
+        item.multiplier_card_supported
+      )
+        return false
+      if (
         filters.provider &&
         item.provider_type.toLowerCase() !== filters.provider.toLowerCase()
       )

@@ -1,6 +1,6 @@
 # Code Go 生产性能与高并发优化操作手册
 
-本文面向当前 Code Go 部署：公网域名 `shu26.cfd`，Nginx 作为入口，控制、网关、账本和工作流为独立 Docker 容器，Redis 用于共享状态和限流。
+本文面向当前 Code Go 部署：公网域名 `codegoai.com`，Nginx 作为入口，控制、网关、账本和工作流为独立 Docker 容器，Redis 用于共享状态和限流。
 
 目标是提升静态页面访问性能、提高 API 并发承载能力、隔离异常流量，并保持现有用户的 API 配置可用。
 
@@ -11,7 +11,7 @@
 ```text
 浏览器、SDK、桌面客户端
   |
-  +-- shu26.cfd -- Cloudflare CDN/WAF -- Nginx -- control-api
+  +-- codegoai.com -- Cloudflare CDN/WAF -- Nginx -- control-api
                                       |
                                       +-- /v1/* -- gateway-1
                                                    -- gateway-2
@@ -26,10 +26,12 @@
 
 | 用途 | 地址 | 缓存策略 |
 | --- | --- | --- |
-| 网站、控制台与 API | `https://shu26.cfd` | CDN 仅缓存静态资源，HTML 与 API 不缓存 |
-| 所有用户 API Base URL | `https://shu26.cfd/v1` | 永久保持不变，Nginx 反代到网关池 |
+| 网站、控制台与 API | `https://codegoai.com` | CDN 仅缓存静态资源，HTML 与 API 不缓存 |
+| 所有用户 API Base URL | `https://codegoai.com/v1` | 永久保持不变，Nginx 反代到网关池 |
 
-不要修改或重定向 `/v1/*`。API SDK、桌面客户端、SSE 和 WebSocket 可能不正确处理 301/302；所有现有和新用户都继续使用 `https://shu26.cfd/v1`。
+旧域名 `https://shu26.cfd` 仅作为兼容入口保留。旧域名的 `/api/*`、`/v1/*`、`/v1beta/*`、OAuth 和支付回调路径不得重定向；普通网页请求可以永久重定向到 `https://codegoai.com`。
+
+不要修改或重定向新旧域名的 API 路径。API SDK、桌面客户端、SSE 和 WebSocket 可能不正确处理 301/302；新用户默认使用 `https://codegoai.com/v1`，历史用户可以继续使用 `https://shu26.cfd/v1`。
 
 ## 2. 实施前准备
 
@@ -71,8 +73,8 @@
 3. 添加 DNS 记录：
 
 ```text
-A     shu26.cfd       <源站公网 IP>   Proxied
-CNAME www             shu26.cfd       Proxied
+A     codegoai.com       <源站公网 IP>   Proxied
+CNAME www             codegoai.com       Proxied
 ```
 
 4. Cloudflare SSL/TLS 使用 `Full (strict)`。
@@ -130,10 +132,10 @@ location = /index.html {
 所有控制台、文档、桌面客户端和第三方工具统一使用：
 
 ```text
-https://shu26.cfd/v1
+https://codegoai.com/v1
 ```
 
-不新增 API Base URL，不要求历史用户修改配置，不为 `/v1/*` 配置跳转。OAuth 回调、网站登录和支付回调继续使用 `https://shu26.cfd`。
+不新增 API Base URL，不要求历史用户修改配置，不为 `/v1/*` 配置跳转。OAuth 回调、网站登录和支付回调继续使用 `https://codegoai.com`。
 
 ### 4.2 Nginx 网关池
 
@@ -153,7 +155,7 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
-    server_name shu26.cfd;
+    server_name codegoai.com;
 
     location ^~ /v1/ {
         proxy_pass http://codego_gateway_pool;
@@ -346,8 +348,8 @@ Redis 用于限流、会话、亲和和冷却状态。应设置：
 
 ## 9. 验收清单
 
-- [ ] `shu26.cfd` 静态资源由 CDN 缓存，HTML 和用户数据不缓存。
-- [ ] 所有用户继续使用 `https://shu26.cfd/v1`，不需要修改 Base URL。
+- [ ] `codegoai.com` 静态资源由 CDN 缓存，HTML 和用户数据不缓存。
+- [ ] 所有用户继续使用 `https://codegoai.com/v1`，不需要修改 Base URL。
 - [ ] API 没有 301/302 跳转，SSE 和 WebSocket 可稳定工作。
 - [ ] Nginx 正确传递真实客户端 IP、流式响应和超时配置。
 - [ ] 至少两个 gateway 实例通过负载均衡提供服务。

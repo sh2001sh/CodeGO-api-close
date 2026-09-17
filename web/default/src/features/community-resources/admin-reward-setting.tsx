@@ -28,7 +28,7 @@ export function AdminRewardSetting(props: {
           </h2>
           <p className='text-muted-foreground mt-1 text-sm'>
             {t(
-              'Quota is granted once per GitHub repository after an administrator verifies its shu26.cfd acknowledgement.'
+              'Quota is granted once per GitHub repository after an administrator verifies its codegoai.com acknowledgement.'
             )}
           </p>
         </div>

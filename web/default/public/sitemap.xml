@@ -1,162 +1,162 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://shu26.cfd/</loc>
+    <loc>https://codegoai.com/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/about</loc>
+    <loc>https://codegoai.com/about</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/faq</loc>
+    <loc>https://codegoai.com/faq</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/guide</loc>
+    <loc>https://codegoai.com/guide</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/pricing</loc>
+    <loc>https://codegoai.com/pricing</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api</loc>
+    <loc>https://codegoai.com/topics/codex-api</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-zhongzhuan</loc>
+    <loc>https://codegoai.com/topics/codex-zhongzhuan</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-code-api</loc>
+    <loc>https://codegoai.com/topics/claude-code-api</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-zhongzhuan</loc>
+    <loc>https://codegoai.com/topics/claude-zhongzhuan</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/codex-api-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-zhongzhuan-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/codex-zhongzhuan-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-code-api-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/claude-code-api-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-zhongzhuan-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/claude-zhongzhuan-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api-jiaocheng-2</loc>
+    <loc>https://codegoai.com/topics/codex-api-jiaocheng-2</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-code-api-jiaocheng-2</loc>
+    <loc>https://codegoai.com/topics/claude-code-api-jiaocheng-2</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api-shangshou-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/codex-api-shangshou-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-zhongzhuan-shiyong-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/codex-zhongzhuan-shiyong-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-code-api-shangshou-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/claude-code-api-shangshou-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-zhongzhuan-shiyong-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/claude-zhongzhuan-shiyong-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api-jinjie-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/codex-api-jinjie-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-code-api-jinjie-jiaocheng</loc>
+    <loc>https://codegoai.com/topics/claude-code-api-jinjie-jiaocheng</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api-zenme-yong</loc>
+    <loc>https://codegoai.com/topics/codex-api-zenme-yong</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-code-api-zenme-jie</loc>
+    <loc>https://codegoai.com/topics/claude-code-api-zenme-jie</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api-peizhi</loc>
+    <loc>https://codegoai.com/topics/codex-api-peizhi</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-code-api-peizhi</loc>
+    <loc>https://codegoai.com/topics/claude-code-api-peizhi</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api-vs-claude-code-api</loc>
+    <loc>https://codegoai.com/topics/codex-api-vs-claude-code-api</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-zhongzhuan-zenme-xuan</loc>
+    <loc>https://codegoai.com/topics/codex-zhongzhuan-zenme-xuan</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-zhongzhuan-wending-ma</loc>
+    <loc>https://codegoai.com/topics/claude-zhongzhuan-wending-ma</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/codex-api-baocuo-zenmeban</loc>
+    <loc>https://codegoai.com/topics/codex-api-baocuo-zenmeban</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/topics/claude-code-api-baocuo-zenmeban</loc>
+    <loc>https://codegoai.com/topics/claude-code-api-baocuo-zenmeban</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/privacy-policy</loc>
+    <loc>https://codegoai.com/privacy-policy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://shu26.cfd/user-agreement</loc>
+    <loc>https://codegoai.com/user-agreement</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

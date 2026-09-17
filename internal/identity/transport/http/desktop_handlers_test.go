@@ -433,7 +433,7 @@ func TestGetDesktopConfigTemplateReturnsToolSpecificEndpoints(t *testing.T) {
 		platformconfig.OptionMap = map[string]string{}
 	}
 	platformconfig.OptionMapRWMutex.Unlock()
-	platformconfig.ServerAddress = "https://shu26.cfd"
+	platformconfig.ServerAddress = "https://codegoai.com"
 	t.Cleanup(func() {
 		platformconfig.ServerAddress = "http://localhost:3000"
 	})
@@ -655,7 +655,7 @@ func TestCreateDesktopImportConfigAndConsumeCodeOnce(t *testing.T) {
 		t.Fatalf("failed to seed user: %v", err)
 	}
 	token := seedDesktopToken(t, db, 1, "codex-key", "importkey1234567890")
-	platformconfig.ServerAddress = "https://shu26.cfd"
+	platformconfig.ServerAddress = "https://codegoai.com"
 	t.Cleanup(func() {
 		platformconfig.ServerAddress = "http://localhost:3000"
 		resetDesktopImportCacheForTest(t)
@@ -689,7 +689,7 @@ func TestCreateCCSwitchImportUsesOfficialDirectParameterContract(t *testing.T) {
 		t.Fatalf("failed to seed user: %v", err)
 	}
 	token := seedDesktopToken(t, db, 1, "ccswitch-key", "ccswitchsecret123456")
-	platformconfig.ServerAddress = "https://shu26.cfd"
+	platformconfig.ServerAddress = "https://codegoai.com"
 	t.Cleanup(func() {
 		platformconfig.ServerAddress = "http://localhost:3000"
 		resetDesktopImportCacheForTest(t)
@@ -736,13 +736,13 @@ func TestCreateCCSwitchImportUsesOfficialDirectParameterContract(t *testing.T) {
 	if !strings.Contains(string(usageScript), "{{baseUrl}}/dashboard/balance") || !strings.Contains(string(usageScript), "{{apiKey}}") {
 		t.Fatalf("unexpected CC Switch balance usage script: %s", usageScript)
 	}
-	if params.Get("endpoint") != "https://shu26.cfd/v1" {
+	if params.Get("endpoint") != "https://codegoai.com/v1" {
 		t.Fatalf("unexpected endpoint %q", params.Get("endpoint"))
 	}
 	if params.Get("model") != "gpt-5.6-luna" {
 		t.Fatalf("unexpected model %q", params.Get("model"))
 	}
-	if params.Get("homepage") != "https://shu26.cfd" || params.Get("enabled") != "true" {
+	if params.Get("homepage") != "https://codegoai.com" || params.Get("enabled") != "true" {
 		t.Fatalf("missing official provider metadata in %q", created.DeepLink)
 	}
 	if params.Get("notes") != "Imported from CodeGo website" {
@@ -817,7 +817,7 @@ func TestCreateDesktopImportConfigSupportsAllDesktopTools(t *testing.T) {
 		t.Fatalf("failed to seed user: %v", err)
 	}
 	token := seedDesktopToken(t, db, 1, "matrix-token", "matriximport1234567890")
-	platformconfig.ServerAddress = "https://shu26.cfd"
+	platformconfig.ServerAddress = "https://codegoai.com"
 	t.Cleanup(func() {
 		platformconfig.ServerAddress = "http://localhost:3000"
 		resetDesktopImportCacheForTest(t)

@@ -164,7 +164,7 @@ jobs:
           DEPLOY_COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
-          base_url="${PRODUCTION_PUBLIC_BASE_URL:-https://shu26.cfd}"
+          base_url="${PRODUCTION_PUBLIC_BASE_URL:-https://codegoai.com}"
           base_url="${base_url%/}"
           expected_version="sha-${DEPLOY_COMMIT_SHA:0:7}"
 

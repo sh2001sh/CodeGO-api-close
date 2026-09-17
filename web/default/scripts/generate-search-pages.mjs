@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '..')
 const distDir = path.join(projectRoot, 'dist')
-const baseUrl = 'https://shu26.cfd'
+const baseUrl = 'https://codegoai.com'
 
 const { getSearchPageFaq, getSearchPageSections, searchPages } = await import(
   pathToFileUrl(path.join(projectRoot, 'src/features/search-pages/data.ts')).href,

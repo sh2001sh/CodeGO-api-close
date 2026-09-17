@@ -122,7 +122,7 @@ export function CommunityResourceList(props: {
                       rel='noreferrer'
                     >
                       <Gift className='size-3' />
-                      {t('View shu26.cfd acknowledgement')}
+                      {t('View codegoai.com acknowledgement')}
                     </a>
                   ) : null}
                 </div>

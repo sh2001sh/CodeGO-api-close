@@ -1,5 +1,5 @@
 export const SITE_NAME = 'Code Go'
-export const SITE_ORIGIN = 'https://shu26.cfd'
+export const SITE_ORIGIN = 'https://codegoai.com'
 
 export type PublicPageSection = {
   heading: string

@@ -72,7 +72,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
                 <div className='flex items-center justify-between gap-3 py-4'>
                   <span className='codego-stat-label'>{t('Reliable access')}</span>
                   <span className='font-mono text-[10px] text-muted-foreground/70 uppercase'>
-                    SHU26.CFD
+                    CODEGOAI.COM
                   </span>
                 </div>
               </div>

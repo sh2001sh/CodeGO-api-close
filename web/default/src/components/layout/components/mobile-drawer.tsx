@@ -42,7 +42,7 @@ interface BrandLogoProps {
   onClick?: () => void
 }
 
-const SITE_URL_HINT = 'https://shu26.cfd'
+const SITE_URL_HINT = 'https://codegoai.com'
 
 function BrandLogo({
   homeUrl,

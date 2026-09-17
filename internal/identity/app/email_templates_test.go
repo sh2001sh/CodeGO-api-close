@@ -17,7 +17,7 @@ func TestRegistrationVerificationEmailEscapesCode(t *testing.T) {
 }
 
 func TestPasswordResetEmailEscapesAndIncludesFallbackLink(t *testing.T) {
-	link := "https://shu26.cfd/user/reset?email=a%2Bb%40example.com&token=abc"
+	link := "https://codegoai.com/user/reset?email=a%2Bb%40example.com&token=abc"
 	content := renderPasswordResetEmail("Code Go", link, 10)
 
 	if !strings.Contains(content, "重置密码") {

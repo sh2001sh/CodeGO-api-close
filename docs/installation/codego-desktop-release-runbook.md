@@ -41,13 +41,13 @@
 
 ## 2. 部署目录约定
 
-当前代码假设 `shu26.cfd` 可直接提供以下静态路径：
+当前代码假设 `codegoai.com` 可直接提供以下静态路径：
 
-- 下载页：`https://shu26.cfd/download`
-- 安装包目录：`https://shu26.cfd/downloads/codego/`
+- 下载页：`https://codegoai.com/download`
+- 安装包目录：`https://codegoai.com/downloads/codego/`
 - updater API：
-  - `https://shu26.cfd/api/desktop/release/latest`
-  - `https://shu26.cfd/api/desktop/release/latest.json`
+  - `https://codegoai.com/api/desktop/release/latest`
+  - `https://codegoai.com/api/desktop/release/latest.json`
 
 推荐把桌面端安装包和 updater 产物统一上传到：
 
@@ -87,7 +87,7 @@ CODEGO_DESKTOP_RELEASE_MANIFEST_FILE=/opt/codego/releases/codego-desktop-release
    - `latest.json`
    - 所有 `CodeGo_*` 安装包
    - 所有对应 `.sig`
-4. 将安装包与 `.sig` 上传到 `https://shu26.cfd/downloads/codego/` 对应的静态目录
+4. 将安装包与 `.sig` 上传到 `https://codegoai.com/downloads/codego/` 对应的静态目录
 5. 将 `codego-desktop-release-manifest.json` 放到 `new-api` 运行节点可读取的位置
 6. 设置或更新：
 
@@ -116,7 +116,7 @@ CODEGO_DESKTOP_RELEASE_MANIFEST_FILE=/opt/codego/releases/codego-desktop-release
 - `CODEGO_RELEASE_DEPLOY_PORT`：默认 `22`
 - `CODEGO_RELEASE_METADATA_DIR`：默认复用 `CODEGO_RELEASE_STATIC_DIR`
 - `CODEGO_RELEASE_REMOTE_TMP_DIR`：默认 `/tmp/codego-release-<tag>`
-- `CODEGO_RELEASE_PUBLIC_BASE_URL`：用于部署后 smoke test，默认 `https://shu26.cfd`
+- `CODEGO_RELEASE_PUBLIC_BASE_URL`：用于部署后 smoke test，默认 `https://codegoai.com`
 - `CODEGO_RELEASE_POST_DEPLOY_RELOAD_COMMAND`：用于部署后在目标机器执行 reload / restart 命令，例如 `systemctl restart new-api`
 
 自动部署行为：
@@ -152,13 +152,13 @@ CODEGO_DESKTOP_RELEASE_MANIFEST_FILE=/opt/codego/releases/codego-desktop-release
 确认网站下载页消费接口：
 
 ```powershell
-Invoke-WebRequest "https://shu26.cfd/api/desktop/release/latest" | Select-Object -ExpandProperty Content
+Invoke-WebRequest "https://codegoai.com/api/desktop/release/latest" | Select-Object -ExpandProperty Content
 ```
 
 确认 updater manifest：
 
 ```powershell
-Invoke-WebRequest "https://shu26.cfd/api/desktop/release/latest.json" | Select-Object -ExpandProperty Content
+Invoke-WebRequest "https://codegoai.com/api/desktop/release/latest.json" | Select-Object -ExpandProperty Content
 ```
 
 至少检查：
@@ -167,14 +167,14 @@ Invoke-WebRequest "https://shu26.cfd/api/desktop/release/latest.json" | Select-O
 - Windows x64 URL 是否指向 `.msi`
 - macOS updater URL 是否指向 `.app.tar.gz`
 - `darwin-aarch64` 和 `darwin-x86_64` 是否同时存在
-- URL 是否都落在 `https://shu26.cfd/downloads/codego/`
+- URL 是否都落在 `https://codegoai.com/downloads/codego/`
 
 也可以直接使用仓库脚本做半自动验收：
 
 ```bash
 node scripts/wait-for-codego-release-version.mjs \
-  --release-url "https://shu26.cfd/api/desktop/release/latest" \
-  --latest-url "https://shu26.cfd/api/desktop/release/latest.json" \
+  --release-url "https://codegoai.com/api/desktop/release/latest" \
+  --latest-url "https://codegoai.com/api/desktop/release/latest.json" \
   --expected-version "3.16.4" \
   --timeout-ms "180000" \
   --interval-ms "5000"
@@ -193,9 +193,9 @@ node scripts/wait-for-codego-release-version.mjs \
 随机抽查几个实际下载地址：
 
 ```powershell
-Invoke-WebRequest "https://shu26.cfd/downloads/codego/CodeGo_3.16.4_x64_en-US.msi" -Method Head
-Invoke-WebRequest "https://shu26.cfd/downloads/codego/CodeGo_3.16.4_universal.dmg" -Method Head
-Invoke-WebRequest "https://shu26.cfd/downloads/codego/CodeGo_3.16.4_universal.app.tar.gz" -Method Head
+Invoke-WebRequest "https://codegoai.com/downloads/codego/CodeGo_3.16.4_x64_en-US.msi" -Method Head
+Invoke-WebRequest "https://codegoai.com/downloads/codego/CodeGo_3.16.4_universal.dmg" -Method Head
+Invoke-WebRequest "https://codegoai.com/downloads/codego/CodeGo_3.16.4_universal.app.tar.gz" -Method Head
 ```
 
 ### 5.3 网站下载页
@@ -203,7 +203,7 @@ Invoke-WebRequest "https://shu26.cfd/downloads/codego/CodeGo_3.16.4_universal.ap
 打开：
 
 ```text
-https://shu26.cfd/download
+https://codegoai.com/download
 ```
 
 确认：

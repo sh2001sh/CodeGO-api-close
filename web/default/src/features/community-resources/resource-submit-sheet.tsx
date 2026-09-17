@@ -184,7 +184,7 @@ export function ResourceSubmitSheet(props: {
                 <FormItem className='border-primary/20 bg-primary/5 rounded-lg border p-4'>
                   <FormLabel className='flex items-center gap-2'>
                     <Gift className='text-primary size-4' />
-                    {t('shu26.cfd acknowledgement link')}
+                    {t('codegoai.com acknowledgement link')}
                   </FormLabel>
                   <FormControl>
                     <Input
@@ -194,7 +194,7 @@ export function ResourceSubmitSheet(props: {
                   </FormControl>
                   <FormDescription>
                     {t(
-                      'Optional. Link to the README or project file that thanks shu26.cfd. An administrator can verify it and grant bonus quota.'
+                      'Optional. Link to the README or project file that thanks codegoai.com. An administrator can verify it and grant bonus quota.'
                     )}
                   </FormDescription>
                   <FormMessage />

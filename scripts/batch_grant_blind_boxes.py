@@ -173,7 +173,7 @@ def grant_blind_box(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ids-file", required=True, type=Path, help="TXT file with one external ID per line")
-    parser.add_argument("--base-url", default="https://shu26.cfd", help="Code Go site URL")
+    parser.add_argument("--base-url", default="https://codegoai.com", help="Code Go site URL")
     parser.add_argument("--quantity", type=int, default=1, help="Blind boxes per user (default: 1)")
     parser.add_argument("--reason", default="LinuxDO community blind box grant", help="Audit reason recorded for every grant")
     parser.add_argument("--batch", default=f"manual-{datetime.now(UTC):%Y%m%d}", help="Stable idempotency batch name")

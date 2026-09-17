@@ -43,7 +43,7 @@ import type { TopNavLink } from '../types'
 import { HeaderLogo } from './header-logo'
 
 const AUTH_PROMPT_SECONDS = 5
-const SITE_URL_HINT = 'https://shu26.cfd'
+const SITE_URL_HINT = 'https://codegoai.com'
 
 type AuthPromptTarget = {
   title: string

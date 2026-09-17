@@ -6,7 +6,7 @@ import {
   buildWindowsScript,
 } from './codex-config-script.ts'
 
-const serverAddress = 'https://shu26.cfd'
+const serverAddress = 'https://codegoai.com'
 
 describe('Codex WebSocket setup', () => {
   test('advertises Responses WebSocket support in the provider block', () => {

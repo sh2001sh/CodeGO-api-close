@@ -125,7 +125,7 @@ describe('submitDesktopImportRequest', () => {
             data: {
               code: 'import-code',
               deep_link: 'codego://v1/import?resource=provider',
-              config_url: 'https://shu26.cfd/api/desktop/import/config?code=1',
+              config_url: 'https://codegoai.com/api/desktop/import/config?code=1',
               expires_in_seconds: 300,
               tool: 'codex',
               token_name: 'My Codex',
@@ -166,7 +166,7 @@ describe('submitDesktopImportRequest', () => {
             data: {
               code: '',
               deep_link:
-                'ccswitch://v1/import?resource=provider&app=codex&name=CodeGo&endpoint=https%3A%2F%2Fshu26.cfd%2Fv1&apiKey=sk-test&model=gpt-5.6-luna&enabled=true',
+                'ccswitch://v1/import?resource=provider&app=codex&name=CodeGo&endpoint=https%3A%2F%2Fcodegoai.com%2Fv1&apiKey=sk-test&model=gpt-5.6-luna&enabled=true',
               config_url: '',
               expires_in_seconds: 0,
               tool: 'codex',
@@ -185,7 +185,7 @@ describe('submitDesktopImportRequest', () => {
 
     assert.deepEqual(result, { tone: 'success' })
     assert.deepEqual(openedLinks, [
-      'ccswitch://v1/import?resource=provider&app=codex&name=CodeGo&endpoint=https%3A%2F%2Fshu26.cfd%2Fv1&apiKey=sk-test&model=gpt-5.6-luna&enabled=true',
+      'ccswitch://v1/import?resource=provider&app=codex&name=CodeGo&endpoint=https%3A%2F%2Fcodegoai.com%2Fv1&apiKey=sk-test&model=gpt-5.6-luna&enabled=true',
     ])
   })
 
@@ -283,7 +283,7 @@ describe('submitDesktopImportRequest', () => {
               code: 'import-opencode',
               deep_link: 'codego://v1/import?resource=provider&app=opencode',
               config_url:
-                'https://shu26.cfd/api/desktop/import/config?code=opencode',
+                'https://codegoai.com/api/desktop/import/config?code=opencode',
               expires_in_seconds: 300,
               tool: 'opencode',
               token_name: 'My OpenCode',

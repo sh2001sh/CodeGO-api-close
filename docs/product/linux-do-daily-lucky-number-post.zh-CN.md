@@ -67,11 +67,11 @@
 
 站点地址：
 
-https://shu26.cfd
+https://codegoai.com
 
 每日幸运号页面：
 
-https://shu26.cfd/daily-lucky-number
+https://codegoai.com/daily-lucky-number
 
 站点已接入 LinuxDo 授权登录。购买或续费月卡后，可以在套餐页、控制台和每日幸运号页面查看自己的完整编号、幸运尾号、开奖结果和历史记录。
 

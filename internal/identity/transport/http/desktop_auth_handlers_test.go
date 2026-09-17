@@ -21,7 +21,7 @@ import (
 
 func TestStartDesktopAuthSessionReturnsVerificationPayload(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
-	platformconfig.ServerAddress = "https://shu26.cfd"
+	platformconfig.ServerAddress = "https://codegoai.com"
 	t.Cleanup(func() {
 		platformconfig.ServerAddress = "http://localhost:3000"
 	})
@@ -91,7 +91,7 @@ func TestGetDesktopAuthSessionReturnsAuthorizePageMetadata(t *testing.T) {
 
 func TestApproveDesktopAuthSessionAndPollReturnsDesktopAccessToken(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
-	platformconfig.ServerAddress = "https://shu26.cfd"
+	platformconfig.ServerAddress = "https://codegoai.com"
 	t.Cleanup(func() {
 		platformconfig.ServerAddress = "http://localhost:3000"
 	})

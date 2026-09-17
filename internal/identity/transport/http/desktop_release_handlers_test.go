@@ -97,7 +97,7 @@ func TestGetDesktopReleaseLatestReturnsConfiguredManifest(t *testing.T) {
 		}
 	}`)
 	t.Setenv(platformruntime.DesktopReleaseManifestFileEnv, "")
-	setDesktopReleaseServerAddressForTest(t, "https://shu26.cfd")
+	setDesktopReleaseServerAddressForTest(t, "https://codegoai.com")
 
 	ctx, recorder := newAuthenticatedContext(t, http.MethodGet, "/api/desktop/release/latest", nil, 0)
 	GetDesktopReleaseLatest(ctx)
@@ -114,7 +114,7 @@ func TestGetDesktopReleaseLatestJSONReturnsUpdaterManifest(t *testing.T) {
 	t.Setenv("CODEGO_DESKTOP_RELEASE_GITHUB_FALLBACK_ENABLED", "false")
 	t.Setenv(platformruntime.DesktopReleaseManifestJSONEnv, `{
 		"version":"3.16.4",
-		"html_url":"https://shu26.cfd/download/releases/v3.16.4",
+		"html_url":"https://codegoai.com/download/releases/v3.16.4",
 		"published_at":"2026-06-28T08:00:00Z",
 		"notes":"Desktop updater test release",
 		"assets":[],
@@ -359,7 +359,7 @@ func TestGetDesktopReleaseLatestReloadsManifestFileWithoutRestart(t *testing.T) 
 
 	t.Setenv(platformruntime.DesktopReleaseManifestJSONEnv, "")
 	t.Setenv(platformruntime.DesktopReleaseManifestFileEnv, manifestPath)
-	setDesktopReleaseServerAddressForTest(t, "https://shu26.cfd")
+	setDesktopReleaseServerAddressForTest(t, "https://codegoai.com")
 
 	firstCtx, firstRecorder := newAuthenticatedContext(t, http.MethodGet, "/api/desktop/release/latest", nil, 0)
 	GetDesktopReleaseLatest(firstCtx)

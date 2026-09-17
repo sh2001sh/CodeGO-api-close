@@ -81,7 +81,7 @@ type UpdateResourceConfigRequest struct {
 
 func GetResourceConfig() ResourceConfig {
 	rewardUSD := communitysettings.Get().RewardUSD
-	return ResourceConfig{SiteHost: "shu26.cfd", RewardEnabled: rewardUSD > 0, RewardUSD: rewardUSD}
+	return ResourceConfig{SiteHost: "codegoai.com", RewardEnabled: rewardUSD > 0, RewardUSD: rewardUSD}
 }
 
 func UpdateResourceConfig(request UpdateResourceConfigRequest) (ResourceConfig, error) {

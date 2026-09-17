@@ -150,7 +150,7 @@ export function CommunityResourcesPage() {
         <SiteSeo
           title={t('Community resources')}
           description={t(
-            'Discover and share scripts, skills, and tools built around shu26.cfd.'
+            'Discover and share scripts, skills, and tools built around codegoai.com.'
           )}
           canonicalPath='/community-resources'
           robots='noindex,follow'
@@ -180,7 +180,7 @@ export function CommunityResourcesPage() {
                   </h2>
                   <p className='text-muted-foreground mt-1 max-w-3xl text-sm'>
                     {t(
-                      'Thank shu26.cfd in your GitHub README, include the acknowledgement link when submitting, and an administrator can grant a one-time quota reward after verification.'
+                      'Thank codegoai.com in your GitHub README, include the acknowledgement link when submitting, and an administrator can grant a one-time quota reward after verification.'
                     )}
                   </p>
                 </div>

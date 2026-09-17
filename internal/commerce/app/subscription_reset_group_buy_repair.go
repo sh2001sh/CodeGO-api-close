@@ -32,8 +32,17 @@ func RepairRecentSubscriptionResetGroupBuyBonuses() (subscriptionResetGroupBuyRe
 	if platformdb.DB == nil {
 		return result, nil
 	}
+	var subscriptionIDs []int
+	if err := platformdb.DB.Model(&commerceschema.GroupBuyMember{}).
+		Where("user_subscription_id > 0 AND bonus_granted = ? AND bonus_amount_usd > 0", true).
+		Distinct("user_subscription_id").Pluck("user_subscription_id", &subscriptionIDs).Error; err != nil {
+		return result, err
+	}
+	if len(subscriptionIDs) == 0 {
+		return result, nil
+	}
 	var ledgers []commerceschema.SubscriptionResetOpportunityLedger
-	if err := platformdb.DB.Where("change_type = ? AND created_at >= ?", commerceschema.SubscriptionResetOpportunityChangeUse, time.Now().Add(-subscriptionResetGroupBuyRepairLookback).Unix()).
+	if err := platformdb.DB.Where("change_type = ? AND created_at >= ? AND related_user_id IN ?", commerceschema.SubscriptionResetOpportunityChangeUse, time.Now().Add(-subscriptionResetGroupBuyRepairLookback).Unix(), subscriptionIDs).
 		Order("created_at ASC, id ASC").Find(&ledgers).Error; err != nil {
 		return result, err
 	}

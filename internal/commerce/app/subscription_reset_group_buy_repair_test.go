@@ -39,11 +39,18 @@ func TestRepairSubscriptionResetGroupBuyBonusIsExactAndIdempotent(t *testing.T) 
 		EventKey: fmt.Sprintf("use-reset-opportunity:%d:%s", sub.UserId, usedMonth),
 	}
 	require.NoError(t, db.Create(&resetLedger).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityLedger{
+		UserId: sub.UserId, RelatedUserId: 7999,
+		ChangeType: commerceschema.SubscriptionResetOpportunityChangeUse, Delta: -1,
+		UsedMonth: usedMonth, SourceType: "user_subscription", SourceRef: "7999",
+		EventKey: "unrelated-reset-without-group-buy",
+	}).Error)
 
-	restored, reason, err := repairSubscriptionResetGroupBuyBonus(resetLedger)
+	result, err := RepairRecentSubscriptionResetGroupBuyBonuses()
 	require.NoError(t, err)
-	require.Empty(t, reason)
-	require.EqualValues(t, 200, restored)
+	require.Equal(t, 1, result.Scanned)
+	require.Equal(t, 1, result.Repaired)
+	require.EqualValues(t, 200, result.RestoredQuota)
 
 	var current commerceschema.UserSubscription
 	require.NoError(t, db.First(&current, sub.Id).Error)
@@ -56,7 +63,7 @@ func TestRepairSubscriptionResetGroupBuyBonusIsExactAndIdempotent(t *testing.T) 
 	require.NoError(t, db.First(&snapshot, "account_id = ?", account.AccountID).Error)
 	require.EqualValues(t, 1200, snapshot.AvailableBalance)
 
-	restored, reason, err = repairSubscriptionResetGroupBuyBonus(resetLedger)
+	restored, reason, err := repairSubscriptionResetGroupBuyBonus(resetLedger)
 	require.NoError(t, err)
 	require.Zero(t, restored)
 	require.Equal(t, "already_repaired", reason)

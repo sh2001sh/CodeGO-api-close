@@ -58,6 +58,7 @@ func main() {
 	limit := flag.Int("limit", 0, "optional maximum subjects per account type")
 	normalizeNegativeWalletLegacy := flag.Bool("normalize-negative-wallet-legacy", false, "normalize strict negative legacy wallet quotas to the canonical zero ledger balance")
 	groupBuyID := flag.Int64("reconcile-group-buy-id", 0, "reconcile missing group-buy tier bonus for one group")
+	repairSubscriptionResetGroupBuy := flag.Bool("repair-subscription-reset-group-buy", false, "restore group-buy quota omitted by recent subscription resets")
 	balanceBlindBoxLossBefore := flag.Int64("balance-blind-box-loss-compensation-before", 0, "compensate users whose balance blind-box rewards were below their total $15 draw cost before this Unix timestamp")
 	backfillMarketplaceSettlements := flag.Bool("backfill-marketplace-settlements", false, "backfill missing marketplace settlement rows from request logs")
 	flag.Parse()
@@ -82,6 +83,20 @@ func main() {
 			log.Fatalf("reconcile group buy bonus: %v", err)
 		}
 		fmt.Printf("group-buy members adjusted: %d\n", adjusted)
+		return
+	}
+	if *repairSubscriptionResetGroupBuy {
+		if !*apply {
+			log.Fatal("repair-subscription-reset-group-buy requires --apply")
+		}
+		result, err := commerceapp.RepairRecentSubscriptionResetGroupBuyBonuses()
+		if err != nil {
+			log.Fatalf("repair subscription reset group-buy quota: %v", err)
+		}
+		fmt.Printf("subscription resets scanned: %d\n", result.Scanned)
+		fmt.Printf("subscription resets repaired: %d\n", result.Repaired)
+		fmt.Printf("subscription resets skipped: %d\n", result.Skipped)
+		fmt.Printf("subscription reset quota restored: %d\n", result.RestoredQuota)
 		return
 	}
 	if *balanceBlindBoxLossBefore > 0 {

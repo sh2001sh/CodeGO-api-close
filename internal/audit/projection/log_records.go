@@ -169,6 +169,8 @@ func RecordConsumeLog(c *gin.Context, userID int, params auditschema.RecordConsu
 		logger.LogError(c, "failed to record log: "+err.Error())
 		return
 	}
+	billingSource, _ := stringOtherValue(params.Other, "billing_source")
+	RecordChannelConsumerMetric(params.ChannelId, userID, params.Group, params.ModelName, int64(params.Quota), int64(params.PromptTokens+params.CompletionTokens), billingSource)
 	if cacheTokens, ok := numericOtherValue(params.Other, "cache_tokens"); ok {
 		gatewayruntime.RecordChannelCacheObservation(params.ChannelId, params.ModelName, params.PromptTokens, int(cacheTokens))
 	}
@@ -196,6 +198,15 @@ func numericOtherValue(values map[string]interface{}, key string) (float64, bool
 	default:
 		return 0, false
 	}
+}
+
+func stringOtherValue(values map[string]interface{}, key string) (string, bool) {
+	value, found := values[key]
+	if !found {
+		return "", false
+	}
+	text, ok := value.(string)
+	return text, ok
 }
 
 func RecordTaskBillingLog(params auditschema.RecordTaskBillingLogParams) {

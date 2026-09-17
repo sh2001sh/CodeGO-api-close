@@ -1,11 +1,14 @@
 package app
 
 import (
+	"golang.org/x/sync/singleflight"
 	"sync"
 	"time"
 )
 
-const adminMarketplaceStatsCacheTTL = 5 * time.Second
+const adminMarketplaceStatsCacheTTL = 20 * time.Second
+
+var adminChannelsLoads singleflight.Group
 
 var adminMarketplaceStatsCache struct {
 	sync.Mutex

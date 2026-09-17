@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/store"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"gorm.io/gorm"
 	"strconv"
 	"strings"
@@ -161,6 +163,58 @@ func referralInviterIDTx(tx *gorm.DB, inviteeID int) (int, error) {
 	return user.InviterId, nil
 }
 
+func currentCycleGroupBuyBonusQuotaTx(tx *gorm.DB, subscriptionID int, cycleStart, before int64) (int64, error) {
+	if tx == nil || subscriptionID <= 0 {
+		return 0, nil
+	}
+	var members []commerceschema.GroupBuyMember
+	query := tx.Where("user_subscription_id = ? AND bonus_granted = ? AND bonus_amount_usd > 0", subscriptionID, true)
+	if before > 0 {
+		query = query.Where("created_at <= ?", before)
+	}
+	if err := query.Find(&members).Error; err != nil {
+		return 0, err
+	}
+	bonusQuota := int64(0)
+	oldMemberIDs := make([]string, 0)
+	for _, member := range members {
+		if member.CreatedAt >= cycleStart {
+			bonusQuota += int64(quotaUnitsFromUSD(member.BonusAmountUSD))
+		} else {
+			oldMemberIDs = append(oldMemberIDs, fmt.Sprintf(":member:%d:", member.Id))
+		}
+	}
+	if len(oldMemberIDs) == 0 {
+		return bonusQuota, nil
+	}
+	var account billingschema.BillingAccount
+	if err := tx.Where("account_type = ? AND owner_type = ? AND owner_id = ? AND quota_unit = ?", "subscription", "user_subscription", subscriptionID, "quota").First(&account).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return bonusQuota, nil
+		}
+		return 0, err
+	}
+	var grants []billingschema.BillingLedgerEntry
+	grantQuery := tx.Where("account_id = ? AND reason_code = ? AND created_at >= ? AND idempotency_key LIKE ?", account.AccountID, "subscription_bonus", time.Unix(cycleStart, 0), "%group-buy:%")
+	if before > 0 {
+		// Runtime timestamps have second precision while ledger timestamps may
+		// include fractions of that second. Use an exclusive next-second bound.
+		grantQuery = grantQuery.Where("created_at < ?", time.Unix(before+1, 0))
+	}
+	if err := grantQuery.Find(&grants).Error; err != nil {
+		return 0, err
+	}
+	for _, grant := range grants {
+		for _, memberMarker := range oldMemberIDs {
+			if strings.Contains(grant.IdempotencyKey, memberMarker) {
+				bonusQuota += grant.Amount
+				break
+			}
+		}
+	}
+	return bonusQuota, nil
+}
+
 // UseUserSubscriptionResetOpportunity clears the preferred active subscription usage once per month.
 func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.SubscriptionResetOpportunityUseResult, error) {
 	if userID <= 0 {
@@ -175,6 +229,7 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 	}
 	explicitOrder := commercedomain.NormalizePositiveIntSlice(setting.SubscriptionOrderIds)
 	result := &commerceschema.SubscriptionResetOpportunityUseResult{}
+	var resetLog string
 
 	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		account, err := getOrCreateSubscriptionResetOpportunityAccountTx(tx, userID)
@@ -245,7 +300,15 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 			return err
 		}
 		baseQuota := min(max(plan.TotalAmount, 0), sub.AmountTotal)
-		sub.AmountUsed = max(sub.AmountUsed-baseQuota, 0)
+		groupBuyBonusQuota, err := currentCycleGroupBuyBonusQuotaTx(tx, sub.Id, sub.StartTime, now)
+		if err != nil {
+			return err
+		}
+		// Only the plan quota and this cycle's group-buy reward are renewable.
+		// Fuel and all other top-ups remain consumed after a reset.
+		groupBuyBonusQuota = min(groupBuyBonusQuota, max(sub.AmountTotal-baseQuota, 0))
+		resettableQuota := baseQuota + groupBuyBonusQuota
+		sub.AmountUsed = max(sub.AmountUsed-resettableQuota, 0)
 		sub.PeriodUsed = 0
 		sub.ModelUsage = ""
 		if err := restoreSubscriptionLedgerBalanceAfterResetTx(tx, &sub, fmt.Sprintf("opportunity:%d:%s", userID, currentMonth)); err != nil {
@@ -282,10 +345,15 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 		result.PeriodUsedAfter = sub.PeriodUsed
 		result.ClearedUsedAmount = result.AmountUsedBefore - result.AmountUsedAfter
 		result.ResetOpportunity = buildSubscriptionResetOpportunitySummary(account)
+		resetLog = fmt.Sprintf(
+			"subscription reset applied user_id=%d subscription_id=%d base_quota=%d group_buy_bonus_quota=%d non_resettable_quota=%d used_before=%d used_after=%d restored_amount=%d",
+			userID, sub.Id, baseQuota, groupBuyBonusQuota, max(sub.AmountTotal-resettableQuota, 0), result.AmountUsedBefore, result.AmountUsedAfter, result.ClearedUsedAmount,
+		)
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	platformobservability.SysLog(resetLog)
 	return result, nil
 }

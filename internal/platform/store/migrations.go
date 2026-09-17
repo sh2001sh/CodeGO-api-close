@@ -80,6 +80,28 @@ type channelLatencyHistogramMigration struct {
 
 func (channelLatencyHistogramMigration) TableName() string { return "channel_latency_histograms" }
 
+type channelConsumerMetricMigration struct {
+	ID           int    `gorm:"primaryKey"`
+	ChannelID    int    `gorm:"column:channel_id;uniqueIndex:idx_channel_consumer_bucket,priority:1;index"`
+	GroupName    string `gorm:"column:group_name;size:128;uniqueIndex:idx_channel_consumer_bucket,priority:2;index"`
+	ModelName    string `gorm:"column:model_name;size:128;uniqueIndex:idx_channel_consumer_bucket,priority:3"`
+	BucketTs     int64  `gorm:"column:bucket_ts;uniqueIndex:idx_channel_consumer_bucket,priority:4;index"`
+	RequestCount int64  `gorm:"column:request_count;not null;default:0"`
+	Quota        int64  `gorm:"column:quota;not null;default:0"`
+	TokenCount   int64  `gorm:"column:token_count;not null;default:0"`
+}
+
+func (channelConsumerMetricMigration) TableName() string { return "channel_consumer_metrics" }
+
+type channelConsumerIdentityMigration struct {
+	ID        int   `gorm:"primaryKey"`
+	ChannelID int   `gorm:"column:channel_id;uniqueIndex:idx_channel_consumer_identity_bucket,priority:1;index"`
+	UserID    int   `gorm:"column:user_id;uniqueIndex:idx_channel_consumer_identity_bucket,priority:2"`
+	BucketTs  int64 `gorm:"column:bucket_ts;uniqueIndex:idx_channel_consumer_identity_bucket,priority:3;index"`
+}
+
+func (channelConsumerIdentityMigration) TableName() string { return "channel_consumer_identities" }
+
 func (legacyMarketplaceModelFeedback) TableName() string {
 	if platformdb.UsingPostgreSQL {
 		return "marketplace.model_consistency_feedback"
@@ -191,6 +213,7 @@ func V2MigrationIDs() []string {
 		"20260915_marketplace_pelican_artifacts_by_model",
 		"20260915_marketplace_average_consumer_amount",
 		"20260915_marketplace_average_consumer_amount_by_model",
+		"20260917_marketplace_consumer_metrics",
 	}
 }
 
@@ -479,6 +502,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260905_marketplace_group_query_index", RunOutsideTx: migrateMarketplaceGroupQueryIndex},
 		{ID: "20260914_account_request_abuse", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.AccountRequestAbuseState{})
+		}},
+		{ID: "20260917_marketplace_consumer_metrics", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&channelConsumerMetricMigration{}, &channelConsumerIdentityMigration{})
 		}},
 	}
 	for _, step := range steps {

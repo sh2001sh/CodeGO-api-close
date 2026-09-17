@@ -13,7 +13,9 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +24,17 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
 	}
 	cacheKey := fmt.Sprintf("%p:%+v", platformdb.DB, input)
+	value, err, _ := adminChannelsLoads.Do(cacheKey, func() (any, error) {
+		return listAdminChannelsCached(input, cacheKey)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cloneChannelViews(value.([]ChannelView)), nil
+}
+
+func listAdminChannelsCached(input AdminChannelQuery, cacheKey string) ([]ChannelView, error) {
+	startedAt := time.Now()
 	adminMarketplaceStatsCache.Lock()
 	if adminMarketplaceStatsCache.adminChannelsResult != nil &&
 		adminMarketplaceStatsCache.adminChannelsKey == cacheKey &&
@@ -31,6 +44,7 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 		return result, nil
 	}
 	adminMarketplaceStatsCache.Unlock()
+	channelsStartedAt := time.Now()
 	query := platformdb.DB.Model(&marketplaceschema.Channel{})
 	if source := strings.TrimSpace(input.Source); source != "" {
 		query = query.Where("submitted_source_label = ? OR approved_source_label = ?", source, source)
@@ -55,25 +69,60 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 	if err := query.Order("updated_at desc").Find(&channels).Error; err != nil {
 		return nil, err
 	}
+	channelsElapsed := time.Since(channelsStartedAt)
+	groupsStartedAt := time.Now()
 	groups, err := groupsByChannelIDs(channelIDs(channels))
 	if err != nil {
 		return nil, err
 	}
-	earnings, err := earningsByGroupIDsInRange(groupIDs(groups), input.StartTimestamp, input.EndTimestamp)
-	if err != nil {
-		return nil, err
-	}
+	groupsElapsed := time.Since(groupsStartedAt)
 	ownerUserIDs := make([]int, 0, len(channels))
 	for index := range channels {
 		ownerUserIDs = append(ownerUserIDs, channels[index].OwnerUserID)
 	}
-	externalIDs, err := ownerExternalIDs(ownerUserIDs)
-	if err != nil {
-		return nil, err
+	var earnings map[string]ownerChannelEarnings
+	var externalIDs map[int]string
+	var latestRuns map[string]*marketplaceschema.VerificationRun
+	var earningsElapsed, ownersElapsed, verificationsElapsed time.Duration
+	loadEarnings := func() error {
+		at := time.Now()
+		var err error
+		earnings, err = earningsByGroupIDsInRange(groupIDs(groups), input.StartTimestamp, input.EndTimestamp)
+		earningsElapsed = time.Since(at)
+		return err
 	}
-	latestRuns, err := latestVerifications(channelIDs(channels))
-	if err != nil {
-		return nil, err
+	loadOwners := func() error {
+		at := time.Now()
+		var err error
+		externalIDs, err = ownerExternalIDs(ownerUserIDs)
+		ownersElapsed = time.Since(at)
+		return err
+	}
+	loadVerifications := func() error {
+		at := time.Now()
+		var err error
+		latestRuns, err = latestVerifications(channelIDs(channels))
+		verificationsElapsed = time.Since(at)
+		return err
+	}
+	if platformdb.DB.Dialector.Name() == "sqlite" {
+		if err := loadEarnings(); err != nil {
+			return nil, err
+		}
+		if err := loadOwners(); err != nil {
+			return nil, err
+		}
+		if err := loadVerifications(); err != nil {
+			return nil, err
+		}
+	} else {
+		var loaders errgroup.Group
+		loaders.Go(loadEarnings)
+		loaders.Go(loadOwners)
+		loaders.Go(loadVerifications)
+		if err := loaders.Wait(); err != nil {
+			return nil, err
+		}
 	}
 	result := make([]ChannelView, 0, len(channels))
 	for index := range channels {
@@ -107,6 +156,10 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 	adminMarketplaceStatsCache.adminChannelsKey = cacheKey
 	adminMarketplaceStatsCache.adminChannelsResult = cloneChannelViews(result)
 	adminMarketplaceStatsCache.Unlock()
+	totalElapsed := time.Since(startedAt)
+	if totalElapsed >= 500*time.Millisecond {
+		platformobservability.SysLog(fmt.Sprintf("slow admin marketplace query channels_ms=%d groups_ms=%d earnings_ms=%d owners_ms=%d verifications_ms=%d rows=%d total_ms=%d", channelsElapsed.Milliseconds(), groupsElapsed.Milliseconds(), earningsElapsed.Milliseconds(), ownersElapsed.Milliseconds(), verificationsElapsed.Milliseconds(), len(result), totalElapsed.Milliseconds()))
+	}
 	return result, nil
 }
 

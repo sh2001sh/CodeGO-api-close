@@ -13,6 +13,7 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
@@ -46,6 +47,7 @@ type rankingTotals struct {
 }
 
 func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
+	startedAt := time.Now()
 	query = normalizeGroupQuery(query)
 	cacheKey := fmt.Sprintf("%+v", query)
 	marketplaceListCache.Lock()
@@ -147,6 +149,9 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	marketplaceListCache.Lock()
 	marketplaceListCache.at, marketplaceListCache.key, marketplaceListCache.result = time.Now(), cacheKey, result
 	marketplaceListCache.Unlock()
+	if elapsed := time.Since(startedAt); elapsed >= 500*time.Millisecond {
+		platformobservability.SysLog(fmt.Sprintf("slow marketplace list query groups=%d returned=%d window_hours=%d total_ms=%d", total, len(items), query.WindowHours, elapsed.Milliseconds()))
+	}
 	return result, nil
 }
 

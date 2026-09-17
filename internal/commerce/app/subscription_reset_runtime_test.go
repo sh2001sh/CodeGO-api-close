@@ -382,6 +382,102 @@ func TestUseUserSubscriptionResetOpportunityRestoresOnlyBaseQuotaAfterFuel(t *te
 	assert.EqualValues(t, 1000, snapshot.AvailableBalance)
 }
 
+func TestUseUserSubscriptionResetOpportunityRestoresCurrentCycleGroupBuyButKeepsFuelUsed(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	insertSubscriptionResetAppTestUser(t, 7214, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 7214, 0, 1000)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{
+		Id: 7315, UserId: 7214, PlanId: plan.Id, AmountTotal: 1500, AmountUsed: 1500,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}
+	require.NoError(t, db.Create(sub).Error)
+	member := &commerceschema.GroupBuyMember{
+		GroupBuyId: 9914, UserId: 7214, UserSubscriptionId: sub.Id,
+		BonusGranted: true, BonusAmountUSD: quotaUnitsToUSD(200),
+	}
+	require.NoError(t, db.Create(member).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityAccount{
+		UserId: 7214, EarnedTotal: 1, AvailableTotal: 1,
+	}).Error)
+	require.NoError(t, restoreSubscriptionLedgerBalanceAfterResetTx(db, sub, "group-buy-fuel-reset-initial"))
+
+	result, err := UseUserSubscriptionResetOpportunity(7214)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1200, result.ClearedUsedAmount)
+	assert.EqualValues(t, 300, result.AmountUsedAfter)
+
+	var current commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", sub.Id).First(&current).Error)
+	assert.EqualValues(t, 1500, current.AmountTotal)
+	assert.EqualValues(t, 300, current.AmountUsed)
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(sub.Id), QuotaUnit: "quota",
+	})
+	require.NoError(t, err)
+	var snapshot billingschema.BillingBalanceSnapshot
+	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
+	assert.EqualValues(t, 1200, snapshot.AvailableBalance)
+}
+
+func TestUseUserSubscriptionResetOpportunityIgnoresPreviousCycleGroupBuy(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	insertSubscriptionResetAppTestUser(t, 7215, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 7215, 0, 1000)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{
+		Id: 7316, UserId: 7215, PlanId: plan.Id, AmountTotal: 1200, AmountUsed: 1200,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}
+	require.NoError(t, db.Create(sub).Error)
+	member := &commerceschema.GroupBuyMember{
+		GroupBuyId: 9915, UserId: 7215, UserSubscriptionId: sub.Id,
+		BonusGranted: true, BonusAmountUSD: quotaUnitsToUSD(200),
+	}
+	require.NoError(t, db.Create(member).Error)
+	require.NoError(t, db.Model(member).Update("created_at", sub.StartTime-1).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityAccount{
+		UserId: 7215, EarnedTotal: 1, AvailableTotal: 1,
+	}).Error)
+	require.NoError(t, restoreSubscriptionLedgerBalanceAfterResetTx(db, sub, "old-group-buy-reset-initial"))
+
+	result, err := UseUserSubscriptionResetOpportunity(7215)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1000, result.ClearedUsedAmount)
+	assert.EqualValues(t, 200, result.AmountUsedAfter)
+}
+
+func TestUseUserSubscriptionResetOpportunityIncludesOldMemberBonusGrantedInCurrentCycle(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	insertSubscriptionResetAppTestUser(t, 7216, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 7216, 0, 1000)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{
+		Id: 7317, UserId: 7216, PlanId: plan.Id, AmountTotal: 1000, AmountUsed: 1000,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}
+	require.NoError(t, db.Create(sub).Error)
+	require.NoError(t, restoreSubscriptionLedgerBalanceAfterResetTx(db, sub, "old-member-current-cycle-initial"))
+	member := &commerceschema.GroupBuyMember{
+		GroupBuyId: 9916, UserId: 7216, UserSubscriptionId: sub.Id,
+		BonusGranted: true, BonusAmountUSD: quotaUnitsToUSD(200),
+	}
+	require.NoError(t, db.Create(member).Error)
+	require.NoError(t, db.Model(member).Update("created_at", sub.StartTime-86400).Error)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return addSubscriptionBonusTx(tx, sub, 200, fmt.Sprintf("group-buy:%d:member:%d:tier:%d", member.GroupBuyId, member.Id, 200))
+	}))
+	require.NoError(t, db.Model(sub).Update("amount_used", 1200).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityAccount{
+		UserId: 7216, EarnedTotal: 1, AvailableTotal: 1,
+	}).Error)
+
+	result, err := UseUserSubscriptionResetOpportunity(7216)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1200, result.ClearedUsedAmount)
+	assert.Zero(t, result.AmountUsedAfter)
+}
+
 func TestUseUserSubscriptionResetOpportunityRejectsWhenAllPassesConverted(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	insertSubscriptionResetAppTestUser(t, 7221, 0)

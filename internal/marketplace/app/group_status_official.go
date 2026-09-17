@@ -9,7 +9,6 @@ import (
 
 	"github.com/sh2001sh/new-api/constant"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -240,39 +239,20 @@ func storeOfficialWalletStats(key string, values map[string]channelConsumerStats
 
 func queryOfficialWalletConsumerStats(names []string, hours int) (map[string]channelConsumerStats, error) {
 	result := make(map[string]channelConsumerStats, len(names))
-
-	groupColumn := "`group`"
-	if platformdb.UsingPostgreSQL {
-		groupColumn = `"group"`
-	}
-	var rows []struct {
-		GroupName            string `gorm:"column:group_name"`
-		ModelName            string `gorm:"column:model_name"`
-		WalletRequestCount   int64  `gorm:"column:wallet_request_count"`
-		WalletConsumerAmount int64  `gorm:"column:wallet_consumer_amount"`
-		WalletTokenCount     int64  `gorm:"column:wallet_token_count"`
-	}
-	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
-	err := platformdb.LogDB.Model(&auditschema.Log{}).
-		Select(groupColumn+` AS group_name, model_name,
-			COUNT(*) AS wallet_request_count,
-			COALESCE(SUM(quota), 0) AS wallet_consumer_amount,
-			COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS wallet_token_count`).
-		Where("type = ? AND created_at >= ? AND "+groupColumn+" IN ? AND other LIKE ? AND prompt_tokens + completion_tokens > 0", auditschema.LogTypeConsume, cutoff, names, walletBillingSourcePattern).
-		Group(groupColumn + ", model_name").Scan(&rows).Error
+	rows, err := auditprojection.QueryGroupConsumerMetrics(hours, names)
 	if err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
 		stats := result[row.GroupName]
-		stats.WalletRequestCount += row.WalletRequestCount
-		stats.WalletConsumerAmount += row.WalletConsumerAmount
-		stats.WalletTokenCount += row.WalletTokenCount
+		stats.WalletRequestCount += row.RequestCount
+		stats.WalletConsumerAmount += row.Quota
+		stats.WalletTokenCount += row.TokenCount
 		if strings.TrimSpace(row.ModelName) != "" {
 			if stats.ByModel == nil {
 				stats.ByModel = make(map[string]consumerAmountStats)
 			}
-			stats.ByModel[row.ModelName] = consumerAmountStats{TokenCount: row.WalletTokenCount, Amount: row.WalletConsumerAmount}
+			stats.ByModel[row.ModelName] = consumerAmountStats{TokenCount: row.TokenCount, Amount: row.Quota}
 		}
 		result[row.GroupName] = stats
 	}

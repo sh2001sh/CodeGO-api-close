@@ -74,6 +74,20 @@ func TestUserLogCountBoundsInputAndPreservesPageRows(t *testing.T) {
 	require.Empty(t, items)
 }
 
+func TestAdminLogCountBoundsInputAndPreservesPageRows(t *testing.T) {
+	db := setupLogQueryTestDB(t)
+	logs := make([]auditschema.Log, logSearchCountLimit+25)
+	for i := range logs {
+		logs[i] = auditschema.Log{UserId: i%3 + 1, Type: auditschema.LogTypeConsume, Group: "admin-test"}
+	}
+	require.NoError(t, db.CreateInBatches(logs, 200).Error)
+	items, total, err := ListAdminLogs(auditdomain.LogListQuery{PageSize: 20})
+	require.NoError(t, err)
+	require.EqualValues(t, logSearchCountLimit, total)
+	require.Len(t, items, 20)
+	require.Equal(t, "admin-test", items[0].Group)
+}
+
 func TestUsageLogQueriesDoNotMixUsersWithOverlappingNames(t *testing.T) {
 	db := setupLogQueryTestDB(t)
 	now := time.Now().Unix()

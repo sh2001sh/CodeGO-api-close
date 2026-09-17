@@ -49,6 +49,9 @@ func initResources() error {
 		platformobservability.FatalLog("failed to initialize default subscription plans: " + err.Error())
 		return err
 	}
+	if _, err := commerceapp.RepairRecentSubscriptionResetGroupBuyBonuses(); err != nil {
+		platformobservability.SysError("failed to repair subscription reset group-buy quota: " + err.Error())
+	}
 	if err := commerceapp.MigrateBlindBoxLegacyCredits(); err != nil {
 		platformobservability.FatalLog("failed to migrate legacy blind box credits: " + err.Error())
 		return err

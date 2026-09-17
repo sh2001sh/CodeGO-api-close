@@ -7,6 +7,7 @@ import (
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +50,7 @@ func GetLogByTokenID(tokenID int) ([]*auditschema.Log, error) {
 }
 
 func ListAdminLogs(query auditdomain.LogListQuery) ([]*auditschema.Log, int64, error) {
+	startedAt := time.Now()
 	var (
 		logs  []*auditschema.Log
 		total int64
@@ -81,19 +83,27 @@ func ListAdminLogs(query auditdomain.LogListQuery) ([]*auditschema.Log, int64, e
 		tx = tx.Where("logs.channel_id = ?", query.Channel)
 	}
 	tx = applyLogContainsFilter(tx, "logs."+logGroupColumn(), query.Group)
-	if err := tx.Model(&auditschema.Log{}).Count(&total).Error; err != nil {
+	countStartedAt := time.Now()
+	countRows := tx.Session(&gorm.Session{}).Model(&auditschema.Log{}).Select("1").Limit(logSearchCountLimit)
+	if err := platformdb.LogDB.Table("(?) AS limited_logs", countRows).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	countElapsed := time.Since(countStartedAt)
+	pageStartedAt := time.Now()
 	if err := tx.Order("logs.id desc").Limit(query.PageSize).Offset(query.StartIdx).Find(&logs).Error; err != nil {
 		return nil, 0, err
 	}
+	pageElapsed := time.Since(pageStartedAt)
+	enrichStartedAt := time.Now()
 	if err := attachChannelNames(logs); err != nil {
 		return logs, total, err
 	}
+	logSlowLogQuery("admin", query, len(logs), countElapsed, pageElapsed, time.Since(enrichStartedAt), time.Since(startedAt))
 	return logs, total, nil
 }
 
 func ListUserLogs(userID int, query auditdomain.LogListQuery) ([]*auditschema.Log, int64, error) {
+	startedAt := time.Now()
 	var (
 		logs  []*auditschema.Log
 		total int64
@@ -121,18 +131,36 @@ func ListUserLogs(userID int, query auditdomain.LogListQuery) ([]*auditschema.Lo
 	tx = applyLogContainsFilter(tx, "logs."+logGroupColumn(), query.Group)
 	// LIMIT on COUNT(*) limits the one aggregate row, not the scanned logs.
 	// Bound the input relation instead, matching the existing search limit.
+	countStartedAt := time.Now()
 	countRows := tx.Session(&gorm.Session{}).Model(&auditschema.Log{}).Select("1").Limit(logSearchCountLimit)
 	if err := platformdb.LogDB.Table("(?) AS limited_logs", countRows).Count(&total).Error; err != nil {
 		platformobservability.SysError("failed to count user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
 	}
+	countElapsed := time.Since(countStartedAt)
+	pageStartedAt := time.Now()
 	if err := tx.Order("logs.id desc").Limit(query.PageSize).Offset(query.StartIdx).Find(&logs).Error; err != nil {
 		platformobservability.SysError("failed to search user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
 	}
+	pageElapsed := time.Since(pageStartedAt)
 
 	formatUserLogs(logs, query.StartIdx)
+	logSlowLogQuery("user", query, len(logs), countElapsed, pageElapsed, 0, time.Since(startedAt))
 	return logs, total, nil
+}
+
+func logSlowLogQuery(scope string, query auditdomain.LogListQuery, rows int, countElapsed, pageElapsed, enrichElapsed, totalElapsed time.Duration) {
+	if totalElapsed < 500*time.Millisecond {
+		return
+	}
+	filtersPresent := query.LogType != auditschema.LogTypeUnknown || query.UserID > 0 || strings.TrimSpace(query.ModelName) != "" ||
+		strings.TrimSpace(query.Username) != "" || strings.TrimSpace(query.TokenName) != "" || strings.TrimSpace(query.RequestID) != "" ||
+		strings.TrimSpace(query.UpstreamRequestID) != "" || query.StartTimestamp != 0 || query.EndTimestamp != 0 || query.Channel != 0 || strings.TrimSpace(query.Group) != ""
+	platformobservability.SysLog(fmt.Sprintf(
+		"slow log query scope=%s count_ms=%d page_ms=%d enrich_ms=%d rows=%d filters_present=%t total_ms=%d",
+		scope, countElapsed.Milliseconds(), pageElapsed.Milliseconds(), enrichElapsed.Milliseconds(), rows, filtersPresent, totalElapsed.Milliseconds(),
+	))
 }
 
 func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {

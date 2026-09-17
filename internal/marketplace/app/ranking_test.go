@@ -2,12 +2,11 @@ package app
 
 import (
 	"testing"
-	"time"
 
 	"github.com/glebarez/sqlite"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -31,20 +30,20 @@ func TestRankingVersionFitsPersistedColumn(t *testing.T) {
 }
 
 func TestChannelConsumerStatsByChannelAcrossGroups(t *testing.T) {
-	originalLogDB := platformdb.LogDB
-	t.Cleanup(func() { platformdb.LogDB = originalLogDB })
+	originalDB, originalLogDB, originalMaster := platformdb.DB, platformdb.LogDB, platformconfig.IsMasterNode
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.LogDB, platformconfig.IsMasterNode = originalDB, originalLogDB, originalMaster
+	})
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
-	platformdb.LogDB = db
-	require.NoError(t, db.AutoMigrate(&auditschema.Log{}))
-	now := time.Now().Unix()
-	require.NoError(t, db.Create([]auditschema.Log{
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ModelName: "model-a", ChannelId: 501, Quota: 100, PromptTokens: 800, CompletionTokens: 200, Other: `{"billing_source":"wallet"}`},
-		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "plus", ModelName: "model-b", ChannelId: 501, Quota: 300, PromptTokens: 1500, CompletionTokens: 500, Other: `{ "billing_source" : "wallet" }`},
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "pro", ModelName: "model-a", ChannelId: 501, Quota: 500, PromptTokens: 1000, Other: `{"billing_source":"subscription"}`},
-		{UserId: 3, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ModelName: "model-a", ChannelId: 502, Quota: 200, Other: `{"billing_source":"subscription"}`},
-		{UserId: 4, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "default", ModelName: "model-b", ChannelId: 502, Quota: 700, Other: `{}`},
-	}).Error)
+	platformdb.DB, platformdb.LogDB = db, db
+	platformconfig.IsMasterNode = true
+	require.NoError(t, auditprojection.EnsureSchema())
+	auditprojection.RecordChannelConsumerMetric(501, 1, "default", "model-a", 100, 1000, "wallet")
+	auditprojection.RecordChannelConsumerMetric(501, 2, "plus", "model-b", 300, 2000, "wallet")
+	auditprojection.RecordChannelConsumerMetric(501, 1, "pro", "model-a", 500, 1000, "subscription")
+	auditprojection.RecordChannelConsumerMetric(502, 3, "default", "model-a", 200, 1000, "subscription")
+	auditprojection.RecordChannelConsumerMetric(502, 4, "default", "model-b", 700, 1000, "")
 
 	stats := channelConsumerStatsByChannel([]int{501, 502}, 24)
 	require.EqualValues(t, 2, stats[501].IndependentConsumers)
@@ -60,25 +59,22 @@ func TestChannelConsumerStatsByChannelAcrossGroups(t *testing.T) {
 }
 
 func TestOfficialWalletConsumerStatsSeparatesModelsAndExcludesSubscriptions(t *testing.T) {
-	originalLogDB := platformdb.LogDB
+	originalDB, originalLogDB, originalMaster := platformdb.DB, platformdb.LogDB, platformconfig.IsMasterNode
 	originalPostgreSQL := platformdb.UsingPostgreSQL
 	t.Cleanup(func() {
-		platformdb.LogDB = originalLogDB
+		platformdb.DB, platformdb.LogDB, platformconfig.IsMasterNode = originalDB, originalLogDB, originalMaster
 		platformdb.UsingPostgreSQL = originalPostgreSQL
 	})
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
-	platformdb.LogDB = db
+	platformdb.DB, platformdb.LogDB, platformconfig.IsMasterNode = db, db, true
 	platformdb.UsingPostgreSQL = false
-	require.NoError(t, db.AutoMigrate(&auditschema.Log{}))
-	now := time.Now().Unix()
-	require.NoError(t, db.Create([]auditschema.Log{
-		{UserId: 1, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 100, PromptTokens: 1000, Other: `{"billing_source":"wallet"}`},
-		{UserId: 2, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 300, PromptTokens: 3000, Other: `{"billing_source":"wallet"}`},
-		{UserId: 3, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-b", Quota: 900, PromptTokens: 2500, CompletionTokens: 500, Other: `{"billing_source":"wallet"}`},
-		{UserId: 4, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-a", ModelName: "model-a", Quota: 5000, PromptTokens: 1000, Other: `{"billing_source":"subscription"}`},
-		{UserId: 5, CreatedAt: now, Type: auditschema.LogTypeConsume, Group: "official-b", ModelName: "model-a", Quota: 700, PromptTokens: 1400, Other: `{"billing_source":"wallet"}`},
-	}).Error)
+	require.NoError(t, auditprojection.EnsureSchema())
+	auditprojection.RecordChannelConsumerMetric(1, 1, "official-a", "model-a", 100, 1000, "wallet")
+	auditprojection.RecordChannelConsumerMetric(1, 2, "official-a", "model-a", 300, 3000, "wallet")
+	auditprojection.RecordChannelConsumerMetric(1, 3, "official-a", "model-b", 900, 3000, "wallet")
+	auditprojection.RecordChannelConsumerMetric(1, 4, "official-a", "model-a", 5000, 1000, "subscription")
+	auditprojection.RecordChannelConsumerMetric(2, 5, "official-b", "model-a", 700, 1400, "wallet")
 	officialWalletStatsCache.Lock()
 	officialWalletStatsCache.entries = nil
 	officialWalletStatsCache.Unlock()

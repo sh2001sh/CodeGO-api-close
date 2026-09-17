@@ -9,13 +9,11 @@ import (
 	"time"
 
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
-	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"golang.org/x/sync/singleflight"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -27,7 +25,6 @@ var rankingRefreshTriggers struct {
 }
 
 const rankingRefreshTriggerCooldown = 30 * time.Second
-const walletBillingSourcePattern = `%"billing_source"%:%"wallet"%`
 
 func allowRankingRefreshTrigger(key string) bool {
 	now := time.Now()
@@ -215,6 +212,9 @@ func buildRanking(groups []marketplaceschema.Group, channels map[string]marketpl
 	// Percentiles are already aggregated from persisted and active histograms.
 	// Re-reading 24 hours of raw payloads here stalls unrelated gateway queries.
 	consumerStats := channelConsumerStatsByChannel(channelIDs, hours)
+	if previous, loadErr := loadRankingSnapshots(groups, hours); loadErr == nil {
+		preservePreviousConsumerStats(groups, channels, consumerStats, previous)
+	}
 	snapshots := scoreMarketplaceGroups(groups, channels, totals, consumerStats, hours)
 	if err := persistRankingSnapshots(snapshots); err != nil {
 		return nil, err
@@ -224,6 +224,33 @@ func buildRanking(groups []marketplaceschema.Group, channels map[string]marketpl
 		result[snapshot.GroupID] = snapshot
 	}
 	return result, nil
+}
+
+func preservePreviousConsumerStats(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, stats map[int]channelConsumerStats, previous map[string]marketplaceschema.RankingSnapshot) {
+	for _, group := range groups {
+		channelID := channels[group.ChannelID].InternalChannelID
+		prior, ok := previous[group.ID]
+		if channelID == nil || *channelID <= 0 || !ok {
+			continue
+		}
+		current := stats[*channelID]
+		if current.IndependentConsumers == 0 {
+			current.IndependentConsumers = prior.IndependentConsumers
+		}
+		if current.WalletTokenCount == 0 && prior.AvgConsumerAmount > 0 {
+			// Aggregated rows start filling after this release. Preserve the last
+			// calculated display values during that warm-up instead of showing zero.
+			current.WalletConsumerAmount = prior.AvgConsumerAmount
+			current.WalletTokenCount = 1_000_000
+			for model, amount := range decodeConsumerAmountsByModel(prior.AvgConsumerAmountByModel) {
+				if current.ByModel == nil {
+					current.ByModel = make(map[string]consumerAmountStats)
+				}
+				current.ByModel[model] = consumerAmountStats{Amount: amount, TokenCount: 1_000_000}
+			}
+		}
+		stats[*channelID] = current
+	}
 }
 
 func marketplaceInternalChannelIDs(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel) []int {
@@ -303,60 +330,37 @@ func (stats channelConsumerStats) averageConsumerAmountsByModel() map[string]int
 
 func channelConsumerStatsByChannel(channelIDs []int, hours int) map[int]channelConsumerStats {
 	result := make(map[int]channelConsumerStats)
-	if len(channelIDs) == 0 || platformdb.LogDB == nil {
+	if len(channelIDs) == 0 {
 		return result
 	}
-	type row struct {
-		ChannelID            int    `gorm:"column:channel_id"`
-		ModelName            string `gorm:"column:model_name"`
-		IndependentConsumers int64  `gorm:"column:independent_consumers"`
-		WalletRequestCount   int64  `gorm:"column:wallet_request_count"`
-		WalletConsumerAmount int64  `gorm:"column:wallet_consumer_amount"`
-		WalletTokenCount     int64  `gorm:"column:wallet_token_count"`
+	rows, err := auditprojection.QueryChannelConsumerMetrics(hours, channelIDs)
+	if err != nil {
+		platformobservability.SysError(fmt.Sprintf("query marketplace wallet consumer metrics: %s", err.Error()))
+		return result
 	}
-	var rows []row
-	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
-	// Consume logs store the settled billing source in Other. Keep the
-	// independent-consumer threshold based on all successful requests, while
-	// the displayed normalized price only reflects quota actually deducted
-	// from the user's wallet. Subscription quota is never presented as an
-	// out-of-pocket cost, and zero-token task records cannot distort the rate.
-	base := platformdb.LogDB.Model(&auditschema.Log{}).
-		Where("type = ? AND created_at >= ? AND channel_id IN ?", auditschema.LogTypeConsume, cutoff, channelIDs)
-	channelRows := base.Session(&gorm.Session{}).
-		Select("channel_id, COUNT(DISTINCT user_id) AS independent_consumers").
-		Group("channel_id")
-	modelRows := base.Session(&gorm.Session{}).
-		Select(`channel_id, model_name,
-			COUNT(*) AS wallet_request_count,
-			COALESCE(SUM(quota), 0) AS wallet_consumer_amount,
-			COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS wallet_token_count`).
-		Where("other LIKE ? AND prompt_tokens + completion_tokens > 0", walletBillingSourcePattern).
-		Group("channel_id, model_name")
-	if err := platformdb.LogDB.Table("(?) AS channel_stats", channelRows).
-		Select(`channel_stats.channel_id, channel_stats.independent_consumers,
-			COALESCE(model_stats.model_name, '') AS model_name,
-			COALESCE(model_stats.wallet_request_count, 0) AS wallet_request_count,
-			COALESCE(model_stats.wallet_consumer_amount, 0) AS wallet_consumer_amount,
-			COALESCE(model_stats.wallet_token_count, 0) AS wallet_token_count`).
-		Joins("LEFT JOIN (?) AS model_stats ON model_stats.channel_id = channel_stats.channel_id", modelRows).
-		Scan(&rows).Error; err != nil {
-		platformobservability.SysError(fmt.Sprintf("aggregate marketplace wallet consumer stats: %s", err.Error()))
+	independentConsumers, err := auditprojection.QueryChannelIndependentConsumers(hours, channelIDs)
+	if err != nil {
+		platformobservability.SysError(fmt.Sprintf("query marketplace independent consumers: %s", err.Error()))
 		return result
 	}
 	for _, item := range rows {
 		stats := result[item.ChannelID]
-		stats.IndependentConsumers = item.IndependentConsumers
-		stats.WalletRequestCount += item.WalletRequestCount
-		stats.WalletConsumerAmount += item.WalletConsumerAmount
-		stats.WalletTokenCount += item.WalletTokenCount
-		if strings.TrimSpace(item.ModelName) != "" && item.WalletTokenCount > 0 {
+		stats.IndependentConsumers = independentConsumers[item.ChannelID]
+		stats.WalletRequestCount += item.RequestCount
+		stats.WalletConsumerAmount += item.Quota
+		stats.WalletTokenCount += item.TokenCount
+		if strings.TrimSpace(item.ModelName) != "" && item.TokenCount > 0 {
 			if stats.ByModel == nil {
 				stats.ByModel = make(map[string]consumerAmountStats)
 			}
-			stats.ByModel[item.ModelName] = consumerAmountStats{TokenCount: item.WalletTokenCount, Amount: item.WalletConsumerAmount}
+			stats.ByModel[item.ModelName] = consumerAmountStats{TokenCount: item.TokenCount, Amount: item.Quota}
 		}
 		result[item.ChannelID] = stats
+	}
+	for channelID, consumers := range independentConsumers {
+		stats := result[channelID]
+		stats.IndependentConsumers = consumers
+		result[channelID] = stats
 	}
 	return result
 }

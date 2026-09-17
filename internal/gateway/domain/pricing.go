@@ -24,6 +24,7 @@ type Pricing struct {
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
 	PricingVersion         string                  `json:"pricing_version,omitempty"`
+	PricingAvailable       bool                    `json:"pricing_available"`
 }
 
 // PricingVendor is the public vendor metadata included with pricing results.

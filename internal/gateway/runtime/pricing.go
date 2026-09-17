@@ -231,9 +231,7 @@ func marketplaceChannelModelPrice(c *gin.Context, modelName string) (marketplace
 	for configuredModel, price := range prices {
 		if strings.EqualFold(configuredModel, strings.TrimSpace(modelName)) {
 			if price.EffectiveBillingMode() != marketplacedomain.ChannelBillingModePerCall {
-				_, hasRatio, _ := gatewaystore.GetModelRatio(modelName)
-				_, hasPrice := gatewaystore.GetModelPrice(modelName, false)
-				if hasRatio || hasPrice || gatewaystore.GetBillingMode(modelName) == gatewaystore.BillingModeTieredExpr {
+				if gatewaystore.HasExplicitModelBillingConfig(modelName) {
 					return marketplacedomain.ChannelModelPrice{}, false
 				}
 			}

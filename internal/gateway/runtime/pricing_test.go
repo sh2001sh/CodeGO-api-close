@@ -11,6 +11,7 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	platformops "github.com/sh2001sh/new-api/internal/platform/opssettings"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
@@ -137,6 +138,33 @@ func TestMarketplaceChannelPriceAppliesOnlyFromCurrentRequestContext(t *testing.
 	otherInfo := &RelayInfo{OriginModelName: "channel-only-model", UsingGroup: "default", UserGroup: "default"}
 	_, err = ModelPriceHelper(otherContext, otherInfo, 1000, &types.TokenCountMeta{MaxTokens: 1000})
 	require.ErrorContains(t, err, "价格")
+}
+
+func TestMarketplaceChannelPriceOverridesOnlySelfUseFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalSelfUse := platformops.IsSelfUseModeEnabled()
+	platformops.SetSelfUseModeEnabled(true)
+	t.Cleanup(func() { platformops.SetSelfUseModeEnabled(originalSelfUse) })
+
+	const model = "market-owner-priced-self-use-only-model"
+	require.True(t, gatewaystore.HasModelBillingConfig(model))
+	require.False(t, gatewaystore.HasExplicitModelBillingConfig(model))
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceGroupID, "market-owner-priced-group")
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceMultiplier, 1.0)
+	httpctx.SetContextKey(ctx, constant.ContextKeyMarketplaceModelPrices, map[string]marketplacedomain.ChannelModelPrice{
+		model: {InputPricePerMillion: 2, OutputPricePerMillion: 8},
+	})
+	info := &RelayInfo{OriginModelName: model, UsingGroup: "market_dynamic", UserGroup: "default"}
+
+	price, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 1000})
+
+	require.NoError(t, err)
+	require.False(t, price.UsePrice)
+	require.InDelta(t, 1.0, price.ModelRatio, 0.000001)
+	require.InDelta(t, 4.0, price.CompletionRatio, 0.000001)
 }
 
 func TestMarketplaceChannelTokenPriceSupportsCacheOverrides(t *testing.T) {

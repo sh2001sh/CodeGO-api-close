@@ -230,7 +230,7 @@ function buildSitePricedModelSet(
 ): Set<string> {
   const result = new Set(
     models
-      .filter((model) => model.pricing_available !== false)
+      .filter((model) => model.pricing_available === true)
       .map((model) => modelKey(model.model_name))
   )
   for (const model of pricedModels) result.add(modelKey(model))

@@ -38,6 +38,7 @@ func loadPricedModelDetails(pricing []gatewaydomain.Pricing) []gatewaydomain.Pri
 		}
 		item.EnableGroup = []string{}
 		item.PricingVersion = pricingVersion
+		item.PricingAvailable = gatewaystore.HasExplicitModelBillingConfig(item.ModelName)
 		byName[key] = item
 	}
 	for _, modelName := range gatewaystore.GetConfiguredModelBillingNames() {
@@ -65,9 +66,10 @@ func loadPricedModelDetails(pricing []gatewaydomain.Pricing) []gatewaydomain.Pri
 
 func configuredModelBillingDetail(modelName string) (gatewaydomain.Pricing, bool) {
 	detail := gatewaydomain.Pricing{
-		ModelName:      modelName,
-		EnableGroup:    []string{},
-		PricingVersion: pricingVersion,
+		ModelName:        modelName,
+		EnableGroup:      []string{},
+		PricingVersion:   pricingVersion,
+		PricingAvailable: true,
 	}
 	if price, ok := gatewaystore.GetModelPrice(modelName, false); ok {
 		detail.QuotaType = 1
@@ -114,7 +116,7 @@ func loadPricedModelNames(pricing []gatewaydomain.Pricing) []string {
 	seen := make(map[string]struct{}, len(pricing))
 	result := make([]string, 0, len(pricing))
 	for _, item := range pricing {
-		if item.ModelName == "" {
+		if item.ModelName == "" || !gatewaystore.HasExplicitModelBillingConfig(item.ModelName) {
 			continue
 		}
 		key := strings.ToLower(strings.TrimSpace(item.ModelName))

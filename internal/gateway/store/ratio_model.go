@@ -421,6 +421,21 @@ func GetModelRatio(name string) (float64, bool, string) {
 	return ratio, true, name
 }
 
+// HasExplicitModelRatio reports whether the administrator configured a ratio
+// for this model. Unlike GetModelRatio, it does not treat the self-use-mode
+// fallback ratio as site pricing.
+func HasExplicitModelRatio(name string) bool {
+	name = FormatMatchingModelName(name)
+	if _, ok := modelRatioMap.Get(name); ok {
+		return true
+	}
+	if strings.HasSuffix(name, CompactModelSuffix) {
+		_, ok := modelRatioMap.Get(CompactWildcardModelKey)
+		return ok
+	}
+	return false
+}
+
 func DefaultModelRatio2JSONString() string {
 	jsonBytes, err := platformencoding.Marshal(defaultModelRatio)
 	if err != nil {

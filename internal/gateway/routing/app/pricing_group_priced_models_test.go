@@ -32,6 +32,7 @@ func TestLoadPricedModelDetailsIncludesConfigOnlyModel(t *testing.T) {
 		require.Equal(t, 0.5, detail.ModelRatio)
 		require.Greater(t, detail.CompletionRatio, float64(0))
 		require.Empty(t, detail.EnableGroup)
+		require.True(t, detail.PricingAvailable)
 		return
 	}
 	t.Fatal("claude-fable-5 billing details not found")
@@ -57,4 +58,8 @@ func TestLoadPricedModelDetailsPreservesMetadataWithoutInternalGroups(t *testing
 	require.NotNil(t, found.CacheRatio)
 	require.Equal(t, 0.1, *found.CacheRatio)
 	require.Empty(t, found.EnableGroup)
+	require.False(t, found.PricingAvailable)
+	require.NotContains(t, loadPricedModelNames([]gatewaydomain.Pricing{{
+		ModelName: "market-only-model",
+	}}), "market-only-model")
 }

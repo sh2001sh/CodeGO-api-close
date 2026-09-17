@@ -134,6 +134,24 @@ func HasModelBillingConfig(model string) bool {
 	return ok && strings.TrimSpace(expr) != ""
 }
 
+// HasExplicitModelBillingConfig reports whether the administrator configured
+// a fixed price, ratio, or valid tiered expression for a model. It deliberately
+// excludes the synthetic fallback used by self-use mode so marketplace owners
+// can price models that the site has not priced.
+func HasExplicitModelBillingConfig(model string) bool {
+	if _, ok := GetModelPrice(model, false); ok {
+		return true
+	}
+	if HasExplicitModelRatio(model) {
+		return true
+	}
+	if GetBillingMode(model) != BillingModeTieredExpr {
+		return false
+	}
+	expr, ok := GetBillingExpr(model)
+	return ok && strings.TrimSpace(expr) != ""
+}
+
 // GetConfiguredModelBillingNames returns models explicitly covered by a
 // site-level fixed, ratio, or valid tiered-expression billing rule.
 func GetConfiguredModelBillingNames() []string {

@@ -283,6 +283,7 @@ func updatePricing() {
 			ModelName:              modelName,
 			EnableGroup:            groups.Items(),
 			SupportedEndpointTypes: modelSupportEndpointTypes[modelName],
+			PricingAvailable:       HasExplicitModelBillingConfig(modelName),
 		}
 		if meta, ok := metaMap[modelName]; ok {
 			if meta.Status != 1 {

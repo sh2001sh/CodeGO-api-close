@@ -44,8 +44,18 @@ func ListRoutePools(ownerUserID int) ([]RoutePoolSummary, error) {
 	if err := platformdb.DB.Where("pool_id IN ?", poolIDs).Order("priority asc, id asc").Find(&members).Error; err != nil {
 		return nil, err
 	}
+	selected := make(map[string]int, len(members))
+	for _, member := range members {
+		selected[member.GroupID] = member.Priority
+	}
+	if err := pruneInactiveRoutePoolGroups(selected); err != nil {
+		return nil, err
+	}
 	selectedByPool := make(map[string][]marketplaceschema.RoutePoolMember, len(pools))
 	for _, member := range members {
+		if _, ok := selected[member.GroupID]; !ok {
+			continue
+		}
 		selectedByPool[member.PoolID] = append(selectedByPool[member.PoolID], member)
 	}
 	officialItems := loadOfficialAutoRouteItemsSummary(ownerUserID)
@@ -355,6 +365,9 @@ func loadRoutePool(ownerUserID int, poolID string) (marketplaceschema.RoutePool,
 		if member.Priority <= 0 {
 			selected[member.GroupID] = index + 1
 		}
+	}
+	if err := pruneInactiveRoutePoolGroups(selected); err != nil {
+		return pool, nil, err
 	}
 	return pool, selected, nil
 }

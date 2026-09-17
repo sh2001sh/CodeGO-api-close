@@ -543,6 +543,9 @@ func loadAutoRoutePoolSelection(ownerUserID int) (map[string]int, error) {
 		}
 		selected[member.GroupID] = priority
 	}
+	if err := pruneInactiveRoutePoolGroups(selected); err != nil {
+		return nil, err
+	}
 	return selected, nil
 }
 

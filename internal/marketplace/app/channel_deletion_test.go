@@ -22,6 +22,7 @@ func TestOwnerCanOnlyDeleteOwnMarketplaceChannel(t *testing.T) {
 		&marketplaceschema.RankingSnapshot{},
 		&marketplaceschema.Settlement{},
 		&marketplaceschema.AutoRoutePoolMember{},
+		&marketplaceschema.RoutePoolMember{},
 	))
 
 	internal := gatewayschema.Channel{Key: "encrypted", Status: 1, Models: "gpt-5", Group: "market-owned"}
@@ -45,6 +46,7 @@ func TestOwnerCanOnlyDeleteOwnMarketplaceChannel(t *testing.T) {
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&group).Error)
 	require.NoError(t, db.Create(&marketplaceschema.AutoRoutePoolMember{OwnerUserID: 7, GroupID: group.ID, Priority: 1}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePoolMember{PoolID: "saved-pool", GroupID: group.ID, Priority: 1}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.RankingSnapshot{GroupID: group.ID, WindowHours: 24, RankingVersion: rankingVersion}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.VerificationRun{ID: "verify-delete", ChannelID: channel.ID, Status: marketplacedomain.VerificationPassed}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.Settlement{ID: "settlement-delete", RequestID: "request-delete", GroupID: group.ID, OwnerUserID: 42, ConsumerUserID: 7, Status: "released"}).Error)
@@ -60,6 +62,7 @@ func TestOwnerCanOnlyDeleteOwnMarketplaceChannel(t *testing.T) {
 	require.ErrorIs(t, db.First(&gatewayschema.Channel{}, internal.Id).Error, gorm.ErrRecordNotFound)
 	require.ErrorIs(t, db.First(&gatewayschema.Ability{}, "channel_id = ?", internal.Id).Error, gorm.ErrRecordNotFound)
 	require.ErrorIs(t, db.First(&marketplaceschema.AutoRoutePoolMember{}, "group_id = ?", group.ID).Error, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, db.First(&marketplaceschema.RoutePoolMember{}, "group_id = ?", group.ID).Error, gorm.ErrRecordNotFound)
 	require.ErrorIs(t, db.First(&marketplaceschema.RankingSnapshot{}, "group_id = ?", group.ID).Error, gorm.ErrRecordNotFound)
 	require.NoError(t, db.First(&marketplaceschema.VerificationRun{}, "channel_id = ?", channel.ID).Error)
 	require.NoError(t, db.First(&marketplaceschema.Settlement{}, "group_id = ?", group.ID).Error)
@@ -74,7 +77,7 @@ func TestAdminCanDeleteAnotherOwnersMarketplaceChannel(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(
 		&marketplaceschema.Channel{}, &marketplaceschema.Group{},
-		&marketplaceschema.RankingSnapshot{}, &marketplaceschema.AutoRoutePoolMember{},
+		&marketplaceschema.RankingSnapshot{}, &marketplaceschema.AutoRoutePoolMember{}, &marketplaceschema.RoutePoolMember{},
 	))
 	channel := marketplaceschema.Channel{
 		ID: "223456789012", OwnerUserID: 99, ProviderType: "anthropic",
@@ -96,6 +99,7 @@ func TestDeletingMarketplaceChannelKeepsPendingEarningsFrozen(t *testing.T) {
 		&marketplaceschema.Group{},
 		&marketplaceschema.Settlement{},
 		&marketplaceschema.AutoRoutePoolMember{},
+		&marketplaceschema.RoutePoolMember{},
 		&marketplaceschema.RankingSnapshot{},
 	))
 	channel := marketplaceschema.Channel{

@@ -32,7 +32,7 @@ func deleteMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", channel.ID).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("group_id = ?", group.ID).Delete(&marketplaceschema.AutoRoutePoolMember{}).Error; err != nil {
+		if err := removeGroupFromRoutePools(tx, group.ID); err != nil {
 			return err
 		}
 		if err := tx.Where("group_id = ?", group.ID).Delete(&marketplaceschema.RankingSnapshot{}).Error; err != nil {

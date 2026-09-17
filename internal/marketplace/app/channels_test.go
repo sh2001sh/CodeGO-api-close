@@ -1,6 +1,7 @@
 package app
 
 import (
+	"gorm.io/gorm"
 	"testing"
 	"time"
 
@@ -21,6 +22,8 @@ func TestPauseAdminChannelKeepsEarnings(t *testing.T) {
 		&marketplaceschema.Channel{},
 		&marketplaceschema.Group{},
 		&marketplaceschema.Settlement{},
+		&marketplaceschema.AutoRoutePoolMember{},
+		&marketplaceschema.RoutePoolMember{},
 	))
 	channel := marketplaceschema.Channel{
 		ID: "pause-earnings-channel", OwnerUserID: 42, ProviderType: "openai_compatible",
@@ -30,6 +33,8 @@ func TestPauseAdminChannelKeepsEarnings(t *testing.T) {
 	group := autoRouteTestGroup("pause-earnings-group", channel.ID, channel.OwnerUserID, 1)
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.AutoRoutePoolMember{OwnerUserID: 7, GroupID: group.ID, Priority: 1}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePoolMember{PoolID: "saved-pool", GroupID: group.ID, Priority: 1}).Error)
 	require.NoError(t, db.Create([]marketplaceschema.Settlement{
 		{RequestID: "pause-pending", GroupID: group.ID, OwnerUserID: 42, OwnerNetAmount: 100, Status: "pending"},
 		{RequestID: "pause-released", GroupID: group.ID, OwnerUserID: 42, OwnerNetAmount: 200, Status: "released"},
@@ -45,6 +50,8 @@ func TestPauseAdminChannelKeepsEarnings(t *testing.T) {
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
 	require.Equal(t, marketplacedomain.LifecycleSuspended, channel.Status)
 	require.Equal(t, marketplacedomain.LifecycleSuspended, group.LifecycleStatus)
+	require.ErrorIs(t, db.First(&marketplaceschema.AutoRoutePoolMember{}, "group_id = ?", group.ID).Error, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, db.First(&marketplaceschema.RoutePoolMember{}, "group_id = ?", group.ID).Error, gorm.ErrRecordNotFound)
 }
 
 func TestPauseAdminChannelDisablesLinkedGatewayChannel(t *testing.T) {
@@ -54,6 +61,8 @@ func TestPauseAdminChannelDisablesLinkedGatewayChannel(t *testing.T) {
 		&gatewayschema.Ability{},
 		&marketplaceschema.Channel{},
 		&marketplaceschema.Group{},
+		&marketplaceschema.AutoRoutePoolMember{},
+		&marketplaceschema.RoutePoolMember{},
 	))
 	internal := gatewayschema.Channel{Id: 901, Key: "test-key", Status: constant.ChannelStatusEnabled}
 	channel := marketplaceschema.Channel{
@@ -73,6 +82,26 @@ func TestPauseAdminChannelDisablesLinkedGatewayChannel(t *testing.T) {
 	require.NoError(t, PauseAdminChannel(channel.ID, false))
 	require.NoError(t, db.First(&internal, internal.Id).Error)
 	require.Equal(t, constant.ChannelStatusEnabled, internal.Status)
+}
+
+func TestOwnerPauseRemovesSavedPoolMembersWithoutRestoringThemOnResume(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{},
+		&marketplaceschema.AutoRoutePoolMember{}, &marketplaceschema.RoutePoolMember{}))
+	channel := marketplaceschema.Channel{ID: "owner-pause-channel", OwnerUserID: 42, Status: marketplacedomain.LifecycleActive}
+	group := autoRouteTestGroup("owner-pause-group", channel.ID, channel.OwnerUserID, 1)
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+	require.NoError(t, db.Create(&marketplaceschema.AutoRoutePoolMember{OwnerUserID: 7, GroupID: group.ID, Priority: 1}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.RoutePoolMember{PoolID: "saved", GroupID: group.ID, Priority: 1}).Error)
+
+	require.NoError(t, PauseOwnerChannel(42, channel.ID, true))
+	require.NoError(t, PauseOwnerChannel(42, channel.ID, false))
+	var autoCount, namedCount int64
+	require.NoError(t, db.Model(&marketplaceschema.AutoRoutePoolMember{}).Where("group_id = ?", group.ID).Count(&autoCount).Error)
+	require.NoError(t, db.Model(&marketplaceschema.RoutePoolMember{}).Where("group_id = ?", group.ID).Count(&namedCount).Error)
+	require.Zero(t, autoCount)
+	require.Zero(t, namedCount)
 }
 
 func TestListOwnerChannelsIncludesIncomeSummary(t *testing.T) {

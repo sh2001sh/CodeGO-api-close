@@ -252,7 +252,13 @@ func PauseOwnerChannel(ownerUserID int, channelID string, paused bool) error {
 		if err := tx.Model(channel).Update("status", status).Error; err != nil {
 			return err
 		}
-		return tx.Model(group).Update("lifecycle_status", status).Error
+		if err := tx.Model(group).Update("lifecycle_status", status).Error; err != nil {
+			return err
+		}
+		if paused {
+			return removeGroupFromRoutePools(tx, group.ID)
+		}
+		return nil
 	})
 	if err == nil {
 		err = syncPausedMarketplaceChannel(channel, paused)
@@ -276,7 +282,13 @@ func PauseAdminChannel(channelID string, paused bool) error {
 		if err := tx.Model(channel).Update("status", status).Error; err != nil {
 			return err
 		}
-		return tx.Model(group).Update("lifecycle_status", status).Error
+		if err := tx.Model(group).Update("lifecycle_status", status).Error; err != nil {
+			return err
+		}
+		if paused {
+			return removeGroupFromRoutePools(tx, group.ID)
+		}
+		return nil
 	})
 	if err == nil {
 		err = syncPausedMarketplaceChannel(channel, paused)

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -414,16 +415,18 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		upstreamStarted = true
 		gatewayroutingapp.BeginAutoGroupAttempt(c, relayInfo.OriginModelName)
 
-		switch relayFormat {
-		case types.RelayFormatOpenAIRealtime:
-			newAPIError = gatewayexecutionapp.ExecuteRealtimeRelay(c, relayInfo)
-		case types.RelayFormatClaude:
-			newAPIError = gatewayexecutionapp.ExecuteClaudeRelay(c, relayInfo)
-		case types.RelayFormatGemini:
-			newAPIError = geminiRelayHandler(c, relayInfo)
-		default:
-			newAPIError = relayHandler(c, relayInfo)
-		}
+		newAPIError = executeRelayAttempt(c, func() *types.NewAPIError {
+			switch relayFormat {
+			case types.RelayFormatOpenAIRealtime:
+				return gatewayexecutionapp.ExecuteRealtimeRelay(c, relayInfo)
+			case types.RelayFormatClaude:
+				return gatewayexecutionapp.ExecuteClaudeRelay(c, relayInfo)
+			case types.RelayFormatGemini:
+				return geminiRelayHandler(c, relayInfo)
+			default:
+				return relayHandler(c, relayInfo)
+			}
+		})
 		gatewayroutingapp.EndAutoGroupAttempt(c)
 		releaseChannelConcurrency()
 		if releaseFaultDomainSlot != nil {
@@ -486,4 +489,28 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		retryLogStr := fmt.Sprintf("retry channels: %s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
 	}
+}
+
+// executeRelayAttempt gives each selected channel its own cancellation scope.
+// Cancelling it before the retry loop advances makes net/http tear down the
+// previous transport instead of allowing an abandoned stream to keep running
+// while another channel starts serving the same downstream request.
+func executeRelayAttempt(c *gin.Context, execute func() *types.NewAPIError) *types.NewAPIError {
+	if execute == nil {
+		return nil
+	}
+	if c == nil || c.Request == nil {
+		return execute()
+	}
+
+	parentRequest := c.Request
+	attemptCtx, cancelAttempt := context.WithCancel(parentRequest.Context())
+	c.Request = parentRequest.WithContext(attemptCtx)
+	defer func() {
+		cancelAttempt()
+		// Preserve request mutations made by the relay while restoring the
+		// downstream lifetime for the next routing attempt.
+		c.Request = c.Request.WithContext(parentRequest.Context())
+	}()
+	return execute()
 }

@@ -59,6 +59,37 @@ func TestDoAPIRequestPropagatesClientCancellationToUpstream(t *testing.T) {
 	}
 }
 
+func TestDoAPIRequestCancelsActiveUpstreamStreamAfterClientDisconnect(t *testing.T) {
+	stopped := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: first\n\n")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+		close(stopped)
+	}))
+	defer server.Close()
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	requestCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(requestCtx)
+	resp, err := DoAPIRequest(contextAwareRequestAdaptor{url: server.URL}, ctx,
+		&relaycommon.RelayInfo{IsStream: true, RelayMode: gatewaycontract.RelayModeChatCompletions, ChannelMeta: &relaycommon.ChannelMeta{}}, strings.NewReader("{}"))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	first := make([]byte, len("data: first\n\n"))
+	_, err = io.ReadFull(resp.Body, first)
+	require.NoError(t, err)
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("active upstream stream continued after client disconnect")
+	}
+}
+
 func TestAutoFirstByteDeadlineCancelsStalledHeadersWithoutBucketRounding(t *testing.T) {
 	platformhttpx.InitHTTPClient()
 	stopped := make(chan struct{})

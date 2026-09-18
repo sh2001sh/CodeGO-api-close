@@ -10,28 +10,28 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// TopupFundingLotRemaining returns the quota from one paid top-up that has not
-// been consumed. Bonus, transfer, and administrator-granted lots are excluded.
-func TopupFundingLotRemaining(tx *gorm.DB, userID int, tradeNo string) (int64, error) {
+// TopupFundingLotAmounts returns the original and remaining quota from one paid
+// top-up. Bonus, transfer, and administrator-granted lots are excluded.
+func TopupFundingLotAmounts(tx *gorm.DB, userID int, tradeNo string) (int64, int64, error) {
 	if tx == nil || userID <= 0 || strings.TrimSpace(tradeNo) == "" {
-		return 0, errors.New("invalid top-up funding lookup")
+		return 0, 0, errors.New("invalid top-up funding lookup")
 	}
 	if !tx.Migrator().HasTable(&billingschema.FundingLot{}) {
-		return 0, errors.New("funding attribution is not available")
+		return 0, 0, errors.New("funding attribution is not available")
 	}
 	account, err := findUserClaudeWalletAccountTx(tx, userID)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	var lot billingschema.FundingLot
 	key := fmt.Sprintf("topup:%s:unified", strings.TrimSpace(tradeNo))
 	if err := tx.Where("account_id = ? AND idempotency_key = ?", account.AccountID, key).First(&lot).Error; err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	if lot.Source != billingschema.FundingSourceTopup || lot.RemainingAmount <= 0 {
-		return 0, nil
+	if lot.Source != billingschema.FundingSourceTopup || lot.OriginalAmount <= 0 {
+		return 0, 0, nil
 	}
-	return lot.RemainingAmount, nil
+	return lot.OriginalAmount, max(lot.RemainingAmount, 0), nil
 }
 
 // RefundTopupFundingLotTx removes exactly one paid top-up's remaining quota

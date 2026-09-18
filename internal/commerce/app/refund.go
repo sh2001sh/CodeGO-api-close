@@ -47,20 +47,20 @@ func refundableTopup(userID int, order *commerceschema.TopUp) commerceschema.Ref
 	if order.UserId != userID || order.RefundStatus == commerceschema.RefundStatusSuccess {
 		return item
 	}
-	var remaining int64
+	var original, remaining int64
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var err error
-		remaining, err = billingapp.TopupFundingLotRemaining(tx, userID, order.TradeNo)
+		original, remaining, err = billingapp.TopupFundingLotAmounts(tx, userID, order.TradeNo)
 		return err
 	})
 	if err != nil {
 		item.UnavailableReason = "该订单没有可识别的充值余额"
 		return item
 	}
-	item.TotalQuota = order.Amount
+	item.TotalQuota = original
 	item.RemainingQuota = remaining
-	item.UsedQuota = order.Amount - remaining
-	item.GrossRefund, item.FeeAmount, item.RefundAmount = refundMoney(order.Money, remaining, order.Amount)
+	item.UsedQuota = max(original-remaining, 0)
+	item.GrossRefund, item.FeeAmount, item.RefundAmount = refundMoney(order.Money, remaining, original)
 	item.Refundable = (order.RefundStatus == "" || order.RefundStatus == commerceschema.RefundStatusFailed) && remaining > 0 && item.RefundAmount >= 0.01 && strings.TrimSpace(extractProviderOrderID(order.ProviderPayload)) != ""
 	if !item.Refundable && item.UnavailableReason == "" {
 		item.UnavailableReason = refundStatusReason(order.RefundStatus)
@@ -282,13 +282,13 @@ func minInt64(left, right int64) int64 {
 
 func refundableTopupTx(tx *gorm.DB, userID int, order *commerceschema.TopUp) commerceschema.RefundableOrder {
 	item := commerceschema.RefundableOrder{OrderType: commerceschema.RefundOrderTypeBalance, TradeNo: order.TradeNo, PaymentMethod: order.PaymentMethod, CreatedAt: order.CreateTime, PaidAmount: order.Money, RefundStatus: order.RefundStatus}
-	remaining, err := billingapp.TopupFundingLotRemaining(tx, userID, order.TradeNo)
+	original, remaining, err := billingapp.TopupFundingLotAmounts(tx, userID, order.TradeNo)
 	if err != nil {
 		item.UnavailableReason = "该订单没有可识别的充值余额"
 		return item
 	}
-	item.TotalQuota, item.RemainingQuota, item.UsedQuota = order.Amount, remaining, order.Amount-remaining
-	item.GrossRefund, item.FeeAmount, item.RefundAmount = refundMoney(order.Money, remaining, order.Amount)
+	item.TotalQuota, item.RemainingQuota, item.UsedQuota = original, remaining, max(original-remaining, 0)
+	item.GrossRefund, item.FeeAmount, item.RefundAmount = refundMoney(order.Money, remaining, original)
 	item.Refundable = (order.RefundStatus == "" || order.RefundStatus == commerceschema.RefundStatusFailed) && remaining > 0 && item.RefundAmount >= 0.01 && strings.TrimSpace(extractProviderOrderID(order.ProviderPayload)) != ""
 	if !item.Refundable {
 		item.UnavailableReason = refundUnavailableReason(order.ProviderPayload, remaining, item.RefundAmount)

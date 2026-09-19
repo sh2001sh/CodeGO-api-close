@@ -18,10 +18,6 @@ var monitorSetting = MonitorSetting{
 }
 
 func init() {
-	config.GlobalConfig.Register("monitor_setting", &monitorSetting)
-}
-
-func GetMonitorSetting() *MonitorSetting {
 	if os.Getenv("CHANNEL_TEST_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_TEST_FREQUENCY"))
 		if err == nil && frequency > 0 {
@@ -29,5 +25,9 @@ func GetMonitorSetting() *MonitorSetting {
 			monitorSetting.AutoTestChannelMinutes = float64(frequency)
 		}
 	}
+	config.GlobalConfig.Register("monitor_setting", &monitorSetting)
+}
+
+func GetMonitorSetting() *MonitorSetting {
 	return &monitorSetting
 }

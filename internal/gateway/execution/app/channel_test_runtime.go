@@ -89,6 +89,10 @@ func TestMarketplaceChannelByID(channelID int, testModel string, endpointType st
 
 // TestAllChannels starts the asynchronous full-channel test job.
 func TestAllChannels(notify bool) error {
+	if !shouldContinueChannelTests(notify) {
+		return nil
+	}
+
 	testAllChannelsLock.Lock()
 	if testAllChannelsRunning {
 		testAllChannelsLock.Unlock()
@@ -118,11 +122,17 @@ func TestAllChannels(notify bool) error {
 		}()
 
 		for _, channel := range channels {
+			if !shouldContinueChannelTests(notify) {
+				return
+			}
 			current, err := gatewaystore.LoadChannelByID(channel.Id, true)
 			if err != nil || !shouldAutomaticallyTestChannel(current) {
 				continue
 			}
 			channel = current
+			if !shouldContinueChannelTests(notify) {
+				return
+			}
 
 			isChannelEnabled := channel.Status == constant.ChannelStatusEnabled
 			tik := time.Now()
@@ -171,6 +181,10 @@ func TestAllChannels(notify bool) error {
 	return nil
 }
 
+func shouldContinueChannelTests(manual bool) bool {
+	return manual || gatewaystore.GetMonitorSetting().AutoTestChannelEnabled
+}
+
 func shouldAutomaticallyTestChannel(channel *gatewayschema.Channel) bool {
 	return channel != nil && channel.Status != constant.ChannelStatusManuallyDisabled
 }
@@ -192,6 +206,9 @@ func StartAutomaticChannelTestTask() {
 				for {
 					frequency := gatewaystore.GetMonitorSetting().AutoTestChannelMinutes
 					time.Sleep(time.Duration(int(math.Round(frequency))) * time.Minute)
+					if !shouldContinueChannelTests(false) {
+						break
+					}
 					platformobservability.SysLog(fmt.Sprintf("automatically test channels with interval %f minutes", frequency))
 					platformobservability.SysLog("automatically testing all channels")
 					_ = TestAllChannels(false)

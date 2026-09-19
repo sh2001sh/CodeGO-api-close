@@ -11,9 +11,37 @@ import (
 	"github.com/sh2001sh/new-api/dto"
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAutomaticChannelTestsDoNotStartWhenDisabled(t *testing.T) {
+	t.Setenv("CHANNEL_TEST_FREQUENCY", "1")
+	setting := gatewaystore.GetMonitorSetting()
+	original := *setting
+	t.Cleanup(func() { *setting = original })
+	setting.AutoTestChannelEnabled = false
+
+	require.NoError(t, TestAllChannels(false))
+
+	testAllChannelsLock.Lock()
+	running := testAllChannelsRunning
+	testAllChannelsLock.Unlock()
+	require.False(t, running)
+}
+
+func TestManualChannelTestsRemainAvailableWhenAutomaticTestsDisabled(t *testing.T) {
+	setting := gatewaystore.GetMonitorSetting()
+	original := *setting
+	t.Cleanup(func() { *setting = original })
+	setting.AutoTestChannelEnabled = true
+	require.True(t, shouldContinueChannelTests(false))
+
+	setting.AutoTestChannelEnabled = false
+	require.False(t, shouldContinueChannelTests(false))
+	require.True(t, shouldContinueChannelTests(true))
+}
 
 func TestAutomaticChannelTestSkipsManuallyDisabledChannel(t *testing.T) {
 	require.False(t, shouldAutomaticallyTestChannel(&gatewayschema.Channel{

@@ -5,24 +5,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/types"
 )
 
 const requestBudgetContextKey = "gateway_request_budget"
 
 const (
-	responsesStreamRetryBudget       = 150 * time.Second
-	responsesFirstAttemptWaitTimeout = 60 * time.Second
-	responsesShortAttemptDefault     = 30 * time.Second
-	responsesShortAttemptMin         = 15 * time.Second
-	responsesShortAttemptMax         = 30 * time.Second
-	responsesShortAttemptBucket      = 5 * time.Second
-	responsesAdaptiveTTFTMinSamples  = 10
-	largeRequestBodyBudgetThreshold  = 8 << 20
-	autoRouteShortFirstByteTimeout   = 12 * time.Second
-	autoRouteToolFirstByteTimeout    = 18 * time.Second
-	autoRouteLongFirstByteTimeout    = 25 * time.Second
+	responsesStreamRetryBudget      = 150 * time.Second
+	largeRequestBodyBudgetThreshold = 8 << 20
 )
 
 type RequestBudget struct {
@@ -71,74 +61,16 @@ func RequestBudgetStartTime(requestStartedAt, validatedAt time.Time, bodySize in
 	return requestStartedAt
 }
 
-// RetryableResponsesAttemptTimeout returns the first-attempt wait cap only
-// while a text Responses stream still has a real retry available.
-func RetryableResponsesAttemptTimeout(c *gin.Context) time.Duration {
-	if c == nil || IsImageGenerationRequest(c) {
-		return 0
-	}
-	if IsSingleChannelRoute(c) && !HasRemainingCrossGroupRoute(c) {
-		return 0
-	}
-	if _, specificChannel := c.Get("specific_channel_id"); specificChannel {
-		return 0
-	}
-	profile, found := RequestProfileFromContext(c)
-	if !found || !profile.IsStream || profile.Protocol != string(types.RelayFormatOpenAIResponses) {
-		return 0
-	}
-	budget := RequestBudgetFromContext(c)
-	if budget == nil || !budget.CanRetry(time.Now()) {
-		return 0
-	}
-	if profile.RequestType == RequestTypeChatLongStream || profile.RequestType == RequestTypeToolCallStream {
-		return responsesFirstAttemptWaitTimeout
-	}
-	channelID := c.GetInt(string(constant.ContextKeyChannelId))
-	model := c.GetString(string(constant.ContextKeyOriginalModel))
-	health, found := GetChannelHealth(channelID, model, profile.RequestType)
-	if !found || health.TTFTSamples < responsesAdaptiveTTFTMinSamples || health.TTFTP95Milliseconds <= 0 {
-		return responsesShortAttemptDefault
-	}
-	timeout := time.Duration(health.TTFTP95Milliseconds*1.25) * time.Millisecond
-	if timeout < responsesShortAttemptMin {
-		return responsesShortAttemptMin
-	}
-	if timeout > responsesShortAttemptMax {
-		return responsesShortAttemptMax
-	}
-	return ceilDuration(timeout, responsesShortAttemptBucket)
-}
-
-// AutomaticRouteFirstByteTimeout bounds an Auto request before it emits any
-// useful output so an overloaded first group can yield to a later group. It
-// excludes upstream-bound sessions because their state cannot be rebuilt by a
-// different channel.
+// AutomaticRouteFirstByteTimeout intentionally disables speculative failover
+// after an Auto request has been dispatched. The upstream may continue
+// billable work after the local connection is cancelled.
 func AutomaticRouteFirstByteTimeout(c *gin.Context) time.Duration {
-	if c == nil || !IsAutoRouteRequest(c) || IsImageGenerationRequest(c) || !HasRemainingCrossGroupRoute(c) {
-		return 0
-	}
-	if _, specificChannel := c.Get("specific_channel_id"); specificChannel {
-		return 0
-	}
-	profile, found := RequestProfileFromContext(c)
-	if !found || !profile.IsStream || profile.MigrationCapability == MigrationUpstreamStateBound || profile.PromptSizeBucket == PromptSizeVeryLarge {
-		return 0
-	}
-	budget := RequestBudgetFromContext(c)
-	if budget == nil || !budget.CanRetry(time.Now()) {
-		return 0
-	}
-	switch profile.RequestType {
-	case RequestTypeChatShortStream:
-		return autoRouteShortFirstByteTimeout
-	case RequestTypeToolCallStream:
-		return autoRouteToolFirstByteTimeout
-	case RequestTypeChatLongStream:
-		return autoRouteLongFirstByteTimeout
-	default:
-		return 0
-	}
+	// Once the request body has been written, a provider may keep generating and
+	// charge for the request even if cancelling the HTTP context succeeds
+	// locally. A speculative first-byte deadline therefore cannot safely trigger
+	// a full-request replay through another paid route. Explicit transport and
+	// upstream HTTP failures still use the bounded request retry budget.
+	return 0
 }
 
 const automaticFirstByteDeadlineKey = "automatic_first_byte_deadline"
@@ -179,13 +111,6 @@ func RemainingAutomaticFirstByteWait(c *gin.Context) time.Duration {
 		}
 	}
 	return AutomaticRouteFirstByteTimeout(c)
-}
-
-func ceilDuration(value, bucket time.Duration) time.Duration {
-	if value <= 0 || bucket <= 0 {
-		return value
-	}
-	return ((value + bucket - 1) / bucket) * bucket
 }
 
 func RequestBudgetFromContext(c *gin.Context) *RequestBudget {

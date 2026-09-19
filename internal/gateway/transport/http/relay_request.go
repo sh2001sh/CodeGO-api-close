@@ -442,6 +442,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		relaycommon.ReleaseAllCoolingFallbacks(c)
 
 		if newAPIError == nil {
+			gatewaystream.MarkAttemptCompleted(c)
 			relaycommon.FinishRouteDecisionAttempt(c, true, 0, "", string(gatewaystream.AttemptStageFromContext(c)))
 			gatewayroutingapp.RecordAutoGroupSuccess(c, relayInfo.OriginModelName)
 			if httpctx.GetContextKeyBool(c, constant.ContextKeyIsStream) {

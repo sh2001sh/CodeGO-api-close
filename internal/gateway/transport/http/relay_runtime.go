@@ -190,6 +190,12 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if c != nil && c.GetBool(string(constant.ContextKeyResponsesReplayForbidden)) {
 		return false
 	}
+	if c != nil && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+		// The upstream has acknowledged the request with a successful HTTP
+		// response. Retrying a later local/stream failure can double-charge the
+		// channel even when context cancellation closes our connection.
+		return false
+	}
 	if gatewayruntime.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}

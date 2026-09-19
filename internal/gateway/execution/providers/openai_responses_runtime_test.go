@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
@@ -38,6 +39,28 @@ func TestOaiResponsesToChatStreamHandlerPreservesCacheWriteTokens(t *testing.T) 
 
 	require.Nil(t, err)
 	require.Equal(t, 20, usage.PromptTokensDetails.CachedCreationTokens)
+}
+
+func TestOaiResponsesToChatStreamHandlerMarksOutputCommittedAndMapsFailureToBadGateway(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","delta":"partial"}`,
+		``,
+		`data: {"type":"response.failed","response":{"error":{"type":"server_error","message":"upstream failed"}}}`,
+		``,
+	}, "\n")
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	response := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.6-sol"}, RelayFormat: types.RelayFormatOpenAI, IsStream: true}
+
+	_, apiErr := OaiResponsesToChatStreamHandler(ctx, info, response)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+	require.Equal(t, gatewaystream.AttemptStageSemanticCommitted, gatewaystream.AttemptStageFromContext(ctx))
 }
 
 func TestOaiResponsesToChatStreamHandlerMapsIncompleteResponseToLength(t *testing.T) {

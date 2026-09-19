@@ -100,6 +100,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	}
 
 	defer platformhttpx.CloseResponseBodyGracefully(resp)
+	helper.MarkAttemptBootstrap(c)
 
 	responseId := helper.GetResponseID(c)
 	createAt := time.Now().Unix()
@@ -535,12 +536,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		case "response.error", "response.failed":
 			if streamResp.Response != nil {
 				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusInternalServerError)
+					streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)
 					sr.Stop(streamErr)
 					return
 				}
 			}
-			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
 			sr.Stop(streamErr)
 			return
 

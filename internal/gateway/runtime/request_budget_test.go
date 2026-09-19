@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
@@ -73,145 +72,9 @@ func TestResponsesStreamBudgetKeepsOneRecoveryAttemptAvailable(t *testing.T) {
 
 	require.Equal(t, responsesStreamRetryBudget, budget.Deadline.Sub(now))
 	require.True(t, budget.TryBeginAttempt(now, "provider:a"))
-	require.Equal(t, responsesFirstAttemptWaitTimeout, RetryableResponsesAttemptTimeout(context))
+	require.True(t, budget.CanRetry(now.Add(time.Second)))
 	require.True(t, budget.TryBeginAttempt(now.Add(time.Second), "provider:a"))
-	require.Zero(t, RetryableResponsesAttemptTimeout(context))
-}
-
-func TestResponsesStreamSingleChannelDoesNotUseFastAttemptTimeout(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	profile := RequestProfile{
-		RequestType: RequestTypeChatLongStream,
-		Protocol:    string(types.RelayFormatOpenAIResponses),
-		IsStream:    true,
-	}
-	setRequestProfile(context, profile)
-	budget := StartRequestBudget(context, profile, time.Now())
-	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
-	MarkSingleChannelRoute(context, true)
-
-	require.Zero(t, RetryableResponsesAttemptTimeout(context))
-	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
-	require.Equal(t, 1, budget.FaultDomainsUsed)
-}
-
-func TestResponsesStreamSingleChannelUsesTimeoutWithCrossGroupFallback(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	profile := RequestProfile{
-		RequestType: RequestTypeChatLongStream,
-		Protocol:    string(types.RelayFormatOpenAIResponses),
-		IsStream:    true,
-	}
-	setRequestProfile(context, profile)
-	budget := StartRequestBudget(context, profile, time.Now())
-	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
-	MarkSingleChannelRoute(context, true)
-	MarkRemainingCrossGroupRoutes(context, 1)
-
-	require.Equal(t, responsesFirstAttemptWaitTimeout, RetryableResponsesAttemptTimeout(context))
-}
-
-func TestResponsesShortStreamUsesAdaptiveTTFTTimeout(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	profile := RequestProfile{
-		RequestType: RequestTypeChatShortStream,
-		Protocol:    string(types.RelayFormatOpenAIResponses),
-		IsStream:    true,
-	}
-	setRequestProfile(context, profile)
-	StartRequestBudget(context, profile, time.Now())
-	context.Set(string(constant.ContextKeyChannelId), 912_345)
-	context.Set(string(constant.ContextKeyOriginalModel), "gpt-adaptive-timeout")
-	for sample := 0; sample < responsesAdaptiveTTFTMinSamples; sample++ {
-		RecordChannelSuccess(912_345, "gpt-adaptive-timeout", 16*time.Second, RequestTypeChatShortStream)
-	}
-
-	require.Equal(t, 20*time.Second, RetryableResponsesAttemptTimeout(context))
-}
-
-func TestResponsesShortStreamBucketsAdaptiveTimeoutForConnectionReuse(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	profile := RequestProfile{
-		RequestType: RequestTypeChatShortStream,
-		Protocol:    string(types.RelayFormatOpenAIResponses),
-		IsStream:    true,
-	}
-	setRequestProfile(context, profile)
-	StartRequestBudget(context, profile, time.Now())
-	context.Set(string(constant.ContextKeyChannelId), 912_348)
-	context.Set(string(constant.ContextKeyOriginalModel), "gpt-adaptive-bucket")
-	for sample := 0; sample < responsesAdaptiveTTFTMinSamples; sample++ {
-		RecordChannelSuccess(912_348, "gpt-adaptive-bucket", 17*time.Second, RequestTypeChatShortStream)
-	}
-
-	// 17s * 1.25 = 21.25s. Round up to a stable transport bucket so nearby
-	// channel percentiles share an outbound connection pool.
-	require.Equal(t, 25*time.Second, RetryableResponsesAttemptTimeout(context))
-}
-
-func TestResponsesShortStreamUsesConservativeDefaultWithoutSamples(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	profile := RequestProfile{
-		RequestType: RequestTypeChatShortStream,
-		Protocol:    string(types.RelayFormatOpenAIResponses),
-		IsStream:    true,
-	}
-	setRequestProfile(context, profile)
-	StartRequestBudget(context, profile, time.Now())
-
-	require.Equal(t, responsesShortAttemptDefault, RetryableResponsesAttemptTimeout(context))
-}
-
-func TestResponsesShortStreamClampsAdaptiveTTFTTimeout(t *testing.T) {
-	testCases := []struct {
-		name      string
-		channelID int
-		model     string
-		ttft      time.Duration
-		expected  time.Duration
-	}{
-		{name: "minimum", channelID: 912_346, model: "gpt-adaptive-min", ttft: time.Second, expected: responsesShortAttemptMin},
-		{name: "maximum", channelID: 912_347, model: "gpt-adaptive-max", ttft: 40 * time.Second, expected: responsesShortAttemptMax},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			context, _ := gin.CreateTestContext(httptest.NewRecorder())
-			profile := RequestProfile{
-				RequestType: RequestTypeChatShortStream,
-				Protocol:    string(types.RelayFormatOpenAIResponses),
-				IsStream:    true,
-			}
-			setRequestProfile(context, profile)
-			StartRequestBudget(context, profile, time.Now())
-			context.Set(string(constant.ContextKeyChannelId), testCase.channelID)
-			context.Set(string(constant.ContextKeyOriginalModel), testCase.model)
-			for sample := 0; sample < responsesAdaptiveTTFTMinSamples; sample++ {
-				RecordChannelSuccess(testCase.channelID, testCase.model, testCase.ttft, RequestTypeChatShortStream)
-			}
-
-			require.Equal(t, testCase.expected, RetryableResponsesAttemptTimeout(context))
-		})
-	}
-}
-
-func TestSpecificChannelDoesNotUseFastResponsesRetryWindow(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	profile := RequestProfile{
-		RequestType: RequestTypeChatLongStream,
-		Protocol:    string(types.RelayFormatOpenAIResponses),
-		IsStream:    true,
-	}
-	setRequestProfile(context, profile)
-	StartRequestBudget(context, profile, time.Now())
-	context.Set("specific_channel_id", 6)
-
-	require.Zero(t, RetryableResponsesAttemptTimeout(context))
+	require.False(t, budget.CanRetry(now.Add(2*time.Second)))
 }
 
 func TestRemainingCrossGroupRouteState(t *testing.T) {
@@ -225,7 +88,7 @@ func TestRemainingCrossGroupRouteState(t *testing.T) {
 	require.False(t, HasRemainingCrossGroupRoute(context))
 }
 
-func TestAutomaticRouteFirstByteTimeoutRequiresSafeFallback(t *testing.T) {
+func TestAutomaticRouteFirstByteTimeoutDoesNotReplayAcceptedWork(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())
 	profile := RequestProfile{
@@ -239,7 +102,7 @@ func TestAutomaticRouteFirstByteTimeoutRequiresSafeFallback(t *testing.T) {
 	budget := StartRequestBudget(context, profile, time.Now())
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 
-	require.Equal(t, autoRouteShortFirstByteTimeout, AutomaticRouteFirstByteTimeout(context))
+	require.Zero(t, AutomaticRouteFirstByteTimeout(context))
 
 	context.Set("specific_channel_id", 9)
 	require.Zero(t, AutomaticRouteFirstByteTimeout(context))
@@ -265,7 +128,7 @@ func TestAutomaticRouteFirstByteTimeoutProtectsUpstreamState(t *testing.T) {
 	require.Zero(t, AutomaticRouteFirstByteTimeout(context))
 }
 
-func TestAutomaticRouteFirstByteTimeoutAllowsCacheAffinityButProtectsHugePrompts(t *testing.T) {
+func TestAutomaticRouteFirstByteTimeoutStaysDisabledAcrossProfiles(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	profile := RequestProfile{RequestType: RequestTypeChatLongStream, IsStream: true, MigrationCapability: MigrationCacheAffinity, PromptSizeBucket: PromptSizeMedium}
 	setRequestProfile(ctx, profile)
@@ -274,7 +137,7 @@ func TestAutomaticRouteFirstByteTimeoutAllowsCacheAffinityButProtectsHugePrompts
 	MarkLongContextRequestWithContinuation(ctx, "gpt-5.6-sol", 85000, true)
 	budget := StartRequestBudget(ctx, profile, time.Now())
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
-	require.Equal(t, 25*time.Second, AutomaticRouteFirstByteTimeout(ctx))
+	require.Zero(t, AutomaticRouteFirstByteTimeout(ctx))
 	profile.PromptSizeBucket = PromptSizeVeryLarge
 	setRequestProfile(ctx, profile)
 	require.Zero(t, AutomaticRouteFirstByteTimeout(ctx))
@@ -283,7 +146,7 @@ func TestAutomaticRouteFirstByteTimeoutAllowsCacheAffinityButProtectsHugePrompts
 	require.Zero(t, AutomaticRouteFirstByteTimeout(ctx))
 }
 
-func TestAutomaticFirstByteWaitDoesNotRestartAfterHeaders(t *testing.T) {
+func TestAutomaticFirstByteWaitDoesNotCreateSpeculativeDeadline(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	profile := RequestProfile{RequestType: RequestTypeChatLongStream, IsStream: true, MigrationCapability: MigrationCacheAffinity}
 	setRequestProfile(ctx, profile)
@@ -292,18 +155,14 @@ func TestAutomaticFirstByteWaitDoesNotRestartAfterHeaders(t *testing.T) {
 	StartRequestBudget(ctx, profile, time.Now())
 	StartRouteDecision(ctx, "gpt-5.6-sol", "auto")
 	StartRouteDecisionAttempt(ctx, 0, 624217, "first")
-	require.Equal(t, 25*time.Second, StartAutomaticFirstByteWait(ctx))
-	ctx.Set(automaticFirstByteDeadlineKey, time.Now().Add(7*time.Second))
-	wait := StreamFirstOutputTimeoutForRequest(ctx, "gpt-5.6-sol", 85000)
-	require.InDelta(t, float64(7*time.Second), float64(wait), float64(100*time.Millisecond))
-	ctx.Set(automaticFirstByteDeadlineKey, time.Now().Add(-time.Second))
-	require.Equal(t, time.Nanosecond, StreamFirstOutputTimeoutForRequest(ctx, "gpt-5.6-sol", 85000))
+	require.Zero(t, StartAutomaticFirstByteWait(ctx))
+	require.Zero(t, StreamFirstOutputTimeoutForRequest(ctx, "gpt-5.6-sol", 85000))
 	MarkRemainingCrossGroupRoutes(ctx, 0)
 	StartRouteDecisionAttempt(ctx, 1, 624218, "last")
 	require.Zero(t, StartAutomaticFirstByteWait(ctx))
 	require.Zero(t, RemainingAutomaticFirstByteWait(ctx), "last attempt must not inherit the previous deadline")
 	decision, ok := GetRouteDecision(ctx)
 	require.True(t, ok)
-	require.EqualValues(t, 25000, decision.Attempts[0].FirstByteTimeoutMS, "later attempts must not erase an earlier timeout decision")
+	require.Zero(t, decision.Attempts[0].FirstByteTimeoutMS)
 	require.Zero(t, decision.Attempts[1].FirstByteTimeoutMS)
 }

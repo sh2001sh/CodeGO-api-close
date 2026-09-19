@@ -72,6 +72,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	}
 
 	defer httpx.CloseResponseBodyGracefully(resp)
+	gatewaystream.MarkAttemptBootstrap(c)
 
 	responseID := gatewaystream.GetResponseID(c)
 	createAt := time.Now().Unix()
@@ -140,6 +141,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				needsReasoningSummarySeparator = false
 			}
 		}
+		gatewaystream.MarkSemanticCommitted(c)
 		if !sendStartIfNeeded() {
 			return false
 		}
@@ -170,6 +172,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		if callID == "" {
 			return true
 		}
+		gatewaystream.MarkSemanticCommitted(c)
 		if !sendStartIfNeeded() {
 			return false
 		}
@@ -259,11 +262,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				needsReasoningSummarySeparator = true
 			}
 		case "response.output_text.delta":
-			if !sendStartIfNeeded() {
-				sr.Stop(streamErr)
-				return
-			}
 			if streamResp.Delta != "" {
+				gatewaystream.MarkSemanticCommitted(c)
+				if !sendStartIfNeeded() {
+					sr.Stop(streamErr)
+					return
+				}
 				outputText.WriteString(streamResp.Delta)
 				usageText.WriteString(streamResp.Delta)
 				delta := streamResp.Delta
@@ -399,12 +403,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		case "response.error", "response.failed":
 			if streamResp.Response != nil {
 				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusInternalServerError)
+					streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)
 					sr.Stop(streamErr)
 					return
 				}
 			}
-			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
 			sr.Stop(streamErr)
 			return
 		}
@@ -444,6 +448,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	} else {
 		handleNonOpenAIFinalResponse(c, info, responseID, createAt, model, usage)
 	}
+	gatewaystream.MarkAttemptCompleted(c)
 	return usage, nil
 }
 

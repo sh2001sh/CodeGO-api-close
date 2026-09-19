@@ -221,6 +221,13 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	if resp == nil {
 		return nil, errors.New("resp is nil")
 	}
+	if c != nil && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		// A successful response header means the upstream accepted the work. Any
+		// later parse, conversion, stream or downstream-write failure is no longer
+		// safe to replay through another paid route.
+		c.Set(string(constant.ContextKeyUpstreamRequestAccepted), true)
+		gatewaystream.MarkAttemptConnected(c)
+	}
 	if info != nil && info.FirstByteTrace != nil {
 		info.FirstByteTrace.MarkOutboundHTTPVersion(resp.ProtoMajor, resp.ProtoMinor)
 		info.FirstByteTrace.MarkUpstreamResponseHeaders()
@@ -288,9 +295,6 @@ func responseHeaderTimeoutForRequest(c *gin.Context, info *relaycommon.RelayInfo
 			}
 			return baseTimeout
 		}
-	}
-	if retryTimeout := relaycommon.RetryableResponsesAttemptTimeout(c); retryTimeout > 0 {
-		return minPositiveDuration(baseTimeout, retryTimeout)
 	}
 	if baseTimeout <= 0 {
 		return 0

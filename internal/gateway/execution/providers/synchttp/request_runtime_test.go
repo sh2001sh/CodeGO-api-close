@@ -16,6 +16,7 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/stretchr/testify/require"
@@ -90,39 +91,29 @@ func TestDoAPIRequestCancelsActiveUpstreamStreamAfterClientDisconnect(t *testing
 	}
 }
 
-func TestAutoFirstByteDeadlineCancelsStalledHeadersWithoutBucketRounding(t *testing.T) {
+func TestAutoRouteBudgetDoesNotCancelAcceptedBillableWork(t *testing.T) {
 	platformhttpx.InitHTTPClient()
-	stopped := make(chan struct{})
-	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// HTTP/1 observes a disconnected peer after consuming the request body.
 		_, _ = io.Copy(io.Discard, r.Body)
-		select {
-		case <-r.Context().Done():
-			close(stopped)
-		case <-release:
-		}
+		time.Sleep(150 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("accepted"))
 	}))
 	defer server.Close()
-	defer close(release)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	profile := relaycommon.InitializeRequestProfile(ctx, "gpt-5.6-sol", ctx.Request.URL.Path, relaycommon.RequestProfileHint{IsStream: true})
 	relaycommon.MarkAutoRouteRequest(ctx)
 	relaycommon.MarkRemainingCrossGroupRoutes(ctx, 1)
 	budget := relaycommon.StartRequestBudget(ctx, profile, time.Now())
-	budget.Deadline = time.Now().Add(200 * time.Millisecond)
+	budget.Deadline = time.Now().Add(50 * time.Millisecond)
 	started := time.Now()
-	_, err := DoAPIRequest(contextAwareRequestAdaptor{url: server.URL}, ctx,
+	resp, err := DoAPIRequest(contextAwareRequestAdaptor{url: server.URL}, ctx,
 		&relaycommon.RelayInfo{IsStream: true, OriginModelName: "gpt-5.6-sol", RelayMode: gatewaycontract.RelayModeResponses, ChannelMeta: &relaycommon.ChannelMeta{}}, strings.NewReader("{}"))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "upstream response timed out")
-	require.Less(t, time.Since(started), 2*time.Second, "must not wait for the five-second transport bucket")
-	select {
-	case <-stopped:
-	case <-time.After(2 * time.Second):
-		t.Fatal("upstream request was not cancelled")
-	}
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.GreaterOrEqual(t, time.Since(started), 100*time.Millisecond)
+	require.True(t, ctx.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)))
 }
 
 func TestAutoHeaderDeadlineKeepsSuccessfulResponseBodyOpen(t *testing.T) {
@@ -241,7 +232,7 @@ func TestResponseHeaderTimeoutCanBeDisabledForTextWithoutAffectingImages(t *test
 	require.Equal(t, 120*time.Second, responseHeaderTimeoutForRequest(nil, image))
 }
 
-func TestRetryableResponsesFirstAttemptBoundsResponseHeaderWait(t *testing.T) {
+func TestResponsesFirstAttemptDoesNotImposeResponseHeaderWait(t *testing.T) {
 	previous := platformconfig.RelayResponseHeaderTimeout
 	platformconfig.RelayResponseHeaderTimeout = 0
 	t.Cleanup(func() { platformconfig.RelayResponseHeaderTimeout = previous })
@@ -261,7 +252,7 @@ func TestRetryableResponsesFirstAttemptBoundsResponseHeaderWait(t *testing.T) {
 
 	markResponsesStreamRetrySafeBeforeConnect(context, info)
 	require.True(t, context.GetBool(string(constant.ContextKeyResponsesStreamRetrySafe)))
-	require.Equal(t, 30*time.Second, responseHeaderTimeoutForRequest(context, info))
+	require.Zero(t, responseHeaderTimeoutForRequest(context, info))
 
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 	require.Zero(t, responseHeaderTimeoutForRequest(context, info))
@@ -294,7 +285,7 @@ func TestLongResponsesRequestDoesNotUseShortRetryHeaderTimeout(t *testing.T) {
 	require.Zero(t, responseHeaderTimeoutForRequest(context, info))
 }
 
-func TestAutomaticRouteHeaderTimeoutOverridesLongResponsesWait(t *testing.T) {
+func TestAutomaticRouteDoesNotImposeHeaderTimeout(t *testing.T) {
 	previous := platformconfig.RelayResponseHeaderTimeout
 	platformconfig.RelayResponseHeaderTimeout = 0
 	t.Cleanup(func() { platformconfig.RelayResponseHeaderTimeout = previous })
@@ -318,7 +309,25 @@ func TestAutomaticRouteHeaderTimeoutOverridesLongResponsesWait(t *testing.T) {
 		IsStream:        true,
 	}
 
-	require.Equal(t, 18*time.Second, responseHeaderTimeoutForRequest(context, info))
+	require.Zero(t, responseHeaderTimeoutForRequest(context, info))
+}
+
+func TestDoRequestMarksSuccessfulUpstreamAsAccepted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{RelayMode: gatewaycontract.RelayModeResponses, IsStream: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+	resp, err := DoAPIRequest(contextAwareRequestAdaptor{url: server.URL}, ctx, info, strings.NewReader(`{}`))
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	defer resp.Body.Close()
+	require.True(t, ctx.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)))
+	require.Equal(t, gatewaystream.AttemptStageConnected, gatewaystream.AttemptStageFromContext(ctx))
 }
 
 func TestSetupAPIRequestHeaderForwardsRemoteCompactionFeature(t *testing.T) {

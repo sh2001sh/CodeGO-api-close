@@ -166,6 +166,16 @@ func TestShouldNotRetryAfterResponsesCreateWasWrittenUpstream(t *testing.T) {
 	require.False(t, shouldRetry(ctx, err, 1))
 }
 
+func TestShouldNotRetryAfterSuccessfulUpstreamResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ctx.Set(string(constant.ContextKeyUpstreamRequestAccepted), true)
+	err := types.NewOpenAIError(errors.New("local response conversion failed"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+
+	require.False(t, shouldRetry(ctx, err, 1))
+}
+
 func TestShouldRetryCapacityBeforeResponseDelivery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

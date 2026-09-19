@@ -67,6 +67,7 @@ const (
 	ContextKeyBackgroundResumeID          ContextKey = "responses_background_resume_id"
 	ContextKeyBackgroundResumeCursor      ContextKey = "responses_background_resume_cursor"
 	ContextKeyResponsesReplayForbidden    ContextKey = "responses_replay_forbidden"
+	ContextKeyUpstreamRequestAccepted     ContextKey = "upstream_request_accepted"
 	ContextKeyResponsesGenericUpstream400 ContextKey = "responses_generic_upstream_400"
 
 	/* user related keys */

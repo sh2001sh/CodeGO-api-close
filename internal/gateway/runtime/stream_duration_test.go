@@ -46,7 +46,7 @@ func TestAdaptiveProgressTimeoutUsesLongContextOnly(t *testing.T) {
 	require.Zero(t, StreamAdaptiveProgressTimeoutForRequest(ctx, "claude-opus", LongContextPromptTokenThreshold))
 }
 
-func TestRetryableResponsesFirstAttemptUsesShorterInitialWindow(t *testing.T) {
+func TestResponsesFirstAttemptDoesNotCreateSpeculativeInitialWindow(t *testing.T) {
 	oldProgress := constant.StreamingAdaptiveProgressTimeout
 	oldInitial := constant.StreamingAdaptiveInitialTimeout
 	constant.StreamingAdaptiveProgressTimeout = 45
@@ -69,13 +69,13 @@ func TestRetryableResponsesFirstAttemptUsesShorterInitialWindow(t *testing.T) {
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 	MarkLongContextRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold)
 
-	require.Equal(t, 60*time.Second, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
+	require.Zero(t, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 	require.Zero(t, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
 	require.Equal(t, 30*time.Minute, StreamMaxDurationForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
 }
 
-func TestRetryableShortResponsesUsesSemanticOutputWindow(t *testing.T) {
+func TestShortResponsesDoesNotCreateSemanticOutputDeadline(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())
 	context.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
@@ -89,7 +89,7 @@ func TestRetryableShortResponsesUsesSemanticOutputWindow(t *testing.T) {
 	require.True(t, budget.TryBeginAttempt(time.Now(), "provider:a"))
 
 	require.Zero(t, StreamAdaptiveProgressTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
-	require.Equal(t, responsesShortAttemptDefault, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
+	require.Zero(t, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", 1_000))
 }
 
 func TestNativeResponsesDisablesPostStartProgressDeadline(t *testing.T) {
@@ -116,7 +116,7 @@ func TestNativeResponsesDisablesPostStartProgressDeadline(t *testing.T) {
 	MarkLongContextRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold)
 
 	require.Zero(t, StreamAdaptiveProgressTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
-	require.Equal(t, responsesFirstAttemptWaitTimeout, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
+	require.Zero(t, StreamAdaptiveInitialTimeoutForRequest(context, "gpt-5.6-sol", LongContextPromptTokenThreshold))
 }
 
 func TestSingleChannelResponsesHasNoAdaptiveInitialDeadline(t *testing.T) {

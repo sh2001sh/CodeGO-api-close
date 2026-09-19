@@ -1,6 +1,7 @@
 package http
 
 import (
+	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	stdhttp "net/http"
 
@@ -77,4 +78,19 @@ func GetRatioConfig(c *gin.Context) {
 		return
 	}
 	httpapi.ApiSuccess(c, data)
+}
+
+func GetSub2APIKeyBilling(c *gin.Context) {
+	token, err := identityapp.GetUserToken(c.GetInt("id"), c.GetInt("token_id"))
+	if err != nil || token == nil {
+		c.JSON(stdhttp.StatusUnauthorized, gin.H{"error": gin.H{"type": "authentication_error", "message": "Invalid API key"}})
+		return
+	}
+	payload, err := gatewayroutingapp.BuildSub2APIKeyBilling(token.UserId, token.Group)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(stdhttp.StatusOK, payload)
 }

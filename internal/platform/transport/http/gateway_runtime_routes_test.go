@@ -27,6 +27,7 @@ func TestGatewayRuntimeRegistersCodexCompatibilityRoutes(t *testing.T) {
 		"POST /backend-api/codex/alpha/search",
 		"POST /backend-api/codex/responses",
 		"POST /backend-api/codex/responses/compact",
+		"GET /v1/sub2api/billing",
 	} {
 		require.True(t, routes[route], route)
 	}

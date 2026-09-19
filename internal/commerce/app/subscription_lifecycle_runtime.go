@@ -112,6 +112,11 @@ func applyManagedSubscriptionPreview(tx *gorm.DB, userID int, targetPlan *commer
 		if !resetUsed && currentPlan.PriceAmount > 0 && currentSub.AmountTotal > 0 && remainingQuota > 0 {
 			discount = currentPlan.PriceAmount * float64(remainingQuota) / float64(currentSub.AmountTotal)
 		}
+		// A reset opportunity already granted the old package again, so its
+		// remaining quota cannot also reduce the upgrade price. Since the user
+		// pays the full target price in that case, keep the old balance and add
+		// the new package quota instead of replacing it.
+		preview.PreserveRemainingQuota = resetUsed && remainingQuota > 0
 		preview.BaseAmountDue = math.Max(targetPlan.PriceAmount-discount, 0.01)
 		preview.AmountDue = preview.BaseAmountDue
 	}
@@ -297,9 +302,13 @@ func renewUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubscr
 	return sub, nil
 }
 
-func upgradeUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, source string) (*commerceschema.UserSubscription, error) {
+func upgradeUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, source string, preserveRemainingQuota bool) (*commerceschema.UserSubscription, error) {
 	if tx == nil || sub == nil || plan == nil {
 		return nil, errors.New("invalid upgrade args")
+	}
+	remainingQuota := int64(0)
+	if preserveRemainingQuota {
+		remainingQuota = max(sub.AmountTotal-sub.AmountUsed, 0)
 	}
 	sub.PlanId = plan.Id
 	sub.Status = "active"
@@ -314,7 +323,7 @@ func upgradeUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubs
 	}
 	sub.StartTime = nowUnix
 	sub.EndTime = endUnix
-	sub.AmountTotal = plan.TotalAmount
+	sub.AmountTotal = plan.TotalAmount + remainingQuota
 	sub.AmountUsed = 0
 	sub.PeriodAmount = plan.PeriodAmount
 	sub.PeriodUsed = 0
@@ -379,7 +388,7 @@ func ApplySubscriptionPurchaseTx(tx *gorm.DB, userID int, plan *commerceschema.S
 	case commerceschema.SubscriptionPurchaseActionUpgrade:
 		if preview.CurrentSubscription != nil {
 			var err error
-			sub, err = upgradeUserSubscriptionWithPlanTx(tx, preview.CurrentSubscription, plan, source)
+			sub, err = upgradeUserSubscriptionWithPlanTx(tx, preview.CurrentSubscription, plan, source, preview.PreserveRemainingQuota)
 			if err != nil {
 				return nil, preview, err
 			}

@@ -389,6 +389,9 @@ export interface MarketplaceOwnerUsageLogResult {
     request_count: number
     success_count: number
     failed_count: number
+    upstream_attempt_count: number
+    upstream_success_count: number
+    upstream_failed_count: number
     consumer_amount: number
     owner_income: number
     pending_income: number

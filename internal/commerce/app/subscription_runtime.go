@@ -10,6 +10,7 @@ import (
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"math"
 	"strings"
@@ -21,6 +22,22 @@ import (
 
 	"gorm.io/gorm"
 )
+
+const (
+	defaultPendingSubscriptionOrderExpiryMinutes = 30
+	minimumPendingSubscriptionOrderExpiryMinutes = 3
+	maximumPendingSubscriptionOrderExpiryMinutes = 24 * 60
+)
+
+// PendingSubscriptionOrderExpiry is the longest an unpaid checkout may keep
+// a subscription purchase or discount card reserved.
+func PendingSubscriptionOrderExpiry() time.Duration {
+	minutes := platformconfig.GetEnvOrDefaultInt("SUBSCRIPTION_ORDER_PENDING_EXPIRY_MINUTES", defaultPendingSubscriptionOrderExpiryMinutes)
+	if minutes < minimumPendingSubscriptionOrderExpiryMinutes || minutes > maximumPendingSubscriptionOrderExpiryMinutes {
+		minutes = defaultPendingSubscriptionOrderExpiryMinutes
+	}
+	return time.Duration(minutes) * time.Minute
+}
 
 func ResolveSubscriptionPurchasePreview(userID int, targetPlan *commerceschema.SubscriptionPlan) (*commercedomain.SubscriptionPurchasePreview, error) {
 	return resolveSubscriptionPurchasePreviewTx(nil, userID, targetPlan)
@@ -264,6 +281,52 @@ func CancelPendingSubscriptionOrder(userID int, tradeNo string) error {
 		}
 		return ReleaseReservedBlindBoxPropByTradeNoTx(tx, tradeNo, commerceschema.BlindBoxPropOrderTypeSubscription)
 	})
+}
+
+// ExpireDueSubscriptionOrders releases stale unpaid checkouts. A verified
+// late payment remains safe because CompleteSubscriptionOrder accepts expired
+// orders and resumes the idempotent fulfillment workflow.
+func ExpireDueSubscriptionOrders(limit int) (int, error) {
+	if limit <= 0 {
+		limit = 300
+	}
+	now := platformruntime.GetTimestamp()
+	cutoff := now - int64(PendingSubscriptionOrderExpiry().Seconds())
+	var ids []int
+	if err := platformdb.DB.Model(&commerceschema.SubscriptionOrder{}).
+		Where("status = ? AND create_time > 0 AND create_time <= ?", constant.TopUpStatusPending, cutoff).
+		Order("create_time asc, id asc").Limit(limit).Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+
+	expired := 0
+	for _, id := range ids {
+		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+			var order commerceschema.SubscriptionOrder
+			if err := tx.Set("gorm:query_option", "FOR UPDATE").
+				Where("id = ? AND status = ? AND create_time <= ?", id, constant.TopUpStatusPending, cutoff).
+				First(&order).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				return err
+			}
+			order.Status = constant.TopUpStatusExpired
+			order.CompleteTime = now
+			if err := tx.Save(&order).Error; err != nil {
+				return err
+			}
+			if err := ReleaseReservedBlindBoxPropByTradeNoTx(tx, order.TradeNo, commerceschema.BlindBoxPropOrderTypeSubscription); err != nil {
+				return err
+			}
+			expired++
+			return nil
+		})
+		if err != nil {
+			return expired, err
+		}
+	}
+	return expired, nil
 }
 
 func upsertSubscriptionTopUpTx(tx *gorm.DB, order *commerceschema.SubscriptionOrder) error {

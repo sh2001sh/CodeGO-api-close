@@ -7,6 +7,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -37,6 +38,12 @@ func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
 		{UserId: 301, CreatedAt: now - 1, Type: auditschema.LogTypeError, ChannelId: ownerInternalID, RequestId: "owner-error", UpstreamRequestId: "upstream-401", ModelName: "claude-sonnet", Content: "masked error", Other: `{"owner_error":"status_code=401, invalid upstream account","status_code":401,"error_type":"openai_error","error_code":"bad_response_status_code","retry_count":2,"request_path":"/v1/responses","total_duration_ms":12345,"e2e_ttft_ms":5300,"attempt_ttft_ms":3990}`},
 		{UserId: 999, CreatedAt: now - 2, Type: auditschema.LogTypeConsume, ChannelId: foreignInternalID, RequestId: "foreign-success", ModelName: "gpt-5"},
 	}).Error)
+	require.NoError(t, db.Create([]gatewayschema.RequestAttemptAudit{
+		{AttemptID: "owner-success-1", RequestID: "owner-success", ChannelID: ownerInternalID, ModelName: "gpt-5", Success: true, Status: "succeeded", StartedAt: time.Unix(now, 0)},
+		{AttemptID: "owner-error-1", RequestID: "owner-error", ChannelID: ownerInternalID, ModelName: "claude-sonnet", Success: false, Status: "failed", StatusCode: 500, StartedAt: time.Unix(now-1, 0)},
+		{AttemptID: "owner-error-2", RequestID: "owner-error", ChannelID: ownerInternalID, ModelName: "claude-sonnet", Success: false, Status: "failed", StatusCode: 500, StartedAt: time.Unix(now-1, 0)},
+		{AttemptID: "foreign-success-1", RequestID: "foreign-success", ChannelID: foreignInternalID, ModelName: "gpt-5", Success: true, Status: "succeeded", StartedAt: time.Unix(now-2, 0)},
+	}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.Settlement{
 		RequestID: "owner-success", GroupID: "owner-group", OwnerUserID: 10, ConsumerUserID: 300,
 		ConsumerAmount: 100, PlatformCommission: 5, OwnerNetAmount: 95, Multiplier: 1,
@@ -49,6 +56,9 @@ func TestListOwnerUsageLogsScopesAndSanitizesChannelCalls(t *testing.T) {
 	require.EqualValues(t, 2, result.Summary.RequestCount)
 	require.EqualValues(t, 1, result.Summary.SuccessCount)
 	require.EqualValues(t, 1, result.Summary.FailedCount)
+	require.EqualValues(t, 3, result.Summary.UpstreamAttemptCount)
+	require.EqualValues(t, 1, result.Summary.UpstreamSuccessCount)
+	require.EqualValues(t, 2, result.Summary.UpstreamFailedCount)
 	require.Equal(t, int64(100), result.Summary.ConsumerAmount)
 	require.Equal(t, int64(95), result.Summary.OwnerIncome)
 	summaryOnly, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{SummaryOnly: true})
@@ -115,6 +125,19 @@ func TestListOwnerUsageLogsSearchesOwnedDetailsAndExternalUser(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.Total)
 	require.Equal(t, "upstream websocket rejected", result.Items[0].ErrorMessage)
+}
+
+func TestListOwnerUsageLogsReturnsZeroAttemptSummaryWithoutAuditRows(t *testing.T) {
+	db, _ := openOwnerUsageLogTestDB(t)
+	internalID := 103
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "empty", OwnerUserID: 10, InternalChannelID: &internalID, Status: "active", ProviderType: "openai"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "empty-group", ChannelID: "empty", OwnerUserID: 10, InternalGroupName: "empty", PublicSlug: "empty", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1}).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{ChannelID: "empty", SummaryOnly: true})
+	require.NoError(t, err)
+	require.Zero(t, result.Summary.UpstreamAttemptCount)
+	require.Zero(t, result.Summary.UpstreamSuccessCount)
+	require.Zero(t, result.Summary.UpstreamFailedCount)
 }
 
 func TestListOwnerUsageLogsFiltersSingleOwnedChannel(t *testing.T) {
@@ -219,7 +242,7 @@ func openOwnerUsageLogTestDB(t testing.TB) (*gorm.DB, *gorm.DB) {
 	logDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	platformdb.DB, platformdb.LogDB = db, logDB
-	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.Settlement{}))
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.Settlement{}, &gatewayschema.RequestAudit{}, &gatewayschema.RequestAttemptAudit{}))
 	require.NoError(t, logDB.AutoMigrate(&auditschema.Log{}))
 	return db, logDB
 }

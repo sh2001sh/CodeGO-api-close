@@ -27,6 +27,44 @@ type PricingPayload struct {
 	PricingVersion     string                                  `json:"pricing_version"`
 }
 
+type Sub2APIKeyBilling struct {
+	Object                  string  `json:"object"`
+	SchemaVersion           int     `json:"schema_version"`
+	BillingScope            string  `json:"billing_scope"`
+	Group                   string  `json:"group"`
+	GroupRateMultiplier     float64 `json:"group_rate_multiplier"`
+	ResolvedRateMultiplier  float64 `json:"resolved_rate_multiplier"`
+	EffectiveRateMultiplier float64 `json:"effective_rate_multiplier"`
+}
+
+// BuildSub2APIKeyBilling implements sub2api's API-key multiplier discovery
+// contract. CodeGo has no separate peak multiplier, so effective equals the
+// user-resolved group multiplier.
+func BuildSub2APIKeyBilling(userID int, tokenGroup string) (Sub2APIKeyBilling, error) {
+	userGroup, err := identitystore.LoadUserGroup(userID, false)
+	if err != nil {
+		return Sub2APIKeyBilling{}, err
+	}
+	group := NormalizeTokenGroup(tokenGroup)
+	if resolved, found, resolveErr := ResolveUserGroupAlias(group); resolveErr != nil {
+		return Sub2APIKeyBilling{}, resolveErr
+	} else if found {
+		group = resolved
+	}
+	if group == AutoGroupName {
+		return Sub2APIKeyBilling{
+			Object: "sub2api.key_billing", SchemaVersion: 1, BillingScope: "token",
+			Group: group, GroupRateMultiplier: 1, ResolvedRateMultiplier: 1, EffectiveRateMultiplier: 1,
+		}, nil
+	}
+	base := gatewaystore.GetGroupRatio(group)
+	resolved := GetUserGroupRatio(userGroup, group)
+	return Sub2APIKeyBilling{
+		Object: "sub2api.key_billing", SchemaVersion: 1, BillingScope: "token",
+		Group: group, GroupRateMultiplier: base, ResolvedRateMultiplier: resolved, EffectiveRateMultiplier: resolved,
+	}, nil
+}
+
 // loadPricedModelDetails returns complete site-level billing details without
 // exposing the internal groups that made a model visible to the projection.
 func loadPricedModelDetails(pricing []gatewaydomain.Pricing) []gatewaydomain.Pricing {

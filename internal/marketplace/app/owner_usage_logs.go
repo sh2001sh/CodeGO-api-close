@@ -7,6 +7,7 @@ import (
 	"time"
 
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -229,6 +230,9 @@ func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string,
 	).Scan(&summary).Error; err != nil {
 		return summary, err
 	}
+	if err := loadOwnerUsageAttemptSummary(channelIDs, query, &summary); err != nil {
+		return summary, err
+	}
 	if len(groupIDs) == 0 {
 		return summary, nil
 	}
@@ -242,6 +246,75 @@ func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string,
 	summary.ReleasedIncome = totals.ReleasedIncome
 	summary.ReclaimedIncome = totals.ReclaimedIncome
 	return summary, nil
+}
+
+func loadOwnerUsageAttemptSummary(channelIDs []int, query OwnerUsageLogQuery, summary *OwnerUsageLogSummary) error {
+	if summary == nil {
+		return nil
+	}
+	// The legacy log is one row per completed/charged request; the attempt
+	// audit is one row per real upstream call, including hidden retry failures.
+	// Filters that the attempt audit cannot represent retain the legacy count.
+	if query.UpstreamRequestID != "" {
+		summary.UpstreamAttemptCount = summary.RequestCount
+		summary.UpstreamSuccessCount = summary.SuccessCount
+		summary.UpstreamFailedCount = summary.FailedCount
+		return nil
+	}
+	db := platformdb.DB.Model(&gatewayschema.RequestAttemptAudit{}).Where("channel_id IN ?", channelIDs)
+	if query.StartTimestamp > 0 {
+		db = db.Where("started_at >= ?", time.Unix(query.StartTimestamp, 0).UTC())
+	}
+	if query.EndTimestamp > 0 {
+		db = db.Where("started_at < ?", time.Unix(query.EndTimestamp+1, 0).UTC())
+	}
+	if query.Status == "success" {
+		db = db.Where("success = ?", true)
+	} else if query.Status == "failed" {
+		db = db.Where("success = ?", false)
+	}
+	if query.ModelName != "" {
+		db = db.Where("LOWER(model_name) LIKE ? ESCAPE '!'", ownerLogLike(query.ModelName))
+	}
+	if query.RequestID != "" {
+		db = db.Where("request_id = ?", query.RequestID)
+	}
+	if query.ExternalUserID != "" {
+		db = db.Where("request_id IN (?)", platformdb.DB.Model(&gatewayschema.RequestAudit{}).
+			Select("request_id").Where("user_id IN ?", query.userFilterIDs))
+	}
+	if query.Search != "" {
+		pattern := ownerLogLike(query.Search)
+		conditions := []string{
+			"LOWER(model_name) LIKE ? ESCAPE '!'",
+			"LOWER(request_id) LIKE ? ESCAPE '!'",
+			"LOWER(failure_class) LIKE ? ESCAPE '!'",
+			"LOWER(stage) LIKE ? ESCAPE '!'",
+		}
+		args := []any{pattern, pattern, pattern, pattern}
+		if len(query.searchUserIDs) > 0 {
+			conditions = append(conditions, "request_id IN (?)")
+			args = append(args, platformdb.DB.Model(&gatewayschema.RequestAudit{}).Select("request_id").Where("user_id IN ?", query.searchUserIDs))
+		}
+		db = db.Where("("+strings.Join(conditions, " OR ")+")", args...)
+	}
+	var attempts struct {
+		Count   int64 `gorm:"column:upstream_attempt_count"`
+		Success int64 `gorm:"column:upstream_success_count"`
+		Failed  int64 `gorm:"column:upstream_failed_count"`
+	}
+	if err := db.Select(
+		"COUNT(*) AS upstream_attempt_count, "+
+			"COALESCE(SUM(CASE WHEN success = ? THEN 1 ELSE 0 END), 0) AS upstream_success_count, "+
+			"COALESCE(SUM(CASE WHEN success = ? THEN 1 ELSE 0 END), 0) AS upstream_failed_count",
+		true, false,
+	).Scan(&attempts).Error; err != nil {
+		return err
+	}
+	summary.UpstreamAttemptCount = attempts.Count
+	summary.UpstreamSuccessCount = attempts.Success
+	summary.UpstreamFailedCount = attempts.Failed
+	return nil
 }
 
 type ownerSettlementTotals struct {

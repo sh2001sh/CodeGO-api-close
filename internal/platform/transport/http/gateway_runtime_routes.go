@@ -111,6 +111,12 @@ func registerRelayPlaygroundRoutes(router *gin.Engine) {
 }
 
 func registerRelayCoreRoutes(router *gin.Engine) {
+	sub2apiRouter := router.Group("/v1/sub2api")
+	sub2apiRouter.Use(middleware.RouteTag("relay"))
+	sub2apiRouter.Use(middleware.TokenAuthReadOnly())
+	{
+		sub2apiRouter.GET("/billing", gatewayhttp.GetSub2APIKeyBilling)
+	}
 	balanceRouter := router.Group("/v1/dashboard")
 	balanceRouter.Use(middleware.RouteTag("relay"))
 	balanceRouter.Use(middleware.SystemPerformanceCheck())

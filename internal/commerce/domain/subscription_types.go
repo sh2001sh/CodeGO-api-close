@@ -12,6 +12,7 @@ type SubscriptionPurchasePreview struct {
 	AmountDue                       float64                          `json:"amount_due"`
 	CurrentSubscription             *commerceschema.UserSubscription `json:"-"`
 	CurrentPlan                     *commerceschema.SubscriptionPlan `json:"-"`
+	PreserveRemainingQuota          bool                             `json:"-"`
 	DisabledReason                  string                           `json:"disabled_reason,omitempty"`
 	AppliedBlindBoxDiscountRate     float64                          `json:"applied_blind_box_discount_rate,omitempty"`
 	FirstPurchaseDiscountApplied    bool                             `json:"first_purchase_discount_applied,omitempty"`

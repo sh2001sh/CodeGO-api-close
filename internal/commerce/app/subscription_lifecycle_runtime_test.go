@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/sh2001sh/new-api/constant"
+	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -245,7 +246,7 @@ func TestUpgradeUserSubscriptionWithPlanTx_ResetsUsageAndStartsNewCycle(t *testi
 			return err
 		}
 		var err error
-		upgraded, err = upgradeUserSubscriptionWithPlanTx(tx, locked, targetPlan, "order")
+		upgraded, err = upgradeUserSubscriptionWithPlanTx(tx, locked, targetPlan, "order", false)
 		return err
 	}))
 	require.NotNil(t, upgraded)
@@ -254,4 +255,60 @@ func TestUpgradeUserSubscriptionWithPlanTx_ResetsUsageAndStartsNewCycle(t *testi
 	assert.Equal(t, targetPlan.TotalAmount, upgraded.AmountTotal)
 	assert.GreaterOrEqual(t, upgraded.StartTime, now)
 	assert.Greater(t, upgraded.EndTime, upgraded.StartTime)
+}
+
+func TestApplySubscriptionPurchaseTx_FullPriceUpgradeAfterResetPreservesRemainingQuota(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 9221, Username: "upgrade_after_reset", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	currentPlan := &commerceschema.SubscriptionPlan{Id: 9322, Title: "Pro月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro, DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 169, TotalAmount: quotaUnitsFromUSD(630)}
+	targetPlan := &commerceschema.SubscriptionPlan{Id: 9323, Title: "Ultra月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierUltra, DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 299, TotalAmount: quotaUnitsFromUSD(1150)}
+	require.NoError(t, db.Create(currentPlan).Error)
+	require.NoError(t, db.Create(targetPlan).Error)
+	now := time.Now().Unix()
+	remaining := quotaUnitsFromUSD(472.68)
+	sub := &commerceschema.UserSubscription{Id: 9421, UserId: user.Id, PlanId: currentPlan.Id, AmountTotal: quotaUnitsFromUSD(750), AmountUsed: quotaUnitsFromUSD(750) - remaining, StartTime: now - 10*24*3600, EndTime: now + 20*24*3600, Status: "active"}
+	require.NoError(t, db.Create(sub).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityLedger{UserId: user.Id, RelatedUserId: sub.Id, ChangeType: commerceschema.SubscriptionResetOpportunityChangeUse, Delta: -1, EventKey: "reset-before-upgrade"}).Error)
+
+	var upgraded *commerceschema.UserSubscription
+	var preview *commercedomain.SubscriptionPurchasePreview
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		upgraded, preview, err = ApplySubscriptionPurchaseTx(tx, user.Id, targetPlan, "order")
+		return err
+	}))
+	require.NotNil(t, preview)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseActionUpgrade, preview.Action)
+	assert.Equal(t, targetPlan.PriceAmount, preview.BaseAmountDue)
+	assert.True(t, preview.PreserveRemainingQuota)
+	assert.Equal(t, targetPlan.TotalAmount+remaining, upgraded.AmountTotal)
+	assert.Zero(t, upgraded.AmountUsed)
+}
+
+func TestApplySubscriptionPurchaseTx_DiscountedUpgradeDoesNotPreserveRemainingQuota(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 9222, Username: "discounted_upgrade", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	currentPlan := &commerceschema.SubscriptionPlan{Id: 9324, Title: "Pro月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro, DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 169, TotalAmount: quotaUnitsFromUSD(630)}
+	targetPlan := &commerceschema.SubscriptionPlan{Id: 9325, Title: "Ultra月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierUltra, DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 299, TotalAmount: quotaUnitsFromUSD(1150)}
+	require.NoError(t, db.Create(currentPlan).Error)
+	require.NoError(t, db.Create(targetPlan).Error)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{Id: 9422, UserId: user.Id, PlanId: currentPlan.Id, AmountTotal: currentPlan.TotalAmount, AmountUsed: quotaUnitsFromUSD(200), StartTime: now - 10*24*3600, EndTime: now + 20*24*3600, Status: "active"}
+	require.NoError(t, db.Create(sub).Error)
+
+	var upgraded *commerceschema.UserSubscription
+	var preview *commercedomain.SubscriptionPurchasePreview
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		upgraded, preview, err = ApplySubscriptionPurchaseTx(tx, user.Id, targetPlan, "order")
+		return err
+	}))
+	require.NotNil(t, preview)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseActionUpgrade, preview.Action)
+	assert.Less(t, preview.BaseAmountDue, targetPlan.PriceAmount)
+	assert.False(t, preview.PreserveRemainingQuota)
+	assert.Equal(t, targetPlan.TotalAmount, upgraded.AmountTotal)
+	assert.Zero(t, upgraded.AmountUsed)
 }

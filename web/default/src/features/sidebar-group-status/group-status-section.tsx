@@ -24,7 +24,7 @@ export function GroupStatusSection(props: {
     <section className='group-status-render-section app-page-shell p-4'>
       <div
         className={cn(
-          'flex items-center justify-between gap-3',
+          'flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center',
           props.expanded && 'mb-4'
         )}
       >
@@ -54,7 +54,23 @@ export function GroupStatusSection(props: {
             · {group.models.length} 个模型
           </p>
         </div>
-        <div className='flex shrink-0 items-center gap-3'>
+        <div className='flex shrink-0 flex-wrap items-center gap-2 sm:gap-3'>
+          {typeof group.request_count === 'number' &&
+            typeof group.success_rate === 'number' &&
+            group.request_count > 0 && (
+              <div className='border-border bg-muted/30 order-3 w-full rounded-md border px-3 py-2 text-xs sm:order-none sm:w-auto sm:border-0 sm:bg-transparent sm:p-0 sm:text-right'>
+                <div className='text-muted-foreground'>近 6 小时请求</div>
+                <div className='mt-0.5 font-semibold tabular-nums'>
+                  成功 {Math.round((group.request_count * group.success_rate) / 100).toLocaleString()}
+                  {' · '}失败{' '}
+                  {Math.max(
+                    0,
+                    group.request_count -
+                      Math.round((group.request_count * group.success_rate) / 100)
+                  ).toLocaleString()}
+                </div>
+              </div>
+            )}
           <div className='hidden text-right sm:block'>
             <div className='text-muted-foreground text-xs'>缓存命中率</div>
             <div className='mt-0.5 text-base font-semibold tabular-nums'>

@@ -229,6 +229,9 @@ function OwnerLogToolbar(props: {
     request_count: number
     success_count: number
     failed_count: number
+    upstream_attempt_count: number
+    upstream_success_count: number
+    upstream_failed_count: number
     consumer_amount: number
     owner_income: number
   }
@@ -364,7 +367,7 @@ function OwnerLogToolbar(props: {
         <ShieldCheck className='text-info mt-0.5 size-3.5 shrink-0' />
         <span>
           {t(
-            '仅隐藏凭据、请求正文和用户隐私；渠道主可查看真实上游错误。当前统计范围：{{period}}。',
+            '“上游尝试”包含跨渠道重试前真实发出的每一次请求；“计费请求”只统计已落调用日志的请求。仅隐藏凭据、请求正文和用户隐私。当前统计范围：{{period}}。',
             {
               period: props.periodLabel,
             }
@@ -381,16 +384,20 @@ function SummaryBand(props: { summary?: OwnerLogToolbarProps['summary'] }) {
   const summary = props.summary
   const items = [
     {
-      label: t('总调用'),
+      label: t('上游尝试'),
+      value: (summary?.upstream_attempt_count ?? 0).toLocaleString(),
+    },
+    {
+      label: t('上游成功'),
+      value: (summary?.upstream_success_count ?? 0).toLocaleString(),
+    },
+    {
+      label: t('上游失败'),
+      value: (summary?.upstream_failed_count ?? 0).toLocaleString(),
+    },
+    {
+      label: t('计费请求'),
       value: (summary?.request_count ?? 0).toLocaleString(),
-    },
-    {
-      label: t('成功调用'),
-      value: (summary?.success_count ?? 0).toLocaleString(),
-    },
-    {
-      label: t('失败调用'),
-      value: (summary?.failed_count ?? 0).toLocaleString(),
     },
     {
       label: t('用户总扣费'),
@@ -399,7 +406,7 @@ function SummaryBand(props: { summary?: OwnerLogToolbarProps['summary'] }) {
     { label: t('渠道总收入'), value: formatQuota(summary?.owner_income ?? 0) },
   ]
   return (
-    <div className='border-border bg-card grid overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-5'>
+    <div className='border-border bg-card grid overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-6'>
       {items.map((item) => (
         <div
           key={item.label}

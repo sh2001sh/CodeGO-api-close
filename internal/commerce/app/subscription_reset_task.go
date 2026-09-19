@@ -79,6 +79,18 @@ func runSubscriptionMaintenanceOnce() {
 			break
 		}
 	}
+	totalExpiredSubscriptionOrders := 0
+	for {
+		n, err := ExpireDueSubscriptionOrders(subscriptionMaintenanceBatchSize)
+		if err != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("pending subscription order expiry task failed: %v", err))
+			break
+		}
+		totalExpiredSubscriptionOrders += n
+		if n < subscriptionMaintenanceBatchSize {
+			break
+		}
+	}
 	totalExpired := 0
 	for {
 		n, err := ExpireDueSubscriptions(subscriptionMaintenanceBatchSize)
@@ -129,7 +141,7 @@ func runSubscriptionMaintenanceOnce() {
 			logger.LogWarn(ctx, fmt.Sprintf("monthly pass prop reconciliation failed: %v", err))
 		}
 	}
-	if platformconfig.DebugEnabled && (totalExpired > 0 || totalExpiredTopUps > 0 || totalExpiredBlindBoxOrders > 0) {
-		logger.LogDebug(ctx, "commerce maintenance: expired_subscriptions=%d expired_topups=%d expired_blind_box_orders=%d", totalExpired, totalExpiredTopUps, totalExpiredBlindBoxOrders)
+	if platformconfig.DebugEnabled && (totalExpired > 0 || totalExpiredTopUps > 0 || totalExpiredBlindBoxOrders > 0 || totalExpiredSubscriptionOrders > 0) {
+		logger.LogDebug(ctx, "commerce maintenance: expired_subscriptions=%d expired_topups=%d expired_blind_box_orders=%d expired_subscription_orders=%d", totalExpired, totalExpiredTopUps, totalExpiredBlindBoxOrders, totalExpiredSubscriptionOrders)
 	}
 }

@@ -218,8 +218,8 @@ export function SidebarGroupStatusPage() {
                   </button>
                 ))}
               </div>
-              <div className='flex flex-col gap-2 xl:flex-row xl:items-center'>
-                <label className='relative min-w-0 flex-1 xl:max-w-xl'>
+              <div className='grid grid-cols-2 gap-2 xl:flex xl:items-center'>
+                <label className='relative col-span-2 min-w-0 flex-1 xl:max-w-xl'>
                   <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2' />
                   <Input
                     value={search}
@@ -233,7 +233,7 @@ export function SidebarGroupStatusPage() {
                   value={modelFilter}
                   onChange={(event) => setModelFilter(event.target.value)}
                   aria-label='按模型筛选'
-                  className='xl:w-52'
+                  className='min-h-11 w-full xl:w-52'
                 >
                   <option value=''>全部模型</option>
                   {modelOptions.map((model) => (
@@ -246,7 +246,7 @@ export function SidebarGroupStatusPage() {
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value)}
                   aria-label='按状态筛选'
-                  className='xl:w-40'
+                  className='min-h-11 w-full xl:w-40'
                 >
                   <option value=''>全部状态</option>
                   <option value='healthy'>稳定</option>

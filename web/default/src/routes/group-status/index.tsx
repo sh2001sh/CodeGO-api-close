@@ -36,7 +36,7 @@ function GroupStatusPage() {
       <div className='dawn !min-h-0 !bg-transparent'>
         <DawnNav />
       </div>
-      <div className='h-svh pt-28 md:pt-16'>
+      <div className='min-h-svh pt-32 pb-[env(safe-area-inset-bottom)] md:pt-20'>
         <SidebarGroupStatusPage />
       </div>
     </div>

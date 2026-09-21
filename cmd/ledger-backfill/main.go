@@ -522,15 +522,19 @@ func ensureBootstrapCredit(tx *gorm.DB, accountType string, ownerType string, ow
 	if err != nil {
 		return err
 	}
-	var entryCount int64
-	if err := tx.Model(&billingschema.BillingLedgerEntry{}).Where("account_id = ?", account.AccountID).Count(&entryCount).Error; err != nil {
-		return err
-	}
 	// Legacy balances can be negative after a historical over-consumption.
 	// Preserve the account for coverage checks, but never manufacture a
 	// compensating credit for a balance the ledger cannot represent.
-	if entryCount > 0 || amount <= 0 {
+	if amount <= 0 {
 		return nil
+	}
+	var existing billingschema.BillingLedgerEntry
+	err = tx.Select("entry_id").Where("account_id = ?", account.AccountID).Limit(1).Take(&existing).Error
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
 	}
 	_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID: account.AccountID, Amount: amount, IdempotencyKey: idempotencyKey,

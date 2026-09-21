@@ -32,7 +32,7 @@ type mirroredWalletStore struct {
 type mirroredWalletTxStore struct {
 	accountType string
 	readBalance func(tx *gorm.DB, userID int) (int, error)
-	applyDelta  func(tx *gorm.DB, userID int, amount int) error
+	applyDelta  func(tx *gorm.DB, userID int, amount int64) error
 }
 
 func GetUserClaudeWalletQuota(userID int) (int, error) {
@@ -200,7 +200,7 @@ func SetClaudeWalletQuota(userID int, targetBalance int) error {
 }
 
 func CreditClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
-	return creditUserWalletQuotaTx(tx, userID, amount, idempotencyKey, reasonCode, mirroredWalletTxStore{
+	return creditUserWalletQuotaTx(tx, userID, int64(amount), idempotencyKey, reasonCode, mirroredWalletTxStore{
 		accountType: billingAccountTypeClaudeWallet,
 		readBalance: getUserClaudeWalletQuotaTx,
 		applyDelta:  increaseUserClaudeWalletQuotaTx,
@@ -212,7 +212,7 @@ func CreditClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyK
 // settlements are already held in a dedicated pending account, so releasing one
 // must transfer that amount to the owner's available balance and never consume
 // an unrelated existing wallet balance.
-func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
+func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int64, idempotencyKey string, reasonCode string) error {
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
@@ -230,7 +230,7 @@ func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int, idemp
 	}
 	entry, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID:      account.AccountID,
-		Amount:         int64(amount),
+		Amount:         amount,
 		IdempotencyKey: idempotencyKey,
 		ReasonCode:     defaultReasonCode(reasonCode, "marketplace_owner_release"),
 		ReferenceType:  "user",
@@ -241,7 +241,7 @@ func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int, idemp
 	if err != nil {
 		return err
 	}
-	if err := recordFundingLotTx(tx, account.AccountID, int64(amount), idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
+	if err := recordFundingLotTx(tx, account.AccountID, amount, idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
 		return err
 	}
 
@@ -258,8 +258,8 @@ func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int, idemp
 
 // ReclaimMarketplaceOwnerEarningsTx moves already released marketplace quota
 // from the channel owner to the administrator wallet in one transaction.
-func ReclaimMarketplaceOwnerEarningsTx(tx *gorm.DB, ownerUserID, adminUserID, amount int, operationID string) error {
-	if err := DebitClaudeWalletQuotaTxWithReason(tx, ownerUserID, amount, operationID+":debit", "marketplace_owner_reclaim"); err != nil {
+func ReclaimMarketplaceOwnerEarningsTx(tx *gorm.DB, ownerUserID, adminUserID int, amount int64, operationID string) error {
+	if err := debitClaudeWalletQuotaAmountTx(tx, ownerUserID, amount, operationID+":debit", "marketplace_owner_reclaim"); err != nil {
 		return err
 	}
 	return CreditMarketplaceOwnerEarningsTx(tx, adminUserID, amount, operationID+":credit", "marketplace_owner_reclaim")
@@ -268,12 +268,12 @@ func ReclaimMarketplaceOwnerEarningsTx(tx *gorm.DB, ownerUserID, adminUserID, am
 // ForfeitMarketplacePendingEarningsTx removes frozen funds from the pending
 // settlement account and credits the administrator wallet without crediting
 // the channel owner's wallet.
-func ForfeitMarketplacePendingEarningsTx(tx *gorm.DB, pendingAccountID string, adminUserID, amount int, operationID string) error {
-	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{AccountID: pendingAccountID, RequestID: ledgerSyncRequestID(operationID), ReservedAmount: int64(amount), IdempotencyKey: operationID + ":reserve"})
+func ForfeitMarketplacePendingEarningsTx(tx *gorm.DB, pendingAccountID string, adminUserID int, amount int64, operationID string) error {
+	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{AccountID: pendingAccountID, RequestID: ledgerSyncRequestID(operationID), ReservedAmount: amount, IdempotencyKey: operationID + ":reserve"})
 	if err != nil {
 		return err
 	}
-	if _, err = billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{ReservationID: reservation.ReservationID, ActualAmount: int64(amount), IdempotencyKey: operationID + ":settle"}); err != nil {
+	if _, err = billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{ReservationID: reservation.ReservationID, ActualAmount: amount, IdempotencyKey: operationID + ":settle"}); err != nil {
 		return err
 	}
 	return CreditMarketplaceOwnerEarningsTx(tx, adminUserID, amount, operationID+":credit", "marketplace_owner_forfeit")
@@ -339,7 +339,7 @@ func adjustUserWalletQuota(userID int, delta int, mirrored mirroredWalletStore) 
 	return nil
 }
 
-func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string, mirrored mirroredWalletTxStore) error {
+func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, idempotencyKey string, reasonCode string, mirrored mirroredWalletTxStore) error {
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
@@ -366,7 +366,7 @@ func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey
 	}
 	entry, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID:      account.AccountID,
-		Amount:         int64(amount),
+		Amount:         amount,
 		IdempotencyKey: idempotencyKey,
 		ReasonCode:     defaultReasonCode(reasonCode, "ledger_sync_credit"),
 		ReferenceType:  "user",
@@ -377,7 +377,7 @@ func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey
 	if err != nil {
 		return err
 	}
-	if err := recordFundingLotTx(tx, account.AccountID, int64(amount), idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
+	if err := recordFundingLotTx(tx, account.AccountID, amount, idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
 		return err
 	}
 	if err := mirrored.applyDelta(tx, userID, amount); err != nil {
@@ -479,7 +479,7 @@ func reconcileAccountBalanceTx(tx *gorm.DB, account *billingschema.BillingAccoun
 	if diff == 0 {
 		return nil
 	}
-	return applyLedgerDeltaTx(tx, account, userID, -diff, fmt.Sprintf("reconcile:%s", platformruntime.GetUUID()), "ledger_sync_reconcile")
+	return applyLedgerDeltaTx(tx, account, userID, int64(-diff), fmt.Sprintf("reconcile:%s", platformruntime.GetUUID()), "ledger_sync_reconcile")
 }
 
 func loadBalanceSnapshot(accountID string) (*billingschema.BillingBalanceSnapshot, error) {
@@ -544,14 +544,14 @@ func applyLedgerDelta(account *billingschema.BillingAccount, userID int, delta i
 	return err
 }
 
-func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, userID int, delta int, operationID string, reasonCode string) error {
+func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, userID int, delta int64, operationID string, reasonCode string) error {
 	if account == nil || delta == 0 {
 		return nil
 	}
 	if delta < 0 {
 		_, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 			AccountID:      account.AccountID,
-			Amount:         int64(-delta),
+			Amount:         -delta,
 			IdempotencyKey: fmt.Sprintf("ledger-credit:%s", operationID),
 			ReasonCode:     reasonCode,
 			ReferenceType:  "user",
@@ -565,7 +565,7 @@ func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, user
 	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
 		AccountID:      account.AccountID,
 		RequestID:      ledgerSyncRequestID(operationID),
-		ReservedAmount: int64(delta),
+		ReservedAmount: delta,
 		IdempotencyKey: fmt.Sprintf("ledger-reservation:%s", operationID),
 	})
 	if err != nil {
@@ -573,7 +573,7 @@ func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, user
 	}
 	_, err = billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{
 		ReservationID:  reservation.ReservationID,
-		ActualAmount:   int64(delta),
+		ActualAmount:   delta,
 		IdempotencyKey: fmt.Sprintf("ledger-settlement:%s", operationID),
 	})
 	return err
@@ -606,11 +606,11 @@ func getUserClaudeWalletQuotaTx(tx *gorm.DB, userID int) (int, error) {
 	return quota, nil
 }
 
-func increaseUserWalletQuotaTx(tx *gorm.DB, userID int, amount int) error {
+func increaseUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64) error {
 	return tx.Model(&identityschema.User{}).Where("id = ?", userID).Update("quota", gorm.Expr("quota + ?", amount)).Error
 }
 
-func increaseUserClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int) error {
+func increaseUserClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int64) error {
 	return tx.Model(&identityschema.User{}).Where("id = ?", userID).Update("claude_quota", gorm.Expr("claude_quota + ?", amount)).Error
 }
 

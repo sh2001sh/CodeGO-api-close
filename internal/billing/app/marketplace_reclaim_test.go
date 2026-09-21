@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -11,6 +12,41 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMarketplaceReclaimTransfersAmountAboveInt32(t *testing.T) {
+	setupMonthlyPassFundingTestDB(t)
+	db := platformdb.DB
+	reclaimAmount := int64(math.MaxInt32) + 313_199_320
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Settlement{}, &marketplaceschema.IncomeReclaim{}, &billingschema.FundingLot{}))
+	require.NoError(t, db.Create([]identityschema.User{
+		{Id: 1, Username: "bigint-admin", AffCode: "bigint-admin"},
+		{Id: 10, Username: "bigint-owner", AffCode: "bigint-owner", ClaudeQuota: int(reclaimAmount)},
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{
+		ID: "bigint-reclaim", RequestID: "bigint-reclaim", GroupID: "g-bigint",
+		OwnerUserID: 10, OwnerNetAmount: reclaimAmount, Status: "released",
+	}).Error)
+	marketplacesettlement.RegisterReclaimHook(ReclaimMarketplaceOwnerEarningsTx)
+	t.Cleanup(func() { marketplacesettlement.RegisterReclaimHook(nil) })
+
+	result, err := marketplacesettlement.ReclaimPending(marketplacesettlement.ReleaseFilter{
+		OwnerUserIDs: []int{10}, MaxAmount: reclaimAmount, OperationID: "bigint-wallet-reclaim",
+	})
+	require.NoError(t, err)
+	require.Equal(t, reclaimAmount, result.Amount)
+
+	var owner, admin identityschema.User
+	require.NoError(t, db.First(&owner, 10).Error)
+	require.NoError(t, db.First(&admin, 1).Error)
+	require.Zero(t, owner.ClaudeQuota)
+	require.EqualValues(t, reclaimAmount, admin.ClaudeQuota)
+	ownerBalance, err := GetUserClaudeWalletQuota(10)
+	require.NoError(t, err)
+	require.Zero(t, ownerBalance)
+	adminBalance, err := GetUserClaudeWalletQuota(1)
+	require.NoError(t, err)
+	require.EqualValues(t, reclaimAmount, adminBalance)
+}
 
 func TestMarketplaceReclaimUpdatesWalletsAndRollsBackWholeBatch(t *testing.T) {
 	setupMonthlyPassFundingTestDB(t)

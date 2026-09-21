@@ -3,6 +3,7 @@ package settlement
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -42,6 +43,25 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 	platformdb.UsingPostgreSQL = true
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Settlement{}, &marketplaceschema.IncomeReclaim{}))
 
+	t.Run("amount above int32 remains bigint", func(t *testing.T) {
+		amount := int64(math.MaxInt32) + 313_199_320
+		item := postgresReclaimSettlement("bigint-amount", 14, amount, time.Now().UTC())
+		require.NoError(t, db.Create(&item).Error)
+		transferred := int64(0)
+		RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, hookAmount int64, _ string) error {
+			require.Equal(t, 14, owner)
+			transferred += hookAmount
+			return nil
+		})
+		task, err := CreateIncomeReclaimTask(ReleaseFilter{OwnerUserIDs: []int{14}, MaxAmount: amount, OperationID: "postgres-bigint"})
+		require.NoError(t, err)
+		task, err = ProcessIncomeReclaimTask(task.ID)
+		require.NoError(t, err)
+		require.Equal(t, reclaimTaskCompleted, task.Status)
+		require.Equal(t, amount, task.Amount)
+		require.Equal(t, amount, transferred)
+	})
+
 	t.Run("exact amount can end in the middle of one settlement", func(t *testing.T) {
 		reference := time.Now().UTC().Add(-time.Hour)
 		items := []marketplaceschema.Settlement{
@@ -50,8 +70,8 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 			postgresReclaimSettlement("partial-3", 11, 70, reference.Add(2*time.Second)),
 		}
 		require.NoError(t, db.Create(&items).Error)
-		transfers := make(map[int]int)
-		RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, amount int, _ string) error {
+		transfers := make(map[int]int64)
+		RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, amount int64, _ string) error {
 			transfers[owner] += amount
 			return nil
 		})
@@ -62,7 +82,7 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 		require.Equal(t, reclaimTaskCompleted, task.Status)
 		require.Equal(t, 3, task.Count)
 		require.EqualValues(t, 100, task.Amount)
-		require.Equal(t, map[int]int{10: 80, 11: 20}, transfers)
+		require.Equal(t, map[int]int64{10: 80, 11: 20}, transfers)
 
 		var updated []marketplaceschema.Settlement
 		require.NoError(t, db.Where("request_id LIKE ?", "partial-%").Order("created_at, id").Find(&updated).Error)
@@ -73,13 +93,13 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, task.Count, repeated.Count)
 		require.Equal(t, task.Amount, repeated.Amount)
-		require.Equal(t, map[int]int{10: 80, 11: 20}, transfers)
+		require.Equal(t, map[int]int64{10: 80, 11: 20}, transfers)
 	})
 
 	t.Run("hook failure rolls back settlement updates", func(t *testing.T) {
 		item := postgresReclaimSettlement("rollback", 12, 40, time.Now().UTC())
 		require.NoError(t, db.Create(&item).Error)
-		RegisterReclaimHook(func(_ *gorm.DB, _, _ int, _ int, _ string) error {
+		RegisterReclaimHook(func(_ *gorm.DB, _, _ int, _ int64, _ string) error {
 			return errors.New("forced transfer failure")
 		})
 		task, err := CreateIncomeReclaimTask(ReleaseFilter{OwnerUserIDs: []int{12}, OperationID: "postgres-rollback"})
@@ -98,8 +118,8 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 			items[index] = postgresReclaimSettlement(fmt.Sprintf("large-%05d", index), 13, 1, reference)
 		}
 		require.NoError(t, db.CreateInBatches(items, 500).Error)
-		transferred := 0
-		RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, amount int, _ string) error {
+		transferred := int64(0)
+		RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, amount int64, _ string) error {
 			require.Equal(t, 13, owner)
 			transferred += amount
 			return nil
@@ -114,7 +134,7 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, reclaimTaskCompleted, task.Status)
 		require.Equal(t, reclaimBatchSize+1, task.Count)
-		require.Equal(t, reclaimBatchSize+1, transferred)
+		require.Equal(t, int64(reclaimBatchSize+1), transferred)
 	})
 }
 

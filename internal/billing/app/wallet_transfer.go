@@ -11,7 +11,7 @@ import (
 
 // DebitLegacyGPTQuotaTxWithReason is restricted to the one-time unified-credit migration.
 func DebitLegacyGPTQuotaTxWithReason(tx *gorm.DB, userID int, amount int, operationID, reasonCode string) error {
-	return debitUserWalletQuotaTx(tx, userID, amount, operationID, mirroredWalletTxStore{
+	return debitUserWalletQuotaTx(tx, userID, int64(amount), operationID, mirroredWalletTxStore{
 		accountType: billingAccountTypeWallet,
 		readBalance: getUserWalletQuotaTx,
 		applyDelta:  decreaseUserWalletQuotaTx,
@@ -25,6 +25,10 @@ func DebitClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID s
 
 // DebitClaudeWalletQuotaTxWithReason debits the universal wallet with an explicit ledger reason.
 func DebitClaudeWalletQuotaTxWithReason(tx *gorm.DB, userID int, amount int, operationID, reasonCode string) error {
+	return debitClaudeWalletQuotaAmountTx(tx, userID, int64(amount), operationID, reasonCode)
+}
+
+func debitClaudeWalletQuotaAmountTx(tx *gorm.DB, userID int, amount int64, operationID, reasonCode string) error {
 	return debitUserWalletQuotaTx(tx, userID, amount, operationID, mirroredWalletTxStore{
 		accountType: billingAccountTypeClaudeWallet,
 		readBalance: getUserClaudeWalletQuotaTx,
@@ -32,7 +36,7 @@ func DebitClaudeWalletQuotaTxWithReason(tx *gorm.DB, userID int, amount int, ope
 	}, false, reasonCode)
 }
 
-func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID string, mirrored mirroredWalletTxStore, consumeBonus bool, reasonCode string) error {
+func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, operationID string, mirrored mirroredWalletTxStore, consumeBonus bool, reasonCode string) error {
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
@@ -44,7 +48,7 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID str
 	if err != nil {
 		return err
 	}
-	if legacyBalance < amount {
+	if int64(legacyBalance) < amount {
 		return billingdomain.ErrInsufficientBalance
 	}
 	account, err := ensureMirroredUserAccountTx(tx, userID, mirrored.accountType, legacyBalance)
@@ -58,7 +62,7 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID str
 		return err
 	}
 	if reasonCode != "wallet_peer_transfer_debit" && reasonCode != "wallet_peer_transfer_fee" && reasonCode != "marketplace_owner_reclaim" && reasonCode != "payment_refund" {
-		if err := ConsumeWalletRewardHoldsTx(tx, account.AccountID, int64(amount)); err != nil {
+		if err := ConsumeWalletRewardHoldsTx(tx, account.AccountID, amount); err != nil {
 			return err
 		}
 	}
@@ -66,20 +70,20 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int, operationID str
 		return err
 	}
 	if consumeBonus {
-		return ConsumeBonusWalletQuotaCreditsTx(tx, userID, int64(amount))
+		return ConsumeBonusWalletQuotaCreditsTx(tx, userID, amount)
 	}
 	return nil
 }
 
-func decreaseUserWalletQuotaTx(tx *gorm.DB, userID int, amount int) error {
+func decreaseUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64) error {
 	return decreaseUserQuotaColumnTx(tx, userID, "quota", amount)
 }
 
-func decreaseUserClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int) error {
+func decreaseUserClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int64) error {
 	return decreaseUserQuotaColumnTx(tx, userID, "claude_quota", amount)
 }
 
-func decreaseUserQuotaColumnTx(tx *gorm.DB, userID int, column string, amount int) error {
+func decreaseUserQuotaColumnTx(tx *gorm.DB, userID int, column string, amount int64) error {
 	result := tx.Model(&identityschema.User{}).
 		Where(fmt.Sprintf("id = ? AND %s >= ?", column), userID, amount).
 		UpdateColumn(column, gorm.Expr(column+" - ?", amount))

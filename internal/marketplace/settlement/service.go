@@ -39,9 +39,9 @@ type RecordParams struct {
 	SubscriptionMultiplier float64
 }
 
-type ReleaseHook func(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error
-type ReclaimHook func(tx *gorm.DB, ownerUserID int, adminUserID int, amount int, idempotencyKey string) error
-type ForfeitHook func(tx *gorm.DB, pendingAccountID string, adminUserID int, amount int, idempotencyKey string) error
+type ReleaseHook func(tx *gorm.DB, userID int, amount int64, idempotencyKey string, reasonCode string) error
+type ReclaimHook func(tx *gorm.DB, ownerUserID int, adminUserID int, amount int64, idempotencyKey string) error
+type ForfeitHook func(tx *gorm.DB, pendingAccountID string, adminUserID int, amount int64, idempotencyKey string) error
 
 type ReleaseFilter struct {
 	OwnerUserIDs   []int
@@ -449,7 +449,7 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 		}
 		slices.Sort(owners)
 		for _, owner := range owners {
-			if err := reclaimHook(tx, owner, 1, int(ownerAmounts[owner]), fmt.Sprintf("marketplace-reclaim:%s:batch:%d:owner:%d", task.ID, task.BatchNumber+1, owner)); err != nil {
+			if err := reclaimHook(tx, owner, 1, ownerAmounts[owner], fmt.Sprintf("marketplace-reclaim:%s:batch:%d:owner:%d", task.ID, task.BatchNumber+1, owner)); err != nil {
 				return err
 			}
 		}
@@ -490,10 +490,10 @@ func reclaimPostgresBatchTx(tx *gorm.DB, filter ReleaseFilter, remaining int64, 
 WITH locked AS MATERIALIZED (?),
 amounts AS (
 	SELECT id, owner_user_id, owner_net_amount, reclaimed_amount,
-		CASE WHEN ? <= 0 THEN owner_net_amount - reclaimed_amount
+		CASE WHEN CAST(? AS BIGINT) <= 0 THEN owner_net_amount - reclaimed_amount
 		ELSE LEAST(
 			owner_net_amount - reclaimed_amount,
-			GREATEST(? - COALESCE(
+			GREATEST(CAST(? AS BIGINT) - COALESCE(
 				SUM(owner_net_amount - reclaimed_amount) OVER (
 					ORDER BY created_at ASC, id ASC
 					ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
@@ -638,7 +638,7 @@ func forfeitOne(settlementID string) error {
 		if item.Status != statusPending {
 			return nil
 		}
-		if err := forfeitHook(tx, item.PendingAccountID, 1, int(item.OwnerNetAmount), "marketplace-forfeit:"+item.ID); err != nil {
+		if err := forfeitHook(tx, item.PendingAccountID, 1, item.OwnerNetAmount, "marketplace-forfeit:"+item.ID); err != nil {
 			return err
 		}
 		now := time.Now().UTC()
@@ -650,7 +650,7 @@ func forfeitOneTx(tx *gorm.DB, item *marketplaceschema.Settlement) error {
 	if item.Status != statusPending {
 		return nil
 	}
-	if err := forfeitHook(tx, item.PendingAccountID, 1, int(item.OwnerNetAmount), "marketplace-forfeit:"+item.ID); err != nil {
+	if err := forfeitHook(tx, item.PendingAccountID, 1, item.OwnerNetAmount, "marketplace-forfeit:"+item.ID); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -679,7 +679,7 @@ func releaseOne(settlementID string) error {
 		}); err != nil {
 			return err
 		}
-		if err := releaseHook(tx, item.OwnerUserID, int(item.OwnerNetAmount), "marketplace-release-credit:"+item.ID, "marketplace_owner_release"); err != nil {
+		if err := releaseHook(tx, item.OwnerUserID, item.OwnerNetAmount, "marketplace-release-credit:"+item.ID, "marketplace_owner_release"); err != nil {
 			return err
 		}
 		now := time.Now().UTC()

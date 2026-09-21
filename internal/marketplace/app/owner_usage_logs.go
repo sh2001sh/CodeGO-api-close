@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -221,6 +222,28 @@ func ownerUsageLogDBQuery(channelIDs []int, query OwnerUsageLogQuery) *gorm.DB {
 }
 
 func loadOwnerUsageSummary(ownerUserID int, channelIDs []int, groupIDs []string, query OwnerUsageLogQuery) (OwnerUsageLogSummary, error) {
+	cacheKey := ownerUsageSummaryCacheKey(ownerUserID, channelIDs, groupIDs, query)
+	if summary, ok := cachedOwnerUsageSummary(cacheKey); ok {
+		return summary, nil
+	}
+	value, err, _ := ownerUsageSummaryLoads.Do(cacheKey, func() (any, error) {
+		if summary, ok := cachedOwnerUsageSummary(cacheKey); ok {
+			return summary, nil
+		}
+		summary, err := loadOwnerUsageSummaryUncached(ownerUserID, channelIDs, groupIDs, query)
+		if err != nil {
+			return OwnerUsageLogSummary{}, err
+		}
+		cacheOwnerUsageSummary(cacheKey, summary)
+		return summary, nil
+	})
+	if err != nil {
+		return OwnerUsageLogSummary{}, err
+	}
+	return value.(OwnerUsageLogSummary), nil
+}
+
+func loadOwnerUsageSummaryUncached(ownerUserID int, channelIDs []int, groupIDs []string, query OwnerUsageLogQuery) (OwnerUsageLogSummary, error) {
 	var summary OwnerUsageLogSummary
 	if err := ownerUsageLogDBQuery(channelIDs, query).Select(
 		"COUNT(*) AS request_count, "+
@@ -329,7 +352,7 @@ func loadOwnerUsageSettlementSummary(ownerUserID int, channelIDs []int, groupIDs
 	var totals ownerSettlementTotals
 	settlementQuery := platformdb.DB.Model(&marketplaceschema.Settlement{}).
 		Where("owner_user_id = ? AND group_id IN ?", ownerUserID, groupIDs).
-		Select("COALESCE(SUM(consumer_amount), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income, " +
+		Select("COALESCE(SUM(" + walletEquivalentConsumerAmountSQL + "), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income, " +
 			"COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income, " +
 			"COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount - reclaimed_amount ELSE 0 END), 0) AS released_income, " +
 			"COALESCE(SUM(CASE WHEN status = 'reclaimed' THEN owner_net_amount ELSE reclaimed_amount END), 0) AS reclaimed_income")
@@ -492,6 +515,12 @@ func ownerUsageLogItem(log auditschema.Log, channel ownerUsageChannel, settlemen
 	applyOwnerUsageLogDetails(&item, log)
 	if settlement.ID != "" {
 		item.ConsumerAmount = settlement.ConsumerAmount
+		if settlement.BillingSource == "subscription" {
+			item.ConsumerAmount = settlement.SettlementGrossAmount
+			if item.ConsumerAmount <= 0 {
+				item.ConsumerAmount = walletEquivalentSubscriptionAmount(settlement.ConsumerAmount)
+			}
+		}
 		item.OwnerIncome = settlement.OwnerNetAmount
 		item.ReclaimedIncome = settlement.ReclaimedAmount
 		if settlement.Status == "reclaimed" {
@@ -502,6 +531,24 @@ func ownerUsageLogItem(log auditschema.Log, channel ownerUsageChannel, settlemen
 		item.IncomeStatus = settlement.Status
 		item.AvailableAt = &settlement.AvailableAt
 		item.ReleasedAt = settlement.ReleasedAt
+	} else {
+		var billing struct {
+			Source string `json:"billing_source"`
+		}
+		if json.Unmarshal([]byte(log.Other), &billing) == nil && billing.Source == "subscription" {
+			item.ConsumerAmount = walletEquivalentSubscriptionAmount(item.ConsumerAmount)
+		}
 	}
 	return item
+}
+
+func walletEquivalentSubscriptionAmount(amount int64) int64 {
+	if amount <= 0 {
+		return 0
+	}
+	converted := amount / 10
+	if amount%10 >= 5 {
+		converted++
+	}
+	return converted
 }

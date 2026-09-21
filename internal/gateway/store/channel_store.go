@@ -91,8 +91,16 @@ func HasEnabledChannelForGroup(group string) (bool, error) {
 	return false, nil
 }
 
-// SearchChannels searches channels for admin views.
-func SearchChannels(keyword string, group string, modelName string, idSort bool, sortOptions ...ChannelSortOptions) ([]*gatewayschema.Channel, error) {
+type ChannelSearchPage struct {
+	Items      []*gatewayschema.Channel
+	Total      int64
+	TypeCounts map[int64]int64
+}
+
+// SearchChannelsPage searches and paginates channels in the database. Keeping
+// filtering and pagination in SQL avoids loading every matching channel into
+// the control-plane process for each table interaction.
+func SearchChannelsPage(keyword string, group string, modelName string, statusFilter int, typeFilter int, offset int, limit int, idSort bool, sortOptions ...ChannelSortOptions) (*ChannelSearchPage, error) {
 	var channels []*gatewayschema.Channel
 	modelsCol := "`models`"
 	if platformdb.UsingPostgreSQL {
@@ -109,17 +117,47 @@ func SearchChannels(keyword string, group string, modelName string, idSort bool,
 		Where("channel_scope <> ?", gatewayschema.ChannelScopeExternal).
 		Omit("key")
 
-	whereClause := "(id = ? OR name LIKE ? OR `key` = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-	if platformdb.UsingPostgreSQL {
-		whereClause = "(id = ? OR name LIKE ? OR \"key\" = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
+	keyword = strings.TrimSpace(keyword)
+	if keyword != "" {
+		whereClause := "(id = ? OR name LIKE ? OR `key` = ? OR " + baseURLCol + " LIKE ?)"
+		if platformdb.UsingPostgreSQL {
+			whereClause = "(id = ? OR name LIKE ? OR \"key\" = ? OR " + baseURLCol + " LIKE ?)"
+		}
+		baseQuery = baseQuery.Where(whereClause, platformtext.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%")
 	}
-	args := []any{platformtext.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + modelName + "%"}
-	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
+	if modelName = strings.TrimSpace(modelName); modelName != "" {
+		baseQuery = baseQuery.Where(modelsCol+" LIKE ?", "%"+modelName+"%")
+	}
+	baseQuery = ApplyChannelGroupFilter(baseQuery, group)
+	if statusFilter == constant.ChannelStatusEnabled {
+		baseQuery = baseQuery.Where("status = ?", constant.ChannelStatusEnabled)
+	} else if statusFilter == 0 {
+		baseQuery = baseQuery.Where("status != ?", constant.ChannelStatusEnabled)
+	}
 
-	if err := applyChannelSort(baseQuery, order).Find(&channels).Error; err != nil {
+	var typeRows []struct {
+		Type  int64
+		Count int64
+	}
+	if err := baseQuery.Session(&gorm.Session{}).Select("type, count(*) as count").Group("type").Find(&typeRows).Error; err != nil {
 		return nil, err
 	}
-	return channels, nil
+	typeCounts := make(map[int64]int64, len(typeRows))
+	for _, row := range typeRows {
+		typeCounts[row.Type] = row.Count
+	}
+	if typeFilter >= 0 {
+		baseQuery = baseQuery.Where("type = ?", typeFilter)
+	}
+	var total int64
+	if err := baseQuery.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	if err := applyChannelSort(baseQuery, order).Offset(offset).Limit(limit).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	return &ChannelSearchPage{Items: channels, Total: total, TypeCounts: typeCounts}, nil
 }
 
 // ListChannelsByTag loads channels under one tag, optionally including sensitive fields.

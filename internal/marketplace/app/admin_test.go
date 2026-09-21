@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -48,6 +49,43 @@ func TestListAdminChannelsIncludesOwnerAndFiltersEarningsByTime(t *testing.T) {
 	require.EqualValues(t, 500, channels[0].TotalIncome)
 	require.EqualValues(t, 200, channels[0].PendingIncome)
 	require.EqualValues(t, 300, channels[0].ReleasedIncome)
+}
+
+func TestListAdminChannelsPageFiltersAndOnlyReturnsVisibleRows(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	invalidateAdminMarketplaceStatsCache()
+	require.NoError(t, db.AutoMigrate(
+		&identityschema.User{},
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&marketplaceschema.Settlement{},
+	))
+	require.NoError(t, db.Create(&identityschema.User{Id: 42, ExternalId: "PAGE42", Username: "page-owner"}).Error)
+	for index := 1; index <= 65; index++ {
+		channel := marketplaceschema.Channel{
+			ID: fmt.Sprintf("page-channel-%03d", index), OwnerUserID: 42,
+			ProviderType: "openai", Status: marketplacedomain.LifecycleActive,
+			SubmittedSourceLabel: "官key", DeclaredModels: `["gpt-page"]`,
+			UpdatedAt: time.Unix(int64(index), 0),
+		}
+		group := autoRouteTestGroup(fmt.Sprintf("page-group-%03d", index), channel.ID, channel.OwnerUserID, 1)
+		group.SystemDisplayName = fmt.Sprintf("分页渠道 %03d", index)
+		group.VerificationStatus = marketplacedomain.VerificationPassed
+		require.NoError(t, db.Create(&channel).Error)
+		require.NoError(t, db.Create(&group).Error)
+	}
+
+	result, err := ListAdminChannelsPage(AdminChannelQuery{
+		Search: "分页渠道", Verification: marketplacedomain.VerificationPassed,
+		Page: 2, PageSize: 20,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 65, result.Total)
+	require.Equal(t, 2, result.Page)
+	require.Equal(t, 20, result.PageSize)
+	require.Len(t, result.Items, 20)
+	require.Equal(t, "page-channel-045", result.Items[0].ID)
+	require.Equal(t, "page-channel-026", result.Items[19].ID)
 }
 
 func TestListAdminOwnerIncomeKeepsDeletedChannelHistory(t *testing.T) {
@@ -166,6 +204,32 @@ func TestAdminStatisticsCacheInvalidatesAfterSettlementChanges(t *testing.T) {
 	groupIncome, err = earningsByGroupIDs([]string{"cached-group"})
 	require.NoError(t, err)
 	require.EqualValues(t, 300, groupIncome["cached-group"].TotalIncome)
+}
+
+func TestChannelEarningsCacheKeepsIndependentOwnerEntries(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	invalidateAdminMarketplaceStatsCache()
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Settlement{}))
+	require.NoError(t, db.Create([]marketplaceschema.Settlement{
+		{ID: "cache-a-1", RequestID: "cache-a-1", GroupID: "cache-group-a", OwnerUserID: 41, OwnerNetAmount: 100, Status: "released"},
+		{ID: "cache-b-1", RequestID: "cache-b-1", GroupID: "cache-group-b", OwnerUserID: 42, OwnerNetAmount: 200, Status: "released"},
+	}).Error)
+
+	first, err := earningsByGroupIDs([]string{"cache-group-a"})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, first["cache-group-a"].TotalIncome)
+	_, err = earningsByGroupIDs([]string{"cache-group-b"})
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{
+		ID: "cache-a-2", RequestID: "cache-a-2", GroupID: "cache-group-a", OwnerUserID: 41,
+		OwnerNetAmount: 300, Status: "released",
+	}).Error)
+
+	// Loading another owner's dashboard must not evict the first owner's hot
+	// aggregate and force another full settlement scan.
+	cached, err := earningsByGroupIDs([]string{"cache-group-a"})
+	require.NoError(t, err)
+	require.EqualValues(t, 100, cached["cache-group-a"].TotalIncome)
 }
 
 func TestAdminChannelListCacheInvalidatesAfterChannelChanges(t *testing.T) {

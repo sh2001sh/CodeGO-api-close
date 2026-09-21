@@ -440,14 +440,18 @@ export function useAdminMarketplaceChannels(
     staleTime: 5_000,
     refetchOnWindowFocus: false,
     refetchInterval: (query) =>
-      verificationRefetchInterval(query.state.data ?? []),
+      verificationRefetchInterval(query.state.data?.items ?? []),
   })
 }
 
-export function useAdminOwnerIncome(filters: AdminMarketplaceChannelFilters) {
+export function useAdminOwnerIncome(
+  filters: AdminMarketplaceChannelFilters,
+  enabled = true
+) {
   return useQuery({
     queryKey: ['marketplace-owner-income', 'admin', filters],
     queryFn: () => getAdminOwnerIncome(filters),
+    enabled,
     placeholderData: (previousData) => previousData,
     staleTime: 5_000,
     refetchOnWindowFocus: false,

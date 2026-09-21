@@ -185,7 +185,7 @@ func ExportMyUsageLogs(c *gin.Context) {
 	var buffer bytes.Buffer
 	buffer.WriteString("\xEF\xBB\xBF")
 	writer := csv.NewWriter(&buffer)
-	if err := writer.Write([]string{"日志 ID", "时间", "渠道", "分组", "用户", "状态", "模型", "请求 ID", "上游请求 ID", "Prompt Tokens", "Completion Tokens", "耗时(ms)", "HTTP 状态", "错误类型", "错误代码", "错误信息", "用户扣费", "渠道收入", "平台佣金", "倍率", "收入状态"}); err != nil {
+	if err := writer.Write([]string{"日志 ID", "时间", "渠道", "分组", "用户", "状态", "模型", "请求 ID", "上游请求 ID", "Prompt Tokens", "Completion Tokens", "耗时(ms)", "HTTP 状态", "错误类型", "错误代码", "错误信息", "用户扣费（余额等值）", "渠道收入", "平台佣金", "倍率", "收入状态"}); err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
@@ -495,7 +495,9 @@ func AcceptGroupInvite(c *gin.Context) {
 }
 
 func ListAdminChannels(c *gin.Context) {
-	result, err := marketplaceapp.ListAdminChannels(marketplaceapp.AdminChannelQuery{
+	page := queryInt(c, "page", 1)
+	pageSize := queryInt(c, "page_size", 50)
+	result, err := marketplaceapp.ListAdminChannelsPage(marketplaceapp.AdminChannelQuery{
 		Search:         c.Query("search"),
 		Status:         c.Query("status"),
 		Source:         c.Query("source"),
@@ -504,6 +506,8 @@ func ListAdminChannels(c *gin.Context) {
 		OwnerSearch:    c.Query("owner_search"),
 		StartTimestamp: queryInt64(c, "start_timestamp"),
 		EndTimestamp:   queryInt64(c, "end_timestamp"),
+		Page:           page,
+		PageSize:       pageSize,
 	})
 	respond(c, result, err)
 }

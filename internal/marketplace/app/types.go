@@ -131,6 +131,15 @@ type AdminChannelQuery struct {
 	OwnerSearch    string
 	StartTimestamp int64
 	EndTimestamp   int64
+	Page           int
+	PageSize       int
+}
+
+type AdminChannelListResult struct {
+	Items    []ChannelView `json:"items"`
+	Total    int64         `json:"total"`
+	Page     int           `json:"page"`
+	PageSize int           `json:"page_size"`
 }
 
 type AdminOwnerIncomeQuery struct {

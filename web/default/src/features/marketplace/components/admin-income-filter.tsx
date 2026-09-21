@@ -20,6 +20,10 @@ export function AdminIncomeFilter(props: {
   onRefresh: () => void
   isFetching: boolean
   isError: boolean
+  notLoaded: boolean
+  canLoadAll: boolean
+  onLoadAll: () => void
+  incomeUnavailable: boolean
   onRelease: () => void
   releasing: boolean
   reclaimAmount: string
@@ -36,23 +40,37 @@ export function AdminIncomeFilter(props: {
         <div className='flex flex-wrap gap-x-5 gap-y-2 text-sm'>
           <IncomeValue
             label={t('渠道主')}
-            value={(report?.owner_count ?? 0).toLocaleString()}
+            value={
+              props.notLoaded
+                ? '--'
+                : (report?.owner_count ?? 0).toLocaleString()
+            }
           />
           <IncomeValue
             label={t('筛选收益')}
-            value={formatQuota(report?.total_income ?? 0)}
+            value={
+              props.notLoaded ? '--' : formatQuota(report?.total_income ?? 0)
+            }
           />
           <IncomeValue
             label={t('待结算')}
-            value={formatQuota(report?.pending_income ?? 0)}
+            value={
+              props.notLoaded ? '--' : formatQuota(report?.pending_income ?? 0)
+            }
           />
           <IncomeValue
             label={t('已到账收益')}
-            value={formatQuota(report?.released_income ?? 0)}
+            value={
+              props.notLoaded ? '--' : formatQuota(report?.released_income ?? 0)
+            }
           />
           <IncomeValue
             label={t('已回收额度')}
-            value={formatQuota(report?.reclaimed_income ?? 0)}
+            value={
+              props.notLoaded
+                ? '--'
+                : formatQuota(report?.reclaimed_income ?? 0)
+            }
           />
         </div>
         <div className='flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
@@ -111,6 +129,7 @@ export function AdminIncomeFilter(props: {
             onClick={props.onRelease}
             disabled={
               props.releasing ||
+              props.incomeUnavailable ||
               props.isError ||
               props.isFetching ||
               props.selectedOwnerIDs.length === 0 ||
@@ -128,83 +147,102 @@ export function AdminIncomeFilter(props: {
           {t('渠道主收益加载失败，请重试。')}
         </div>
       )}
-      {!props.isError && !props.isFetching && report?.items.length === 0 && (
-        <p className='text-muted-foreground px-4 py-6 text-sm'>
-          {t('当前筛选条件下暂无渠道主收益记录')}
-        </p>
-      )}
-      {!props.isError && (report?.items.length ?? 0) > 0 && (
-        <div className='border-border max-h-52 overflow-y-auto border-t'>
-          <label className='flex items-center gap-2 border-b px-4 py-2 text-xs'>
-            <input
-              type='checkbox'
-              checked={
-                report?.items.every((item) =>
-                  props.selectedOwnerIDs.includes(item.owner_user_id)
-                ) ?? false
-              }
-              onChange={(event) =>
-                props.onSelectedOwnerIDsChange(
-                  event.target.checked
-                    ? report!.items.map((item) => item.owner_user_id)
-                    : []
-                )
-              }
-            />
-            {t('选择全部渠道主')}
-          </label>
-          {report?.items.map((item) => (
-            <div
-              key={item.owner_user_id}
-              className='border-border grid grid-cols-2 gap-x-4 gap-y-2 border-b px-4 py-2.5 text-xs last:border-b-0 lg:grid-cols-4 lg:items-center'
-            >
-              <label className='col-span-2 flex items-center gap-2 sm:col-span-1'>
-                <input
-                  type='checkbox'
-                  checked={props.selectedOwnerIDs.includes(item.owner_user_id)}
-                  onChange={(event) => {
-                    const next = new Set(props.selectedOwnerIDs)
-                    if (event.target.checked) next.add(item.owner_user_id)
-                    else next.delete(item.owner_user_id)
-                    props.onSelectedOwnerIDsChange(Array.from(next))
-                  }}
-                />
-                <span className='text-foreground font-medium tabular-nums'>
-                  {t('渠道主 ID')}: {item.owner_external_id || '--'}
-                </span>
-              </label>
-              <ReportValue
-                label={t('收益')}
-                value={formatQuota(item.total_income)}
-              />
-              <ReportValue
-                label={t('当前可用额度')}
-                value={formatQuota(item.current_quota)}
-              />
-              <ReportValue
-                label={t('当前可回收额度')}
-                value={formatQuota(item.reclaimable_quota)}
-              />
-              <ReportValue
-                label={t('待结算')}
-                value={formatQuota(item.pending_income)}
-              />
-              <ReportValue
-                label={t('已到账收益')}
-                value={formatQuota(item.released_income)}
-              />
-              <ReportValue
-                label={t('已回收额度')}
-                value={formatQuota(item.reclaimed_income)}
-              />
-              <ReportValue
-                label={t('请求')}
-                value={item.request_count.toLocaleString()}
-              />
-            </div>
-          ))}
+      {props.canLoadAll && (
+        <div className='border-border flex flex-col items-start gap-2 border-t px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between'>
+          <span className='text-muted-foreground'>
+            {t(
+              '为避免进入页面时扫描全部历史，请搜索渠道主或选择时间范围；也可以手动加载全部历史。'
+            )}
+          </span>
+          <Button variant='outline' size='sm' onClick={props.onLoadAll}>
+            {t('加载全部历史收益')}
+          </Button>
         </div>
       )}
+      {!props.notLoaded &&
+        !props.isError &&
+        !props.isFetching &&
+        report?.items.length === 0 && (
+          <p className='text-muted-foreground px-4 py-6 text-sm'>
+            {t('当前筛选条件下暂无渠道主收益记录')}
+          </p>
+        )}
+      {!props.notLoaded &&
+        !props.isError &&
+        (report?.items.length ?? 0) > 0 && (
+          <div className='border-border max-h-52 overflow-y-auto border-t'>
+            <label className='flex items-center gap-2 border-b px-4 py-2 text-xs'>
+              <input
+                type='checkbox'
+                checked={
+                  report?.items.every((item) =>
+                    props.selectedOwnerIDs.includes(item.owner_user_id)
+                  ) ?? false
+                }
+                onChange={(event) =>
+                  props.onSelectedOwnerIDsChange(
+                    event.target.checked
+                      ? report!.items.map((item) => item.owner_user_id)
+                      : []
+                  )
+                }
+              />
+              {t('选择全部渠道主')}
+            </label>
+            {report?.items.map((item) => (
+              <div
+                key={item.owner_user_id}
+                className='border-border grid grid-cols-2 gap-x-4 gap-y-2 border-b px-4 py-2.5 text-xs last:border-b-0 lg:grid-cols-4 lg:items-center'
+              >
+                <label className='col-span-2 flex items-center gap-2 sm:col-span-1'>
+                  <input
+                    type='checkbox'
+                    checked={props.selectedOwnerIDs.includes(
+                      item.owner_user_id
+                    )}
+                    onChange={(event) => {
+                      const next = new Set(props.selectedOwnerIDs)
+                      if (event.target.checked) next.add(item.owner_user_id)
+                      else next.delete(item.owner_user_id)
+                      props.onSelectedOwnerIDsChange(Array.from(next))
+                    }}
+                  />
+                  <span className='text-foreground font-medium tabular-nums'>
+                    {t('渠道主 ID')}: {item.owner_external_id || '--'}
+                  </span>
+                </label>
+                <ReportValue
+                  label={t('收益')}
+                  value={formatQuota(item.total_income)}
+                />
+                <ReportValue
+                  label={t('当前可用额度')}
+                  value={formatQuota(item.current_quota)}
+                />
+                <ReportValue
+                  label={t('当前可回收额度')}
+                  value={formatQuota(item.reclaimable_quota)}
+                />
+                <ReportValue
+                  label={t('待结算')}
+                  value={formatQuota(item.pending_income)}
+                />
+                <ReportValue
+                  label={t('已到账收益')}
+                  value={formatQuota(item.released_income)}
+                />
+                <ReportValue
+                  label={t('已回收额度')}
+                  value={formatQuota(item.reclaimed_income)}
+                />
+                <ReportValue
+                  label={t('请求')}
+                  value={item.request_count.toLocaleString()}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       <div className='text-muted-foreground border-border border-t px-4 py-2 text-xs'>
         {t('收益按历史结算记录统计，渠道删除后仍会保留。')}
       </div>

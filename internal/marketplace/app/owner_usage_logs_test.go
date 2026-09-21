@@ -261,3 +261,44 @@ func TestOwnerLogIncludesPartialAndLegacyFullReclaims(t *testing.T) {
 		})
 	}
 }
+
+func TestOwnerUsageLogConvertsSubscriptionDebitToWalletEquivalent(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		settlement marketplaceschema.Settlement
+		log        auditschema.Log
+		want       int64
+	}{
+		{"wallet", marketplaceschema.Settlement{ID: "wallet", BillingSource: "wallet", ConsumerAmount: 60, SettlementGrossAmount: 60}, auditschema.Log{Quota: 60}, 60},
+		{"subscription", marketplaceschema.Settlement{ID: "subscription", BillingSource: "subscription", ConsumerAmount: 600, SettlementGrossAmount: 60}, auditschema.Log{Quota: 600}, 60},
+		{"legacy subscription", marketplaceschema.Settlement{ID: "legacy", BillingSource: "subscription", ConsumerAmount: 605}, auditschema.Log{Quota: 605}, 61},
+		{"missing settlement subscription", marketplaceschema.Settlement{}, auditschema.Log{Quota: 605, Other: `{"billing_source":"subscription"}`}, 61},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			item := ownerUsageLogItem(test.log, ownerUsageChannel{}, test.settlement, "user")
+			require.Equal(t, test.want, item.ConsumerAmount)
+		})
+	}
+}
+
+func TestOwnerUsageLogSummaryUsesWalletEquivalentForMixedBilling(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	internalID := 101
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "mixed", OwnerUserID: 10, InternalChannelID: &internalID, ProviderType: "openai"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "mixed-group", ChannelID: "mixed", OwnerUserID: 10, InternalGroupName: "mixed", PublicSlug: "mixed", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1}).Error)
+	require.NoError(t, logDB.Create([]auditschema.Log{
+		{ChannelId: internalID, Type: auditschema.LogTypeConsume, RequestId: "mixed-wallet", Quota: 60},
+		{ChannelId: internalID, Type: auditschema.LogTypeConsume, RequestId: "mixed-subscription", Quota: 600},
+	}).Error)
+	require.NoError(t, db.Create([]marketplaceschema.Settlement{
+		{RequestID: "mixed-wallet", GroupID: "mixed-group", OwnerUserID: 10, ConsumerAmount: 60, SettlementGrossAmount: 60, BillingSource: "wallet"},
+		{RequestID: "mixed-subscription", GroupID: "mixed-group", OwnerUserID: 10, ConsumerAmount: 600, SettlementGrossAmount: 60, BillingSource: "subscription"},
+	}).Error)
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{})
+	require.NoError(t, err)
+	require.EqualValues(t, 120, result.Summary.ConsumerAmount)
+	require.Len(t, result.Items, 2)
+	for _, item := range result.Items {
+		require.EqualValues(t, 60, item.ConsumerAmount)
+	}
+}

@@ -62,6 +62,12 @@ type ReclaimResult struct {
 	Amount int64
 }
 
+type reclaimBatchOwnerAmount struct {
+	OwnerUserID int   `gorm:"column:owner_user_id"`
+	Count       int   `gorm:"column:count"`
+	Amount      int64 `gorm:"column:amount"`
+}
+
 var (
 	releaseHook       ReleaseHook
 	reclaimHook       ReclaimHook
@@ -374,56 +380,68 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 				return nil
 			}
 		}
-		query := reclaimSettlementQuery(tx, filter).
-			Select("id", "owner_user_id", "owner_net_amount", "reclaimed_amount", "created_at").
-			Order("created_at ASC, id ASC").Limit(reclaimBatchSize)
+		ownerAmounts := make(map[int]int64)
+		batchAmount, batchCount := int64(0), 0
 		if platformdb.UsingPostgreSQL {
-			query = query.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
+			remaining := int64(0)
+			if filter.MaxAmount > 0 {
+				remaining = filter.MaxAmount - task.Amount
+			}
+			amounts, err := reclaimPostgresBatchTx(tx, filter, remaining, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			for _, item := range amounts {
+				ownerAmounts[item.OwnerUserID] = item.Amount
+				batchAmount += item.Amount
+				batchCount += item.Count
+			}
 		} else {
-			query = query.Clauses(lock)
+			query := reclaimSettlementQuery(tx, filter).
+				Select("id", "owner_user_id", "owner_net_amount", "reclaimed_amount", "created_at").
+				Order("created_at ASC, id ASC").Limit(reclaimBatchSize).
+				Clauses(lock)
+			var items []marketplaceschema.Settlement
+			if err := query.Find(&items).Error; err != nil {
+				return err
+			}
+			var fullIDs []string
+			now := time.Now().UTC()
+			for _, item := range items {
+				amount := item.OwnerNetAmount - item.ReclaimedAmount
+				if filter.MaxAmount > 0 {
+					amount = min(amount, filter.MaxAmount-task.Amount-batchAmount)
+				}
+				if amount <= 0 {
+					break
+				}
+				ownerAmounts[item.OwnerUserID] += amount
+				if item.ReclaimedAmount+amount == item.OwnerNetAmount {
+					fullIDs = append(fullIDs, item.ID)
+				} else if err := tx.Model(&item).Updates(map[string]any{"reclaimed_amount": item.ReclaimedAmount + amount, "reclaimed_at": now}).Error; err != nil {
+					return err
+				}
+				batchCount++
+				batchAmount += amount
+				if filter.MaxAmount > 0 && task.Amount+batchAmount == filter.MaxAmount {
+					break
+				}
+			}
+			if len(fullIDs) > 0 {
+				if err := tx.Model(&marketplaceschema.Settlement{}).Where("id IN ?", fullIDs).Updates(map[string]any{
+					"reclaimed_amount": gorm.Expr("owner_net_amount"), "reclaimed_at": now, "status": statusReclaimed,
+				}).Error; err != nil {
+					return err
+				}
+			}
 		}
-		var items []marketplaceschema.Settlement
-		if err := query.Find(&items).Error; err != nil {
-			return err
-		}
-		if len(items) == 0 {
+		if batchCount == 0 {
 			if err := tx.Model(&task).Update("status", reclaimTaskCompleted).Error; err != nil {
 				return err
 			}
 			task.Status = reclaimTaskCompleted
 			result = task
 			return nil
-		}
-		ownerAmounts := make(map[int]int64)
-		fullIDs := make([]string, 0, len(items))
-		batchAmount, batchCount := int64(0), 0
-		now := time.Now().UTC()
-		for _, item := range items {
-			amount := item.OwnerNetAmount - item.ReclaimedAmount
-			if filter.MaxAmount > 0 {
-				amount = min(amount, filter.MaxAmount-task.Amount-batchAmount)
-			}
-			if amount <= 0 {
-				break
-			}
-			ownerAmounts[item.OwnerUserID] += amount
-			if item.ReclaimedAmount+amount == item.OwnerNetAmount {
-				fullIDs = append(fullIDs, item.ID)
-			} else if err := tx.Model(&item).Updates(map[string]any{"reclaimed_amount": item.ReclaimedAmount + amount, "reclaimed_at": now}).Error; err != nil {
-				return err
-			}
-			batchCount++
-			batchAmount += amount
-			if filter.MaxAmount > 0 && task.Amount+batchAmount == filter.MaxAmount {
-				break
-			}
-		}
-		if len(fullIDs) > 0 {
-			if err := tx.Model(&marketplaceschema.Settlement{}).Where("id IN ?", fullIDs).Updates(map[string]any{
-				"reclaimed_amount": gorm.Expr("owner_net_amount"), "reclaimed_at": now, "status": statusReclaimed,
-			}).Error; err != nil {
-				return err
-			}
 		}
 		owners := make([]int, 0, len(ownerAmounts))
 		for owner := range ownerAmounts {
@@ -437,7 +455,7 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 		}
 		newCount, newAmount, newBatchNumber := task.Count+batchCount, task.Amount+batchAmount, task.BatchNumber+1
 		updates := map[string]any{"status": reclaimTaskRunning, "count": newCount, "amount": newAmount, "batch_number": newBatchNumber, "error_message": ""}
-		if (filter.MaxAmount > 0 && newAmount == filter.MaxAmount) || len(items) < reclaimBatchSize {
+		if (filter.MaxAmount > 0 && newAmount == filter.MaxAmount) || batchCount < reclaimBatchSize {
 			updates["status"] = reclaimTaskCompleted
 		}
 		if err := tx.Model(&marketplaceschema.IncomeReclaim{}).Where("id = ?", task.ID).Updates(updates).Error; err != nil {
@@ -457,6 +475,52 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 		return marketplaceschema.IncomeReclaim{}, err
 	}
 	return result, nil
+}
+
+// reclaimPostgresBatchTx avoids sending thousands of settlement IDs back to
+// PostgreSQL in an IN list. The candidate lock, partial-amount calculation,
+// update, and per-owner aggregation stay in one statement and one transaction.
+func reclaimPostgresBatchTx(tx *gorm.DB, filter ReleaseFilter, remaining int64, now time.Time) ([]reclaimBatchOwnerAmount, error) {
+	locked := reclaimSettlementQuery(tx, filter).
+		Select("id", "owner_user_id", "owner_net_amount", "reclaimed_amount", "created_at").
+		Order("created_at ASC, id ASC").Limit(reclaimBatchSize).
+		Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
+	table := marketplaceschema.Settlement{}.TableName()
+	statement := fmt.Sprintf(`
+WITH locked AS MATERIALIZED (?),
+amounts AS (
+	SELECT id, owner_user_id, owner_net_amount, reclaimed_amount,
+		CASE WHEN ? <= 0 THEN owner_net_amount - reclaimed_amount
+		ELSE LEAST(
+			owner_net_amount - reclaimed_amount,
+			GREATEST(? - COALESCE(
+				SUM(owner_net_amount - reclaimed_amount) OVER (
+					ORDER BY created_at ASC, id ASC
+					ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+				), 0
+			), 0))
+		END AS reclaim_amount
+	FROM locked
+),
+updated AS (
+	UPDATE %s AS settlement
+	SET reclaimed_amount = settlement.reclaimed_amount + amounts.reclaim_amount,
+		reclaimed_at = ?,
+		status = CASE
+			WHEN settlement.reclaimed_amount + amounts.reclaim_amount = settlement.owner_net_amount THEN ?
+			ELSE settlement.status
+		END
+	FROM amounts
+	WHERE settlement.id = amounts.id AND amounts.reclaim_amount > 0
+	RETURNING settlement.owner_user_id, amounts.reclaim_amount
+)
+SELECT owner_user_id, COUNT(*) AS count, COALESCE(SUM(reclaim_amount), 0) AS amount
+FROM updated
+GROUP BY owner_user_id
+ORDER BY owner_user_id`, table)
+	var result []reclaimBatchOwnerAmount
+	err := tx.Raw(statement, locked, remaining, remaining, now, statusReclaimed).Scan(&result).Error
+	return result, err
 }
 
 func reclaimSettlementQuery(tx *gorm.DB, filter ReleaseFilter) *gorm.DB {

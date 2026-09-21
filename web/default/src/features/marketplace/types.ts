@@ -237,6 +237,15 @@ export interface AdminMarketplaceChannelFilters {
   ownerUserIds?: number[]
   startTimestamp?: number
   endTimestamp?: number
+  page?: number
+  pageSize?: number
+}
+
+export interface AdminMarketplaceChannelResult {
+  items: MarketplaceChannel[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface AdminOwnerIncomeItem {

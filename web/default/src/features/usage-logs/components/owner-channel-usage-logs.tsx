@@ -256,7 +256,9 @@ function OwnerLogToolbar(props: {
             {t('渠道使用日志')}
           </div>
           <p className='text-muted-foreground mt-1 text-sm'>
-            {t('按渠道和时间范围核对调用、用户扣费与逐笔收入。')}
+            {t(
+              '按渠道和时间范围核对调用、用户扣费与逐笔收入。套餐扣费按余额等值展示。'
+            )}
           </p>
         </div>
         <div className='flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end'>

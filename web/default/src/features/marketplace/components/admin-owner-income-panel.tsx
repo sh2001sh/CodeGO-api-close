@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useDebounce } from '@/hooks'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
@@ -22,6 +23,7 @@ export function AdminOwnerIncomePanel(props: {
   const { t } = useTranslation()
   const [selectedIDs, setSelectedIDs] = useState<number[]>([])
   const [amount, setAmount] = useState('')
+  const [loadAllIncome, setLoadAllIncome] = useState(false)
   const [runningElapsedSeconds, setRunningElapsedSeconds] = useState(0)
   const [reclaimOperationID, setReclaimOperationID] = useState<
     string | undefined
@@ -33,14 +35,20 @@ export function AdminOwnerIncomePanel(props: {
   const pendingOperation = useRef<{ signature: string; id: string } | null>(
     null
   )
+  const deferredOwnerSearch = useDebounce(props.ownerSearch.trim(), 400)
   const filters = {
-    ownerSearch: props.ownerSearch.trim(),
+    ownerSearch: deferredOwnerSearch,
     startTimestamp:
       props.range.start && Math.floor(props.range.start.getTime() / 1000),
     endTimestamp:
       props.range.end && Math.floor(props.range.end.getTime() / 1000),
   }
-  const query = useAdminOwnerIncome(filters)
+  const hasFilter = Boolean(
+    filters.ownerSearch || filters.startTimestamp || filters.endTimestamp
+  )
+  const incomeEnabled = hasFilter || loadAllIncome
+  const searchSettling = props.ownerSearch.trim() !== deferredOwnerSearch
+  const query = useAdminOwnerIncome(filters, incomeEnabled && !searchSettling)
   const refetchIncome = query.refetch
   const reclaim = useAdminOwnerIncomeRelease()
   const reclaimTask = useAdminOwnerIncomeReclaim(reclaimOperationID)
@@ -102,6 +110,9 @@ export function AdminOwnerIncomePanel(props: {
   const submit = () => {
     if (
       query.isFetching ||
+      searchSettling ||
+      !incomeEnabled ||
+      !query.data ||
       query.isError ||
       reclaim.isPending ||
       !selected.length ||
@@ -189,16 +200,25 @@ export function AdminOwnerIncomePanel(props: {
         ownerSearch={props.ownerSearch}
         onOwnerSearchChange={(value) => {
           setSelectedIDs([])
+          setLoadAllIncome(false)
           props.onOwnerSearchChange(value)
         }}
         range={props.range}
         onRangeChange={(range) => {
           setSelectedIDs([])
+          setLoadAllIncome(false)
           props.onRangeChange(range)
         }}
-        onRefresh={() => void query.refetch()}
+        onRefresh={() => {
+          if (!hasFilter && !loadAllIncome) setLoadAllIncome(true)
+          else void query.refetch()
+        }}
         isFetching={query.isFetching}
         isError={query.isError}
+        notLoaded={!incomeEnabled || searchSettling}
+        canLoadAll={!incomeEnabled && !searchSettling}
+        onLoadAll={() => setLoadAllIncome(true)}
+        incomeUnavailable={searchSettling || !incomeEnabled || !query.data}
         releasing={reclaim.isPending}
         reclaimAmount={amount}
         onReclaimAmountChange={setAmount}

@@ -77,12 +77,16 @@ type OwnerUserUsageItem struct {
 	AvgLatencyMs        float64 `json:"avg_latency_ms"`
 	AvgTTFTMs           float64 `json:"avg_ttft_ms"`
 	TotalConsumerAmount int64   `json:"total_consumer_amount"`
-	// Gross settlement uses the historical wallet multiplier for both billing sources.
+	// Wallet-equivalent consumer debit, also used by the owner ranking display.
 	TotalSettlementGrossAmount int64     `json:"total_settlement_gross_amount"`
 	TotalOwnerIncome           int64     `json:"total_owner_income"`
 	UserMultiplier             *float64  `json:"user_multiplier"`
 	LastRequestAt              time.Time `json:"last_request_at"`
 }
+
+// Subscription debits use ten times the wallet quota units. Prefer the
+// persisted wallet-equivalent settlement gross; older rows may lack it.
+const walletEquivalentConsumerAmountSQL = "CASE WHEN billing_source = 'subscription' THEN COALESCE(NULLIF(settlement_gross_amount, 0), (consumer_amount + 5) / 10) ELSE consumer_amount END"
 
 func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any, error) {
 	if q.Page < 1 {
@@ -130,7 +134,7 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 		lastRequestSelect = "cast(strftime('%s', max(created_at)) as integer) as last_unix"
 	}
 	settlementDB := platformdb.DB.Model(&marketplaceschema.Settlement{}).
-		Select("consumer_user_id as user_id, group_id, count(*) as cnt, sum(consumer_amount) as amount, sum(settlement_gross_amount) as gross, sum(owner_net_amount) as income, "+lastRequestSelect).
+		Select("consumer_user_id as user_id, group_id, count(*) as cnt, sum("+walletEquivalentConsumerAmountSQL+") as amount, sum("+walletEquivalentConsumerAmountSQL+") as gross, sum(owner_net_amount) as income, "+lastRequestSelect).
 		Where("owner_user_id = ? AND group_id IN ?", owner, ids)
 	if q.StartTimestamp > 0 {
 		settlementDB = settlementDB.Where("created_at >= ?", time.Unix(q.StartTimestamp, 0))

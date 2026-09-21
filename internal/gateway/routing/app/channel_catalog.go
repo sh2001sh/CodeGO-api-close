@@ -57,7 +57,7 @@ type ChannelSearchParams struct {
 // ChannelSearchResult describes the admin channel search response.
 type ChannelSearchResult struct {
 	Items      []*gatewayschema.Channel
-	Total      int
+	Total      int64
 	TypeCounts map[int64]int64
 }
 
@@ -303,11 +303,17 @@ func SearchChannels(params ChannelSearchParams) (*ChannelSearchResult, error) {
 			channelData = append(channelData, tagChannels...)
 		}
 	} else {
-		channels, err := gatewaystore.SearchChannels(params.Keyword, params.Group, params.Model, params.IDSort, params.Sort)
+		page, err := gatewaystore.SearchChannelsPage(
+			params.Keyword, params.Group, params.Model,
+			params.Status, params.TypeFilter,
+			(params.Page-1)*params.PageSize, params.PageSize,
+			params.IDSort, params.Sort,
+		)
 		if err != nil {
 			return nil, err
 		}
-		channelData = channels
+		sanitizeChannels(page.Items)
+		return &ChannelSearchResult{Items: page.Items, Total: page.Total, TypeCounts: page.TypeCounts}, nil
 	}
 
 	if params.Status == constant.ChannelStatusEnabled || params.Status == 0 {
@@ -353,7 +359,7 @@ func SearchChannels(params ChannelSearchParams) (*ChannelSearchResult, error) {
 	sanitizeChannels(pagedData)
 	return &ChannelSearchResult{
 		Items:      pagedData,
-		Total:      total,
+		Total:      int64(total),
 		TypeCounts: typeCounts,
 	}, nil
 }

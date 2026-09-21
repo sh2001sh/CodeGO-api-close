@@ -3,10 +3,10 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	"slices"
 	"time"
 
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -19,13 +19,23 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 	}
 	normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch)
 	cacheKey := fmt.Sprintf("%p:%s:%d:%d", platformdb.DB, normalizedSearch, input.StartTimestamp, input.EndTimestamp)
+	value, err, _ := adminOwnerIncomeLoads.Do(cacheKey, func() (any, error) {
+		return listAdminOwnerIncomeCached(input, normalizedSearch, cacheKey)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return populateAdminOwnerBalances(cloneAdminOwnerIncomeResult(value.(*AdminOwnerIncomeResult)))
+}
+
+func listAdminOwnerIncomeCached(input AdminOwnerIncomeQuery, normalizedSearch, cacheKey string) (*AdminOwnerIncomeResult, error) {
 	adminMarketplaceStatsCache.Lock()
 	if adminMarketplaceStatsCache.ownerIncomeResult != nil &&
 		adminMarketplaceStatsCache.ownerIncomeKey == cacheKey &&
 		time.Since(adminMarketplaceStatsCache.ownerIncomeAt) < adminMarketplaceStatsCacheTTL {
 		result := cloneAdminOwnerIncomeResult(adminMarketplaceStatsCache.ownerIncomeResult)
 		adminMarketplaceStatsCache.Unlock()
-		return populateAdminOwnerBalances(result)
+		return result, nil
 	}
 	adminMarketplaceStatsCache.Unlock()
 	query := platformdb.DB.Model(&marketplaceschema.Settlement{}).
@@ -78,7 +88,7 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		result.ForfeitedIncome += item.ForfeitedIncome
 	}
 	cacheAdminOwnerIncomeResult(cacheKey, result)
-	return populateAdminOwnerBalances(result)
+	return result, nil
 }
 
 func populateAdminOwnerBalances(result *AdminOwnerIncomeResult) (*AdminOwnerIncomeResult, error) {

@@ -18,6 +18,7 @@ import type {
   MarketplaceMultiplierTrend,
   ChannelFeedbackSummary,
   AdminMarketplaceChannelFilters,
+  AdminMarketplaceChannelResult,
   AdminOwnerIncomeResult,
   AdminOwnerIncomeReclaimTask,
   TokenOption,
@@ -810,7 +811,9 @@ export async function getAdminMarketplaceChannels(
   if (filters.endTimestamp) {
     search.set('end_timestamp', String(filters.endTimestamp))
   }
-  const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
+  if (filters.page) search.set('page', String(filters.page))
+  if (filters.pageSize) search.set('page_size', String(filters.pageSize))
+  const response = await api.get<ApiResponse<AdminMarketplaceChannelResult>>(
     `/api/marketplace/admin/channels?${search.toString()}`
   )
   return requireData(response.data)

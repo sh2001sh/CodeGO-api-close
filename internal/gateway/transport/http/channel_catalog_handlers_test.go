@@ -1,6 +1,8 @@
 package http
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -11,6 +13,14 @@ import (
 	"strings"
 	"testing"
 )
+
+type channelSearchEnvelope struct {
+	Data struct {
+		Items      []gatewayschema.Channel `json:"items"`
+		Total      int64                   `json:"total"`
+		TypeCounts map[string]int64        `json:"type_counts"`
+	} `json:"data"`
+}
 
 func TestGetAllChannelsSanitizesMultiKeyChannelInfo(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
@@ -77,6 +87,36 @@ func TestSearchChannelsExcludesMarketplaceExternalChannels(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "shared-search-official")
 	require.NotContains(t, recorder.Body.String(), "shared-search-external")
+}
+
+func TestSearchChannelsPaginatesAndCountsInDatabase(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	for index := 1; index <= 30; index++ {
+		channelType := 1
+		if index > 20 {
+			channelType = 2
+		}
+		require.NoError(t, db.Create(&gatewayschema.Channel{
+			Id: index, Type: channelType, Key: "key", Status: constant.ChannelStatusEnabled,
+			Name: fmt.Sprintf("paged-search-%02d", index), Models: "gpt-4o", Group: "default",
+			ChannelScope: gatewayschema.ChannelScopeOfficial,
+		}).Error)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/channel/search?keyword=paged-search&type=1&p=2&page_size=5&sort_by=id&sort_order=asc", nil)
+	SearchChannels(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response channelSearchEnvelope
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Len(t, response.Data.Items, 5)
+	require.EqualValues(t, 20, response.Data.Total)
+	require.EqualValues(t, 20, response.Data.TypeCounts["1"])
+	require.EqualValues(t, 10, response.Data.TypeCounts["2"])
+	require.Equal(t, 6, response.Data.Items[0].Id)
+	require.Equal(t, 10, response.Data.Items[4].Id)
 }
 
 func TestAddChannelBatchPrefixDoesNotAccumulate(t *testing.T) {

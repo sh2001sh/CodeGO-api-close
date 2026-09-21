@@ -33,6 +33,141 @@ func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
 	return cloneChannelViews(value.([]ChannelView)), nil
 }
 
+// ListAdminChannelsPage keeps filtering and pagination in the database so the
+// governance table only enriches the rows visible on the current page.
+func ListAdminChannelsPage(input AdminChannelQuery) (*AdminChannelListResult, error) {
+	if input.Page < 1 {
+		input.Page = 1
+	}
+	if input.PageSize < 1 {
+		input.PageSize = 50
+	} else if input.PageSize > 200 {
+		input.PageSize = 200
+	}
+	if input.StartTimestamp > 0 && input.EndTimestamp > 0 && input.StartTimestamp > input.EndTimestamp {
+		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
+	}
+
+	channelTable := marketplaceschema.Channel{}.TableName()
+	groupTable := marketplaceschema.Group{}.TableName()
+	query := platformdb.DB.Table(channelTable + " AS c").
+		Joins("JOIN " + groupTable + " AS g ON g.channel_id = c.id AND g.deleted_at IS NULL").
+		Where("c.deleted_at IS NULL")
+	if source := strings.TrimSpace(input.Source); source != "" {
+		query = query.Where("c.submitted_source_label = ? OR c.approved_source_label = ?", source, source)
+	}
+	if provider := strings.TrimSpace(input.Provider); provider != "" {
+		query = query.Where("c.provider_type = ?", provider)
+	}
+	if normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch); normalizedSearch != "" {
+		ownerUserIDs, err := ownerUserIDsByExternalID(normalizedSearch)
+		if err != nil {
+			return nil, err
+		}
+		if len(ownerUserIDs) == 0 {
+			return &AdminChannelListResult{Items: []ChannelView{}, Page: input.Page, PageSize: input.PageSize}, nil
+		}
+		query = query.Where("c.owner_user_id IN ?", ownerUserIDs)
+	}
+	if status := strings.TrimSpace(input.Status); status != "" {
+		query = query.Where("c.status = ?", status)
+	}
+	if verification := strings.TrimSpace(input.Verification); verification != "" {
+		query = query.Where("g.verification_status = ?", verification)
+	}
+	if search := strings.TrimSpace(input.Search); search != "" {
+		pattern := ownerLogLike(search)
+		query = query.Where(
+			"(LOWER(c.id) LIKE ? ESCAPE '!' OR LOWER(g.system_display_name) LIKE ? ESCAPE '!' OR LOWER(c.provider_type) LIKE ? ESCAPE '!' OR LOWER(c.submitted_source_label) LIKE ? ESCAPE '!' OR LOWER(c.approved_source_label) LIKE ? ESCAPE '!' OR LOWER(c.declared_models) LIKE ? ESCAPE '!')",
+			pattern, pattern, pattern, pattern, pattern, pattern,
+		)
+	}
+
+	var total int64
+	if err := query.Session(&gorm.Session{}).Distinct("c.id").Count(&total).Error; err != nil {
+		return nil, err
+	}
+	var channels []marketplaceschema.Channel
+	if err := query.Select("c.*").Order("c.updated_at DESC, c.id ASC").
+		Offset((input.Page - 1) * input.PageSize).Limit(input.PageSize).
+		Scan(&channels).Error; err != nil {
+		return nil, err
+	}
+	items, err := enrichAdminChannelPage(channels, input)
+	if err != nil {
+		return nil, err
+	}
+	return &AdminChannelListResult{Items: items, Total: total, Page: input.Page, PageSize: input.PageSize}, nil
+}
+
+func enrichAdminChannelPage(channels []marketplaceschema.Channel, input AdminChannelQuery) ([]ChannelView, error) {
+	if len(channels) == 0 {
+		return []ChannelView{}, nil
+	}
+	groups, err := groupsByChannelIDs(channelIDs(channels))
+	if err != nil {
+		return nil, err
+	}
+	ownerUserIDs := make([]int, 0, len(channels))
+	for index := range channels {
+		ownerUserIDs = append(ownerUserIDs, channels[index].OwnerUserID)
+	}
+	var earnings map[string]ownerChannelEarnings
+	var externalIDs map[int]string
+	var latestRuns map[string]*marketplaceschema.VerificationRun
+	loadEarnings := func() error {
+		var err error
+		earnings, err = earningsByGroupIDsInRange(groupIDs(groups), input.StartTimestamp, input.EndTimestamp)
+		return err
+	}
+	loadOwners := func() error {
+		var err error
+		externalIDs, err = ownerExternalIDs(ownerUserIDs)
+		return err
+	}
+	loadVerifications := func() error {
+		var err error
+		latestRuns, err = latestVerifications(channelIDs(channels))
+		return err
+	}
+	if platformdb.DB.Dialector.Name() == "sqlite" {
+		if err := loadEarnings(); err != nil {
+			return nil, err
+		}
+		if err := loadOwners(); err != nil {
+			return nil, err
+		}
+		if err := loadVerifications(); err != nil {
+			return nil, err
+		}
+	} else {
+		var loaders errgroup.Group
+		loaders.Go(loadEarnings)
+		loaders.Go(loadOwners)
+		loaders.Go(loadVerifications)
+		if err := loaders.Wait(); err != nil {
+			return nil, err
+		}
+	}
+	result := make([]ChannelView, 0, len(channels))
+	for index := range channels {
+		group := groups[channels[index].ID]
+		if group == nil {
+			continue
+		}
+		view := channelViewWithLatestVerification(&channels[index], group, latestRuns[channels[index].ID])
+		view.OwnerExternalID = externalIDs[channels[index].OwnerUserID]
+		view.RequestCount = earnings[group.ID].RequestCount
+		view.TotalIncome = earnings[group.ID].TotalIncome
+		view.PendingIncome = earnings[group.ID].PendingIncome
+		view.ReleasedIncome = earnings[group.ID].ReleasedIncome
+		view.ReclaimedIncome = earnings[group.ID].ReclaimedIncome
+		view.ForfeitedIncome = earnings[group.ID].ForfeitedIncome
+		result = append(result, *view)
+	}
+	return result, nil
+}
+
 func listAdminChannelsCached(input AdminChannelQuery, cacheKey string) ([]ChannelView, error) {
 	startedAt := time.Now()
 	adminMarketplaceStatsCache.Lock()

@@ -2,8 +2,13 @@ package http
 
 import (
 	"fmt"
+	"reflect"
+	"testing"
+	"time"
+
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
@@ -14,8 +19,6 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
-	"reflect"
-	"testing"
 )
 
 func TestGetUserModelsForMarketplaceToken(t *testing.T) {
@@ -175,8 +178,8 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 	if payload.StripeCustomer != user.StripeCustomer || payload.InviterId != user.InviterId {
 		t.Fatalf("expected persisted profile fields, got %#v", payload)
 	}
-	if payload.UsedQuota != 9 {
-		t.Fatalf("expected ledger-backed used quota 9, got %d", payload.UsedQuota)
+	if payload.UsedQuota != user.UsedQuota {
+		t.Fatalf("expected cold profile read to return legacy used quota %d, got %d", user.UsedQuota, payload.UsedQuota)
 	}
 	if sidebarSettings, ok := payload.Permissions["sidebar_settings"].(bool); !ok || !sidebarSettings {
 		t.Fatalf("expected admin sidebar_settings permission, got %#v", payload.Permissions)
@@ -191,6 +194,21 @@ func TestGetUserSelfReturnsProfilePermissionsAndSidebarModules(t *testing.T) {
 	}
 	if settingPermission, ok := adminPermission["setting"].(bool); !ok || settingPermission {
 		t.Fatalf("expected admin setting permission to be false, got %#v", adminPermission["setting"])
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		refreshed, err := billingapp.GetUserHistoricalUsedQuotaForDisplay(user.Id, user.UsedQuota)
+		if err != nil {
+			t.Fatalf("failed to read refreshed historical usage: %v", err)
+		}
+		if refreshed == 9 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected background ledger usage refresh to reach 9, got %d", refreshed)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 

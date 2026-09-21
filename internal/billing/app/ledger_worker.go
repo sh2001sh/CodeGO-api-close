@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -17,7 +18,9 @@ import (
 const (
 	ledgerWorkerAccountBatchSize   = 24
 	ledgerWorkerInterval           = 2 * time.Second
-	ledgerReconciliationInterval   = 30 * time.Minute
+	ledgerReconciliationInterval   = 24 * time.Hour
+	ledgerReconciliationMinSpacing = time.Minute
+	ledgerReconciliationTimeout    = 15 * time.Second
 	ledgerOutboxCleanupInterval    = time.Minute
 	staleReservationScanInterval   = time.Minute
 	ledgerOutboxPublishedRetention = 72 * time.Hour
@@ -27,6 +30,7 @@ const (
 var ledgerReconciliationState = struct {
 	sync.Mutex
 	lastByAccount map[string]time.Time
+	nextAllowed   time.Time
 }{lastByAccount: make(map[string]time.Time)}
 
 // StartLedgerWorker begins asynchronous outbox processing for the ledger runtime.
@@ -149,10 +153,18 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 	reconcile := ledgerReconciliationDue(accountID, now)
 	repair := false
 	if reconcile {
-		var err error
-		repair, err = balanceSnapshotNeedsRepair(ctx, accountID)
-		if err != nil {
-			return 0, err
+		checkCtx, cancel := context.WithTimeout(ctx, ledgerReconciliationTimeout)
+		var checkErr error
+		repair, checkErr = balanceSnapshotNeedsRepair(checkCtx, accountID)
+		cancel()
+		if checkErr != nil {
+			if !errors.Is(checkErr, context.DeadlineExceeded) {
+				markLedgerReconciliationRetryable(accountID, now)
+				return 0, checkErr
+			}
+			// A timed-out projection check is defensive maintenance. It must not
+			// stop pending ledger events from being published on a busy database.
+			platformobservability.SysError(fmt.Sprintf("skip timed-out ledger reconciliation account=%s: %s", accountID, checkErr.Error()))
 		}
 	}
 	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -207,12 +219,32 @@ func ledgerReconciliationDue(accountID string, now time.Time) bool {
 	ledgerReconciliationState.Lock()
 	defer ledgerReconciliationState.Unlock()
 	last, found := ledgerReconciliationState.lastByAccount[accountID]
-	return !found || now.Sub(last) >= ledgerReconciliationInterval
+	if !found {
+		// A process restart must not turn the first event for every account into
+		// a full immutable-ledger scan.
+		ledgerReconciliationState.lastByAccount[accountID] = now
+		return false
+	}
+	if now.Sub(last) < ledgerReconciliationInterval || now.Before(ledgerReconciliationState.nextAllowed) {
+		return false
+	}
+	// Reserve the slot before starting the query. A timeout therefore cannot
+	// cause the worker to retry the same expensive scan every two seconds.
+	ledgerReconciliationState.lastByAccount[accountID] = now
+	ledgerReconciliationState.nextAllowed = now.Add(ledgerReconciliationMinSpacing)
+	return true
 }
 
 func markLedgerReconciled(accountID string, now time.Time) {
 	ledgerReconciliationState.Lock()
 	ledgerReconciliationState.lastByAccount[accountID] = now
+	ledgerReconciliationState.Unlock()
+}
+
+func markLedgerReconciliationRetryable(accountID string, now time.Time) {
+	ledgerReconciliationState.Lock()
+	ledgerReconciliationState.lastByAccount[accountID] = now.Add(-ledgerReconciliationInterval)
+	ledgerReconciliationState.nextAllowed = time.Time{}
 	ledgerReconciliationState.Unlock()
 }
 

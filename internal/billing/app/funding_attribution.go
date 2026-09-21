@@ -283,7 +283,7 @@ func ensureLegacyFundingLotTx(tx *gorm.DB, accountID string, minimumAmount int64
 		return err
 	}
 	var totalAvailable int64
-	if err := tx.Model(&billingschema.FundingLot{}).Where("account_id = ?", accountID).
+	if err := tx.Model(&billingschema.FundingLot{}).Where("account_id = ? AND remaining_amount > 0", accountID).
 		Select("COALESCE(SUM(remaining_amount), 0)").Scan(&totalAvailable).Error; err != nil {
 		return err
 	}

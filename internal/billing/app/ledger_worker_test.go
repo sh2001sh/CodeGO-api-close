@@ -52,6 +52,10 @@ func TestRunLedgerWorkerBatchRebuildsSnapshotAndPublishesEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, db.Model(&billingschema.BillingBalanceSnapshot{}).Where("account_id = ?", account.AccountID).Updates(map[string]any{"available_balance": 0, "consumed_total": 0}).Error)
+	ledgerReconciliationState.Lock()
+	ledgerReconciliationState.lastByAccount[account.AccountID] = time.Now().Add(-ledgerReconciliationInterval)
+	ledgerReconciliationState.nextAllowed = time.Time{}
+	ledgerReconciliationState.Unlock()
 	processed, err := processLedgerOutboxAccount(context.Background(), account.AccountID)
 	require.NoError(t, err)
 	require.Equal(t, 3, processed)
@@ -114,8 +118,15 @@ func TestCleanupPublishedLedgerOutboxBatchPreservesRecentAndPendingEvents(t *tes
 func TestLedgerReconciliationDueUsesPerAccountInterval(t *testing.T) {
 	now := time.Now().UTC()
 	accountID := "reconcile-interval-test"
-	require.True(t, ledgerReconciliationDue(accountID, now))
-	markLedgerReconciled(accountID, now)
+	ledgerReconciliationState.Lock()
+	delete(ledgerReconciliationState.lastByAccount, accountID)
+	ledgerReconciliationState.nextAllowed = time.Time{}
+	ledgerReconciliationState.Unlock()
+	require.False(t, ledgerReconciliationDue(accountID, now), "cold accounts must not scan their full history")
 	require.False(t, ledgerReconciliationDue(accountID, now.Add(ledgerReconciliationInterval-time.Second)))
 	require.True(t, ledgerReconciliationDue(accountID, now.Add(ledgerReconciliationInterval)))
+	require.False(t, ledgerReconciliationDue("another-account", now.Add(ledgerReconciliationInterval)), "cold accounts are initialized without scanning")
+	markLedgerReconciled("another-account", now.Add(-ledgerReconciliationInterval))
+	require.False(t, ledgerReconciliationDue("another-account", now.Add(ledgerReconciliationInterval)), "global spacing must bound scans")
+	require.True(t, ledgerReconciliationDue("another-account", now.Add(ledgerReconciliationInterval+ledgerReconciliationMinSpacing)))
 }

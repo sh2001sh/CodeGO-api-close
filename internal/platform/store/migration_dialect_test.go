@@ -6,6 +6,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -76,6 +77,43 @@ func TestQueryPathIndexStatementsUseDialect(t *testing.T) {
 
 	sqliteStatements := queryPathIndexStatements("sqlite")
 	require.Contains(t, sqliteStatements[0].SQL, "CREATE INDEX IF NOT EXISTS")
+}
+
+func TestDatabasePressureIndexStatementsUseDialect(t *testing.T) {
+	postgres := databasePressureIndexStatements("postgres")
+	require.Len(t, postgres, 3)
+	joined := strings.Join([]string{postgres[0].SQL, postgres[1].SQL, postgres[2].SQL}, "\n")
+	require.Contains(t, joined, "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
+	require.Contains(t, joined, "WHERE status = 'pending'")
+	require.Contains(t, joined, "WHERE remaining_amount > 0")
+	require.Contains(t, joined, "INCLUDE (quota, prompt_tokens, completion_tokens)")
+
+	mysql := databasePressureIndexStatements("mysql")
+	require.Len(t, mysql, 3)
+	require.NotContains(t, strings.Join([]string{mysql[0].SQL, mysql[1].SQL, mysql[2].SQL}, "\n"), "CONCURRENTLY")
+
+	sqliteStatements := databasePressureIndexStatements("sqlite")
+	require.Len(t, sqliteStatements, 3)
+	require.Contains(t, sqliteStatements[0].SQL, "CREATE INDEX IF NOT EXISTS")
+}
+
+func TestMigrateDatabasePressureIndexesSQLiteIsIdempotent(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+
+	originalDB, originalLogDB := platformdb.DB, platformdb.LogDB
+	t.Cleanup(func() {
+		platformdb.DB = originalDB
+		platformdb.LogDB = originalLogDB
+	})
+	platformdb.DB = db
+	platformdb.LogDB = db
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingOutboxEvent{}, &billingschema.FundingLot{}, &auditschema.Log{}))
+	require.NoError(t, migrateDatabasePressureIndexes(db))
+	require.NoError(t, migrateDatabasePressureIndexes(db))
+	require.True(t, db.Migrator().HasIndex(&billingschema.BillingOutboxEvent{}, "idx_billing_outbox_pending_account"))
+	require.True(t, db.Migrator().HasIndex(&billingschema.FundingLot{}, "idx_billing_funding_lots_available_fifo"))
+	require.True(t, db.Migrator().HasIndex("logs", "idx_logs_user_type_created_id"))
 }
 
 func TestMigrateQueryPathIndexesSQLiteIsIdempotent(t *testing.T) {

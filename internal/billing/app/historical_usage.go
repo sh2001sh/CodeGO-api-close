@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -26,7 +27,11 @@ type historicalUsageEntry struct {
 
 var historicalUsageLoads singleflight.Group
 
+var historicalUsageDisplayRefreshSlots = make(chan struct{}, 1)
+
 const historicalUsageTTL = 30 * time.Second
+
+const historicalUsageDisplayTimeout = 10 * time.Second
 
 // GetUserHistoricalUsedQuotaForDisplay serves the last aggregate (or the
 // existing usage counter on a cold cache) while refreshing it asynchronously.
@@ -41,16 +46,47 @@ func GetUserHistoricalUsedQuotaForDisplay(userID int, legacyUsedQuota int) (int,
 	cached, ok := historicalUsageCache.items[key]
 	historicalUsageCache.Unlock()
 	if !ok || time.Since(cached.at) >= historicalUsageTTL {
-		go func() {
-			if _, err := GetUserLedgerConsumedQuota(userID); err != nil {
-				platformobservability.SysError("refresh profile historical usage: " + err.Error())
-			}
-		}()
+		startHistoricalUsageDisplayRefresh(userID, key)
 	}
 	if cached.amount > int64(legacyUsedQuota) {
 		return int(cached.amount), nil
 	}
 	return legacyUsedQuota, nil
+}
+
+func startHistoricalUsageDisplayRefresh(userID int, key string) {
+	select {
+	case historicalUsageDisplayRefreshSlots <- struct{}{}:
+	default:
+		return
+	}
+	go func() {
+		defer func() { <-historicalUsageDisplayRefreshSlots }()
+		ctx, cancel := context.WithTimeout(context.Background(), historicalUsageDisplayTimeout)
+		defer cancel()
+		amount, err := loadUserLedgerConsumedQuotaContext(ctx, userID)
+		if err != nil {
+			platformobservability.SysError("refresh profile historical usage: " + err.Error())
+			return
+		}
+		cacheHistoricalUsage(key, amount)
+	}()
+}
+
+func cacheHistoricalUsage(key string, amount int64) {
+	historicalUsageCache.Lock()
+	defer historicalUsageCache.Unlock()
+	if len(historicalUsageCache.items) >= 1024 {
+		for itemKey, value := range historicalUsageCache.items {
+			if time.Since(value.at) >= historicalUsageTTL {
+				delete(historicalUsageCache.items, itemKey)
+			}
+		}
+		if len(historicalUsageCache.items) >= 1024 {
+			clear(historicalUsageCache.items)
+		}
+	}
+	historicalUsageCache.items[key] = historicalUsageEntry{amount: amount, at: time.Now()}
 }
 
 // GetUserLedgerConsumedQuota returns request-backed settled usage from the
@@ -69,23 +105,11 @@ func GetUserLedgerConsumedQuota(userID int) (int64, error) {
 		if ok && time.Since(cached.at) < historicalUsageTTL {
 			return cached.amount, nil
 		}
-		amount, err := loadUserLedgerConsumedQuota(userID)
+		amount, err := loadUserLedgerConsumedQuotaContext(context.Background(), userID)
 		if err != nil {
 			return nil, err
 		}
-		historicalUsageCache.Lock()
-		defer historicalUsageCache.Unlock()
-		if len(historicalUsageCache.items) >= 1024 {
-			for key, value := range historicalUsageCache.items {
-				if time.Since(value.at) >= historicalUsageTTL {
-					delete(historicalUsageCache.items, key)
-				}
-			}
-			if len(historicalUsageCache.items) >= 1024 {
-				clear(historicalUsageCache.items)
-			}
-		}
-		historicalUsageCache.items[key] = historicalUsageEntry{amount: amount, at: time.Now()}
+		cacheHistoricalUsage(key, amount)
 		return amount, nil
 	})
 	if err != nil {
@@ -94,16 +118,17 @@ func GetUserLedgerConsumedQuota(userID int) (int64, error) {
 	return value.(int64), nil
 }
 
-func loadUserLedgerConsumedQuota(userID int) (int64, error) {
+func loadUserLedgerConsumedQuotaContext(ctx context.Context, userID int) (int64, error) {
+	db := platformdb.DB.WithContext(ctx)
 
 	// Keep the subscription lookup in SQL so billing does not import the
 	// commerce package and create an application-layer import cycle.
-	subscriptionQuery := platformdb.DB.Table("user_subscriptions").
+	subscriptionQuery := db.Table("user_subscriptions").
 		Select("user_subscriptions.id").
 		Where("user_subscriptions.user_id = ?", userID)
 
 	accountTable := billingschema.BillingAccount{}.TableName()
-	accountQuery := platformdb.DB.Model(&billingschema.BillingAccount{}).
+	accountQuery := db.Model(&billingschema.BillingAccount{}).
 		Select(accountTable+".account_id").
 		Where(
 			fmt.Sprintf("(%s.owner_type = ? AND %s.owner_id = ? AND %s.account_type IN ?) OR (%s.owner_type = ? AND %s.owner_id IN (?) AND %s.account_type = ?)", accountTable, accountTable, accountTable, accountTable, accountTable, accountTable),
@@ -122,7 +147,7 @@ func loadUserLedgerConsumedQuota(userID int) (int64, error) {
 	settlementTable := billingschema.BillingSettlement{}.TableName()
 	reservationTable := billingschema.BillingReservation{}.TableName()
 	var consumed int64
-	if err := platformdb.DB.Model(&billingschema.BillingSettlement{}).
+	if err := db.Model(&billingschema.BillingSettlement{}).
 		Joins("JOIN "+reservationTable+" AS usage_reservations ON usage_reservations.reservation_id = "+settlementTable+".reservation_id").
 		Where("usage_reservations.account_id IN ?", accountIDs).
 		Where("usage_reservations.status = ?", billingschema.BillingReservationStatusSettled).

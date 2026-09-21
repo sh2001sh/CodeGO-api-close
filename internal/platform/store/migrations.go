@@ -216,6 +216,7 @@ func V2MigrationIDs() []string {
 		"20260917_marketplace_consumer_metrics",
 		"20260917_codego_oidc_provider",
 		"20260921_community_channel_ratings",
+		"20260921_database_pressure_indexes",
 	}
 }
 
@@ -514,6 +515,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260921_community_channel_ratings", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&communityschema.ChannelRating{})
 		}},
+		{ID: "20260921_database_pressure_indexes", RunOutsideTx: migrateDatabasePressureIndexes},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -808,6 +810,12 @@ func queryPathTableExists(db *gorm.DB, item queryPathIndexStatement) bool {
 		return db.Migrator().HasTable(&marketplaceschema.Settlement{})
 	case "idx_marketplace_groups_visibility_lifecycle_updated":
 		return db.Migrator().HasTable(&marketplaceschema.Group{})
+	case "idx_billing_outbox_pending_account":
+		return db.Migrator().HasTable(&billingschema.BillingOutboxEvent{})
+	case "idx_billing_funding_lots_available_fifo":
+		return db.Migrator().HasTable(&billingschema.FundingLot{})
+	case "idx_logs_user_type_created_id":
+		return db.Migrator().HasTable("logs")
 	default:
 		return false
 	}
@@ -847,6 +855,55 @@ func queryPathIndexStatements(dialect string) []queryPathIndexStatement {
 			{Name: "idx_request_attempt_audit_channel_started", Table: "gateway_request_attempt_audits", SQL: "CREATE INDEX IF NOT EXISTS idx_request_attempt_audit_channel_started ON gateway_request_attempt_audits (channel_id, started_at)"},
 			{Name: "idx_marketplace_settlements_owner_group_created", Table: "marketplace_settlements", SQL: "CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_owner_group_created ON marketplace_settlements (owner_user_id, group_id, created_at)"},
 			{Name: "idx_marketplace_groups_visibility_lifecycle_updated", Table: "marketplace_groups", SQL: "CREATE INDEX IF NOT EXISTS idx_marketplace_groups_visibility_lifecycle_updated ON marketplace_groups (visibility, lifecycle_status, updated_at, id)"},
+		}
+	}
+}
+
+// migrateDatabasePressureIndexes adds composite indexes for the production
+// queries that otherwise read or sort thousands of rows per request. The
+// PostgreSQL variants are built concurrently because these are hot tables.
+func migrateDatabasePressureIndexes(_ *gorm.DB) error {
+	primary := platformdb.DB
+	if primary == nil {
+		return nil
+	}
+	for _, item := range databasePressureIndexStatements(primary.Dialector.Name()) {
+		db := primary
+		if item.Database == queryPathDatabaseLogs {
+			db = platformdb.LogDB
+			if db == nil {
+				db = primary
+			}
+		}
+		if !queryPathTableExists(db, item) {
+			continue
+		}
+		if err := db.Exec(item.SQL).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return fmt.Errorf("create database pressure index %s: %w", item.Name, err)
+		}
+	}
+	return nil
+}
+
+func databasePressureIndexStatements(dialect string) []queryPathIndexStatement {
+	switch strings.ToLower(strings.TrimSpace(dialect)) {
+	case "postgres":
+		return []queryPathIndexStatement{
+			{Name: "idx_billing_outbox_pending_account", Table: "billing.outbox_events", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_pending_account ON billing.outbox_events (account_id) WHERE status = 'pending'`},
+			{Name: "idx_billing_funding_lots_available_fifo", Table: "billing.funding_lots", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_funding_lots_available_fifo ON billing.funding_lots (account_id, created_at, lot_id) INCLUDE (remaining_amount) WHERE remaining_amount > 0`},
+			{Name: "idx_logs_user_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_user_type_created_id ON logs (user_id, type, created_at DESC, id DESC) INCLUDE (quota, prompt_tokens, completion_tokens)`},
+		}
+	case "mysql":
+		return []queryPathIndexStatement{
+			{Name: "idx_billing_outbox_pending_account", Table: "billing_outbox_events", SQL: "CREATE INDEX idx_billing_outbox_pending_account ON billing_outbox_events (status, account_id)"},
+			{Name: "idx_billing_funding_lots_available_fifo", Table: "billing_funding_lots", SQL: "CREATE INDEX idx_billing_funding_lots_available_fifo ON billing_funding_lots (account_id, remaining_amount, created_at, lot_id)"},
+			{Name: "idx_logs_user_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX idx_logs_user_type_created_id ON logs (user_id, type, created_at, id)"},
+		}
+	default:
+		return []queryPathIndexStatement{
+			{Name: "idx_billing_outbox_pending_account", Table: "billing_outbox_events", SQL: "CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_account ON billing_outbox_events (status, account_id)"},
+			{Name: "idx_billing_funding_lots_available_fifo", Table: "billing_funding_lots", SQL: "CREATE INDEX IF NOT EXISTS idx_billing_funding_lots_available_fifo ON billing_funding_lots (account_id, remaining_amount, created_at, lot_id)"},
+			{Name: "idx_logs_user_type_created_id", Database: queryPathDatabaseLogs, Table: "logs", SQL: "CREATE INDEX IF NOT EXISTS idx_logs_user_type_created_id ON logs (user_id, type, created_at, id)"},
 		}
 	}
 }

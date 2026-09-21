@@ -63,6 +63,10 @@ func TestLedgerReconciliationDoesNotBlockConcurrentCreditPostgres(t *testing.T) 
 		}
 	}))
 	done := make(chan error, 1)
+	ledgerReconciliationState.Lock()
+	ledgerReconciliationState.lastByAccount[account.AccountID] = time.Now().Add(-ledgerReconciliationInterval)
+	ledgerReconciliationState.nextAllowed = time.Time{}
+	ledgerReconciliationState.Unlock()
 	go func() {
 		_, err := processLedgerOutboxAccount(ctx, account.AccountID)
 		done <- err
@@ -92,7 +96,8 @@ func TestLedgerReconciliationDoesNotBlockConcurrentCreditPostgres(t *testing.T) 
 	// A real inconsistency must still be repaired under the original write lock.
 	require.NoError(t, db.Model(&actual).Update("available_balance", 0).Error)
 	ledgerReconciliationState.Lock()
-	delete(ledgerReconciliationState.lastByAccount, account.AccountID)
+	ledgerReconciliationState.lastByAccount[account.AccountID] = time.Now().Add(-ledgerReconciliationInterval)
+	ledgerReconciliationState.nextAllowed = time.Time{}
 	ledgerReconciliationState.Unlock()
 	_, err = processLedgerOutboxAccount(context.Background(), account.AccountID)
 	require.NoError(t, err)
@@ -103,7 +108,8 @@ func TestLedgerReconciliationDoesNotBlockConcurrentCreditPostgres(t *testing.T) 
 	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{AccountID: account.AccountID, Amount: 50, IdempotencyKey: account.AccountID + "-before-failure"})
 	require.NoError(t, err)
 	ledgerReconciliationState.Lock()
-	delete(ledgerReconciliationState.lastByAccount, account.AccountID)
+	ledgerReconciliationState.lastByAccount[account.AccountID] = time.Now().Add(-ledgerReconciliationInterval)
+	ledgerReconciliationState.nextAllowed = time.Time{}
 	ledgerReconciliationState.Unlock()
 	readErr := errors.New("reconciliation read failed")
 	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:fail_reconciliation_read", func(tx *gorm.DB) {

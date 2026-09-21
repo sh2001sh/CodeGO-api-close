@@ -19,6 +19,7 @@ import (
 )
 
 func RegisterControlRuntimeRoutes(router *gin.Engine, assets ThemeAssets) {
+	router.GET("/.well-known/openid-configuration", middleware.DisableCache(), identityhttp.OIDCDiscovery)
 	registerControlAPIRoutes(router)
 	registerDashboardCompatibilityRoutes(router)
 	registerControlWebRoutes(router, assets)
@@ -32,6 +33,11 @@ func registerControlAPIRoutes(router *gin.Engine) {
 	apiRouter.Use(middleware.GlobalAPIRateLimitExceptReadPaths())
 	anonymousRequestBodyLimit := middleware.AnonymousRequestBodyLimit()
 	{
+		apiRouter.GET("/oidc/authorize", middleware.CriticalRateLimit(), middleware.DisableCache(), identityhttp.OIDCAuthorize)
+		apiRouter.POST("/oidc/token", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, middleware.DisableCache(), identityhttp.OIDCToken)
+		apiRouter.GET("/oidc/userinfo", middleware.CriticalRateLimit(), middleware.DisableCache(), identityhttp.OIDCUserInfo)
+		apiRouter.POST("/oidc/userinfo", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, middleware.DisableCache(), identityhttp.OIDCUserInfo)
+		apiRouter.GET("/oidc/jwks", middleware.DisableCache(), identityhttp.OIDCJWKS)
 		RegisterPlatformRoutes(apiRouter, anonymousRequestBodyLimit)
 		apiRouter.GET("/models", middleware.UserAuth(), gatewayhttp.DashboardListModels)
 		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), gatewayhttp.GetPricing)

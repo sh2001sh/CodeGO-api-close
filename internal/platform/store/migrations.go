@@ -214,6 +214,8 @@ func V2MigrationIDs() []string {
 		"20260915_marketplace_average_consumer_amount",
 		"20260915_marketplace_average_consumer_amount_by_model",
 		"20260917_marketplace_consumer_metrics",
+		"20260917_codego_oidc_provider",
+		"20260921_community_channel_ratings",
 	}
 }
 
@@ -505,6 +507,12 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260917_marketplace_consumer_metrics", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&channelConsumerMetricMigration{}, &channelConsumerIdentityMigration{})
+		}},
+		{ID: "20260917_codego_oidc_provider", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&identityschema.OIDCAuthorizationCode{}, &identityschema.OIDCAccessToken{})
+		}},
+		{ID: "20260921_community_channel_ratings", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&communityschema.ChannelRating{})
 		}},
 	}
 	for _, step := range steps {

@@ -60,9 +60,10 @@ import {
 } from '@/features/auth/lib/storage'
 
 export function SignUpForm({
+  redirectTo,
   className,
   ...props
-}: React.HTMLAttributes<HTMLFormElement>) {
+}: React.HTMLAttributes<HTMLFormElement> & { redirectTo?: string }) {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
   const [verificationCode, setVerificationCode] = useState('')
@@ -182,7 +183,7 @@ export function SignUpForm({
 
       if (res?.success) {
         removeAffiliateCode()
-        await handleLoginSuccess(res.data as { id?: number } | null)
+        await handleLoginSuccess(res.data as { id?: number } | null, redirectTo)
         toast.success(t('Account created!'))
       }
     } catch (_error) {
@@ -383,6 +384,7 @@ export function SignUpForm({
         {oauthRegisterEnabled && (
           <OAuthProviders
             status={status}
+            redirectTo={redirectTo}
             disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
             onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
             isWeChatLoading={isWeChatSubmitting}

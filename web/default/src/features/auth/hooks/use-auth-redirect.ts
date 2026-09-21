@@ -25,6 +25,17 @@ import { removeUserId, saveUserId } from '../lib/storage'
 
 let loginTransition = 0
 
+export function normalizeAuthRedirect(redirectTo?: string): string {
+  if (
+    !redirectTo ||
+    !redirectTo.startsWith('/') ||
+    redirectTo.startsWith('//')
+  ) {
+    return '/dashboard'
+  }
+  return redirectTo
+}
+
 function getSavedLanguage(user: User): string | undefined {
   const userData = user as Record<string, unknown>
   if (typeof userData.language === 'string') {
@@ -94,7 +105,11 @@ export function useAuthRedirect() {
     }
 
     // Navigate to target page
-    const targetPath = redirectTo || '/dashboard'
+    const targetPath = normalizeAuthRedirect(redirectTo)
+    if (targetPath.startsWith('/api/')) {
+      window.location.assign(targetPath)
+      return
+    }
     navigate({ to: targetPath, replace: true })
   }
 

@@ -28,7 +28,53 @@ const STORAGE_KEYS = {
   USER_ID: 'uid',
   AFFILIATE: 'aff',
   STATUS: 'status',
+  AUTH_REDIRECT: 'auth_redirect',
 } as const
+
+export function saveAuthRedirect(redirectTo?: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (
+      !redirectTo ||
+      !redirectTo.startsWith('/') ||
+      redirectTo.startsWith('//')
+    ) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.AUTH_REDIRECT)
+      return
+    }
+    window.sessionStorage.setItem(
+      STORAGE_KEYS.AUTH_REDIRECT,
+      JSON.stringify({ redirectTo, createdAt: Date.now() })
+    )
+  } catch (_error) {
+    // A blocked sessionStorage must not prevent authentication.
+  }
+}
+
+export function consumeAuthRedirect(): string | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEYS.AUTH_REDIRECT)
+    window.sessionStorage.removeItem(STORAGE_KEYS.AUTH_REDIRECT)
+    if (!raw) return undefined
+    const value = JSON.parse(raw) as {
+      redirectTo?: unknown
+      createdAt?: unknown
+    }
+    if (
+      typeof value.redirectTo !== 'string' ||
+      !value.redirectTo.startsWith('/') ||
+      value.redirectTo.startsWith('//') ||
+      typeof value.createdAt !== 'number' ||
+      Date.now() - value.createdAt > 10 * 60 * 1000
+    ) {
+      return undefined
+    }
+    return value.redirectTo
+  } catch (_error) {
+    return undefined
+  }
+}
 
 // ============================================================================
 // User ID Storage

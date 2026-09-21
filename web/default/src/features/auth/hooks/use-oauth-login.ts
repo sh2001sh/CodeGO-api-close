@@ -29,6 +29,7 @@ import {
   buildOIDCOAuthUrl,
   buildLinuxDOOAuthUrl,
 } from '../lib/oauth'
+import { saveAuthRedirect } from '../lib/storage'
 import type { SystemStatus, CustomOAuthProviderInfo } from '../types'
 
 type LogoutRequestConfig = AxiosRequestConfig & {
@@ -38,7 +39,10 @@ type LogoutRequestConfig = AxiosRequestConfig & {
 /**
  * Hook for managing OAuth login
  */
-export function useOAuthLogin(status: SystemStatus | null) {
+export function useOAuthLogin(
+  status: SystemStatus | null,
+  redirectTo?: string
+) {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
   const [githubButtonText, setGithubButtonText] = useState(() =>
@@ -57,6 +61,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
   }, [t])
 
   const resetSession = async () => {
+    saveAuthRedirect(redirectTo)
     cancelSelfRequests()
     try {
       auth.reset()

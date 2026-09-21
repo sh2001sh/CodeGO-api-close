@@ -21,20 +21,13 @@ import i18n from 'i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { cancelSelfRequests, getSelf } from '@/lib/api'
 import type { User } from '@/features/users/types'
+import {
+  normalizeAuthRedirect,
+  requiresDocumentNavigation,
+} from '../lib/auth-redirect'
 import { removeUserId, saveUserId } from '../lib/storage'
 
 let loginTransition = 0
-
-export function normalizeAuthRedirect(redirectTo?: string): string {
-  if (
-    !redirectTo ||
-    !redirectTo.startsWith('/') ||
-    redirectTo.startsWith('//')
-  ) {
-    return '/dashboard'
-  }
-  return redirectTo
-}
 
 function getSavedLanguage(user: User): string | undefined {
   const userData = user as Record<string, unknown>
@@ -106,7 +99,7 @@ export function useAuthRedirect() {
 
     // Navigate to target page
     const targetPath = normalizeAuthRedirect(redirectTo)
-    if (targetPath.startsWith('/api/')) {
+    if (requiresDocumentNavigation(targetPath)) {
       window.location.assign(targetPath)
       return
     }

@@ -691,12 +691,14 @@ func TestOaiResponsesStreamHandlerForwardsTerminalFailureAfterOutput(t *testing.
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
 
-	usage, err := OaiResponsesStreamHandler(c, &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}, resp)
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}
+	usage, err := OaiResponsesStreamHandler(c, info, resp)
 	require.Nil(t, usage)
 	require.NotNil(t, err)
 	require.True(t, types.IsSkipRetryError(err))
 	require.Contains(t, recorder.Body.String(), "event: response.failed")
 	require.Contains(t, recorder.Body.String(), "upstream failed")
+	require.Equal(t, "partial", info.ConversationResponseText)
 }
 
 func TestOaiResponsesStreamHandlerAddsFailureWhenPartialStreamCloses(t *testing.T) {

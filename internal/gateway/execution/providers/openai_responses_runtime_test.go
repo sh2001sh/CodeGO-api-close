@@ -61,6 +61,7 @@ func TestOaiResponsesToChatStreamHandlerMarksOutputCommittedAndMapsFailureToBadG
 	require.NotNil(t, apiErr)
 	require.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
 	require.Equal(t, gatewaystream.AttemptStageSemanticCommitted, gatewaystream.AttemptStageFromContext(ctx))
+	require.Equal(t, "partial", info.ConversationResponseText)
 }
 
 func TestOaiResponsesToChatStreamHandlerFinalizesAfterNormalEOF(t *testing.T) {

@@ -29,6 +29,7 @@ import (
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	"github.com/sh2001sh/new-api/internal/platform/tokenx"
 	"github.com/sh2001sh/new-api/types"
 )
 
@@ -421,6 +422,21 @@ func refundRelayBillingIfNeeded(c *gin.Context, relayInfo *relaycommon.RelayInfo
 		return apiErr
 	}
 	apiErr = billingapp.NormalizeViolationFeeError(apiErr)
+	if gatewaystream.AttemptStageFromContext(c) == gatewaystream.AttemptStageSemanticCommitted &&
+		relayInfo.Billing != nil && !relayInfo.BillingSettled {
+		// A transport error after semantic output is not equivalent to a rejected
+		// upstream request. Settle the known/estimated usage instead of refunding
+		// the reservation and losing the upstream work from the billing log.
+		usage := tokenx.ResponseText2Usage(c, relayInfo.ConversationResponseText, relayInfo.UpstreamModelName, relayInfo.GetEstimatePromptTokens())
+		if usage != nil && usage.PromptTokens == 0 {
+			usage.PromptTokens = relayInfo.GetEstimatePromptTokens()
+			usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+		}
+		if usage != nil {
+			billingapp.PostTextConsumeQuota(c, relayInfo, usage, []string{"流式响应在产生语义输出后中断：" + apiErr.Error()})
+			return apiErr
+		}
+	}
 	if relayInfo.Billing != nil {
 		if err := billingapp.RefundRelayBillingSync(c, relayInfo); err != nil {
 			platformobservability.SysError("synchronous billing refund failed: " + err.Error())

@@ -342,6 +342,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if preOutputBufferErr != nil {
 		return nil, types.NewOpenAIError(preOutputBufferErr, types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
+	// Preserve partial output for the outer billing finalizer when the stream
+	// fails after semantic output has already been delivered.
+	info.ConversationResponseText = responseTextBuilder.String()
 	// The scanner may observe a downstream cancellation while it is unwinding
 	// its workers. StreamStatus is the synchronized outcome of those workers,
 	// so use it to reliably propagate client-gone to the main relay path before

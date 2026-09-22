@@ -270,6 +270,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					return
 				}
 				outputText.WriteString(streamResp.Delta)
+				info.ConversationResponseText = outputText.String()
 				usageText.WriteString(streamResp.Delta)
 				delta := streamResp.Delta
 				chunk := &dto.ChatCompletionsStreamResponse{
@@ -426,6 +427,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		return usage, nil
 	}
 
+	// Preserve partial output for the outer billing finalizer when the stream
+	// fails after semantic output has already been delivered.
+	info.ConversationResponseText = outputText.String()
 	if streamErr != nil {
 		return nil, streamErr
 	}

@@ -166,4 +166,28 @@ func TestFinalizeSubscriptionRefundClosesPackageAfterPendingUsage(t *testing.T) 
 	require.NoError(t, db.Where("trade_no = ?", tradeNo).First(&order).Error)
 	require.Equal(t, commerceschema.RefundStatusSuccess, order.RefundStatus)
 	require.Equal(t, refundNo, order.RefundNo)
+
+	require.NoError(t, finalizeUserRefund(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, refundNo, 39.2))
+	require.NoError(t, db.Where("id = ?", subscriptionID).First(&subscription).Error)
+	require.EqualValues(t, 950, subscription.AmountTotal)
+}
+
+func TestSuccessfulRefundStatusCannotBeDowngraded(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	const (
+		userID  = 5726
+		tradeNo = "refund-success-is-terminal"
+	)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionOrder{
+		UserId: userID, TradeNo: tradeNo, RefundStatus: commerceschema.RefundStatusSuccess,
+		RefundProviderID: "provider-success",
+	}).Error)
+
+	require.NoError(t, setRefundStatus(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, commerceschema.RefundStatusProcessing, "provider-retry", ""))
+
+	var order commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", tradeNo).First(&order).Error)
+	require.Equal(t, commerceschema.RefundStatusSuccess, order.RefundStatus)
+	require.Equal(t, "provider-success", order.RefundProviderID)
 }

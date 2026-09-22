@@ -246,11 +246,17 @@ func CreateUserRefund(userID int, req commerceschema.RefundRequest) (*commercesc
 func SyncUserRefund(userID int, refundNo string) (*commerceschema.RefundResult, error) {
 	var topup commerceschema.TopUp
 	if err := platformdb.DB.Where("user_id = ? AND refund_no = ?", userID, refundNo).First(&topup).Error; err == nil {
+		if topup.RefundStatus == commerceschema.RefundStatusSuccess {
+			return &commerceschema.RefundResult{OrderType: commerceschema.RefundOrderTypeBalance, TradeNo: topup.TradeNo, RefundNo: refundNo, RefundID: topup.RefundProviderID, RefundAmount: topup.RefundAmount, Status: commerceschema.RefundStatusSuccess}, nil
+		}
 		return syncRefundOrder(userID, commerceschema.RefundOrderTypeBalance, topup.TradeNo, refundNo, topup.RefundProviderID, topup.RefundAmount)
 	}
 	var order commerceschema.SubscriptionOrder
 	if err := platformdb.DB.Where("user_id = ? AND refund_no = ?", userID, refundNo).First(&order).Error; err != nil {
 		return nil, errors.New("退款订单不存在")
+	}
+	if order.RefundStatus == commerceschema.RefundStatusSuccess {
+		return &commerceschema.RefundResult{OrderType: commerceschema.RefundOrderTypeSubscription, TradeNo: order.TradeNo, RefundNo: refundNo, RefundID: order.RefundProviderID, RefundAmount: order.RefundAmount, Status: commerceschema.RefundStatusSuccess}, nil
 	}
 	return syncRefundOrder(userID, commerceschema.RefundOrderTypeSubscription, order.TradeNo, refundNo, order.RefundProviderID, order.RefundAmount)
 }
@@ -279,6 +285,9 @@ func finalizeUserRefund(userID int, orderType, tradeNo, refundNo string, refundA
 			if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("user_id = ? AND trade_no = ?", userID, tradeNo).First(&order).Error; err != nil {
 				return err
 			}
+			if order.RefundStatus == commerceschema.RefundStatusSuccess {
+				return nil
+			}
 			remaining := order.RefundQuota
 			if remaining <= 0 {
 				return errors.New("充值余额已处理或不可退款")
@@ -292,6 +301,9 @@ func finalizeUserRefund(userID int, orderType, tradeNo, refundNo string, refundA
 		var order commerceschema.SubscriptionOrder
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("user_id = ? AND trade_no = ?", userID, tradeNo).First(&order).Error; err != nil {
 			return err
+		}
+		if order.RefundStatus == commerceschema.RefundStatusSuccess {
+			return nil
 		}
 		var sub commerceschema.UserSubscription
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", order.TargetSubscriptionId, userID).First(&sub).Error; err != nil {
@@ -356,9 +368,15 @@ func saveRefundProviderState(userID int, orderType, tradeNo string, response *Ji
 func setRefundStatus(userID int, orderType, tradeNo, status, providerID, _ string) error {
 	updates := map[string]any{"refund_status": status, "refund_provider_id": providerID, "refund_updated_at": platformruntime.GetTimestamp()}
 	if orderType == commerceschema.RefundOrderTypeBalance {
-		return platformdb.DB.Model(&commerceschema.TopUp{}).Where("user_id = ? AND trade_no = ?", userID, tradeNo).Updates(updates).Error
+		return platformdb.DB.Model(&commerceschema.TopUp{}).
+			Where("user_id = ? AND trade_no = ?", userID, tradeNo).
+			Where("refund_status IS NULL OR refund_status <> ?", commerceschema.RefundStatusSuccess).
+			Updates(updates).Error
 	}
-	return platformdb.DB.Model(&commerceschema.SubscriptionOrder{}).Where("user_id = ? AND trade_no = ?", userID, tradeNo).Updates(updates).Error
+	return platformdb.DB.Model(&commerceschema.SubscriptionOrder{}).
+		Where("user_id = ? AND trade_no = ?", userID, tradeNo).
+		Where("refund_status IS NULL OR refund_status <> ?", commerceschema.RefundStatusSuccess).
+		Updates(updates).Error
 }
 
 func refundStatusFromJianPay(status int) string {

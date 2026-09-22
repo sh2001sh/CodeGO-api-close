@@ -9,7 +9,6 @@ import (
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
-	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -241,62 +240,42 @@ func AllocateSettledFundingFIFO(requestID, accountID string, amount int64) error
 		if allocations > 0 {
 			return nil
 		}
-		if err := ensureLegacyFundingLotTx(tx, accountID, amount); err != nil {
-			return err
-		}
-		var lots []billingschema.FundingLot
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("account_id = ? AND remaining_amount > 0", accountID).
-			Order("created_at asc, lot_id asc").Find(&lots).Error; err != nil {
-			return err
-		}
 		remaining := amount
-		for index := range lots {
-			if remaining == 0 {
-				break
+		for remaining > 0 {
+			var lot billingschema.FundingLot
+			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("account_id = ? AND remaining_amount > 0", accountID).
+				Order("created_at asc, lot_id asc").Take(&lot).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				lot = billingschema.FundingLot{
+					AccountID: accountID, Source: billingschema.FundingSourceLegacyUnattributed,
+					ReferenceType: "legacy_wallet", ReferenceID: requestID,
+					OriginalAmount: remaining, RemainingAmount: remaining,
+					RevenueMultiplier: 0, IdempotencyKey: "legacy-wallet:" + accountID + ":" + requestID,
+				}
+				if err := tx.Create(&lot).Error; err != nil {
+					return err
+				}
+			} else if err != nil {
+				return err
 			}
-			used := lots[index].RemainingAmount
+			used := lot.RemainingAmount
 			if used > remaining {
 				used = remaining
 			}
-			if err := tx.Model(&lots[index]).Update("remaining_amount", gorm.Expr("remaining_amount - ?", used)).Error; err != nil {
+			if err := tx.Model(&lot).Update("remaining_amount", gorm.Expr("remaining_amount - ?", used)).Error; err != nil {
 				return err
 			}
 			if err := tx.Create(&billingschema.FundingAllocation{
-				RequestID: requestID, LotID: lots[index].LotID, AccountID: accountID,
-				Source: lots[index].Source, Amount: used, RevenueMultiplier: lots[index].RevenueMultiplier,
+				RequestID: requestID, LotID: lot.LotID, AccountID: accountID,
+				Source: lot.Source, Amount: used, RevenueMultiplier: lot.RevenueMultiplier,
 			}).Error; err != nil {
 				return err
 			}
 			remaining -= used
 		}
-		if remaining != 0 {
-			return errors.New("funding lot balance is lower than settled wallet amount")
-		}
 		return nil
 	})
-}
-
-func ensureLegacyFundingLotTx(tx *gorm.DB, accountID string, minimumAmount int64) error {
-	var snapshot billingschema.BillingBalanceSnapshot
-	if err := tx.Where("account_id = ?", accountID).First(&snapshot).Error; err != nil {
-		return err
-	}
-	var totalAvailable int64
-	if err := tx.Model(&billingschema.FundingLot{}).Where("account_id = ? AND remaining_amount > 0", accountID).
-		Select("COALESCE(SUM(remaining_amount), 0)").Scan(&totalAvailable).Error; err != nil {
-		return err
-	}
-	target := snapshot.AvailableBalance + minimumAmount
-	if totalAvailable >= target {
-		return nil
-	}
-	missing := target - totalAvailable
-	return tx.Create(&billingschema.FundingLot{
-		AccountID: accountID, Source: billingschema.FundingSourceLegacyUnattributed,
-		ReferenceType: "legacy_wallet", ReferenceID: accountID, OriginalAmount: missing, RemainingAmount: missing,
-		RevenueMultiplier: 0, IdempotencyKey: "legacy-wallet:" + accountID + ":" + platformruntime.GetUUID(),
-	}).Error
 }
 
 func fundingSourceFromReason(reasonCode string) string {

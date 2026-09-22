@@ -372,6 +372,22 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		"upstream_eof":               upstreamEOF,
 		"client_disconnected":        c.GetBool(string(constant.ContextKeyClientGone)),
 	})
+	// A downstream disconnect is not proof that the upstream stopped. Once the
+	// upstream has returned 2xx, it may continue billable generation after our
+	// transport is closed. Preserve the known input/output usage instead of
+	// refunding the reservation as if the request never reached the provider.
+	if c.GetBool(string(constant.ContextKeyClientGone)) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+		if usage.PromptTokens == 0 {
+			usage.PromptTokens = info.GetEstimatePromptTokens()
+		}
+		if usage.CompletionTokens == 0 && responseTextBuilder.Len() > 0 {
+			usage.CompletionTokens = tokenx.CountTextToken(responseTextBuilder.String(), info.UpstreamModelName)
+		}
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+		info.ConversationResponseText = responseTextBuilder.String()
+		helper.MarkAttemptCompleted(c)
+		return usage, nil
+	}
 
 	if firstOutputTimedOut.Load() && !sawSemanticOutput.Load() {
 		return nil, types.NewOpenAIError(

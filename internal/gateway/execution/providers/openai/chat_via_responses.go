@@ -548,6 +548,17 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		default:
 		}
 	})
+	if helper.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+		if usage.PromptTokens == 0 {
+			usage.PromptTokens = info.GetEstimatePromptTokens()
+		}
+		if usage.CompletionTokens == 0 && outputText.Len() > 0 {
+			usage = tokenx.ResponseText2Usage(c, outputText.String(), info.UpstreamModelName, usage.PromptTokens)
+		}
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+		helper.MarkAttemptCompleted(c)
+		return usage, nil
+	}
 	if cyberErr != nil {
 		return nil, cyberErr
 	}

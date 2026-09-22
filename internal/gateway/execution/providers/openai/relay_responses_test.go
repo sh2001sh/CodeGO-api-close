@@ -148,6 +148,36 @@ func TestOaiResponsesStreamHandlerMarksCancelledClient(t *testing.T) {
 	require.True(t, c.GetBool(string(constant.ContextKeyClientGone)))
 }
 
+func TestOaiResponsesStreamHandlerSettlesAcceptedRequestAfterClientDisconnect(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	requestContext, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reader, writer := io.Pipe()
+	go func() {
+		_, _ = io.WriteString(writer, `data: {"type":"response.created","response":{"id":"resp_accepted"}}`+"\n\n")
+		cancel()
+		_ = writer.Close()
+	}()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(requestContext)
+	c.Set(string(constant.ContextKeyUpstreamRequestAccepted), true)
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5.6-sol", IsStream: true}
+	info.SetEstimatePromptTokens(123)
+	resp := &http.Response{StatusCode: http.StatusOK, Body: reader, Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, err := OaiResponsesStreamHandler(c, info, resp)
+
+	require.Nil(t, err)
+	require.NotNil(t, usage)
+	require.Equal(t, 123, usage.PromptTokens)
+	require.Equal(t, 123, usage.TotalTokens)
+	require.True(t, c.GetBool(string(constant.ContextKeyClientGone)))
+}
+
 func TestOaiResponsesStreamHandlerTimesOutBeforeSemanticOutput(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
 	oldFirstByteTimeout := constant.StreamingFirstByteTimeout

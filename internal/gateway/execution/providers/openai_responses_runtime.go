@@ -3,6 +3,7 @@ package providers
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
@@ -413,6 +414,17 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return
 		}
 	})
+	if gatewaystream.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+		if usage.PromptTokens == 0 {
+			usage.PromptTokens = info.GetEstimatePromptTokens()
+		}
+		if usage.CompletionTokens == 0 && usageText.Len() > 0 {
+			usage = tokenx.ResponseText2Usage(c, usageText.String(), info.UpstreamModelName, usage.PromptTokens)
+		}
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+		gatewaystream.MarkAttemptCompleted(c)
+		return usage, nil
+	}
 
 	if streamErr != nil {
 		return nil, streamErr

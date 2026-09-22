@@ -47,7 +47,7 @@ func checkSystemPerformance() *types.NewAPIError {
 	status := platformobservability.GetSystemStatus()
 
 	// 检查 CPU
-	if config.CPUThreshold > 0 && int(status.CPUUsage) > config.CPUThreshold {
+	if config.CPUThreshold > 0 && status.CPUHighSampleCount >= platformobservability.CPUOverloadSampleThreshold && int(status.CPUUsage) > config.CPUThreshold {
 		return types.NewErrorWithStatusCode(
 			fmt.Errorf("system cpu overloaded (current: %.1f%%, threshold: %d%%)", status.CPUUsage, config.CPUThreshold),
 			"system_cpu_overloaded", http.StatusServiceUnavailable)

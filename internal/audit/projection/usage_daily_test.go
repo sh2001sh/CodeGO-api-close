@@ -90,6 +90,12 @@ func TestUsageDayExpressionSupportsAllDatabaseDialects(t *testing.T) {
 	require.Contains(t, usageDayExpression("mysql"), "TIMESTAMPADD")
 }
 
+func TestAggregateUsageDaysRejectsInvalidDay(t *testing.T) {
+	setupUsageDailyTestDB(t)
+	_, _, err := aggregateUsageDays(context.Background(), []string{"2026-09-32"})
+	require.ErrorContains(t, err, "parse usage day")
+}
+
 func setupUsageDailyTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})

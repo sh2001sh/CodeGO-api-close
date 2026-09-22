@@ -129,19 +129,32 @@ func queryChangedUsageDays(ctx context.Context, lastLogID, maxLogID int64, fullB
 }
 
 func aggregateUsageDays(ctx context.Context, days []string) ([]UserUsageDaily, []ChannelUsageDaily, error) {
-	day := usageDayExpression(platformdb.LogDB.Dialector.Name())
-	newBaseQuery := func() *gorm.DB {
-		return platformdb.LogDB.WithContext(ctx).Model(&auditschema.Log{}).
-			Where("type = ?", auditschema.LogTypeConsume).
-			Where(day+" IN ?", days)
-	}
 	userRows := []UserUsageDaily{}
-	if err := newBaseQuery().Select(usageDailySelect(day, "user_id")).Group(day + ", user_id").Scan(&userRows).Error; err != nil {
-		return nil, nil, err
-	}
 	channelRows := []ChannelUsageDaily{}
-	if err := newBaseQuery().Select(usageDailySelect(day, "channel_id")).Group(day + ", channel_id").Scan(&channelRows).Error; err != nil {
-		return nil, nil, err
+	for _, day := range days {
+		start, err := time.Parse(time.DateOnly, day)
+		if err != nil {
+			return nil, nil, fmt.Errorf("parse usage day %q: %w", day, err)
+		}
+		startUnix := start.UTC().Unix()
+		endUnix := start.AddDate(0, 0, 1).UTC().Unix()
+		newBaseQuery := func() *gorm.DB {
+			return platformdb.LogDB.WithContext(ctx).Model(&auditschema.Log{}).
+				Where("type = ?", auditschema.LogTypeConsume).
+				Where("created_at >= ? AND created_at < ?", startUnix, endUnix)
+		}
+
+		var dailyUsers []UserUsageDaily
+		if err := newBaseQuery().Select(usageDailySelect("?", "user_id"), day).Group("user_id").Scan(&dailyUsers).Error; err != nil {
+			return nil, nil, err
+		}
+		userRows = append(userRows, dailyUsers...)
+
+		var dailyChannels []ChannelUsageDaily
+		if err := newBaseQuery().Select(usageDailySelect("?", "channel_id"), day).Group("channel_id").Scan(&dailyChannels).Error; err != nil {
+			return nil, nil, err
+		}
+		channelRows = append(channelRows, dailyChannels...)
 	}
 	return userRows, channelRows, nil
 }

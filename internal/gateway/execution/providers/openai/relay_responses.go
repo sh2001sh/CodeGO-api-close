@@ -191,6 +191,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		}
 		textOutput := isResponsesTextDelta(streamResponse)
 		if isResponsesFailureEvent(streamResponse) {
+			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
 			terminalFailure = responsesFailureError(streamResponse)
 			if sawSemanticOutput.Load() {
 				if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {

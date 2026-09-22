@@ -698,6 +698,7 @@ func TestOaiResponsesStreamHandlerForwardsTerminalFailureAfterOutput(t *testing.
 	require.True(t, types.IsSkipRetryError(err))
 	require.Contains(t, recorder.Body.String(), "event: response.failed")
 	require.Contains(t, recorder.Body.String(), "upstream failed")
+	require.True(t, c.GetBool(string(constant.ContextKeyUpstreamTerminalError)))
 	require.Equal(t, "partial", info.ConversationResponseText)
 }
 

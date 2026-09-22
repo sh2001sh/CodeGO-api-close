@@ -423,6 +423,7 @@ func refundRelayBillingIfNeeded(c *gin.Context, relayInfo *relaycommon.RelayInfo
 	}
 	apiErr = billingapp.NormalizeViolationFeeError(apiErr)
 	if gatewaystream.AttemptStageFromContext(c) == gatewaystream.AttemptStageSemanticCommitted &&
+		!c.GetBool(string(constant.ContextKeyUpstreamTerminalError)) &&
 		relayInfo.Billing != nil && !relayInfo.BillingSettled {
 		// A transport error after semantic output is not equivalent to a rejected
 		// upstream request. Settle the known/estimated usage instead of refunding

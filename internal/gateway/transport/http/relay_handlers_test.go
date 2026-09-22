@@ -28,6 +28,23 @@ type relayErrorEnvelope struct {
 	} `json:"error"`
 }
 
+type refundTrackingBilling struct {
+	refunded bool
+	settled  bool
+}
+
+func (b *refundTrackingBilling) Settle(int) error {
+	b.settled = true
+	return nil
+}
+
+func (b *refundTrackingBilling) Refund(*gin.Context) { b.refunded = true }
+func (b *refundTrackingBilling) NeedsRefund() bool   { return true }
+func (b *refundTrackingBilling) GetPreConsumedQuota() int {
+	return 100
+}
+func (b *refundTrackingBilling) Reserve(int) error { return nil }
+
 func TestGenericResponsesUpstream400RetriesOnlyBeforeContentWithinBudget(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
@@ -70,6 +87,21 @@ func TestRefundRelayBillingSkipsRequestsWithoutRelayInfo(t *testing.T) {
 	apiErr := types.NewErrorWithStatusCode(errors.New("service busy"), types.ErrorCodeServiceBusy, http.StatusServiceUnavailable)
 
 	require.Same(t, apiErr, refundRelayBillingIfNeeded(ctx, nil, apiErr))
+}
+
+func TestRefundRelayBillingRefundsExplicitUpstreamTerminalErrorAfterOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	gatewaystream.MarkSemanticCommitted(ctx)
+	ctx.Set(string(constant.ContextKeyUpstreamTerminalError), true)
+	billing := &refundTrackingBilling{}
+	info := &relaycommon.RelayInfo{Billing: billing}
+	apiErr := types.NewOpenAIError(errors.New("upstream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	require.Same(t, apiErr, refundRelayBillingIfNeeded(ctx, info, apiErr))
+	require.True(t, billing.refunded)
+	require.False(t, billing.settled)
+	require.Nil(t, info.Billing)
 }
 
 func TestRelayFailureSampleRequiresUpstreamAttempt(t *testing.T) {

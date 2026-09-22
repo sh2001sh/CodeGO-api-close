@@ -403,6 +403,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				sentStop = true
 			}
 		case "response.error", "response.failed":
+			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
 			if streamResp.Response != nil {
 				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
 					streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)

@@ -106,6 +106,9 @@ const (
 	// ContextKeyResponsesTerminalSent prevents the generic finalizer from
 	// appending a second terminal event after response.failed was emitted.
 	ContextKeyResponsesTerminalSent ContextKey = "responses_terminal_sent"
+	// ContextKeyUpstreamTerminalError marks an explicit upstream error event.
+	// Billing must refund these failures even if partial output preceded them.
+	ContextKeyUpstreamTerminalError ContextKey = "upstream_terminal_error"
 	// ContextKeyCyberPolicyResponseForwarded prevents the generic error finalizer
 	// from appending a sanitized error after the upstream policy event was sent.
 	ContextKeyCyberPolicyResponseForwarded ContextKey = "cyber_policy_response_forwarded"

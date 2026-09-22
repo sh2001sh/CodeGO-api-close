@@ -63,6 +63,30 @@ func TestOaiResponsesToChatStreamHandlerMarksOutputCommittedAndMapsFailureToBadG
 	require.Equal(t, gatewaystream.AttemptStageSemanticCommitted, gatewaystream.AttemptStageFromContext(ctx))
 }
 
+func TestOaiResponsesToChatStreamHandlerFinalizesAfterNormalEOF(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","delta":"partial"}`,
+		``,
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	response := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.6-sol"}, RelayFormat: types.RelayFormatOpenAI, IsStream: true}
+	info.SetEstimatePromptTokens(12)
+
+	usage, apiErr := OaiResponsesToChatStreamHandler(ctx, info, response)
+
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	require.Equal(t, 12, usage.PromptTokens)
+	require.Contains(t, recorder.Body.String(), `"finish_reason":"stop"`)
+}
+
 func TestOaiResponsesToChatStreamHandlerMapsIncompleteResponseToLength(t *testing.T) {
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)

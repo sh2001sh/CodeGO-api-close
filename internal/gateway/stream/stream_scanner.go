@@ -81,6 +81,14 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 		})
 	}
 	SetStreamWorkerContext(c, dataCtx)
+	defer func() {
+		// Post-scan finalizers may still need to emit a stop frame or usage. The
+		// worker context is intentionally cancelled once queued events drain, so
+		// restore the downstream request lifetime before returning to the handler.
+		if c != nil && c.Request != nil {
+			SetStreamWorkerContext(c, c.Request.Context())
+		}
+	}()
 
 	scanner := NewStreamScanner(resp.Body)
 	ticker := time.NewTicker(streamingTimeout)

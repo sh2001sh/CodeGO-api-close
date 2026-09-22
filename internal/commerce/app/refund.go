@@ -297,11 +297,18 @@ func finalizeUserRefund(userID int, orderType, tradeNo, refundNo string, refundA
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", order.TargetSubscriptionId, userID).First(&sub).Error; err != nil {
 			return err
 		}
-		if order.RefundQuota <= 0 || order.RefundQuota > sub.AmountTotal-sub.AmountUsed {
-			return errors.New("套餐可退款额度已变化")
+		if order.RefundQuota <= 0 {
+			return errors.New("套餐可退款额度无效")
 		}
-		sub.AmountTotal -= order.RefundQuota
-		sub.PeriodAmount -= minInt64(order.RefundQuota, sub.PeriodAmount-sub.PeriodUsed)
+		// The provider refund is irreversible once successful. Usage may settle
+		// while it is processing, so only remove the balance that still exists and
+		// always close the subscription. Rejecting here would leave a refunded
+		// package active and let it continue spending.
+		remainingQuota := max(sub.AmountTotal-sub.AmountUsed, 0)
+		quotaToRemove := minInt64(order.RefundQuota, remainingQuota)
+		sub.AmountTotal -= quotaToRemove
+		periodRemaining := max(sub.PeriodAmount-sub.PeriodUsed, 0)
+		sub.PeriodAmount -= minInt64(quotaToRemove, periodRemaining)
 		sub.Status = commerceschema.SubscriptionStatusSettledCancelled
 		if err := tx.Save(&sub).Error; err != nil {
 			return err

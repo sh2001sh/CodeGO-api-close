@@ -133,3 +133,37 @@ func TestRefundableSubscriptionFailsClosedWhenResetUsageCannotBeVerified(t *test
 	require.False(t, item.Refundable)
 	require.Contains(t, item.UnavailableReason, "无法核验累计消耗")
 }
+
+func TestFinalizeSubscriptionRefundClosesPackageAfterPendingUsage(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	const (
+		userID         = 5725
+		subscriptionID = 6725
+		tradeNo        = "refund-pending-usage"
+		refundNo       = "refund-pending-usage-provider"
+	)
+	require.NoError(t, db.Create(&commerceschema.UserSubscription{
+		Id: subscriptionID, UserId: userID, PlanId: 1,
+		AmountTotal: 1_000, AmountUsed: 950,
+		PeriodAmount: 1_000, PeriodUsed: 950, Status: "active",
+	}).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionOrder{
+		UserId: userID, TradeNo: tradeNo, TargetSubscriptionId: subscriptionID,
+		RefundStatus: commerceschema.RefundStatusProcessing, RefundQuota: 400,
+	}).Error)
+
+	require.NoError(t, finalizeUserRefund(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, refundNo, 39.2))
+
+	var subscription commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", subscriptionID).First(&subscription).Error)
+	require.Equal(t, commerceschema.SubscriptionStatusSettledCancelled, subscription.Status)
+	require.EqualValues(t, 950, subscription.AmountTotal)
+	require.EqualValues(t, 950, subscription.AmountUsed)
+	require.EqualValues(t, 950, subscription.PeriodAmount)
+	require.EqualValues(t, 950, subscription.PeriodUsed)
+	var order commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", tradeNo).First(&order).Error)
+	require.Equal(t, commerceschema.RefundStatusSuccess, order.RefundStatus)
+	require.Equal(t, refundNo, order.RefundNo)
+}

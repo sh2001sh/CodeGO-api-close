@@ -62,3 +62,74 @@ func TestRefundMoneyRejectsEmptyQuota(t *testing.T) {
 	require.Zero(t, fee)
 	require.Zero(t, net)
 }
+
+func TestRefundableSubscriptionKeepsUsageClearedByReferralReset(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	const (
+		userID         = 5723
+		subscriptionID = 6723
+	)
+	subscription := commerceschema.UserSubscription{
+		Id: subscriptionID, UserId: userID, PlanId: 1,
+		AmountTotal: 1_000, AmountUsed: 0,
+		Status: "active",
+	}
+	require.NoError(t, db.Create(&subscription).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityLedger{
+		UserId: userID, RelatedUserId: subscriptionID,
+		ChangeType: commerceschema.SubscriptionResetOpportunityChangeUse,
+		Delta:      -1, UsedMonth: "2026-09", SourceType: "user_subscription",
+		SourceRef: "6723", EventKey: "refund-after-reset-6723",
+	}).Error)
+	account := billingschema.BillingAccount{
+		AccountID: "refund-reset-subscription", OwnerType: "user_subscription",
+		OwnerID: subscriptionID, AccountType: "subscription", QuotaUnit: "quota",
+	}
+	require.NoError(t, db.Create(&account).Error)
+	require.NoError(t, db.Create(&billingschema.BillingBalanceSnapshot{
+		AccountID: account.AccountID, ConsumedTotal: 400, RefundedTotal: 50,
+	}).Error)
+	order := commerceschema.SubscriptionOrder{
+		UserId: userID, TargetSubscriptionId: subscriptionID, Money: 100,
+		ProviderPayload: `{"trade_no":"provider-subscription-order"}`,
+	}
+
+	item := refundableSubscription(userID, &order)
+
+	require.EqualValues(t, 1_000, item.TotalQuota)
+	require.EqualValues(t, 350, item.UsedQuota)
+	require.EqualValues(t, 650, item.RemainingQuota)
+	require.Equal(t, 65.0, item.GrossRefund)
+	require.Equal(t, 1.3, item.FeeAmount)
+	require.Equal(t, 63.7, item.RefundAmount)
+	require.True(t, item.Refundable)
+}
+
+func TestRefundableSubscriptionFailsClosedWhenResetUsageCannotBeVerified(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	const (
+		userID         = 5724
+		subscriptionID = 6724
+	)
+	require.NoError(t, db.Create(&commerceschema.UserSubscription{
+		Id: subscriptionID, UserId: userID, PlanId: 1,
+		AmountTotal: 1_000, AmountUsed: 0, Status: "active",
+	}).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityLedger{
+		UserId: userID, RelatedUserId: subscriptionID,
+		ChangeType: commerceschema.SubscriptionResetOpportunityChangeUse,
+		Delta:      -1, UsedMonth: "2026-09", SourceType: "user_subscription",
+		SourceRef: "6724", EventKey: "refund-after-reset-6724",
+	}).Error)
+	order := commerceschema.SubscriptionOrder{
+		UserId: userID, TargetSubscriptionId: subscriptionID, Money: 100,
+		ProviderPayload: `{"trade_no":"provider-subscription-order"}`,
+	}
+
+	item := refundableSubscription(userID, &order)
+
+	require.False(t, item.Refundable)
+	require.Contains(t, item.UnavailableReason, "无法核验累计消耗")
+}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/sh2001sh/new-api/constant"
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -72,18 +73,27 @@ func refundableTopup(userID int, order *commerceschema.TopUp) commerceschema.Ref
 }
 
 func refundableSubscription(userID int, order *commerceschema.SubscriptionOrder) commerceschema.RefundableOrder {
+	return refundableSubscriptionWithDB(platformdb.DB, userID, order)
+}
+
+func refundableSubscriptionWithDB(tx *gorm.DB, userID int, order *commerceschema.SubscriptionOrder) commerceschema.RefundableOrder {
 	item := commerceschema.RefundableOrder{OrderType: commerceschema.RefundOrderTypeSubscription, TradeNo: order.TradeNo, PaymentMethod: order.PaymentMethod, CreatedAt: order.CreateTime, PaidAmount: order.Money, RefundStatus: order.RefundStatus}
 	if order.UserId != userID || order.TargetSubscriptionId <= 0 || order.RefundStatus == commerceschema.RefundStatusSuccess {
 		return item
 	}
 	var sub commerceschema.UserSubscription
-	if err := platformdb.DB.Where("id = ? AND user_id = ?", order.TargetSubscriptionId, userID).First(&sub).Error; err != nil {
+	if err := tx.Where("id = ? AND user_id = ?", order.TargetSubscriptionId, userID).First(&sub).Error; err != nil {
 		item.UnavailableReason = "找不到对应套餐使用记录"
 		return item
 	}
+	usedQuota, err := refundableSubscriptionUsedQuotaTx(tx, &sub)
+	if err != nil {
+		item.UnavailableReason = "套餐已使用额度刷新，无法核验累计消耗，不支持退款"
+		return item
+	}
 	item.TotalQuota = sub.AmountTotal
-	item.UsedQuota = sub.AmountUsed
-	item.RemainingQuota = sub.AmountTotal - sub.AmountUsed
+	item.UsedQuota = usedQuota
+	item.RemainingQuota = sub.AmountTotal - usedQuota
 	if item.RemainingQuota < 0 {
 		item.RemainingQuota = 0
 	}
@@ -96,6 +106,34 @@ func refundableSubscription(userID int, order *commerceschema.SubscriptionOrder)
 		}
 	}
 	return item
+}
+
+// refundableSubscriptionUsedQuotaTx preserves consumption erased from the
+// subscription projection by a referral reset. Billing snapshots are
+// cumulative, so consumed minus refunded remains the authoritative net usage
+// across reset cycles. If a reset exists but its billing snapshot cannot be
+// verified, fail closed instead of treating the refreshed projection as new.
+func refundableSubscriptionUsedQuotaTx(tx *gorm.DB, sub *commerceschema.UserSubscription) (int64, error) {
+	if tx == nil || sub == nil || sub.Id <= 0 {
+		return 0, errors.New("invalid subscription")
+	}
+	resetUsed, err := subscriptionHasResetOpportunityUsageTx(tx, sub.Id)
+	if err != nil || !resetUsed {
+		return max(sub.AmountUsed, 0), err
+	}
+
+	var account billingschema.BillingAccount
+	if err := tx.Select("account_id").
+		Where("account_type = ? AND owner_type = ? AND owner_id = ? AND quota_unit = ?", "subscription", "user_subscription", sub.Id, "quota").
+		First(&account).Error; err != nil {
+		return 0, err
+	}
+	var snapshot billingschema.BillingBalanceSnapshot
+	if err := tx.Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
+		return 0, err
+	}
+	netConsumed := max(snapshot.ConsumedTotal-snapshot.RefundedTotal, 0)
+	return max(sub.AmountUsed, netConsumed), nil
 }
 
 func refundMoney(paid float64, remaining, total int64) (float64, float64, float64) {
@@ -297,26 +335,7 @@ func refundableTopupTx(tx *gorm.DB, userID int, order *commerceschema.TopUp) com
 }
 
 func refundableSubscriptionTx(tx *gorm.DB, userID int, order *commerceschema.SubscriptionOrder) commerceschema.RefundableOrder {
-	item := refundableSubscription(userID, order)
-	var sub commerceschema.UserSubscription
-	if err := tx.Where("id = ? AND user_id = ?", order.TargetSubscriptionId, userID).First(&sub).Error; err != nil {
-		item.Refundable = false
-		item.UnavailableReason = "找不到对应套餐使用记录"
-		return item
-	}
-	item.TotalQuota, item.UsedQuota, item.RemainingQuota = sub.AmountTotal, sub.AmountUsed, sub.AmountTotal-sub.AmountUsed
-	if item.RemainingQuota < 0 {
-		item.RemainingQuota = 0
-	}
-	item.GrossRefund, item.FeeAmount, item.RefundAmount = refundMoney(order.Money, item.RemainingQuota, item.TotalQuota)
-	item.Refundable = (order.RefundStatus == "" || order.RefundStatus == commerceschema.RefundStatusFailed) && item.RemainingQuota > 0 && item.RefundAmount >= 0.01 && strings.TrimSpace(extractProviderOrderID(order.ProviderPayload)) != ""
-	if !item.Refundable {
-		item.UnavailableReason = refundStatusReason(order.RefundStatus)
-		if item.UnavailableReason == "" {
-			item.UnavailableReason = refundUnavailableReason(order.ProviderPayload, item.RemainingQuota, item.RefundAmount)
-		}
-	}
-	return item
+	return refundableSubscriptionWithDB(tx, userID, order)
 }
 
 func saveRefundProviderState(userID int, orderType, tradeNo string, response *JianPayRefundResult) error {

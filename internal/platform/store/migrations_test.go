@@ -199,6 +199,35 @@ func TestPublishedOutboxCleanupIndexStatement(t *testing.T) {
 	}
 }
 
+func TestBillingHotPathIndexStatements(t *testing.T) {
+	postgres := billingHotPathIndexStatements("postgres")
+	require.Len(t, postgres, 4)
+	require.Contains(t, postgres[0], "INCLUDE (amount, entry_type, reference_type)")
+	require.Contains(t, postgres[1], "WHERE status = 'completed'")
+	require.Contains(t, postgres[2], "WHERE status = 'open'")
+	require.Contains(t, postgres[3], "autovacuum_vacuum_scale_factor")
+
+	for _, dialect := range []string{"mysql", "sqlite"} {
+		statements := billingHotPathIndexStatements(dialect)
+		require.Len(t, statements, 3)
+		require.NotContains(t, strings.Join(statements, " "), "CONCURRENTLY")
+	}
+}
+
+func TestMigrateBillingHotPathIndexesSQLite(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&billingschema.BillingLedgerEntry{},
+		&billingschema.BillingSettlement{},
+		&billingschema.BillingReservation{},
+		&billingschema.BillingOutboxEvent{},
+	))
+	require.NoError(t, migrateBillingHotPathIndexes(db))
+	require.NoError(t, migrateBillingHotPathIndexes(db))
+	require.True(t, db.Migrator().HasIndex(&billingschema.BillingLedgerEntry{}, "idx_billing_ledger_entries_account_aggregate"))
+}
+
 func TestMigratePublishedOutboxCleanupIndexSQLite(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)

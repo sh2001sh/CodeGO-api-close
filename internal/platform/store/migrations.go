@@ -217,6 +217,9 @@ func V2MigrationIDs() []string {
 		"20260917_codego_oidc_provider",
 		"20260921_community_channel_ratings",
 		"20260921_database_pressure_indexes",
+		"20260921_marketplace_reclaim_owner_amounts",
+		"20260922_marketplace_settlement_created_index",
+		"20260922_billing_hot_path_indexes",
 	}
 }
 
@@ -394,6 +397,8 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260912_marketplace_settlement_due_index", RunOutsideTx: migrateMarketplaceSettlementDueIndex},
 		{ID: "20260914_marketplace_settlement_reclaim_index", RunOutsideTx: migrateMarketplaceSettlementReclaimIndex},
+		{ID: "20260922_marketplace_settlement_created_index", RunOutsideTx: migrateMarketplaceSettlementCreatedIndex},
+		{ID: "20260922_billing_hot_path_indexes", RunOutsideTx: migrateBillingHotPathIndexes},
 		{ID: "20260915_marketplace_pelican_artifacts", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.PelicanArtifact{})
 		}},
@@ -508,6 +513,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260917_marketplace_consumer_metrics", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&channelConsumerMetricMigration{}, &channelConsumerIdentityMigration{})
+		}},
+		{ID: "20260921_marketplace_reclaim_owner_amounts", Run: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&marketplaceschema.IncomeReclaim{})
 		}},
 		{ID: "20260917_codego_oidc_provider", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&identityschema.OIDCAuthorizationCode{}, &identityschema.OIDCAccessToken{})
@@ -776,6 +784,79 @@ func migrateMarketplaceSettlementReclaimIndex(_ *gorm.DB) error {
 		return fmt.Errorf("create marketplace settlement reclaim index: %w", err)
 	}
 	return nil
+}
+
+// migrateMarketplaceSettlementCreatedIndex accelerates administrator income
+// reports that aggregate every owner or a set of groups within a time window.
+func migrateMarketplaceSettlementCreatedIndex(_ *gorm.DB) error {
+	primary := platformdb.DB
+	if primary == nil || !primary.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+		return nil
+	}
+	var statement string
+	switch strings.ToLower(primary.Dialector.Name()) {
+	case "postgres":
+		statement = "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_settlements_created_owner_group ON marketplace.settlements (created_at DESC, owner_user_id, group_id)"
+	case "mysql":
+		statement = "CREATE INDEX idx_marketplace_settlements_created_owner_group ON marketplace_settlements (created_at, owner_user_id, group_id)"
+	default:
+		statement = "CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_created_owner_group ON marketplace_settlements (created_at, owner_user_id, group_id)"
+	}
+	if err := primary.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		return fmt.Errorf("create marketplace settlement created index: %w", err)
+	}
+	return nil
+}
+
+// migrateBillingHotPathIndexes keeps account reconciliation and historical
+// balance checks index-only, and makes outbox cleanup react to its high churn.
+func migrateBillingHotPathIndexes(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&billingschema.BillingLedgerEntry{}) {
+		return nil
+	}
+	for _, statement := range billingHotPathIndexStatements(db.Dialector.Name()) {
+		if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return fmt.Errorf("create billing hot path index: %w", err)
+		}
+	}
+	return nil
+}
+
+func billingHotPathIndexStatements(dialect string) []string {
+	switch strings.ToLower(strings.TrimSpace(dialect)) {
+	case "postgres":
+		return []string{
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_ledger_entries_account_aggregate
+			 ON billing.ledger_entries (account_id)
+			 INCLUDE (amount, entry_type, reference_type)`,
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_settlements_completed_reservation
+			 ON billing.settlements (reservation_id)
+			 INCLUDE (actual_amount, delta_amount)
+			 WHERE status = 'completed'`,
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_reservations_open_account_amount
+			 ON billing.reservations (account_id)
+			 INCLUDE (reserved_amount)
+			 WHERE status = 'open'`,
+			`ALTER TABLE billing.outbox_events SET (
+				autovacuum_vacuum_scale_factor = 0.02,
+				autovacuum_vacuum_threshold = 10000,
+				autovacuum_analyze_scale_factor = 0.01,
+				autovacuum_analyze_threshold = 5000
+			)`,
+		}
+	case "mysql":
+		return []string{
+			`CREATE INDEX idx_billing_ledger_entries_account_aggregate ON billing_ledger_entries (account_id, entry_type, reference_type, amount)`,
+			`CREATE INDEX idx_billing_settlements_completed_reservation ON billing_settlements (reservation_id, status, actual_amount, delta_amount)`,
+			`CREATE INDEX idx_billing_reservations_open_account_amount ON billing_reservations (account_id, status, reserved_amount)`,
+		}
+	default:
+		return []string{
+			`CREATE INDEX IF NOT EXISTS idx_billing_ledger_entries_account_aggregate ON billing_ledger_entries (account_id, entry_type, reference_type, amount)`,
+			`CREATE INDEX IF NOT EXISTS idx_billing_settlements_completed_reservation ON billing_settlements (reservation_id, status, actual_amount, delta_amount)`,
+			`CREATE INDEX IF NOT EXISTS idx_billing_reservations_open_account_amount ON billing_reservations (account_id, status, reserved_amount)`,
+		}
+	}
 }
 
 func migrateMarketplaceGroupQueryIndex(_ *gorm.DB) error {
@@ -1205,6 +1286,8 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 			!db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "BatchNumber") ||
 			!db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "ErrorMessage") ||
 			!db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "UpdatedAt")
+	case "20260921_marketplace_reclaim_owner_amounts":
+		return !db.Migrator().HasColumn(&marketplaceschema.IncomeReclaim{}, "OwnerAmounts")
 	case "20260817_marketplace_transport_capabilities":
 		return db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "TransportCapabilities")

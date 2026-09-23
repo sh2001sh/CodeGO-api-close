@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
@@ -280,6 +281,36 @@ func TestChannelConcurrencyReserveRetriesWithSameToken(t *testing.T) {
 	require.Equal(t, 1, admitted)
 	require.Equal(t, []string{"stable-token", "stable-token"}, tokens)
 	require.Len(t, committedTokens, 1)
+}
+
+func TestChannelConcurrencyRedisDefaultsFailFast(t *testing.T) {
+	t.Setenv("CHANNEL_CONCURRENCY_REDIS_TIMEOUT_MS", "")
+	t.Setenv("CHANNEL_CONCURRENCY_REDIS_RESERVE_ATTEMPTS", "")
+
+	require.Equal(t, 350*time.Millisecond, channelConcurrencyGateOperationTimeout())
+
+	originalRunner := runChannelConcurrencyReserve
+	t.Cleanup(func() { runChannelConcurrencyReserve = originalRunner })
+	var attempts int
+	runChannelConcurrencyReserve = func(
+		context.Context,
+		[]string,
+		string,
+		int,
+		int,
+	) (int, error) {
+		attempts++
+		return 0, context.DeadlineExceeded
+	}
+
+	_, err := reserveChannelConcurrencyWithRetry(
+		channelConcurrencyLeaseKeys(528, 7),
+		"fail-fast-token",
+		1,
+		1,
+	)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Equal(t, 1, attempts)
 }
 
 func TestRedisChannelConcurrencyTimeoutFallsBackToLocalGate(t *testing.T) {

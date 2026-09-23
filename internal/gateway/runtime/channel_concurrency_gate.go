@@ -19,8 +19,8 @@ import (
 const (
 	channelConcurrencyLeaseTTL          = 90 * time.Second
 	channelConcurrencyRenewInterval     = 20 * time.Second
-	channelConcurrencyGateRedisTimeout  = 2 * time.Second
-	channelConcurrencyReserveAttempts   = 2
+	channelConcurrencyGateRedisTimeout  = 350 * time.Millisecond
+	channelConcurrencyReserveAttempts   = 1
 	channelConcurrencyRetryDelay        = 50 * time.Millisecond
 	channelConcurrencyGateErrorInterval = time.Minute
 	channelConcurrencyLeaseKeyPrefix    = "gateway:channel-concurrency:v2:"
@@ -115,10 +115,10 @@ var runChannelConcurrencyReserve = func(
 }
 
 // reserveRedisChannelConcurrency acquires one cross-Gateway lease. Redis being
-	// disabled means the process-local gate remains authoritative. Redis is only
-	// the cross-instance coordination layer; if it is temporarily unavailable,
-	// keep serving through the local gate instead of turning every request into a
-	// route-pool failure. Limits recover automatically when Redis is reachable.
+// disabled means the process-local gate remains authoritative. Redis is only
+// the cross-instance coordination layer; if it is temporarily unavailable,
+// keep serving through the local gate instead of turning every request into a
+// route-pool failure. Limits recover automatically when Redis is reachable.
 func reserveRedisChannelConcurrency(
 	channelID, userID, totalLimit, userLimit int,
 ) (func(), bool, ChannelConcurrencyAdmission) {

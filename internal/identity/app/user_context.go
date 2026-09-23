@@ -1,14 +1,19 @@
 package app
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/gin-gonic/gin"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 )
 
 // LoadUserByID returns the current persisted user snapshot.
 func LoadUserByID(userID int, selectAll bool) (*identityschema.User, error) {
 	return identitystore.LoadUserByID(userID, selectAll)
+}
+
+// EnsureUserExternalID assigns the stable public ID required by OIDC to legacy users.
+func EnsureUserExternalID(user *identityschema.User) error {
+	return identitystore.EnsureUserExternalID(user)
 }
 
 // LoadUserCacheSnapshot returns the cached user projection used by auth flows.

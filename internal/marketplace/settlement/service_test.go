@@ -2,6 +2,7 @@ package settlement
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func TestRecordAndReleaseSettlementAreIdempotent(t *testing.T) {
 
 	require.NoError(t, ReleaseDue(10))
 	require.NoError(t, ReleaseDue(10))
-	require.Equal(t, int64(95), releasedAmount)
+	require.EqualValues(t, 95, releasedAmount)
 
 	require.NoError(t, db.First(&item, "request_id = ?", params.RequestID).Error)
 	require.Equal(t, statusReleased, item.Status)
@@ -95,7 +96,7 @@ func TestReclaimPendingCreditsAdministratorAndMarksRecord(t *testing.T) {
 	require.Equal(t, 1, result.Count)
 	require.EqualValues(t, 95, result.Amount)
 	require.Equal(t, 10, creditedUser)
-	require.Equal(t, int64(95), creditedAmount)
+	require.EqualValues(t, 95, creditedAmount)
 	var item marketplaceschema.Settlement
 	require.NoError(t, db.First(&item, "request_id = ?", params.RequestID).Error)
 	require.Equal(t, statusReclaimed, item.Status)
@@ -118,7 +119,8 @@ func TestReclaimAmountSmallerThanOneSettlement(t *testing.T) {
 	result, err := ReclaimPending(filter)
 	require.NoError(t, err)
 	require.EqualValues(t, 40, result.Amount)
-	require.Equal(t, int64(40), debited)
+	require.Equal(t, map[int]int64{10: 40}, result.OwnerAmounts)
+	require.EqualValues(t, 40, debited)
 	var item marketplaceschema.Settlement
 	require.NoError(t, db.First(&item, "request_id = ?", "partial").Error)
 	require.EqualValues(t, 95, item.OwnerNetAmount)
@@ -127,14 +129,17 @@ func TestReclaimAmountSmallerThanOneSettlement(t *testing.T) {
 	repeated, err := ReclaimPending(filter)
 	require.NoError(t, err)
 	require.Equal(t, result, repeated)
-	require.Equal(t, int64(40), debited)
+	require.EqualValues(t, 40, debited)
+	var operation marketplaceschema.IncomeReclaim
+	require.NoError(t, db.First(&operation, "id = ?", "partial-action").Error)
+	require.JSONEq(t, `{"10":40}`, operation.OwnerAmounts)
 	filter.MaxAmount = 1
 	_, err = ReclaimPending(filter)
 	require.ErrorContains(t, err, "操作标识")
 	rest, err := ReclaimPending(ReleaseFilter{OwnerUserIDs: []int{10}, OperationID: "reclaim-rest"})
 	require.NoError(t, err)
 	require.EqualValues(t, 55, rest.Amount)
-	require.Equal(t, int64(95), debited)
+	require.EqualValues(t, 95, debited)
 	require.NoError(t, db.First(&item, "request_id = ?", "partial").Error)
 	require.EqualValues(t, 95, item.ReclaimedAmount)
 	require.Equal(t, statusReclaimed, item.Status)
@@ -203,8 +208,16 @@ func openSettlementTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestIncomeReclaimTaskIsCreatedWithoutProcessingAndCommitsInBatches(t *testing.T) {
+func TestReclaimAllIncludesMoreThanFiveThousandRecordsAndRespectsFilters(t *testing.T) {
 	db := openSettlementTestDB(t)
+	maxCursorPredicates := 0
+	settlementReads := 0
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("track_reclaim_cursor_predicates", func(tx *gorm.DB) {
+		if tx.Statement.Table == (marketplaceschema.Settlement{}).TableName() {
+			settlementReads++
+			maxCursorPredicates = max(maxCursorPredicates, strings.Count(strings.ToLower(tx.Statement.SQL.String()), "(created_at >"))
+		}
+	}))
 	// Match the timestamp convention used by GORM's CreatedAt writer.
 	reference := db.NowFunc().Truncate(time.Second)
 	items := make([]marketplaceschema.Settlement, 5001)
@@ -218,44 +231,24 @@ func TestIncomeReclaimTaskIsCreatedWithoutProcessingAndCommitsInBatches(t *testi
 		{RequestID: "pending", GroupID: "g", OwnerUserID: 10, OwnerNetAmount: 100, Status: statusPending, CreatedAt: reference},
 	}).Error)
 	transfers := 0
-	transferredAmount := int64(0)
-	transferKeys := make([]string, 0, 3)
-	RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, amount int64, key string) error {
+	RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, amount int64, _ string) error {
 		transfers++
 		require.Equal(t, 10, owner)
-		transferredAmount += amount
-		transferKeys = append(transferKeys, key)
+		if transfers == 1 {
+			require.EqualValues(t, 5000, amount)
+		} else {
+			require.EqualValues(t, 1, amount)
+		}
 		return nil
 	})
 	t.Cleanup(func() { RegisterReclaimHook(nil) })
-	task, err := CreateIncomeReclaimTask(ReleaseFilter{OwnerUserIDs: []int{10}, StartTimestamp: reference.Unix(), EndTimestamp: reference.Unix(), OperationID: "large-batch"})
+	result, err := ReclaimPending(ReleaseFilter{OwnerUserIDs: []int{10}, StartTimestamp: reference.Unix(), EndTimestamp: reference.Unix(), OperationID: "large-batch"})
 	require.NoError(t, err)
-	require.Equal(t, reclaimTaskPending, task.Status)
-	require.Zero(t, task.Count)
-	require.Zero(t, task.Amount)
-	require.Zero(t, transfers)
-	var released int64
-	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Where("status = ?", statusReleased).Count(&released).Error)
-	require.EqualValues(t, 5003, released)
-
-	task, err = ProcessIncomeReclaimTask(task.ID)
-	require.NoError(t, err)
-	require.Equal(t, reclaimTaskRunning, task.Status)
-	require.Equal(t, 5000, task.Count)
-	require.EqualValues(t, 5000, task.Amount)
-	require.Equal(t, 1, transfers)
-
-	task, err = ProcessIncomeReclaimTask(task.ID)
-	require.NoError(t, err)
-	require.Equal(t, reclaimTaskCompleted, task.Status)
-	require.Equal(t, 5001, task.Count)
-	require.EqualValues(t, 5001, task.Amount)
+	require.Equal(t, 5001, result.Count)
 	require.Equal(t, 2, transfers)
-	require.Equal(t, int64(5001), transferredAmount)
-	require.Equal(t, []string{
-		"marketplace-reclaim:large-batch:batch:1:owner:10",
-		"marketplace-reclaim:large-batch:batch:2:owner:10",
-	}, transferKeys)
+	require.EqualValues(t, 5001, result.Amount)
+	require.LessOrEqual(t, settlementReads, 2, "full reclaim must not page through matching settlements")
+	require.Zero(t, maxCursorPredicates, "full reclaim must not use an application-side cursor")
 	var untouched int64
 	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Where("status <> ?", statusReclaimed).Count(&untouched).Error)
 	require.EqualValues(t, 3, untouched)
@@ -278,9 +271,6 @@ func TestReclaimInsufficientEarningsRollsBackAndConcurrentRetryIsIdempotent(t *t
 	var count int64
 	require.NoError(t, db.Model(&marketplaceschema.IncomeReclaim{}).Count(&count).Error)
 	require.EqualValues(t, 1, count)
-	var failedTask marketplaceschema.IncomeReclaim
-	require.NoError(t, db.First(&failedTask, "id = ?", "over-limit").Error)
-	require.Equal(t, reclaimTaskFailed, failedTask.Status)
 	var wg sync.WaitGroup
 	results := make([]ReclaimResult, 4)
 	errs := make([]error, 4)

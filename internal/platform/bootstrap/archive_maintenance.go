@@ -54,6 +54,12 @@ func runDataArchiveCycle(ctx context.Context, sink platformarchive.Sink, setting
 		archived, err := gatewaystore.ArchiveSettledExecutionsBatch(ctx, sink, now, setting.GatewayExecutionRetentionDays, setting.BatchSize)
 		reportArchiveCycle("gateway executions", archived, err)
 	}
+	if setting.RequestAuditRetentionDays > 0 {
+		archived, err := gatewaystore.ArchiveRequestAuditsBatch(ctx, sink, now, setting.RequestAuditRetentionDays, setting.BatchSize)
+		reportArchiveCycle("request audits", archived, err)
+		archived, err = gatewaystore.ArchiveRequestAttemptAuditsBatch(ctx, sink, now, setting.RequestAuditRetentionDays, setting.BatchSize)
+		reportArchiveCycle("request attempt audits", archived, err)
+	}
 }
 
 func reportArchiveCycle(dataset string, archived int64, err error) {

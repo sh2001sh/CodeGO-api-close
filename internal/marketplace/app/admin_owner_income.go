@@ -3,10 +3,10 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	"slices"
 	"time"
 
-	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -19,23 +19,13 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 	}
 	normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch)
 	cacheKey := fmt.Sprintf("%p:%s:%d:%d", platformdb.DB, normalizedSearch, input.StartTimestamp, input.EndTimestamp)
-	value, err, _ := adminOwnerIncomeLoads.Do(cacheKey, func() (any, error) {
-		return listAdminOwnerIncomeCached(input, normalizedSearch, cacheKey)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return populateAdminOwnerBalances(cloneAdminOwnerIncomeResult(value.(*AdminOwnerIncomeResult)))
-}
-
-func listAdminOwnerIncomeCached(input AdminOwnerIncomeQuery, normalizedSearch, cacheKey string) (*AdminOwnerIncomeResult, error) {
 	adminMarketplaceStatsCache.Lock()
 	if adminMarketplaceStatsCache.ownerIncomeResult != nil &&
 		adminMarketplaceStatsCache.ownerIncomeKey == cacheKey &&
 		time.Since(adminMarketplaceStatsCache.ownerIncomeAt) < adminMarketplaceStatsCacheTTL {
 		result := cloneAdminOwnerIncomeResult(adminMarketplaceStatsCache.ownerIncomeResult)
 		adminMarketplaceStatsCache.Unlock()
-		return result, nil
+		return populateAdminOwnerBalances(result)
 	}
 	adminMarketplaceStatsCache.Unlock()
 	query := platformdb.DB.Model(&marketplaceschema.Settlement{}).
@@ -88,7 +78,7 @@ func listAdminOwnerIncomeCached(input AdminOwnerIncomeQuery, normalizedSearch, c
 		result.ForfeitedIncome += item.ForfeitedIncome
 	}
 	cacheAdminOwnerIncomeResult(cacheKey, result)
-	return result, nil
+	return populateAdminOwnerBalances(result)
 }
 
 func populateAdminOwnerBalances(result *AdminOwnerIncomeResult) (*AdminOwnerIncomeResult, error) {
@@ -169,9 +159,28 @@ func adminOwnerIncomeReclaimResult(task marketplaceschema.IncomeReclaim) (*Admin
 	if err := json.Unmarshal([]byte(task.Filter), &filter); err != nil {
 		return nil, fmt.Errorf("decode income reclaim task filter: %w", err)
 	}
+	amounts := map[int]int64{}
+	if task.OwnerAmounts != "" {
+		if err := json.Unmarshal([]byte(task.OwnerAmounts), &amounts); err != nil {
+			return nil, fmt.Errorf("decode income reclaim owner amounts: %w", err)
+		}
+	}
+	ownerIDs := make([]int, 0, len(amounts))
+	for ownerID := range amounts {
+		ownerIDs = append(ownerIDs, ownerID)
+	}
+	externalIDs, err := ownerExternalIDs(ownerIDs)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]AdminOwnerIncomeReleaseItem, 0, len(amounts))
+	for ownerID, amount := range amounts {
+		items = append(items, AdminOwnerIncomeReleaseItem{OwnerUserID: ownerID, OwnerExternalID: externalIDs[ownerID], Amount: amount})
+	}
+	slices.SortFunc(items, func(a, b AdminOwnerIncomeReleaseItem) int { return a.OwnerUserID - b.OwnerUserID })
 	return &AdminOwnerIncomeReleaseResult{
 		OperationID: task.ID, Status: task.Status, ReclaimedCount: task.Count,
-		ReclaimedAmount: task.Amount, TargetAmount: filter.MaxAmount,
+		ReclaimedAmount: task.Amount, TargetAmount: filter.MaxAmount, Items: items,
 		BatchNumber: task.BatchNumber, ErrorMessage: task.ErrorMessage,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
 	}, nil

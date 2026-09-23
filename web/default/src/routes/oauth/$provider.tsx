@@ -30,10 +30,7 @@ import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import { api, getSelf } from '@/lib/api'
 import { OAuthCallbackScreen } from '@/features/auth/components/oauth-callback-screen'
 import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
-import {
-  normalizeAuthRedirect,
-  requiresDocumentNavigation,
-} from '@/features/auth/lib/auth-redirect'
+import { normalizeAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { consumeAuthRedirect } from '@/features/auth/lib/storage'
 
 type OAuthRequestConfig = AxiosRequestConfig & {
@@ -65,10 +62,7 @@ function OAuthCallback() {
     ;(async () => {
       const safeNavigate = (target: string) => {
         const safeTarget = normalizeAuthRedirect(target)
-        if (
-          requiresDocumentNavigation(safeTarget) &&
-          typeof window !== 'undefined'
-        ) {
+        if (safeTarget.startsWith('/api/') && typeof window !== 'undefined') {
           window.location.replace(safeTarget)
           return
         }

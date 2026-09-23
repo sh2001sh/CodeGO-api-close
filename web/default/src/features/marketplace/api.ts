@@ -18,9 +18,8 @@ import type {
   MarketplaceMultiplierTrend,
   ChannelFeedbackSummary,
   AdminMarketplaceChannelFilters,
-  AdminMarketplaceChannelResult,
   AdminOwnerIncomeResult,
-  AdminOwnerIncomeReclaimTask,
+  AdminOwnerIncomeReleaseResult,
   TokenOption,
   MarketplaceBatchTest,
   MarketplaceObservability,
@@ -268,16 +267,6 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
       if (search && !searchable.includes(search)) return false
       if (filters.source && item.source_label !== filters.source) return false
       if (
-        filters.multiplier_card === 'supported' &&
-        !item.multiplier_card_supported
-      )
-        return false
-      if (
-        filters.multiplier_card === 'unsupported' &&
-        item.multiplier_card_supported
-      )
-        return false
-      if (
         filters.provider &&
         item.provider_type.toLowerCase() !== filters.provider.toLowerCase()
       )
@@ -353,6 +342,13 @@ export async function getMarketplaceMultiplierTrends(input: {
 export async function getMyMarketplaceChannels() {
   const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
     '/api/marketplace/channels/mine'
+  )
+  return requireData(response.data)
+}
+
+export async function getAdminOwnerIncomeReclaim(operationId: string) {
+  const response = await api.get<ApiResponse<AdminOwnerIncomeReleaseResult>>(
+    `/api/marketplace/admin/owner-income/reclaims/${encodeURIComponent(operationId)}`
   )
   return requireData(response.data)
 }
@@ -811,9 +807,7 @@ export async function getAdminMarketplaceChannels(
   if (filters.endTimestamp) {
     search.set('end_timestamp', String(filters.endTimestamp))
   }
-  if (filters.page) search.set('page', String(filters.page))
-  if (filters.pageSize) search.set('page_size', String(filters.pageSize))
-  const response = await api.get<ApiResponse<AdminMarketplaceChannelResult>>(
+  const response = await api.get<ApiResponse<{ items: MarketplaceChannel[]; total: number; page: number; page_size: number }>>(
     `/api/marketplace/admin/channels?${search.toString()}`
   )
   return requireData(response.data)
@@ -856,15 +850,8 @@ export async function releaseAdminOwnerIncome(
   if (filters.maxAmount && filters.maxAmount > 0)
     search.set('max_amount', String(filters.maxAmount))
   search.set('operation_id', filters.operationId)
-  const response = await api.post<ApiResponse<AdminOwnerIncomeReclaimTask>>(
+  const response = await api.post<ApiResponse<AdminOwnerIncomeReleaseResult>>(
     `/api/marketplace/admin/owner-income/release?${search.toString()}`
-  )
-  return requireData(response.data)
-}
-
-export async function getAdminOwnerIncomeReclaim(operationId: string) {
-  const response = await api.get<ApiResponse<AdminOwnerIncomeReclaimTask>>(
-    `/api/marketplace/admin/owner-income/reclaims/${encodeURIComponent(operationId)}`
   )
   return requireData(response.data)
 }

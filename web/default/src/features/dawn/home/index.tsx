@@ -40,6 +40,8 @@ import { DawnNav } from '../components/dawn-nav'
 import { CountUp, Reveal } from '../components/reveal'
 import { compactCount, fmtInt, pct, sec } from '../lib/format'
 
+const COMMUNITY_URL = 'https://community.codegoai.com'
+
 const HOME_FILTERS = {
   search: '',
   model: '',
@@ -210,6 +212,14 @@ export function DawnHome() {
             <Link className='btn' to={user ? '/dashboard' : '/sign-in'}>
               {user ? '我的控制台' : '登录 / 注册'}
             </Link>
+            <a
+              className='btn community-cta'
+              href={COMMUNITY_URL}
+              target='_blank'
+              rel='noopener noreferrer'
+            >
+              进入社区 <ArrowRight size={15} />
+            </a>
           </div>
         </div>
         <div className='scroll'>SCROLL</div>

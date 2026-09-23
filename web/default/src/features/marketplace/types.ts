@@ -237,15 +237,6 @@ export interface AdminMarketplaceChannelFilters {
   ownerUserIds?: number[]
   startTimestamp?: number
   endTimestamp?: number
-  page?: number
-  pageSize?: number
-}
-
-export interface AdminMarketplaceChannelResult {
-  items: MarketplaceChannel[]
-  total: number
-  page: number
-  page_size: number
 }
 
 export interface AdminOwnerIncomeItem {
@@ -270,7 +261,13 @@ export interface AdminOwnerIncomeResult {
   reclaimed_income: number
 }
 
-export interface AdminOwnerIncomeReclaimTask {
+export interface AdminOwnerIncomeReleaseItem {
+  owner_user_id: number
+  owner_external_id: string
+  amount: number
+}
+
+export interface AdminOwnerIncomeReleaseResult {
   operation_id: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   reclaimed_count: number
@@ -280,6 +277,7 @@ export interface AdminOwnerIncomeReclaimTask {
   error_message?: string
   created_at: string
   updated_at: string
+  items: AdminOwnerIncomeReleaseItem[]
 }
 
 export interface ChannelFormValues {
@@ -341,7 +339,6 @@ export interface GroupFilters {
   models?: string[]
   source: string
   provider: string
-  multiplier_card?: '' | 'supported' | 'unsupported'
   status: string
   verification: string
   sort: string
@@ -349,6 +346,7 @@ export interface GroupFilters {
   window_hours: number
   page: number
   page_size: number
+  multiplier_card?: string
 }
 
 export interface TokenOption {
@@ -398,14 +396,14 @@ export interface MarketplaceOwnerUsageLogResult {
     request_count: number
     success_count: number
     failed_count: number
-    upstream_attempt_count: number
-    upstream_success_count: number
-    upstream_failed_count: number
     consumer_amount: number
     owner_income: number
     pending_income: number
     released_income: number
     reclaimed_income: number
+    upstream_attempt_count: number
+    upstream_success_count: number
+    upstream_failed_count: number
   }
   total: number
   page: number

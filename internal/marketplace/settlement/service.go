@@ -58,8 +58,9 @@ type ReleaseResult struct {
 }
 
 type ReclaimResult struct {
-	Count  int
-	Amount int64
+	Count        int
+	Amount       int64
+	OwnerAmounts map[int]int64
 }
 
 type reclaimBatchOwnerAmount struct {
@@ -328,7 +329,13 @@ func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 	if task.Status == reclaimTaskFailed {
 		return ReclaimResult{}, errors.New(task.ErrorMessage)
 	}
-	return ReclaimResult{Count: task.Count, Amount: task.Amount}, nil
+	ownerAmounts := map[int]int64{}
+	if task.OwnerAmounts != "" {
+		if err := json.Unmarshal([]byte(task.OwnerAmounts), &ownerAmounts); err != nil {
+			return ReclaimResult{}, err
+		}
+	}
+	return ReclaimResult{Count: task.Count, Amount: task.Amount, OwnerAmounts: ownerAmounts}, nil
 }
 
 func processNextIncomeReclaimTask() (bool, error) {
@@ -453,8 +460,21 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 				return err
 			}
 		}
+		cumulativeOwnerAmounts := map[int]int64{}
+		if task.OwnerAmounts != "" {
+			if err := json.Unmarshal([]byte(task.OwnerAmounts), &cumulativeOwnerAmounts); err != nil {
+				return err
+			}
+		}
+		for owner, amount := range ownerAmounts {
+			cumulativeOwnerAmounts[owner] += amount
+		}
+		ownerAmountsJSON, err := json.Marshal(cumulativeOwnerAmounts)
+		if err != nil {
+			return err
+		}
 		newCount, newAmount, newBatchNumber := task.Count+batchCount, task.Amount+batchAmount, task.BatchNumber+1
-		updates := map[string]any{"status": reclaimTaskRunning, "count": newCount, "amount": newAmount, "batch_number": newBatchNumber, "error_message": ""}
+		updates := map[string]any{"status": reclaimTaskRunning, "count": newCount, "amount": newAmount, "batch_number": newBatchNumber, "owner_amounts": string(ownerAmountsJSON), "error_message": ""}
 		if (filter.MaxAmount > 0 && newAmount == filter.MaxAmount) || batchCount < reclaimBatchSize {
 			updates["status"] = reclaimTaskCompleted
 		}
@@ -464,6 +484,7 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 		task.Count = newCount
 		task.Amount = newAmount
 		task.BatchNumber = newBatchNumber
+		task.OwnerAmounts = string(ownerAmountsJSON)
 		task.Status = updates["status"].(string)
 		result = task
 		return nil

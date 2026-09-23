@@ -19,10 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { z } from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
-import {
-  normalizeAuthRedirect,
-  requiresDocumentNavigation,
-} from '@/features/auth/lib/auth-redirect'
+import { getSelf } from '@/lib/api'
+import { loadActiveAuthSession } from '@/features/auth/lib/auth-session'
 import { SignUp } from '@/features/auth/sign-up'
 
 const searchSchema = z.object({
@@ -35,15 +33,19 @@ export const Route = createFileRoute('/(auth)/sign-up')({
   beforeLoad: async ({ search }) => {
     const { auth } = useAuthStore.getState()
     if (auth.user) {
-      const targetPath = normalizeAuthRedirect(search?.redirect)
-      if (
-        requiresDocumentNavigation(targetPath) &&
-        typeof window !== 'undefined'
-      ) {
-        window.location.replace(targetPath)
+      const sessionUser = await loadActiveAuthSession(getSelf)
+      if (!sessionUser) {
+        auth.reset()
         return
       }
-      throw redirect({ to: targetPath })
+      auth.setUser(sessionUser)
+      const target = search?.redirect
+      throw redirect({
+        to:
+          target && target.startsWith('/') && !target.startsWith('//')
+            ? target
+            : '/dashboard',
+      })
     }
   },
 })

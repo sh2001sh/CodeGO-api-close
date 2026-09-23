@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { useDebounce } from '@/hooks'
+import { useEffect, useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -35,10 +34,8 @@ export function AdminGovernance() {
   const [channelSource, setChannelSource] = useState('')
   const [channelProvider, setChannelProvider] = useState('')
   const [channelVerification, setChannelVerification] = useState('')
-  const [page, setPage] = useState(1)
-  const pageSize = 50
-  const deferredOwnerSearch = useDebounce(ownerSearch.trim(), 400)
-  const deferredChannelSearch = useDebounce(channelSearch.trim(), 400)
+  const deferredOwnerSearch = useDebouncedValue(ownerSearch.trim(), 350)
+  const deferredChannelSearch = useDebouncedValue(channelSearch.trim(), 350)
   const query = useAdminMarketplaceChannels(
     {
       search: deferredChannelSearch,
@@ -49,8 +46,6 @@ export function AdminGovernance() {
       ownerSearch: deferredOwnerSearch,
       startTimestamp: toTimestamp(incomeRange.start),
       endTimestamp: toTimestamp(incomeRange.end),
-      page,
-      pageSize,
     },
     true
   )
@@ -70,33 +65,21 @@ export function AdminGovernance() {
       </div>
       <AdminOwnerIncomePanel
         ownerSearch={ownerSearch}
-        onOwnerSearchChange={(value) => {
-          setOwnerSearch(value)
-          setPage(1)
-        }}
+        onOwnerSearchChange={setOwnerSearch}
         range={incomeRange}
-        onRangeChange={(value) => {
-          setIncomeRange(value)
-          setPage(1)
-        }}
+        onRangeChange={setIncomeRange}
       />
       <div className='border-border bg-muted/10 flex flex-wrap items-center gap-2 rounded-md border p-3'>
         <Input
           value={channelSearch}
-          onChange={(event) => {
-            setChannelSearch(event.target.value)
-            setPage(1)
-          }}
+          onChange={(event) => setChannelSearch(event.target.value)}
           placeholder={t('搜索分组、渠道 ID、模型或来源')}
           aria-label={t('搜索分组、渠道 ID、模型或来源')}
           className='bg-background min-w-64 flex-1'
         />
         <NativeSelect
           value={channelSource}
-          onChange={(event) => {
-            setChannelSource(event.target.value)
-            setPage(1)
-          }}
+          onChange={(event) => setChannelSource(event.target.value)}
           aria-label={t('来源')}
           className='bg-background'
         >
@@ -109,10 +92,7 @@ export function AdminGovernance() {
         </NativeSelect>
         <NativeSelect
           value={channelProvider}
-          onChange={(event) => {
-            setChannelProvider(event.target.value)
-            setPage(1)
-          }}
+          onChange={(event) => setChannelProvider(event.target.value)}
           aria-label={t('协议类型')}
           className='bg-background'
         >
@@ -125,10 +105,7 @@ export function AdminGovernance() {
         </NativeSelect>
         <NativeSelect
           value={channelStatus}
-          onChange={(event) => {
-            setChannelStatus(event.target.value)
-            setPage(1)
-          }}
+          onChange={(event) => setChannelStatus(event.target.value)}
           aria-label={t('状态')}
           className='bg-background'
         >
@@ -143,10 +120,7 @@ export function AdminGovernance() {
         </NativeSelect>
         <NativeSelect
           value={channelVerification}
-          onChange={(event) => {
-            setChannelVerification(event.target.value)
-            setPage(1)
-          }}
+          onChange={(event) => setChannelVerification(event.target.value)}
           aria-label={t('检测状态')}
           className='bg-background'
         >
@@ -285,41 +259,6 @@ export function AdminGovernance() {
           </div>
         )}
       </section>
-      {(query.data?.total ?? 0) > pageSize && (
-        <div className='flex items-center justify-between gap-3'>
-          <span className='text-muted-foreground text-xs tabular-nums'>
-            {t('共 {{count}} 个渠道', { count: query.data?.total ?? 0 })} ·{' '}
-            {t('第 {{page}} / {{pages}} 页', {
-              page,
-              pages: Math.max(
-                1,
-                Math.ceil((query.data?.total ?? 0) / pageSize)
-              ),
-            })}
-          </span>
-          <div className='flex gap-2'>
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={page <= 1 || query.isFetching}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              {t('上一页')}
-            </Button>
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={
-                page >= Math.ceil((query.data?.total ?? 0) / pageSize) ||
-                query.isFetching
-              }
-              onClick={() => setPage((current) => current + 1)}
-            >
-              {t('下一页')}
-            </Button>
-          </div>
-        </div>
-      )}
       <ChannelEditDialog
         admin
         channel={editing}
@@ -338,6 +277,15 @@ export function AdminGovernance() {
       />
     </div>
   )
+}
+
+function useDebouncedValue<T>(value: T, delay: number) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay)
+    return () => window.clearTimeout(timer)
+  }, [delay, value])
+  return debounced
 }
 
 function toTimestamp(value?: Date) {

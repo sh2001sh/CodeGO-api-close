@@ -24,6 +24,8 @@ import { normalizeSystemName } from '@/lib/branding'
 import { cn } from '@/lib/utils'
 import { ThemeSwitch } from '@/components/theme-switch'
 
+const COMMUNITY_URL = 'https://community.codegoai.com'
+
 const NAV_ITEMS = [
   { title: '主页', href: '/' },
   { title: '市场', href: '/market' },
@@ -121,6 +123,14 @@ export function DawnNav({ variant = 'light' }: { variant?: 'light' | 'hero' }) {
             {item.title}
           </Link>
         ))}
+        <a
+          className='community-link'
+          href={COMMUNITY_URL}
+          target='_blank'
+          rel='noopener noreferrer'
+        >
+          社区
+        </a>
       </div>
       <div className='right'>
         <ThemeSwitch />

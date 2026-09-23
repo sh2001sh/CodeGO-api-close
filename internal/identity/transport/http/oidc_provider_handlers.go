@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	"gorm.io/gorm"
 )
 
 func OIDCDiscovery(c *gin.Context) {
@@ -71,10 +74,20 @@ func OIDCAuthorize(c *gin.Context) {
 		return
 	}
 	user, err := identityapp.LoadUserByID(userID, false)
-	if err != nil || user.Status != constant.UserStatusEnabled || user.ExternalId == "" {
+	if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && user.Status != constant.UserStatusEnabled) {
 		session.Clear()
 		_ = session.Save()
 		c.Redirect(http.StatusFound, "/sign-in?redirect="+url.QueryEscape(c.Request.URL.RequestURI()))
+		return
+	}
+	if err != nil {
+		platformobservability.SysLog(fmt.Sprintf("failed to load OIDC user %d: %v", userID, err))
+		c.String(http.StatusInternalServerError, "unable to load OIDC identity")
+		return
+	}
+	if err := identityapp.EnsureUserExternalID(user); err != nil {
+		platformobservability.SysLog(fmt.Sprintf("failed to assign external id for OIDC user %d: %v", userID, err))
+		c.String(http.StatusInternalServerError, "unable to prepare OIDC identity")
 		return
 	}
 	code, err := identityapp.IssueOIDCAuthorizationCode(config, request, userID, time.Now().UTC())

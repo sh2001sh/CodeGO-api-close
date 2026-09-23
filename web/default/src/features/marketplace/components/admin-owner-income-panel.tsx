@@ -1,18 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
-import { useDebounce } from '@/hooks'
+import { useRef, useState } from 'react'
+import { Download, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
-import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
 import {
-  useAdminOwnerIncome,
-  useAdminOwnerIncomeReclaim,
-  useAdminOwnerIncomeRelease,
-} from '../hooks'
+  formatQuota,
+  parseQuotaFromDollars,
+  quotaUnitsToDollars,
+} from '@/lib/format'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useAdminOwnerIncome, useAdminOwnerIncomeRelease } from '../hooks'
+import type {
+  AdminOwnerIncomeItem,
+  AdminOwnerIncomeReleaseResult,
+} from '../types'
 import { AdminIncomeFilter, type AdminIncomeRange } from './admin-income-filter'
-
-const RECLAIM_OPERATION_STORAGE_KEY = 'admin-owner-income-reclaim-operation'
 
 export function AdminOwnerIncomePanel(props: {
   ownerSearch: string
@@ -21,108 +23,69 @@ export function AdminOwnerIncomePanel(props: {
   onRangeChange: (range: AdminIncomeRange) => void
 }) {
   const { t } = useTranslation()
-  const [selectedIDs, setSelectedIDs] = useState<number[]>([])
-  const [amount, setAmount] = useState('')
-  const [loadAllIncome, setLoadAllIncome] = useState(false)
-  const [runningElapsedSeconds, setRunningElapsedSeconds] = useState(0)
-  const [reclaimOperationID, setReclaimOperationID] = useState<
-    string | undefined
-  >(() =>
-    typeof window === 'undefined'
-      ? undefined
-      : sessionStorage.getItem(RECLAIM_OPERATION_STORAGE_KEY) || undefined
+  const [selectedOwners, setSelectedOwners] = useState<AdminOwnerIncomeItem[]>(
+    []
   )
+  const [amount, setAmount] = useState('')
+  const [lastResult, setLastResult] =
+    useState<AdminOwnerIncomeReleaseResult | null>(null)
   const pendingOperation = useRef<{ signature: string; id: string } | null>(
     null
   )
-  const deferredOwnerSearch = useDebounce(props.ownerSearch.trim(), 400)
   const filters = {
-    ownerSearch: deferredOwnerSearch,
+    ownerSearch: props.ownerSearch.trim(),
     startTimestamp:
       props.range.start && Math.floor(props.range.start.getTime() / 1000),
     endTimestamp:
       props.range.end && Math.floor(props.range.end.getTime() / 1000),
   }
-  const hasFilter = Boolean(
-    filters.ownerSearch || filters.startTimestamp || filters.endTimestamp
-  )
-  const incomeEnabled = hasFilter || loadAllIncome
-  const searchSettling = props.ownerSearch.trim() !== deferredOwnerSearch
-  const query = useAdminOwnerIncome(filters, incomeEnabled && !searchSettling)
-  const refetchIncome = query.refetch
+  const query = useAdminOwnerIncome(filters)
   const reclaim = useAdminOwnerIncomeRelease()
-  const reclaimTask = useAdminOwnerIncomeReclaim(reclaimOperationID)
-  const completedOperation = useRef<string | undefined>(undefined)
-  const selected = (query.data?.items ?? []).filter((item) =>
-    selectedIDs.includes(item.owner_user_id)
-  )
-  const available = selected.reduce(
-    (sum, item) => sum + item.reclaimable_quota,
+  const available = selectedOwners.reduce(
+    (sum, owner) => sum + owner.reclaimable_quota,
     0
   )
-  const taskElapsedSeconds =
-    reclaimTask.data &&
-    ['completed', 'failed'].includes(reclaimTask.data.status)
-      ? Math.max(
-          0,
-          Math.floor(
-            (new Date(reclaimTask.data.updated_at).getTime() -
-              new Date(reclaimTask.data.created_at).getTime()) /
-              1000
-          )
-        )
-      : runningElapsedSeconds
 
-  useEffect(() => {
-    const task = reclaimTask.data
-    if (!task || !['pending', 'running'].includes(task.status)) return
-    const timer = window.setInterval(() => {
-      setRunningElapsedSeconds(
-        Math.max(
-          0,
-          Math.floor((Date.now() - new Date(task.created_at).getTime()) / 1000)
-        )
+  const toggleOwner = (owner: AdminOwnerIncomeItem) => {
+    setSelectedOwners((current) => {
+      const exists = current.some(
+        (item) => item.owner_user_id === owner.owner_user_id
       )
-    }, 1000)
-    return () => window.clearInterval(timer)
-  }, [reclaimTask.data])
+      return exists
+        ? current.filter((item) => item.owner_user_id !== owner.owner_user_id)
+        : [...current, owner]
+    })
+  }
 
-  useEffect(() => {
-    const task = reclaimTask.data
-    if (!task || completedOperation.current === task.operation_id) return
-    if (task.status === 'completed') {
-      completedOperation.current = task.operation_id
-      pendingOperation.current = null
-      void refetchIncome()
-      toast.success(
-        t('实际回收 {{count}} 条收益，共 {{amount}}', {
-          count: task.reclaimed_count,
-          amount: formatQuota(task.reclaimed_amount),
-        })
-      )
-    }
-    if (task.status === 'failed') {
-      completedOperation.current = task.operation_id
-      toast.error(task.error_message || t('额度回收失败'))
-    }
-  }, [reclaimTask.data, refetchIncome, t])
+  const addVisibleOwners = () => {
+    setSelectedOwners((current) => {
+      const next = new Map(current.map((owner) => [owner.owner_user_id, owner]))
+      for (const owner of query.data?.items ?? []) {
+        next.set(owner.owner_user_id, owner)
+      }
+      return Array.from(next.values())
+    })
+  }
+
+  const changeRange = (range: AdminIncomeRange) => {
+    setSelectedOwners([])
+    setLastResult(null)
+    props.onRangeChange(range)
+  }
 
   const submit = () => {
     if (
       query.isFetching ||
-      searchSettling ||
-      !incomeEnabled ||
-      !query.data ||
       query.isError ||
       reclaim.isPending ||
-      !selected.length ||
+      selectedOwners.length === 0 ||
       available <= 0
     )
       return
     const partial = amount.trim() !== ''
     const maxAmount = partial
       ? parseQuotaFromDollars(Number(amount))
-      : available
+      : undefined
     if (
       partial &&
       (!Number.isFinite(Number(amount)) ||
@@ -133,7 +96,7 @@ export function AdminOwnerIncomePanel(props: {
       toast.error(t('请输入有效的正数回收金额'))
       return
     }
-    if (maxAmount > available) {
+    if (maxAmount && maxAmount > available) {
       toast.error(t('输入金额超过所选渠道主当前可回收额度'))
       return
     }
@@ -143,43 +106,47 @@ export function AdminOwnerIncomePanel(props: {
         t(
           '将从 {{count}} 位渠道主的可用额度中回收{{amount}}。\n收益时间：{{scope}}\n渠道主：{{owners}}',
           {
-            count: selected.length,
+            count: selectedOwners.length,
             amount: formatQuota(maxAmount ?? available),
             scope,
-            owners: selected
-              .map((item) => item.owner_external_id || item.owner_user_id)
+            owners: selectedOwners
+              .map((owner) => owner.owner_external_id || owner.owner_user_id)
               .join(', '),
           }
         )
       )
     )
       return
-    const ownerUserIds = selected
-      .map((item) => item.owner_user_id)
+    const ownerUserIds = selectedOwners
+      .map((owner) => owner.owner_user_id)
       .sort((a, b) => a - b)
-    const signature = JSON.stringify({ ...filters, ownerUserIds, maxAmount })
+    const releaseFilters = {
+      startTimestamp: filters.startTimestamp,
+      endTimestamp: filters.endTimestamp,
+      ownerUserIds,
+      maxAmount,
+    }
+    const signature = JSON.stringify(releaseFilters)
     if (pendingOperation.current?.signature !== signature) {
       pendingOperation.current = { signature, id: crypto.randomUUID() }
     }
     reclaim.mutate(
       {
-        ...filters,
-        ownerUserIds,
-        maxAmount,
+        ...releaseFilters,
         operationId: pendingOperation.current.id,
       },
       {
         onSuccess: (result) => {
-          completedOperation.current = undefined
-          setRunningElapsedSeconds(0)
-          setReclaimOperationID(result.operation_id)
-          sessionStorage.setItem(
-            RECLAIM_OPERATION_STORAGE_KEY,
-            result.operation_id
+          pendingOperation.current = null
+          setLastResult(result)
+          toast.success(
+            t('实际回收 {{count}} 条收益，共 {{amount}}', {
+              count: result.reclaimed_count,
+              amount: formatQuota(result.reclaimed_amount),
+            })
           )
-          if (result.status === 'pending' || result.status === 'running') {
-            toast.success(t('回收任务已创建，正在后台处理'))
-          }
+          setSelectedOwners([])
+          setAmount('')
         },
         onError: (error) =>
           toast.error(
@@ -189,127 +156,155 @@ export function AdminOwnerIncomePanel(props: {
     )
   }
 
+  const exportResult = () => {
+    if (!lastResult?.items.length) return
+    const rows = lastResult.items.map((item) => [
+      item.owner_external_id || String(item.owner_user_id),
+      String(quotaUnitsToDollars(item.amount)),
+    ])
+    const csv = [[t('渠道主 ID'), t('回收额度')], ...rows]
+      .map((row) => row.map(escapeCSVCell).join(','))
+      .join('\r\n')
+    const url = URL.createObjectURL(
+      new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+    )
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `marketplace-reclaim-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
-    <section aria-label={t('渠道主收益管理')} className='my-4 space-y-2'>
-      <h2 className='text-lg font-semibold'>{t('渠道主收益管理')}</h2>
-      <p className='text-muted-foreground text-sm'>
-        {t('按渠道主外部 ID 和收益时间筛选，勾选后回收已到账收益。')}
-      </p>
+    <section aria-label={t('渠道主收益管理')} className='my-5 space-y-4'>
+      <div className='flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between'>
+        <div>
+          <p className='text-muted-foreground text-xs font-semibold tracking-wider uppercase'>
+            {t('批量财务操作')}
+          </p>
+          <h2 className='mt-1 text-xl font-semibold'>
+            {t('批量回收渠道主收益')}
+          </h2>
+          <p className='text-muted-foreground mt-1 text-sm'>
+            {t('按时间查找渠道主，加入回收批次后统一执行。')}
+          </p>
+        </div>
+        <div className='text-muted-foreground text-sm tabular-nums'>
+          {t('当前筛选已到账')}{' '}
+          <strong className='text-foreground'>
+            {formatQuota(query.data?.released_income ?? 0)}
+          </strong>
+        </div>
+      </div>
+
       <AdminIncomeFilter
         report={query.data}
         ownerSearch={props.ownerSearch}
-        onOwnerSearchChange={(value) => {
-          setSelectedIDs([])
-          setLoadAllIncome(false)
-          props.onOwnerSearchChange(value)
-        }}
+        onOwnerSearchChange={props.onOwnerSearchChange}
         range={props.range}
-        onRangeChange={(range) => {
-          setSelectedIDs([])
-          setLoadAllIncome(false)
-          props.onRangeChange(range)
-        }}
-        onRefresh={() => {
-          if (!hasFilter && !loadAllIncome) setLoadAllIncome(true)
-          else void query.refetch()
-        }}
+        onRangeChange={changeRange}
+        onRefresh={() => void query.refetch()}
         isFetching={query.isFetching}
         isError={query.isError}
-        notLoaded={!incomeEnabled || searchSettling}
-        canLoadAll={!incomeEnabled && !searchSettling}
-        onLoadAll={() => setLoadAllIncome(true)}
-        incomeUnavailable={searchSettling || !incomeEnabled || !query.data}
-        releasing={reclaim.isPending}
-        reclaimAmount={amount}
-        onReclaimAmountChange={setAmount}
-        selectedOwnerIDs={selected.map((item) => item.owner_user_id)}
-        onSelectedOwnerIDsChange={setSelectedIDs}
-        onRelease={submit}
+        selectedOwners={selectedOwners}
+        onToggleOwner={toggleOwner}
+        onAddVisible={addVisibleOwners}
+        onClearSelected={() => setSelectedOwners([])}
       />
-      <p className='text-muted-foreground text-xs'>
-        {t(
-          '金额单位与上方收益显示一致。留空回收当前可回收额度；输入金额将按所选渠道主合计精确回收，优先扣除较早收益。任何一位渠道主额度不足时，本次操作全部取消。'
-        )}
-      </p>
-      {reclaimTask.data && (
-        <div
-          className='border-border bg-muted/30 space-y-3 border p-4'
-          aria-live='polite'
-        >
-          <div className='flex items-start justify-between gap-3'>
+
+      <section className='border-primary/25 bg-primary/[0.025] rounded-md border p-4'>
+        <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem_auto] lg:items-end'>
+          <div>
+            <h3 className='font-semibold'>{t('执行批量回收')}</h3>
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {t('已选 {{count}} 人，可回收 {{amount}}。留空金额将全部回收。', {
+                count: selectedOwners.length,
+                amount: formatQuota(available),
+              })}
+            </p>
+          </div>
+          <label className='space-y-1.5'>
+            <span className='text-sm font-medium'>{t('本次回收总额')}</span>
+            <Input
+              type='number'
+              min='0'
+              step='any'
+              placeholder={t('留空则全部回收')}
+              value={amount}
+              onChange={(event) => setAmount(event.currentTarget.value)}
+              aria-label={t('本次回收总额')}
+            />
+          </label>
+          <Button
+            onClick={submit}
+            disabled={
+              reclaim.isPending ||
+              query.isError ||
+              query.isFetching ||
+              selectedOwners.length === 0 ||
+              available <= 0
+            }
+            className='lg:min-w-40'
+          >
+            <WalletCards className={reclaim.isPending ? 'animate-pulse' : ''} />
+            {reclaim.isPending ? t('回收中') : t('确认批量回收')}
+          </Button>
+        </div>
+      </section>
+
+      {lastResult && (
+        <section className='border-border overflow-hidden rounded-md border'>
+          <div className='bg-muted/15 border-border flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between'>
             <div>
-              <p className='font-medium'>
-                {reclaimTask.data.status === 'completed'
-                  ? t('回收完成')
-                  : reclaimTask.data.status === 'failed'
-                    ? t('回收失败')
-                    : t('正在回收')}
-              </p>
-              <p className='text-muted-foreground mt-1 text-xs'>
-                {t('已处理 {{count}} 条 · 已提交 {{batches}} 批', {
-                  count: reclaimTask.data.reclaimed_count,
-                  batches: reclaimTask.data.batch_number,
+              <h3 className='font-semibold'>{t('最近一次回收结果')}</h3>
+              <p className='text-muted-foreground text-sm'>
+                {t('{{count}} 位渠道主，共回收 {{amount}}', {
+                  count: lastResult.items.length,
+                  amount: formatQuota(lastResult.reclaimed_amount),
                 })}
               </p>
             </div>
-            {!['pending', 'running'].includes(reclaimTask.data.status) && (
-              <Button
-                type='button'
-                variant='ghost'
-                size='sm'
-                onClick={() => {
-                  sessionStorage.removeItem(RECLAIM_OPERATION_STORAGE_KEY)
-                  setReclaimOperationID(undefined)
-                }}
-              >
-                {t('关闭结果')}
-              </Button>
-            )}
+            <Button
+              variant='outline'
+              onClick={exportResult}
+              disabled={lastResult.items.length === 0}
+            >
+              <Download />
+              {t('导出 CSV')}
+            </Button>
           </div>
-          <Progress
-            value={
-              reclaimTask.data.target_amount > 0
-                ? Math.min(
-                    100,
-                    (reclaimTask.data.reclaimed_amount /
-                      reclaimTask.data.target_amount) *
-                      100
-                  )
-                : null
-            }
-          />
-          <div className='text-muted-foreground grid gap-1 text-xs sm:grid-cols-4'>
-            <span>
-              {t('已回收：{{amount}}', {
-                amount: formatQuota(reclaimTask.data.reclaimed_amount),
-              })}
-            </span>
-            <span>
-              {t('目标：{{amount}}', {
-                amount: formatQuota(reclaimTask.data.target_amount),
-              })}
-            </span>
-            <span>
-              {t('最近更新：{{time}}', {
-                time: new Date(
-                  reclaimTask.data.updated_at
-                ).toLocaleTimeString(),
-              })}
-            </span>
-            <span>
-              {t('已运行：{{minutes}}分 {{seconds}}秒', {
-                minutes: Math.floor(taskElapsedSeconds / 60),
-                seconds: taskElapsedSeconds % 60,
-              })}
-            </span>
+          <div className='overflow-x-auto'>
+            <table className='w-full text-sm'>
+              <thead className='bg-muted/10 text-muted-foreground'>
+                <tr>
+                  <th className='px-4 py-2.5 text-left font-medium'>
+                    {t('渠道主 ID')}
+                  </th>
+                  <th className='px-4 py-2.5 text-right font-medium'>
+                    {t('回收额度')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className='divide-border divide-y'>
+                {lastResult.items.map((item) => (
+                  <tr key={item.owner_user_id}>
+                    <td className='px-4 py-3 font-mono font-medium'>
+                      {item.owner_external_id || item.owner_user_id}
+                    </td>
+                    <td className='px-4 py-3 text-right font-semibold tabular-nums'>
+                      {formatQuota(item.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          {reclaimTask.data.error_message && (
-            <p className='text-destructive text-xs'>
-              {reclaimTask.data.error_message}
-            </p>
-          )}
-        </div>
+        </section>
       )}
     </section>
   )
+}
+
+function escapeCSVCell(value: string) {
+  return `"${value.replaceAll('"', '""')}"`
 }

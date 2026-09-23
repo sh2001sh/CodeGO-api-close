@@ -300,6 +300,7 @@ type IncomeReclaim struct {
 	Status       string    `gorm:"size:16;not null;default:pending;index"`
 	Count        int       `gorm:"not null;default:0"`
 	Amount       int64     `gorm:"not null;default:0"`
+	OwnerAmounts string    `gorm:"type:text"`
 	BatchNumber  int       `gorm:"not null;default:0"`
 	ErrorMessage string    `gorm:"type:text;not null;default:''"`
 	CreatedAt    time.Time `gorm:"autoCreateTime"`

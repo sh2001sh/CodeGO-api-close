@@ -34,6 +34,12 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('Console'), href: '/dashboard' })
   }
 
+  links.push({
+    title: '社区',
+    href: 'https://community.codegoai.com',
+    external: true,
+  })
+
   const pricing = modules?.pricing
   if (pricing && typeof pricing === 'object' && pricing.enabled) {
     const requiresAuth = pricing.requireAuth && !isAuthed

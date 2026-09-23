@@ -152,15 +152,22 @@ type AdminOwnerIncomeQuery struct {
 }
 
 type AdminOwnerIncomeReleaseResult struct {
-	OperationID     string    `json:"operation_id"`
-	Status          string    `json:"status"`
-	ReclaimedCount  int       `json:"reclaimed_count"`
-	ReclaimedAmount int64     `json:"reclaimed_amount"`
-	TargetAmount    int64     `json:"target_amount"`
-	BatchNumber     int       `json:"batch_number"`
-	ErrorMessage    string    `json:"error_message,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	OperationID     string                        `json:"operation_id"`
+	Status          string                        `json:"status"`
+	ReclaimedCount  int                           `json:"reclaimed_count"`
+	ReclaimedAmount int64                         `json:"reclaimed_amount"`
+	TargetAmount    int64                         `json:"target_amount"`
+	BatchNumber     int                           `json:"batch_number"`
+	ErrorMessage    string                        `json:"error_message,omitempty"`
+	CreatedAt       time.Time                     `json:"created_at"`
+	UpdatedAt       time.Time                     `json:"updated_at"`
+	Items           []AdminOwnerIncomeReleaseItem `json:"items"`
+}
+
+type AdminOwnerIncomeReleaseItem struct {
+	OwnerUserID     int    `json:"owner_user_id"`
+	OwnerExternalID string `json:"owner_external_id"`
+	Amount          int64  `json:"amount"`
 }
 
 type AdminOwnerIncomeItem struct {
@@ -196,7 +203,6 @@ type GroupQuery struct {
 	Models           []string
 	Source           string
 	Provider         string
-	MultiplierCard   string
 	Status           string
 	Verification     string
 	Sort             string
@@ -206,6 +212,7 @@ type GroupQuery struct {
 	PageSize         int
 	MinMultiplier    float64
 	MaxMultiplier    float64
+	MultiplierCard   string
 }
 
 type GroupListItem struct {

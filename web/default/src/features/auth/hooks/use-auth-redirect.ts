@@ -21,13 +21,20 @@ import i18n from 'i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { cancelSelfRequests, getSelf } from '@/lib/api'
 import type { User } from '@/features/users/types'
-import {
-  normalizeAuthRedirect,
-  requiresDocumentNavigation,
-} from '../lib/auth-redirect'
 import { removeUserId, saveUserId } from '../lib/storage'
 
 let loginTransition = 0
+
+export function normalizeAuthRedirect(redirectTo?: string): string {
+  if (
+    !redirectTo ||
+    !redirectTo.startsWith('/') ||
+    redirectTo.startsWith('//')
+  ) {
+    return '/dashboard'
+  }
+  return redirectTo
+}
 
 function getSavedLanguage(user: User): string | undefined {
   const userData = user as Record<string, unknown>
@@ -73,6 +80,15 @@ export function useAuthRedirect() {
       saveUserId(userData.id)
     }
 
+    // OIDC authorization must continue immediately after the session is created.
+    // Waiting for the optional profile refresh here can leave the provider flow
+    // stuck on the loading state when that request is slow or temporarily fails.
+    const targetPath = normalizeAuthRedirect(redirectTo)
+    if (targetPath.startsWith('/api/')) {
+      window.location.assign(targetPath)
+      return
+    }
+
     // Fetch and set user data
     try {
       const self = await getSelf()
@@ -98,11 +114,6 @@ export function useAuthRedirect() {
     }
 
     // Navigate to target page
-    const targetPath = normalizeAuthRedirect(redirectTo)
-    if (requiresDocumentNavigation(targetPath)) {
-      window.location.assign(targetPath)
-      return
-    }
     navigate({ to: targetPath, replace: true })
   }
 

@@ -354,6 +354,39 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 	return "openai"
 }
 
+func appendTextBillingClassification(other map[string]interface{}, relayInfo *relaycommon.RelayInfo, summary textQuotaSummary, usedFallbackUsage bool) {
+	if other == nil || relayInfo == nil {
+		return
+	}
+
+	if relayInfo.PriceData.UsePrice {
+		other["billing_basis"] = "per_call"
+	} else {
+		other["billing_basis"] = "token"
+	}
+	if !summary.ToolCallSurchargeQuota.IsZero() {
+		other["tool_fee_applied"] = true
+	}
+
+	if summary.CompletionTokens != 0 {
+		return
+	}
+	if relayInfo.PriceData.UsePrice {
+		other["output_zero_reason"] = "per_call"
+		return
+	}
+	if !usedFallbackUsage {
+		return
+	}
+
+	other["usage_source"] = "fallback_prompt_tokens"
+	other["input_only_billing"] = summary.PromptTokens > 0
+	other["output_zero_reason"] = "missing_final_usage"
+	if relayInfo.StreamStatus != nil && string(relayInfo.StreamStatus.EndReason) == "client_gone" {
+		other["output_zero_reason"] = "client_gone"
+	}
+}
+
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
 	originUsage := usage
 	usedFallbackUsage := false
@@ -487,6 +520,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	if tieredBillingApplied {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
+	appendTextBillingClassification(other, relayInfo, summary, usedFallbackUsage)
 	appendUsageConsumptionDiscountInfo(other, discountDetail)
 	gatewayruntime.AttachRouteLogInfo(ctx, other)
 

@@ -61,6 +61,7 @@ export function SidebarGroupStatusPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set()
   )
+  const [visibleGroupCount, setVisibleGroupCount] = useState(20)
   const [activePoolID, setActivePoolID] = useState(readActiveRoutePoolID)
   const pools = useMarketplaceRoutePools(authed)
   const autoPool = useMarketplaceAutoRoutePool(authed)
@@ -115,6 +116,13 @@ export function SidebarGroupStatusPage() {
         search: deferredSearch,
       }),
     [allItems, deferredSearch, modelFilter, source, statusFilter]
+  )
+  useEffect(() => {
+    setVisibleGroupCount(20)
+  }, [deferredSearch, modelFilter, source, statusFilter])
+  const visibleItems = useMemo(
+    () => items.slice(0, visibleGroupCount),
+    [items, visibleGroupCount]
   )
   const modelOptions = useMemo(() => collectModelOptions(allItems), [allItems])
   const summary = useMemo(() => summarizeGroups(allItems), [allItems])
@@ -265,7 +273,7 @@ export function SidebarGroupStatusPage() {
               <EmptyPanel />
             ) : (
               <div className='flex flex-col gap-5'>
-                {items.map((group) => (
+                {visibleItems.map((group) => (
                   <GroupStatusSection
                     key={group.group}
                     group={group}
@@ -279,6 +287,16 @@ export function SidebarGroupStatusPage() {
                     }
                   />
                 ))}
+                {visibleItems.length < items.length && (
+                  <div className='flex justify-center pt-1'>
+                    <Button
+                      variant='outline'
+                      onClick={() => setVisibleGroupCount((count) => count + 20)}
+                    >
+                      加载更多（剩余 {items.length - visibleItems.length} 个）
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>

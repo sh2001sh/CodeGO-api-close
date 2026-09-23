@@ -124,6 +124,7 @@ func ListOwnerUsageLogs(ownerUserID int, query OwnerUsageLogQuery) (*OwnerUsageL
 }
 
 const maxOwnerUsageLogExportRows = 20000
+const ownerUsageSettlementBatchSize = 500
 
 func ExportOwnerUsageLogs(ownerUserID int, query OwnerUsageLogQuery) ([]OwnerUsageLogItem, error) {
 	query.SummaryOnly = false
@@ -350,31 +351,63 @@ type ownerSettlementTotals struct {
 
 func loadOwnerUsageSettlementSummary(ownerUserID int, channelIDs []int, groupIDs []string, query OwnerUsageLogQuery) (ownerSettlementTotals, error) {
 	var totals ownerSettlementTotals
-	settlementQuery := platformdb.DB.Model(&marketplaceschema.Settlement{}).
-		Where("owner_user_id = ? AND group_id IN ?", ownerUserID, groupIDs).
-		Select("COALESCE(SUM(" + walletEquivalentConsumerAmountSQL + "), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income, " +
-			"COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income, " +
-			"COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount - reclaimed_amount ELSE 0 END), 0) AS released_income, " +
-			"COALESCE(SUM(CASE WHEN status = 'reclaimed' THEN owner_net_amount ELSE reclaimed_amount END), 0) AS reclaimed_income")
-	if hasOwnerUsageContentFilters(query) {
-		var requestIDs []string
+	newSettlementQuery := func() *gorm.DB {
+		db := platformdb.DB.Model(&marketplaceschema.Settlement{}).
+			Where("owner_user_id = ? AND group_id IN ?", ownerUserID, groupIDs).
+			Select("COALESCE(SUM(" + walletEquivalentConsumerAmountSQL + "), 0) AS consumer_amount, COALESCE(SUM(owner_net_amount), 0) AS owner_income, " +
+				"COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income, " +
+				"COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount - reclaimed_amount ELSE 0 END), 0) AS released_income, " +
+				"COALESCE(SUM(CASE WHEN status = 'reclaimed' THEN owner_net_amount ELSE reclaimed_amount END), 0) AS reclaimed_income")
+		if query.StartTimestamp > 0 {
+			db = db.Where("created_at >= ?", time.Unix(query.StartTimestamp, 0))
+		}
+		if query.EndTimestamp > 0 {
+			db = db.Where("created_at < ?", time.Unix(query.EndTimestamp+1, 0))
+		}
+		return db
+	}
+	if !hasOwnerUsageContentFilters(query) {
+		return totals, newSettlementQuery().Scan(&totals).Error
+	}
+
+	// LogDB may be physically separate from the settlement database, so a SQL
+	// subquery cannot safely cross the boundary. Stream matching request IDs in
+	// bounded batches instead of materializing every match in application memory
+	// or building one unbounded IN clause.
+	type matchedRequest struct {
+		ID        int
+		RequestID string
+	}
+	lastID := 0
+	for {
+		rows := make([]matchedRequest, 0, ownerUsageSettlementBatchSize)
 		if err := ownerUsageLogDBQuery(channelIDs, query).
-			Where("type = ? AND request_id <> ''", auditschema.LogTypeConsume).
-			Pluck("request_id", &requestIDs).Error; err != nil {
+			Select("id, request_id").
+			Where("type = ? AND request_id <> '' AND id > ?", auditschema.LogTypeConsume, lastID).
+			Order("id ASC").Limit(ownerUsageSettlementBatchSize).Scan(&rows).Error; err != nil {
 			return totals, err
 		}
-		if len(requestIDs) == 0 {
+		if len(rows) == 0 {
 			return totals, nil
 		}
-		settlementQuery = settlementQuery.Where("request_id IN ?", requestIDs)
+		requestIDs := make([]string, 0, len(rows))
+		for _, row := range rows {
+			lastID = row.ID
+			requestIDs = append(requestIDs, row.RequestID)
+		}
+		var batch ownerSettlementTotals
+		if err := newSettlementQuery().Where("request_id IN ?", requestIDs).Scan(&batch).Error; err != nil {
+			return totals, err
+		}
+		totals.ConsumerAmount += batch.ConsumerAmount
+		totals.OwnerIncome += batch.OwnerIncome
+		totals.PendingIncome += batch.PendingIncome
+		totals.ReleasedIncome += batch.ReleasedIncome
+		totals.ReclaimedIncome += batch.ReclaimedIncome
+		if len(rows) < ownerUsageSettlementBatchSize {
+			return totals, nil
+		}
 	}
-	if query.StartTimestamp > 0 {
-		settlementQuery = settlementQuery.Where("created_at >= ?", time.Unix(query.StartTimestamp, 0))
-	}
-	if query.EndTimestamp > 0 {
-		settlementQuery = settlementQuery.Where("created_at < ?", time.Unix(query.EndTimestamp+1, 0))
-	}
-	return totals, settlementQuery.Scan(&totals).Error
 }
 
 func normalizeOwnerUsageLogQuery(query OwnerUsageLogQuery) OwnerUsageLogQuery {

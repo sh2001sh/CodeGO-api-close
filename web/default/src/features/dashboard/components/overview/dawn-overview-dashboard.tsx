@@ -111,7 +111,9 @@ export function DawnOverviewDashboard() {
         start_timestamp: startTimestamp,
         end_timestamp: endTimestamp,
         p: 1,
-        page_size: 1000,
+        // The API caps this endpoint at 100 rows; request the real bound so
+        // the dashboard does not imply that it received a larger full slice.
+        page_size: 100,
       })
       if (!response.success || !response.data) {
         throw new Error(response.message || '用量记录加载失败')

@@ -30,7 +30,7 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 	if userID <= 0 {
 		return nil, errors.New("请先登录")
 	}
-	groups, err := loadPublicGroupRows(GroupQuery{ViewerUserID: userID, IncludeAccess: true, Verification: marketplacedomain.VerificationPassed})
+	groups, err := loadKeyGroupOptionRows(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +137,25 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 		poolOptions = append(poolOptions, keyPoolOption(RoutePoolTokenGroupValue(pool.ID), pool.Name, "marketplace_pool", membersByPool[pool.ID], modelsByGroup))
 	}
 	return append(poolOptions, options...), nil
+}
+
+// loadKeyGroupOptionRows deliberately has no discovery-page limit. The API key
+// selector searches this complete result locally so existing keys keep their
+// display metadata and groups beyond the marketplace's 1000-row discovery cap
+// remain selectable.
+func loadKeyGroupOptionRows(userID int) ([]marketplaceschema.Group, error) {
+	var groups []marketplaceschema.Group
+	query := GroupQuery{
+		ViewerUserID:  userID,
+		IncludeAccess: true,
+		Verification:  marketplacedomain.VerificationPassed,
+	}
+	if err := publicGroupsQuery(query).
+		Order("updated_at DESC, id ASC").
+		Find(&groups).Error; err != nil {
+		return nil, err
+	}
+	return groups, nil
 }
 
 func keyPoolOption(value, name, category string, members []string, modelsByGroup map[string][]string) KeyGroupOption {

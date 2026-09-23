@@ -150,7 +150,9 @@ function BillingBreakdown(props: {
 }) {
   const { t } = useTranslation()
   const { log, other, isAdmin } = props
-  const isPerCall = isPerCallBilling(other.model_price)
+  const isPerCall =
+    other.billing_basis === 'per_call' ||
+    (other.billing_basis == null && isPerCallBilling(other.model_price))
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'
   const tieredSummary = getTieredBillingSummary(other)
@@ -206,6 +208,39 @@ function BillingBreakdown(props: {
         value: `${fmtPrice(baseInputUSD * other.completion_ratio)}/M`,
       })
     }
+  }
+
+  if (other.input_only_billing) {
+    rows.push({
+      label: t('Settlement'),
+      value: t('Input-only settlement'),
+    })
+  }
+  if (other.usage_source === 'fallback_prompt_tokens') {
+    rows.push({
+      label: t('Usage Source'),
+      value: t('Estimated input tokens (final usage missing)'),
+    })
+  }
+  if (other.output_zero_reason === 'client_gone') {
+    rows.push({
+      label: t('Output zero reason'),
+      value: t('Client disconnected before final usage'),
+    })
+  } else if (other.output_zero_reason === 'missing_final_usage') {
+    rows.push({
+      label: t('Output zero reason'),
+      value: t('Final usage missing'),
+    })
+  } else if (other.output_zero_reason === 'per_call') {
+    rows.push({
+      label: t('Output zero reason'),
+      value: t('Token output does not determine per-call cost'),
+    })
+  }
+
+  if (other.tool_fee_applied) {
+    rows.push({ label: t('Additional billing'), value: t('Tool fee') })
   }
 
   const userGR = other.user_group_ratio

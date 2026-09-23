@@ -100,6 +100,55 @@ function UsageDiscountBadge(props: { other: LogOtherData | null }) {
   )
 }
 
+function BillingClassificationBadges(props: { other: LogOtherData | null }) {
+  const { t } = useTranslation()
+  const { other } = props
+  if (!other) return null
+
+  const perCall =
+    other.billing_basis === 'per_call' ||
+    (other.billing_basis == null && isPerCallBilling(other.model_price))
+  const settlementLabel = other.input_only_billing
+    ? t('Input-only settlement')
+    : perCall
+      ? t('Per-call')
+      : t('Per-token')
+
+  return (
+    <div className='flex flex-wrap gap-1'>
+      <span
+        className={cn(
+          'inline-flex w-fit rounded border px-1.5 py-0.5 text-[10px] font-medium',
+          other.input_only_billing
+            ? 'border-warning/30 bg-warning/10 text-warning'
+            : 'border-border/70 bg-muted/40 text-muted-foreground'
+        )}
+      >
+        {settlementLabel}
+      </span>
+      {other.tool_fee_applied && (
+        <span className='border-info/30 bg-info/10 text-info inline-flex w-fit rounded border px-1.5 py-0.5 text-[10px] font-medium'>
+          {t('Tool fee')}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function outputZeroReasonLabel(
+  other: LogOtherData | null,
+  t: (key: string) => string
+): string | null {
+  switch (other?.output_zero_reason) {
+    case 'client_gone':
+      return t('Client disconnected before final usage')
+    case 'missing_final_usage':
+      return t('Final usage missing')
+    default:
+      return null
+  }
+}
+
 function formatRatioCompact(ratio: number | undefined): string {
   if (ratio == null || !Number.isFinite(ratio)) return '-'
   return ratio % 1 === 0
@@ -771,6 +820,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const cacheWriteTokens = hasSplitCache
           ? cacheWrite5m + cacheWrite1h
           : other?.cache_creation_tokens || 0
+        const zeroReason = outputZeroReasonLabel(other, t)
 
         return (
           <div className='flex flex-col gap-0.5'>
@@ -791,6 +841,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   </span>
                 )}
               </div>
+            )}
+            {completionTokens === 0 && zeroReason && (
+              <span className='text-warning text-[10px] leading-tight'>
+                {zeroReason}
+              </span>
             )}
           </div>
         )
@@ -819,6 +874,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               </span>
               <BillingQuotaSourceBadge other={other} />
               <UsageDiscountBadge other={other} />
+              <BillingClassificationBadges other={other} />
             </div>
           )
         }
@@ -832,6 +888,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             </span>
             <BillingQuotaSourceBadge other={other} />
             <UsageDiscountBadge other={other} />
+            <BillingClassificationBadges other={other} />
           </div>
         )
       },

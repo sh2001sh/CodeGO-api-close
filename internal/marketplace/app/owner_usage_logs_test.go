@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -301,4 +302,30 @@ func TestOwnerUsageLogSummaryUsesWalletEquivalentForMixedBilling(t *testing.T) {
 	for _, item := range result.Items {
 		require.EqualValues(t, 60, item.ConsumerAmount)
 	}
+}
+
+func TestOwnerUsageLogFilteredSummaryStreamsSettlementIDsInBatches(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	internalID := 404
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "batched", OwnerUserID: 10, InternalChannelID: &internalID, ProviderType: "openai"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "batched-group", ChannelID: "batched", OwnerUserID: 10, InternalGroupName: "batched", PublicSlug: "batched", SourceType: "marketplace_user", CreditPoolPolicy: "universal", LifecycleStatus: "active", VerificationStatus: "passed", Visibility: "public", Multiplier: 1}).Error)
+
+	count := ownerUsageSettlementBatchSize + 7
+	logs := make([]auditschema.Log, 0, count+1)
+	settlements := make([]marketplaceschema.Settlement, 0, count+1)
+	for i := 0; i < count; i++ {
+		requestID := fmt.Sprintf("matched-%04d", i)
+		logs = append(logs, auditschema.Log{ChannelId: internalID, Type: auditschema.LogTypeConsume, RequestId: requestID, ModelName: "gpt-batched"})
+		settlements = append(settlements, marketplaceschema.Settlement{RequestID: requestID, GroupID: "batched-group", OwnerUserID: 10, ConsumerAmount: 10, OwnerNetAmount: 9, BillingSource: "wallet"})
+	}
+	logs = append(logs, auditschema.Log{ChannelId: internalID, Type: auditschema.LogTypeConsume, RequestId: "not-matched", ModelName: "other-model"})
+	settlements = append(settlements, marketplaceschema.Settlement{RequestID: "not-matched", GroupID: "batched-group", OwnerUserID: 10, ConsumerAmount: 999, OwnerNetAmount: 999, BillingSource: "wallet"})
+	require.NoError(t, logDB.CreateInBatches(logs, 100).Error)
+	require.NoError(t, db.CreateInBatches(settlements, 100).Error)
+
+	result, err := ListOwnerUsageLogs(10, OwnerUsageLogQuery{ModelName: "gpt-batched", SummaryOnly: true})
+	require.NoError(t, err)
+	require.EqualValues(t, count, result.Total)
+	require.EqualValues(t, count*10, result.Summary.ConsumerAmount)
+	require.EqualValues(t, count*9, result.Summary.OwnerIncome)
 }

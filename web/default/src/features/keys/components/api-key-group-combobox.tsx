@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -62,6 +62,8 @@ type ApiKeyGroupComboboxProps = {
   placeholder?: string
   disabled?: boolean
 }
+
+const OPTION_BATCH_SIZE = 60
 
 function formatGroupRatio(
   ratio: ApiKeyGroupOption['ratio'],
@@ -142,10 +144,13 @@ export function ApiKeyGroupCombobox({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
+  const [visibleOptionCount, setVisibleOptionCount] =
+    useState(OPTION_BATCH_SIZE)
+  const deferredSearchValue = useDeferredValue(searchValue)
   const selectedOption = options.find((option) => option.value === value)
 
   const filteredOptions = useMemo(() => {
-    const search = searchValue.trim().toLowerCase()
+    const search = deferredSearchValue.trim().toLowerCase()
     if (!search) return options
 
     return options.filter((option) => {
@@ -161,24 +166,56 @@ export function ApiKeyGroupCombobox({
         subscriptionRatioText.includes(search)
       )
     })
-  }, [options, searchValue])
+  }, [deferredSearchValue, options])
 
   const handleSelect = (selectedValue: string) => {
     onValueChange(selectedValue)
     setOpen(false)
     setSearchValue('')
+    setVisibleOptionCount(OPTION_BATCH_SIZE)
   }
-  const officialOptions = filteredOptions.filter(
-    (option) => option.category === undefined || option.category === 'official'
-  )
-  const marketplacePoolOptions = filteredOptions.filter(
-    (option) =>
-      option.category === 'marketplace_pool' ||
-      option.category === 'marketplace_auto'
-  )
-  const marketplaceOptions = filteredOptions.filter(
-    (option) => option.category === 'marketplace'
-  )
+  const visibleGroups = useMemo(() => {
+    const marketplacePoolOptions = filteredOptions.filter(
+      (option) =>
+        option.category === 'marketplace_pool' ||
+        option.category === 'marketplace_auto'
+    )
+    const officialOptions = filteredOptions.filter(
+      (option) =>
+        option.category === undefined || option.category === 'official'
+    )
+    const marketplaceOptions = filteredOptions.filter(
+      (option) => option.category === 'marketplace'
+    )
+    const visibleMarketplacePoolOptions = marketplacePoolOptions.slice(
+      0,
+      visibleOptionCount
+    )
+    const officialLimit = Math.max(
+      0,
+      visibleOptionCount - visibleMarketplacePoolOptions.length
+    )
+    const visibleOfficialOptions = officialOptions.slice(0, officialLimit)
+    const marketplaceLimit = Math.max(
+      0,
+      officialLimit - visibleOfficialOptions.length
+    )
+    return {
+      marketplacePoolOptions: visibleMarketplacePoolOptions,
+      officialOptions: visibleOfficialOptions,
+      marketplaceOptions: marketplaceOptions.slice(0, marketplaceLimit),
+    }
+  }, [filteredOptions, visibleOptionCount])
+  const renderedOptionCount =
+    visibleGroups.marketplacePoolOptions.length +
+    visibleGroups.officialOptions.length +
+    visibleGroups.marketplaceOptions.length
+  const remainingOptionCount = filteredOptions.length - renderedOptionCount
+
+  const handleSearchValueChange = (nextValue: string) => {
+    setSearchValue(nextValue)
+    setVisibleOptionCount(OPTION_BATCH_SIZE)
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -222,28 +259,45 @@ export function ApiKeyGroupCombobox({
           <CommandInput
             placeholder={t('Search...')}
             value={searchValue}
-            onValueChange={setSearchValue}
+            onValueChange={handleSearchValueChange}
           />
           <CommandList className='max-h-[360px]'>
             <CommandEmpty>{t('No group found.')}</CommandEmpty>
             <GroupOptions
               heading={t('我的路由池')}
-              options={marketplacePoolOptions}
+              options={visibleGroups.marketplacePoolOptions}
               value={value}
               onSelect={handleSelect}
             />
             <GroupOptions
               heading={t('CodeGo 官方')}
-              options={officialOptions}
+              options={visibleGroups.officialOptions}
               value={value}
               onSelect={handleSelect}
             />
             <GroupOptions
               heading={t('第三方分组')}
-              options={marketplaceOptions}
+              options={visibleGroups.marketplaceOptions}
               value={value}
               onSelect={handleSelect}
             />
+            {remainingOptionCount > 0 && (
+              <div className='border-border/60 border-t p-2'>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='sm'
+                  className='text-muted-foreground hover:text-foreground w-full'
+                  onClick={() =>
+                    setVisibleOptionCount(
+                      (current) => current + OPTION_BATCH_SIZE
+                    )
+                  }
+                >
+                  {t('Load more')}（{remainingOptionCount}）
+                </Button>
+              </div>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

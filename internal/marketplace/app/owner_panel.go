@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -118,6 +117,9 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 	if len(ids) == 0 {
 		return map[string]any{"items": []OwnerUserUsageItem{}, "total": 0, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": 0, "total_requests": int64(0), "consumer_amount": int64(0), "owner_income": int64(0)}}, nil
 	}
+	// Keep the group metadata small and use it to constrain the aggregate query.
+	// The previous implementation loaded every user/group aggregate and only then
+	// sorted and paged it in Go.
 	var rows []struct {
 		UserID   int
 		GroupID  string
@@ -142,7 +144,72 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 	if q.EndTimestamp > 0 {
 		settlementDB = settlementDB.Where("created_at < ?", time.Unix(q.EndTimestamp+1, 0))
 	}
-	if err := settlementDB.Group("consumer_user_id,group_id").Scan(&rows).Error; err != nil {
+	if q.Search != "" {
+		search := strings.ToLower(strings.TrimSpace(q.Search))
+		groupMatches := make([]string, 0)
+		for _, group := range groups {
+			if strings.Contains(strings.ToLower(group.ID), search) ||
+				strings.Contains(strings.ToLower(group.ChannelID), search) ||
+				strings.Contains(strings.ToLower(group.SystemDisplayName), search) {
+				groupMatches = append(groupMatches, group.ID)
+			}
+		}
+		var matchedUsers []identityschema.User
+		if err := platformdb.DB.Select("id").Where("LOWER(external_id) LIKE ?", "%"+search+"%").Find(&matchedUsers).Error; err != nil {
+			return nil, err
+		}
+		matchedUserIDs := make([]int, 0, len(matchedUsers)+1)
+		for _, user := range matchedUsers {
+			matchedUserIDs = append(matchedUserIDs, user.Id)
+		}
+		if numericID, err := strconv.Atoi(search); err == nil && numericID > 0 {
+			matchedUserIDs = append(matchedUserIDs, numericID)
+		}
+		conditions := make([]string, 0, 2)
+		args := make([]any, 0, 2)
+		if len(groupMatches) > 0 {
+			conditions = append(conditions, "group_id IN ?")
+			args = append(args, groupMatches)
+		}
+		if len(matchedUserIDs) > 0 {
+			conditions = append(conditions, "consumer_user_id IN ?")
+			args = append(args, matchedUserIDs)
+		}
+		if len(conditions) == 0 {
+			return map[string]any{"items": []OwnerUserUsageItem{}, "total": 0, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": 0, "total_requests": int64(0), "consumer_amount": int64(0), "owner_income": int64(0)}}, nil
+		}
+		settlementDB = settlementDB.Where("("+strings.Join(conditions, " OR ")+")", args...)
+	}
+	var summary struct {
+		TotalUsers    int64 `gorm:"column:total_users"`
+		TotalRequests int64 `gorm:"column:total_requests"`
+		Consumer      int64 `gorm:"column:consumer_amount"`
+		OwnerIncome   int64 `gorm:"column:owner_income"`
+	}
+	if err := settlementDB.Session(&gorm.Session{}).Select(
+		"COUNT(DISTINCT consumer_user_id) AS total_users, COUNT(*) AS total_requests, " +
+			"COALESCE(SUM(" + walletEquivalentConsumerAmountSQL + "), 0) AS consumer_amount, " +
+			"COALESCE(SUM(owner_net_amount), 0) AS owner_income",
+	).Scan(&summary).Error; err != nil {
+		return nil, err
+	}
+	groupedDB := settlementDB.Group("consumer_user_id,group_id")
+	var total int64
+	if err := platformdb.DB.Table("(?) AS grouped_usage", groupedDB.Session(&gorm.Session{}).Select("consumer_user_id, group_id")).Count(&total).Error; err != nil {
+		return nil, err
+	}
+	orderColumn := "cnt"
+	switch q.Sort {
+	case "amount":
+		orderColumn = "amount"
+	case "recent":
+		orderColumn = "last"
+	}
+	direction := "DESC"
+	if q.Direction == "asc" {
+		direction = "ASC"
+	}
+	if err := groupedDB.Order(orderColumn + " " + direction).Order("consumer_user_id ASC, group_id ASC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	userIDs := make([]int, 0, len(rows))
@@ -160,68 +227,15 @@ func ListOwnerChannelUserUsage(owner int, q OwnerUserUsageQuery) (map[string]any
 		externalIDs[user.Id] = user.ExternalId
 	}
 	items := make([]OwnerUserUsageItem, 0, len(rows))
-	uniqueUsers := make(map[int]struct{}, len(rows))
-	var totalRequests, totalConsumerAmount, totalOwnerIncome int64
 	for _, r := range rows {
 		group := groupsByID[r.GroupID]
 		if platformdb.DB.Dialector.Name() == "sqlite" {
 			r.Last = time.Unix(r.LastUnix, 0)
 		}
 		item := OwnerUserUsageItem{UserID: strconv.Itoa(r.UserID), ExternalUserID: externalIDs[r.UserID], ChannelID: group.ChannelID, ChannelName: group.SystemDisplayName, GroupID: r.GroupID, RequestCount: r.Cnt, SuccessCount: r.Cnt, SuccessRate: 1, TotalConsumerAmount: r.Amount, TotalSettlementGrossAmount: r.Gross, TotalOwnerIncome: r.Income, LastRequestAt: r.Last}
-		if q.Search != "" && !strings.Contains(strings.ToLower(item.ExternalUserID+" "+item.UserID+" "+item.ChannelName), strings.ToLower(q.Search)) {
-			continue
-		}
 		items = append(items, item)
-		totalRequests += r.Cnt
-		totalConsumerAmount += r.Amount
-		totalOwnerIncome += r.Income
-		uniqueUsers[r.UserID] = struct{}{}
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		compare := func() int {
-			switch q.Sort {
-			case "amount":
-				if items[i].TotalSettlementGrossAmount != items[j].TotalSettlementGrossAmount {
-					if items[i].TotalSettlementGrossAmount < items[j].TotalSettlementGrossAmount {
-						return -1
-					}
-					return 1
-				}
-			case "recent":
-				if !items[i].LastRequestAt.Equal(items[j].LastRequestAt) {
-					if items[i].LastRequestAt.Before(items[j].LastRequestAt) {
-						return -1
-					}
-					return 1
-				}
-			default:
-				if items[i].RequestCount != items[j].RequestCount {
-					if items[i].RequestCount < items[j].RequestCount {
-						return -1
-					}
-					return 1
-				}
-			}
-			return 0
-		}()
-		if compare == 0 {
-			return items[i].UserID < items[j].UserID
-		}
-		if q.Direction == "asc" {
-			return compare < 0
-		}
-		return compare > 0
-	})
-	total := len(items)
-	start := (q.Page - 1) * q.PageSize
-	if start > total {
-		start = total
-	}
-	end := start + q.PageSize
-	if end > total {
-		end = total
-	}
-	return map[string]any{"items": items[start:end], "total": total, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": len(uniqueUsers), "total_requests": totalRequests, "consumer_amount": totalConsumerAmount, "owner_income": totalOwnerIncome}}, nil
+	return map[string]any{"items": items, "total": total, "page": q.Page, "page_size": q.PageSize, "summary": map[string]any{"total_users": summary.TotalUsers, "total_requests": summary.TotalRequests, "consumer_amount": summary.Consumer, "owner_income": summary.OwnerIncome}}, nil
 }
 func SetUserMultiplier(owner int, channel string, user int, m *float64) error {
 	_, err := BatchSetUserMultipliers(owner, []MultiplierTarget{{ChannelID: channel, UserID: user}}, m)

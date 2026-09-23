@@ -61,18 +61,18 @@ func GetPageQuery(c *gin.Context) *PageInfo {
 		}
 	}
 
-	if pageInfo.PageSize == 0 {
+	if pageInfo.PageSize <= 0 {
 		pageSize, _ := strconv.Atoi(c.Query("ps"))
-		if pageSize != 0 {
+		if pageSize > 0 {
 			pageInfo.PageSize = pageSize
 		}
-		if pageInfo.PageSize == 0 {
+		if pageInfo.PageSize <= 0 {
 			pageSize, _ = strconv.Atoi(c.Query("size"))
-			if pageSize != 0 {
+			if pageSize > 0 {
 				pageInfo.PageSize = pageSize
 			}
 		}
-		if pageInfo.PageSize == 0 {
+		if pageInfo.PageSize <= 0 {
 			pageInfo.PageSize = defaultItemsPerPage
 		}
 	}

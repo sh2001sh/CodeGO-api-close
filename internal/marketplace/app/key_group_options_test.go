@@ -74,15 +74,15 @@ func TestKeyGroupOptionsAccessPoolsAndBoundedQueries(t *testing.T) {
 	require.Equal(t, 2.0, *byValue["market:owned"].Multiplier)
 	require.True(t, byValue["market:public"].SubscriptionEnabled)
 	baselineQueries := queryCount
-	for i := 0; i < 65; i++ {
+	for i := 0; i < 1005; i++ {
 		addGroup(fmt.Sprintf("more-%d", i), "public", "active", "passed", 20)
 	}
 	queryCount = 0
 	options, err = ListKeyGroupOptions(userID)
 	require.NoError(t, err)
-	require.Len(t, options, 70, "all options must arrive in one response, without 50-row pagination")
+	require.Len(t, options, 1010, "selectors must not inherit the 1000-row marketplace discovery cap")
 	require.Equal(t, baselineQueries, queryCount, "query count must not grow with group count")
-	t.Logf("3 and 68 selectable groups: %d queries each, without analytics tables", queryCount)
+	t.Logf("3 and 1008 selectable groups: %d queries each, without analytics tables", queryCount)
 	_, err = ListKeyGroupOptions(0)
 	require.Error(t, err)
 	// A real storage failure must not be reported as an empty successful list.

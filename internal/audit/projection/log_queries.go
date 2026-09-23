@@ -22,6 +22,23 @@ import (
 const logSearchCountLimit = 10000
 const logGroupOptionLimit = 200
 
+const (
+	logCountCacheTTL        = 10 * time.Second
+	logCountCacheMaxEntries = 512
+)
+
+type cachedLogCount struct {
+	total int64
+	at    time.Time
+}
+
+var logCountCache = struct {
+	sync.Mutex
+	items map[string]cachedLogCount
+}{items: make(map[string]cachedLogCount)}
+
+var logCountLoads singleflight.Group
+
 var usedLogGroupsCache struct {
 	sync.RWMutex
 	items map[int]cachedLogGroups
@@ -84,8 +101,8 @@ func ListAdminLogs(query auditdomain.LogListQuery) ([]*auditschema.Log, int64, e
 	}
 	tx = applyLogContainsFilter(tx, "logs."+logGroupColumn(), query.Group)
 	countStartedAt := time.Now()
-	countRows := tx.Session(&gorm.Session{}).Model(&auditschema.Log{}).Select("1").Limit(logSearchCountLimit)
-	if err := platformdb.LogDB.Table("(?) AS limited_logs", countRows).Count(&total).Error; err != nil {
+	var err error
+	if total, err = countLogsForList("admin", tx, query); err != nil {
 		return nil, 0, err
 	}
 	countElapsed := time.Since(countStartedAt)
@@ -109,6 +126,7 @@ func ListUserLogs(userID int, query auditdomain.LogListQuery) ([]*auditschema.Lo
 		total int64
 	)
 
+	query.UserID = userID
 	tx := platformdb.LogDB.Where("logs.user_id = ?", userID)
 	if query.LogType != auditschema.LogTypeUnknown {
 		tx = tx.Where("logs.type = ?", query.LogType)
@@ -132,8 +150,8 @@ func ListUserLogs(userID int, query auditdomain.LogListQuery) ([]*auditschema.Lo
 	// LIMIT on COUNT(*) limits the one aggregate row, not the scanned logs.
 	// Bound the input relation instead, matching the existing search limit.
 	countStartedAt := time.Now()
-	countRows := tx.Session(&gorm.Session{}).Model(&auditschema.Log{}).Select("1").Limit(logSearchCountLimit)
-	if err := platformdb.LogDB.Table("(?) AS limited_logs", countRows).Count(&total).Error; err != nil {
+	var err error
+	if total, err = countLogsForList("user", tx, query); err != nil {
 		platformobservability.SysError("failed to count user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
 	}
@@ -148,6 +166,54 @@ func ListUserLogs(userID int, query auditdomain.LogListQuery) ([]*auditschema.Lo
 	formatUserLogs(logs, query.StartIdx)
 	logSlowLogQuery("user", query, len(logs), countElapsed, pageElapsed, 0, time.Since(startedAt))
 	return logs, total, nil
+}
+
+func countLogsForList(scope string, tx *gorm.DB, query auditdomain.LogListQuery) (int64, error) {
+	key := fmt.Sprintf(
+		"%p:%s:%d:%d:%d:%d:%s:%s:%s:%d:%s:%s:%s",
+		platformdb.LogDB, scope, query.UserID, query.LogType, query.StartTimestamp, query.EndTimestamp,
+		strings.TrimSpace(query.Username), strings.TrimSpace(query.TokenName), strings.TrimSpace(query.ModelName),
+		query.Channel, strings.TrimSpace(query.Group), strings.TrimSpace(query.RequestID), strings.TrimSpace(query.UpstreamRequestID),
+	)
+	logCountCache.Lock()
+	if item, ok := logCountCache.items[key]; ok && time.Since(item.at) < logCountCacheTTL {
+		logCountCache.Unlock()
+		return item.total, nil
+	}
+	logCountCache.Unlock()
+
+	value, err, _ := logCountLoads.Do(key, func() (any, error) {
+		logCountCache.Lock()
+		if item, ok := logCountCache.items[key]; ok && time.Since(item.at) < logCountCacheTTL {
+			logCountCache.Unlock()
+			return item.total, nil
+		}
+		logCountCache.Unlock()
+
+		var total int64
+		countRows := tx.Session(&gorm.Session{}).Model(&auditschema.Log{}).Select("1").Limit(logSearchCountLimit)
+		if err := platformdb.LogDB.Table("(?) AS limited_logs", countRows).Count(&total).Error; err != nil {
+			return int64(0), err
+		}
+		logCountCache.Lock()
+		if len(logCountCache.items) >= logCountCacheMaxEntries {
+			for cacheKey, cached := range logCountCache.items {
+				if time.Since(cached.at) >= logCountCacheTTL {
+					delete(logCountCache.items, cacheKey)
+				}
+			}
+			if len(logCountCache.items) >= logCountCacheMaxEntries {
+				clear(logCountCache.items)
+			}
+		}
+		logCountCache.items[key] = cachedLogCount{total: total, at: time.Now()}
+		logCountCache.Unlock()
+		return total, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return value.(int64), nil
 }
 
 func logSlowLogQuery(scope string, query auditdomain.LogListQuery, rows int, countElapsed, pageElapsed, enrichElapsed, totalElapsed time.Duration) {

@@ -8,10 +8,12 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	"github.com/sh2001sh/new-api/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -158,6 +160,65 @@ func TestCalculateTextQuotaSummaryFallbackKeepsClaudeSemantic(t *testing.T) {
 	require.Equal(t, 120, summary.PromptTokens)
 	require.Equal(t, 120, summary.TotalTokens)
 	require.Equal(t, 120, summary.Quota)
+}
+
+func TestAppendTextBillingClassificationMarksFallbackInputOnlySettlement(t *testing.T) {
+	relayInfo := &relaycommon.RelayInfo{
+		PriceData: types.PriceData{},
+	}
+	relayInfo.StreamStatus = gatewaycontract.NewStreamStatus()
+	relayInfo.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, nil)
+	other := map[string]interface{}{}
+
+	appendTextBillingClassification(other, relayInfo, textQuotaSummary{
+		PromptTokens:     120,
+		CompletionTokens: 0,
+	}, true)
+
+	require.Equal(t, "token", other["billing_basis"])
+	require.Equal(t, "fallback_prompt_tokens", other["usage_source"])
+	require.Equal(t, true, other["input_only_billing"])
+	require.Equal(t, "client_gone", other["output_zero_reason"])
+}
+
+func TestAppendTextBillingClassificationMarksMissingFinalUsage(t *testing.T) {
+	relayInfo := &relaycommon.RelayInfo{PriceData: types.PriceData{}}
+	other := map[string]interface{}{}
+
+	appendTextBillingClassification(other, relayInfo, textQuotaSummary{
+		PromptTokens: 80,
+	}, true)
+
+	require.Equal(t, "missing_final_usage", other["output_zero_reason"])
+}
+
+func TestAppendTextBillingClassificationKeepsExactUsageUnmarked(t *testing.T) {
+	relayInfo := &relaycommon.RelayInfo{PriceData: types.PriceData{}}
+	other := map[string]interface{}{}
+
+	appendTextBillingClassification(other, relayInfo, textQuotaSummary{
+		PromptTokens:     100,
+		CompletionTokens: 20,
+	}, false)
+
+	require.Equal(t, "token", other["billing_basis"])
+	require.NotContains(t, other, "usage_source")
+	require.NotContains(t, other, "input_only_billing")
+	require.NotContains(t, other, "output_zero_reason")
+}
+
+func TestAppendTextBillingClassificationMarksPerCallAndToolFee(t *testing.T) {
+	relayInfo := &relaycommon.RelayInfo{PriceData: types.PriceData{UsePrice: true}}
+	other := map[string]interface{}{}
+
+	appendTextBillingClassification(other, relayInfo, textQuotaSummary{
+		ToolCallSurchargeQuota: decimal.NewFromInt(12),
+	}, false)
+
+	require.Equal(t, "per_call", other["billing_basis"])
+	require.Equal(t, "per_call", other["output_zero_reason"])
+	require.Equal(t, true, other["tool_fee_applied"])
+	require.NotContains(t, other, "input_only_billing")
 }
 
 func TestCalculateTextQuotaSummaryUsesAnthropicUsageSemanticFromUpstreamUsage(t *testing.T) {

@@ -459,6 +459,13 @@ func SetChannelUserBlock(c *gin.Context) {
 	respond(c, gin.H{"blocked": req.Blocked}, err)
 }
 
+func ListChannelUserBlocks(c *gin.Context) {
+	result, err := marketplaceapp.ListChannelUserBlocks(
+		c.GetInt("id"), c.Param("id"), queryInt(c, "page", 1), queryInt(c, "page_size", 20),
+	)
+	respond(c, result, err)
+}
+
 func BindToken(c *gin.Context) {
 	var req marketplaceapp.TokenBindingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -73,6 +73,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.POST("/channels/:id/verification/pause", PauseChannelVerification)
 		marketplaceRoute.POST("/channels/:id/pause", PauseChannel)
 		marketplaceRoute.POST("/channels/:id/resume", ResumeChannel)
+		marketplaceRoute.GET("/channels/:id/user-blocks", ListChannelUserBlocks)
 		marketplaceRoute.POST("/channels/:id/user-block", SetChannelUserBlock)
 	}
 

@@ -227,6 +227,21 @@ export interface MarketplaceChannel {
   deleted_at?: string | null
 }
 
+export interface MarketplaceChannelUserBlock {
+  user_id: number
+  user_external_id: string
+  username: string
+  display_name: string
+  blocked_at: string
+}
+
+export interface MarketplaceChannelUserBlockList {
+  items: MarketplaceChannelUserBlock[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export interface AdminMarketplaceChannelFilters {
   search?: string
   status?: string

@@ -122,6 +122,21 @@ type ChannelView struct {
 	DeletedAt                        *time.Time                   `json:"deleted_at"`
 }
 
+type ChannelUserBlockView struct {
+	UserID         int       `json:"user_id"`
+	UserExternalID string    `json:"user_external_id"`
+	Username       string    `json:"username"`
+	DisplayName    string    `json:"display_name"`
+	BlockedAt      time.Time `json:"blocked_at"`
+}
+
+type ChannelUserBlockList struct {
+	Items    []ChannelUserBlockView `json:"items"`
+	Total    int64                  `json:"total"`
+	Page     int                    `json:"page"`
+	PageSize int                    `json:"page_size"`
+}
+
 type AdminChannelQuery struct {
 	Search         string
 	Status         string

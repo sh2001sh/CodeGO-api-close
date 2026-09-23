@@ -358,6 +358,60 @@ func SetChannelUserBlockByExternalID(ownerUserID int, channelID string, targetEx
 	return SetChannelUserBlock(ownerUserID, channelID, user.Id, blocked)
 }
 
+func ListChannelUserBlocks(ownerUserID int, channelID string, page int, pageSize int) (*ChannelUserBlockList, error) {
+	if ownerUserID <= 0 || strings.TrimSpace(channelID) == "" {
+		return nil, errors.New("参数无效")
+	}
+	var channel marketplaceschema.Channel
+	if err := platformdb.DB.Select("id").Where("id = ? AND owner_user_id = ?", channelID, ownerUserID).First(&channel).Error; err != nil {
+		return nil, err
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	query := platformdb.DB.Model(&marketplaceschema.ChannelUserBlock{}).Where("channel_id = ?", channelID)
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, err
+	}
+	blocks := make([]marketplaceschema.ChannelUserBlock, 0, pageSize)
+	if err := query.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&blocks).Error; err != nil {
+		return nil, err
+	}
+
+	userIDs := make([]int, 0, len(blocks))
+	for _, block := range blocks {
+		userIDs = append(userIDs, block.UserID)
+	}
+	usersByID := make(map[int]identityschema.User, len(userIDs))
+	if len(userIDs) > 0 {
+		var users []identityschema.User
+		if err := platformdb.DB.Unscoped().Select("id", "external_id", "username", "display_name").Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+			return nil, err
+		}
+		for _, user := range users {
+			usersByID[user.Id] = user
+		}
+	}
+
+	items := make([]ChannelUserBlockView, 0, len(blocks))
+	for _, block := range blocks {
+		user := usersByID[block.UserID]
+		items = append(items, ChannelUserBlockView{
+			UserID: block.UserID, UserExternalID: user.ExternalId, Username: user.Username,
+			DisplayName: user.DisplayName, BlockedAt: block.CreatedAt,
+		})
+	}
+	return &ChannelUserBlockList{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
 func loadOwnedChannelGroup(ownerUserID int, channelID string) (*marketplaceschema.Channel, *marketplaceschema.Group, error) {
 	var channel marketplaceschema.Channel
 	if err := platformdb.DB.Where("id = ? AND owner_user_id = ?", channelID, ownerUserID).First(&channel).Error; err != nil {

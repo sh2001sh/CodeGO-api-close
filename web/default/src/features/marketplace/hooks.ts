@@ -41,6 +41,7 @@ import {
   getMarketplaceMultiplierNotices,
   readMarketplaceMultiplierNotice,
   getSecurityAuditEvents,
+  getMarketplaceChannelUserBlocks,
   updateSecurityAuditEvent,
 } from './api'
 import type {
@@ -335,6 +336,21 @@ export function useMyMarketplaceChannels() {
   })
 }
 
+export function useMarketplaceChannelUserBlocks(
+  channelId: string,
+  page = 1,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['marketplace-channel-user-blocks', channelId, page],
+    queryFn: () =>
+      getMarketplaceChannelUserBlocks({ channelId, page, pageSize: 20 }),
+    enabled: enabled && Boolean(channelId),
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+  })
+}
+
 export function useMyMarketplaceUsageLogs(
   params: MarketplaceOwnerUsageLogFilters
 ) {
@@ -393,7 +409,14 @@ export function useMarketplaceMutations() {
     }),
     userBlock: useMutation({
       mutationFn: setMarketplaceChannelUserBlock,
-      onSuccess: invalidateAvailability,
+      onSuccess: async (_data, input) => {
+        await Promise.all([
+          invalidateAvailability(),
+          queryClient.invalidateQueries({
+            queryKey: ['marketplace-channel-user-blocks', input.channelId],
+          }),
+        ])
+      },
     }),
     adminPause: useMutation({
       mutationFn: (input: { id: string; paused: boolean }) =>

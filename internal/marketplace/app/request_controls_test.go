@@ -94,6 +94,25 @@ func TestSetChannelUserBlockByExternalID(t *testing.T) {
 	require.ErrorContains(t, SetChannelUserBlockByExternalID(11, "420", "missing", true), "用户编号不存在")
 }
 
+func TestListChannelUserBlocksRequiresOwnershipAndReturnsPublicIdentity(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}, &marketplaceschema.ChannelUserBlock{}))
+	require.NoError(t, db.Create(&identityschema.User{Id: 20, ExternalId: "JLW7UE", Username: "blocked-user", DisplayName: "Blocked User", Password: "password"}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "420", OwnerUserID: 11}).Error)
+	require.NoError(t, SetChannelUserBlock(11, "420", 20, true))
+
+	result, err := ListChannelUserBlocks(11, "420", 1, 20)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.Total)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "JLW7UE", result.Items[0].UserExternalID)
+	require.Equal(t, "blocked-user", result.Items[0].Username)
+	require.Equal(t, "Blocked User", result.Items[0].DisplayName)
+
+	_, err = ListChannelUserBlocks(12, "420", 1, 20)
+	require.Error(t, err)
+}
+
 func TestSyncInternalChannelClearsZeroConcurrencyLimits(t *testing.T) {
 	for _, limits := range []struct{ total, user int }{{0, 0}, {0, 2}, {7, 0}} {
 		t.Run(fmt.Sprintf("total=%d/user=%d", limits.total, limits.user), func(t *testing.T) {

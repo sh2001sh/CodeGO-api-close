@@ -220,6 +220,7 @@ func V2MigrationIDs() []string {
 		"20260921_marketplace_reclaim_owner_amounts",
 		"20260922_marketplace_settlement_created_index",
 		"20260922_billing_hot_path_indexes",
+		"20260923_billing_outbox_autovacuum_repair",
 	}
 }
 
@@ -399,6 +400,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260914_marketplace_settlement_reclaim_index", RunOutsideTx: migrateMarketplaceSettlementReclaimIndex},
 		{ID: "20260922_marketplace_settlement_created_index", RunOutsideTx: migrateMarketplaceSettlementCreatedIndex},
 		{ID: "20260922_billing_hot_path_indexes", RunOutsideTx: migrateBillingHotPathIndexes},
+		{ID: "20260923_billing_outbox_autovacuum_repair", Run: migrateBillingOutboxAutovacuumRepair},
 		{ID: "20260915_marketplace_pelican_artifacts", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.PelicanArtifact{})
 		}},
@@ -838,6 +840,7 @@ func billingHotPathIndexStatements(dialect string) []string {
 			 INCLUDE (reserved_amount)
 			 WHERE status = 'open'`,
 			`ALTER TABLE billing.outbox_events SET (
+				autovacuum_enabled = true,
 				autovacuum_vacuum_scale_factor = 0.02,
 				autovacuum_vacuum_threshold = 10000,
 				autovacuum_analyze_scale_factor = 0.01,
@@ -857,6 +860,32 @@ func billingHotPathIndexStatements(dialect string) []string {
 			`CREATE INDEX IF NOT EXISTS idx_billing_reservations_open_account_amount ON billing_reservations (account_id, status, reserved_amount)`,
 		}
 	}
+}
+
+// migrateBillingOutboxAutovacuumRepair repairs installations where an older
+// cleanup migration disabled autovacuum on the high-churn outbox table. Keep
+// this as a separate migration so already-applied hot-path migrations receive
+// the repair without rebuilding any indexes.
+func migrateBillingOutboxAutovacuumRepair(tx *gorm.DB) error {
+	if tx == nil || !tx.Migrator().HasTable(&billingschema.BillingOutboxEvent{}) {
+		return nil
+	}
+	if strings.ToLower(strings.TrimSpace(tx.Dialector.Name())) != "postgres" {
+		return nil
+	}
+	if err := tx.Exec(`
+		ALTER TABLE billing.outbox_events SET (
+			autovacuum_enabled = true,
+			autovacuum_vacuum_scale_factor = 0.005,
+			autovacuum_vacuum_threshold = 10000,
+			autovacuum_analyze_scale_factor = 0.005,
+			autovacuum_analyze_threshold = 5000,
+			autovacuum_vacuum_cost_limit = 2000
+		)
+	`).Error; err != nil {
+		return fmt.Errorf("repair billing outbox autovacuum: %w", err)
+	}
+	return nil
 }
 
 func migrateMarketplaceGroupQueryIndex(_ *gorm.DB) error {

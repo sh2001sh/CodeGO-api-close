@@ -85,6 +85,7 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 		"GET /api/marketplace/channels/mine/logs/export":       false,
 		"GET /api/marketplace/security-audit/events/export":    false,
 		"GET /api/marketplace/channels/mine/observability":     false,
+		"GET /api/marketplace/channels/:id/user-blocks":        false,
 		"GET /api/marketplace/admin/owner-income/reclaims/:id": false,
 		"PATCH /api/marketplace/admin/channels/:id":            false,
 		"POST /api/marketplace/admin/channels/:id/test":        false,

@@ -6,7 +6,6 @@ import {
   Pause,
   Pencil,
   Play,
-  ShieldBan,
   Trash2,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +17,7 @@ import { useMarketplaceMutations } from '../hooks'
 import { isImageGenerationModel } from '../lib/model-capabilities'
 import { failedConnectivityModels } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
+import { ChannelUserBlocksDialog } from './channel-user-blocks-dialog'
 
 export function OwnerChannelActions(props: {
   channel: MarketplaceChannel
@@ -94,43 +94,13 @@ export function OwnerChannelActions(props: {
     }
   }
 
-  const blockUser = () => {
-    const identifier = window.prompt(t('请输入要拉黑的用户编号或数字 ID'))
-    if (!identifier?.trim()) return
-    const normalized = identifier.trim()
-    const numericUserId = /^\d+$/.test(normalized)
-      ? Number(normalized)
-      : undefined
-    mutations.userBlock.mutate(
-      {
-        channelId: channel.id,
-        userId: numericUserId,
-        userExternalId: numericUserId ? undefined : normalized,
-        blocked: true,
-      },
-      {
-        onSuccess: () => toast.success(t('用户已被拉黑')),
-        onError: (error) =>
-          toast.error(error instanceof Error ? error.message : t('拉黑失败')),
-      }
-    )
-  }
-
   return (
     <div className='flex shrink-0 flex-wrap items-center gap-2 lg:justify-end'>
       <Button variant='outline' size='sm' onClick={props.onEdit}>
         <Pencil />
         {t('编辑')}
       </Button>
-      <Button
-        variant='outline'
-        size='sm'
-        onClick={blockUser}
-        disabled={mutations.userBlock.isPending}
-      >
-        <ShieldBan />
-        {t('拉黑用户')}
-      </Button>
+      <ChannelUserBlocksDialog channel={channel} />
       <Button
         variant='outline'
         size='sm'

@@ -31,6 +31,7 @@ import type {
   SecurityAuditEvent,
   SecurityAuditEventFilters,
   SecurityAuditEventList,
+  MarketplaceChannelUserBlockList,
 } from './types'
 
 interface ApiResponse<T = unknown> {
@@ -342,6 +343,21 @@ export async function getMarketplaceMultiplierTrends(input: {
 export async function getMyMarketplaceChannels() {
   const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
     '/api/marketplace/channels/mine'
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceChannelUserBlocks(input: {
+  channelId: string
+  page?: number
+  pageSize?: number
+}) {
+  const params = new URLSearchParams({
+    page: String(input.page ?? 1),
+    page_size: String(input.pageSize ?? 20),
+  })
+  const response = await api.get<ApiResponse<MarketplaceChannelUserBlockList>>(
+    `/api/marketplace/channels/${encodeURIComponent(input.channelId)}/user-blocks?${params.toString()}`
   )
   return requireData(response.data)
 }
@@ -807,9 +823,14 @@ export async function getAdminMarketplaceChannels(
   if (filters.endTimestamp) {
     search.set('end_timestamp', String(filters.endTimestamp))
   }
-  const response = await api.get<ApiResponse<{ items: MarketplaceChannel[]; total: number; page: number; page_size: number }>>(
-    `/api/marketplace/admin/channels?${search.toString()}`
-  )
+  const response = await api.get<
+    ApiResponse<{
+      items: MarketplaceChannel[]
+      total: number
+      page: number
+      page_size: number
+    }>
+  >(`/api/marketplace/admin/channels?${search.toString()}`)
   return requireData(response.data)
 }
 

@@ -206,12 +206,19 @@ func TestBillingHotPathIndexStatements(t *testing.T) {
 	require.Contains(t, postgres[1], "WHERE status = 'completed'")
 	require.Contains(t, postgres[2], "WHERE status = 'open'")
 	require.Contains(t, postgres[3], "autovacuum_vacuum_scale_factor")
+	require.Contains(t, postgres[3], "autovacuum_enabled = true")
 
 	for _, dialect := range []string{"mysql", "sqlite"} {
 		statements := billingHotPathIndexStatements(dialect)
 		require.Len(t, statements, 3)
 		require.NotContains(t, strings.Join(statements, " "), "CONCURRENTLY")
 	}
+}
+
+func TestMigrateBillingOutboxAutovacuumRepairSQLiteIsNoop(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, migrateBillingOutboxAutovacuumRepair(db))
 }
 
 func TestMigrateBillingHotPathIndexesSQLite(t *testing.T) {

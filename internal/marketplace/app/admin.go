@@ -337,6 +337,9 @@ func ReviewChannel(channelID string, req AdminReviewRequest) (*ChannelView, erro
 		channel.SourceLabelReviewReason = req.Reason
 		group.LifecycleStatus = marketplacedomain.LifecycleActive
 		group.PublishedAt = &now
+		if err = syncPausedMarketplaceChannel(channel, false); err != nil {
+			return channelView(channel, group), err
+		}
 		invalidateAdminMarketplaceStatsCache()
 	}
 	return channelView(channel, group), err

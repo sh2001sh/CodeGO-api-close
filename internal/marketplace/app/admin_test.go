@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sh2001sh/new-api/constant"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -11,6 +13,48 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestReviewChannelReenablesPreviouslyPausedInternalChannel(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&marketplaceschema.Channel{},
+		&marketplaceschema.Group{},
+		&gatewayschema.Channel{},
+		&gatewayschema.Ability{},
+	))
+
+	internal := gatewayschema.Channel{
+		Status: constant.ChannelStatusManuallyDisabled,
+		Name:   "paused marketplace channel",
+		Models: "gpt-5.6-sol",
+		Group:  "market_review_resume",
+	}
+	require.NoError(t, db.Create(&internal).Error)
+	require.NoError(t, db.Create(&gatewayschema.Ability{
+		Group: "market_review_resume", Model: "gpt-5.6-sol",
+		ChannelId: internal.Id, Enabled: false,
+	}).Error)
+
+	channel := marketplaceschema.Channel{
+		ID: "review-resume-channel", OwnerUserID: 42, ProviderType: "openai",
+		SubmittedSourceLabel: "Codex Pro", Status: marketplacedomain.LifecycleSuspended,
+		InternalChannelID: &internal.Id,
+	}
+	group := autoRouteTestGroup("review-resume-group", channel.ID, channel.OwnerUserID, 1)
+	group.LifecycleStatus = marketplacedomain.LifecycleSuspended
+	group.VerificationStatus = marketplacedomain.VerificationPassed
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, db.Create(&group).Error)
+
+	_, err := ReviewChannel(channel.ID, AdminReviewRequest{Approved: true, Reason: "重新上架"})
+	require.NoError(t, err)
+	require.NoError(t, db.First(&internal, internal.Id).Error)
+	require.Equal(t, constant.ChannelStatusEnabled, internal.Status)
+
+	var ability gatewayschema.Ability
+	require.NoError(t, db.First(&ability, "channel_id = ?", internal.Id).Error)
+	require.True(t, ability.Enabled)
+}
 
 func TestListAdminChannelsIncludesOwnerAndFiltersEarningsByTime(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)

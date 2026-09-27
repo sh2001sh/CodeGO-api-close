@@ -166,6 +166,21 @@ func processCompletions(streamResp string, streamItems []string, responseTextBui
 	return nil
 }
 
+func extractLastValidStreamUsage(streamItems []string) (*dto.Usage, bool) {
+	for i := len(streamItems) - 1; i >= 0; i-- {
+		var streamResponse struct {
+			Usage *dto.Usage `json:"usage"`
+		}
+		if err := platformencoding.UnmarshalString(streamItems[i], &streamResponse); err != nil {
+			continue
+		}
+		if tokenx.ValidUsage(streamResponse.Usage) {
+			return streamResponse.Usage, true
+		}
+	}
+	return nil, false
+}
+
 func handleLastResponse(lastStreamData string, responseId *string, createAt *int64,
 	systemFingerprint *string, model *string, usage **dto.Usage,
 	containStreamUsage *bool, info *relaycommon.RelayInfo,

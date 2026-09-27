@@ -64,7 +64,8 @@ type LatLng struct {
 }
 
 func (r *GeminiChatRequest) GetTokenCountMeta() *types.TokenCountMeta {
-	var files []*types.FileMeta = make([]*types.FileMeta, 0)
+	var files = make([]*types.FileMeta, 0)
+	var tokenCountMeta types.TokenCountMeta
 
 	var maxTokens int
 
@@ -73,36 +74,84 @@ func (r *GeminiChatRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	}
 
 	var inputTexts []string
+	if r.SystemInstructions != nil {
+		tokenCountMeta.MessagesCount++
+		inputTexts = append(inputTexts, "system")
+		appendGeminiContentTokenTexts(&inputTexts, r.SystemInstructions, &files)
+	}
 	for _, content := range r.Contents {
-		for _, part := range content.Parts {
-			if part.Text != "" {
-				inputTexts = append(inputTexts, part.Text)
+		tokenCountMeta.MessagesCount++
+		inputTexts = append(inputTexts, content.Role)
+		appendGeminiContentTokenTexts(&inputTexts, &content, &files)
+	}
+
+	if len(r.Tools) > 0 {
+		tools := r.GetTools()
+		for _, tool := range tools {
+			if tool.FunctionDeclarations == nil {
+				continue
 			}
-			if source := part.InlineData.ToFileSource(); source != nil {
-				mimeType := part.InlineData.MimeType
-				var fileType types.FileType
-				if strings.HasPrefix(mimeType, "image/") {
-					fileType = types.FileTypeImage
-				} else if strings.HasPrefix(mimeType, "audio/") {
-					fileType = types.FileTypeAudio
-				} else if strings.HasPrefix(mimeType, "video/") {
-					fileType = types.FileTypeVideo
-				} else {
-					fileType = types.FileTypeFile
-				}
-				files = append(files, &types.FileMeta{
-					FileType: fileType,
-					Source:   source,
-				})
+			data, err := platformencoding.Marshal(tool.FunctionDeclarations)
+			if err != nil {
+				continue
+			}
+			inputTexts = append(inputTexts, string(data))
+			var declarations []json.RawMessage
+			if err := platformencoding.Unmarshal(data, &declarations); err == nil {
+				tokenCountMeta.ToolsCount += len(declarations)
+			} else {
+				tokenCountMeta.ToolsCount++
 			}
 		}
 	}
+	if r.ToolConfig != nil {
+		appendGeminiJSONTokenText(&inputTexts, r.ToolConfig)
+	}
 
-	inputText := strings.Join(inputTexts, "\n")
-	return &types.TokenCountMeta{
-		CombineText: inputText,
-		Files:       files,
-		MaxTokens:   maxTokens,
+	tokenCountMeta.CombineText = strings.Join(inputTexts, "\n")
+	tokenCountMeta.Files = files
+	tokenCountMeta.MaxTokens = maxTokens
+	return &tokenCountMeta
+}
+
+func appendGeminiContentTokenTexts(texts *[]string, content *GeminiChatContent, files *[]*types.FileMeta) {
+	for _, part := range content.Parts {
+		if part.Text != "" {
+			*texts = append(*texts, part.Text)
+		}
+		if source := part.InlineData.ToFileSource(); source != nil {
+			mimeType := part.InlineData.MimeType
+			fileType := types.FileTypeFile
+			switch {
+			case strings.HasPrefix(mimeType, "image/"):
+				fileType = types.FileTypeImage
+			case strings.HasPrefix(mimeType, "audio/"):
+				fileType = types.FileTypeAudio
+			case strings.HasPrefix(mimeType, "video/"):
+				fileType = types.FileTypeVideo
+			}
+			*files = append(*files, &types.FileMeta{FileType: fileType, Source: source})
+		}
+		if part.FileData != nil && part.FileData.FileUri != "" {
+			*files = append(*files, &types.FileMeta{
+				FileType: types.FileTypeFile,
+				Source:   types.NewFileSourceFromData(part.FileData.FileUri, part.FileData.MimeType),
+			})
+		}
+		appendGeminiJSONTokenText(texts, part.FunctionCall)
+		appendGeminiJSONTokenText(texts, part.FunctionResponse)
+		appendGeminiJSONTokenText(texts, part.ExecutableCode)
+		appendGeminiJSONTokenText(texts, part.CodeExecutionResult)
+	}
+}
+
+func appendGeminiJSONTokenText(texts *[]string, value any) {
+	if value == nil {
+		return
+	}
+	data, err := platformencoding.Marshal(value)
+	if err == nil && len(data) > 0 && string(data) != "null" {
+		*texts = append(*texts, string(data))
 	}
 }
 

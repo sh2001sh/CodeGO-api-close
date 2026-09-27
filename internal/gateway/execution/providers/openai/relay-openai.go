@@ -222,11 +222,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var usage = &dto.Usage{}
 	var streamItems []string // store stream items
 	var lastStreamData string
-	var secondLastStreamData string // 存储倒数第二个stream data，用于音频模型
 	var cyberPolicyErr *types.NewAPIError
-
-	// 检查是否为音频模型
-	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		if err := cyberPolicyAPIError([]byte(data), resp.StatusCode, resp.Header.Get("Content-Type")); err != nil {
@@ -262,11 +258,6 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 		}
 		if len(data) > 0 {
-			// 对音频模型，保存倒数第二个stream data
-			if isAudioModel && lastStreamData != "" {
-				secondLastStreamData = lastStreamData
-			}
-
 			lastStreamData = data
 			streamItems = append(streamItems, data)
 		}
@@ -275,21 +266,12 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		return nil, cyberPolicyErr
 	}
 
-	// 对音频模型，从倒数第二个stream data中提取usage信息
-	if isAudioModel && secondLastStreamData != "" {
-		var streamResp struct {
-			Usage *dto.Usage `json:"usage"`
-		}
-		err := platformencoding.Unmarshal([]byte(secondLastStreamData), &streamResp)
-		if err == nil && streamResp.Usage != nil && tokenx.ValidUsage(streamResp.Usage) {
-			usage = streamResp.Usage
-			containStreamUsage = true
-
-			if platformconfig.DebugEnabled {
-				logger.LogDebug(c, fmt.Sprintf("Audio model usage extracted from second last SSE: PromptTokens=%d, CompletionTokens=%d, TotalTokens=%d, InputTokens=%d, OutputTokens=%d",
-					usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens,
-					usage.InputTokens, usage.OutputTokens))
-			}
+	if streamUsage, found := extractLastValidStreamUsage(streamItems); found {
+		usage = streamUsage
+		containStreamUsage = true
+		if platformconfig.DebugEnabled {
+			logger.LogDebug(c, fmt.Sprintf("Stream usage extracted from SSE: PromptTokens=%d, CompletionTokens=%d, TotalTokens=%d, InputTokens=%d, OutputTokens=%d",
+				usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, usage.InputTokens, usage.OutputTokens))
 		}
 	}
 

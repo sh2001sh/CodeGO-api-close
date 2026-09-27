@@ -28,14 +28,15 @@ import { type TopNavLink } from '../types'
  * If you need fallback links, add them here.
  */
 export const defaultTopNavLinks: TopNavLink[] = [
-  { title: '主页', href: '/' },
-  { title: '市场', href: '/market' },
+  { title: 'Home', href: '/' },
+  { title: 'Market', href: '/market' },
   {
-    title: '社区',
+    title: 'Community',
     href: 'https://community.codegoai.com',
     external: true,
   },
-  { title: '模型', href: '/pricing' },
-  { title: '控制台', href: '/dashboard', requiresAuth: true },
-  { title: '状态', href: '/group-status' },
+  { title: 'Models', href: '/pricing' },
+  { title: 'Docs', href: '/docs' },
+  { title: 'Console', href: '/dashboard', requiresAuth: true },
+  { title: 'Status', href: '/group-status' },
 ]

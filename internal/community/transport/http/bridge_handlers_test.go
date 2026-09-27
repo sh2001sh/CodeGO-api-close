@@ -74,6 +74,20 @@ func TestCommunityBridgeRoutesAreVersionedAndRegistered(t *testing.T) {
 	}
 }
 
+func TestRetiredCommunityResourceRoutesAreNotRegistered(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	RegisterCommunityRoutes(engine.Group("/api"))
+	for _, route := range engine.Routes() {
+		require.NotContains(t, route.Path, "community-resources")
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete} {
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, httptest.NewRequest(method, "/api/community-resources", nil))
+		require.Equal(t, http.StatusNotFound, recorder.Code)
+	}
+}
+
 func TestCommunityBridgeUsesHTTPStatusAndLimitedMemberPayload(t *testing.T) {
 	originalDB := platformdb.DB
 	db, err := gorm.Open(sqlite.Open("file:community-bridge-http?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})

@@ -17,7 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import i18n from '@/i18n/config'
 import { FileCheck2, XCircle } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -72,6 +74,7 @@ function formatTime(timestamp: number) {
 }
 
 export function InvoiceAdminPanel() {
+  useTranslation()
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<InvoiceStatus | 'all'>('pending')
   const [selected, setSelected] = useState<InvoiceRequest | null>(null)
@@ -130,9 +133,15 @@ export function InvoiceAdminPanel() {
       <CardHeader className='gap-3 border-b'>
         <div className='flex flex-col justify-between gap-3 sm:flex-row sm:items-start'>
           <div>
-            <CardTitle>发票审核</CardTitle>
+            <CardTitle>
+              <Trans i18nKey={'发票审核'} />
+            </CardTitle>
             <CardDescription className='mt-1'>
-              仅管理员可查看抬头、税号和接收邮箱，并登记发票号码或驳回原因。
+              <Trans
+                i18nKey={
+                  '仅管理员可查看抬头、税号和接收邮箱，并登记发票号码或驳回原因。'
+                }
+              />
             </CardDescription>
           </div>
           <NativeSelect
@@ -142,10 +151,18 @@ export function InvoiceAdminPanel() {
             }
             className='w-full sm:w-36'
           >
-            <option value='pending'>待处理</option>
-            <option value='issued'>已开具</option>
-            <option value='rejected'>已驳回</option>
-            <option value='all'>全部</option>
+            <option value='pending'>
+              <Trans i18nKey={'待处理'} />
+            </option>
+            <option value='issued'>
+              <Trans i18nKey={'已开具'} />
+            </option>
+            <option value='rejected'>
+              <Trans i18nKey={'已驳回'} />
+            </option>
+            <option value='all'>
+              <Trans i18nKey={'全部'} />
+            </option>
           </NativeSelect>
         </div>
       </CardHeader>
@@ -153,23 +170,33 @@ export function InvoiceAdminPanel() {
         <div className='border-border bg-background/75 overflow-hidden rounded-2xl border'>
           {requests.isLoading ? (
             <p className='text-muted-foreground py-10 text-center text-sm'>
-              正在加载申请...
+              <Trans i18nKey={'正在加载申请...'} />
             </p>
           ) : null}
           {requests.isError ? (
             <p className='text-destructive py-10 text-center text-sm'>
-              申请数据加载失败
+              <Trans i18nKey={'申请数据加载失败'} />
             </p>
           ) : null}
           {requests.data ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>申请人 / 订单</TableHead>
-                  <TableHead>开票信息</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>提交时间</TableHead>
-                  <TableHead className='text-right'>处理</TableHead>
+                  <TableHead>
+                    <Trans i18nKey={'申请人 / 订单'} />
+                  </TableHead>
+                  <TableHead>
+                    <Trans i18nKey={'开票信息'} />
+                  </TableHead>
+                  <TableHead>
+                    <Trans i18nKey={'状态'} />
+                  </TableHead>
+                  <TableHead>
+                    <Trans i18nKey={'提交时间'} />
+                  </TableHead>
+                  <TableHead className='text-right'>
+                    <Trans i18nKey={'处理'} />
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -177,11 +204,14 @@ export function InvoiceAdminPanel() {
                   <TableRow key={request.id}>
                     <TableCell className='align-top whitespace-normal'>
                       <div className='font-medium'>
-                        用户 #{request.user_id} · {request.order_title}
+                        <Trans i18nKey={'用户 #'} />
+                        {request.user_id} · {request.order_title}
                       </div>
                       <div className='text-muted-foreground text-xs'>
                         {request.order_count > 1
-                          ? `合并 ${request.order_count} 笔订单`
+                          ? i18n.t('合并 {{param0}} 笔订单', {
+                              param0: request.order_count,
+                            })
                           : request.trade_no}{' '}
                         · {request.currency} {request.order_amount.toFixed(2)}
                       </div>
@@ -207,7 +237,7 @@ export function InvoiceAdminPanel() {
                         variant='outline'
                         onClick={() => openReview(request)}
                       >
-                        处理
+                        <Trans i18nKey={'处理'} />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -218,7 +248,7 @@ export function InvoiceAdminPanel() {
                       colSpan={5}
                       className='text-muted-foreground h-28 text-center'
                     >
-                      没有符合筛选条件的申请
+                      <Trans i18nKey={'没有符合筛选条件的申请'} />
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -234,7 +264,9 @@ export function InvoiceAdminPanel() {
       >
         <DialogContent className='max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-lg'>
           <DialogHeader>
-            <DialogTitle>处理发票申请</DialogTitle>
+            <DialogTitle>
+              <Trans i18nKey={'处理发票申请'} />
+            </DialogTitle>
             <DialogDescription>
               {selected
                 ? `${selected.title} · ${selected.order_title} · ${selected.currency} ${selected.order_amount.toFixed(2)}`
@@ -243,7 +275,7 @@ export function InvoiceAdminPanel() {
           </DialogHeader>
           <div className='grid gap-3'>
             <label className='grid gap-1.5 text-sm font-medium'>
-              处理结果
+              <Trans i18nKey={'处理结果'} />
               <NativeSelect
                 value={draft.status}
                 onChange={(event) =>
@@ -254,13 +286,17 @@ export function InvoiceAdminPanel() {
                 }
                 className='w-full'
               >
-                <option value='issued'>已开具</option>
-                <option value='rejected'>驳回</option>
+                <option value='issued'>
+                  <Trans i18nKey={'已开具'} />
+                </option>
+                <option value='rejected'>
+                  <Trans i18nKey={'驳回'} />
+                </option>
               </NativeSelect>
             </label>
             {isIssued ? (
               <label className='grid gap-1.5 text-sm font-medium'>
-                发票号码
+                <Trans i18nKey={'发票号码'} />
                 <Input
                   value={draft.invoice_number}
                   onChange={(event) =>
@@ -270,13 +306,19 @@ export function InvoiceAdminPanel() {
                   autoFocus
                 />
                 <span className='text-muted-foreground font-normal'>
-                  电子税务局将自动向申请邮箱发送电子发票，本站不再另行发送。
+                  <Trans
+                    i18nKey={
+                      '电子税务局将自动向申请邮箱发送电子发票，本站不再另行发送。'
+                    }
+                  />
                 </span>
               </label>
             ) : (
               <label className='grid gap-1.5 text-sm font-medium'>
-                驳回原因{' '}
-                <span className='text-destructive font-normal'>必填</span>
+                <Trans i18nKey={'驳回原因'} />{' '}
+                <span className='text-destructive font-normal'>
+                  <Trans i18nKey={'必填'} />
+                </span>
                 <Textarea
                   value={draft.admin_note}
                   onChange={(event) =>
@@ -289,12 +331,16 @@ export function InvoiceAdminPanel() {
             )}
             {invoiceNumberRequired ? (
               <p className='text-destructive text-sm' role='alert'>
-                请填写发票号码后再确认开具。
+                <Trans i18nKey={'请填写发票号码后再确认开具。'} />
               </p>
             ) : null}
             {rejectionReasonRequired ? (
               <p className='text-destructive text-sm' role='alert'>
-                请填写驳回原因后再提交，用户将能够在申请记录中看到该原因。
+                <Trans
+                  i18nKey={
+                    '请填写驳回原因后再提交，用户将能够在申请记录中看到该原因。'
+                  }
+                />
               </p>
             ) : null}
           </div>
@@ -310,10 +356,10 @@ export function InvoiceAdminPanel() {
             >
               {isIssued ? <FileCheck2 /> : <XCircle />}
               {update.isPending
-                ? '保存中...'
+                ? i18n.t('保存中...')
                 : isIssued
-                  ? '确认已开具'
-                  : '确认驳回'}
+                  ? i18n.t('确认已开具')
+                  : i18n.t('确认驳回')}
             </Button>
           </DialogFooter>
         </DialogContent>

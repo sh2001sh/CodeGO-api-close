@@ -185,7 +185,7 @@ func ExportMyUsageLogs(c *gin.Context) {
 	var buffer bytes.Buffer
 	buffer.WriteString("\xEF\xBB\xBF")
 	writer := csv.NewWriter(&buffer)
-	if err := writer.Write([]string{"日志 ID", "时间", "渠道", "分组", "用户", "状态", "模型", "请求 ID", "上游请求 ID", "Prompt Tokens", "Completion Tokens", "耗时(ms)", "HTTP 状态", "错误类型", "错误代码", "错误信息", "用户扣费（余额等值）", "渠道收入", "平台佣金", "倍率", "收入状态"}); err != nil {
+	if err := writer.Write([]string{"日志 ID", "时间", "渠道", "分组", "用户", "状态", "模型", "请求 ID", "上游请求 ID", "Prompt Tokens", "缓存命中 Tokens", "缓存写入 Tokens", "Completion Tokens", "耗时(ms)", "HTTP 状态", "错误类型", "错误代码", "错误信息", "用户扣费（余额等值）", "渠道收入", "平台佣金", "倍率", "收入状态"}); err != nil {
 		httpapi.ApiError(c, err)
 		return
 	}
@@ -193,7 +193,7 @@ func ExportMyUsageLogs(c *gin.Context) {
 		row := []string{
 			strconv.Itoa(item.ID), time.Unix(item.CreatedAt, 0).Format("2006-01-02 15:04:05"), item.ChannelName, item.GroupID,
 			item.UserID, item.Status, item.ModelName, item.RequestID, item.UpstreamRequestID,
-			strconv.Itoa(item.PromptTokens), strconv.Itoa(item.CompletionTokens), strconv.FormatInt(item.TotalDurationMs, 10),
+			strconv.Itoa(item.PromptTokens), strconv.FormatInt(item.CacheReadTokens, 10), strconv.FormatInt(item.CacheWriteTokens, 10), strconv.Itoa(item.CompletionTokens), strconv.FormatInt(item.TotalDurationMs, 10),
 			strconv.Itoa(item.StatusCode), item.ErrorType, item.ErrorCode, item.ErrorMessage,
 			strconv.FormatInt(item.ConsumerAmount, 10), strconv.FormatInt(item.OwnerIncome, 10), strconv.FormatInt(item.PlatformCommission, 10),
 			strconv.FormatFloat(item.Multiplier, 'f', -1, 64), item.IncomeStatus,

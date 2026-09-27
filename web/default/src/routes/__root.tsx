@@ -23,8 +23,6 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
 import { useStatus } from '@/hooks/use-status'
 import { Toaster } from '@/components/ui/sonner'
@@ -51,12 +49,6 @@ function RootComponent() {
       <NavigationProgress />
       <Outlet />
       <Toaster duration={5000} />
-      {import.meta.env.MODE === 'development' && (
-        <>
-          <ReactQueryDevtools buttonPosition='bottom-left' />
-          <TanStackRouterDevtools position='bottom-right' />
-        </>
-      )}
     </ThemeCustomizationProvider>
   )
 }

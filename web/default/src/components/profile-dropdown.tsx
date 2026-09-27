@@ -27,7 +27,7 @@ import {
   Workflow,
   ReceiptText,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { ROLE } from '@/lib/roles'
@@ -43,9 +43,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SignOutDialog } from '@/components/sign-out-dialog'
+import { TierBadge } from '@/features/daily-lucky-number/components/tier-badge'
 import { useDailyLuckyNumberSelf } from '@/features/daily-lucky-number/hooks/use-daily-lucky-number'
 import { getMembershipTierRank } from '@/features/daily-lucky-number/lib'
-import { TierBadge } from '@/features/daily-lucky-number/components/tier-badge'
 
 const avatarFallbackClassName = 'font-semibold text-white'
 
@@ -137,7 +137,7 @@ export function ProfileDropdown() {
 
           <DropdownMenuItem onClick={() => navigate({ to: '/invoices' })}>
             <ReceiptText className='size-4' />
-            电子发票
+            <Trans i18nKey={'电子发票'} />
           </DropdownMenuItem>
 
           {featuredLuckyCard?.number ? (
@@ -165,13 +165,9 @@ export function ProfileDropdown() {
 
           {isSuperAdmin && (
             <>
-              <DropdownMenuItem
-                onClick={() =>
-                  navigate({ to: '/channels' })
-                }
-              >
+              <DropdownMenuItem onClick={() => navigate({ to: '/channels' })}>
                 <Workflow className='size-4' />
-                自动路由
+                <Trans i18nKey={'自动路由'} />
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() =>

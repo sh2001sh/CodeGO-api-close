@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import i18n from '@/i18n/config'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
   Tooltip,
@@ -25,6 +27,7 @@ const TIME_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
 })
 
 export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
+  useTranslation()
   const segments = useMemo(() => buildHealthSegments(props.item), [props.item])
   const total = segments.length || 1
   const bucketSeconds =
@@ -59,8 +62,10 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
                 </div>
                 <div className='text-background/80 text-xs'>
                   {bucket.request_count > 0 && bucket.success_rate != null
-                    ? `成功率 ${bucket.success_rate.toFixed(1)}%`
-                    : '该时间段暂无请求样本'}
+                    ? i18n.t('成功率 {{param0}}%', {
+                        param0: bucket.success_rate.toFixed(1),
+                      })
+                    : i18n.t('该时间段暂无请求样本')}
                 </div>
               </div>
             </TooltipContent>
@@ -69,10 +74,19 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
       </div>
 
       <div className='text-muted-foreground flex items-center gap-x-3 text-[10px]'>
-        <LegendSwatch className={SEGMENT_CLASS.healthy} label='稳定' />
-        <LegendSwatch className={SEGMENT_CLASS.unstable} label='波动' />
-        <LegendSwatch className={SEGMENT_CLASS.failed} label='异常' />
-        <LegendSwatch className={SEGMENT_CLASS.unknown} label='无样本' />
+        <LegendSwatch
+          className={SEGMENT_CLASS.healthy}
+          label={i18n.t('稳定')}
+        />
+        <LegendSwatch
+          className={SEGMENT_CLASS.unstable}
+          label={i18n.t('波动')}
+        />
+        <LegendSwatch className={SEGMENT_CLASS.failed} label={i18n.t('异常')} />
+        <LegendSwatch
+          className={SEGMENT_CLASS.unknown}
+          label={i18n.t('无样本')}
+        />
       </div>
     </div>
   )
@@ -103,9 +117,12 @@ function buildBucketLabel(
 ) {
   const range = formatBucketRange(bucket.ts, bucketSeconds)
   if (bucket.request_count <= 0 || bucket.success_rate == null) {
-    return `${range}，暂无请求样本`
+    return i18n.t('{{range}}，暂无请求样本', { range })
   }
-  return `${range}，成功率 ${bucket.success_rate.toFixed(1)}%`
+  return i18n.t('{{range}}，成功率 {{rate}}%', {
+    range,
+    rate: bucket.success_rate.toFixed(1),
+  })
 }
 
 function inferBucketSeconds(sampleWindowHours: number, segmentCount: number) {

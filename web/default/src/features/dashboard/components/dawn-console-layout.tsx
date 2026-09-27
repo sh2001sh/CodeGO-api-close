@@ -33,6 +33,7 @@ interface DawnConsoleLayoutProps {
  */
 export function DawnConsoleLayout({ children }: DawnConsoleLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   return (
     <LayoutProvider>
@@ -42,10 +43,12 @@ export function DawnConsoleLayout({ children }: DawnConsoleLayoutProps) {
           <div className='dawn-console-body'>
             <DawnConsoleSidebar
               open={sidebarOpen}
+              collapsed={sidebarCollapsed}
+              onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
               onNavigate={() => setSidebarOpen(false)}
             />
             <div
-              className={`dawn-console-scrim${sidebarOpen ? ' show' : ''}`}
+              className={`dawn-console-scrim${sidebarOpen ? 'show' : ''}`}
               onClick={() => setSidebarOpen(false)}
               aria-hidden
             />

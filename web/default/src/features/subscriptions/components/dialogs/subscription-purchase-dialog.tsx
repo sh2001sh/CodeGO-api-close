@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import i18n from '@/i18n/config'
 import {
   CalendarClock,
   CheckCircle2,
@@ -10,7 +11,7 @@ import {
   QrCode,
   XCircle,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -30,6 +31,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  translatePlanAction,
+  translatePlanSubtitle,
+  translatePlanTitle,
+} from '@/features/packages/lib/display'
+import {
   getSubscriptionOrderStatus,
   cancelSubscriptionOrder,
   paySubscriptionCreem,
@@ -43,10 +49,6 @@ import {
   formatSubscriptionPlanPrice,
   formatSubscriptionQuotaAmount,
   getSubscriptionDisabledReasonText,
-  getSubscriptionPlanActionLabel,
-  getSubscriptionPlanDetailText,
-  getSubscriptionPlanDiscountText,
-  getSubscriptionPlanSubtitle,
   isMonthlyCardPlan,
   normalizeSubscriptionText,
 } from '../../lib'
@@ -108,14 +110,16 @@ function getMethodLabel(
   t: (key: string) => string
 ): string {
   if (type === 'xunhu') {
-    return '微信支付（XunhuPay）'
+    return `${t('微信支付')} (XunhuPay)`
   }
   if (type === 'wxpay') {
-    return '微信支付'
+    return t('微信支付')
   }
   return (
-    normalizeSubscriptionText(
-      methods.find((item) => item.type === type)?.name
+    t(
+      normalizeSubscriptionText(
+        methods.find((item) => item.type === type)?.name
+      ) || type
     ) ||
     type ||
     t('Pay')
@@ -326,24 +330,18 @@ export function SubscriptionPurchaseDialog(props: Props) {
     effectiveAmount,
     plan.currency
   )
-  const actionLabel = getSubscriptionPlanActionLabel(planRecord.action, t)
+  const actionLabel = translatePlanAction(planRecord.action, t)
   const purchaseType = props.purchaseType || 'normal'
   const groupBuyId = props.groupBuyId || 0
   const isCollectivePurchase =
     purchaseType === 'group_buy' || purchaseType === 'join_group'
   const purchaseModeLabel =
     purchaseType === 'group_buy'
-      ? '开启集享计划'
+      ? t('开启集享计划')
       : purchaseType === 'join_group'
-        ? '参与集享计划'
+        ? t('参与集享计划')
         : actionLabel
-  const discountText = getSubscriptionPlanDiscountText(plan)
-  const detailText = getSubscriptionPlanDetailText(
-    plan,
-    totalAmount,
-    periodAmount,
-    t
-  )
+  const detailText = `${t('Validity')} ${formatDuration(plan, t)} · ${t('Base quota ({{currency}})', { currency: 'USD' })} ${formatSubscriptionQuotaAmount(totalAmount)}`
   const isMonthlyPlan = isMonthlyCardPlan(plan)
   const limitReached =
     (props.purchaseLimit || 0) > 0 &&
@@ -618,7 +616,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
           </div>
           <div className='min-w-0'>
             <div className='text-foreground text-sm font-semibold'>
-              {isFulfilling ? '正在发放套餐权益' : statusConfig.title}
+              {isFulfilling ? i18n.t('正在发放套餐权益') : statusConfig.title}
             </div>
             <p className='text-muted-foreground mt-1 text-sm leading-6'>
               {paymentTracker.message}
@@ -627,16 +625,25 @@ export function SubscriptionPurchaseDialog(props: Props) {
         </div>
 
         <div className='grid gap-2 sm:grid-cols-2'>
-          <StatusItem label='操作类型' value={paymentTracker.actionLabel} />
-          <StatusItem label='支付方式' value={paymentTracker.methodLabel} />
           <StatusItem
-            label='应付金额'
+            label={i18n.t('操作类型')}
+            value={paymentTracker.actionLabel}
+          />
+          <StatusItem
+            label={i18n.t('支付方式')}
+            value={paymentTracker.methodLabel}
+          />
+          <StatusItem
+            label={i18n.t('应付金额')}
             value={formatSubscriptionPlanPrice(
               paymentTracker.amountDue,
               plan.currency
             )}
           />
-          <StatusItem label='订单号' value={paymentTracker.orderId || '-'} />
+          <StatusItem
+            label={i18n.t('订单号')}
+            value={paymentTracker.orderId || '-'}
+          />
         </div>
 
         {paymentTracker.qrCodeUrl && paymentTracker.stage === 'pending' ? (
@@ -649,7 +656,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
               />
             </div>
             <p className='text-muted-foreground text-center text-xs'>
-              请使用微信扫码完成支付。
+              <Trans i18nKey={'请使用微信扫码完成支付。'} />
             </p>
           </div>
         ) : null}
@@ -661,7 +668,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
               onClick={() => window.open(paymentTracker.externalUrl, '_blank')}
             >
               <ExternalLink className='mr-1 h-4 w-4' />
-              打开支付页面
+              <Trans i18nKey={'打开支付页面'} />
             </Button>
           ) : null}
 
@@ -671,11 +678,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
               onClick={() => void cancelPendingPayment()}
               disabled={paying}
             >
-              取消支付
+              <Trans i18nKey={'取消支付'} />
             </Button>
           ) : (
             <Button variant='default' onClick={() => handleOpenChange(false)}>
-              关闭
+              <Trans i18nKey={'关闭'} />
             </Button>
           )}
         </div>
@@ -701,19 +708,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   <div className='min-w-0'>
                     <div className='mb-2 flex flex-wrap items-center gap-2'>
                       <span className='bg-foreground text-background rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em]'>
-                        套餐
+                        <Trans i18nKey={'套餐'} />
                       </span>
-                      {discountText ? (
-                        <span className='border-warning/20 bg-warning/10 text-warning rounded-full border px-3 py-1 text-[12px] font-semibold'>
-                          {discountText}
-                        </span>
-                      ) : null}
                     </div>
                     <p className='text-primary text-[11px] font-semibold tracking-[0.22em] uppercase'>
-                      {getSubscriptionPlanSubtitle(plan)}
+                      {translatePlanSubtitle(plan, t)}
                     </p>
                     <h3 className='text-foreground mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl'>
-                      {normalizeSubscriptionText(plan.title) || t('Plan Name')}
+                      {translatePlanTitle(plan.title, t)}
                     </h3>
                     <p className='text-muted-foreground mt-2 text-sm leading-6'>
                       {detailText}
@@ -730,13 +732,23 @@ export function SubscriptionPurchaseDialog(props: Props) {
                       {displayPrice}
                     </div>
                     <div className='text-muted-foreground mt-1 text-xs'>
-                      应付金额
+                      <Trans i18nKey={'应付金额'} />
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className='px-4 py-4 sm:px-5'>
+                <div className='border-primary/25 bg-primary/5 mb-4 rounded-lg border px-3 py-3 text-sm'>
+                  <p className='font-semibold'>
+                    {t('Package multiplier is 10× the wallet multiplier.')}
+                  </p>
+                  <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>
+                    {t(
+                      'For the same model and group, package quota is deducted at 10× the wallet rate. Package quota and wallet balance are not equivalent.'
+                    )}
+                  </p>
+                </div>
                 <PackageModelScopeNotice className='mb-4' />
                 {firstPurchaseDiscountApplied ? (
                   <div className='border-primary/25 bg-primary/5 mb-4 flex items-start gap-3 rounded-lg border px-4 py-3'>
@@ -746,10 +758,16 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     />
                     <div>
                       <p className='text-foreground text-sm font-semibold'>
-                        套餐首购 {Number(firstPurchaseDiscount.toFixed(1))} 折
+                        <Trans i18nKey={'套餐首购'} />{' '}
+                        {Number(firstPurchaseDiscount.toFixed(1))}{' '}
+                        <Trans i18nKey={'折'} />
                       </p>
                       <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-                        优惠已自动应用于你的首次月卡购买，本订单不会同时消耗盲盒套餐折扣卡。
+                        <Trans
+                          i18nKey={
+                            '优惠已自动应用于你的首次月卡购买，本订单不会同时消耗盲盒套餐折扣卡。'
+                          }
+                        />
                       </p>
                     </div>
                   </div>
@@ -762,11 +780,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     />
                     <div>
                       <p className='text-foreground text-sm font-semibold'>
-                        本订单将参与集享计划
+                        <Trans i18nKey={'本订单将参与集享计划'} />
                       </p>
                       <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-                        支付后基础额度立即生效。本期达到满额档或持续 48
-                        小时后，系统会按照最终参与档位自动补发额度差额。
+                        <Trans
+                          i18nKey={
+                            '支付后基础额度立即生效。本期达到满额档或持续 48 小时后，系统会按照最终参与档位自动补发额度差额。'
+                          }
+                        />
                       </p>
                     </div>
                   </div>
@@ -775,7 +796,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   {summaryItems.map((item) => (
                     <SummaryItem
                       key={item.label}
-                      label={item.label}
+                      label={t(item.label)}
                       value={item.value}
                     />
                   ))}
@@ -786,8 +807,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
             {limitReached ? (
               <Alert variant='destructive'>
                 <AlertDescription>
-                  已达到该套餐购买上限（{props.purchaseCount}/
-                  {props.purchaseLimit}）。
+                  <Trans i18nKey={'已达到该套餐购买上限（'} />
+                  {props.purchaseCount}/{props.purchaseLimit}）。
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -805,7 +826,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                 <div className='app-page-shell p-4'>
                   <div className='text-foreground mb-3 flex items-center gap-2 text-sm font-medium'>
                     <QrCode className='text-primary h-4 w-4' />
-                    选择支付方式
+                    <Trans i18nKey={'选择支付方式'} />
                   </div>
 
                   <div className='space-y-3'>
@@ -870,7 +891,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
               ) : (
                 <Alert>
                   <AlertDescription>
-                    当前套餐暂未配置可用支付方式。
+                    <Trans i18nKey={'当前套餐暂未配置可用支付方式。'} />
                   </AlertDescription>
                 </Alert>
               )

@@ -17,8 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com.
 */
 import { useEffect, type ReactNode } from 'react'
+import i18n from '@/i18n/config'
 import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 
 export function DawnModal(props: {
   open: boolean
@@ -55,7 +57,7 @@ export function DawnModal(props: {
         aria-label={label ?? 'dialog'}
       >
         <div
-          className={`box${variant === 'narrow' ? ' narrow' : ''}${variant === 'plain' ? ' plain' : ''}`}
+          className={`box${variant === 'narrow' ? 'narrow' : ''}${variant === 'plain' ? 'plain' : ''}`}
         >
           {children}
         </div>
@@ -66,10 +68,11 @@ export function DawnModal(props: {
 }
 
 export function ModalHead(props: { title: string; onClose: () => void }) {
+  useTranslation()
   return (
     <div className='m-head'>
       <h3>{props.title}</h3>
-      <button className='x' onClick={props.onClose} aria-label='关闭'>
+      <button className='x' onClick={props.onClose} aria-label={i18n.t('关闭')}>
         <X size={18} />
       </button>
     </div>

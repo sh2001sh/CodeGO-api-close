@@ -1,4 +1,6 @@
+import i18n from '@/i18n/config'
 import { Gift, type LucideIcon } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 
@@ -8,6 +10,7 @@ export function BalanceBoxQuantityControl(props: {
   disabled: boolean
   onChange: (count: number) => void
 }) {
+  useTranslation()
   return (
     <div>
       <div className='flex flex-wrap items-baseline justify-between gap-2'>
@@ -15,10 +18,10 @@ export function BalanceBoxQuantityControl(props: {
           className='text-foreground text-sm font-semibold'
           htmlFor='balance-box-count'
         >
-          盲盒数量
+          <Trans i18nKey={'盲盒数量'} />
         </label>
         <span className='text-muted-foreground text-xs'>
-          单次最多 {props.max}
+          <Trans i18nKey={'单次最多'} /> {props.max}
         </span>
       </div>
       <div className='mt-2.5 flex min-w-0 flex-wrap items-center gap-1.5'>
@@ -47,7 +50,7 @@ export function BalanceBoxQuantityControl(props: {
           max={props.max}
           value={props.count}
           disabled={props.disabled}
-          aria-label='自定义盲盒数量'
+          aria-label={i18n.t('自定义盲盒数量')}
           className='h-9 w-20 max-w-full'
           onChange={(event) =>
             props.onChange(

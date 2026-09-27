@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18n from '@/i18n/config'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
@@ -37,12 +38,12 @@ export function Channels() {
     <ChannelsProvider>
       <SectionPageLayout>
         <SectionPageLayout.Title>
-          {showRouting ? '渠道与智能路由' : t('Channels')}
+          {showRouting ? i18n.t('渠道与智能路由') : t('Channels')}
         </SectionPageLayout.Title>
         <SectionPageLayout.Description>
           {showRouting
-            ? '按渠道已配置分组管理自动路由、渠道启用状态和采购倍率。'
-            : '维护上游接入、凭据和模型能力。'}
+            ? i18n.t('按渠道已配置分组管理自动路由、渠道启用状态和采购倍率。')
+            : i18n.t('维护上游接入、凭据和模型能力。')}
         </SectionPageLayout.Description>
         <SectionPageLayout.Actions>
           <ChannelsPrimaryButtons />

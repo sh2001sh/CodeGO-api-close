@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import i18n from '@/i18n/config'
 import {
   CalendarDays,
   Clock3,
@@ -11,6 +12,7 @@ import {
   Sparkles,
   TicketPercent,
 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -94,10 +96,11 @@ export function BlindBoxHistorySheet(props: {
         <SheetHeader className='border-b px-5 py-4 pr-14'>
           <SheetTitle className='flex items-center gap-2'>
             <CalendarDays className='text-primary size-5' />
-            开奖历史
+            <Trans i18nKey={'开奖历史'} />
           </SheetTitle>
           <SheetDescription>
-            展示最近 {data?.retention_days || 30} 天的抽取结果和具体奖励
+            <Trans i18nKey={'展示最近'} /> {data?.retention_days || 30}{' '}
+            <Trans i18nKey={'天的抽取结果和具体奖励'} />
           </SheetDescription>
         </SheetHeader>
 
@@ -105,7 +108,7 @@ export function BlindBoxHistorySheet(props: {
           {loading ? (
             <div className='text-muted-foreground flex min-h-48 items-center justify-center gap-2 text-sm'>
               <Loader2 className='size-4 animate-spin' />
-              正在加载开奖记录
+              <Trans i18nKey={'正在加载开奖记录'} />
             </div>
           ) : error ? (
             <div className='border-destructive/30 bg-destructive/5 text-destructive rounded-xl border px-4 py-6 text-center text-sm'>
@@ -113,7 +116,7 @@ export function BlindBoxHistorySheet(props: {
             </div>
           ) : !data?.records.length ? (
             <div className='border-border text-muted-foreground rounded-xl border border-dashed px-4 py-10 text-center text-sm'>
-              最近 30 天还没有抽取记录
+              <Trans i18nKey={'最近 30 天还没有抽取记录'} />
             </div>
           ) : (
             <div className='space-y-2.5'>
@@ -127,7 +130,9 @@ export function BlindBoxHistorySheet(props: {
         <div className='border-t px-5 py-3'>
           <div className='flex items-center justify-between gap-3'>
             <div className='text-muted-foreground text-xs tabular-nums'>
-              共 {data?.total || 0} 条 · 第 {page}/{totalPages} 页
+              <Trans i18nKey={'共'} /> {data?.total || 0}{' '}
+              <Trans i18nKey={'条 · 第'} /> {page}/{totalPages}{' '}
+              <Trans i18nKey={'页'} />
             </div>
             <div className='flex gap-2'>
               <Button
@@ -138,7 +143,7 @@ export function BlindBoxHistorySheet(props: {
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
               >
                 <ChevronLeft className='size-4' />
-                上一页
+                <Trans i18nKey={'上一页'} />
               </Button>
               <Button
                 type='button'
@@ -149,7 +154,7 @@ export function BlindBoxHistorySheet(props: {
                   setPage((current) => Math.min(totalPages, current + 1))
                 }
               >
-                下一页
+                <Trans i18nKey={'下一页'} />
                 <ChevronRight className='size-4' />
               </Button>
             </div>
@@ -189,7 +194,9 @@ function HistoryRecord(props: { record: BlindBoxRecord }) {
           </div>
           {record.lucky_number ? <LuckyNumberHistory record={record} /> : null}
           <div className='mt-2 flex flex-wrap gap-1.5'>
-            <HistoryTag>统一盲盒</HistoryTag>
+            <HistoryTag>
+              <Trans i18nKey={'统一盲盒'} />
+            </HistoryTag>
             <HistoryTag>{detail.type}</HistoryTag>
             {record.is_pity ? (
               <HistoryTag>{blindBoxGuaranteeLabel(record)}</HistoryTag>
@@ -219,20 +226,25 @@ function RewardIcon(props: { record: BlindBoxRecord }) {
 }
 
 function LuckyNumberHistory(props: { record: BlindBoxRecord }) {
+  useTranslation()
   const { record } = props
 
   return (
     <div className='border-primary/20 bg-primary/[0.045] mt-2.5 flex flex-col gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between'>
       <div className='flex min-w-0 items-center gap-2'>
         <Hash className='text-primary size-4 shrink-0' aria-hidden='true' />
-        <span className='text-muted-foreground shrink-0 text-xs'>幸运号</span>
+        <span className='text-muted-foreground shrink-0 text-xs'>
+          <Trans i18nKey={'幸运号'} />
+        </span>
         <span className='text-foreground font-mono text-base font-semibold tracking-widest tabular-nums'>
           {record.lucky_number}
         </span>
       </div>
       <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
         <Clock3 className='size-3.5 shrink-0' aria-hidden='true' />
-        仅限 {record.lucky_draw_date || '开出当日'} 有效
+        <Trans i18nKey={'仅限'} />{' '}
+        {record.lucky_draw_date || i18n.t('开出当日')}{' '}
+        <Trans i18nKey={'有效'} />
       </div>
     </div>
   )

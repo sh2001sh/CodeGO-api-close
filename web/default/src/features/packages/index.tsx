@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import i18n from '@/i18n/config'
 import {
   Activity,
   BookOpenText,
@@ -25,7 +27,7 @@ import {
   RefreshCw,
   Wallet,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { TitledCard } from '@/components/ui/titled-card'
@@ -33,6 +35,8 @@ import {
   CardStaggerContainer,
   CardStaggerItem,
 } from '@/components/page-transition'
+import { GroupBuyRecords } from '@/features/group-buy'
+import { getGroupBuyList } from '@/features/group-buy/api'
 import { SubscriptionFuelDialog } from '@/features/subscriptions/components/dialogs/subscription-fuel-dialog'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
 import { PackageModelScopeNotice } from '@/features/subscriptions/components/package-model-scope-notice'
@@ -100,6 +104,21 @@ function useGroupedPlans(plans: PlanRecord[]) {
 export function PackagesPage() {
   const { t } = useTranslation()
   const workspace = useWalletWorkspace()
+  const queryClient = useQueryClient()
+  const collectiveQuery = useQuery({
+    queryKey: ['group-buy', 'list'],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const response = await getGroupBuyList()
+      if (!response.success || !response.data)
+        throw new Error(
+          response.message || t('Unable to load collective plans.')
+        )
+      return response
+    },
+  })
+  const collectiveRooms = collectiveQuery.data?.data?.data ?? []
+  const [selectedGroupBuyId, setSelectedGroupBuyId] = useState(0)
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
   const [selectedPurchaseType, setSelectedPurchaseType] =
     useState<SubscriptionPurchaseType>('normal')
@@ -159,6 +178,7 @@ export function PackagesPage() {
       await Promise.all([
         workspace.fetchPublicPlans(),
         workspace.fetchSubscriptionData(),
+        collectiveQuery.refetch(),
       ])
     } finally {
       setRefreshing(false)
@@ -167,8 +187,10 @@ export function PackagesPage() {
 
   const openPurchase = (
     record: PlanRecord,
-    purchaseType: SubscriptionPurchaseType = 'normal'
+    purchaseType: SubscriptionPurchaseType = 'normal',
+    groupBuyId = 0
   ) => {
+    setSelectedGroupBuyId(groupBuyId)
     setSelectedPlan(record)
     setSelectedPurchaseType(purchaseType)
     setPurchaseOpen(true)
@@ -188,7 +210,7 @@ export function PackagesPage() {
                 <div className='min-w-0'>
                   <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
                     <Wallet className='text-primary size-3.5' />
-                    通用余额
+                    <Trans i18nKey={'通用余额'} />
                   </div>
                   <div className='text-foreground mt-1 truncate text-2xl font-bold tabular-nums'>
                     {formatQuotaDisplay(workspace.user?.quota)}
@@ -196,7 +218,7 @@ export function PackagesPage() {
                 </div>
                 <div className='min-w-0'>
                   <div className='text-muted-foreground text-xs'>
-                    账本累计消耗
+                    <Trans i18nKey={'账本累计消耗'} />
                   </div>
                   <div className='text-foreground mt-1 truncate text-lg font-semibold tabular-nums'>
                     {formatQuotaDisplay(workspace.user?.used_quota)}
@@ -205,7 +227,7 @@ export function PackagesPage() {
                 <div className='min-w-0'>
                   <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
                     <Activity className='text-primary size-3.5' />
-                    API 请求
+                    <Trans i18nKey={'API 请求'} />
                   </div>
                   <div className='text-foreground mt-1 truncate text-lg font-semibold tabular-nums'>
                     {(workspace.user?.request_count ?? 0).toLocaleString()}
@@ -214,7 +236,7 @@ export function PackagesPage() {
                 <div className='min-w-0'>
                   <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
                     <Crown className='text-primary size-3.5' />
-                    生效订阅
+                    <Trans i18nKey={'生效订阅'} />
                   </div>
                   <div className='text-foreground mt-1 truncate text-lg font-semibold tabular-nums'>
                     {workspace.subscriptionData?.subscriptions?.length ?? 0}
@@ -254,6 +276,27 @@ export function PackagesPage() {
                 }
                 contentClassName='space-y-5'
               >
+                {collectiveQuery.isError && (
+                  <div role='alert' className='text-destructive text-sm'>
+                    {t('Unable to load collective plans.')}{' '}
+                    <Button
+                      variant='link'
+                      onClick={() => void collectiveQuery.refetch()}
+                    >
+                      {t('Try again')}
+                    </Button>
+                  </div>
+                )}
+                <div className='border-primary/25 bg-primary/5 rounded-lg border px-4 py-3'>
+                  <p className='text-foreground text-sm font-semibold'>
+                    {t('Package multiplier is 10× the wallet multiplier.')}
+                  </p>
+                  <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>
+                    {t(
+                      'For the same model and group, package quota is deducted at 10× the wallet rate. Package quota and wallet balance are not equivalent.'
+                    )}
+                  </p>
+                </div>
                 <details className='codego-package-rules group rounded-lg border'>
                   <summary className='flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3'>
                     <span className='text-foreground flex items-center gap-2 text-[13px] font-semibold'>
@@ -285,6 +328,7 @@ export function PackagesPage() {
                       plans={groupedPlans[zone.id]}
                       loading={workspace.publicPlansLoading}
                       onPurchase={openPurchase}
+                      collectiveRooms={collectiveRooms}
                       purchaseCountMap={purchaseCountMap}
                       subscriptions={
                         workspace.subscriptionData?.subscriptions ?? []
@@ -300,6 +344,7 @@ export function PackagesPage() {
                     plans={groupedPlans.shortterm}
                     loading={workspace.publicPlansLoading}
                     onPurchase={openPurchase}
+                    collectiveRooms={collectiveRooms}
                     purchaseCountMap={purchaseCountMap}
                     subscriptions={
                       workspace.subscriptionData?.subscriptions ?? []
@@ -308,6 +353,9 @@ export function PackagesPage() {
                   />
                 )}
               </TitledCard>
+            </CardStaggerItem>
+            <CardStaggerItem>
+              <GroupBuyRecords />
             </CardStaggerItem>
           </CardStaggerContainer>
         }
@@ -325,7 +373,7 @@ export function PackagesPage() {
                 }
               }
               compact
-              title='套餐额度刷新'
+              title={i18n.t('套餐额度刷新')}
             />
           </div>
         }
@@ -338,6 +386,7 @@ export function PackagesPage() {
           if (!open) {
             void workspace.fetchPublicPlans()
             void workspace.fetchSubscriptionData()
+            void queryClient.invalidateQueries({ queryKey: ['group-buy'] })
           }
         }}
         plan={selectedPlan}
@@ -347,6 +396,7 @@ export function PackagesPage() {
         epayMethods={epayMethods}
         purchaseLimit={selectedPlan?.plan?.max_purchase_per_user || undefined}
         purchaseType={selectedPurchaseType}
+        groupBuyId={selectedGroupBuyId}
         purchaseCount={
           selectedPlan?.plan?.id
             ? purchaseCountMap.get(selectedPlan.plan.id)

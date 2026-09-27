@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import { useTranslation } from 'react-i18next'
 import { SiteSeo } from '@/components/seo'
 import { AuthLayout } from '../auth-layout'
@@ -27,8 +28,10 @@ export function ForgotPassword() {
   return (
     <AuthLayout>
       <SiteSeo
-        title='找回密码'
-        description='找回 Code Go 账户密码并重新访问你的控制台、API Key 与模型配置。'
+        title={i18n.t('找回密码')}
+        description={i18n.t(
+          '找回 Code Go 账户密码并重新访问你的控制台、API Key 与模型配置。'
+        )}
         canonicalPath='/forgot-password'
         robots='noindex,follow'
       />

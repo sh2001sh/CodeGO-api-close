@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StaggerContainer, StaggerItem } from '@/components/page-transition'
 import { SubscriptionLuckySummary } from '@/features/daily-lucky-number/components/subscription-lucky-summary'
 import { useDailyLuckyNumberSelf } from '@/features/daily-lucky-number/hooks/use-daily-lucky-number'
+import type { GroupBuyItem } from '@/features/group-buy/types'
 import {
   getSubscriptionDisabledReasonText,
   formatSubscriptionQuotaAmount,
@@ -49,10 +50,12 @@ export function PlanZone(props: {
   description: string
   plans: PlanRecord[]
   loading: boolean
+  collectiveRooms?: GroupBuyItem[]
   purchaseCountMap: Map<number, number>
   onPurchase: (
     record: PlanRecord,
-    purchaseType?: SubscriptionPurchaseType
+    purchaseType?: SubscriptionPurchaseType,
+    groupBuyId?: number
   ) => void
   subscriptions: UserSubscriptionRecord[]
   onFuel?: (
@@ -84,9 +87,12 @@ export function PlanZone(props: {
             <StaggerItem key={record.plan.id}>
               <PackagePlanCard
                 record={record}
+                collectiveRoom={props.collectiveRooms?.find(
+                  (room) => room.plan_id === record.plan.id
+                )}
                 purchaseCount={props.purchaseCountMap.get(record.plan.id) || 0}
-                onPurchase={(purchaseType) =>
-                  props.onPurchase(record, purchaseType)
+                onPurchase={(purchaseType, groupBuyId) =>
+                  props.onPurchase(record, purchaseType, groupBuyId)
                 }
                 currentSubscription={props.subscriptions.find(
                   (item) => item.subscription.plan_id === record.plan.id

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import {
   ChevronsUpDown,
   Sparkles,
@@ -27,6 +28,7 @@ import {
   Waypoints,
   X,
 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import {
@@ -67,6 +69,7 @@ import {
   readActiveRoutePoolID,
 } from '@/features/marketplace/lib/active-route-pool'
 import { MARKETPLACE_SOURCE_OPTIONS } from '@/features/marketplace/lib/channel-form'
+import { localizedSourceLabel } from '@/features/marketplace/lib/localized-group-name'
 import { MOCK_MARKETPLACE_GROUPS } from '@/features/marketplace/lib/mock-data'
 import type {
   GroupFilters,
@@ -109,6 +112,7 @@ function ModelMultiSelect(props: {
   selected: string[]
   onChange: (models: string[]) => void
 }) {
+  useTranslation()
   const [open, setOpen] = useState(false)
   const selected = new Set(props.selected.map((model) => model.toLowerCase()))
 
@@ -130,14 +134,16 @@ function ModelMultiSelect(props: {
             className={`fbtn market-model-filter${props.selected.length ? 'on' : ''}`}
             role='combobox'
             aria-expanded={open}
-            aria-label='筛选模型'
+            aria-label={i18n.t('筛选模型')}
           />
         }
       >
         <span>
           {props.selected.length > 0
-            ? `已选 ${props.selected.length} 个模型`
-            : '筛选模型'}
+            ? i18n.t('已选 {{param0}} 个模型', {
+                param0: props.selected.length,
+              })
+            : i18n.t('筛选模型')}
         </span>
         <ChevronsUpDown size={14} aria-hidden='true' />
       </PopoverTrigger>
@@ -146,9 +152,11 @@ function ModelMultiSelect(props: {
         align='start'
       >
         <Command>
-          <CommandInput placeholder='搜索模型' />
+          <CommandInput placeholder={i18n.t('搜索模型')} />
           <CommandList className='max-h-72'>
-            <CommandEmpty>没有匹配的模型</CommandEmpty>
+            <CommandEmpty>
+              <Trans i18nKey={'没有匹配的模型'} />
+            </CommandEmpty>
             <CommandGroup>
               {props.models.map((model) => {
                 const checked = selected.has(model.toLowerCase())
@@ -172,7 +180,7 @@ function ModelMultiSelect(props: {
               onClick={() => props.onChange([])}
             >
               <X size={14} />
-              清空模型筛选
+              <Trans i18nKey={'清空模型筛选'} />
             </button>
           )}
         </Command>
@@ -182,6 +190,7 @@ function ModelMultiSelect(props: {
 }
 
 export function DawnMarket() {
+  useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const authed = !!user
   const multiplierNotices = useMarketplaceMultiplierNotices(authed)
@@ -560,8 +569,8 @@ export function DawnMarket() {
   return (
     <div className='dawn'>
       <SiteSeo
-        title='分组市场 | Code Go'
-        description='分组市场 · 倍率与实时指标'
+        title={i18n.t('分组市场 | Code Go')}
+        description={i18n.t('分组市场 · 倍率与实时指标')}
         canonicalPath='/market'
       />
       <DawnNav />
@@ -573,7 +582,11 @@ export function DawnMarket() {
               AI RESOURCES MARKET
             </div>
             <h1>
-              万象，<em>明码标价</em>。
+              <Trans i18nKey={'万象，'} />
+              <em>
+                <Trans i18nKey={'明码标价'} />
+              </em>
+              <Trans i18nKey={'。'} />
             </h1>
           </div>
           <div className='seg'>
@@ -582,7 +595,7 @@ export function DawnMarket() {
               onClick={() => setPerspective('user')}
             >
               <User size={14} />
-              使用者
+              <Trans i18nKey={'使用者'} />
             </button>
             <button
               className={perspective === 'owner' ? 'on' : ''}
@@ -595,7 +608,7 @@ export function DawnMarket() {
               }}
             >
               <Store size={14} />
-              渠道主
+              <Trans i18nKey={'渠道主'} />
             </button>
           </div>
         </div>
@@ -608,14 +621,14 @@ export function DawnMarket() {
             >
               <div className='filters'>
                 <input
-                  placeholder='输入模型 ID，如 gpt-6-astra'
+                  placeholder={i18n.t('输入模型 ID，如 gpt-6-astra')}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
                 <select
                   className='fbtn'
                   value={`${filters.sort}:${filters.direction}`}
-                  aria-label='市场排序'
+                  aria-label={i18n.t('市场排序')}
                   onChange={(event) => {
                     const [sort, direction] = event.target.value.split(':')
                     setFilters((current) => ({
@@ -626,24 +639,40 @@ export function DawnMarket() {
                     }))
                   }}
                 >
-                  <option value='score:desc'>综合评分</option>
-                  <option value='consumer_amount:asc'>综合实扣最低</option>
-                  <option value='consumer_amount:desc'>综合实扣最高</option>
+                  <option value='score:desc'>
+                    <Trans i18nKey={'综合评分'} />
+                  </option>
+                  <option value='consumer_amount:asc'>
+                    <Trans i18nKey={'综合实扣最低'} />
+                  </option>
+                  <option value='consumer_amount:desc'>
+                    <Trans i18nKey={'综合实扣最高'} />
+                  </option>
                   {(filters.models?.length ?? 0) > 0 && (
                     <option value='model_consumer_amount:asc'>
-                      所选模型实扣最低
+                      <Trans i18nKey={'所选模型实扣最低'} />
                     </option>
                   )}
                   {(filters.models?.length ?? 0) > 0 && (
                     <option value='model_consumer_amount:desc'>
-                      所选模型实扣最高
+                      <Trans i18nKey={'所选模型实扣最高'} />
                     </option>
                   )}
-                  <option value='success_rate:desc'>成功率最高</option>
-                  <option value='success_rate:asc'>成功率最低</option>
-                  <option value='ttft:asc'>首字最快</option>
-                  <option value='requests:desc'>调用次数最多</option>
-                  <option value='name:asc'>名称首字母</option>
+                  <option value='success_rate:desc'>
+                    <Trans i18nKey={'成功率最高'} />
+                  </option>
+                  <option value='success_rate:asc'>
+                    <Trans i18nKey={'成功率最低'} />
+                  </option>
+                  <option value='ttft:asc'>
+                    <Trans i18nKey={'首字最快'} />
+                  </option>
+                  <option value='requests:desc'>
+                    <Trans i18nKey={'调用次数最多'} />
+                  </option>
+                  <option value='name:asc'>
+                    <Trans i18nKey={'名称首字母'} />
+                  </option>
                 </select>
                 <ModelMultiSelect
                   models={filterModels}
@@ -664,7 +693,7 @@ export function DawnMarket() {
                 <select
                   className='fsel market-source-filter'
                   value={filters.source}
-                  aria-label='市场来源'
+                  aria-label={i18n.t('市场来源')}
                   onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
@@ -673,18 +702,22 @@ export function DawnMarket() {
                     }))
                   }
                 >
-                  <option value=''>全部来源</option>
-                  <option value='官方'>官方</option>
+                  <option value=''>
+                    <Trans i18nKey={'全部来源'} />
+                  </option>
+                  <option value='官方'>
+                    <Trans i18nKey={'官方'} />
+                  </option>
                   {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
                     <option key={source} value={source}>
-                      {source}
+                      {localizedSourceLabel(source, i18n.language)}
                     </option>
                   ))}
                 </select>
                 <select
                   className='fsel'
                   value={filters.multiplier_card ?? ''}
-                  aria-label='倍率卡支持'
+                  aria-label={i18n.t('倍率卡支持')}
                   onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
@@ -696,9 +729,15 @@ export function DawnMarket() {
                     }))
                   }
                 >
-                  <option value=''>倍率卡：全部</option>
-                  <option value='supported'>支持倍率卡</option>
-                  <option value='unsupported'>不支持倍率卡</option>
+                  <option value=''>
+                    <Trans i18nKey={'倍率卡：全部'} />
+                  </option>
+                  <option value='supported'>
+                    <Trans i18nKey={'支持倍率卡'} />
+                  </option>
+                  <option value='unsupported'>
+                    <Trans i18nKey={'不支持倍率卡'} />
+                  </option>
                 </select>
                 <div className='market-actions'>
                   {import.meta.env.DEV && (
@@ -706,7 +745,7 @@ export function DawnMarket() {
                       className={mockMode ? 'fbtn on' : 'fbtn'}
                       onClick={() => setMockMode((current) => !current)}
                     >
-                      {mockMode ? '示例数据：开' : '示例数据'}
+                      {mockMode ? i18n.t('示例数据：开') : i18n.t('示例数据')}
                     </button>
                   )}
                   <button
@@ -721,7 +760,7 @@ export function DawnMarket() {
                     }}
                   >
                     <Waypoints size={14} />
-                    新建路由池
+                    <Trans i18nKey={'新建路由池'} />
                   </button>
                   <button
                     className='btn'
@@ -735,7 +774,7 @@ export function DawnMarket() {
                     }}
                   >
                     <Sparkles size={14} />
-                    智能新建池
+                    <Trans i18nKey={'智能新建池'} />
                   </button>
                 </div>
               </div>
@@ -746,18 +785,23 @@ export function DawnMarket() {
                 !groupsQuery.isLoading &&
                 (!groupsQuery.isError || mockMode) && (
                   <div className='market-search-status' role='status'>
-                    {filters.search ? `搜索“${filters.search}”` : '当前筛选'}
+                    {filters.search
+                      ? i18n.t('搜索“{{param0}}”', { param0: filters.search })
+                      : i18n.t('当前筛选')}
                     {(filters.models?.length ?? 0) > 0
-                      ? ` · ${filters.models?.length} 个模型`
+                      ? i18n.t(' · {{param0}} 个模型', {
+                          param0: filters.models?.length,
+                        })
                       : ''}
                     {filters.source ? ` · ${filters.source}` : ''}
                     {filters.multiplier_card === 'supported'
-                      ? ' · 支持倍率卡'
+                      ? i18n.t(' · 支持倍率卡')
                       : filters.multiplier_card === 'unsupported'
-                        ? ' · 不支持倍率卡'
+                        ? i18n.t(' · 不支持倍率卡')
                         : ''}
-                    {' · 找到 '}
-                    {groupsQuery.data?.total ?? groups.length} 个分组
+                    {i18n.t(' · 找到 ')}
+                    {groupsQuery.data?.total ?? groups.length}{' '}
+                    <Trans i18nKey={'个分组'} />
                     <button
                       className='btn mini'
                       onClick={() => {
@@ -772,7 +816,7 @@ export function DawnMarket() {
                         }))
                       }}
                     >
-                      清除筛选
+                      <Trans i18nKey={'清除筛选'} />
                     </button>
                   </div>
                 )}
@@ -781,12 +825,14 @@ export function DawnMarket() {
                   <span className='eic'>
                     <Store size={20} className='animate-pulse' />
                   </span>
-                  <b>市场加载中</b>
+                  <b>
+                    <Trans i18nKey={'市场加载中'} />
+                  </b>
                 </div>
               ) : groupsQuery.isError && !mockMode ? (
                 <DawnQueryError
-                  title='市场数据加载失败'
-                  description='请检查网络连接后重试。'
+                  title={i18n.t('市场数据加载失败')}
+                  description={i18n.t('请检查网络连接后重试。')}
                   onRetry={() => void groupsQuery.refetch()}
                   retrying={groupsQuery.isFetching}
                 />
@@ -801,16 +847,22 @@ export function DawnMarket() {
                     )
                     // 搜索/筛选时只显示匹配结果，避免固定官方区块把结果推到首屏以下。
                     const sections = hasListFilter
-                      ? [{ key: 'results', title: '筛选结果', items: groups }]
+                      ? [
+                          {
+                            key: 'results',
+                            title: i18n.t('筛选结果'),
+                            items: groups,
+                          },
+                        ]
                       : [
                           {
                             key: 'official',
-                            title: '官方分组',
+                            title: i18n.t('官方分组'),
                             items: official,
                           },
                           {
                             key: 'third-party',
-                            title: '第三方分组',
+                            title: i18n.t('第三方分组'),
                             items: thirdParty,
                           },
                         ]
@@ -825,7 +877,10 @@ export function DawnMarket() {
                             <h2 id={`market-section-${section.key}`}>
                               {section.title}
                             </h2>
-                            <span>{section.items.length} 个分组</span>
+                            <span>
+                              {section.items.length}{' '}
+                              <Trans i18nKey={'个分组'} />
+                            </span>
                           </div>
                           {section.items.map((group) => (
                             <MarketGroupCard
@@ -878,7 +933,8 @@ export function DawnMarket() {
                         className='num'
                         style={{ color: 'var(--dawn-ink2)' }}
                       >
-                        第 {filters.page} / {totalPages} 页
+                        <Trans i18nKey={'第'} /> {filters.page} / {totalPages}{' '}
+                        <Trans i18nKey={'页'} />
                       </span>
                       <span style={{ display: 'flex', gap: 8 }}>
                         <input
@@ -887,7 +943,7 @@ export function DawnMarket() {
                           min={1}
                           max={totalPages}
                           value={filters.page}
-                          aria-label='跳转页码'
+                          aria-label={i18n.t('跳转页码')}
                           onChange={(event) => {
                             const page = Math.max(
                               1,
@@ -909,7 +965,7 @@ export function DawnMarket() {
                             }))
                           }
                         >
-                          上一页
+                          <Trans i18nKey={'上一页'} />
                         </button>
                         <button
                           className='btn mini'
@@ -921,7 +977,7 @@ export function DawnMarket() {
                             }))
                           }
                         >
-                          下一页
+                          <Trans i18nKey={'下一页'} />
                         </button>
                       </span>
                     </div>
@@ -934,13 +990,13 @@ export function DawnMarket() {
                   </span>
                   <b>
                     {hasListFilter
-                      ? '没有找到符合当前筛选的分组'
-                      : '市场分组上架中'}
+                      ? i18n.t('没有找到符合当前筛选的分组')
+                      : i18n.t('市场分组上架中')}
                   </b>
                   <span>
                     {hasListFilter
-                      ? '请尝试其他关键词或清除搜索条件'
-                      : '渠道检测通过后自动上架'}
+                      ? i18n.t('请尝试其他关键词或清除搜索条件')
+                      : i18n.t('渠道检测通过后自动上架')}
                   </span>
                   {hasListFilter && (
                     <button
@@ -957,7 +1013,7 @@ export function DawnMarket() {
                         }))
                       }}
                     >
-                      清除筛选
+                      <Trans i18nKey={'清除筛选'} />
                     </button>
                   )}
                 </div>
@@ -999,6 +1055,7 @@ export function DawnMarket() {
 
 /** 绑定令牌使用分组。 */
 function UseDialog(props: { group: MarketplaceGroup; onClose: () => void }) {
+  useTranslation()
   const { group } = props
   const tokens = useMarketplaceTokens()
   const [tokenId, setTokenId] = useState<string>('')
@@ -1009,22 +1066,35 @@ function UseDialog(props: { group: MarketplaceGroup; onClose: () => void }) {
   }, [tokens.data, tokenId])
 
   return (
-    <DawnModal open onClose={props.onClose} variant='narrow' label='使用分组'>
+    <DawnModal
+      open
+      onClose={props.onClose}
+      variant='narrow'
+      label={i18n.t('使用分组')}
+    >
       <div className='m-main'>
         <ModalHead
           title={`使用 · ${group.system_display_name}`}
           onClose={props.onClose}
         />
         <div className='kv'>
-          <span>倍率</span>
+          <span>
+            <Trans i18nKey={'倍率'} />
+          </span>
           <b>{group.multiplier}×</b>
         </div>
         <div className='kv'>
-          <span>模型</span>
-          <b>{group.models.length} 个</b>
+          <span>
+            <Trans i18nKey={'模型'} />
+          </span>
+          <b>
+            {group.models.length} <Trans i18nKey={'个'} />
+          </b>
         </div>
         <div className='field' style={{ marginTop: 12 }}>
-          <label>绑定 API 令牌</label>
+          <label>
+            <Trans i18nKey={'绑定 API 令牌'} />
+          </label>
           <select
             value={tokenId}
             onChange={(event) => setTokenId(event.target.value)}
@@ -1038,7 +1108,7 @@ function UseDialog(props: { group: MarketplaceGroup; onClose: () => void }) {
         </div>
         <div className='m-foot'>
           <button className='btn' onClick={props.onClose}>
-            取消
+            <Trans i18nKey={'取消'} />
           </button>
           <button
             className='btn primary'
@@ -1056,7 +1126,7 @@ function UseDialog(props: { group: MarketplaceGroup; onClose: () => void }) {
               }
             }}
           >
-            绑定并使用
+            <Trans i18nKey={'绑定并使用'} />
           </button>
         </div>
       </div>
@@ -1069,24 +1139,34 @@ function BargainDialog(props: {
   group: MarketplaceGroup
   onClose: () => void
 }) {
+  useTranslation()
   const { group } = props
   const [rate, setRate] = useState('0.85')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
 
   return (
-    <DawnModal open onClose={props.onClose} variant='narrow' label='发起砍价'>
+    <DawnModal
+      open
+      onClose={props.onClose}
+      variant='narrow'
+      label={i18n.t('发起砍价')}
+    >
       <div className='m-main'>
         <ModalHead
           title={`发起砍价 · ${group.system_display_name}`}
           onClose={props.onClose}
         />
         <div className='kv'>
-          <span>当前倍率</span>
+          <span>
+            <Trans i18nKey={'当前倍率'} />
+          </span>
           <b>{group.multiplier}×</b>
         </div>
         <div className='field' style={{ marginTop: 12 }}>
-          <label>期望倍率</label>
+          <label>
+            <Trans i18nKey={'期望倍率'} />
+          </label>
           <input
             type='number'
             step='0.05'
@@ -1097,16 +1177,18 @@ function BargainDialog(props: {
           />
         </div>
         <div className='field'>
-          <label>留言</label>
+          <label>
+            <Trans i18nKey={'留言'} />
+          </label>
           <input
-            placeholder='一句话说明理由'
+            placeholder={i18n.t('一句话说明理由')}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
           />
         </div>
         <div className='m-foot'>
           <button className='btn' onClick={props.onClose}>
-            取消
+            <Trans i18nKey={'取消'} />
           </button>
           <button
             className='btn primary'
@@ -1128,7 +1210,7 @@ function BargainDialog(props: {
               }
             }}
           >
-            提交申请
+            <Trans i18nKey={'提交申请'} />
           </button>
         </div>
       </div>
@@ -1141,6 +1223,7 @@ function ConnectivityDialog(props: {
   group: MarketplaceGroup
   onClose: () => void
 }) {
+  useTranslation()
   const { group } = props
   const [model, setModel] = useState(group.models[0] ?? '')
   const [running, setRunning] = useState(false)
@@ -1166,14 +1249,21 @@ function ConnectivityDialog(props: {
   }, [result])
 
   return (
-    <DawnModal open onClose={props.onClose} variant='narrow' label='连通性测试'>
+    <DawnModal
+      open
+      onClose={props.onClose}
+      variant='narrow'
+      label={i18n.t('连通性测试')}
+    >
       <div className='m-main'>
         <ModalHead
           title={`连通性测试 · ${group.system_display_name}`}
           onClose={props.onClose}
         />
         <div className='field'>
-          <label>模型</label>
+          <label>
+            <Trans i18nKey={'模型'} />
+          </label>
           <select
             value={model}
             onChange={(event) => setModel(event.target.value)}
@@ -1188,7 +1278,9 @@ function ConnectivityDialog(props: {
         {!result ? (
           <div className='pp-empty'>
             <Store size={26} />
-            <span>选择模型后运行测试</span>
+            <span>
+              <Trans i18nKey={'选择模型后运行测试'} />
+            </span>
           </div>
         ) : (
           <div>
@@ -1207,14 +1299,16 @@ function ConnectivityDialog(props: {
                     {item.status === 'passed'
                       ? `${item.latency_ms}ms`
                       : item.status === 'failed'
-                        ? item.error || '失败'
-                        : '运行中'}
+                        ? item.error || i18n.t('失败')
+                        : i18n.t('运行中')}
                   </span>
                 </div>
               </div>
             ))}
             <div className='kv' style={{ marginTop: 10 }}>
-              <span>结论</span>
+              <span>
+                <Trans i18nKey={'结论'} />
+              </span>
               <b
                 style={{
                   color:
@@ -1226,16 +1320,16 @@ function ConnectivityDialog(props: {
               >
                 {result.status === 'completed'
                   ? result.items.every((item) => item.status === 'passed')
-                    ? '连通正常'
-                    : '存在异常'
-                  : '运行中'}
+                    ? i18n.t('连通正常')
+                    : i18n.t('存在异常')
+                  : i18n.t('运行中')}
               </b>
             </div>
           </div>
         )}
         <div className='m-foot'>
           <button className='btn' onClick={props.onClose}>
-            关闭
+            <Trans i18nKey={'关闭'} />
           </button>
           <button
             className='btn primary'
@@ -1254,7 +1348,7 @@ function ConnectivityDialog(props: {
               }
             }}
           >
-            {running ? '测试中' : '运行测试'}
+            {running ? i18n.t('测试中') : i18n.t('运行测试')}
           </button>
         </div>
       </div>

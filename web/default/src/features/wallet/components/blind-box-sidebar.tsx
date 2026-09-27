@@ -1,5 +1,7 @@
+import i18n from '@/i18n/config'
 import { ArrowRight } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
+import { useTranslation, Trans } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -74,14 +76,16 @@ export function BlindBoxSidebar(props: {
             <div className='flex items-center gap-2.5'>
               <span aria-hidden className='bg-primary block h-3 w-[3px]' />
               <div className='text-foreground text-[13px] font-semibold'>
-                开奖历史
+                <Trans i18nKey={'开奖历史'} />
               </div>
             </div>
             <span className='codego-stat-label'>30D</span>
           </div>
           {props.records[0] ? (
             <div className='border-border/60 mt-3 border-t pt-3'>
-              <div className='codego-stat-label'>最近获得</div>
+              <div className='codego-stat-label'>
+                <Trans i18nKey={'最近获得'} />
+              </div>
               <div className='text-foreground mt-1.5 truncate text-sm font-medium'>
                 {props.records[0].reward_title}
               </div>
@@ -92,7 +96,7 @@ export function BlindBoxSidebar(props: {
           ) : (
             <div className='codego-empty mt-3 justify-start py-4 text-left'>
               <span aria-hidden className='bg-border block h-5 w-px' />
-              暂无记录
+              <Trans i18nKey={'暂无记录'} />
             </div>
           )}
           <Button
@@ -101,7 +105,7 @@ export function BlindBoxSidebar(props: {
             className='mt-4 w-full justify-between'
             onClick={props.onOpenHistory}
           >
-            查看最近 30 天记录
+            <Trans i18nKey={'查看最近 30 天记录'} />
             <ArrowRight className='size-4' />
           </Button>
         </div>
@@ -133,12 +137,12 @@ function PropsPreview(props: {
         <div className='flex items-center gap-2.5'>
           <span aria-hidden className='bg-primary block h-3 w-[3px]' />
           <div className='text-foreground text-[13px] font-semibold'>
-            我的道具
+            <Trans i18nKey={'我的道具'} />
           </div>
         </div>
         {usable.length > 0 ? (
           <span className='codego-stat-label border-primary/30 text-primary border px-1.5 py-0.5'>
-            可用 {usable.length}
+            <Trans i18nKey={'可用'} /> {usable.length}
           </span>
         ) : null}
       </div>
@@ -171,7 +175,7 @@ function PropsPreview(props: {
       ) : (
         <div className='codego-empty mt-2 justify-center py-6'>
           <span aria-hidden className='bg-border block h-6 w-px' />
-          暂无道具
+          <Trans i18nKey={'暂无道具'} />
         </div>
       )}
 
@@ -181,7 +185,7 @@ function PropsPreview(props: {
         className='mt-3 w-full justify-between'
         onClick={props.onOpenProps}
       >
-        管理全部道具
+        <Trans i18nKey={'管理全部道具'} />
         <ArrowRight className='size-4' />
       </Button>
     </div>
@@ -193,29 +197,30 @@ function AssetBoard(props: {
   availableBoxes: number
   pendingBoxes: number
 }) {
+  useTranslation()
   return (
     <div className='codego-panel p-4'>
       <div className='mb-1 flex items-center justify-between gap-2'>
         <div className='flex items-center gap-2.5'>
           <span aria-hidden className='bg-primary block h-3 w-[3px]' />
           <div className='text-foreground text-[13px] font-semibold'>
-            开奖状态
+            <Trans i18nKey={'开奖状态'} />
           </div>
         </div>
         {props.availableBoxes > 0 ? (
           <span className='codego-stat-label text-primary'>
-            {props.availableBoxes} 待开
+            {props.availableBoxes} <Trans i18nKey={'待开'} />
           </span>
         ) : null}
       </div>
       <div>
-        <StatRow label='通用额度' value={formatQuota(props.quota)} />
+        <StatRow label={i18n.t('通用额度')} value={formatQuota(props.quota)} />
         <StatRow
-          label='待开盲盒'
+          label={i18n.t('待开盲盒')}
           value={String(props.availableBoxes)}
           tone={props.availableBoxes > 0 ? 'text-primary' : undefined}
         />
-        <StatRow label='待结算' value={String(props.pendingBoxes)} />
+        <StatRow label={i18n.t('待结算')} value={String(props.pendingBoxes)} />
       </div>
     </div>
   )
@@ -243,19 +248,23 @@ function SettlementCard() {
       <div className='mb-3 flex items-center gap-2.5'>
         <span aria-hidden className='bg-primary block h-3 w-[3px]' />
         <div className='text-foreground text-[13px] font-semibold'>
-          结算
+          <Trans i18nKey={'结算'} />
         </div>
       </div>
       <div className='codego-empty justify-start gap-2 py-1 text-left'>
-        <span className='codego-stat-label'>统一额度</span>
+        <span className='codego-stat-label'>
+          <Trans i18nKey={'统一额度'} />
+        </span>
         <span className='text-muted-foreground font-sans text-xs tracking-normal normal-case'>
-          永久有效
+          <Trans i18nKey={'永久有效'} />
         </span>
       </div>
       <div className='codego-empty mt-2 justify-start gap-2 py-1 text-left'>
-        <span className='codego-stat-label'>道具</span>
+        <span className='codego-stat-label'>
+          <Trans i18nKey={'道具'} />
+        </span>
         <span className='text-muted-foreground font-sans text-xs tracking-normal normal-case'>
-          自动生效或手动启用
+          <Trans i18nKey={'自动生效或手动启用'} />
         </span>
       </div>
     </div>

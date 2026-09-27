@@ -19,23 +19,27 @@ For commercial licensing, please contact support@quantumnous.com.
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { LayoutDashboard } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { normalizeSystemName } from '@/lib/branding'
 import { cn } from '@/lib/utils'
+import { LanguageSwitcher } from '@/components/language-switcher'
 import { ThemeSwitch } from '@/components/theme-switch'
 
 const COMMUNITY_URL = 'https://community.codegoai.com'
 
 const NAV_ITEMS = [
-  { title: '主页', href: '/' },
-  { title: '市场', href: '/market' },
-  { title: '模型', href: '/pricing' },
-  { title: '控制台', href: '/dashboard' },
-  { title: '状态', href: '/group-status' },
+  { title: 'Home', href: '/' },
+  { title: 'Market', href: '/market' },
+  { title: 'Models', href: '/pricing' },
+  { title: 'Docs', href: '/docs' },
+  { title: 'Console', href: '/dashboard' },
+  { title: 'Status', href: '/group-status' },
 ]
 
 /** 悬浮胶囊导航：logo 居左、胶囊居中、账户区居右，下滑隐藏。 */
 export function DawnNav({ variant = 'light' }: { variant?: 'light' | 'hero' }) {
+  const { t } = useTranslation()
   const location = useLocation()
   const user = useAuthStore((state) => state.auth.user)
   const [hidden, setHidden] = useState(false)
@@ -57,7 +61,13 @@ export function DawnNav({ variant = 'light' }: { variant?: 'light' | 'hero' }) {
       : location.pathname.startsWith(href)
 
   return (
-    <nav className={cn('dawn-nav', hidden && 'hidden-down')}>
+    <nav
+      className={cn(
+        'dawn-nav',
+        variant === 'hero' && 'hero',
+        hidden && 'hidden-down'
+      )}
+    >
       <Link
         className='logo'
         to='/'
@@ -120,7 +130,7 @@ export function DawnNav({ variant = 'light' }: { variant?: 'light' | 'hero' }) {
             to={item.href}
             className={isActive(item.href) ? 'on' : ''}
           >
-            {item.title}
+            {t(item.title)}
           </Link>
         ))}
         <a
@@ -129,10 +139,11 @@ export function DawnNav({ variant = 'light' }: { variant?: 'light' | 'hero' }) {
           target='_blank'
           rel='noopener noreferrer'
         >
-          社区
+          {t('Community')}
         </a>
       </div>
       <div className='right'>
+        <LanguageSwitcher />
         <ThemeSwitch />
         {user ? (
           <Link className='btn mini primary' to='/dashboard'>
@@ -141,7 +152,7 @@ export function DawnNav({ variant = 'light' }: { variant?: 'light' | 'hero' }) {
           </Link>
         ) : (
           <Link className='btn mini primary' to='/sign-in'>
-            登录 / 注册
+            {t('Sign in')} / {t('Sign up')}
           </Link>
         )}
       </div>

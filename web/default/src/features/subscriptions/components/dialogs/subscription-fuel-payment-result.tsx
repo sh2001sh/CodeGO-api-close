@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { ExternalLink, Loader2, QrCode } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
+import { Trans } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 
 export type FuelPaymentStage = 'pending' | 'success' | 'failed'
@@ -58,13 +59,17 @@ export function SubscriptionFuelPaymentResult(props: {
 
       <div className='grid grid-cols-2 gap-3 text-sm'>
         <div className='rounded-lg border px-3 py-2.5'>
-          <div className='text-muted-foreground text-xs'>应付金额</div>
+          <div className='text-muted-foreground text-xs'>
+            <Trans i18nKey={'应付金额'} />
+          </div>
           <div className='mt-1 font-mono font-semibold'>
             ¥{props.payment.amountDue.toFixed(2)}
           </div>
         </div>
         <div className='rounded-lg border px-3 py-2.5'>
-          <div className='text-muted-foreground text-xs'>订单号</div>
+          <div className='text-muted-foreground text-xs'>
+            <Trans i18nKey={'订单号'} />
+          </div>
           <div className='mt-1 font-mono text-xs break-all'>
             {props.payment.orderId}
           </div>
@@ -79,10 +84,12 @@ export function SubscriptionFuelPaymentResult(props: {
           (props.payment.formUrl && props.payment.form)) ? (
           <Button variant='outline' onClick={props.onOpenExternal}>
             <ExternalLink className='mr-1 size-4' />
-            打开支付页面
+            <Trans i18nKey={'打开支付页面'} />
           </Button>
         ) : null}
-        <Button onClick={props.onClose}>关闭</Button>
+        <Button onClick={props.onClose}>
+          <Trans i18nKey={'关闭'} />
+        </Button>
       </div>
     </div>
   )
@@ -105,13 +112,13 @@ function PaymentQrPanel(props: { payment: FuelPaymentState }) {
         />
       ) : (
         <div className='text-muted-foreground rounded-lg border border-dashed px-4 py-8 text-center text-sm'>
-          请点击下方按钮打开支付页面。
+          <Trans i18nKey={'请点击下方按钮打开支付页面。'} />
         </div>
       )}
       {props.payment.qrCodeUrl || props.payment.payUrl ? (
         <div className='text-muted-foreground flex items-center justify-center gap-2 text-center text-xs'>
           <QrCode className='size-4' />
-          请使用微信扫码完成支付
+          <Trans i18nKey={'请使用微信扫码完成支付'} />
         </div>
       ) : null}
     </div>

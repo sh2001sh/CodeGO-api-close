@@ -76,7 +76,10 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
       )}
       <div
         className='flex w-full gap-0.5'
-        aria-label={`${t('近 {{window}}请求状态', { window: windowLabel })}。${threshold}`}
+        aria-label={t('近 {{window}}请求状态。{{threshold}}', {
+          window: windowLabel,
+          threshold,
+        })}
       >
         {series.map((bucket, index) => {
           const range = formatBucketRange(bucket.ts, bucketSeconds, formatter)
@@ -87,7 +90,7 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
                 render={
                   <button
                     type='button'
-                    aria-label={`${range}，${summary}`}
+                    aria-label={t('{{range}}，{{summary}}', { range, summary })}
                     className={cn(
                       'focus-visible:ring-ring h-3 min-w-0 flex-1 rounded-sm transition-[filter,box-shadow] hover:brightness-90 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none',
                       bucketTone(bucket)
@@ -111,8 +114,10 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
 
 function formatBucketDuration(bucketSeconds: number, t: TFunction) {
   if (bucketSeconds % 3600 === 0) {
+    if (bucketSeconds === 3600) return t('1 hour')
     return t('{{count}} 小时', { count: bucketSeconds / 3600 })
   }
+  if (bucketSeconds === 60) return t('1 minute')
   return t('{{count}} 分钟', {
     count: Math.max(1, Math.round(bucketSeconds / 60)),
   })

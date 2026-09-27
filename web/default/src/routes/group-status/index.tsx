@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com.
 */
 import { createFileRoute } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
+import { useTranslation } from 'react-i18next'
 import { SiteSeo } from '@/components/seo'
 import { DawnNav } from '@/features/dawn/components/dawn-nav'
 import { SidebarGroupStatusPage } from '@/features/sidebar-group-status'
@@ -26,11 +28,12 @@ export const Route = createFileRoute('/group-status/')({
 })
 
 function GroupStatusPage() {
+  useTranslation()
   return (
     <div className='bg-background text-foreground relative min-h-svh overflow-x-clip'>
       <SiteSeo
-        title='分组状态 | Code Go'
-        description='分组状态 · 近 6 小时真实请求可用率'
+        title={i18n.t('分组状态 | Code Go')}
+        description={i18n.t('分组状态 · 近 6 小时真实请求可用率')}
         canonicalPath='/group-status'
       />
       <div className='dawn !min-h-0 !bg-transparent'>

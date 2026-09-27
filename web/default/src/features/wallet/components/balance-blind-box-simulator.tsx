@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import {
   BarChart3,
   Beaker,
@@ -6,6 +7,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { formatQuota, formatUsdAmount } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,14 +47,22 @@ function SimulationSetup(props: {
           <Beaker className='size-4' />
         </div>
         <div className='min-w-0'>
-          <h3 className='text-sm font-semibold'>建立模拟额度账户</h3>
+          <h3 className='text-sm font-semibold'>
+            <Trans i18nKey={'建立模拟额度账户'} />
+          </h3>
           <p className='text-muted-foreground mt-1 max-w-2xl text-xs leading-5'>
-            输入一笔虚拟通用额度，按真实奖池、开启保底和“再来一抽”连续结算。模拟结果不会进入钱包、库存或使用记录。
+            <Trans
+              i18nKey={
+                '输入一笔虚拟通用额度，按真实奖池、开启保底和“再来一抽”连续结算。模拟结果不会进入钱包、库存或使用记录。'
+              }
+            />
           </p>
         </div>
       </div>
       <div className='mt-5 max-w-md space-y-2'>
-        <Label htmlFor='blind-box-simulation-balance'>模拟初始额度</Label>
+        <Label htmlFor='blind-box-simulation-balance'>
+          <Trans i18nKey={'模拟初始额度'} />
+        </Label>
         <div className='relative'>
           <span className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm'>
             $
@@ -77,7 +87,8 @@ function SimulationSetup(props: {
         </div>
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <p className='text-muted-foreground text-xs'>
-            每盒 {formatUsdAmount(props.priceUSD)}，最高可设置 $1,000,000
+            <Trans i18nKey={'每盒'} /> {formatUsdAmount(props.priceUSD)}
+            <Trans i18nKey={'，最高可设置 $1,000,000'} />
           </p>
           <Button
             type='button'
@@ -85,7 +96,7 @@ function SimulationSetup(props: {
             onClick={props.state.start}
           >
             <Beaker className='size-4' />
-            开始模拟
+            <Trans i18nKey={'开始模拟'} />
           </Button>
         </div>
       </div>
@@ -98,6 +109,7 @@ function SimulationWorkspace(props: {
   balance?: BalanceBlindBoxOverview
   state: ReturnType<typeof useBalanceBlindBoxSimulator>
 }) {
+  useTranslation()
   const stats = props.state.stats!
   return (
     <div className='space-y-4'>
@@ -106,10 +118,10 @@ function SimulationWorkspace(props: {
           <div>
             <div className='flex items-center gap-2 text-sm font-semibold'>
               <Beaker className='text-primary size-4' />
-              模拟账户运行中
+              <Trans i18nKey={'模拟账户运行中'} />
             </div>
             <p className='text-muted-foreground mt-1 text-xs'>
-              仅用于概率体验，不影响任何真实资产
+              <Trans i18nKey={'仅用于概率体验，不影响任何真实资产'} />
             </p>
           </div>
           <Button
@@ -119,7 +131,7 @@ function SimulationWorkspace(props: {
             onClick={props.state.reset}
           >
             <RotateCcw className='size-4' />
-            重设额度
+            <Trans i18nKey={'重设额度'} />
           </Button>
         </div>
         <SimulationMetrics stats={stats} />
@@ -136,14 +148,15 @@ function SimulationWorkspace(props: {
             <div className='flex items-end justify-between gap-3 border-t pt-3'>
               <div>
                 <p className='text-muted-foreground text-[11px]'>
-                  本次模拟投入
+                  <Trans i18nKey={'本次模拟投入'} />
                 </p>
                 <p className='text-lg font-semibold tabular-nums'>
                   {formatUsdAmount(props.priceUSD * props.state.count)}
                 </p>
               </div>
               <p className='text-muted-foreground text-right text-[11px] leading-4'>
-                当前最多可抽 {props.state.maxCount} 个
+                <Trans i18nKey={'当前最多可抽'} /> {props.state.maxCount}{' '}
+                <Trans i18nKey={'个'} />
               </p>
             </div>
             <Button
@@ -157,7 +170,9 @@ function SimulationWorkspace(props: {
               ) : (
                 <Sparkles className='size-4' />
               )}
-              {props.state.maxCount > 0 ? '模拟抽取' : '模拟额度已不足'}
+              {props.state.maxCount > 0
+                ? i18n.t('模拟抽取')
+                : i18n.t('模拟额度已不足')}
             </Button>
           </div>
         </div>
@@ -170,6 +185,7 @@ function SimulationGuaranteeStatus(props: {
   stats: NonNullable<ReturnType<typeof useBalanceBlindBoxSimulator>['stats']>
   balance?: BalanceBlindBoxOverview
 }) {
+  useTranslation()
   const smallThreshold = props.balance?.small_pity_threshold || 10
   const bigThreshold = props.balance?.pity_threshold || 50
   return (
@@ -177,23 +193,29 @@ function SimulationGuaranteeStatus(props: {
       <div className='flex items-center justify-between gap-3'>
         <div className='flex items-center gap-1.5 text-xs font-semibold'>
           <ShieldCheck className='text-primary size-3.5' aria-hidden='true' />
-          模拟保底进度
+          <Trans i18nKey={'模拟保底进度'} />
         </div>
-        <span className='text-muted-foreground text-[10px]'>连续请求保留</span>
+        <span className='text-muted-foreground text-[10px]'>
+          <Trans i18nKey={'连续请求保留'} />
+        </span>
       </div>
       <div className='flex items-center justify-between gap-3 text-[11px]'>
-        <span className='text-muted-foreground'>首抽保底</span>
+        <span className='text-muted-foreground'>
+          <Trans i18nKey={'首抽保底'} />
+        </span>
         <span className='font-medium'>
-          {props.stats.firstDrawEligible ? '下一抽触发' : '本轮已触发'}
+          {props.stats.firstDrawEligible
+            ? i18n.t('下一抽触发')
+            : i18n.t('本轮已触发')}
         </span>
       </div>
       <SimulationPityProgress
-        label='小保底'
+        label={i18n.t('小保底')}
         progress={props.stats.smallPityProgress}
         threshold={smallThreshold}
       />
       <SimulationPityProgress
-        label='大保底'
+        label={i18n.t('大保底')}
         progress={props.stats.pityProgress}
         threshold={bigThreshold}
       />
@@ -206,6 +228,7 @@ function SimulationPityProgress(props: {
   progress: number
   threshold: number
 }) {
+  useTranslation()
   const target = Math.max(1, props.threshold - 1)
   const progress = Math.min(target, Math.max(0, props.progress))
   const ready = progress >= target
@@ -214,7 +237,7 @@ function SimulationPityProgress(props: {
       <div className='mb-1 flex items-center justify-between gap-3 text-[11px]'>
         <span className='text-muted-foreground'>{props.label}</span>
         <span className='font-medium tabular-nums'>
-          {ready ? '下一抽触发' : `${progress}/${target}`}
+          {ready ? i18n.t('下一抽触发') : `${progress}/${target}`}
         </span>
       </div>
       <div
@@ -258,21 +281,27 @@ function SimulationMetrics(props: {
         ))}
       </div>
       <div className='bg-muted/30 text-muted-foreground border-t px-4 py-2 text-[11px] leading-5 sm:px-5'>
-        累计收益率 =（当前模拟余额 − 初始模拟额度）÷
-        初始模拟额度；累计投入和奖励单独统计。
+        <Trans
+          i18nKey={
+            '累计收益率 =（当前模拟余额 − 初始模拟额度）÷ 初始模拟额度；累计投入和奖励单独统计。'
+          }
+        />
       </div>
     </div>
   )
 }
 
 function SimulationHistory(props: { history: SimulationHistoryItem[] }) {
+  useTranslation()
   if (props.history.length === 0) {
     return (
       <div className='border-border flex min-h-44 flex-col items-center justify-center rounded-lg border border-dashed px-5 text-center'>
         <BarChart3 className='text-muted-foreground size-5' />
-        <p className='mt-2 text-sm font-medium'>尚未开始抽取</p>
+        <p className='mt-2 text-sm font-medium'>
+          <Trans i18nKey={'尚未开始抽取'} />
+        </p>
         <p className='text-muted-foreground mt-1 text-xs'>
-          首批结果会在这里按最新顺序展示
+          <Trans i18nKey={'首批结果会在这里按最新顺序展示'} />
         </p>
       </div>
     )
@@ -280,8 +309,12 @@ function SimulationHistory(props: { history: SimulationHistoryItem[] }) {
   return (
     <div className='min-w-0'>
       <div className='mb-2 flex items-center justify-between gap-3'>
-        <h3 className='text-sm font-medium'>最近模拟结果</h3>
-        <span className='text-muted-foreground text-xs'>保留最近 40 条</span>
+        <h3 className='text-sm font-medium'>
+          <Trans i18nKey={'最近模拟结果'} />
+        </h3>
+        <span className='text-muted-foreground text-xs'>
+          <Trans i18nKey={'保留最近 40 条'} />
+        </span>
       </div>
       <div className='max-h-72 divide-y overflow-y-auto rounded-lg border'>
         {props.history.map((item) => (
@@ -294,13 +327,13 @@ function SimulationHistory(props: { history: SimulationHistoryItem[] }) {
                 {item.reward_title}
               </p>
               <p className='text-muted-foreground mt-0.5 text-[11px]'>
-                第 {item.id} 抽 ·{' '}
+                <Trans i18nKey={'第'} /> {item.id} <Trans i18nKey={'抽 ·'} />{' '}
                 {guaranteeLabel(item.guarantee_type) ?? item.reward_tier}
               </p>
             </div>
             <span className='bg-muted shrink-0 rounded-md px-2 py-1 text-xs font-medium tabular-nums'>
               {item.reward_type === 'prop'
-                ? '权益卡'
+                ? i18n.t('权益卡')
                 : formatUsdAmount(item.reward_usd)}
             </span>
           </div>

@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import i18n from '@/i18n/config'
 import { Trophy } from 'lucide-react'
 import { useReducedMotion } from 'motion/react'
+import { useTranslation, Trans } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -36,6 +38,7 @@ export function BlindBoxPrizeDialog(props: {
 function BlindBoxPrizeDialogContent(
   props: Parameters<typeof BlindBoxPrizeDialog>[0]
 ) {
+  useTranslation()
   const reduced = Boolean(useReducedMotion())
   const [phase, setPhase] = useState<'reel' | 'reveal'>(
     reduced ? 'reveal' : 'reel'
@@ -48,7 +51,7 @@ function BlindBoxPrizeDialogContent(
       <DialogHeader className='shrink-0 border-b px-4 py-4 sm:px-5'>
         <DialogTitle className='flex items-center gap-2 text-base'>
           <Trophy className='text-primary size-5' />
-          {phase === 'reel' ? '正在开启' : '抽奖结果'}
+          {phase === 'reel' ? i18n.t('正在开启') : i18n.t('抽奖结果')}
         </DialogTitle>
       </DialogHeader>
 
@@ -83,7 +86,7 @@ function BlindBoxPrizeDialogContent(
               className='w-full'
               onClick={() => props.onOpenChange(false)}
             >
-              确定
+              <Trans i18nKey={'确定'} />
             </Button>
           </div>
         </>

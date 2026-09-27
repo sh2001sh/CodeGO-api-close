@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useCallback, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
+import { Trans } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { getUserModels, getUserGroups } from './api'
 import { PlaygroundChat } from './components/playground-chat'
@@ -194,11 +195,15 @@ export function Playground() {
           ) && (
             <Alert className='mx-3 mb-2 border-amber-500/40 bg-amber-500/5 sm:mx-0'>
               <AlertTriangle className='text-amber-600' />
-              <AlertTitle>自动分组当前未提供 Claude 模型</AlertTitle>
+              <AlertTitle>
+                <Trans i18nKey={'自动分组当前未提供 Claude 模型'} />
+              </AlertTitle>
               <AlertDescription>
-                请检查后台 AutoGroups 是否包含 Claude
-                所在分组、当前用户是否有该分组权限，以及 Claude
-                模型是否已配置计费。
+                <Trans
+                  i18nKey={
+                    '请检查后台 AutoGroups 是否包含 Claude 所在分组、当前用户是否有该分组权限，以及 Claude 模型是否已配置计费。'
+                  }
+                />
               </AlertDescription>
             </Alert>
           )}

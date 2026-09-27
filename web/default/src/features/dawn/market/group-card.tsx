@@ -16,12 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com.
 */
+import i18n from '@/i18n/config'
 import { BadgeCheck, ChevronDown, CircleDashed } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
 import { classifyRequestHealth } from '@/lib/request-health'
 import { cn } from '@/lib/utils'
 import { RecentRequestStrip } from '@/features/marketplace/components/recent-request-strip'
+import {
+  localizedGroupName,
+  localizedSourceLabel,
+} from '@/features/marketplace/lib/localized-group-name'
 import type { MarketplaceGroup } from '@/features/marketplace/types'
 import { compactCount, pct, sec } from '../lib/format'
 
@@ -98,14 +103,22 @@ export function MarketGroupCard(props: {
         {group.rank > 0 && (
           <span
             className={cn('rank-badge', group.rank <= 3 && 'top')}
-            title={`质量排行榜第 ${group.rank} 名`}
+            title={i18n.t('质量排行榜第 {{rank}} 名', { rank: group.rank })}
           >
             {String(group.rank).padStart(2, '0')}
           </span>
         )}
-        <span className='src'>{group.source_label}</span>
+        <span className='src'>
+          {localizedSourceLabel(group.source_label, i18n.language)}
+        </span>
         <div>
-          <h3>{group.system_display_name}</h3>
+          <h3>
+            {localizedGroupName(
+              group.system_display_name,
+              group.source_label,
+              i18n.language
+            )}
+          </h3>
         </div>
         <div className='state'>
           <span
@@ -117,16 +130,20 @@ export function MarketGroupCard(props: {
               <BadgeCheck size={12} />
             )}
             {!hasTraffic
-              ? '无请求'
+              ? i18n.t('无请求')
               : group.observing
-                ? '观测中'
+                ? i18n.t('观测中')
                 : lifecycleOn
-                  ? '在售'
+                  ? i18n.t('在售')
                   : group.lifecycle_status === 'suspended'
-                    ? '已暂停'
-                    : '未上架'}
+                    ? i18n.t('已暂停')
+                    : i18n.t('未上架')}
           </span>
-          {!hasTraffic && <span className='sub2'>窗口内无请求</span>}
+          {!hasTraffic && (
+            <span className='sub2'>
+              <Trans i18nKey={'窗口内无请求'} />
+            </span>
+          )}
           {hasTraffic && (
             <span className='sub2'>
               {compactCount(group.request_count)} / 24H
@@ -141,7 +158,9 @@ export function MarketGroupCard(props: {
             {group.multiplier}
             <span className='u'>×</span>
           </b>
-          <span>倍率</span>
+          <span>
+            <Trans i18nKey={'倍率'} />
+          </span>
         </div>
         <div
           className={cn(
@@ -155,7 +174,9 @@ export function MarketGroupCard(props: {
             {hasTraffic ? group.success_rate.toFixed(1) : '—'}
             <span className='u'>%</span>
           </b>
-          <span>24H 成功</span>
+          <span>
+            <Trans i18nKey={'24H 成功'} />
+          </span>
         </div>
         <div
           className={cn('m', hasTraffic && group.avg_ttft_ms > 600 && 'warn')}
@@ -164,25 +185,35 @@ export function MarketGroupCard(props: {
             {hasTraffic && group.avg_ttft_ms > 0 ? sec(group.avg_ttft_ms) : '—'}
             <span className='u'>s</span>
           </b>
-          <span>平均首字</span>
+          <span>
+            <Trans i18nKey={'平均首字'} />
+          </span>
         </div>
         <div className='m'>
           <b>
             {hasTraffic ? pct(group.cache_hit_rate, 0) : '—'}
             <span className='u'>%</span>
           </b>
-          <span>缓存命中</span>
+          <span>
+            <Trans i18nKey={'缓存命中'} />
+          </span>
         </div>
         <div className='m'>
           <b>{compactCount(hasTraffic ? group.request_count : null)}</b>
-          <span>24H 请求</span>
+          <span>
+            <Trans i18nKey={'24H 请求'} />
+          </span>
         </div>
         <div
           className='m'
-          title='近 24 小时钱包/通用额度成功请求每 100 万实际 token 的平均扣费；套餐请求和无 token 记录不计入。这是按真实输入、输出与缓存结构形成的综合单价，不等于官方输入单价。'
+          title={i18n.t(
+            '近 24 小时钱包/通用额度成功请求每 100 万实际 token 的平均扣费；套餐请求和无 token 记录不计入。这是按真实输入、输出与缓存结构形成的综合单价，不等于官方输入单价。'
+          )}
         >
           <b>{displayedAverage > 0 ? formatQuota(displayedAverage) : '—'}</b>
-          <span>平均实扣/1M tokens</span>
+          <span>
+            <Trans i18nKey={'平均实扣/1M tokens'} />
+          </span>
         </div>
       </div>
 
@@ -192,37 +223,49 @@ export function MarketGroupCard(props: {
       >
         <div className='m'>
           <b>{group.models.length}</b>
-          <span>模型数</span>
+          <span>
+            <Trans i18nKey={'模型数'} />
+          </span>
         </div>
         <div className='m'>
           <b>
             {group.current_concurrency}/{group.max_concurrency || '∞'}
           </b>
-          <span>并发</span>
+          <span>
+            <Trans i18nKey={'并发'} />
+          </span>
         </div>
         <div className='m'>
           <b>{hasTraffic ? group.score.toFixed(2) : '—'}</b>
-          <span>评分</span>
+          <span>
+            <Trans i18nKey={'评分'} />
+          </span>
         </div>
       </div>
 
       <div className='capline'>
-        <span>远程压缩</span>
+        <span>
+          <Trans i18nKey={'远程压缩'} />
+        </span>
         <b>
           {group.remote_compaction_support === 'v1_v2'
             ? 'v1 + v2'
             : group.remote_compaction_support === 'v1'
-              ? '仅 v1'
+              ? i18n.t('仅 v1')
               : group.remote_compaction_support === 'v2'
-                ? '仅 v2'
-                : '不支持'}
+                ? i18n.t('仅 v2')
+                : i18n.t('不支持')}
         </b>
       </div>
 
       {group.multiplier_card_user_enabled && (
         <div className='capline'>
-          <span>倍率卡</span>
-          <b>支持使用</b>
+          <span>
+            <Trans i18nKey={'倍率卡'} />
+          </span>
+          <b>
+            <Trans i18nKey={'支持使用'} />
+          </b>
         </div>
       )}
 
@@ -247,7 +290,9 @@ export function MarketGroupCard(props: {
               props.onToggleExpand()
             }}
           >
-            {props.expanded ? '收起明细' : `全部 ${group.models.length} 模型`}
+            {props.expanded
+              ? i18n.t('收起明细')
+              : i18n.t('全部 {{param0}} 模型', { param0: group.models.length })}
             <ChevronDown
               size={11}
               style={{
@@ -262,13 +307,23 @@ export function MarketGroupCard(props: {
       {props.expanded && (
         <div className='mlist cache-prices'>
           <div className='mh'>
-            <span>模型</span>
-            <span style={{ textAlign: 'right' }}>输入 /1M · 按次价格</span>
-            <span style={{ textAlign: 'right' }}>输出 /1M</span>
+            <span>
+              <Trans i18nKey={'模型'} />
+            </span>
+            <span style={{ textAlign: 'right' }}>
+              <Trans i18nKey={'输入 /1M · 按次价格'} />
+            </span>
+            <span style={{ textAlign: 'right' }}>
+              <Trans i18nKey={'输出 /1M'} />
+            </span>
             <span className='mp'>{t('缓存写入')} /1M</span>
             <span className='mp'>{t('缓存读取')} /1M</span>
-            <span style={{ textAlign: 'right' }}>平均实扣/1M tokens</span>
-            <span style={{ textAlign: 'right' }}>延迟</span>
+            <span style={{ textAlign: 'right' }}>
+              <Trans i18nKey={'平均实扣/1M tokens'} />
+            </span>
+            <span style={{ textAlign: 'right' }}>
+              <Trans i18nKey={'延迟'} />
+            </span>
           </div>
           {group.models.map((model) => {
             const result = verification.find(
@@ -288,7 +343,11 @@ export function MarketGroupCard(props: {
                 <div className='mr' key={result.model}>
                   <span className='mn'>
                     {result.model}
-                    {free ? <i className='ftag'>免费</i> : null}
+                    {free ? (
+                      <i className='ftag'>
+                        <Trans i18nKey={'免费'} />
+                      </i>
+                    ) : null}
                     {fee?.tiered ? (
                       <i
                         className='ftag'
@@ -305,25 +364,27 @@ export function MarketGroupCard(props: {
                           color: 'var(--dawn-bad)',
                         }}
                       >
-                        检测失败
+                        <Trans i18nKey={'检测失败'} />
                       </i>
                     ) : null}
                   </span>
                   <span className='mp'>
                     {fee?.mode === 'percall' && fee.input !== '—'
-                      ? `${fee.input} /次`
+                      ? i18n.t('{{param0}} /次', { param0: fee.input })
                       : (fee?.input ?? '—')}
                   </span>
                   <span className='mp'>
                     {fee?.mode === 'percall'
-                      ? '按次计费'
+                      ? i18n.t('按次计费')
                       : (fee?.output ?? '—')}
                   </span>
                   <span className='mp'>{fee?.cacheWrite ?? '—'}</span>
                   <span className='mp'>{fee?.cacheRead ?? '—'}</span>
                   <span
                     className='mp'
-                    title='近 24 小时该模型钱包/通用额度成功请求每 100 万实际 token 的平均扣费；套餐请求和无 token 记录不计入'
+                    title={i18n.t(
+                      '近 24 小时该模型钱包/通用额度成功请求每 100 万实际 token 的平均扣费；套餐请求和无 token 记录不计入'
+                    )}
                   >
                     {(group.avg_consumer_amount_by_model?.[result.model] ?? 0) >
                     0
@@ -347,17 +408,17 @@ export function MarketGroupCard(props: {
       <div className='gact' onClick={(event) => event.stopPropagation()}>
         {lifecycleOn && props.authed && (
           <button className='btn mini' onClick={() => props.onBindKey(group)}>
-            绑定 Key
+            <Trans i18nKey={'绑定 Key'} />
           </button>
         )}
         {props.authed && (
           <button className='btn mini' onClick={() => props.onTest(group)}>
-            连通性测试
+            <Trans i18nKey={'连通性测试'} />
           </button>
         )}
         {!isOfficial && lifecycleOn && props.authed && (
           <button className='btn mini' onClick={() => props.onBargain(group)}>
-            砍价
+            <Trans i18nKey={'砍价'} />
           </button>
         )}
         {props.authed && (
@@ -366,14 +427,24 @@ export function MarketGroupCard(props: {
             onClick={() => props.onJoinPool(group)}
             disabled={props.inPool}
           >
-            {props.inPool ? `已在 ${props.poolName ?? '当前池'}` : '加入当前池'}
+            {props.inPool
+              ? i18n.t('已在 {{param0}}', {
+                  param0: props.poolName ?? '当前池',
+                })
+              : i18n.t('加入当前池')}
           </button>
         )}
         <span className='spacer' />
         {props.selected && (
-          <span className='selhint'>已在右侧路由池工作台打开</span>
+          <span className='selhint'>
+            <Trans i18nKey={'已在右侧路由池工作台打开'} />
+          </span>
         )}
-        {props.inPool && <span className='inpool'>已入池</span>}
+        {props.inPool && (
+          <span className='inpool'>
+            <Trans i18nKey={'已入池'} />
+          </span>
+        )}
       </div>
     </div>
   )

@@ -1,5 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import i18n from '@/i18n/config'
 import { Crown, RefreshCw } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -78,6 +80,7 @@ export function SubscriptionPlansCard({
   onSubscriptionRefresh,
   onPlansRefresh,
 }: SubscriptionPlansCardProps) {
+  useTranslation()
   const [now] = useState(() => Date.now() / 1000)
   const [refreshing, setRefreshing] = useState(false)
   const [purchaseOpen, setPurchaseOpen] = useState(false)
@@ -186,7 +189,7 @@ export function SubscriptionPlansCard({
     <>
       <div id='wallet-subscriptions' className='scroll-mt-4'>
         <TitledCard
-          title='套餐购买'
+          title={i18n.t('套餐购买')}
           icon={<Crown className='h-4 w-4' />}
           action={
             <Button
@@ -204,23 +207,31 @@ export function SubscriptionPlansCard({
           contentClassName='space-y-4'
         >
           <div className='border-border bg-muted/40 text-muted-foreground rounded-2xl border px-4 py-3 text-sm leading-6'>
-            月卡仅可用于管理员已启用月卡扣费的非第三方分组，并按该分组配置的月卡倍率扣费。未使用月卡可按档位价格与剩余比例整卡转换为通用额度。
+            <Trans
+              i18nKey={
+                '月卡仅可用于管理员已启用月卡扣费的非第三方分组，并按该分组配置的月卡倍率扣费。未使用月卡可按档位价格与剩余比例整卡转换为通用额度。'
+              }
+            />
           </div>
 
           <PlanSection
-            title='月卡套餐'
-            description='适合长期使用。月卡有效期 1 个月，仅在允许月卡扣费的分组中按配置倍率使用。'
+            title={i18n.t('月卡套餐')}
+            description={i18n.t(
+              '适合长期使用。月卡有效期 1 个月，仅在允许月卡扣费的分组中按配置倍率使用。'
+            )}
             loading={plansLoading}
-            emptyText='当前没有可购买的月卡套餐。'
+            emptyText={i18n.t('当前没有可购买的月卡套餐。')}
           >
             {groupedPlans.monthPlans.map((record) => renderPlanCard(record))}
           </PlanSection>
 
           <PlanSection
-            title='日卡套餐'
-            description='适合临时补量。日卡额度独立结算，不并入月卡总额度，扣费时默认优先于月卡。'
+            title={i18n.t('日卡套餐')}
+            description={i18n.t(
+              '适合临时补量。日卡额度独立结算，不并入月卡总额度，扣费时默认优先于月卡。'
+            )}
             loading={plansLoading}
-            emptyText='当前没有可购买的日卡套餐。'
+            emptyText={i18n.t('当前没有可购买的日卡套餐。')}
           >
             {groupedPlans.dayPlans.map((record) => renderPlanCard(record))}
           </PlanSection>
@@ -229,10 +240,14 @@ export function SubscriptionPlansCard({
             <section className='app-subtle-panel space-y-4 p-4 shadow-none'>
               <div>
                 <div className='text-foreground text-base font-semibold tracking-tight'>
-                  我的订阅
+                  <Trans i18nKey={'我的订阅'} />
                 </div>
                 <p className='text-muted-foreground mt-1 text-sm leading-6'>
-                  先确认当前生效的订阅与额度，再决定是否继续加购。月卡只展示本月可用额度，不展示周期重置。
+                  <Trans
+                    i18nKey={
+                      '先确认当前生效的订阅与额度，再决定是否继续加购。月卡只展示本月可用额度，不展示周期重置。'
+                    }
+                  />
                 </p>
               </div>
 
@@ -307,9 +322,11 @@ export function SubscriptionPlansCard({
                               </div>
                               <p className='text-muted-foreground mt-1 text-xs'>
                                 {active
-                                  ? `剩余 ${remainDays} 天`
-                                  : '该订阅已结束'}{' '}
-                                · 到期时间{' '}
+                                  ? i18n.t('剩余 {{param0}} 天', {
+                                      param0: remainDays,
+                                    })
+                                  : i18n.t('该订阅已结束')}{' '}
+                                <Trans i18nKey={'· 到期时间'} />{' '}
                                 {new Date(
                                   subscription.end_time * 1000
                                 ).toLocaleString()}
@@ -340,7 +357,7 @@ export function SubscriptionPlansCard({
                           <div className='grid gap-2 sm:grid-cols-2'>
                             {!isMonthlyPlan ? (
                               <InfoItem
-                                label='下一次重置'
+                                label={i18n.t('下一次重置')}
                                 value={
                                   subscription.next_reset_time
                                     ? new Date(
@@ -351,7 +368,7 @@ export function SubscriptionPlansCard({
                               />
                             ) : null}
                             <InfoItem
-                              label='订阅状态'
+                              label={i18n.t('订阅状态')}
                               value={
                                 active
                                   ? '生效中'
@@ -377,7 +394,7 @@ export function SubscriptionPlansCard({
                                   setPurchaseOpen(true)
                                 }}
                               >
-                                提前续费
+                                <Trans i18nKey={'提前续费'} />
                               </Button>
                             </div>
                           ) : null}
@@ -474,7 +491,8 @@ function UsageBlock(props: {
   if (props.total <= 0) {
     return (
       <div className='app-subtle-panel text-muted-foreground p-3 text-sm'>
-        {props.label}：不限
+        {props.label}
+        <Trans i18nKey={'：不限'} />
       </div>
     )
   }
@@ -484,7 +502,8 @@ function UsageBlock(props: {
         <span className='text-foreground font-medium'>{props.label}</span>
         <span className='text-muted-foreground text-xs'>
           {formatSubscriptionQuotaAmount(props.used)}/
-          {formatSubscriptionQuotaAmount(props.total)} · 剩余{' '}
+          {formatSubscriptionQuotaAmount(props.total)}{' '}
+          <Trans i18nKey={'· 剩余'} />{' '}
           {formatSubscriptionQuotaAmount(props.remain)}
         </span>
       </div>

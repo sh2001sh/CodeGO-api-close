@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Link } from '@tanstack/react-router'
 import { X, User, Wallet, LogOut, ReceiptText } from 'lucide-react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import type { AuthUser } from '@/stores/auth-store'
 import useDialogState from '@/hooks/use-dialog'
 import { useUserDisplay } from '@/hooks/use-user-display'
@@ -53,11 +53,7 @@ function BrandLogo({
   onClick,
 }: BrandLogoProps) {
   return (
-    <Link
-      to={homeUrl}
-      className='flex items-center gap-2'
-      onClick={onClick}
-    >
+    <Link to={homeUrl} className='flex items-center gap-2' onClick={onClick}>
       <div className='relative h-6 w-6'>
         {loading || !logoLoaded ? (
           <Skeleton className='absolute inset-0 rounded-full' />
@@ -73,7 +69,7 @@ function BrandLogo({
         ) : (
           <>
             <span className='text-xl font-bold'>{displaySiteName}</span>
-            <span className='text-[10px] font-medium text-muted-foreground'>
+            <span className='text-muted-foreground text-[10px] font-medium'>
               {SITE_URL_HINT}
             </span>
           </>
@@ -151,7 +147,7 @@ function MobileUserProfile({ user, onNavigate }: MobileUserProfileProps) {
           className='text-primary/60 hover:text-primary/80 border-border flex items-center gap-2.5 border-b p-2.5 transition-colors'
         >
           <ReceiptText className='size-4' />
-          电子发票
+          <Trans i18nKey={'电子发票'} />
         </Link>
 
         {/* Sign out - consistent style */}

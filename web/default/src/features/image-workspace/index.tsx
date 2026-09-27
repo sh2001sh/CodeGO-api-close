@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import {
   AlertCircle,
   Clock3,
@@ -15,6 +16,7 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import { nanoid } from 'nanoid'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -149,6 +151,7 @@ function ImageWorkspaceSkeleton() {
 }
 
 export function ImageWorkspace() {
+  useTranslation()
   const [sessionId, setSessionId] = useState(loadSessionId)
   const [galleryTab, setGalleryTab] = useState('session')
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null)
@@ -382,30 +385,36 @@ export function ImageWorkspace() {
           {form.group && !modelsQuery.isLoading && models.length === 0 && (
             <Alert className='border-amber-500/40 bg-amber-500/5'>
               <AlertCircle className='text-amber-600' />
-              <AlertTitle>当前分组没有可用的生图模型</AlertTitle>
+              <AlertTitle>
+                <Trans i18nKey={'当前分组没有可用的生图模型'} />
+              </AlertTitle>
               <AlertDescription>
                 {form.group === 'auto'
-                  ? '请检查后台 AutoGroups 是否包含生图模型所在分组、用户分组权限和模型计费配置。'
-                  : '请检查该分组的渠道模型、用户权限和模型计费配置。'}
+                  ? i18n.t(
+                      '请检查后台 AutoGroups 是否包含生图模型所在分组、用户分组权限和模型计费配置。'
+                    )
+                  : i18n.t('请检查该分组的渠道模型、用户权限和模型计费配置。')}
               </AlertDescription>
             </Alert>
           )}
           <div className='flex flex-wrap items-center justify-between gap-3 px-1'>
             <div>
               <div className='text-muted-foreground text-xs font-medium tracking-[0.28em]'>
-                生图工作台
+                <Trans i18nKey={'生图工作台'} />
               </div>
               <h1 className='text-foreground mt-2 text-2xl font-semibold tracking-tight'>
-                生成、编辑和管理图片
+                <Trans i18nKey={'生成、编辑和管理图片'} />
               </h1>
               <p className='text-muted-foreground mt-1 text-sm'>
-                选择模型与参数，输入中文提示词即可开始创作。
+                <Trans
+                  i18nKey={'选择模型与参数，输入中文提示词即可开始创作。'}
+                />
               </p>
             </div>
             <div className='flex flex-wrap gap-2'>
               <Button variant='outline' onClick={handleNewSession}>
                 <RefreshCw data-icon='inline-start' />
-                新建会话
+                <Trans i18nKey={'新建会话'} />
               </Button>
               <Button
                 render={
@@ -416,7 +425,7 @@ export function ImageWorkspace() {
                 }
               >
                 <Clock3 data-icon='inline-start' />
-                查看日志
+                <Trans i18nKey={'查看日志'} />
               </Button>
             </div>
           </div>
@@ -425,10 +434,14 @@ export function ImageWorkspace() {
             <div className='border-border bg-card rounded-xl border p-5'>
               <div className='text-foreground flex items-center gap-2 text-base font-semibold'>
                 <Sparkles className='size-4' />
-                创作对话
+                <Trans i18nKey={'创作对话'} />
               </div>
               <div className='text-muted-foreground mt-1 text-sm'>
-                用中文描述需求，系统会按你当前选择的模型、分组和参数发起生图。
+                <Trans
+                  i18nKey={
+                    '用中文描述需求，系统会按你当前选择的模型、分组和参数发起生图。'
+                  }
+                />
               </div>
 
               <div className='mt-5 space-y-5'>
@@ -441,33 +454,43 @@ export function ImageWorkspace() {
                   <TabsList className='grid w-full grid-cols-2'>
                     <TabsTrigger value='generate'>
                       <WandSparkles className='size-4' />
-                      生图模式
+                      <Trans i18nKey={'生图模式'} />
                     </TabsTrigger>
                     <TabsTrigger value='edit'>
                       <PenSquare className='size-4' />
-                      改图模式
+                      <Trans i18nKey={'改图模式'} />
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
 
                 <div className='grid gap-2'>
-                  <Label>提示词</Label>
+                  <Label>
+                    <Trans i18nKey={'提示词'} />
+                  </Label>
                   <Textarea
                     value={form.prompt}
                     onChange={(event) =>
                       updateForm('prompt', event.target.value)
                     }
-                    placeholder='例如：生成一张电影感的雨夜街头场景，主角撑着透明雨伞站在霓虹灯下，镜头低角度，反光地面细节丰富，整体偏青橙色调。'
+                    placeholder={i18n.t(
+                      '例如：生成一张电影感的雨夜街头场景，主角撑着透明雨伞站在霓虹灯下，镜头低角度，反光地面细节丰富，整体偏青橙色调。'
+                    )}
                     className='min-h-40 rounded-xl'
                   />
                   <div className='text-muted-foreground text-xs leading-6'>
-                    写得越具体，结果越稳定。建议写清主体、环境、风格、镜头、构图和想保留的关键细节。
+                    <Trans
+                      i18nKey={
+                        '写得越具体，结果越稳定。建议写清主体、环境、风格、镜头、构图和想保留的关键细节。'
+                      }
+                    />
                   </div>
                 </div>
 
                 <div className='grid gap-4 md:grid-cols-2'>
                   <div className='grid gap-2'>
-                    <Label>模型</Label>
+                    <Label>
+                      <Trans i18nKey={'模型'} />
+                    </Label>
                     <Select
                       items={models.map((item: ModelOption) => ({
                         value: item.value,
@@ -479,7 +502,7 @@ export function ImageWorkspace() {
                       }
                     >
                       <SelectTrigger className='w-full rounded-lg'>
-                        <SelectValue placeholder='选择模型' />
+                        <SelectValue placeholder={i18n.t('选择模型')} />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
                         <SelectGroup>
@@ -494,7 +517,9 @@ export function ImageWorkspace() {
                   </div>
 
                   <div className='grid gap-2'>
-                    <Label>分组</Label>
+                    <Label>
+                      <Trans i18nKey={'分组'} />
+                    </Label>
                     <Select
                       items={groups.map((item: GroupOption) => ({
                         value: item.value,
@@ -506,7 +531,7 @@ export function ImageWorkspace() {
                       }
                     >
                       <SelectTrigger className='w-full rounded-lg'>
-                        <SelectValue placeholder='选择分组' />
+                        <SelectValue placeholder={i18n.t('选择分组')} />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
                         <SelectGroup>
@@ -515,7 +540,8 @@ export function ImageWorkspace() {
                               <div className='flex items-center gap-2'>
                                 <span>{item.label}</span>
                                 <span className='text-muted-foreground text-xs'>
-                                  倍率 x{item.ratio}
+                                  <Trans i18nKey={'倍率 x'} />
+                                  {item.ratio}
                                 </span>
                               </div>
                             </SelectItem>
@@ -533,7 +559,9 @@ export function ImageWorkspace() {
 
                 <div className='grid gap-4 md:grid-cols-3'>
                   <div className='grid gap-2'>
-                    <Label>尺寸</Label>
+                    <Label>
+                      <Trans i18nKey={'尺寸'} />
+                    </Label>
                     <Select
                       items={sizeOptions.map((value) => ({
                         value,
@@ -560,7 +588,9 @@ export function ImageWorkspace() {
                   </div>
 
                   <div className='grid gap-2'>
-                    <Label>清晰度</Label>
+                    <Label>
+                      <Trans i18nKey={'清晰度'} />
+                    </Label>
                     <Select
                       items={QUALITY_OPTIONS}
                       value={form.quality}
@@ -584,7 +614,9 @@ export function ImageWorkspace() {
                   </div>
 
                   <div className='grid gap-2'>
-                    <Label>生成张数</Label>
+                    <Label>
+                      <Trans i18nKey={'生成张数'} />
+                    </Label>
                     <Select
                       items={COUNT_OPTIONS.map((value) => ({
                         value,
@@ -616,14 +648,18 @@ export function ImageWorkspace() {
                     <div className='flex items-center justify-between gap-3'>
                       <div>
                         <div className='text-foreground text-sm font-semibold'>
-                          来源图片
+                          <Trans i18nKey={'来源图片'} />
                         </div>
                         <div className='text-muted-foreground text-xs leading-6'>
-                          先从历史图片中选一张作为改图基础，再输入你要继续调整的方向。
+                          <Trans
+                            i18nKey={
+                              '先从历史图片中选一张作为改图基础，再输入你要继续调整的方向。'
+                            }
+                          />
                         </div>
                       </div>
                       <Badge variant='outline'>
-                        {readySourceItems.length} 张可选
+                        {readySourceItems.length} <Trans i18nKey={'张可选'} />
                       </Badge>
                     </div>
 
@@ -652,21 +688,25 @@ export function ImageWorkspace() {
                                 size='sm'
                                 onClick={() => setPreviewItem(selectedSource)}
                               >
-                                预览
+                                <Trans i18nKey={'预览'} />
                               </Button>
                               <Button
                                 variant='outline'
                                 size='sm'
                                 onClick={() => applyItemPrompt(selectedSource)}
                               >
-                                复用提示词
+                                <Trans i18nKey={'复用提示词'} />
                               </Button>
                             </div>
                           </div>
                         </div>
                       ) : (
                         <div className='text-muted-foreground text-sm'>
-                          暂时没有可用来源图片。你可以先生成一张，再回来做改图。
+                          <Trans
+                            i18nKey={
+                              '暂时没有可用来源图片。你可以先生成一张，再回来做改图。'
+                            }
+                          />
                         </div>
                       )}
 
@@ -708,7 +748,7 @@ export function ImageWorkspace() {
                     {isSubmitting ? (
                       <>
                         <RefreshCw className='size-4 animate-spin' />
-                        正在处理
+                        <Trans i18nKey={'正在处理'} />
                       </>
                     ) : (
                       <>
@@ -717,7 +757,9 @@ export function ImageWorkspace() {
                         ) : (
                           <ImagePlus className='size-4' />
                         )}
-                        {form.mode === 'generate' ? '开始生图' : '开始改图'}
+                        {form.mode === 'generate'
+                          ? i18n.t('开始生图')
+                          : i18n.t('开始改图')}
                       </>
                     )}
                   </Button>
@@ -727,7 +769,7 @@ export function ImageWorkspace() {
                     onClick={() => updateForm('prompt', '')}
                     disabled={isSubmitting}
                   >
-                    清空提示词
+                    <Trans i18nKey={'清空提示词'} />
                   </Button>
                 </div>
               </div>
@@ -738,15 +780,19 @@ export function ImageWorkspace() {
                 <div>
                   <div className='text-foreground flex items-center gap-2 text-base font-semibold'>
                     <Images className='size-4' />
-                    作品记录
+                    <Trans i18nKey={'作品记录'} />
                   </div>
                   <div className='text-muted-foreground mt-1 text-sm'>
-                    当前会话结果和最近历史都会保存在这里，直到自动清理为止。
+                    <Trans
+                      i18nKey={
+                        '当前会话结果和最近历史都会保存在这里，直到自动清理为止。'
+                      }
+                    />
                   </div>
                 </div>
                 <Button variant='outline' size='sm' onClick={refreshGallery}>
                   <RefreshCw className='size-4' />
-                  刷新
+                  <Trans i18nKey={'刷新'} />
                 </Button>
               </div>
 
@@ -754,19 +800,21 @@ export function ImageWorkspace() {
                 <TabsList className='mt-5 grid w-full grid-cols-2'>
                   <TabsTrigger value='session'>
                     <Sparkles className='size-4' />
-                    当前会话
+                    <Trans i18nKey={'当前会话'} />
                   </TabsTrigger>
                   <TabsTrigger value='recent'>
                     <History className='size-4' />
-                    最近历史
+                    <Trans i18nKey={'最近历史'} />
                   </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value='session' className='mt-4'>
                   <ImageGrid
                     items={sessionItems}
-                    emptyTitle='当前会话还没有图片'
-                    emptyDescription='左侧输入中文提示词后，新的结果会优先出现在这里。'
+                    emptyTitle={i18n.t('当前会话还没有图片')}
+                    emptyDescription={i18n.t(
+                      '左侧输入中文提示词后，新的结果会优先出现在这里。'
+                    )}
                     onPreview={setPreviewItem}
                     onReusePrompt={applyItemPrompt}
                     onEditFromItem={startEditFromItem}
@@ -776,8 +824,10 @@ export function ImageWorkspace() {
                 <TabsContent value='recent' className='mt-4'>
                   <ImageGrid
                     items={recentItems}
-                    emptyTitle='最近还没有图片历史'
-                    emptyDescription='你最近生成的图片会暂时保存在这里，过期后会被自动清理。'
+                    emptyTitle={i18n.t('最近还没有图片历史')}
+                    emptyDescription={i18n.t(
+                      '你最近生成的图片会暂时保存在这里，过期后会被自动清理。'
+                    )}
                     onPreview={setPreviewItem}
                     onReusePrompt={applyItemPrompt}
                     onEditFromItem={startEditFromItem}
@@ -787,19 +837,19 @@ export function ImageWorkspace() {
 
               <div className='mt-5 grid gap-3'>
                 <InfoPill
-                  label='当前会话图片数'
+                  label={i18n.t('当前会话图片数')}
                   value={String(sessionItems.length)}
                 />
                 <InfoPill
-                  label='最近历史图片数'
+                  label={i18n.t('最近历史图片数')}
                   value={String(recentItems.length)}
                 />
                 <InfoPill
-                  label='当前浏览标签'
+                  label={i18n.t('当前浏览标签')}
                   value={galleryTab === 'session' ? '当前会话' : '最近历史'}
                 />
                 <InfoPill
-                  label='当前选中来源图'
+                  label={i18n.t('当前选中来源图')}
                   value={selectedSource ? `#${selectedSource.id}` : '未选择'}
                 />
               </div>
@@ -830,6 +880,7 @@ function ImageGrid(props: {
   onReusePrompt: (item: ImageWorkspaceItem) => void
   onEditFromItem: (item: ImageWorkspaceItem) => void
 }) {
+  useTranslation()
   if (props.items.length === 0) {
     return (
       <Empty className='min-h-72 rounded-xl border'>
@@ -872,7 +923,7 @@ function ImageGrid(props: {
                 <div className='bg-muted flex size-28 items-center justify-center rounded-2xl border'>
                   <div className='text-muted-foreground flex items-center gap-2 text-sm'>
                     <AlertCircle className='size-4' />
-                    {isExpired ? '已过期' : '不可用'}
+                    {isExpired ? i18n.t('已过期') : i18n.t('不可用')}
                   </div>
                 </div>
               )}
@@ -893,7 +944,7 @@ function ImageGrid(props: {
                         <>
                           <span>·</span>
                           <span>
-                            到期{' '}
+                            <Trans i18nKey={'到期'} />{' '}
                             {dayjs.unix(item.expires_at).format('MM-DD HH:mm')}
                           </span>
                         </>
@@ -918,7 +969,7 @@ function ImageGrid(props: {
                       size='sm'
                       onClick={() => props.onPreview(item)}
                     >
-                      预览
+                      <Trans i18nKey={'预览'} />
                     </Button>
                   ) : null}
                   {isReady && item.download_url ? (
@@ -928,7 +979,7 @@ function ImageGrid(props: {
                       render={
                         <a href={item.download_url}>
                           <Download className='size-4' />
-                          下载
+                          <Trans i18nKey={'下载'} />
                         </a>
                       }
                     />
@@ -938,7 +989,7 @@ function ImageGrid(props: {
                     size='sm'
                     onClick={() => props.onReusePrompt(item)}
                   >
-                    复用提示词
+                    <Trans i18nKey={'复用提示词'} />
                   </Button>
                   {isReady ? (
                     <Button
@@ -946,7 +997,7 @@ function ImageGrid(props: {
                       size='sm'
                       onClick={() => props.onEditFromItem(item)}
                     >
-                      基于这张继续改
+                      <Trans i18nKey={'基于这张继续改'} />
                     </Button>
                   ) : null}
                 </div>

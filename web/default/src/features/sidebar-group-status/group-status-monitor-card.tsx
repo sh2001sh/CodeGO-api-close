@@ -17,25 +17,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { HealthStrip } from './health-strip'
-import {
-  formatRequestCount,
-  formatSampleWindowLabel,
-  getStatusMeta,
-} from './presentation'
+import { formatRequestCount, getStatusMeta } from './presentation'
 import type { SidebarGroupModelStatusItem } from './types'
 
 export const GroupStatusMonitorCard = memo(
   function GroupStatusMonitorCard(props: {
     item: SidebarGroupModelStatusItem
   }) {
+    const { t } = useTranslation()
     const meta = getStatusMeta(props.item.status)
-    const seriesWindowLabel = formatSampleWindowLabel(
-      props.item.series_window ?? props.item.sample_window
+    const seriesWindowLabel = localizedSampleWindowLabel(
+      props.item.series_window ?? props.item.sample_window,
+      t
     )
-    const sampleWindowLabel = formatSampleWindowLabel(props.item.sample_window)
+    const sampleWindowLabel = localizedSampleWindowLabel(
+      props.item.sample_window,
+      t
+    )
 
     return (
       <Card
@@ -64,15 +66,18 @@ export const GroupStatusMonitorCard = memo(
                   meta.badgeBg
                 )}
               >
-                {meta.label}
+                {t(meta.label)}
               </div>
             </div>
 
             <div className='divide-border/60 grid grid-cols-3 divide-x py-0.5'>
-              <Metric label='成功率' value={props.item.success_rate} />
-              <Metric label='缓存命中率' value={props.item.cache_hit_rate} />
+              <Metric label={t('成功率')} value={props.item.success_rate} />
+              <Metric
+                label={t('缓存命中率')}
+                value={props.item.cache_hit_rate}
+              />
               <RequestMetric
-                label={`${sampleWindowLabel}请求`}
+                label={t('{{window}}请求', { window: sampleWindowLabel })}
                 value={props.item.request_count}
               />
             </div>
@@ -92,6 +97,18 @@ export const GroupStatusMonitorCard = memo(
     )
   }
 )
+
+function localizedSampleWindowLabel(
+  hours: number | null,
+  t: ReturnType<typeof useTranslation>['t']
+) {
+  if (hours == null || hours <= 0) return t('暂无采样窗口')
+  const minutes = Math.round(hours * 60)
+  if (minutes < 60 || minutes % 60 !== 0) {
+    return t('最近 {{count}} 分钟', { count: minutes })
+  }
+  return t('最近 {{count}} 小时', { count: minutes / 60 })
+}
 
 function Metric(props: { label: string; value?: number | null }) {
   return (

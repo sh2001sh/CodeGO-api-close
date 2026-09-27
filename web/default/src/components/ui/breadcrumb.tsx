@@ -24,6 +24,7 @@ import {
   MoreHorizontalCircle01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<'nav'>) {
@@ -127,7 +128,9 @@ function BreadcrumbEllipsis({
       {...props}
     >
       <HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2} />
-      <span className='sr-only'>更多</span>
+      <span className='sr-only'>
+        <Trans i18nKey={'更多'} />
+      </span>
     </span>
   )
 }

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { type SVGProps } from 'react'
+import i18n from '@/i18n/config'
 import { Radio as RadioPrimitive } from '@base-ui/react/radio'
 import { RadioGroup as Radio } from '@base-ui/react/radio-group'
 import { CircleCheck, Palette, RotateCcw } from 'lucide-react'
@@ -122,6 +123,7 @@ function SectionTitle(props: {
   onReset?: () => void
   className?: string
 }) {
+  useTranslation()
   return (
     <div
       className={cn(
@@ -136,7 +138,7 @@ function SectionTitle(props: {
           variant='secondary'
           className='size-4'
           onClick={props.onReset}
-          aria-label='重置'
+          aria-label={i18n.t('重置')}
         >
           <RotateCcw className='size-3' aria-hidden='true' />
         </Button>
@@ -229,7 +231,6 @@ function ThemeConfig() {
     </div>
   )
 }
-
 
 const RADIUS_OPTIONS: {
   value: ThemeRadius

@@ -24,6 +24,7 @@ import { Route as MarketIndexRouteImport } from './routes/market/index'
 import { Route as GuideIndexRouteImport } from './routes/guide/index'
 import { Route as GroupStatusIndexRouteImport } from './routes/group-status/index'
 import { Route as DownloadIndexRouteImport } from './routes/download/index'
+import { Route as DocsIndexRouteImport } from './routes/docs/index'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as TopicsSlugRouteImport } from './routes/topics/$slug'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
@@ -64,7 +65,6 @@ import { Route as AuthenticatedImagesIndexRouteImport } from './routes/_authenti
 import { Route as AuthenticatedGroupBuyIndexRouteImport } from './routes/_authenticated/group-buy/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDailyLuckyNumberIndexRouteImport } from './routes/_authenticated/daily-lucky-number/index'
-import { Route as AuthenticatedCommunityResourcesIndexRouteImport } from './routes/_authenticated/community-resources/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedBlindBoxIndexRouteImport } from './routes/_authenticated/blind-box/index'
 import { Route as AuthenticatedUsageLogsSectionRouteImport } from './routes/_authenticated/usage-logs/$section'
@@ -159,6 +159,11 @@ const GroupStatusIndexRoute = GroupStatusIndexRouteImport.update({
 const DownloadIndexRoute = DownloadIndexRouteImport.update({
   id: '/download/',
   path: '/download/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/docs/',
+  path: '/docs/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AboutIndexRoute = AboutIndexRouteImport.update({
@@ -380,12 +385,6 @@ const AuthenticatedDailyLuckyNumberIndexRoute =
     path: '/daily-lucky-number/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedCommunityResourcesIndexRoute =
-  AuthenticatedCommunityResourcesIndexRouteImport.update({
-    id: '/community-resources/',
-    path: '/community-resources/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedChannelsIndexRoute =
   AuthenticatedChannelsIndexRouteImport.update({
     id: '/channels/',
@@ -542,6 +541,7 @@ export interface FileRoutesByFullPath {
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about/': typeof AboutIndexRoute
+  '/docs/': typeof DocsIndexRoute
   '/download/': typeof DownloadIndexRoute
   '/group-status/': typeof GroupStatusIndexRoute
   '/guide/': typeof GuideIndexRoute
@@ -558,7 +558,6 @@ export interface FileRoutesByFullPath {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/blind-box/': typeof AuthenticatedBlindBoxIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
-  '/community-resources/': typeof AuthenticatedCommunityResourcesIndexRoute
   '/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/group-buy/': typeof AuthenticatedGroupBuyIndexRoute
@@ -619,6 +618,7 @@ export interface FileRoutesByTo {
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about': typeof AboutIndexRoute
+  '/docs': typeof DocsIndexRoute
   '/download': typeof DownloadIndexRoute
   '/group-status': typeof GroupStatusIndexRoute
   '/guide': typeof GuideIndexRoute
@@ -635,7 +635,6 @@ export interface FileRoutesByTo {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/blind-box': typeof AuthenticatedBlindBoxIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
-  '/community-resources': typeof AuthenticatedCommunityResourcesIndexRoute
   '/daily-lucky-number': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/group-buy': typeof AuthenticatedGroupBuyIndexRoute
@@ -700,6 +699,7 @@ export interface FileRoutesById {
   '/oauth/$provider': typeof OauthProviderRoute
   '/topics/$slug': typeof TopicsSlugRoute
   '/about/': typeof AboutIndexRoute
+  '/docs/': typeof DocsIndexRoute
   '/download/': typeof DownloadIndexRoute
   '/group-status/': typeof GroupStatusIndexRoute
   '/guide/': typeof GuideIndexRoute
@@ -716,7 +716,6 @@ export interface FileRoutesById {
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/_authenticated/blind-box/': typeof AuthenticatedBlindBoxIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
-  '/_authenticated/community-resources/': typeof AuthenticatedCommunityResourcesIndexRoute
   '/_authenticated/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/group-buy/': typeof AuthenticatedGroupBuyIndexRoute
@@ -780,6 +779,7 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about/'
+    | '/docs/'
     | '/download/'
     | '/group-status/'
     | '/guide/'
@@ -796,7 +796,6 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/blind-box/'
     | '/channels/'
-    | '/community-resources/'
     | '/daily-lucky-number/'
     | '/dashboard/'
     | '/group-buy/'
@@ -857,6 +856,7 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about'
+    | '/docs'
     | '/download'
     | '/group-status'
     | '/guide'
@@ -873,7 +873,6 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/blind-box'
     | '/channels'
-    | '/community-resources'
     | '/daily-lucky-number'
     | '/dashboard'
     | '/group-buy'
@@ -937,6 +936,7 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/topics/$slug'
     | '/about/'
+    | '/docs/'
     | '/download/'
     | '/group-status/'
     | '/guide/'
@@ -953,7 +953,6 @@ export interface FileRouteTypes {
     | '/_authenticated/usage-logs/$section'
     | '/_authenticated/blind-box/'
     | '/_authenticated/channels/'
-    | '/_authenticated/community-resources/'
     | '/_authenticated/daily-lucky-number/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/group-buy/'
@@ -1010,6 +1009,7 @@ export interface RootRouteChildren {
   OauthProviderRoute: typeof OauthProviderRoute
   TopicsSlugRoute: typeof TopicsSlugRoute
   AboutIndexRoute: typeof AboutIndexRoute
+  DocsIndexRoute: typeof DocsIndexRoute
   DownloadIndexRoute: typeof DownloadIndexRoute
   GroupStatusIndexRoute: typeof GroupStatusIndexRoute
   GuideIndexRoute: typeof GuideIndexRoute
@@ -1126,6 +1126,13 @@ declare module '@tanstack/react-router' {
       path: '/download'
       fullPath: '/download/'
       preLoaderRoute: typeof DownloadIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/': {
+      id: '/docs/'
+      path: '/docs'
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about/': {
@@ -1408,13 +1415,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDailyLuckyNumberIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/community-resources/': {
-      id: '/_authenticated/community-resources/'
-      path: '/community-resources'
-      fullPath: '/community-resources/'
-      preLoaderRoute: typeof AuthenticatedCommunityResourcesIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/channels/': {
       id: '/_authenticated/channels/'
       path: '/channels'
@@ -1663,7 +1663,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
   AuthenticatedBlindBoxIndexRoute: typeof AuthenticatedBlindBoxIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
-  AuthenticatedCommunityResourcesIndexRoute: typeof AuthenticatedCommunityResourcesIndexRoute
   AuthenticatedDailyLuckyNumberIndexRoute: typeof AuthenticatedDailyLuckyNumberIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedGroupBuyIndexRoute: typeof AuthenticatedGroupBuyIndexRoute
@@ -1696,8 +1695,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
   AuthenticatedBlindBoxIndexRoute: AuthenticatedBlindBoxIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
-  AuthenticatedCommunityResourcesIndexRoute:
-    AuthenticatedCommunityResourcesIndexRoute,
   AuthenticatedDailyLuckyNumberIndexRoute:
     AuthenticatedDailyLuckyNumberIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
@@ -1743,6 +1740,7 @@ const rootRouteChildren: RootRouteChildren = {
   OauthProviderRoute: OauthProviderRoute,
   TopicsSlugRoute: TopicsSlugRoute,
   AboutIndexRoute: AboutIndexRoute,
+  DocsIndexRoute: DocsIndexRoute,
   DownloadIndexRoute: DownloadIndexRoute,
   GroupStatusIndexRoute: GroupStatusIndexRoute,
   GuideIndexRoute: GuideIndexRoute,

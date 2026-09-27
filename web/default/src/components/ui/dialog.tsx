@@ -20,6 +20,7 @@ import * as React from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -87,7 +88,9 @@ function DialogContent({
             }
           >
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-            <span className='sr-only'>关闭</span>
+            <span className='sr-only'>
+              <Trans i18nKey={'关闭'} />
+            </span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -125,7 +128,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant='outline' />}>
-          关闭
+          <Trans i18nKey={'关闭'} />
         </DialogPrimitive.Close>
       )}
     </div>

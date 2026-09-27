@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Check, ChevronsUpDown } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -112,22 +112,28 @@ function GroupRatioBadge(props: {
   )
 }
 
-function GroupRatioBadges({ option }: { option?: ApiKeyGroupOption }) {
+function GroupRatioBadges({
+  option,
+  className,
+}: {
+  option?: ApiKeyGroupOption
+  className?: string
+}) {
   if (!option) return null
   return (
-    <span className='flex shrink-0 flex-wrap justify-end gap-1'>
+    <span className={cn('flex min-w-0 flex-wrap gap-1', className)}>
       <GroupRatioBadge ratio={option.ratio} label='Balance' />
       {option.subscriptionEnabled && (
         <GroupRatioBadge ratio={option.subscriptionRatio} label='Plan' />
       )}
       {option.successRate != null && option.requestCount !== 0 && (
         <Badge variant='outline' className='shrink-0 text-[10px] sm:text-xs'>
-          成功率 {option.successRate.toFixed(1)}%
+          <Trans i18nKey={'成功率'} /> {option.successRate.toFixed(1)}%
         </Badge>
       )}
       {option.avgTTFTMs != null && option.requestCount !== 0 && (
         <Badge variant='outline' className='shrink-0 text-[10px] sm:text-xs'>
-          首字 {(option.avgTTFTMs / 1000).toFixed(2)}s
+          <Trans i18nKey={'首字'} /> {(option.avgTTFTMs / 1000).toFixed(2)}s
         </Badge>
       )}
     </span>
@@ -231,8 +237,8 @@ export function ApiKeyGroupCombobox({
           />
         }
       >
-        <span className='flex min-w-0 flex-1 items-center justify-between gap-2 sm:gap-3'>
-          <span className='min-w-0'>
+        <span className='flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-between sm:gap-3'>
+          <span className='min-w-0 flex-1'>
             <span className='block truncate font-medium'>
               {selectedOption?.label ||
                 value ||
@@ -245,7 +251,10 @@ export function ApiKeyGroupCombobox({
               </span>
             )}
           </span>
-          <GroupRatioBadges option={selectedOption} />
+          <GroupRatioBadges
+            option={selectedOption}
+            className='basis-full sm:basis-auto sm:shrink-0 sm:justify-end'
+          />
         </span>
         <ChevronsUpDown className='h-4 w-4 shrink-0 opacity-50' />
       </PopoverTrigger>
@@ -261,7 +270,7 @@ export function ApiKeyGroupCombobox({
             value={searchValue}
             onValueChange={handleSearchValueChange}
           />
-          <CommandList className='max-h-[360px]'>
+          <CommandList className='max-h-[min(360px,50dvh)]'>
             <CommandEmpty>{t('No group found.')}</CommandEmpty>
             <GroupOptions
               heading={t('我的路由池')}
@@ -320,7 +329,7 @@ function GroupOptions(props: {
           value={option.value}
           disabled={option.disabled}
           onSelect={() => props.onSelect(option.value)}
-          className='data-[selected=true]:bg-muted items-start gap-3 rounded-lg px-3 py-3 transition-colors data-disabled:opacity-50'
+          className='data-[selected=true]:bg-muted flex-wrap items-start gap-2 rounded-lg px-3 py-3 transition-colors data-disabled:opacity-50 sm:flex-nowrap sm:gap-3'
         >
           <Check
             className={cn(
@@ -336,7 +345,10 @@ function GroupOptions(props: {
               </span>
             )}
           </span>
-          <GroupRatioBadges option={option} />
+          <GroupRatioBadges
+            option={option}
+            className='basis-full pl-7 sm:basis-auto sm:shrink-0 sm:justify-end sm:pl-0'
+          />
         </CommandItem>
       ))}
     </CommandGroup>

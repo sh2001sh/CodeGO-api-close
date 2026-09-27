@@ -13,7 +13,6 @@ import (
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
-	communityschema "github.com/sh2001sh/new-api/internal/community/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -318,7 +317,6 @@ func migratePrimaryDB() error {
 		&identitydomain.DesktopDiagnosticReport{},
 		&identitydomain.DesktopTelemetryEvent{},
 		&identitydomain.ImageWorkspaceItem{},
-		&communityschema.Resource{},
 		&marketplaceschema.Channel{},
 		&marketplaceschema.ChannelIDSequence{},
 		&marketplaceschema.Group{},

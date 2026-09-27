@@ -1,5 +1,6 @@
 import { ArrowRight, Trophy } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
+import { Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -47,10 +48,14 @@ export function RewardLadder(props: {
           </span>
           <div className='min-w-0'>
             <h2 className='text-foreground text-base font-semibold'>
-              奖励阶梯
+              <Trans i18nKey={'奖励阶梯'} />
             </h2>
             <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
-              连续命中位数越多档位越高，金额按你当前最高月卡倍率换算
+              <Trans
+                i18nKey={
+                  '连续命中位数越多档位越高，金额按你当前最高月卡倍率换算'
+                }
+              />
             </p>
           </div>
         </div>
@@ -79,10 +84,11 @@ export function RewardLadder(props: {
 
       <div className='border-border/70 bg-muted/20 space-y-2 border-t px-4 py-3.5 sm:px-5'>
         <p className='text-muted-foreground text-xs leading-5'>
-          四位全中时还会额外平分当期奖池；奖池初始{' '}
-          {formatLuckyUsd(rules.jackpot_initial_usd)}，每天无人全中增加{' '}
-          {formatLuckyUsd(rules.jackpot_increment_usd)}，上限{' '}
-          {formatLuckyUsd(rules.jackpot_cap_usd)}。
+          <Trans i18nKey={'四位全中时还会额外平分当期奖池；奖池初始'} />{' '}
+          {formatLuckyUsd(rules.jackpot_initial_usd)}
+          <Trans i18nKey={'，每天无人全中增加'} />{' '}
+          {formatLuckyUsd(rules.jackpot_increment_usd)}
+          <Trans i18nKey={'，上限'} /> {formatLuckyUsd(rules.jackpot_cap_usd)}。
         </p>
         <Button
           variant='link'
@@ -90,7 +96,7 @@ export function RewardLadder(props: {
           className='px-0'
           onClick={props.onOpenRules}
         >
-          查看完整规则与各档倍率
+          <Trans i18nKey={'查看完整规则与各档倍率'} />
           <ArrowRight data-icon='inline-end' />
         </Button>
       </div>
@@ -118,16 +124,14 @@ function LadderTile(props: {
     >
       <div className='flex items-center justify-between gap-3'>
         <span
-          className={cn(
-            'codego-stat-label',
-            props.reached && 'text-primary'
-          )}
+          className={cn('codego-stat-label', props.reached && 'text-primary')}
         >
-          命中 {props.step.digits} 位
+          <Trans i18nKey={'命中'} /> {props.step.digits}{' '}
+          <Trans i18nKey={'位'} />
         </span>
         {props.active ? (
-          <span className='codego-stat-label border border-primary/30 px-1.5 py-0.5 text-primary'>
-            命中
+          <span className='codego-stat-label border-primary/30 text-primary border px-1.5 py-0.5'>
+            <Trans i18nKey={'命中'} />
           </span>
         ) : null}
       </div>

@@ -263,13 +263,19 @@ func signOIDCIDToken(config OIDCProviderConfig, user *identityschema.User, nonce
 	if nonce != "" {
 		claims["nonce"] = nonce
 	}
-	if user.Email != "" {
+	if IsOIDCEmailVerified(user) {
 		claims["email"] = user.Email
-		claims["email_verified"] = false
+		claims["email_verified"] = true
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = config.KeyID
 	return token.SignedString(config.PrivateKey)
+}
+
+// IsOIDCEmailVerified reflects CodeGo's persisted-email invariant: email
+// addresses are stored only after ownership verification or a trusted OAuth import.
+func IsOIDCEmailVerified(user *identityschema.User) bool {
+	return user != nil && strings.TrimSpace(user.Email) != ""
 }
 
 func validOIDCClient(config OIDCProviderConfig, clientID, secret string) bool {

@@ -64,7 +64,7 @@ function DocumentHeader(props: { title: string; description: string }) {
 }
 
 export function LegalDocument(props: LegalDocumentProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: [props.queryKey],
     queryFn: props.fetchDocument,
@@ -72,7 +72,9 @@ export function LegalDocument(props: LegalDocumentProps) {
   })
 
   const rawContent = data?.data?.trim() ?? ''
-  const hasContent = rawContent.length > 0
+  const hasContent =
+    rawContent.length > 0 &&
+    (i18n.language === 'zh' || !/[\u3400-\u9fff]/u.test(rawContent))
   const success = data?.success ?? false
 
   if (isLoading) {
@@ -87,7 +89,7 @@ export function LegalDocument(props: LegalDocumentProps) {
         <div className='mx-auto flex max-w-4xl flex-col gap-4 py-12'>
           <DocumentHeader
             title={props.title}
-            description={props.seoDescription}
+            description={t(props.seoDescription)}
           />
           <Skeleton className='h-8 w-[45%]' />
           <Skeleton className='h-4 w-full' />
@@ -98,8 +100,9 @@ export function LegalDocument(props: LegalDocumentProps) {
     )
   }
 
-  const displayContent =
-    hasContent ? rawContent : (props.fallbackContent?.trim() ?? '')
+  const displayContent = hasContent
+    ? rawContent
+    : (props.fallbackContent?.trim() ?? '')
   const displayIsUrl = displayContent.length > 0 && isValidUrl(displayContent)
   const displayIsHtml =
     displayContent.length > 0 && !displayIsUrl && isLikelyHtml(displayContent)
@@ -116,7 +119,7 @@ export function LegalDocument(props: LegalDocumentProps) {
         <div className='mx-auto max-w-4xl space-y-6 py-12'>
           <DocumentHeader
             title={props.title}
-            description={props.seoDescription}
+            description={t(props.seoDescription)}
           />
           <Card className='border-dashed'>
             <CardHeader className='flex flex-row items-center gap-4'>
@@ -124,7 +127,9 @@ export function LegalDocument(props: LegalDocumentProps) {
                 <FileWarning className='text-muted-foreground h-5 w-5' />
               </div>
               <div className='space-y-1'>
-                <CardTitle className='text-lg font-semibold'>{props.title}</CardTitle>
+                <CardTitle className='text-lg font-semibold'>
+                  {props.title}
+                </CardTitle>
                 <p className='text-muted-foreground text-sm'>
                   {data?.message || props.emptyMessage}
                 </p>
@@ -148,7 +153,7 @@ export function LegalDocument(props: LegalDocumentProps) {
         <div className='mx-auto max-w-4xl space-y-6 py-12'>
           <DocumentHeader
             title={props.title}
-            description={props.seoDescription}
+            description={t(props.seoDescription)}
           />
           <Card>
             <CardHeader>
@@ -182,14 +187,14 @@ export function LegalDocument(props: LegalDocumentProps) {
     <PublicLayout>
       <SiteSeo
         title={props.seoTitle}
-        description={props.seoDescription}
+        description={t(props.seoDescription)}
         keywords={props.seoKeywords}
         canonicalPath={props.canonicalPath}
       />
       <div className='mx-auto max-w-4xl space-y-6 py-12'>
         <DocumentHeader
           title={props.title}
-          description={props.seoDescription}
+          description={t(props.seoDescription)}
         />
 
         {displayIsHtml ? (

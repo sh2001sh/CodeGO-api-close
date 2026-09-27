@@ -35,6 +35,7 @@ export function buildCodexProviderBlock(serverAddress: string): string {
 name = "${CODEX_PROVIDER}"
 base_url = "${serverAddress}/v1"
 wire_api = "responses"
+requires_openai_auth = true
 supports_websockets = true
 # END CODEGO MANAGED PROVIDER`
 }
@@ -175,7 +176,7 @@ exit /b 1
 `
   return script.replace(
     "'# END CODEXFORALL MANAGED PROVIDER'",
-    "'supports_websockets = true','# END CODEXFORALL MANAGED PROVIDER'"
+    "'requires_openai_auth = true','supports_websockets = true','# END CODEXFORALL MANAGED PROVIDER'"
   )
 }
 

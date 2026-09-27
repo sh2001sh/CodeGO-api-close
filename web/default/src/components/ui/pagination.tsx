@@ -17,12 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import * as React from 'react'
+import i18n from '@/i18n/config'
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   MoreHorizontalCircle01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -89,9 +91,10 @@ function PaginationPrevious({
   text = '上一页',
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
+  useTranslation()
   return (
     <PaginationLink
-      aria-label='转到上一页'
+      aria-label={i18n.t('转到上一页')}
       size='default'
       className={cn('pl-1.5!', className)}
       {...props}
@@ -111,9 +114,10 @@ function PaginationNext({
   text = '下一页',
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
+  useTranslation()
   return (
     <PaginationLink
-      aria-label='转到下一页'
+      aria-label={i18n.t('转到下一页')}
       size='default'
       className={cn('pr-1.5!', className)}
       {...props}
@@ -143,7 +147,9 @@ function PaginationEllipsis({
       {...props}
     >
       <HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2} />
-      <span className='sr-only'>更多页</span>
+      <span className='sr-only'>
+        <Trans i18nKey={'更多页'} />
+      </span>
     </span>
   )
 }

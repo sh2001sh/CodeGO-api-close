@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 type SiteSeoProps = {
   title: string
@@ -15,7 +16,11 @@ const SITE_ALTERNATE_NAME = 'Code Go'
 const SITE_ORIGIN = 'https://codegoai.com'
 const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/code-go-logo.svg`
 
-function ensureMeta(selector: string, attribute: 'name' | 'property', value: string) {
+function ensureMeta(
+  selector: string,
+  attribute: 'name' | 'property',
+  value: string
+) {
   let element = document.head.querySelector(selector) as HTMLMetaElement | null
   if (!element) {
     element = document.createElement('meta')
@@ -36,20 +41,23 @@ function ensureLink(selector: string, rel: string) {
 }
 
 export function SiteSeo(props: SiteSeoProps) {
+  const { t, i18n } = useTranslation()
   useEffect(() => {
+    const title = t(props.title)
+    const description = t(props.description)
     const fullTitle =
-      props.title.includes(SITE_NAME) || props.title.includes(SITE_ALTERNATE_NAME)
-      ? props.title
-      : `${props.title} | ${SITE_NAME}`
+      title.includes(SITE_NAME) || title.includes(SITE_ALTERNATE_NAME)
+        ? title
+        : `${title} | ${SITE_NAME}`
     const canonicalUrl = `${SITE_ORIGIN}${props.canonicalPath || ''}`
     const previousTitle = document.title
 
     document.title = fullTitle
 
     ensureMeta('meta[name="description"]', 'name', 'description').content =
-      props.description
+      description
     ensureMeta('meta[name="keywords"]', 'name', 'keywords').content =
-      props.keywords ||
+      (props.keywords ? t(props.keywords) : '') ||
       'CodeGo, Code Go, AI Coding, Codex, Claude Code, AI API, OpenAI compatible API, Claude API, Gemini API'
     ensureMeta('meta[name="robots"]', 'name', 'robots').content =
       props.robots || 'index,follow'
@@ -59,13 +67,16 @@ export function SiteSeo(props: SiteSeoProps) {
       'meta[property="og:description"]',
       'property',
       'og:description'
-    ).content = props.description
+    ).content = description
     ensureMeta('meta[property="og:type"]', 'property', 'og:type').content =
       props.ogType || 'website'
     ensureMeta('meta[property="og:url"]', 'property', 'og:url').content =
       canonicalUrl
-    ensureMeta('meta[property="og:site_name"]', 'property', 'og:site_name').content =
-      SITE_NAME
+    ensureMeta(
+      'meta[property="og:site_name"]',
+      'property',
+      'og:site_name'
+    ).content = SITE_NAME
     ensureMeta('meta[property="og:image"]', 'property', 'og:image').content =
       DEFAULT_OG_IMAGE
     ensureMeta('meta[name="twitter:card"]', 'name', 'twitter:card').content =
@@ -76,7 +87,7 @@ export function SiteSeo(props: SiteSeoProps) {
       'meta[name="twitter:description"]',
       'name',
       'twitter:description'
-    ).content = props.description
+    ).content = description
     ensureMeta('meta[name="twitter:image"]', 'name', 'twitter:image').content =
       DEFAULT_OG_IMAGE
 
@@ -98,7 +109,17 @@ export function SiteSeo(props: SiteSeoProps) {
     return () => {
       document.title = previousTitle
     }
-  }, [props.canonicalPath, props.description, props.jsonLd, props.keywords, props.ogType, props.robots, props.title])
+  }, [
+    i18n.language,
+    props.canonicalPath,
+    props.description,
+    props.jsonLd,
+    props.keywords,
+    props.ogType,
+    props.robots,
+    props.title,
+    t,
+  ])
 
   return null
 }

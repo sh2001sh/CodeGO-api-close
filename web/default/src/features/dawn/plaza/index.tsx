@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com.
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import {
   ArrowRight,
   LayoutGrid,
@@ -28,7 +29,7 @@ import {
   Waypoints,
   X,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { SiteSeo } from '@/components/seo'
 import { useMarketplaceGroups } from '@/features/marketplace/hooks'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
@@ -81,6 +82,10 @@ function guessVendor(name: string): string {
     if (pattern.test(lower)) return vendor
   }
   return '其它'
+}
+
+function displayVendor(name: string): string {
+  return name === '其它' ? i18n.t('Other') : name
 }
 
 export function DawnPlaza() {
@@ -234,8 +239,8 @@ export function DawnPlaza() {
   return (
     <div className='dawn'>
       <SiteSeo
-        title='模型广场 | Code Go'
-        description='模型广场 · 输入输出价目'
+        title={i18n.t('模型广场 | Code Go')}
+        description={i18n.t('模型广场 · 输入输出价目')}
         canonicalPath='/pricing'
       />
       <DawnNav />
@@ -247,7 +252,11 @@ export function DawnPlaza() {
               MODEL PLAZA
             </div>
             <h1>
-              模型广场，<em>皆有价签</em>。
+              <Trans i18nKey={'模型广场，'} />
+              <em>
+                <Trans i18nKey={'皆有价签'} />
+              </em>
+              。
             </h1>
           </div>
           <div className='seg'>
@@ -269,29 +278,39 @@ export function DawnPlaza() {
         <div className='statband'>
           <div className='cell'>
             <b>{models.length}</b>
-            <span>在售模型</span>
+            <span>
+              <Trans i18nKey={'在售模型'} />
+            </span>
           </div>
           <div className='cell'>
             <b>{vendors.length - 1}</b>
-            <span>模型厂家</span>
+            <span>
+              <Trans i18nKey={'模型厂家'} />
+            </span>
           </div>
           <div className='cell'>
             <b className='c-ok'>{free}</b>
-            <span>免费模型</span>
+            <span>
+              <Trans i18nKey={'免费模型'} />
+            </span>
           </div>
           <div className='cell'>
             <b className='c-warn'>{metered}</b>
-            <span>按量计费</span>
+            <span>
+              <Trans i18nKey={'按量计费'} />
+            </span>
           </div>
           <div className='cell'>
             <b>{groups.length}</b>
-            <span>计费分组</span>
+            <span>
+              <Trans i18nKey={'计费分组'} />
+            </span>
           </div>
         </div>
 
         <div className='filters'>
           <input
-            placeholder='搜索模型 / 厂家'
+            placeholder={i18n.t('搜索模型 / 厂家')}
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
           />
@@ -302,7 +321,7 @@ export function DawnPlaza() {
                 className={vendor === name ? 'on' : ''}
                 onClick={() => setVendor(name)}
               >
-                {name}
+                {displayVendor(name)}
               </button>
             ))}
           </div>
@@ -313,22 +332,28 @@ export function DawnPlaza() {
               setSort(event.target.value as 'hot' | 'name' | 'price')
             }
           >
-            <option value='hot'>按热度</option>
-            <option value='name'>按名称</option>
-            <option value='price'>按输入价</option>
+            <option value='hot'>
+              <Trans i18nKey={'按热度'} />
+            </option>
+            <option value='name'>
+              <Trans i18nKey={'按名称'} />
+            </option>
+            <option value='price'>
+              <Trans i18nKey={'按输入价'} />
+            </option>
           </select>
           <div className='iconseg'>
             <button
               className={view === 'table' ? 'on' : ''}
               onClick={() => setView('table')}
-              title='表格'
+              title={i18n.t('表格')}
             >
               <Table2 size={15} />
             </button>
             <button
               className={view === 'grid' ? 'on' : ''}
               onClick={() => setView('grid')}
-              title='卡片'
+              title={i18n.t('卡片')}
             >
               <LayoutGrid size={15} />
             </button>
@@ -337,8 +362,8 @@ export function DawnPlaza() {
 
         {pricing.isLoading ? null : pricing.error ? (
           <DawnQueryError
-            title='模型价格加载失败'
-            description='暂时无法获取模型与计费信息，请稍后重试。'
+            title={i18n.t('模型价格加载失败')}
+            description={i18n.t('暂时无法获取模型与计费信息，请稍后重试。')}
             onRetry={() => void pricing.refetch()}
           />
         ) : list.length === 0 ? (
@@ -346,22 +371,36 @@ export function DawnPlaza() {
             <span className='eic'>
               <SearchX size={20} />
             </span>
-            <b>无匹配模型</b>
+            <b>
+              <Trans i18nKey={'无匹配模型'} />
+            </b>
           </div>
         ) : view === 'table' ? (
           <div className='gtable cache-prices' style={{ marginTop: 16 }}>
             <div className='tr th'>
-              <span>模型</span>
-              <span>输入 /{unit}</span>
-              <span>输出 /{unit}</span>
+              <span>
+                <Trans i18nKey={'模型'} />
+              </span>
+              <span>
+                <Trans i18nKey={'输入 /'} />
+                {unit}
+              </span>
+              <span>
+                <Trans i18nKey={'输出 /'} />
+                {unit}
+              </span>
               <span>
                 {t('缓存写入')} /{unit}
               </span>
               <span>
                 {t('缓存读取')} /{unit}
               </span>
-              <span>可用分组</span>
-              <span style={{ textAlign: 'right' }}>详情</span>
+              <span>
+                <Trans i18nKey={'可用分组'} />
+              </span>
+              <span style={{ textAlign: 'right' }}>
+                <Trans i18nKey={'详情'} />
+              </span>
             </div>
             {list.map((model) => (
               <ModelRow
@@ -403,19 +442,27 @@ export function DawnPlaza() {
                   >
                     {model.model_name}
                   </span>
-                  <span className='ven'>{model.vendorName}</span>
+                  <span className='ven'>{displayVendor(model.vendorName)}</span>
                   {model.quota_type === QUOTA_TYPE_VALUES.REQUEST && (
-                    <span className='btag'>按量</span>
+                    <span className='btag'>
+                      <Trans i18nKey={'按量'} />
+                    </span>
                   )}
                 </span>
                 <div className='pr'>
                   <PriceText model={model} unit={unit} />
-                  <span> /{unit} 输入</span>
+                  <span>
+                    {' '}
+                    /{unit} <Trans i18nKey={'输入'} />
+                  </span>
                 </div>
                 <div className='sub'>
                   {model.quota_type === QUOTA_TYPE_VALUES.REQUEST
-                    ? '按量计费'
-                    : `输出 ${formatPrice(model, 'output', unit)} /${unit}`}
+                    ? i18n.t('按量计费')
+                    : i18n.t('输出 {{param0}} /{{param1}}', {
+                        param0: formatPrice(model, 'output', unit),
+                        param1: unit,
+                      })}
                 </div>
                 {model.quota_type !== QUOTA_TYPE_VALUES.REQUEST && (
                   <div className='sub'>
@@ -447,7 +494,7 @@ export function DawnPlaza() {
         open={!!detailModel}
         onClose={() => setDetail(null)}
         variant='plain'
-        label='模型详情'
+        label={i18n.t('模型详情')}
       >
         {detailModel && (
           <div className='m-main'>
@@ -464,16 +511,18 @@ export function DawnPlaza() {
               >
                 {detailModel.model_name}
                 <span className='ven' style={{ fontSize: 10 }}>
-                  {detailModel.vendorName}
+                  {displayVendor(detailModel.vendorName)}
                 </span>
                 {detailModel.quota_type === QUOTA_TYPE_VALUES.REQUEST && (
-                  <span className='btag'>按量</span>
+                  <span className='btag'>
+                    <Trans i18nKey={'按量'} />
+                  </span>
                 )}
               </h3>
               <button
                 className='x'
                 onClick={() => setDetail(null)}
-                aria-label='关闭'
+                aria-label={i18n.t('关闭')}
               >
                 <X size={18} />
               </button>
@@ -483,13 +532,17 @@ export function DawnPlaza() {
                 <>
                   <div className='pc'>
                     <b>{meteredPrice(detailModel)}</b>
-                    <span>单价 / 次</span>
+                    <span>
+                      <Trans i18nKey={'单价 / 次'} />
+                    </span>
                   </div>
                   <div className='pc'>
                     <b className='c-warn' style={{ color: 'var(--dawn-warn)' }}>
-                      按量
+                      <Trans i18nKey={'按量'} />
                     </b>
-                    <span>计费方式</span>
+                    <span>
+                      <Trans i18nKey={'计费方式'} />
+                    </span>
                   </div>
                 </>
               ) : (
@@ -498,21 +551,29 @@ export function DawnPlaza() {
                     className={`pc${detailModel.model_ratio === 0 ? 'free' : ''}`}
                   >
                     <b>{baseModelPrice(detailModel, 'input', unit)}</b>
-                    <span>输入 / {unit}</span>
+                    <span>
+                      <Trans i18nKey={'输入 /'} /> {unit}
+                    </span>
                   </div>
                   <div
                     className={`pc${detailModel.model_ratio === 0 ? 'free' : ''}`}
                   >
                     <b>{baseModelPrice(detailModel, 'output', unit)}</b>
-                    <span>输出 / {unit}</span>
+                    <span>
+                      <Trans i18nKey={'输出 /'} /> {unit}
+                    </span>
                   </div>
                   <div className='pc'>
                     <b>{baseModelPrice(detailModel, 'create_cache', unit)}</b>
-                    <span>缓存写入 / {unit}</span>
+                    <span>
+                      <Trans i18nKey={'缓存写入 /'} /> {unit}
+                    </span>
                   </div>
                   <div className='pc free'>
                     <b>{baseModelPrice(detailModel, 'cache', unit)}</b>
-                    <span>缓存读取 / {unit}</span>
+                    <span>
+                      <Trans i18nKey={'缓存读取 /'} /> {unit}
+                    </span>
                   </div>
                 </>
               )}
@@ -521,25 +582,27 @@ export function DawnPlaza() {
               <div className='kv2'>
                 <b>
                   {detailModel.quota_type === QUOTA_TYPE_VALUES.REQUEST
-                    ? '每次调用'
-                    : '每 1M tokens'}
+                    ? i18n.t('每次调用')
+                    : i18n.t('每 1M tokens')}
                 </b>
-                计费粒度
+                <Trans i18nKey={'计费粒度'} />
               </div>
               <div className='kv2'>
-                <b>{detailGroups.length} 个</b>
-                覆盖分组
+                <b>
+                  {detailGroups.length} <Trans i18nKey={'个'} />
+                </b>
+                <Trans i18nKey={'覆盖分组'} />
               </div>
               {detailModel.tags && (
                 <div className='kv2'>
                   <b>{detailModel.tags}</b>
-                  标签
+                  <Trans i18nKey={'标签'} />
                 </div>
               )}
             </div>
             <div className='sect'>
               <Waypoints size={12} />
-              各分组价格（含分组倍率）
+              <Trans i18nKey={'各分组价格（含分组倍率）'} />
             </div>
             {isDynamicPricingModel(detailModel) && (
               <p className='text-muted-foreground mb-3 text-xs'>
@@ -549,10 +612,20 @@ export function DawnPlaza() {
             {isDynamicPricingModel(detailModel) && (
               <div className='gtab cache-tiers' style={{ marginBottom: 12 }}>
                 <div className='gr gh'>
-                  <span>阶梯</span>
-                  <span>条件</span>
-                  <span>输入 /{unit}</span>
-                  <span>输出 /{unit}</span>
+                  <span>
+                    <Trans i18nKey={'阶梯'} />
+                  </span>
+                  <span>
+                    <Trans i18nKey={'条件'} />
+                  </span>
+                  <span>
+                    <Trans i18nKey={'输入 /'} />
+                    {unit}
+                  </span>
+                  <span>
+                    <Trans i18nKey={'输出 /'} />
+                    {unit}
+                  </span>
                   <span>
                     {t('缓存写入')} /{unit}
                   </span>
@@ -562,7 +635,10 @@ export function DawnPlaza() {
                 </div>
                 {getDynamicPricingTiers(detailModel).map((tier, index) => (
                   <div className='gr' key={`tier-${index}`}>
-                    <span className='gn'>第 {index + 1} 档</span>
+                    <span className='gn'>
+                      <Trans i18nKey={'第'} /> {index + 1}{' '}
+                      <Trans i18nKey={'档'} />
+                    </span>
                     <span className='num'>
                       {tier.conditions.length
                         ? tier.conditions
@@ -571,7 +647,7 @@ export function DawnPlaza() {
                                 `${condition.var} ${condition.op} ${condition.value}`
                             )
                             .join(' · ')
-                        : '默认'}
+                        : i18n.t('默认')}
                     </span>
                     <span className='num'>
                       {dynamicTierPrice(tier.inputPrice, unit)}
@@ -591,10 +667,20 @@ export function DawnPlaza() {
             )}
             <div className='gtab cache-prices'>
               <div className='gr gh'>
-                <span>分组</span>
-                <span>倍率</span>
-                <span>输入 /{unit}</span>
-                <span>输出 /{unit}</span>
+                <span>
+                  <Trans i18nKey={'分组'} />
+                </span>
+                <span>
+                  <Trans i18nKey={'倍率'} />
+                </span>
+                <span>
+                  <Trans i18nKey={'输入 /'} />
+                  {unit}
+                </span>
+                <span>
+                  <Trans i18nKey={'输出 /'} />
+                  {unit}
+                </span>
                 <span>
                   {t('缓存写入')} /{unit}
                 </span>
@@ -617,7 +703,9 @@ export function DawnPlaza() {
                       <span className='num'>
                         <b>{formatPrice(detailModel, 'input', unit)}</b>
                       </span>
-                      <span className='num'>按量</span>
+                      <span className='num'>
+                        <Trans i18nKey={'按量'} />
+                      </span>
                       <span className='num'>—</span>
                       <span className='num'>—</span>
                     </>
@@ -702,18 +790,18 @@ export function DawnPlaza() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    去使用 →
+                    <Trans i18nKey={'去使用 →'} />
                   </Link>
                 </div>
               ))}
             </div>
             <div className='mfoot2'>
               <button className='btn' onClick={() => setDetail(null)}>
-                关闭
+                <Trans i18nKey={'关闭'} />
               </button>
               <Link className='btn primary' to='/market'>
                 <Store size={14} />
-                去市场选组
+                <Trans i18nKey={'去市场选组'} />
               </Link>
             </div>
           </div>
@@ -767,6 +855,7 @@ function dynamicTierPrice(value: unknown, unit: TokenUnit): string {
 }
 
 function PriceText({ model, unit }: { model: PricingModel; unit: TokenUnit }) {
+  useTranslation()
   if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
     return <>{meteredPrice(model)}</>
   }
@@ -774,7 +863,7 @@ function PriceText({ model, unit }: { model: PricingModel; unit: TokenUnit }) {
   const isFree = model.model_ratio === 0
   return (
     <span className={isFree ? 'price free' : undefined}>
-      {isFree ? '免费' : value}
+      {isFree ? i18n.t('免费') : value}
     </span>
   )
 }
@@ -792,6 +881,7 @@ function ModelRow(props: {
   onOpen: () => void
   groups: string[]
 }) {
+  useTranslation()
   const { model, unit, onOpen, groups } = props
   const metered = model.quota_type === QUOTA_TYPE_VALUES.REQUEST
   const isFree = !metered && model.model_ratio === 0
@@ -826,15 +916,19 @@ function ModelRow(props: {
         >
           {model.model_name}
         </span>
-        <span className='ven'>{model.vendorName}</span>
-        {metered && <span className='btag'>按量</span>}
+        <span className='ven'>{displayVendor(model.vendorName)}</span>
+        {metered && (
+          <span className='btag'>
+            <Trans i18nKey={'按量'} />
+          </span>
+        )}
       </span>
       <span className={`price${isFree ? 'free' : ''}`}>
         <b>
           {metered
             ? meteredPrice(model)
             : isFree
-              ? '免费'
+              ? i18n.t('免费')
               : formatPrice(model, 'input', unit)}
         </b>
         <span className='u'> /{unit}</span>
@@ -842,9 +936,9 @@ function ModelRow(props: {
       <span className={`price${isFree ? 'free' : ''}`}>
         <b>
           {metered
-            ? '按量'
+            ? i18n.t('按量')
             : isFree
-              ? '免费'
+              ? i18n.t('免费')
               : formatPrice(model, 'output', unit)}
         </b>
         <span className='u'>{metered ? '' : ` /${unit}`}</span>
@@ -875,7 +969,7 @@ function ModelRow(props: {
           gap: 4,
         }}
       >
-        详情 <ArrowRight size={12} />
+        <Trans i18nKey={'详情'} /> <ArrowRight size={12} />
       </span>
     </div>
   )

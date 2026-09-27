@@ -58,6 +58,8 @@ func TestOIDCAuthorizationCodeRoundTripAndReplayRejection(t *testing.T) {
 	require.True(t, parsed.Valid)
 	require.Equal(t, "ABC234", claims["sub"])
 	require.Equal(t, "nonce-value", claims["nonce"])
+	require.Equal(t, "member@example.com", claims["email"])
+	require.Equal(t, true, claims["email_verified"])
 
 	loaded, scope, err := LoadOIDCUserByAccessToken(result.AccessToken, now.Add(2*time.Second))
 	require.NoError(t, err)
@@ -92,4 +94,11 @@ func TestOIDCPKCEVerificationRejectsWrongVerifier(t *testing.T) {
 	challenge := base64.RawURLEncoding.EncodeToString(digest[:])
 	require.True(t, verifyPKCE("correct-verifier", challenge))
 	require.False(t, verifyPKCE("wrong-verifier", challenge))
+}
+
+func TestOIDCEmailVerificationRequiresPersistedEmail(t *testing.T) {
+	require.False(t, IsOIDCEmailVerified(nil))
+	require.False(t, IsOIDCEmailVerified(&identityschema.User{}))
+	require.False(t, IsOIDCEmailVerified(&identityschema.User{Email: "  "}))
+	require.True(t, IsOIDCEmailVerified(&identityschema.User{Email: "member@example.com"}))
 }

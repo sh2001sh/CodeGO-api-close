@@ -19,16 +19,19 @@ For commercial licensing, please contact support@quantumnous.com
 import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
+import { normalizeInterfaceLanguage, toIntlLocale } from './languages'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
 import ja from './locales/ja.json'
 import ru from './locales/ru.json'
 import vi from './locales/vi.json'
+import zhTW from './locales/zh-TW.json'
 import zh from './locales/zh.json'
 
 export const resources = {
   en,
   zh,
+  'zh-TW': zhTW,
   fr,
   ru,
   ja,
@@ -41,8 +44,7 @@ i18n
   .init({
     resources,
     fallbackLng: 'en',
-    supportedLngs: ['en', 'zh', 'fr', 'ru', 'ja', 'vi'],
-    load: 'languageOnly', // Convert zh-CN -> zh
+    supportedLngs: ['en', 'zh', 'zh-TW', 'fr', 'ru', 'ja', 'vi'],
     nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
     debug: import.meta.env.DEV,
     interpolation: {
@@ -51,7 +53,16 @@ i18n
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],
+      convertDetectedLanguage: normalizeInterfaceLanguage,
     },
   })
+
+if (typeof document !== 'undefined') {
+  const updateDocumentLanguage = (language: string) => {
+    document.documentElement.lang = toIntlLocale(language) ?? 'en'
+  }
+  i18n.on('languageChanged', updateDocumentLanguage)
+  updateDocumentLanguage(i18n.language)
+}
 
 export default i18n

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo, useState, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import {
   Activity,
   ArrowUpRight,
@@ -32,7 +33,7 @@ import {
   Wallet,
   Waypoints,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
@@ -246,7 +247,9 @@ export function DawnOverviewDashboard() {
             <span className='n'>C·01</span>
             OVERVIEW
           </div>
-          <h1 className='pg'>概览</h1>
+          <h1 className='pg'>
+            <Trans i18nKey={'概览'} />
+          </h1>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <div className='seg'>
@@ -283,15 +286,15 @@ export function DawnOverviewDashboard() {
                   : ''
               }
             />
-            刷新
+            <Trans i18nKey={'刷新'} />
           </button>
         </div>
       </div>
 
       {usageQuery.isError || groupQuery.isError || logsQuery.isError ? (
         <DawnQueryError
-          title='概览数据加载不完整'
-          description='部分统计暂时不可用，请重新加载。'
+          title={i18n.t('概览数据加载不完整')}
+          description={i18n.t('部分统计暂时不可用，请重新加载。')}
           onRetry={() => void handleRefresh()}
           retrying={
             usageQuery.isFetching ||
@@ -310,7 +313,7 @@ export function DawnOverviewDashboard() {
           <code>{baseUrl}</code>
           <button className='btn mini' onClick={() => void handleCopy(baseUrl)}>
             <Copy size={14} />
-            复制
+            <Trans i18nKey={'复制'} />
           </button>
         </div>
 
@@ -318,7 +321,7 @@ export function DawnOverviewDashboard() {
         <div className='ap'>
           <span className='apl'>
             <Plug size={13} />
-            协议
+            <Trans i18nKey={'协议'} />
           </span>
           <span className='prtag'>OpenAI Compatible</span>
           <span className='prtag'>Anthropic</span>
@@ -328,7 +331,7 @@ export function DawnOverviewDashboard() {
         <div className='ap'>
           <span className='apl'>
             <Waypoints size={13} />
-            可用分组
+            <Trans i18nKey={'可用分组'} />
           </span>
           <span
             className='prtag'
@@ -340,7 +343,7 @@ export function DawnOverviewDashboard() {
             {activeGroup}
           </span>
           <Link className='btn mini' to='/market'>
-            去市场 <ArrowUpRight size={13} />
+            <Trans i18nKey={'去市场'} /> <ArrowUpRight size={13} />
           </Link>
         </div>
       </div>
@@ -352,7 +355,7 @@ export function DawnOverviewDashboard() {
         <div className='halo' />
         <div className='hl'>
           <Wallet size={13} />
-          可用总额度
+          <Trans i18nKey={'可用总额度'} />
           <span
             style={{
               marginLeft: 'auto',
@@ -370,11 +373,11 @@ export function DawnOverviewDashboard() {
           <span>{formatQuota(balance)}</span>
           <Link className='btn mini' to='/wallet' style={{ marginLeft: 12 }}>
             <ArrowUpRight size={14} />
-            钱包
+            <Trans i18nKey={'钱包'} />
           </Link>
           <Link className='btn mini primary' to='/blind-box'>
             <Gift size={14} />
-            盲盒
+            <Trans i18nKey={'盲盒'} />
           </Link>
         </div>
       </div>
@@ -382,11 +385,15 @@ export function DawnOverviewDashboard() {
       <div className='sb4 rise' style={{ animationDelay: '.12s' }}>
         <div className='cell'>
           <b>{formatQuota(spend)}</b>
-          <span>期间消耗</span>
+          <span>
+            <Trans i18nKey={'期间消耗'} />
+          </span>
         </div>
         <div className='cell'>
           <b>{formatNumber(requests)}</b>
-          <span>请求次数</span>
+          <span>
+            <Trans i18nKey={'请求次数'} />
+          </span>
         </div>
         <div className='cell'>
           <b>{formatCompactNumber(tokens)}</b>
@@ -397,7 +404,9 @@ export function DawnOverviewDashboard() {
             {avgLatencyMs != null ? `${(avgLatencyMs / 1000).toFixed(2)}` : '—'}
             <span className='u'>s</span>
           </b>
-          <span>平均耗时</span>
+          <span>
+            <Trans i18nKey={'平均耗时'} />
+          </span>
         </div>
       </div>
 
@@ -405,13 +414,17 @@ export function DawnOverviewDashboard() {
         <div className='panel rise' style={{ animationDelay: '.18s' }}>
           <div className='ph2'>
             <Activity size={15} />
-            请求走势
-            <span className='win'>{range.toUpperCase()} · 消耗</span>
+            <Trans i18nKey={'请求走势'} />
+            <span className='win'>
+              {range.toUpperCase()} <Trans i18nKey={'· 消耗'} />
+            </span>
           </div>
           {bars.length === 0 ? (
             <div className='pp-empty' style={{ padding: '28px 0' }}>
               <Activity size={20} />
-              <span>窗口内暂无数据</span>
+              <span>
+                <Trans i18nKey={'窗口内暂无数据'} />
+              </span>
             </div>
           ) : (
             <>
@@ -512,7 +525,7 @@ export function DawnOverviewDashboard() {
       >
         <div className='ph2'>
           <BrainCircuit size={15} />
-          模型用量
+          <Trans i18nKey={'模型用量'} />
           <span className='win'>{range.toUpperCase()} · TOP 5</span>
         </div>
         {modelUsage.length ? (
@@ -536,7 +549,9 @@ export function DawnOverviewDashboard() {
         ) : (
           <div className='pp-empty' style={{ padding: '18px 0' }}>
             <Activity size={20} />
-            <span>窗口内暂无消耗记录</span>
+            <span>
+              <Trans i18nKey={'窗口内暂无消耗记录'} />
+            </span>
           </div>
         )}
       </div>

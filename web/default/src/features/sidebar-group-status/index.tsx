@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import { RefreshCcw, Search } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
@@ -49,6 +51,7 @@ import {
 import { useSidebarGroupStatus } from './use-sidebar-group-status'
 
 export function SidebarGroupStatusPage() {
+  useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const authed = !!user
   const query = useSidebarGroupStatus()
@@ -177,12 +180,16 @@ export function SidebarGroupStatusPage() {
       <SectionPageLayout>
         <SectionPageLayout.Title>
           <span className='demo-status-title'>
-            分组状态，<em>实时</em>。
+            <Trans i18nKey={'分组状态，'} />
+            <em>
+              <Trans i18nKey={'实时'} />
+            </em>
+            。
           </span>
         </SectionPageLayout.Title>
         <SectionPageLayout.Actions>
           <Button variant='outline' size='sm' render={<Link to='/market' />}>
-            前往分组市场
+            <Trans i18nKey={'前往分组市场'} />
           </Button>
           <Button
             variant='outline'
@@ -193,7 +200,7 @@ export function SidebarGroupStatusPage() {
             <RefreshCcw
               className={cn('size-3.5', query.isFetching && 'animate-spin')}
             />
-            刷新
+            <Trans i18nKey={'刷新'} />
           </Button>
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
@@ -203,7 +210,7 @@ export function SidebarGroupStatusPage() {
             <div className='border-border flex flex-col gap-3 border-b pb-3'>
               <div
                 className='border-border/70 flex w-fit items-center gap-4 border-b'
-                aria-label='分组来源筛选'
+                aria-label={i18n.t('分组来源筛选')}
               >
                 {(
                   [
@@ -222,7 +229,7 @@ export function SidebarGroupStatusPage() {
                         : 'text-muted-foreground hover:text-foreground border-transparent'
                     }`}
                   >
-                    {label}
+                    {i18n.t(label)}
                   </button>
                 ))}
               </div>
@@ -232,18 +239,20 @@ export function SidebarGroupStatusPage() {
                   <Input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder='搜索分组名称、内部 ID 或模型'
-                    aria-label='搜索分组名称、内部 ID 或模型'
+                    placeholder={i18n.t('搜索分组名称、内部 ID 或模型')}
+                    aria-label={i18n.t('搜索分组名称、内部 ID 或模型')}
                     className='bg-background pl-9'
                   />
                 </label>
                 <NativeSelect
                   value={modelFilter}
                   onChange={(event) => setModelFilter(event.target.value)}
-                  aria-label='按模型筛选'
+                  aria-label={i18n.t('按模型筛选')}
                   className='min-h-11 w-full xl:w-52'
                 >
-                  <option value=''>全部模型</option>
+                  <option value=''>
+                    <Trans i18nKey={'全部模型'} />
+                  </option>
                   {modelOptions.map((model) => (
                     <option key={model} value={model}>
                       {model}
@@ -253,14 +262,24 @@ export function SidebarGroupStatusPage() {
                 <NativeSelect
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value)}
-                  aria-label='按状态筛选'
+                  aria-label={i18n.t('按状态筛选')}
                   className='min-h-11 w-full xl:w-40'
                 >
-                  <option value=''>全部状态</option>
-                  <option value='healthy'>稳定</option>
-                  <option value='unstable'>波动</option>
-                  <option value='failed'>异常</option>
-                  <option value='unknown'>暂无近期请求</option>
+                  <option value=''>
+                    <Trans i18nKey={'全部状态'} />
+                  </option>
+                  <option value='healthy'>
+                    <Trans i18nKey={'稳定'} />
+                  </option>
+                  <option value='unstable'>
+                    <Trans i18nKey={'波动'} />
+                  </option>
+                  <option value='failed'>
+                    <Trans i18nKey={'异常'} />
+                  </option>
+                  <option value='unknown'>
+                    <Trans i18nKey={'暂无近期请求'} />
+                  </option>
                 </NativeSelect>
               </div>
             </div>
@@ -291,9 +310,13 @@ export function SidebarGroupStatusPage() {
                   <div className='flex justify-center pt-1'>
                     <Button
                       variant='outline'
-                      onClick={() => setVisibleGroupCount((count) => count + 20)}
+                      onClick={() =>
+                        setVisibleGroupCount((count) => count + 20)
+                      }
                     >
-                      加载更多（剩余 {items.length - visibleItems.length} 个）
+                      <Trans i18nKey={'加载更多（剩余'} />{' '}
+                      {items.length - visibleItems.length}{' '}
+                      <Trans i18nKey={'个）'} />
                     </Button>
                   </div>
                 )}
@@ -310,29 +333,30 @@ function OverviewPanel(props: {
   summary: ReturnType<typeof summarizeGroups>
   loading: boolean
 }) {
+  const { t } = useTranslation()
   const metrics = [
     {
-      label: '分组',
+      label: t('分组'),
       value: String(props.summary.groups),
       tone: 'text-foreground',
     },
     {
-      label: '稳定',
+      label: t('稳定'),
       value: String(props.summary.healthyModels),
       tone: 'text-success',
     },
     {
-      label: '波动',
+      label: t('波动'),
       value: String(props.summary.unstableModels),
       tone: 'text-warning',
     },
     {
-      label: '异常',
+      label: t('异常'),
       value: String(props.summary.failedModels),
       tone: 'text-destructive',
     },
     {
-      label: '无请求',
+      label: t('无请求'),
       value: String(props.summary.unknownModels),
       tone: 'text-muted-foreground',
     },
@@ -345,7 +369,7 @@ function OverviewPanel(props: {
           <div className='flex items-center gap-2.5'>
             <span aria-hidden className='bg-primary block h-3 w-[3px]' />
             <CardTitle className='text-[13px] font-semibold'>
-              分组模型状态
+              <Trans i18nKey={'分组模型状态'} />
             </CardTitle>
           </div>
           <span className='codego-stat-label'>6H WINDOW</span>
@@ -406,14 +430,18 @@ function ErrorPanel(props: { onRetry: () => void }) {
     <Card>
       <CardContent className='flex flex-col items-start gap-4 py-8'>
         <div className='space-y-1'>
-          <div className='text-base font-semibold'>模型状态暂时不可用</div>
+          <div className='text-base font-semibold'>
+            <Trans i18nKey={'模型状态暂时不可用'} />
+          </div>
           <div className='text-muted-foreground text-sm leading-6'>
-            当前无法获取分组下模型状态数据，请稍后刷新重试。
+            <Trans
+              i18nKey={'当前无法获取分组下模型状态数据，请稍后刷新重试。'}
+            />
           </div>
         </div>
         <Button variant='outline' size='sm' onClick={props.onRetry}>
           <RefreshCcw className='size-3.5' />
-          重新获取
+          <Trans i18nKey={'重新获取'} />
         </Button>
       </CardContent>
     </Card>
@@ -425,9 +453,15 @@ function EmptyPanel() {
     <Card>
       <CardContent className='py-8'>
         <div className='space-y-1'>
-          <div className='text-base font-semibold'>暂无可展示的模型状态</div>
+          <div className='text-base font-semibold'>
+            <Trans i18nKey={'暂无可展示的模型状态'} />
+          </div>
           <div className='text-muted-foreground text-sm leading-6'>
-            当前用户还没有可用的业务分组模型，或暂未产生用于监测的请求样本。
+            <Trans
+              i18nKey={
+                '当前用户还没有可用的业务分组模型，或暂未产生用于监测的请求样本。'
+              }
+            />
           </div>
         </div>
       </CardContent>

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { type Row } from '@tanstack/react-table'
+import i18n from '@/i18n/config'
 import {
   MoreHorizontal,
   Boxes,
@@ -35,7 +36,7 @@ import {
   RotateCcw,
   Ban,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
@@ -243,7 +244,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                 setRecoverConfirmOpen(true)
               }}
             >
-              解除全局禁用
+              <Trans i18nKey={'解除全局禁用'} />
               <DropdownMenuShortcut>
                 <RotateCcw size={16} />
               </DropdownMenuShortcut>
@@ -258,7 +259,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               }}
               className='text-destructive focus:text-destructive'
             >
-              全局禁用
+              <Trans i18nKey={'全局禁用'} />
               <DropdownMenuShortcut>
                 <Ban size={16} />
               </DropdownMenuShortcut>
@@ -318,9 +319,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       <ConfirmDialog
         open={disableConfirmOpen}
         onOpenChange={setDisableConfirmOpen}
-        title='全局禁用'
+        title={i18n.t('全局禁用')}
         desc={`停止“${channel.name}”的所有新请求。该操作不会改变分组内自动路由开关或成本倍率。`}
-        confirmText='确认禁用'
+        confirmText={i18n.t('确认禁用')}
         destructive
         handleConfirm={() => {
           void handleDisableChannel(channel.id, queryClient)
@@ -330,9 +331,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       <ConfirmDialog
         open={recoverConfirmOpen}
         onOpenChange={setRecoverConfirmOpen}
-        title='解除全局禁用'
+        title={i18n.t('解除全局禁用')}
         desc={`恢复“${channel.name}”的全局渠道状态。该操作不会改变分组内自动路由开关或成本倍率。`}
-        confirmText='确认恢复'
+        confirmText={i18n.t('确认恢复')}
         handleConfirm={() => {
           void handleEnableChannel(channel.id, queryClient)
           setRecoverConfirmOpen(false)

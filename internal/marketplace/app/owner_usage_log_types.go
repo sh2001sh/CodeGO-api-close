@@ -30,6 +30,8 @@ type OwnerUsageLogItem struct {
 	ModelName          string                 `json:"model_name"`
 	PromptTokens       int                    `json:"prompt_tokens"`
 	CompletionTokens   int                    `json:"completion_tokens"`
+	CacheReadTokens    int64                  `json:"cache_read_tokens"`
+	CacheWriteTokens   int64                  `json:"cache_write_tokens"`
 	UseTime            int                    `json:"use_time"`
 	IsStream           bool                   `json:"is_stream"`
 	RequestID          string                 `json:"request_id"`

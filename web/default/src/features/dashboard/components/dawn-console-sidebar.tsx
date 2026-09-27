@@ -18,24 +18,30 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
+import {
+  ChevronDown,
+  ExternalLink,
+  Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ChevronDown, ExternalLink, Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
-import { useSidebarData } from '@/hooks/use-sidebar-data'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
-import { useChatPresets } from '@/features/chat/hooks/use-chat-presets'
+import { useSidebarData } from '@/hooks/use-sidebar-data'
+import { checkIsActive } from '@/components/layout/lib/url-utils'
+import { getNavGroupsForPath } from '@/components/layout/lib/workspace-registry'
+import type { NavGroup, NavItem } from '@/components/layout/types'
 import { fetchActiveChatKey } from '@/features/chat/hooks/use-active-chat-key'
+import { useChatPresets } from '@/features/chat/hooks/use-chat-presets'
 import {
   chatLinkRequiresApiKey,
   resolveChatUrl,
   type ChatPreset,
 } from '@/features/chat/lib/chat-links'
-import { getNavGroupsForPath } from '@/components/layout/lib/workspace-registry'
-import { checkIsActive } from '@/components/layout/lib/url-utils'
-import type { NavGroup, NavItem } from '@/components/layout/types'
 
 interface SidebarGroupState {
   [key: string]: boolean
@@ -47,6 +53,8 @@ interface SidebarGroupState {
  */
 export function DawnConsoleSidebar(props: {
   open?: boolean
+  collapsed?: boolean
+  onToggleCollapsed?: () => void
   onNavigate?: () => void
 }) {
   const { t } = useTranslation()
@@ -72,19 +80,37 @@ export function DawnConsoleSidebar(props: {
 
   return (
     <aside
-      className={`dawn-console-sidebar${props.open ? ' open' : ''}`}
+      className={cn(
+        'dawn-console-sidebar',
+        props.open && 'open',
+        props.collapsed && 'collapsed'
+      )}
       onClickCapture={(event) => {
         if ((event.target as HTMLElement).closest('a')) props.onNavigate?.()
       }}
     >
+      <button
+        type='button'
+        className='dawn-console-sidebar-toggle'
+        onClick={props.onToggleCollapsed}
+        aria-label={t(props.collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
+        title={t(props.collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
+      >
+        {props.collapsed ? (
+          <PanelLeftOpen size={16} />
+        ) : (
+          <PanelLeftClose size={16} />
+        )}
+      </button>
       {navGroups.map((group) => (
         <SidebarGroup
           key={group.id || group.title}
           group={group}
           openGroups={openGroups}
-          onToggle={(key) =>
+          onToggle={(key) => {
+            if (props.collapsed) props.onToggleCollapsed?.()
             setOpenGroups((current) => ({ ...current, [key]: !current[key] }))
-          }
+          }}
           isActive={isActive}
         />
       ))}
@@ -136,7 +162,11 @@ function SidebarItem(props: {
   if ('items' in item && item.items?.length) {
     return (
       <div>
-        <button className='sgroup tog' onClick={props.onToggle}>
+        <button
+          className='sgroup tog'
+          onClick={props.onToggle}
+          title={item.title}
+        >
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {item.icon ? <item.icon size={14} /> : null}
             {item.title}
@@ -180,6 +210,7 @@ function SidebarItem(props: {
       <Link
         to={item.url}
         className={cn('sitem', props.isActive(item) && 'on')}
+        title={item.title}
       >
         {Icon ? <Icon size={16} /> : null}
         <span>{item.title}</span>
@@ -226,7 +257,9 @@ function ChatPresetsNav({ item }: { item: NavItem }) {
         toast.error(
           error instanceof Error
             ? error.message
-            : t('Unable to prepare chat link. Please ensure you have an enabled API key.')
+            : t(
+                'Unable to prepare chat link. Please ensure you have an enabled API key.'
+              )
         )
         return
       } finally {

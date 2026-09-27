@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import {
   ArrowRight,
   Check,
@@ -6,6 +7,7 @@ import {
   Loader2,
   WalletCards,
 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { BalanceBoxQuantityControl } from './balance-blind-box-controls'
@@ -29,7 +31,7 @@ export function BalanceBoxPurchaseWorkspace(props: BalanceBoxPanelViewProps) {
         onClick={props.onOpenProps}
       >
         <WalletCards className='size-4' aria-hidden='true' />
-        我的权益卡
+        <Trans i18nKey={'我的权益卡'} />
         <ArrowRight className='size-4' aria-hidden='true' />
       </Button>
     </section>
@@ -45,17 +47,21 @@ function PurchaseHeader(props: { unitPrice: number; inventoryAfter: number }) {
           id='blind-box-purchase-title'
           className='text-foreground text-[13px] font-semibold'
         >
-          购买盲盒
+          <Trans i18nKey={'购买盲盒'} />
         </h3>
       </div>
       <div className='text-right text-xs tabular-nums'>
-        <span className='text-muted-foreground'>单价 </span>
+        <span className='text-muted-foreground'>
+          <Trans i18nKey={'单价'} />{' '}
+        </span>
         <span className='text-foreground font-semibold'>
           {props.unitPrice.toFixed(2)}
         </span>
-        <span className='text-muted-foreground ml-3'>购买后库存 </span>
+        <span className='text-muted-foreground ml-3'>
+          <Trans i18nKey={'购买后库存'} />{' '}
+        </span>
         <span className='text-foreground font-semibold'>
-          {props.inventoryAfter} 个
+          {props.inventoryAfter} <Trans i18nKey={'个'} />
         </span>
       </div>
     </div>
@@ -79,27 +85,35 @@ function PurchaseGrid(props: {
           />
         </div>
         <div className='border-border/70 min-w-0 border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6'>
-          <div className='codego-stat-label'>人民币渠道</div>
+          <div className='codego-stat-label'>
+            <Trans i18nKey={'人民币渠道'} />
+          </div>
           {view.cashMethods.length > 0 ? (
             <CashMethodPicker {...view} />
           ) : (
             <p className='text-muted-foreground mt-2 text-xs leading-5'>
-              当前没有可用的人民币支付渠道，可使用统一额度购买。
+              <Trans
+                i18nKey={'当前没有可用的人民币支付渠道，可使用统一额度购买。'}
+              />
             </p>
           )}
         </div>
         <div className='border-border/70 min-w-0 border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6'>
           <div className='flex items-end justify-between gap-3'>
             <div>
-              <div className='codego-stat-label'>订单合计</div>
+              <div className='codego-stat-label'>
+                <Trans i18nKey={'订单合计'} />
+              </div>
               <div className='text-foreground mt-2 text-2xl leading-none font-semibold tabular-nums'>
                 {props.totalPrice.toFixed(2)}
               </div>
             </div>
             <div className='text-muted-foreground text-right text-[11px] leading-5'>
-              共 {view.count} 个
+              <Trans i18nKey={'共'} /> {view.count} <Trans i18nKey={'个'} />
               <br />
-              今日剩余 {view.balance?.remaining_purchase_limit || 0} 个
+              <Trans i18nKey={'今日剩余'} />{' '}
+              {view.balance?.remaining_purchase_limit || 0}{' '}
+              <Trans i18nKey={'个'} />
             </div>
           </div>
         </div>
@@ -152,6 +166,7 @@ function CashMethodPicker(props: BalanceBoxPanelViewProps) {
 function PurchasePaymentActions(
   props: BalanceBoxPanelViewProps & { totalPrice: number }
 ) {
+  useTranslation()
   const walletBalance = props.balance?.balance_usd || 0
   const walletShortfall = Math.max(0, props.totalPrice - walletBalance)
   const cashLimitReached =
@@ -162,14 +177,14 @@ function PurchasePaymentActions(
         busy={props.busy && !props.cashPaying}
         disabled={!props.canPurchase}
         icon={Coins}
-        title='额度支付'
+        title={i18n.t('额度支付')}
         detail={
           walletShortfall > 0
             ? `差 ${walletShortfall.toFixed(2)}`
             : `余额 ${walletBalance.toFixed(2)}`
         }
         amount={props.totalPrice.toFixed(2)}
-        busyLabel='支付中…'
+        busyLabel={i18n.t('支付中…')}
         onClick={props.onPurchase}
       />
       {props.cashMethods.length > 0 ? (
@@ -178,10 +193,10 @@ function PurchasePaymentActions(
           busy={props.cashPaying}
           disabled={!props.selectedCashMethod || props.busy || cashLimitReached}
           icon={CreditCard}
-          title='人民币支付'
+          title={i18n.t('人民币支付')}
           detail={props.selectedCashMethod?.name || '未选渠道'}
           amount={`¥${props.cashAmountDue.toFixed(2)}`}
-          busyLabel='下单中…'
+          busyLabel={i18n.t('下单中…')}
           onClick={props.onCashPurchase}
         />
       ) : null}

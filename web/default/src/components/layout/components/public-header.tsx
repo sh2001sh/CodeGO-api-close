@@ -268,7 +268,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                       link.disabled && 'pointer-events-none opacity-50'
                     )}
                   >
-                    {link.title}
+                    {t(link.title)}
                   </Link>
                 )
               })}
@@ -310,6 +310,7 @@ export function PublicHeader(props: PublicHeaderProps) {
 
             {/* Mobile: compact actions + hamburger */}
             <div className='flex items-center gap-2 sm:hidden'>
+              {showLanguageSwitcher && <LanguageSwitcher />}
               {showThemeSwitch && <ThemeSwitch />}
               {showAuthButtons && !loading && isAuthenticated && (
                 <ProfileDropdown />
@@ -385,7 +386,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                     className={linkClassName}
                     style={transitionStyle}
                   >
-                    {link.title}
+                    {t(link.title)}
                   </a>
                 )
               }
@@ -398,7 +399,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                   className={linkClassName}
                   style={transitionStyle}
                 >
-                  {link.title}
+                  {t(link.title)}
                 </Link>
               )
             })}

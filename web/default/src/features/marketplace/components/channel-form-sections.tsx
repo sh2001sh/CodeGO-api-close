@@ -8,6 +8,7 @@ import {
   MARKETPLACE_SOURCE_OPTIONS,
   type ChannelFormInput,
 } from '../lib/channel-form'
+import { localizedSourceLabel } from '../lib/localized-group-name'
 import { FormField, FormSection } from './channel-form-layout'
 
 type ChannelForm = UseFormReturn<ChannelFormInput>
@@ -81,7 +82,7 @@ function ConnectionCredentialFields(props: {
   form: ChannelForm
   editing?: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   return (
     <div className='grid gap-4 lg:grid-cols-2'>
       <FormField
@@ -94,7 +95,7 @@ function ConnectionCredentialFields(props: {
         >
           {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
             <option key={source} value={source}>
-              {source}
+              {localizedSourceLabel(source, i18n.language)}
             </option>
           ))}
         </NativeSelect>

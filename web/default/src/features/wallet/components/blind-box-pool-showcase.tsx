@@ -16,10 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-
+import i18n from '@/i18n/config'
 import { motion, useReducedMotion } from 'motion/react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { RARITY_BADGE, classifyTier, formatTierAmount, groupTiersByRewardType, type RARITY_RING } from '../lib/blind-box-rarity'
+import {
+  RARITY_BADGE,
+  classifyTier,
+  formatTierAmount,
+  groupTiersByRewardType,
+  type RARITY_RING,
+} from '../lib/blind-box-rarity'
 import type { BlindBoxSelfData, BlindBoxTier } from '../types'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
@@ -50,6 +57,7 @@ export function BlindBoxPoolShowcase(props: {
   description?: string
   hideSubscription?: boolean
 }) {
+  useTranslation()
   const reduced = Boolean(useReducedMotion())
   const grouped = groupTiersByRewardType(props.tiers || props.data?.tiers || [])
   const hiddenProbability = props.data?.subscription_prize_probability || 0
@@ -66,15 +74,17 @@ export function BlindBoxPoolShowcase(props: {
         <div className='flex items-center gap-2.5'>
           <span aria-hidden className='bg-primary block h-3 w-[3px]' />
           <h2 className='text-foreground text-[13px] font-semibold'>
-            {props.title || '奖池一览'}
+            {props.title || i18n.t('奖池一览')}
           </h2>
         </div>
-        <span className='codego-stat-label'>概率已公开</span>
+        <span className='codego-stat-label'>
+          <Trans i18nKey={'概率已公开'} />
+        </span>
       </div>
 
       <div className='px-4 py-2 sm:px-5'>
         {!props.hideSubscription ? (
-          <PoolGroup title='隐藏款'>
+          <PoolGroup title={i18n.t('隐藏款')}>
             <PoolRow
               label={hiddenTitle}
               probability={hiddenProbability}
@@ -86,7 +96,7 @@ export function BlindBoxPoolShowcase(props: {
         ) : null}
 
         {grouped.credit.length > 0 ? (
-          <PoolGroup title='通用额度'>
+          <PoolGroup title={i18n.t('通用额度')}>
             {grouped.credit.map((tier) => (
               <TierRow
                 key={tier.name}
@@ -99,7 +109,7 @@ export function BlindBoxPoolShowcase(props: {
         ) : null}
 
         {grouped.props.length > 0 ? (
-          <PoolGroup title='道具'>
+          <PoolGroup title={i18n.t('道具')}>
             {grouped.props.map((tier) => (
               <TierRow
                 key={tier.name}
@@ -131,7 +141,11 @@ function PoolGroup(props: { title: string; children: React.ReactNode }) {
   )
 }
 
-function TierRow(props: { tier: BlindBoxTier; maxProbability: number; reduced: boolean }) {
+function TierRow(props: {
+  tier: BlindBoxTier
+  maxProbability: number
+  reduced: boolean
+}) {
   return (
     <PoolRow
       label={formatTierAmount(props.tier)}
@@ -161,12 +175,12 @@ function PoolRow(props: {
   return (
     <motion.div
       variants={props.reduced ? REDUCED_CELL : CELL}
-      className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 border-b border-border/50 py-2.5 last:border-b-0'
+      className='border-border/50 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 border-b py-2.5 last:border-b-0'
     >
       <div className='flex min-w-0 items-center gap-2.5'>
         <span
           className={cn(
-            'block h-[2px] shrink-0 bg-primary',
+            'bg-primary block h-[2px] shrink-0',
             props.rarity === 'legendary'
               ? 'w-8'
               : props.rarity === 'epic'
@@ -197,7 +211,7 @@ function PoolRow(props: {
             {badge.label}
           </span>
         ) : null}
-        <div className='hidden h-[4px] w-28 overflow-hidden rounded-full bg-muted sm:block'>
+        <div className='bg-muted hidden h-[4px] w-28 overflow-hidden rounded-full sm:block'>
           <motion.div
             className={cn(
               'h-full rounded-full',
@@ -212,7 +226,7 @@ function PoolRow(props: {
             transition={{ duration: 0.6, ease: EASE_OUT_QUINT }}
           />
         </div>
-        <span className='w-20 text-right font-mono text-xs font-medium text-muted-foreground tabular-nums'>
+        <span className='text-muted-foreground w-20 text-right font-mono text-xs font-medium tabular-nums'>
           {formatProbability(props.probability)}
         </span>
       </div>

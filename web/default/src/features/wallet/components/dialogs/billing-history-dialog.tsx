@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search, Copy, Check, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
@@ -369,12 +369,14 @@ export function BillingHistoryDialog({
                                   <span className='font-medium'>
                                     {t('Refundable amount')}:{' '}
                                     <span className='text-foreground'>
-                                      {refundInfo.refund_amount.toFixed(2)} 元
+                                      {refundInfo.refund_amount.toFixed(2)}{' '}
+                                      <Trans i18nKey={'元'} />
                                     </span>
                                   </span>
                                   <span className='text-muted-foreground'>
                                     {t('Fee')}:{' '}
-                                    {refundInfo.fee_amount.toFixed(2)} 元
+                                    {refundInfo.fee_amount.toFixed(2)}{' '}
+                                    <Trans i18nKey={'元'} />
                                   </span>
                                 </div>
                                 <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1'>

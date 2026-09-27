@@ -12,6 +12,7 @@ import {
   useMarketplaceFailedModelRemoval,
 } from '../hooks'
 import { MARKETPLACE_SOURCE_OPTIONS } from '../lib/channel-form'
+import { localizedSourceLabel } from '../lib/localized-group-name'
 import type { MarketplaceChannel } from '../types'
 import { AdminChannelActions } from './admin-channel-actions'
 import type { AdminIncomeRange } from './admin-income-filter'
@@ -26,7 +27,7 @@ import { SensitiveWordPolicyControl } from './sensitive-word-policy-control'
 import { MarketplaceStatusBadge } from './status-badge'
 
 export function AdminGovernance() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [incomeRange, setIncomeRange] = useState<AdminIncomeRange>({})
   const [ownerSearch, setOwnerSearch] = useState('')
   const [channelSearch, setChannelSearch] = useState('')
@@ -86,7 +87,7 @@ export function AdminGovernance() {
           <option value=''>{t('全部来源')}</option>
           {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
             <option key={source} value={source}>
-              {source}
+              {localizedSourceLabel(source, i18n.language)}
             </option>
           ))}
         </NativeSelect>

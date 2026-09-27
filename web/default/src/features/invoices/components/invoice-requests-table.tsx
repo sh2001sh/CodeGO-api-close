@@ -15,7 +15,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 */
+import i18n from '@/i18n/config'
 import { FileCheck2, FileClock, FileX2 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -67,13 +69,16 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
 }
 
 export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
+  useTranslation()
   if (requests.length === 0) {
     return (
       <div className='bg-muted/20 flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-6 text-center'>
         <FileClock className='text-muted-foreground size-5' />
-        <p className='font-medium'>暂无发票申请记录</p>
+        <p className='font-medium'>
+          <Trans i18nKey={'暂无发票申请记录'} />
+        </p>
         <p className='text-muted-foreground max-w-md text-sm'>
-          提交申请后，处理结果和发票号码会显示在这里。
+          <Trans i18nKey={'提交申请后，处理结果和发票号码会显示在这里。'} />
         </p>
       </div>
     )
@@ -93,7 +98,9 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                 <div className='text-muted-foreground text-sm'>
                   {formatMoney(request)}
                   {request.order_count > 1
-                    ? ` · 合并 ${request.order_count} 笔订单`
+                    ? i18n.t(' · 合并 {{param0}} 笔订单', {
+                        param0: request.order_count,
+                      })
                     : ''}
                 </div>
               </div>
@@ -101,22 +108,34 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
             </div>
             <div className='grid gap-3 text-sm sm:grid-cols-2'>
               <div>
-                <div className='text-muted-foreground text-xs'>抬头</div>
+                <div className='text-muted-foreground text-xs'>
+                  <Trans i18nKey={'抬头'} />
+                </div>
                 <div className='mt-1'>{request.title}</div>
               </div>
               <div>
-                <div className='text-muted-foreground text-xs'>订单号</div>
+                <div className='text-muted-foreground text-xs'>
+                  <Trans i18nKey={'订单号'} />
+                </div>
                 <div className='mt-1 font-mono text-xs'>
-                  {request.order_count > 1 ? '合并申请' : request.trade_no}
+                  {request.order_count > 1
+                    ? i18n.t('合并申请')
+                    : request.trade_no}
                 </div>
               </div>
               <div>
-                <div className='text-muted-foreground text-xs'>申请时间</div>
+                <div className='text-muted-foreground text-xs'>
+                  <Trans i18nKey={'申请时间'} />
+                </div>
                 <div className='mt-1'>{formatDateTime(request.created_at)}</div>
               </div>
               <div>
-                <div className='text-muted-foreground text-xs'>发票号码</div>
-                <div className='mt-1'>{request.invoice_number || '待开具'}</div>
+                <div className='text-muted-foreground text-xs'>
+                  <Trans i18nKey={'发票号码'} />
+                </div>
+                <div className='mt-1'>
+                  {request.invoice_number || i18n.t('待开具')}
+                </div>
               </div>
             </div>
             {request.status === 'rejected' && request.admin_note ? (
@@ -132,10 +151,18 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>订单与抬头</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>申请时间</TableHead>
-              <TableHead>发票号码</TableHead>
+              <TableHead>
+                <Trans i18nKey={'订单与抬头'} />
+              </TableHead>
+              <TableHead>
+                <Trans i18nKey={'状态'} />
+              </TableHead>
+              <TableHead>
+                <Trans i18nKey={'申请时间'} />
+              </TableHead>
+              <TableHead>
+                <Trans i18nKey={'发票号码'} />
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -147,7 +174,9 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                     <div className='text-muted-foreground text-xs'>
                       {formatMoney(request)} ·{' '}
                       {request.order_count > 1
-                        ? `合并 ${request.order_count} 笔订单`
+                        ? i18n.t('合并 {{param0}} 笔订单', {
+                            param0: request.order_count,
+                          })
                         : request.trade_no}
                     </div>
                     <div className='text-sm'>{request.title}</div>
@@ -161,7 +190,9 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                 </TableCell>
                 <TableCell className='align-top whitespace-normal'>
                   {request.invoice_number || (
-                    <span className='text-muted-foreground'>待开具</span>
+                    <span className='text-muted-foreground'>
+                      <Trans i18nKey={'待开具'} />
+                    </span>
                   )}
                   {request.status === 'rejected' && request.admin_note ? (
                     <div className='text-destructive mt-1 max-w-56 text-xs leading-5'>

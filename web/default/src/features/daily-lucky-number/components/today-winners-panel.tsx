@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import i18n from '@/i18n/config'
 import {
   AlertCircle,
   CalendarDays,
@@ -7,6 +8,7 @@ import {
   ShieldCheck,
   Trophy,
 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -64,7 +66,7 @@ export function TodayWinnersPanel(props: {
             <WinnerList records={view.visible} />
           ) : (
             <div className='text-muted-foreground px-4 py-8 text-center text-sm'>
-              今日暂无该档位的中奖记录
+              <Trans i18nKey={'今日暂无该档位的中奖记录'} />
             </div>
           )}
           <PanelFooter
@@ -140,6 +142,7 @@ function PanelHeader(props: {
   timezone: string
   count: number
 }) {
+  useTranslation()
   return (
     <div className='border-border/70 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5'>
       <div className='flex items-center gap-3'>
@@ -148,12 +151,12 @@ function PanelHeader(props: {
         </span>
         <div>
           <h2 className='text-foreground text-base font-semibold'>
-            今日中奖名单
+            <Trans i18nKey={'今日中奖名单'} />
           </h2>
           <p className='text-muted-foreground mt-0.5 text-xs'>
             {props.count > 0
-              ? `已加载 ${props.count} 条中奖记录`
-              : '按命中位数查看奖励结果'}
+              ? i18n.t('已加载 {{param0}} 条中奖记录', { param0: props.count })
+              : i18n.t('按命中位数查看奖励结果')}
           </p>
         </div>
       </div>
@@ -175,13 +178,14 @@ function PanelFooter(props: {
   onPrevious: () => void
   onNext: () => void
 }) {
+  useTranslation()
   return (
     <div className='border-border/70 bg-muted/15 flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 sm:px-5'>
       <span className='text-muted-foreground inline-flex items-center gap-2 text-xs'>
         <ShieldCheck className='size-3.5' aria-hidden='true' />
         {props.pageMayBeTruncated
-          ? '名单较长，已按页展示'
-          : '仅展示中奖尾号和套餐档位'}
+          ? i18n.t('名单较长，已按页展示')
+          : i18n.t('仅展示中奖尾号和套餐档位')}
       </span>
       {props.total > 0 && props.pageCount > 1 ? (
         <div className='flex items-center gap-1.5'>
@@ -190,19 +194,20 @@ function PanelFooter(props: {
             size='icon-sm'
             onClick={props.onPrevious}
             disabled={props.page <= 1}
-            aria-label='上一页'
+            aria-label={i18n.t('上一页')}
           >
             <ChevronLeft aria-hidden='true' />
           </Button>
           <span className='text-muted-foreground min-w-20 text-center text-xs tabular-nums'>
-            第 {props.page} / {props.pageCount} 页
+            <Trans i18nKey={'第'} /> {props.page} / {props.pageCount}{' '}
+            <Trans i18nKey={'页'} />
           </span>
           <Button
             variant='ghost'
             size='icon-sm'
             onClick={props.onNext}
             disabled={props.page >= props.pageCount}
-            aria-label='下一页'
+            aria-label={i18n.t('下一页')}
           >
             <ChevronRight aria-hidden='true' />
           </Button>
@@ -217,9 +222,11 @@ function ErrorState(props: { onRetry: () => void }) {
     <Alert variant='destructive' className='m-4 sm:m-5'>
       <AlertCircle aria-hidden='true' />
       <AlertDescription className='flex flex-wrap items-center justify-between gap-3'>
-        <span>中奖名单暂时加载失败，请稍后重试。</span>
+        <span>
+          <Trans i18nKey={'中奖名单暂时加载失败，请稍后重试。'} />
+        </span>
         <Button variant='outline' size='sm' onClick={props.onRetry}>
-          重试
+          <Trans i18nKey={'重试'} />
         </Button>
       </AlertDescription>
     </Alert>
@@ -236,6 +243,7 @@ function LoadingState() {
 }
 
 function EmptyState(props: { hasDraw: boolean }) {
+  useTranslation()
   return (
     <Empty className='min-h-48 border-0'>
       <EmptyHeader>
@@ -243,12 +251,14 @@ function EmptyState(props: { hasDraw: boolean }) {
           <Trophy aria-hidden='true' />
         </EmptyMedia>
         <EmptyTitle>
-          {props.hasDraw ? '今天暂时没有中奖记录' : '今日尚未开奖'}
+          {props.hasDraw
+            ? i18n.t('今天暂时没有中奖记录')
+            : i18n.t('今日尚未开奖')}
         </EmptyTitle>
         <EmptyDescription>
           {props.hasDraw
-            ? '中奖记录将在结算完成后按命中档位展示。'
-            : '开奖后将会在这里展示当日中奖名单。'}
+            ? i18n.t('中奖记录将在结算完成后按命中档位展示。')
+            : i18n.t('开奖后将会在这里展示当日中奖名单。')}
         </EmptyDescription>
       </EmptyHeader>
     </Empty>

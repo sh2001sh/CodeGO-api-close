@@ -159,9 +159,9 @@ func OIDCUserInfo(c *gin.Context) {
 			claims["name"] = user.Username
 		}
 	}
-	if hasOIDCScope(scope, "email") && user.Email != "" {
+	if hasOIDCScope(scope, "email") && identityapp.IsOIDCEmailVerified(user) {
 		claims["email"] = user.Email
-		claims["email_verified"] = false
+		claims["email_verified"] = true
 	}
 	c.JSON(http.StatusOK, claims)
 }

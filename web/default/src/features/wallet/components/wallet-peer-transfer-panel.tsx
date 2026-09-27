@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import {
   ArrowRight,
   History,
@@ -82,23 +83,25 @@ export function WalletPeerTransferPanel(props: {
           <div className='min-w-0 text-xs leading-5'>
             <p className='font-medium'>
               {!props.overview.security.email_bound
-                ? '绑定邮箱后才能设置支付密码'
+                ? i18n.t('绑定邮箱后才能设置支付密码')
                 : props.locked
-                ? t('Transfers are temporarily locked')
-                : t('Set a payment password before your first transfer')}
+                  ? t('Transfers are temporarily locked')
+                  : t('Set a payment password before your first transfer')}
             </p>
             <p className='text-muted-foreground'>
               {!props.overview.security.email_bound
-                ? '请先前往个人设置绑定邮箱，后续修改支付密码时验证码会发送到该邮箱。'
+                ? i18n.t(
+                    '请先前往个人设置绑定邮箱，后续修改支付密码时验证码会发送到该邮箱。'
+                  )
                 : props.locked
-                ? t('Try again after {{time}}.', {
-                    time: new Date(
-                      props.overview.security.locked_until * 1000
-                    ).toLocaleString(),
-                  })
-                : t(
-                    'Five failed password attempts lock transfers for 30 minutes.'
-                  )}
+                  ? t('Try again after {{time}}.', {
+                      time: new Date(
+                        props.overview.security.locked_until * 1000
+                      ).toLocaleString(),
+                    })
+                  : t(
+                      'Five failed password attempts lock transfers for 30 minutes.'
+                    )}
             </p>
           </div>
         </div>

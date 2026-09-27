@@ -203,7 +203,7 @@ func normalizeLang(lang string) string {
 
 	// Handle common variations
 	switch {
-	case strings.HasPrefix(lang, "zh-tw"):
+	case strings.HasPrefix(lang, "zh-tw"), strings.HasPrefix(lang, "zh-hk"), strings.HasPrefix(lang, "zh-mo"), strings.HasPrefix(lang, "zh-hant"):
 		return LangZhTW
 	case strings.HasPrefix(lang, "zh"):
 		return LangZhCN

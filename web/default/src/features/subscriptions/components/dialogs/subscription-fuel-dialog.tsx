@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import i18n from '@/i18n/config'
 import { AlertCircle, Loader2 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -74,6 +76,7 @@ function submitExternalPaymentForm(
 }
 
 export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
+  useTranslation()
   const fallbackQuotaPerUnit = 500_000
   const configuredMinimumQuota = props.minimumQuota || fallbackQuotaPerUnit
   const configuredQuotaStep = props.quotaStep || fallbackQuotaPerUnit
@@ -222,9 +225,13 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className='sm:max-w-md'>
         <DialogHeader>
-          <DialogTitle>为 {props.title} 加油</DialogTitle>
+          <DialogTitle>
+            <Trans i18nKey={'为'} /> {props.title} <Trans i18nKey={'加油'} />
+          </DialogTitle>
           <DialogDescription>
-            额度直接追加到当前月卡，模型权限和到期时间保持不变。
+            <Trans
+              i18nKey={'额度直接追加到当前月卡，模型权限和到期时间保持不变。'}
+            />
           </DialogDescription>
         </DialogHeader>
 
@@ -238,7 +245,9 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
           ) : (
             <>
               <div className='bg-muted/30 rounded-lg border px-3 py-2.5 text-sm'>
-                <div className='font-medium'>月卡到期时间不变</div>
+                <div className='font-medium'>
+                  <Trans i18nKey={'月卡到期时间不变'} />
+                </div>
                 <div className='text-muted-foreground mt-1 text-xs tabular-nums'>
                   {props.subscription
                     ? formatDate(props.subscription.end_time)
@@ -247,7 +256,9 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
               </div>
 
               <div className='space-y-2'>
-                <Label htmlFor='subscription-fuel-amount'>补充额度（$）</Label>
+                <Label htmlFor='subscription-fuel-amount'>
+                  <Trans i18nKey={'补充额度（$）'} />
+                </Label>
                 <Input
                   id='subscription-fuel-amount'
                   type='number'
@@ -257,19 +268,26 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
                   onChange={(event) => setAmount(Number(event.target.value))}
                 />
                 <p className='text-muted-foreground text-xs'>
-                  最低 ${minimumAmount}，每次递增 ${amountStep}。
+                  <Trans i18nKey={'最低 $'} />
+                  {minimumAmount}
+                  <Trans i18nKey={'，每次递增 $'} />
+                  {amountStep}。
                 </p>
               </div>
 
               <div className='grid grid-cols-2 gap-3 text-sm'>
                 <div className='rounded-lg border px-3 py-2.5'>
-                  <div className='text-muted-foreground text-xs'>加油单价</div>
+                  <div className='text-muted-foreground text-xs'>
+                    <Trans i18nKey={'加油单价'} />
+                  </div>
                   <div className='mt-1 font-mono font-semibold'>
                     ¥{quote?.unit_price.toFixed(3) ?? '--'} / $1
                   </div>
                 </div>
                 <div className='rounded-lg border px-3 py-2.5'>
-                  <div className='text-muted-foreground text-xs'>应付金额</div>
+                  <div className='text-muted-foreground text-xs'>
+                    <Trans i18nKey={'应付金额'} />
+                  </div>
                   <div className='mt-1 font-mono font-semibold tabular-nums'>
                     ¥{quote?.amount_due.toFixed(2) ?? '--'}
                   </div>
@@ -277,13 +295,15 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
               </div>
 
               <div className='space-y-2'>
-                <Label>支付方式</Label>
+                <Label>
+                  <Trans i18nKey={'支付方式'} />
+                </Label>
                 <Select
                   value={selectedPaymentMethod}
                   onValueChange={(value) => setPaymentMethod(value ?? '')}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder='选择支付方式' />
+                    <SelectValue placeholder={i18n.t('选择支付方式')} />
                   </SelectTrigger>
                   <SelectContent>
                     {paymentOptions.map((method) => (
@@ -298,7 +318,7 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
               <Alert>
                 <AlertCircle className='size-4' />
                 <AlertDescription>
-                  加油不延长有效期，也不升级模型权限。
+                  <Trans i18nKey={'加油不延长有效期，也不升级模型权限。'} />
                 </AlertDescription>
               </Alert>
             </>
@@ -308,7 +328,7 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
         {!paymentState ? (
           <DialogFooter>
             <Button variant='outline' onClick={() => props.onOpenChange(false)}>
-              取消
+              <Trans i18nKey={'取消'} />
             </Button>
             <Button
               disabled={
@@ -329,7 +349,7 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
               {purchaseMutation.isPending ? (
                 <Loader2 className='mr-1 size-4 animate-spin' />
               ) : null}
-              确认支付
+              <Trans i18nKey={'确认支付'} />
             </Button>
           </DialogFooter>
         ) : null}

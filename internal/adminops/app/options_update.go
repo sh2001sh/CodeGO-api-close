@@ -111,11 +111,6 @@ func validateOptionValue(key string, value string) error {
 	case "AutomaticRetryStatusCodes":
 		_, err := gatewaystore.ParseHTTPStatusCodeRanges(value)
 		return err
-	case "community_resource_setting.reward_usd":
-		reward, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-		if err != nil || reward < 0 || reward > 1000 {
-			return fmt.Errorf("community resource reward must be between 0 and 1000 USD")
-		}
 	case "payment_setting.first_purchase_discount_multiplier":
 		multiplier, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 		if err != nil || multiplier <= 0 || multiplier >= 1 {

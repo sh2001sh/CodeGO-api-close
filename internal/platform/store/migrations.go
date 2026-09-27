@@ -127,7 +127,6 @@ func V2MigrationIDs() []string {
 		"20260714_user_external_id",
 		"20260715_blind_box_admin_grants",
 		"20260718_first_purchase_discount",
-		"20260718_community_resources",
 		"20260719_subscription_first_purchase_discount",
 		"20260721_blind_box_zero_hour",
 		"20260724_gateway_route_pools",
@@ -307,9 +306,6 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		}},
 		{ID: "20260718_first_purchase_discount", Run: func(tx *gorm.DB) error {
 			return migrateFirstPurchaseDiscount(tx)
-		}},
-		{ID: "20260718_community_resources", Run: func(tx *gorm.DB) error {
-			return tx.AutoMigrate(&communityschema.Resource{})
 		}},
 		{ID: "20260719_subscription_first_purchase_discount", Run: func(tx *gorm.DB) error {
 			return migrateSubscriptionFirstPurchaseDiscount(tx)

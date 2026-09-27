@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 
 const multiplierDurations = [
   ['Lite', '15 分钟'],
@@ -121,7 +121,9 @@ export function MonthlyPlanRules() {
       </div>
 
       <div className='border-t px-4 py-5 sm:px-5'>
-        <span className='codego-kicker'>月卡额度 / 通用余额</span>
+        <span className='codego-kicker'>
+          <Trans i18nKey={'月卡额度 / 通用余额'} />
+        </span>
         <div className='mt-4 overflow-x-auto'>
           <div
             role='table'

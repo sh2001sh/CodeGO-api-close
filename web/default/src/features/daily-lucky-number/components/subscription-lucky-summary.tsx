@@ -1,5 +1,7 @@
-import { ArrowUpRight, CalendarDays } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
+import { ArrowUpRight, CalendarDays } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type {
@@ -48,6 +50,7 @@ export function SubscriptionLuckySummary(props: {
   showLink?: boolean
   className?: string
 }) {
+  useTranslation()
   const subscription = props.record.subscription
   const plan = isPlanRecord(props.plan) ? props.plan.plan : props.plan
   const tier = normalizeMembershipTier(
@@ -71,7 +74,9 @@ export function SubscriptionLuckySummary(props: {
     return (
       <div className={cn('flex min-w-0 items-center gap-2', props.className)}>
         <TierBadge tier={tier} compact />
-        <span className='text-primary text-[11px] font-semibold tabular-nums'>{tierMultiplier.toFixed(1)}x</span>
+        <span className='text-primary text-[11px] font-semibold tabular-nums'>
+          {tierMultiplier.toFixed(1)}x
+        </span>
         <span className='text-foreground font-mono text-xs font-semibold tabular-nums'>
           {suffix || '----'}
         </span>
@@ -83,8 +88,11 @@ export function SubscriptionLuckySummary(props: {
             )}
           >
             {matchedDigits > 0
-              ? `命中 ${matchedDigits} 位 · +${formatLuckyUsd(rewardUsd)}`
-              : '今日未命中'}
+              ? i18n.t('命中 {{param0}} 位 · +{{param1}}', {
+                  param0: matchedDigits,
+                  param1: formatLuckyUsd(rewardUsd),
+                })
+              : i18n.t('今日未命中')}
           </span>
         ) : null}
       </div>
@@ -98,15 +106,24 @@ export function SubscriptionLuckySummary(props: {
           <TierBadge tier={tier} />
           <div className='min-w-0'>
             <div className='text-foreground truncate text-sm font-semibold'>
-              {plan?.title || '月卡套餐'}
+              {plan?.title || i18n.t('月卡套餐')}
             </div>
             <div className='text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
               <CalendarDays className='size-3.5' aria-hidden='true' />
-              <span>剩余 {getRemainingDays(subscription.end_time)} 天</span>
+              <span>
+                <Trans i18nKey={'剩余'} />{' '}
+                {getRemainingDays(subscription.end_time)}{' '}
+                <Trans i18nKey={'天'} />
+              </span>
               <span aria-hidden='true'>·</span>
-              <span>幸运尾号 {suffix || '----'}</span>
+              <span>
+                <Trans i18nKey={'幸运尾号'} /> {suffix || '----'}
+              </span>
               <span aria-hidden='true'>·</span>
-              <span className='text-primary font-medium'>{tierMultiplier.toFixed(1)}x 奖励倍率</span>
+              <span className='text-primary font-medium'>
+                {tierMultiplier.toFixed(1)}
+                <Trans i18nKey={'x 奖励倍率'} />
+              </span>
             </div>
           </div>
         </div>
@@ -116,7 +133,7 @@ export function SubscriptionLuckySummary(props: {
             size='sm'
             render={<Link to='/daily-lucky-number' />}
           >
-            查看活动
+            <Trans i18nKey={'查看活动'} />
             <ArrowUpRight data-icon='inline-end' />
           </Button>
         ) : null}
@@ -127,7 +144,7 @@ export function SubscriptionLuckySummary(props: {
           cardCode={number?.card_code}
           luckySuffix={number?.lucky_suffix}
         />
-          <span
+        <span
           className={cn(
             'text-muted-foreground text-xs',
             matchedDigits > 0 && 'text-success font-medium'
@@ -135,9 +152,12 @@ export function SubscriptionLuckySummary(props: {
         >
           {props.draw
             ? matchedDigits > 0
-              ? `今日命中 ${matchedDigits} 位 · +${formatLuckyUsd(rewardUsd)}`
-              : '今日未命中'
-            : '将从下一期开奖开始参与'}
+              ? i18n.t('今日命中 {{param0}} 位 · +{{param1}}', {
+                  param0: matchedDigits,
+                  param1: formatLuckyUsd(rewardUsd),
+                })
+              : i18n.t('今日未命中')
+            : i18n.t('将从下一期开奖开始参与')}
         </span>
       </div>
     </div>

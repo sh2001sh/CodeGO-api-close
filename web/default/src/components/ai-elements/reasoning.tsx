@@ -26,7 +26,9 @@ import {
   useEffect,
   useState,
 } from 'react'
+import type { TFunction } from 'i18next'
 import { BrainIcon, ChevronDownIcon } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import { useControllableState } from '@/lib/use-controllable-state'
 import { cn } from '@/lib/utils'
 import {
@@ -138,19 +140,32 @@ export const Reasoning = memo(
 
 export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger>
 
-const getThinkingMessage = (isStreaming: boolean, duration?: number) => {
+const getThinkingMessage = (
+  isStreaming: boolean,
+  duration: number | undefined,
+  t: TFunction
+) => {
   if (isStreaming) {
-    return <Shimmer duration={1}>思考中...</Shimmer>
+    return <Shimmer duration={1}>{t('思考中...')}</Shimmer>
   }
   // When duration is unknown or 0 (e.g., non-streaming responses), show a generic message
   if (duration === undefined || duration === 0) {
-    return <p>已思考数秒</p>
+    return (
+      <p>
+        <Trans i18nKey={'已思考数秒'} />
+      </p>
+    )
   }
-  return <p>已思考 {duration} 秒</p>
+  return (
+    <p>
+      <Trans i18nKey={'已思考'} /> {duration} <Trans i18nKey={'秒'} />
+    </p>
+  )
 }
 
 export const ReasoningTrigger = memo(
   ({ className, children, ...props }: ReasoningTriggerProps) => {
+    const { t } = useTranslation()
     const { isStreaming, isOpen, duration } = useReasoning()
 
     return (
@@ -164,7 +179,7 @@ export const ReasoningTrigger = memo(
         {children ?? (
           <>
             <BrainIcon className='size-4' />
-            {getThinkingMessage(isStreaming, duration)}
+            {getThinkingMessage(isStreaming, duration, t)}
             <ChevronDownIcon
               className={cn(
                 'size-4 transition-transform',

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, RefreshCw, Save } from 'lucide-react'
+import { Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SectionPageLayout } from '@/components/layout'
-import { RoutePoolInsights } from './components/route-pool-insights'
 import { RoutePoolGroupList } from './components/route-pool-group-list'
+import { RoutePoolInsights } from './components/route-pool-insights'
 import type { FundingPolicy, RoutePoolGroup, RoutePoolMetrics } from './types'
 
 type DailyEconomics = {
@@ -25,9 +26,15 @@ const fundingSources: FundingPolicy['source'][] = [
 export function RoutePools() {
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>渠道与智能路由</SectionPageLayout.Title>
+      <SectionPageLayout.Title>
+        <Trans i18nKey={'渠道与智能路由'} />
+      </SectionPageLayout.Title>
       <SectionPageLayout.Description>
-        渠道分组来自渠道配置；启用算法后按成本、成功率、冷却和首字耗时自动选择。
+        <Trans
+          i18nKey={
+            '渠道分组来自渠道配置；启用算法后按成本、成功率、冷却和首字耗时自动选择。'
+          }
+        />
       </SectionPageLayout.Description>
       <SectionPageLayout.Content>
         <RoutePoolsContent />
@@ -109,7 +116,9 @@ export function RoutePoolsContent() {
       api.put('/api/route-finance/policies', { policies: items }),
     onSuccess: () => {
       toast.success('来源倍率已保存')
-      void queryClient.invalidateQueries({ queryKey: ['route-finance-policies'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['route-finance-policies'],
+      })
     },
     onError: () => toast.error('来源倍率保存失败'),
   })
@@ -137,14 +146,20 @@ export function RoutePoolsContent() {
     <div className='space-y-4'>
       <div className='flex flex-col justify-between gap-3 sm:flex-row sm:items-start'>
         <div>
-          <h2 className='text-lg font-semibold'>自动路由</h2>
+          <h2 className='text-lg font-semibold'>
+            <Trans i18nKey={'自动路由'} />
+          </h2>
           <p className='text-muted-foreground mt-1 text-sm'>
-            分组与候选渠道自动同步自渠道配置。开启后，未命中缓存粘性的请求按成本、健康度和首字时间评分选择。
+            <Trans
+              i18nKey={
+                '分组与候选渠道自动同步自渠道配置。开启后，未命中缓存粘性的请求按成本、健康度和首字时间评分选择。'
+              }
+            />
           </p>
         </div>
         <Button variant='outline' onClick={refresh}>
           <RefreshCw />
-          刷新
+          <Trans i18nKey={'刷新'} />
         </Button>
       </div>
 
@@ -154,14 +169,18 @@ export function RoutePoolsContent() {
             <div className='flex min-w-0 items-start gap-2 text-sm'>
               <AlertCircle className='text-destructive mt-0.5 size-4 shrink-0' />
               <div>
-                <p className='font-medium'>路由数据暂时无法加载</p>
+                <p className='font-medium'>
+                  <Trans i18nKey={'路由数据暂时无法加载'} />
+                </p>
                 <p className='text-muted-foreground mt-1'>
-                  请刷新重试；现有渠道和运行中的路由不会被修改。
+                  <Trans
+                    i18nKey={'请刷新重试；现有渠道和运行中的路由不会被修改。'}
+                  />
                 </p>
               </div>
             </div>
             <Button size='sm' variant='outline' onClick={refresh}>
-              重试
+              <Trans i18nKey={'重试'} />
             </Button>
           </CardContent>
         </Card>
@@ -188,9 +207,13 @@ export function RoutePoolsContent() {
         />
         <Card>
           <CardContent className='space-y-3 pt-6'>
-            <h3 className='font-semibold'>用户来源倍率</h3>
+            <h3 className='font-semibold'>
+              <Trans i18nKey={'用户来源倍率'} />
+            </h3>
             <p className='text-muted-foreground text-sm'>
-              仅影响新入账额度的收益归因，不影响渠道采购倍率。
+              <Trans
+                i18nKey={'仅影响新入账额度的收益归因，不影响渠道采购倍率。'}
+              />
             </p>
             {policyDraft.map((policy, index) => (
               <label
@@ -229,7 +252,7 @@ export function RoutePoolsContent() {
               disabled={savePolicies.isPending}
             >
               <Save />
-              保存来源倍率
+              <Trans i18nKey={'保存来源倍率'} />
             </Button>
           </CardContent>
         </Card>

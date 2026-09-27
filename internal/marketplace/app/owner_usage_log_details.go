@@ -22,6 +22,8 @@ func applyOwnerUsageLogDetails(item *OwnerUsageLogItem, log auditschema.Log) {
 		return
 	}
 	item.FirstByteMs = firstInt64(other, "e2e_ttft_ms", "frt")
+	item.CacheReadTokens = firstInt64(other, "cache_tokens")
+	item.CacheWriteTokens = firstInt64(other, "cache_write_tokens")
 	item.AttemptTTFTMs = firstInt64(other, "attempt_ttft_ms")
 	if duration := firstInt64(other, "total_duration_ms"); duration > 0 {
 		item.TotalDurationMs = duration

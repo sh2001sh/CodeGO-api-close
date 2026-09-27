@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link, useSearch } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import { useTranslation } from 'react-i18next'
 import { useStatus } from '@/hooks/use-status'
 import { SiteSeo } from '@/components/seo'
@@ -32,8 +33,10 @@ export function SignUp() {
   return (
     <AuthLayout>
       <SiteSeo
-        title='注册'
-        description='注册 Code Go 以创建账户并开始使用 API、模型广场与长期 AI Coding 工作流。'
+        title={i18n.t('注册')}
+        description={i18n.t(
+          '注册 Code Go 以创建账户并开始使用 API、模型广场与长期 AI Coding 工作流。'
+        )}
         canonicalPath='/sign-up'
         robots='noindex,follow'
       />

@@ -26,7 +26,7 @@ import {
   Settings2,
   Sparkles,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -509,7 +509,6 @@ export function SubscriptionsMutateDrawer({
                       </FormItem>
                     )}
                   />
-
                 </div>
 
                 <FormField
@@ -543,9 +542,15 @@ export function SubscriptionsMutateDrawer({
               <div className='space-y-3 rounded-lg border p-4'>
                 <div className='flex items-start justify-between gap-3'>
                   <div>
-                    <FormLabel>动态加油包</FormLabel>
+                    <FormLabel>
+                      <Trans i18nKey={'动态加油包'} />
+                    </FormLabel>
                     <FormDescription>
-                      用户可按本套餐的单价自定义补充额度，不延长月卡有效期。
+                      <Trans
+                        i18nKey={
+                          '用户可按本套餐的单价自定义补充额度，不延长月卡有效期。'
+                        }
+                      />
                     </FormDescription>
                   </div>
                   <FormField
@@ -567,7 +572,9 @@ export function SubscriptionsMutateDrawer({
                     name='fuel_unit_price'
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>加油单价（元 / $1 额度）</FormLabel>
+                        <FormLabel>
+                          <Trans i18nKey={'加油单价（元 / $1 额度）'} />
+                        </FormLabel>
                         <FormControl>
                           <Input
                             {...field}
@@ -590,7 +597,9 @@ export function SubscriptionsMutateDrawer({
                     name='fuel_min_quota'
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>最低加油额度（$）</FormLabel>
+                        <FormLabel>
+                          <Trans i18nKey={'最低加油额度（$）'} />
+                        </FormLabel>
                         <FormControl>
                           <Input
                             {...field}
@@ -613,7 +622,9 @@ export function SubscriptionsMutateDrawer({
                     name='fuel_quota_step'
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>额度递增步长（$）</FormLabel>
+                        <FormLabel>
+                          <Trans i18nKey={'额度递增步长（$）'} />
+                        </FormLabel>
                         <FormControl>
                           <Input
                             {...field}

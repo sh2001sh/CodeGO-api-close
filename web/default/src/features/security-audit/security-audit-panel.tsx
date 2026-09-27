@@ -15,7 +15,7 @@ import {
   UserRound,
   Waypoints,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import dayjs from '@/lib/dayjs'
 import { Badge } from '@/components/ui/badge'
@@ -812,7 +812,7 @@ function RecentTriggerHint({ event }: { event: SecurityAuditEvent }) {
       variant='outline'
       className='border-warning/20 bg-warning/10 text-warning'
     >
-      近 24 小时 {count} 次
+      <Trans i18nKey={'近 24 小时'} /> {count} <Trans i18nKey={'次'} />
     </Badge>
   )
 }
@@ -875,13 +875,17 @@ function AuditEventCard({
       </div>
       <div className='grid grid-cols-2 gap-x-4 gap-y-2 text-xs'>
         <div>
-          <span className='text-muted-foreground'>渠道</span>
+          <span className='text-muted-foreground'>
+            <Trans i18nKey={'渠道'} />
+          </span>
           <p className='mt-0.5 truncate font-mono'>
             {event.marketplace_channel_id || event.channel_id || '-'}
           </p>
         </div>
         <div>
-          <span className='text-muted-foreground'>用户 / Key</span>
+          <span className='text-muted-foreground'>
+            <Trans i18nKey={'用户 / Key'} />
+          </span>
           <p className='mt-0.5 truncate'>
             {event.user_external_id || '-'} ·{' '}
             {event.token_name || `#${event.token_id}`}
@@ -892,13 +896,17 @@ function AuditEventCard({
           </p>
         </div>
         <div>
-          <span className='text-muted-foreground'>来源</span>
+          <span className='text-muted-foreground'>
+            <Trans i18nKey={'来源'} />
+          </span>
           <p className='mt-0.5 truncate'>
             {sourceLabels[event.source] ?? event.source}
           </p>
         </div>
         <div>
-          <span className='text-muted-foreground'>通知</span>
+          <span className='text-muted-foreground'>
+            <Trans i18nKey={'通知'} />
+          </span>
           <p className='mt-0.5 truncate'>
             {notificationLabel(event.notification_status)}
           </p>

@@ -26,12 +26,17 @@ import {
   Sunrise,
   Zap,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { normalizeSystemName } from '@/lib/branding'
 import { Markdown } from '@/components/ui/markdown'
 import { SiteSeo } from '@/components/seo'
 import { useHomePageContent } from '@/features/home/hooks'
 import { useMarketplaceGroups } from '@/features/marketplace/hooks'
+import {
+  localizedGroupName,
+  localizedSourceLabel,
+} from '@/features/marketplace/lib/localized-group-name'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import { availablePricingModels } from '@/features/pricing/lib/merge-pricing-models'
 import { countFreeModels } from '@/features/pricing/lib/model-helpers'
@@ -57,6 +62,7 @@ const HOME_FILTERS = {
 }
 
 export function DawnHome() {
+  const { t, i18n } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const { content, isLoaded, isUrl } = useHomePageContent()
   const marketplace = useMarketplaceGroups(HOME_FILTERS)
@@ -138,7 +144,9 @@ export function DawnHome() {
       <div className='dawn'>
         <SiteSeo
           title={`${normalizeSystemName()} | AI API`}
-          description='AI 编程网关 · 分组市场与模型价目'
+          description={t(
+            'AI coding gateway, group marketplace and model pricing'
+          )}
           canonicalPath='/'
         />
         <main className='overflow-x-hidden'>
@@ -163,8 +171,10 @@ export function DawnHome() {
   return (
     <div className='dawn'>
       <SiteSeo
-        title={`${brand} | AI 编程网关`}
-        description='AI 编程网关 · 分组市场与模型价目'
+        title={`${brand} | ${t('AI coding gateway')}`}
+        description={t(
+          'AI coding gateway, group marketplace and model pricing'
+        )}
         canonicalPath='/'
       />
       <DawnNav variant='hero' />
@@ -201,16 +211,16 @@ export function DawnHome() {
             AI CODING GATEWAY
           </div>
           <h1 className='reveal in'>
-            一线，
+            {t('One connection,')}
             <br />
-            <span className='gold'>连万象。</span>
+            <span className='gold'>{t('every model.')}</span>
           </h1>
           <div className='cta reveal in'>
             <Link className='btn primary' to='/market'>
-              进入市场 <ArrowUpRight size={16} />
+              {t('Explore the market')} <ArrowUpRight size={16} />
             </Link>
             <Link className='btn' to={user ? '/dashboard' : '/sign-in'}>
-              {user ? '我的控制台' : '登录 / 注册'}
+              {user ? t('My console') : `${t('Sign in')} / ${t('Sign up')}`}
             </Link>
             <a
               className='btn community-cta'
@@ -218,7 +228,7 @@ export function DawnHome() {
               target='_blank'
               rel='noopener noreferrer'
             >
-              进入社区 <ArrowRight size={15} />
+              {t('Visit the community')} <ArrowRight size={15} />
             </a>
           </div>
         </div>
@@ -231,7 +241,8 @@ export function DawnHome() {
           {[0, 1].map((index) => (
             <span key={index}>
               AI RESOURCES MARKET <Sparkles />
-              <span className='o'>一线连万象</span> <Sunrise />
+              <span className='o'>{t('One connection, every model')}</span>{' '}
+              <Sunrise />
               {brand.toUpperCase()} <span className='o'>LIVE</span> <Zap />
             </span>
           ))}
@@ -246,7 +257,7 @@ export function DawnHome() {
             INTERLUDE
           </div>
           <h2>
-            万模，<em>皆可比较</em>。
+            {t('Every model,')} <em>{t('ready to compare')}</em>.
           </h2>
         </Reveal>
       </section>
@@ -261,7 +272,7 @@ export function DawnHome() {
                   <span className='n'>02</span>
                   LIVE
                 </div>
-                <h2>此刻</h2>
+                <h2>{t('Live now')}</h2>
               </div>
             </div>
           </Reveal>
@@ -271,19 +282,19 @@ export function DawnHome() {
                 <b>
                   <CountUp to={marketplace.data?.total ?? 0} />
                 </b>
-                <span>在售分组</span>
+                <span>{t('Groups for sale')}</span>
               </div>
               <div className='cell'>
                 <b>
                   <CountUp to={models.length} />
                 </b>
-                <span>可用模型</span>
+                <span>{t('Available models')}</span>
               </div>
               <div className='cell'>
                 <b>
                   <CountUp to={aggregates.totalRequests} />
                 </b>
-                <span>24H 请求</span>
+                <span>{t('24h requests')}</span>
               </div>
               <div className='cell'>
                 <b>
@@ -296,7 +307,7 @@ export function DawnHome() {
                     '—'
                   )}
                 </b>
-                <span>24H 成功率</span>
+                <span>{t('24h success rate')}</span>
               </div>
               <div className='cell'>
                 <b>
@@ -309,7 +320,7 @@ export function DawnHome() {
                     '—'
                   )}
                 </b>
-                <span>首字均值</span>
+                <span>{t('Average time to first token')}</span>
               </div>
             </div>
           </Reveal>
@@ -318,7 +329,7 @@ export function DawnHome() {
               <div className='ticker'>
                 <span className='label'>
                   <Activity size={13} />
-                  行情
+                  {t('Market activity')}
                 </span>
                 <div className='win'>
                   <div className='items'>
@@ -331,7 +342,7 @@ export function DawnHome() {
                         {model.model_name}
                         <b>
                           {model.quota_type === 1
-                            ? '按量'
+                            ? t('Usage based')
                             : formatPrice(model, 'input', 'M')}
                           /1M
                         </b>
@@ -353,7 +364,8 @@ export function DawnHome() {
             INTERLUDE
           </div>
           <h2>
-            <span className='stroke'>路由</span>，<em>可见</em>。
+            <span className='stroke'>{t('Routing')}</span>,{' '}
+            <em>{t('made visible')}</em>.
           </h2>
         </Reveal>
       </section>
@@ -368,10 +380,12 @@ export function DawnHome() {
                   <span className='n'>04</span>
                   MARKET
                 </div>
-                <h2>热</h2>
+                <h2>{t('Trending')}</h2>
               </div>
               <Link className='btn' to='/market'>
-                全部 {fmtInt(marketplace.data?.total ?? 0)} 组{' '}
+                {t('All {{count}} groups', {
+                  count: fmtInt(marketplace.data?.total ?? 0),
+                })}{' '}
                 <ArrowRight size={15} />
               </Link>
             </div>
@@ -382,28 +396,39 @@ export function DawnHome() {
                 {groups.slice(0, 3).map((group) => (
                   <Link to='/market' className='hcard' key={group.id}>
                     <div className='halo' />
-                    <span className='src'>{group.source_label}</span>
-                    <h3>{group.system_display_name}</h3>
+                    <span className='src'>
+                      {localizedSourceLabel(group.source_label, i18n.language)}
+                    </span>
+                    <h3>
+                      {localizedGroupName(
+                        group.system_display_name,
+                        group.source_label,
+                        i18n.language
+                      )}
+                    </h3>
                     <div className='pr'>
                       {group.multiplier}
-                      <span> × 倍率</span>
+                      <span> × {t('multiplier')}</span>
                     </div>
                     <div className='hm'>
                       <span className='g'>
-                        24H 成功<b>{pct(group.success_rate)}%</b>
+                        {t('24h success')}
+                        <b>{pct(group.success_rate)}%</b>
                       </span>
                       <span>
-                        首字<b>{sec(group.avg_ttft_ms)}s</b>
+                        {t('First token')}
+                        <b>{sec(group.avg_ttft_ms)}s</b>
                       </span>
                       <span>
-                        模型<b>{group.models.length}</b>
+                        {t('Models')}
+                        <b>{group.models.length}</b>
                       </span>
                       <span>
                         24H<b>{compactCount(group.request_count)}</b>
                       </span>
                     </div>
                     <span className='go'>
-                      进入 <ArrowRight size={14} />
+                      {t('Enter')} <ArrowRight size={14} />
                     </span>
                   </Link>
                 ))}
@@ -413,10 +438,12 @@ export function DawnHome() {
                 <span className='eic'>
                   <Sunrise size={20} />
                 </span>
-                <b>市场分组上架中</b>
-                <span>{freeCount} 个模型价目已就绪</span>
+                <b>{t('Market groups are coming soon')}</b>
+                <span>
+                  {t('{{count}} model prices are ready', { count: freeCount })}
+                </span>
                 <Link className='btn mini' to='/pricing'>
-                  查看模型价目 <ArrowRight size={13} />
+                  {t('View model prices')} <ArrowRight size={13} />
                 </Link>
               </div>
             )}
@@ -438,15 +465,15 @@ export function DawnHome() {
             <div className='row'>
               <div>
                 <b>{fmtInt(models.length)}</b>
-                <span>可用模型</span>
+                <span>{t('Available models')}</span>
               </div>
               <div>
                 <b>{fmtInt(freeCount)}</b>
-                <span>免费模型</span>
+                <span>{t('Free models')}</span>
               </div>
               <div>
                 <b>{fmtInt(marketplace.data?.total ?? 0)}</b>
-                <span>在售分组</span>
+                <span>{t('Groups for sale')}</span>
               </div>
             </div>
           </Reveal>
@@ -456,7 +483,7 @@ export function DawnHome() {
             <span className='dot'>G</span>
             {brand}
           </span>
-          <span>AI 网关与代码平台</span>
+          <span>{t('AI gateway and coding platform')}</span>
           <span>© {new Date().getFullYear()}</span>
         </footer>
       </section>

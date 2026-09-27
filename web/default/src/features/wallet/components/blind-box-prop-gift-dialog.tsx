@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import i18n from '@/i18n/config'
 import { Gift, Loader2, Search, ShieldAlert } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -24,6 +26,7 @@ export function BlindBoxPropGiftDialog(props: {
   onOpenChange: (open: boolean) => void
   onGifted: () => Promise<void>
 }) {
+  useTranslation()
   const [externalId, setExternalId] = useState('')
   const [recipient, setRecipient] = useState<WalletTransferRecipient | null>(
     null
@@ -91,10 +94,14 @@ export function BlindBoxPropGiftDialog(props: {
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Gift className='text-primary size-4' />
-            赠送道具
+            <Trans i18nKey={'赠送道具'} />
           </DialogTitle>
           <DialogDescription>
-            {props.prop ? `将“${props.prop.title}”转移给其他用户。` : ''}
+            {props.prop
+              ? i18n.t('将“{{param0}}”转移给其他用户。', {
+                  param0: props.prop.title,
+                })
+              : ''}
           </DialogDescription>
         </DialogHeader>
 
@@ -104,14 +111,14 @@ export function BlindBoxPropGiftDialog(props: {
               htmlFor='prop-gift-recipient'
               className='text-sm font-medium'
             >
-              接收用户 ID
+              <Trans i18nKey={'接收用户 ID'} />
             </label>
             <div className='mt-2 flex gap-2'>
               <Input
                 id='prop-gift-recipient'
                 value={externalId}
                 maxLength={6}
-                placeholder='6 位用户 ID'
+                placeholder={i18n.t('6 位用户 ID')}
                 onChange={(event) => {
                   setExternalId(event.target.value.toUpperCase())
                   setRecipient(null)
@@ -129,7 +136,7 @@ export function BlindBoxPropGiftDialog(props: {
                 ) : (
                   <Search className='size-4' />
                 )}
-                查询
+                <Trans i18nKey={'查询'} />
               </Button>
             </div>
           </div>
@@ -138,7 +145,7 @@ export function BlindBoxPropGiftDialog(props: {
             <div className='border-border bg-muted/25 rounded-lg border px-3 py-3'>
               <div className='text-sm font-medium'>{recipient.external_id}</div>
               <div className='text-muted-foreground mt-1 text-xs'>
-                {recipient.display_name_masked || '已确认接收用户'}
+                {recipient.display_name_masked || i18n.t('已确认接收用户')}
               </div>
             </div>
           ) : null}
@@ -146,7 +153,11 @@ export function BlindBoxPropGiftDialog(props: {
           <div className='bg-warning/10 text-warning-foreground flex gap-2 rounded-lg px-3 py-2.5 text-xs leading-5'>
             <ShieldAlert className='mt-0.5 size-4 shrink-0' />
             <span>
-              赠送完成后不可撤回。已启用、暂停、锁定、已使用或已过期的道具不能赠送。
+              <Trans
+                i18nKey={
+                  '赠送完成后不可撤回。已启用、暂停、锁定、已使用或已过期的道具不能赠送。'
+                }
+              />
             </span>
           </div>
         </div>
@@ -158,7 +169,7 @@ export function BlindBoxPropGiftDialog(props: {
             onClick={() => handleOpenChange(false)}
             disabled={submitting}
           >
-            取消
+            <Trans i18nKey={'取消'} />
           </Button>
           <Button
             type='button'
@@ -170,7 +181,7 @@ export function BlindBoxPropGiftDialog(props: {
             ) : (
               <Gift className='size-4' />
             )}
-            确认赠送
+            <Trans i18nKey={'确认赠送'} />
           </Button>
         </DialogFooter>
       </DialogContent>

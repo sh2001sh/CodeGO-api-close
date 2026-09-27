@@ -1,3 +1,5 @@
+import i18n from '@/i18n/config'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { formatLuckyUsd } from '../lib'
 import type { LuckyPublicWin } from '../types'
@@ -20,12 +22,13 @@ export function WinnerFilters(props: {
   total: number
   onChange: (filter: WinnerFilter) => void
 }) {
+  useTranslation()
   return (
     <div className='border-border/70 bg-muted/20 border-b p-3 sm:p-4'>
       <div
         className='grid grid-cols-2 gap-2 sm:grid-cols-5'
         role='group'
-        aria-label='按命中位数筛选'
+        aria-label={i18n.t('按命中位数筛选')}
       >
         {FILTERS.map((item) => {
           const count =
@@ -78,14 +81,16 @@ export function WinnerList(props: { records: LuckyPublicWin[] }) {
               <TierBadge tier={item.membership_tier} compact />
             </div>
             <div className='text-muted-foreground mt-1 text-[11px]'>
-              幸运尾号
+              <Trans i18nKey={'幸运尾号'} />
             </div>
           </div>
           <div className='shrink-0 text-right'>
             <div className='text-success font-mono text-sm font-semibold tabular-nums'>
               +{formatLuckyUsd(item.reward_usd)}
             </div>
-            <div className='text-muted-foreground mt-1 text-[11px]'>已到账</div>
+            <div className='text-muted-foreground mt-1 text-[11px]'>
+              <Trans i18nKey={'已到账'} />
+            </div>
           </div>
         </article>
       ))}
@@ -111,7 +116,9 @@ function MatchLevel(props: { digits: number }) {
       <strong className='font-mono text-base leading-none tabular-nums'>
         {props.digits}
       </strong>
-      <span className='mt-0.5 text-[9px] font-medium'>位</span>
+      <span className='mt-0.5 text-[9px] font-medium'>
+        <Trans i18nKey={'位'} />
+      </span>
     </span>
   )
 }

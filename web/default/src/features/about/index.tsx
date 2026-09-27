@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
+import i18n from '@/i18n/config'
+import { useTranslation, Trans } from 'react-i18next'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { Markdown } from '@/components/ui/markdown'
 import { PublicLayout } from '@/components/layout'
@@ -25,45 +27,13 @@ import { getAboutContent } from './api'
 
 const aboutSeo = getPublicPageSeoEntry('/about')
 
-const fallbackAboutMarkdown = `## 品牌主张
-
-让 AI 编程的每一步，都算数。
-
-## Code Go 在做什么
-
-Code Go 让 AI 编程更适合长期使用。
-
-## 为什么这样做
-
-如果你长期使用 Codex、Claude Code 或多模型工作流，你会需要一个更稳定的使用入口。
-
-## Code Go 的差异化
-
-- 不只是接入模型
-- 不只是管理额度
-- 也不只是看调用结果
-
-我们更关心的是：你每天做 AI 编程时，是否能感受到进度在持续累积。
-
-## 适合谁
-
-- 长期使用 Codex 的开发者
-- 长期使用 Claude Code 的开发者
-- 需要多模型、额度管理、成长反馈和工作流记录的团队
-
-## 对外表达
-
-如果只用一句话介绍 Code Go，就是：
-
-**让 AI 编程的每一步，都算数。**
-`
-
 function AboutHero() {
+  const { t } = useTranslation()
   return (
     <div className='space-y-4'>
       <div className='space-y-3'>
         <h1 className='text-foreground text-4xl font-semibold tracking-tight md:text-5xl'>
-          {aboutSeo.h1}
+          {t(aboutSeo.h1)}
         </h1>
       </div>
     </div>
@@ -71,25 +41,27 @@ function AboutHero() {
 }
 
 function SupportGroupCard() {
+  useTranslation()
   return (
     <div className='border-border bg-card text-card-foreground overflow-hidden rounded-xl border'>
       <div className='grid gap-6 p-6 md:grid-cols-[minmax(0,1fr)_240px] md:items-center'>
         <div className='space-y-3'>
           <div className='text-primary text-xs font-semibold tracking-[0.24em] uppercase'>
-            售后支持
+            <Trans i18nKey={'售后支持'} />
           </div>
           <h2 className='text-foreground text-2xl font-semibold tracking-tight'>
-            售后 QQ 群
+            <Trans i18nKey={'售后 QQ 群'} />
           </h2>
           <div className='bg-muted/60 text-foreground rounded-lg px-4 py-3 text-sm leading-7'>
-            群号：<span className='font-semibold'>996040309</span>
+            <Trans i18nKey={'群号：'} />
+            <span className='font-semibold'>996040309</span>
           </div>
         </div>
 
         <div className='border-border bg-background mx-auto w-full max-w-[220px] rounded-xl border p-3'>
           <img
             src='/guide/16-support-qq-group.png'
-            alt='Code Go 售后 QQ 群二维码'
+            alt={i18n.t('Code Go 售后 QQ 群二维码')}
             className='h-auto w-full rounded-lg'
             loading='lazy'
           />
@@ -113,13 +85,16 @@ function isLikelyHtml(value: string) {
 }
 
 export function About() {
+  const { t, i18n: currentI18n } = useTranslation()
   const { data, isError, isLoading } = useQuery({
     queryKey: ['about-content'],
     queryFn: getAboutContent,
   })
 
   const rawContent = data?.data?.trim() ?? ''
-  const hasContent = rawContent.length > 0
+  const hasContent =
+    rawContent.length > 0 &&
+    (currentI18n.language === 'zh' || !/[\u3400-\u9fff]/u.test(rawContent))
   const isUrl = hasContent && isValidUrl(rawContent)
   const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
 
@@ -136,7 +111,7 @@ export function About() {
           <AboutHero />
           <SupportGroupCard />
           <Markdown className='codego-public-prose prose-neutral dark:prose-invert max-w-none'>
-            {fallbackAboutMarkdown}
+            {t('about.fallbackMarkdown')}
           </Markdown>
         </div>
       </PublicLayout>
@@ -160,7 +135,7 @@ export function About() {
           <iframe
             src={rawContent}
             className='h-[calc(100vh-18rem)] w-full border-0'
-            title='Code Go 关于内容'
+            title={i18n.t('Code Go 关于内容')}
           />
         </div>
       </PublicLayout>

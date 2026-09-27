@@ -381,6 +381,8 @@ export interface MarketplaceOwnerUsageLog {
   model_name: string
   prompt_tokens: number
   completion_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
   use_time: number
   is_stream: boolean
   request_id: string

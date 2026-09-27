@@ -24,7 +24,7 @@ import { useRender } from '@base-ui/react/use-render'
 import { SidebarLeftIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
@@ -215,8 +215,12 @@ function Sidebar({
           side={side}
         >
           <SheetHeader className='sr-only'>
-            <SheetTitle>侧边栏</SheetTitle>
-            <SheetDescription>显示移动端侧边栏。</SheetDescription>
+            <SheetTitle>
+              <Trans i18nKey={'侧边栏'} />
+            </SheetTitle>
+            <SheetDescription>
+              <Trans i18nKey={'显示移动端侧边栏。'} />
+            </SheetDescription>
           </SheetHeader>
           <div className='flex h-full w-full flex-col'>{children}</div>
         </SheetContent>

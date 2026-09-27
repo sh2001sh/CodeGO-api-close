@@ -1,6 +1,8 @@
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import { ArrowRight, Compass } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
+import { useTranslation, Trans } from 'react-i18next'
 import { MOTION_TRANSITION } from '@/lib/motion'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { Button } from '@/components/ui/button'
@@ -21,12 +23,9 @@ function GuideDiagram(props: { title: string; steps: string[] }) {
       <div className='text-foreground text-sm font-medium'>{props.title}</div>
       <div className='mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         {props.steps.map((step, index) => (
-          <div
-            key={step}
-            className='app-subtle-panel relative p-3'
-          >
+          <div key={step} className='app-subtle-panel relative p-3'>
             <div className='text-muted-foreground text-[11px] font-semibold tracking-[0.22em] uppercase'>
-              第 {index + 1} 步
+              <Trans i18nKey={'第'} /> {index + 1} <Trans i18nKey={'步'} />
             </div>
             <div className='mt-2 text-sm leading-6 font-medium'>{step}</div>
             {index < props.steps.length - 1 ? (
@@ -89,7 +88,6 @@ function GuideSectionBlock(props: { section: (typeof guideSections)[number] }) {
               steps={section.diagram_steps}
             />
           ) : null}
-
         </div>
 
         <div className='space-y-5'>
@@ -112,6 +110,21 @@ function GuideSectionBlock(props: { section: (typeof guideSections)[number] }) {
 }
 
 export function Guide() {
+  const { t } = useTranslation()
+  const localizedSections = guideSections.map((section) => ({
+    ...section,
+    title: t(section.title),
+    summary: t(section.summary),
+    steps: section.steps?.map((step) => t(step)),
+    notes: section.notes?.map((note) => t(note)),
+    diagram_title: section.diagram_title ? t(section.diagram_title) : undefined,
+    diagram_steps: section.diagram_steps?.map((step) => t(step)),
+    images: section.images.map((image) => ({
+      ...image,
+      alt: t(image.alt),
+      caption: t(image.caption),
+    })),
+  }))
   return (
     <PublicLayout showMainContainer={false}>
       <SiteSeo
@@ -127,7 +140,7 @@ export function Guide() {
             <div className='max-w-3xl space-y-4'>
               <div className='space-y-3'>
                 <h1 className='text-foreground text-4xl font-semibold tracking-tight md:text-5xl'>
-                  {guideSeo.h1}
+                  {t(guideSeo.h1)}
                 </h1>
               </div>
             </div>
@@ -135,10 +148,10 @@ export function Guide() {
             <div className='grid gap-3 sm:grid-cols-3 lg:min-w-[440px]'>
               <div className='overview-soft-card px-4 py-4'>
                 <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  章节数量
+                  <Trans i18nKey={'章节数量'} />
                 </div>
                 <div className='mt-2 text-2xl font-semibold'>
-                  {guideSections.length}
+                  {localizedSections.length}
                 </div>
               </div>
             </div>
@@ -151,12 +164,12 @@ export function Guide() {
               <div className='overview-glass-card space-y-4 rounded-2xl p-4'>
                 <div className='flex items-center gap-2 text-sm font-semibold'>
                   <Compass className='size-4' />
-                  导航目录
+                  <Trans i18nKey={'导航目录'} />
                 </div>
 
-                <nav aria-label='使用说明章节目录'>
+                <nav aria-label={i18n.t('使用说明章节目录')}>
                   <ul className='space-y-1'>
-                    {guideSections.map((section) => (
+                    {localizedSections.map((section) => (
                       <li key={section.id}>
                         <a
                           href={`#${section.id}`}
@@ -174,21 +187,21 @@ export function Guide() {
 
                 <div className='flex flex-col gap-2 pt-1'>
                   <Button className='w-full' render={<Link to='/sign-up' />}>
-                    立即注册
+                    <Trans i18nKey={'立即注册'} />
                   </Button>
                   <Button
                     variant='outline'
                     className='w-full'
                     render={<Link to='/pricing' />}
                   >
-                    查看模型广场
+                    <Trans i18nKey={'查看模型广场'} />
                   </Button>
                 </div>
               </div>
             </aside>
 
             <div className='min-w-0 space-y-2'>
-              {guideSections.map((section) => (
+              {localizedSections.map((section) => (
                 <GuideSectionBlock key={section.id} section={section} />
               ))}
             </div>

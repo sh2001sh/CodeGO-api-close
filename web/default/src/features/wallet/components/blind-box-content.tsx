@@ -6,7 +6,9 @@ it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 */
+import i18n from '@/i18n/config'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
+import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BlindBoxSelfData, PaymentMethod } from '../types'
 import { BalanceBlindBoxPanel } from './balance-blind-box-panel'
@@ -45,6 +47,7 @@ export interface BlindBoxContentProps {
 }
 
 export function BlindBoxContent(props: BlindBoxContentProps) {
+  useTranslation()
   const reduced = Boolean(useReducedMotion())
 
   if (props.loading && !props.data) return <BlindBoxContentSkeleton />
@@ -82,7 +85,7 @@ export function BlindBoxContent(props: BlindBoxContentProps) {
         <BlindBoxPoolShowcase
           data={props.data}
           tiers={props.data?.inventory?.tiers || props.data?.tiers || []}
-          title='统一盲盒奖池'
+          title={i18n.t('统一盲盒奖池')}
           description=''
           hideSubscription
         />

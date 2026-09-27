@@ -1,5 +1,5 @@
 import { CirclePause, CirclePlay, Gift, RefreshCw } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { BlindBoxProp } from '../types'
 
@@ -62,7 +62,7 @@ export function BlindBoxPropsList(props: {
                     className='w-full sm:w-auto'
                   >
                     <Gift className='size-4' data-icon='inline-start' />
-                    赠送
+                    <Trans i18nKey={'赠送'} />
                   </Button>
                 ) : null}
                 {convertible ? (
@@ -84,7 +84,7 @@ export function BlindBoxPropsList(props: {
                       }
                       data-icon='inline-start'
                     />
-                    转为九折充值卡
+                    <Trans i18nKey={'转为九折充值卡'} />
                   </Button>
                 ) : null}
                 {pausable && active ? (
@@ -97,7 +97,7 @@ export function BlindBoxPropsList(props: {
                     className='w-full shrink-0 sm:w-auto'
                   >
                     <CirclePause className='size-4' data-icon='inline-start' />
-                    暂停
+                    <Trans i18nKey={'暂停'} />
                   </Button>
                 ) : manual ? (
                   <Button

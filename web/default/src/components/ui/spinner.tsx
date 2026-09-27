@@ -16,8 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18n from '@/i18n/config'
 import { Loading03Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 type SpinnerProps = Omit<
@@ -28,12 +30,13 @@ type SpinnerProps = Omit<
 }
 
 function Spinner({ className, strokeWidth = 2, ...props }: SpinnerProps) {
+  useTranslation()
   return (
     <HugeiconsIcon
       icon={Loading03Icon}
       strokeWidth={strokeWidth}
       role='status'
-      aria-label='加载中'
+      aria-label={i18n.t('加载中')}
       className={cn('size-4 animate-spin', className)}
       {...props}
     />

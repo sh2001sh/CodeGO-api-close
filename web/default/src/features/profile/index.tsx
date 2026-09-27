@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18n from '@/i18n/config'
+import { useTranslation, Trans } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
 import { Main } from '@/components/layout'
@@ -35,6 +37,7 @@ import { TwoFACard } from './components/two-fa-card'
 import { useProfile } from './hooks'
 
 export function Profile() {
+  useTranslation()
   const { profile, loading, refreshProfile } = useProfile()
   const { status } = useStatus()
   const permissions = useAuthStore((s) => s.auth.user?.permissions)
@@ -49,8 +52,8 @@ export function Profile() {
   return (
     <Main>
       <SiteSeo
-        title='个人资料'
-        description='个人资料'
+        title={i18n.t('个人资料')}
+        description={i18n.t('个人资料')}
         canonicalPath='/profile'
         robots='noindex,follow'
       />
@@ -62,7 +65,7 @@ export function Profile() {
           </span>
         </div>
         <h2 className='codego-page-title text-foreground mt-3 text-3xl leading-[1.04] font-semibold text-balance sm:text-4xl'>
-          个人资料
+          <Trans i18nKey={'个人资料'} />
         </h2>
       </div>
       <div className='codego-page-content min-h-0 flex-1 overflow-auto px-4 pt-5 pb-6 sm:px-7 sm:pt-6 sm:pb-8'>

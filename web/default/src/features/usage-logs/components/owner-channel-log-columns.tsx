@@ -65,6 +65,16 @@ export function useOwnerChannelLogColumns(
             <div>
               {row.original.prompt_tokens.toLocaleString()} {t('输入')}
             </div>
+            <div className='text-success mt-0.5'>
+              {t('缓存命中')}:{' '}
+              {(row.original.cache_read_tokens ?? 0).toLocaleString()}
+            </div>
+            {(row.original.cache_write_tokens ?? 0) > 0 && (
+              <div className='text-muted-foreground mt-0.5'>
+                {t('缓存写入')}:{' '}
+                {row.original.cache_write_tokens.toLocaleString()}
+              </div>
+            )}
             <div className='text-muted-foreground mt-0.5'>
               {row.original.completion_tokens.toLocaleString()} {t('输出')}
             </div>

@@ -1,3 +1,4 @@
+import { Trans } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -22,7 +23,9 @@ export function BlindBoxPropsDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className='max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-lg'>
         <DialogHeader>
-          <DialogTitle>我的道具</DialogTitle>
+          <DialogTitle>
+            <Trans i18nKey={'我的道具'} />
+          </DialogTitle>
         </DialogHeader>
         <div className='max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1'>
           <BlindBoxPropsList

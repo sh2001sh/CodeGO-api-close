@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import {
   AlertCircle,
   ArrowLeft,
@@ -5,6 +6,7 @@ import {
   History,
   Trophy,
 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -49,6 +51,7 @@ export function HistoryPanel(props: {
   publicWinsError?: boolean
   onRetry: () => void
 }) {
+  useTranslation()
   const page = props.tab === 'mine' ? props.history : props.publicWins
   const currentPage =
     props.tab === 'mine' ? props.historyPage : props.publicPage
@@ -65,12 +68,14 @@ export function HistoryPanel(props: {
       <div className='border-border/70 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5'>
         <div className='flex items-center gap-2'>
           <History className='text-primary size-4' aria-hidden='true' />
-          <h2 className='text-foreground text-base font-semibold'>中奖记录</h2>
+          <h2 className='text-foreground text-base font-semibold'>
+            <Trans i18nKey={'中奖记录'} />
+          </h2>
         </div>
         <div
           className='bg-muted inline-flex rounded-lg p-1'
           role='tablist'
-          aria-label='中奖记录视图'
+          aria-label={i18n.t('中奖记录视图')}
         >
           <button
             type='button'
@@ -85,7 +90,7 @@ export function HistoryPanel(props: {
             )}
             onClick={() => props.onTabChange('mine')}
           >
-            我的中奖记录
+            <Trans i18nKey={'我的中奖记录'} />
           </button>
           <button
             type='button'
@@ -100,7 +105,7 @@ export function HistoryPanel(props: {
             )}
             onClick={() => props.onTabChange('public')}
           >
-            历史中奖名单
+            <Trans i18nKey={'历史中奖名单'} />
           </button>
         </div>
       </div>
@@ -108,7 +113,9 @@ export function HistoryPanel(props: {
       {props.previousDraw ? (
         <div className='border-border/70 bg-muted/20 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5'>
           <div className='flex items-center gap-3'>
-            <span className='text-muted-foreground text-xs'>上期开奖</span>
+            <span className='text-muted-foreground text-xs'>
+              <Trans i18nKey={'上期开奖'} />
+            </span>
             <LuckyDigits value={props.previousDraw.winning_number} />
             <span className='text-muted-foreground text-xs'>
               {formatLuckyDate(
@@ -119,11 +126,11 @@ export function HistoryPanel(props: {
             </span>
           </div>
           <span className='text-muted-foreground text-xs tabular-nums'>
-            四位全中{' '}
+            <Trans i18nKey={'四位全中'} />{' '}
             <strong className='text-foreground font-mono'>
               {props.previousDraw.full_match_count}
             </strong>{' '}
-            份
+            <Trans i18nKey={'份'} />
           </span>
         </div>
       ) : null}
@@ -139,11 +146,11 @@ export function HistoryPanel(props: {
             <AlertDescription className='flex flex-wrap items-center justify-between gap-3'>
               <span>
                 {props.tab === 'mine'
-                  ? '个人中奖记录加载失败。'
-                  : '历史中奖名单加载失败。'}
+                  ? i18n.t('个人中奖记录加载失败。')
+                  : i18n.t('历史中奖名单加载失败。')}
               </span>
               <Button variant='outline' size='sm' onClick={props.onRetry}>
-                重试
+                <Trans i18nKey={'重试'} />
               </Button>
             </AlertDescription>
           </Alert>
@@ -164,13 +171,15 @@ export function HistoryPanel(props: {
               </EmptyMedia>
               <EmptyTitle>
                 {props.tab === 'mine'
-                  ? '暂时没有中奖记录'
-                  : '暂时没有公开中奖名单'}
+                  ? i18n.t('暂时没有中奖记录')
+                  : i18n.t('暂时没有公开中奖名单')}
               </EmptyTitle>
               <EmptyDescription>
                 {props.tab === 'mine'
-                  ? '命中的开奖记录会显示在这里，参与和额度结算均由系统自动完成。'
-                  : '中奖记录完成额度结算后会在这里公开展示。'}
+                  ? i18n.t(
+                      '命中的开奖记录会显示在这里，参与和额度结算均由系统自动完成。'
+                    )
+                  : i18n.t('中奖记录完成额度结算后会在这里公开展示。')}
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -179,13 +188,23 @@ export function HistoryPanel(props: {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>日期</TableHead>
-                  <TableHead>中奖号码</TableHead>
                   <TableHead>
-                    {props.tab === 'mine' ? '我的尾号' : '中奖尾号'}
+                    <Trans i18nKey={'日期'} />
                   </TableHead>
-                  <TableHead>结果</TableHead>
-                  <TableHead className='text-right'>奖励</TableHead>
+                  <TableHead>
+                    <Trans i18nKey={'中奖号码'} />
+                  </TableHead>
+                  <TableHead>
+                    {props.tab === 'mine'
+                      ? i18n.t('我的尾号')
+                      : i18n.t('中奖尾号')}
+                  </TableHead>
+                  <TableHead>
+                    <Trans i18nKey={'结果'} />
+                  </TableHead>
+                  <TableHead className='text-right'>
+                    <Trans i18nKey={'奖励'} />
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -207,7 +226,9 @@ export function HistoryPanel(props: {
                         </TableCell>
                         <TableCell>
                           <span className='text-success text-xs font-medium'>
-                            命中 {item.reward.matched_digits} 位
+                            <Trans i18nKey={'命中'} />{' '}
+                            {item.reward.matched_digits}{' '}
+                            <Trans i18nKey={'位'} />
                           </span>
                         </TableCell>
                         <TableCell className='text-right font-mono text-sm font-semibold tabular-nums'>
@@ -235,7 +256,10 @@ export function HistoryPanel(props: {
                         <TableCell className='text-xs'>
                           <div className='flex items-center gap-2'>
                             <TierBadge tier={item.membership_tier} compact />
-                            <span>命中 {item.matched_digits} 位</span>
+                            <span>
+                              <Trans i18nKey={'命中'} /> {item.matched_digits}{' '}
+                              <Trans i18nKey={'位'} />
+                            </span>
                           </div>
                         </TableCell>
                         <TableCell className='text-right font-mono text-sm font-semibold tabular-nums'>
@@ -247,7 +271,8 @@ export function HistoryPanel(props: {
             </Table>
             <div className='border-border/70 flex items-center justify-between border-t px-4 py-3 sm:px-5'>
               <span className='text-muted-foreground text-xs tabular-nums'>
-                第 {currentPage} / {totalPages} 页
+                <Trans i18nKey={'第'} /> {currentPage} / {totalPages}{' '}
+                <Trans i18nKey={'页'} />
               </span>
               <div className='flex items-center gap-2'>
                 <Button
@@ -255,7 +280,7 @@ export function HistoryPanel(props: {
                   size='icon-sm'
                   onClick={() => props.onPageChange(currentPage - 1)}
                   disabled={currentPage <= 1}
-                  aria-label='上一页'
+                  aria-label={i18n.t('上一页')}
                 >
                   <ArrowLeft aria-hidden='true' />
                 </Button>
@@ -264,7 +289,7 @@ export function HistoryPanel(props: {
                   size='icon-sm'
                   onClick={() => props.onPageChange(currentPage + 1)}
                   disabled={currentPage >= totalPages}
-                  aria-label='下一页'
+                  aria-label={i18n.t('下一页')}
                 >
                   <ArrowRight aria-hidden='true' />
                 </Button>

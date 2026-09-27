@@ -20,8 +20,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import i18n from '@/i18n/config'
 import { Loader2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useStatus } from '@/hooks/use-status'
@@ -249,12 +250,14 @@ export function SignUpForm({
           name='aff'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>邀请码（可选）</FormLabel>
+              <FormLabel>
+                <Trans i18nKey={'邀请码（可选）'} />
+              </FormLabel>
               <FormControl>
                 <Input
                   autoComplete='off'
                   maxLength={32}
-                  placeholder='输入邀请码'
+                  placeholder={i18n.t('输入邀请码')}
                   {...field}
                 />
               </FormControl>
@@ -402,7 +405,9 @@ export function SignUpForm({
             <DialogHeader className='text-left'>
               <DialogTitle>{t('WeChat sign in')}</DialogTitle>
               <DialogDescription>
-                扫描二维码关注公众号，回复“验证码”获取登录验证码。
+                <Trans
+                  i18nKey={'扫描二维码关注公众号，回复“验证码”获取登录验证码。'}
+                />
               </DialogDescription>
             </DialogHeader>
 

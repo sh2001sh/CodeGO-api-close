@@ -64,7 +64,10 @@ func TestMarketplaceReclaimUpdatesWalletsAndRollsBackWholeBatch(t *testing.T) {
 	require.NoError(t, db.First(&record, "id = ?", "first").Error)
 	require.EqualValues(t, 40, record.ReclaimedAmount)
 	require.Equal(t, "released", record.Status)
-	var operations int64
-	require.NoError(t, db.Model(&marketplaceschema.IncomeReclaim{}).Where("id = ?", "insufficient-wallet").Count(&operations).Error)
-	require.Zero(t, operations)
+	var failedOperation marketplaceschema.IncomeReclaim
+	require.NoError(t, db.First(&failedOperation, "id = ?", "insufficient-wallet").Error)
+	require.Equal(t, "failed", failedOperation.Status)
+	require.NotEmpty(t, failedOperation.ErrorMessage)
+	require.Zero(t, failedOperation.Count)
+	require.Zero(t, failedOperation.Amount)
 }

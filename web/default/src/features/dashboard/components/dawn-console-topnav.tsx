@@ -42,10 +42,10 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { LuckyRewardNotifier } from '@/features/daily-lucky-number/components/lucky-reward-notifier'
 
 const TOP_NAV_ITEMS = [
-  { id: 'home', icon: Home, label: '首页', path: '/' },
-  { id: 'market', icon: Store, label: '市场', path: '/market' },
-  { id: 'pricing', icon: TrendingUp, label: '模型', path: '/pricing' },
-  { id: 'status', icon: Activity, label: '状态', path: '/group-status' },
+  { id: 'home', icon: Home, label: 'Home', path: '/' },
+  { id: 'market', icon: Store, label: 'Market', path: '/market' },
+  { id: 'pricing', icon: TrendingUp, label: 'Models', path: '/pricing' },
+  { id: 'status', icon: Activity, label: 'Status', path: '/group-status' },
 ]
 
 export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
@@ -65,8 +65,8 @@ export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
     const key = `workshop:welcome:${userId}:${token}`
     if (window.localStorage.getItem(key) === '1') return
     window.localStorage.setItem(key, '1')
-    toast.success('早安工匠，今天也是充满活力的一天')
-  }, [userId])
+    toast.success(t('Welcome back'))
+  }, [t, userId])
 
   const handleLogout = () => {
     logout()
@@ -84,7 +84,8 @@ export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
         <Link
           className='logo'
           aria-label={normalizeSystemName()}
-          to='/dashboard'
+          to='/'
+          title={t('Home')}
         >
           <svg
             className='logo-icon'
@@ -144,7 +145,7 @@ export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
 
         <button
           className='menu-btn'
-          aria-label='打开菜单'
+          aria-label={t('Open menu')}
           onClick={props.onMenuClick}
         >
           <Menu size={18} />
@@ -162,14 +163,14 @@ export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
                 className={cn('nav-link', isActive(item.path) && 'active')}
               >
                 <Icon size={13} />
-                {item.label}
+                {t(item.label)}
               </Link>
             )
           })}
         </nav>
 
         <div className='right-actions'>
-          <Search className='console-search' />
+          <Search className='console-search' placeholder={t('Search')} />
           <LuckyRewardNotifier />
           <NotificationButton
             unreadCount={notifications.unreadCount}
@@ -178,7 +179,11 @@ export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
           <LanguageSwitcher />
           <ThemeSwitch />
           {isAdmin && (
-            <Link className='icon-btn' to='/system-settings/site' title='设置'>
+            <Link
+              className='icon-btn'
+              to='/system-settings/site'
+              title={t('Settings')}
+            >
               <Settings size={16} />
             </Link>
           )}
@@ -188,13 +193,13 @@ export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
           >
             <button
               className='user-btn'
-              aria-label={t('账户菜单')}
+              aria-label={t('Account menu')}
               aria-expanded={userMenuOpen}
               aria-haspopup='true'
               onClick={() => setUserMenuOpen((current) => !current)}
             >
               <User size={14} />
-              <span>{user?.display_name || user?.username || '用户'}</span>
+              <span>{user?.display_name || user?.username || t('User')}</span>
             </button>
             <div
               className='user-dropdown'
@@ -202,17 +207,17 @@ export function DawnConsoleTopNav(props: { onMenuClick?: () => void }) {
             >
               <Link to='/profile' className='dropdown-item'>
                 <User size={14} />
-                个人资料
+                {t('Profile')}
               </Link>
               {isAdmin && (
                 <Link to='/system-settings/site' className='dropdown-item'>
                   <Settings size={14} />
-                  系统设置
+                  {t('System Settings')}
                 </Link>
               )}
               <button className='dropdown-item' onClick={handleLogout}>
                 <LogOut size={14} />
-                退出登录
+                {t('Sign out')}
               </button>
             </div>
           </div>

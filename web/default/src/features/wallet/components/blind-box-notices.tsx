@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { AlertCircle } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
+import { Trans } from 'react-i18next'
 import type { BlindBoxStatistics } from '../types'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
@@ -38,10 +39,14 @@ export function BlindBoxDisabledNotice() {
       />
       <div className='min-w-0 text-xs leading-5'>
         <div className='text-foreground text-sm font-semibold'>
-          盲盒活动暂未开放
+          <Trans i18nKey={'盲盒活动暂未开放'} />
         </div>
         <p className='text-muted-foreground mt-0.5'>
-          购买入口已暂停，已支付但未抽取的盲盒不会失效，活动恢复后可继续抽取。
+          <Trans
+            i18nKey={
+              '购买入口已暂停，已支付但未抽取的盲盒不会失效，活动恢复后可继续抽取。'
+            }
+          />
         </p>
       </div>
     </motion.div>
@@ -89,20 +94,22 @@ export function BlindBoxStatsPanel(props: { statistics?: BlindBoxStatistics }) {
         <div className='flex items-center gap-2.5'>
           <span aria-hidden className='bg-primary block h-3 w-[3px]' />
           <div className='text-foreground text-[13px] font-semibold'>
-            我的战绩
+            <Trans i18nKey={'我的战绩'} />
           </div>
         </div>
         <span className='codego-stat-label'>
-          保底 {props.statistics?.pity_wins || 0}
+          <Trans i18nKey={'保底'} /> {props.statistics?.pity_wins || 0}
         </span>
       </div>
-      <div className='mt-3 flex items-baseline justify-between gap-3 border-t border-border/60 py-2.5'>
-        <span className='codego-stat-label'>累计开启</span>
+      <div className='border-border/60 mt-3 flex items-baseline justify-between gap-3 border-t py-2.5'>
+        <span className='codego-stat-label'>
+          <Trans i18nKey={'累计开启'} />
+        </span>
         <span className='text-foreground text-xl leading-none font-semibold tabular-nums'>
           {props.statistics?.total_opened || 0}
           <span className='text-muted-foreground text-xs font-normal'>
             {' '}
-            次
+            <Trans i18nKey={'次'} />
           </span>
         </span>
       </div>
@@ -110,7 +117,7 @@ export function BlindBoxStatsPanel(props: { statistics?: BlindBoxStatistics }) {
         {rows.map((row) => (
           <div
             key={row.label}
-            className='flex items-baseline justify-between gap-3 border-b border-border/60 py-2 last:border-b-0'
+            className='border-border/60 flex items-baseline justify-between gap-3 border-b py-2 last:border-b-0'
           >
             <dt className='codego-stat-label'>{row.label}</dt>
             <dd className='text-foreground font-mono text-xs font-medium tabular-nums'>

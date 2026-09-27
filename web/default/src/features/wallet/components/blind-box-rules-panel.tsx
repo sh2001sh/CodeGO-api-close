@@ -16,8 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18n from '@/i18n/config'
 import { CheckCircle2, ShieldCheck, Zap } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { BalanceBlindBoxOverview } from '../types'
 
@@ -26,6 +28,7 @@ const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
 export function BlindBoxPityTrack(props: {
   balance?: BalanceBlindBoxOverview
 }) {
+  useTranslation()
   const balance = props.balance
   const firstEligible = Boolean(
     balance?.first_draw_eligible && balance.first_draw_guarantee_usd > 0
@@ -43,14 +46,14 @@ export function BlindBoxPityTrack(props: {
         />
         <div className='bg-background/65 space-y-4 px-4 py-4 sm:px-5'>
           <GuaranteeProgress
-            label='小保底'
+            label={i18n.t('小保底')}
             progress={balance?.small_pity_progress || 0}
             threshold={balance?.small_pity_threshold || 0}
             rewardMin={balance?.small_pity_reward_min_usd || 0}
             rewardMax={balance?.small_pity_reward_max_usd || 0}
           />
           <GuaranteeProgress
-            label='大保底'
+            label={i18n.t('大保底')}
             progress={balance?.pity_progress || 0}
             threshold={balance?.pity_threshold || 0}
             rewardMin={balance?.pity_reward_min_usd || 0}
@@ -60,22 +63,33 @@ export function BlindBoxPityTrack(props: {
       </div>
 
       <p className='text-muted-foreground border-border/70 border-t px-4 py-3 text-[11px] leading-5 sm:px-5'>
-        三类保底使用独立奖池，顶级大奖仅来自普通池。只有实际开启盲盒才会增加或重置进度，购买、持有和转赠均不影响保底。
+        <Trans
+          i18nKey={
+            '三类保底使用独立奖池，顶级大奖仅来自普通池。只有实际开启盲盒才会增加或重置进度，购买、持有和转赠均不影响保底。'
+          }
+        />
       </p>
     </section>
   )
 }
 
 function GuaranteeHeader(props: { firstEligible: boolean }) {
+  useTranslation()
   return (
     <div className='border-border/70 flex items-start justify-between gap-4 border-b px-4 py-3.5 sm:px-5'>
       <div>
         <div className='flex items-center gap-2'>
           <ShieldCheck className='text-primary size-4' aria-hidden='true' />
-          <h3 className='text-foreground text-sm font-semibold'>首购与保底</h3>
+          <h3 className='text-foreground text-sm font-semibold'>
+            <Trans i18nKey={'首购与保底'} />
+          </h3>
         </div>
         <p className='text-muted-foreground mt-1 text-xs leading-5'>
-          开启库存时查看保底状态；命中保底的盲盒会在奖励揭晓时明确标注类型。
+          <Trans
+            i18nKey={
+              '开启库存时查看保底状态；命中保底的盲盒会在奖励揭晓时明确标注类型。'
+            }
+          />
         </p>
       </div>
       <span
@@ -91,7 +105,9 @@ function GuaranteeHeader(props: { firstEligible: boolean }) {
         ) : (
           <CheckCircle2 className='size-3' aria-hidden='true' />
         )}
-        {props.firstEligible ? '首购权益待使用' : '首购权益已使用'}
+        {props.firstEligible
+          ? i18n.t('首购权益待使用')
+          : i18n.t('首购权益已使用')}
       </span>
     </div>
   )
@@ -102,16 +118,22 @@ function FirstPurchaseGuarantee(props: {
   rewardMin: number
   rewardMax: number
 }) {
+  useTranslation()
   return (
     <div className='bg-background/65 px-4 py-4 sm:px-5'>
-      <div className='text-muted-foreground text-[11px]'>首购首抽保底</div>
+      <div className='text-muted-foreground text-[11px]'>
+        <Trans i18nKey={'首购首抽保底'} />
+      </div>
       <div className='text-foreground mt-1 text-lg font-semibold tabular-nums'>
-        {formatRewardRange(props.rewardMin, props.rewardMax)} 通用额度
+        {formatRewardRange(props.rewardMin, props.rewardMax)}{' '}
+        <Trans i18nKey={'通用额度'} />
       </div>
       <p className='text-muted-foreground mt-2 text-xs leading-5'>
         {props.eligible
-          ? '账户首次实际开启的盲盒进入独立首购池，提前购买多个也只触发一次。'
-          : '首购保底已经使用，后续按常规奖池和连续保底规则结算。'}
+          ? i18n.t(
+              '账户首次实际开启的盲盒进入独立首购池，提前购买多个也只触发一次。'
+            )
+          : i18n.t('首购保底已经使用，后续按常规奖池和连续保底规则结算。')}
       </p>
     </div>
   )
@@ -124,6 +146,7 @@ function GuaranteeProgress(props: {
   rewardMin: number
   rewardMax: number
 }) {
+  useTranslation()
   const reduced = Boolean(useReducedMotion())
   const progress = Math.max(0, props.progress)
   const threshold = Math.max(0, props.threshold)
@@ -143,11 +166,13 @@ function GuaranteeProgress(props: {
             {props.label}
           </span>
           <span className='text-muted-foreground ml-1.5 text-[10px]'>
-            第 {threshold} 抽内
+            <Trans i18nKey={'第'} /> {threshold} <Trans i18nKey={'抽内'} />
           </span>
         </div>
         <span className='text-foreground text-xs font-semibold tabular-nums'>
-          {ready ? '下一抽触发' : `已累计 ${progress} 次`}
+          {ready
+            ? i18n.t('下一抽触发')
+            : i18n.t('已累计 {{param0}} 次', { param0: progress })}
         </span>
       </div>
       <div className='bg-muted mt-2 h-1.5 overflow-hidden rounded-full'>
@@ -163,8 +188,16 @@ function GuaranteeProgress(props: {
       </div>
       <p className='text-muted-foreground mt-1.5 text-[11px] leading-4'>
         {ready
-          ? `${formatRewardRange(props.rewardMin, props.rewardMax)} 通用额度保底已就绪。`
-          : `再出现 ${remainingMisses} 次低奖，下一抽进入 ${formatRewardRange(props.rewardMin, props.rewardMax)} 通用额度保底池。`}
+          ? i18n.t('{{param0}} 通用额度保底已就绪。', {
+              param0: formatRewardRange(props.rewardMin, props.rewardMax),
+            })
+          : i18n.t(
+              '再出现 {{param0}} 次低奖，下一抽进入 {{param1}} 通用额度保底池。',
+              {
+                param0: remainingMisses,
+                param1: formatRewardRange(props.rewardMin, props.rewardMax),
+              }
+            )}
       </p>
     </div>
   )
@@ -194,7 +227,7 @@ export function BlindBoxPropRules() {
         <div className='flex items-center gap-2.5'>
           <span aria-hidden className='bg-primary block h-3 w-[3px]' />
           <h3 className='text-foreground text-[13px] font-semibold'>
-            道具生效规则
+            <Trans i18nKey={'道具生效规则'} />
           </h3>
         </div>
         <span className='codego-stat-label'>RULES</span>

@@ -1,5 +1,7 @@
 import { useId } from 'react'
+import i18n from '@/i18n/config'
 import { ChevronDown, ChevronRight, ListPlus } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { GroupStatusMonitorCard } from './group-status-monitor-card'
@@ -16,6 +18,7 @@ export function GroupStatusSection(props: {
   joining: boolean
   onJoinCurrentPool: () => void
 }) {
+  useTranslation()
   const contentId = useId()
   const group = props.group
   const status = getStatusMeta(group.status)
@@ -44,14 +47,14 @@ export function GroupStatusSection(props: {
                 status.badgeBg
               )}
             >
-              {status.label}
+              {i18n.t(status.label)}
             </span>
           </div>
           <p className='text-muted-foreground truncate text-sm'>
             {(group.source_type ?? 'official') === 'marketplace_user'
-              ? '第三方渠道 · 套餐与余额'
-              : '官方渠道'}{' '}
-            · {group.models.length} 个模型
+              ? i18n.t('第三方渠道 · 套餐与余额')
+              : i18n.t('官方渠道')}{' '}
+            · {group.models.length} <Trans i18nKey={'个模型'} />
           </p>
         </div>
         <div className='flex shrink-0 flex-wrap items-center gap-2 sm:gap-3'>
@@ -59,20 +62,30 @@ export function GroupStatusSection(props: {
             typeof group.success_rate === 'number' &&
             group.request_count > 0 && (
               <div className='border-border bg-muted/30 order-3 w-full rounded-md border px-3 py-2 text-xs sm:order-none sm:w-auto sm:border-0 sm:bg-transparent sm:p-0 sm:text-right'>
-                <div className='text-muted-foreground'>近 6 小时请求</div>
+                <div className='text-muted-foreground'>
+                  <Trans i18nKey={'近 6 小时请求'} />
+                </div>
                 <div className='mt-0.5 font-semibold tabular-nums'>
-                  成功 {Math.round((group.request_count * group.success_rate) / 100).toLocaleString()}
-                  {' · '}失败{' '}
+                  <Trans i18nKey={'成功'} />{' '}
+                  {Math.round(
+                    (group.request_count * group.success_rate) / 100
+                  ).toLocaleString()}
+                  {' · '}
+                  <Trans i18nKey={'失败'} />{' '}
                   {Math.max(
                     0,
                     group.request_count -
-                      Math.round((group.request_count * group.success_rate) / 100)
+                      Math.round(
+                        (group.request_count * group.success_rate) / 100
+                      )
                   ).toLocaleString()}
                 </div>
               </div>
             )}
           <div className='hidden text-right sm:block'>
-            <div className='text-muted-foreground text-xs'>缓存命中率</div>
+            <div className='text-muted-foreground text-xs'>
+              <Trans i18nKey={'缓存命中率'} />
+            </div>
             <div className='mt-0.5 text-base font-semibold tabular-nums'>
               {group.cache_hit_rate == null
                 ? '--'
@@ -90,10 +103,10 @@ export function GroupStatusSection(props: {
           >
             <ListPlus className='size-3.5' />
             {props.inCurrentPool
-              ? '已在当前池'
+              ? i18n.t('已在当前池')
               : props.joining
-                ? '加入中'
-                : '加入当前池'}
+                ? i18n.t('加入中')
+                : i18n.t('加入当前池')}
           </Button>
           <Button
             variant='ghost'
@@ -101,8 +114,8 @@ export function GroupStatusSection(props: {
             onClick={props.onToggle}
             aria-expanded={props.expanded}
             aria-controls={contentId}
-            aria-label={props.expanded ? '收起模型' : '展开模型'}
-            title={props.expanded ? '收起模型' : '展开模型'}
+            aria-label={i18n.t(props.expanded ? '收起模型' : '展开模型')}
+            title={i18n.t(props.expanded ? '收起模型' : '展开模型')}
           >
             {props.expanded ? <ChevronDown /> : <ChevronRight />}
           </Button>

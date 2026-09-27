@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 */
 import { useMemo, useState } from 'react'
+import i18n from '@/i18n/config'
 import {
   Building2,
   CalendarDays,
@@ -24,6 +25,7 @@ import {
   ReceiptText,
   UserRound,
 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -96,6 +98,7 @@ export function InvoiceRequestDialog({
   onOpenChange,
   onSubmitted,
 }: InvoiceRequestDialogProps) {
+  useTranslation()
   const [form, setForm] = useState<CreateInvoiceRequestPayload>(() =>
     formForOrders(orders)
   )
@@ -143,13 +146,19 @@ export function InvoiceRequestDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='max-h-[calc(100vh-2rem)] overflow-y-auto p-0 sm:max-w-2xl'>
         <DialogHeader className='border-b px-5 pt-5 pb-4 sm:px-6'>
-          <DialogTitle>申请电子发票</DialogTitle>
+          <DialogTitle>
+            <Trans i18nKey={'申请电子发票'} />
+          </DialogTitle>
           <DialogDescription>
             {orders.length > 0
               ? orders.length > 1
-                ? `已选择 ${orders.length} 笔订单，将合并为一张发票。`
-                : '确认订单后填写开票信息，提交后可在发票页持续跟踪处理状态。'
-              : '请选择订单'}
+                ? i18n.t('已选择 {{param0}} 笔订单，将合并为一张发票。', {
+                    param0: orders.length,
+                  })
+                : i18n.t(
+                    '确认订单后填写开票信息，提交后可在发票页持续跟踪处理状态。'
+                  )
+              : i18n.t('请选择订单')}
           </DialogDescription>
         </DialogHeader>
 
@@ -160,16 +169,22 @@ export function InvoiceRequestDialog({
                 <div className='space-y-1'>
                   <div className='flex flex-wrap items-center gap-2'>
                     <h3 className='font-medium'>
-                      {orders.length > 1 ? '合并开票' : orders[0].order_title}
+                      {orders.length > 1
+                        ? i18n.t('合并开票')
+                        : orders[0].order_title}
                     </h3>
                     <Badge variant='outline'>
                       {orders.length > 1
-                        ? `${orders.length} 笔订单`
+                        ? i18n.t('{{param0}} 笔订单', { param0: orders.length })
                         : getOrderSourceLabel(orders[0].source_type)}
                     </Badge>
                   </div>
                   <p className='text-muted-foreground text-sm'>
-                    提交后订单会被锁定到本次申请，已申请订单不能再次开票。
+                    <Trans
+                      i18nKey={
+                        '提交后订单会被锁定到本次申请，已申请订单不能再次开票。'
+                      }
+                    />
                   </p>
                 </div>
                 <div className='text-right'>
@@ -190,7 +205,7 @@ export function InvoiceRequestDialog({
                 ) : null}
                 <span className='inline-flex items-center gap-1.5'>
                   <ReceiptText className='size-4' />
-                  {orders.length} 笔已支付订单
+                  {orders.length} <Trans i18nKey={'笔已支付订单'} />
                 </span>
               </div>
             </div>
@@ -198,9 +213,15 @@ export function InvoiceRequestDialog({
 
           <div className='space-y-3'>
             <div className='space-y-1'>
-              <h3 className='text-sm font-medium'>开票类型</h3>
+              <h3 className='text-sm font-medium'>
+                <Trans i18nKey={'开票类型'} />
+              </h3>
               <p className='text-muted-foreground text-sm'>
-                个人发票只需抬头和接收邮箱；企业发票需要补充纳税人识别号。
+                <Trans
+                  i18nKey={
+                    '个人发票只需抬头和接收邮箱；企业发票需要补充纳税人识别号。'
+                  }
+                />
               </p>
             </div>
             <div className='grid gap-3 sm:grid-cols-2'>
@@ -218,9 +239,11 @@ export function InvoiceRequestDialog({
                     <UserRound className='size-5' />
                   </div>
                   <div className='space-y-1'>
-                    <div className='font-medium'>个人</div>
+                    <div className='font-medium'>
+                      <Trans i18nKey={'个人'} />
+                    </div>
                     <p className='text-muted-foreground text-sm leading-6'>
-                      适合个人报销或个人名义开具。
+                      <Trans i18nKey={'适合个人报销或个人名义开具。'} />
                     </p>
                   </div>
                 </div>
@@ -239,9 +262,13 @@ export function InvoiceRequestDialog({
                     <Building2 className='size-5' />
                   </div>
                   <div className='space-y-1'>
-                    <div className='font-medium'>企业</div>
+                    <div className='font-medium'>
+                      <Trans i18nKey={'企业'} />
+                    </div>
                     <p className='text-muted-foreground text-sm leading-6'>
-                      适合公司主体开票，需要填写企业抬头和税号。
+                      <Trans
+                        i18nKey={'适合公司主体开票，需要填写企业抬头和税号。'}
+                      />
                     </p>
                   </div>
                 </div>
@@ -251,15 +278,21 @@ export function InvoiceRequestDialog({
 
           <div className='bg-background/75 border-border/80 space-y-4 rounded-2xl border px-4 py-4'>
             <div className='space-y-1'>
-              <h3 className='text-sm font-medium'>开票信息</h3>
+              <h3 className='text-sm font-medium'>
+                <Trans i18nKey={'开票信息'} />
+              </h3>
               <p className='text-muted-foreground text-sm'>
-                请确保抬头、税号和接收邮箱准确，开票后将按这些信息发放。
+                <Trans
+                  i18nKey={
+                    '请确保抬头、税号和接收邮箱准确，开票后将按这些信息发放。'
+                  }
+                />
               </p>
             </div>
 
             <div className='grid gap-4 sm:grid-cols-2'>
               <label className='grid gap-1.5 text-sm font-medium'>
-                发票抬头
+                <Trans i18nKey={'发票抬头'} />
                 <Input
                   value={form.title}
                   onChange={(event) => update('title', event.target.value)}
@@ -269,7 +302,7 @@ export function InvoiceRequestDialog({
               </label>
 
               <label className='grid gap-1.5 text-sm font-medium'>
-                接收邮箱
+                <Trans i18nKey={'接收邮箱'} />
                 <Input
                   type='email'
                   value={form.email}
@@ -281,25 +314,27 @@ export function InvoiceRequestDialog({
 
               {isEnterprise ? (
                 <label className='grid gap-1.5 text-sm font-medium sm:col-span-2'>
-                  纳税人识别号
+                  <Trans i18nKey={'纳税人识别号'} />
                   <Input
                     value={form.tax_number}
                     onChange={(event) =>
                       update('tax_number', event.target.value)
                     }
-                    placeholder='统一社会信用代码或纳税人识别号'
+                    placeholder={i18n.t('统一社会信用代码或纳税人识别号')}
                     maxLength={64}
                   />
                 </label>
               ) : null}
 
               <label className='grid gap-1.5 text-sm font-medium sm:col-span-2'>
-                备注{' '}
-                <span className='text-muted-foreground font-normal'>可选</span>
+                <Trans i18nKey={'备注'} />{' '}
+                <span className='text-muted-foreground font-normal'>
+                  <Trans i18nKey={'可选'} />
+                </span>
                 <Textarea
                   value={form.remark}
                   onChange={(event) => update('remark', event.target.value)}
-                  placeholder='如有特殊开票需求，请在此说明'
+                  placeholder={i18n.t('如有特殊开票需求，请在此说明')}
                   maxLength={500}
                   rows={4}
                 />
@@ -310,13 +345,19 @@ export function InvoiceRequestDialog({
           <div className='bg-muted/35 border-border/80 text-muted-foreground flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm leading-6'>
             <CircleAlert className='mt-0.5 size-4 shrink-0' />
             <div className='space-y-1'>
-              <p className='text-foreground font-medium'>交付说明</p>
+              <p className='text-foreground font-medium'>
+                <Trans i18nKey={'交付说明'} />
+              </p>
               <p>
-                发票开具后，电子税务局会自动发送到接收邮箱；本站不另行发送邮件或提供下载链接。每笔订单仅可申请一次。
+                <Trans
+                  i18nKey={
+                    '发票开具后，电子税务局会自动发送到接收邮箱；本站不另行发送邮件或提供下载链接。每笔订单仅可申请一次。'
+                  }
+                />
               </p>
               <p className='inline-flex items-center gap-1.5 text-xs'>
                 <Mail className='size-3.5' />
-                请优先填写常用工作邮箱，避免后续收件失败。
+                <Trans i18nKey={'请优先填写常用工作邮箱，避免后续收件失败。'} />
               </p>
             </div>
           </div>
@@ -324,7 +365,7 @@ export function InvoiceRequestDialog({
 
         <DialogFooter showCloseButton className='px-5 sm:px-6'>
           <Button onClick={submit} disabled={submitDisabled}>
-            {submitting ? '提交中...' : '提交申请'}
+            {submitting ? i18n.t('提交中...') : i18n.t('提交申请')}
           </Button>
         </DialogFooter>
       </DialogContent>

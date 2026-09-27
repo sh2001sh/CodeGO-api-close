@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import React from 'react'
+import i18n from '@/i18n/config'
 import {
   CheckCircle2,
   CircleSlash,
@@ -27,6 +28,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -70,6 +72,7 @@ export function BlindBoxPaymentDialog(props: {
   onContinueInBackground?: () => void
   onRetry?: () => void
 }) {
+  useTranslation()
   const [showExitConfirm, setShowExitConfirm] = React.useState(false)
   const [cancelling, setCancelling] = React.useState(false)
 
@@ -112,7 +115,7 @@ export function BlindBoxPaymentDialog(props: {
         <DialogHeader className='border-b px-5 py-4'>
           <DialogTitle className='flex items-center gap-2 text-base'>
             <Gift className='size-5' />
-            支付确认
+            <Trans i18nKey={'支付确认'} />
           </DialogTitle>
         </DialogHeader>
 
@@ -136,21 +139,34 @@ export function BlindBoxPaymentDialog(props: {
                   </div>
                   <div className='text-muted-foreground mt-1 text-sm leading-6'>
                     {isTimedOut
-                      ? '支付处理时间较长，你可以关闭对话框，结果会自动同步'
-                      : props.state.message || '请使用下方二维码完成支付'}
+                      ? i18n.t(
+                          '支付处理时间较长，你可以关闭对话框，结果会自动同步'
+                        )
+                      : props.state.message ||
+                        i18n.t('请使用下方二维码完成支付')}
                   </div>
                 </div>
               </div>
             </div>
 
             <div className='grid gap-3 sm:grid-cols-2'>
-              <Metric label='购买数量' value={String(props.state.quantity)} />
               <Metric
-                label='支付金额'
+                label={i18n.t('购买数量')}
+                value={String(props.state.quantity)}
+              />
+              <Metric
+                label={i18n.t('支付金额')}
                 value={`¥${props.state.amountDue.toFixed(2)}`}
               />
-              <Metric label='支付方式' value={props.state.methodLabel} />
-              <Metric label='订单号' value={props.state.orderId || '--'} mono />
+              <Metric
+                label={i18n.t('支付方式')}
+                value={props.state.methodLabel}
+              />
+              <Metric
+                label={i18n.t('订单号')}
+                value={props.state.orderId || '--'}
+                mono
+              />
             </div>
 
             {props.state.stage === 'pending' ? (
@@ -161,11 +177,11 @@ export function BlindBoxPaymentDialog(props: {
             ) : props.state.stage === 'failed' ? (
               <div className='app-subtle-panel p-4'>
                 <div className='text-muted-foreground text-sm leading-6'>
-                  {props.state.message || '支付失败'}
+                  {props.state.message || i18n.t('支付失败')}
                 </div>
                 {props.onRetry && props.state.retryPayload ? (
                   <Button className='mt-3' onClick={props.onRetry}>
-                    重新支付
+                    <Trans i18nKey={'重新支付'} />
                   </Button>
                 ) : null}
               </div>
@@ -176,11 +192,11 @@ export function BlindBoxPaymentDialog(props: {
               props.state.stage === 'pending' ? (
                 <Button variant='outline' onClick={props.onOpenExternal}>
                   <ExternalLink data-icon='inline-start' />
-                  打开支付页
+                  <Trans i18nKey={'打开支付页'} />
                 </Button>
               ) : null}
               <Button variant='ghost' onClick={handleCloseAttempt}>
-                关闭
+                <Trans i18nKey={'关闭'} />
               </Button>
             </div>
           </div>
@@ -200,10 +216,14 @@ function ExitConfirmPanel(props: {
     <div className='space-y-4 px-5 py-5'>
       <div className='border-warning/20 bg-warning/5 rounded-xl border p-4'>
         <div className='text-foreground text-sm font-semibold'>
-          支付仍在处理中
+          <Trans i18nKey={'支付仍在处理中'} />
         </div>
         <div className='text-muted-foreground mt-1 text-sm leading-6'>
-          后台继续会保留当前订单；取消订单会立即释放本次购买额度。若支付结果稍后才返回，已付款的盲盒仍会自动到账。
+          <Trans
+            i18nKey={
+              '后台继续会保留当前订单；取消订单会立即释放本次购买额度。若支付结果稍后才返回，已付款的盲盒仍会自动到账。'
+            }
+          />
         </div>
       </div>
 
@@ -212,7 +232,7 @@ function ExitConfirmPanel(props: {
           onClick={props.onContinueInBackground}
           disabled={props.cancelling}
         >
-          后台继续
+          <Trans i18nKey={'后台继续'} />
         </Button>
         <Button
           variant='outline'
@@ -220,14 +240,14 @@ function ExitConfirmPanel(props: {
           disabled={props.cancelling}
         >
           {props.cancelling ? <Loader2 className='animate-spin' /> : null}
-          取消订单
+          <Trans i18nKey={'取消订单'} />
         </Button>
         <Button
           variant='ghost'
           onClick={props.onBack}
           disabled={props.cancelling}
         >
-          返回支付
+          <Trans i18nKey={'返回支付'} />
         </Button>
       </div>
     </div>
@@ -252,13 +272,13 @@ function PaymentQrPanel(props: { qrCodeUrl: string; payUrl: string }) {
           </div>
         ) : (
           <div className='border-border/70 text-muted-foreground rounded-xl border border-dashed px-5 py-10 text-center text-sm'>
-            请点击下方按钮继续支付
+            <Trans i18nKey={'请点击下方按钮继续支付'} />
           </div>
         )}
 
         <div className='text-muted-foreground flex items-center gap-2 text-center text-xs leading-5'>
           <QrCode className='size-4 shrink-0' />
-          支付完成后自动同步结果
+          <Trans i18nKey={'支付完成后自动同步结果'} />
         </div>
       </div>
     </div>

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import { Trophy } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
@@ -17,6 +19,7 @@ const luckyRewardNotificationQueryKey = [
 ] as const
 
 export function LuckyRewardNotifier() {
+  useTranslation()
   const userID = useAuthStore((state) => state.auth.user?.id)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -75,7 +78,7 @@ export function LuckyRewardNotifier() {
       onClick={openResults}
       disabled={markingAllRead}
       aria-label={`有 ${unreadCount} 条每日幸运号中奖通知`}
-      title='查看每日幸运号奖励'
+      title={i18n.t('查看每日幸运号奖励')}
     >
       <Trophy className='text-primary' aria-hidden='true' />
       <span className='bg-primary text-primary-foreground absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-4 font-semibold'>

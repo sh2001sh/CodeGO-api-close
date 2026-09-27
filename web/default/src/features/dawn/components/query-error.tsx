@@ -1,4 +1,5 @@
 import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { Trans } from 'react-i18next'
 
 export function DawnQueryError(props: {
   title: string
@@ -19,7 +20,7 @@ export function DawnQueryError(props: {
         disabled={props.retrying}
       >
         <RefreshCw size={14} className={props.retrying ? 'animate-spin' : ''} />
-        重新加载
+        <Trans i18nKey={'重新加载'} />
       </button>
     </div>
   )

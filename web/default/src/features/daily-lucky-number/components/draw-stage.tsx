@@ -7,6 +7,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
+import { Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { formatCountdown, formatLuckyDate, formatLuckyUsd } from '../lib'
@@ -64,10 +65,10 @@ function StageHeader(props: {
         </span>
         <div className='min-w-0'>
           <h2 className='text-foreground text-sm font-semibold'>
-            每日幸运数字
+            <Trans i18nKey={'每日幸运数字'} />
           </h2>
           <p className='text-muted-foreground mt-0.5 truncate text-xs'>
-            月卡持续参与，盲盒每盒赠送一个当日号码
+            <Trans i18nKey={'月卡持续参与，盲盒每盒赠送一个当日号码'} />
           </p>
         </div>
       </div>
@@ -91,7 +92,7 @@ function StageHeader(props: {
           aria-haspopup='dialog'
         >
           <BookOpen data-icon='inline-start' />
-          活动规则
+          <Trans i18nKey={'活动规则'} />
         </Button>
       </div>
     </div>
@@ -117,12 +118,9 @@ function DrawConsole(props: {
       <div className='min-w-0'>
         <div className='text-info flex flex-wrap items-center gap-1.5 text-xs font-medium'>
           <Clock3 className='size-3.5' aria-hidden='true' />
-          每日{' '}
-          {formatDrawTime(
-            props.payload.draw_hour,
-            props.payload.draw_minute
-          )}{' '}
-          开奖
+          <Trans i18nKey={'每日'} />{' '}
+          {formatDrawTime(props.payload.draw_hour, props.payload.draw_minute)}{' '}
+          <Trans i18nKey={'开奖'} />
           {today ? (
             <span className='text-muted-foreground'>
               ·{' '}
@@ -172,7 +170,7 @@ function JackpotSummary(props: {
     <aside className='border-border/70 border-t px-4 py-5 sm:border-t-0 sm:border-l sm:px-6'>
       <div className='flex items-center gap-2 text-sm font-semibold'>
         <Trophy className='text-primary size-4' aria-hidden='true' />
-        本期累计奖池
+        <Trans i18nKey={'本期累计奖池'} />
       </div>
       <motion.div
         key={props.payload.jackpot_usd}
@@ -192,7 +190,9 @@ function JackpotSummary(props: {
         />
       </div>
       <div className='text-muted-foreground mt-2 flex justify-between gap-3 text-xs tabular-nums'>
-        <span>四位全中者共同分享</span>
+        <span>
+          <Trans i18nKey={'四位全中者共同分享'} />
+        </span>
         <span>
           {ratio.toFixed(0)}% / {formatLuckyUsd(props.payload.jackpot_cap_usd)}
         </span>

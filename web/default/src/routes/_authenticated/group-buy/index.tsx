@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { GroupBuyPage } from '@/features/group-buy'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/group-buy/')({
-  component: GroupBuyPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/packages', hash: 'group-buy', replace: true })
+  },
 })

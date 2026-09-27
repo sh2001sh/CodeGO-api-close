@@ -1,4 +1,6 @@
+import i18n from '@/i18n/config'
 import { Check, Copy } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
@@ -16,17 +18,24 @@ export function LuckyNumberCode(props: {
   compact?: boolean
   className?: string
 }) {
+  useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard()
   const code = props.cardCode?.trim() || ''
   const suffix = normalizeLuckyNumber(props.luckySuffix)
   const copied = code !== '' && copiedText === code
 
   if (!code) {
-    return <span className='text-muted-foreground text-xs'>号码待生成</span>
+    return (
+      <span className='text-muted-foreground text-xs'>
+        <Trans i18nKey={'号码待生成'} />
+      </span>
+    )
   }
 
   return (
-    <span className={cn('inline-flex min-w-0 items-center gap-1', props.className)}>
+    <span
+      className={cn('inline-flex min-w-0 items-center gap-1', props.className)}
+    >
       <span
         className={cn(
           'text-foreground min-w-0 truncate font-mono text-sm font-semibold tabular-nums',
@@ -54,7 +63,9 @@ export function LuckyNumberCode(props: {
           >
             {copied ? <Check className='text-success' /> : <Copy />}
           </TooltipTrigger>
-          <TooltipContent>{copied ? '已复制' : '复制号码'}</TooltipContent>
+          <TooltipContent>
+            {copied ? i18n.t('已复制') : i18n.t('复制号码')}
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
     </span>

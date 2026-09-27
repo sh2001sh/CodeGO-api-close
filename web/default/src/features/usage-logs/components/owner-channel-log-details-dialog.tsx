@@ -82,6 +82,24 @@ export function OwnerChannelLogDetailsDialog(props: {
                   />
                 )}
               </DetailSection>
+              <DetailSection icon={<Route />} title={t('Token 与缓存')}>
+                <DetailRow
+                  label={t('输入 Token')}
+                  value={item.prompt_tokens.toLocaleString()}
+                />
+                <DetailRow
+                  label={t('缓存命中 Token')}
+                  value={(item.cache_read_tokens ?? 0).toLocaleString()}
+                />
+                <DetailRow
+                  label={t('缓存写入 Token')}
+                  value={(item.cache_write_tokens ?? 0).toLocaleString()}
+                />
+                <DetailRow
+                  label={t('输出 Token')}
+                  value={item.completion_tokens.toLocaleString()}
+                />
+              </DetailSection>
               <DetailSection icon={<Clock3 />} title={t('耗时')}>
                 <DetailRow
                   label={t('尝试级首字')}

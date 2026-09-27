@@ -14,6 +14,10 @@ describe('Codex WebSocket setup', () => {
       buildCodexProviderBlock(serverAddress),
       /supports_websockets = true/
     )
+    assert.match(
+      buildCodexProviderBlock(serverAddress),
+      /requires_openai_auth = true/
+    )
   })
 
   test('adds WebSocket support to the Windows-generated provider block', () => {
@@ -21,7 +25,7 @@ describe('Codex WebSocket setup', () => {
 
     assert.ok(
       script.includes(
-        "'supports_websockets = true','# END CODEXFORALL MANAGED PROVIDER'"
+        "'requires_openai_auth = true','supports_websockets = true','# END CODEXFORALL MANAGED PROVIDER'"
       )
     )
   })
@@ -30,5 +34,6 @@ describe('Codex WebSocket setup', () => {
     const script = buildLinuxScript(serverAddress, 'sk-test', 'gpt-test')
 
     assert.match(script, /supports_websockets = true/)
+    assert.match(script, /requires_openai_auth = true/)
   })
 })

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { type ColumnDef } from '@tanstack/react-table'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { formatQuota, formatTimestamp } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -189,7 +189,8 @@ export function useUsersColumns(): ColumnDef<User>[] {
               copyable={false}
             />
             <div className='text-muted-foreground text-xs'>
-              到期：{formatTimestamp(user.current_subscription_end_time || 0)}
+              <Trans i18nKey={'到期：'} />
+              {formatTimestamp(user.current_subscription_end_time || 0)}
             </div>
           </div>
         )

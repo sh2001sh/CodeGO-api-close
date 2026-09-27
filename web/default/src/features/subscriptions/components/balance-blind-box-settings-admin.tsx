@@ -2,7 +2,9 @@ import { useEffect, useMemo } from 'react'
 import { z } from 'zod'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import i18n from '@/i18n/config'
 import { Gauge, Settings2, TrendingUp } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { calculateBlindBoxEconomics } from '@/lib/blind-box-economics'
 import { Button } from '@/components/ui/button'
@@ -70,6 +72,7 @@ const schema = z.object({
 type Values = z.infer<typeof schema>
 
 export function BalanceBlindBoxSettingsAdmin() {
+  useTranslation()
   const optionsQuery = useSystemOptions()
   const updateOption = useUpdateOption()
   const optionData = optionsQuery.data?.data
@@ -115,9 +118,15 @@ export function BalanceBlindBoxSettingsAdmin() {
           <Settings2 className='size-4' />
         </div>
         <div>
-          <h3 className='text-sm font-semibold'>统一盲盒管理</h3>
+          <h3 className='text-sm font-semibold'>
+            <Trans i18nKey={'统一盲盒管理'} />
+          </h3>
           <p className='text-muted-foreground mt-1 text-sm leading-6'>
-            控制统一盲盒售价、单用户每日购买数量与普通高方差奖池。人民币和统一额度入口使用同一库存与概率表，首购和大小保底使用独立有界奖池。
+            <Trans
+              i18nKey={
+                '控制统一盲盒售价、单用户每日购买数量与普通高方差奖池。人民币和统一额度入口使用同一库存与概率表，首购和大小保底使用独立有界奖池。'
+              }
+            />
           </p>
         </div>
       </div>
@@ -130,9 +139,11 @@ export function BalanceBlindBoxSettingsAdmin() {
             render={({ field }) => (
               <FormItem className='bg-muted/40 flex items-center justify-between rounded-xl p-3'>
                 <div>
-                  <FormLabel>启用统一盲盒</FormLabel>
+                  <FormLabel>
+                    <Trans i18nKey={'启用统一盲盒'} />
+                  </FormLabel>
                   <FormDescription>
-                    关闭后用户端不再允许购买或开启
+                    <Trans i18nKey={'关闭后用户端不再允许购买或开启'} />
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -150,40 +161,40 @@ export function BalanceBlindBoxSettingsAdmin() {
             <NumberField
               form={form}
               name='priceUSD'
-              label='单盒售价（USD）'
+              label={i18n.t('单盒售价（USD）')}
               step='0.01'
             />
             <NumberField
               form={form}
               name='dailyPurchaseLimit'
-              label='单用户每日购买上限'
+              label={i18n.t('单用户每日购买上限')}
             />
             <NumberField
               form={form}
               name='firstDrawGuaranteeUSD'
-              label='首抽最低等值额度（USD）'
+              label={i18n.t('首抽最低等值额度（USD）')}
               step='0.01'
             />
             <NumberField
               form={form}
               name='smallPityThreshold'
-              label='小保底触发抽数'
+              label={i18n.t('小保底触发抽数')}
             />
             <NumberField
               form={form}
               name='smallPityGuaranteeUSD'
-              label='小保底最低等值额度（USD）'
+              label={i18n.t('小保底最低等值额度（USD）')}
               step='0.01'
             />
             <NumberField
               form={form}
               name='pityThreshold'
-              label='大保底触发抽数'
+              label={i18n.t('大保底触发抽数')}
             />
             <NumberField
               form={form}
               name='pityGuaranteeUSD'
-              label='大保底最低等值额度（USD）'
+              label={i18n.t('大保底最低等值额度（USD）')}
               step='0.01'
             />
           </div>
@@ -191,7 +202,7 @@ export function BalanceBlindBoxSettingsAdmin() {
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
             <BlindBoxSettingsMetric
               icon={TrendingUp}
-              label='普通池理论期望'
+              label={i18n.t('普通池理论期望')}
               value={
                 economics
                   ? `${economics.expectedRewardUSD.toFixed(3)} USD`
@@ -200,7 +211,7 @@ export function BalanceBlindBoxSettingsAdmin() {
             />
             <BlindBoxSettingsMetric
               icon={TrendingUp}
-              label='单抽额度不低于售价概率'
+              label={i18n.t('单抽额度不低于售价概率')}
               value={
                 economics
                   ? `${(economics.immediateProfitProbability * 100).toFixed(2)}%`
@@ -209,14 +220,18 @@ export function BalanceBlindBoxSettingsAdmin() {
             />
             <BlindBoxSettingsMetric
               icon={Gauge}
-              label='普通池单奖上限'
+              label={i18n.t('普通池单奖上限')}
               value={
                 economics ? `${economics.maxRewardUSD.toFixed(2)} USD` : '--'
               }
             />
           </div>
           <p className='text-muted-foreground text-xs leading-5'>
-            普通池静态数据不作为用户收益承诺；实际累计收益率以模拟抽盒结果为准，并纳入“再来一抽”、首抽、小保底和大保底。
+            <Trans
+              i18nKey={
+                '普通池静态数据不作为用户收益承诺；实际累计收益率以模拟抽盒结果为准，并纳入“再来一抽”、首抽、小保底和大保底。'
+              }
+            />
           </p>
 
           <FormField
@@ -225,7 +240,9 @@ export function BalanceBlindBoxSettingsAdmin() {
             render={({ field }) => (
               <FormItem>
                 <div className='flex flex-wrap items-center justify-between gap-2'>
-                  <FormLabel>普通高方差奖池</FormLabel>
+                  <FormLabel>
+                    <Trans i18nKey={'普通高方差奖池'} />
+                  </FormLabel>
                   <span
                     className={
                       probability !== null &&
@@ -234,9 +251,9 @@ export function BalanceBlindBoxSettingsAdmin() {
                         : 'text-destructive'
                     }
                   >
-                    概率合计：
+                    <Trans i18nKey={'概率合计：'} />
                     {probability === null
-                      ? 'JSON 无效'
+                      ? i18n.t('JSON 无效')
                       : `${(probability * 100).toFixed(4)}%`}
                   </span>
                 </div>
@@ -248,9 +265,11 @@ export function BalanceBlindBoxSettingsAdmin() {
                   />
                 </FormControl>
                 <FormDescription>
-                  支持 name、min_usd、max_usd、probability、reward_type 和
-                  wallet_type，所有 probability 合计必须等于
-                  1。这里不包含首购、小保底和大保底池。
+                  <Trans
+                    i18nKey={
+                      '支持 name、min_usd、max_usd、probability、reward_type 和 wallet_type，所有 probability 合计必须等于 1。这里不包含首购、小保底和大保底池。'
+                    }
+                  />
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -262,12 +281,14 @@ export function BalanceBlindBoxSettingsAdmin() {
               type='submit'
               disabled={optionsQuery.isLoading || updateOption.isPending}
             >
-              {updateOption.isPending ? '保存中...' : '保存统一盲盒配置'}
+              {updateOption.isPending
+                ? i18n.t('保存中...')
+                : i18n.t('保存统一盲盒配置')}
             </Button>
             <span className='text-muted-foreground text-xs' aria-live='polite'>
               {form.formState.isDirty
-                ? '有未保存的修改'
-                : '当前显示值可直接编辑'}
+                ? i18n.t('有未保存的修改')
+                : i18n.t('当前显示值可直接编辑')}
             </span>
           </div>
         </form>

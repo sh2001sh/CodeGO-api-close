@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18n from '@/i18n/config'
 import { CalendarClock, Hash, Sparkles, Star } from 'lucide-react'
 import {
   AnimatePresence,
@@ -23,6 +24,7 @@ import {
   useReducedMotion,
   type Variants,
 } from 'motion/react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { blindBoxGuaranteeLabel } from '../lib/blind-box-guarantee'
@@ -105,6 +107,7 @@ export function PrizeRevealHeader(props: {
   openCount: number
   records: BlindBoxRecord[]
 }) {
+  useTranslation()
   const reduced = useReducedMotion()
   const rarity = highestRarity(props.records)
   const celebratory = rarity === 'legendary'
@@ -136,11 +139,14 @@ export function PrizeRevealHeader(props: {
             <Star className='fill-primary text-primary size-5 shrink-0' />
           ) : null}
           <div className='text-foreground text-lg font-semibold'>
-            {celebratory ? `恭喜！${props.summary}` : props.summary}
+            {celebratory
+              ? i18n.t('恭喜！{{param0}}', { param0: props.summary })
+              : props.summary}
           </div>
         </div>
         <div className='text-muted-foreground mt-1 text-sm'>
-          共抽取 {props.openCount} 次，奖励已到账
+          <Trans i18nKey={'共抽取'} /> {props.openCount}{' '}
+          <Trans i18nKey={'次，奖励已到账'} />
         </div>
       </div>
     </motion.div>
@@ -193,6 +199,7 @@ function PrizeRevealCard(props: {
   onUseReward?: (record: BlindBoxRecord) => void
   formatTimestamp: (timestamp?: number) => string
 }) {
+  useTranslation()
   const { record } = props
   const rarity = classifyReward(record)
   const badge = RARITY_BADGE[rarity]
@@ -214,7 +221,7 @@ function PrizeRevealCard(props: {
               {record.reward_title}
             </div>
             <div className='border-border/70 bg-background/60 text-muted-foreground rounded-full border px-2.5 py-0.5 text-xs font-medium'>
-              统一盲盒 · {rewardTypeLabel(record)}
+              <Trans i18nKey={'统一盲盒 ·'} /> {rewardTypeLabel(record)}
             </div>
             {badge ? (
               <div
@@ -244,38 +251,44 @@ function PrizeRevealCard(props: {
             onClick={() => props.onUseReward?.(record)}
             disabled={!propAvailable}
           >
-            {propActive ? '已启用' : propAvailable ? '立即使用' : '不可用'}
+            {propActive
+              ? i18n.t('已启用')
+              : propAvailable
+                ? i18n.t('立即使用')
+                : i18n.t('不可用')}
           </Button>
         ) : null}
       </div>
       {record.reward_type === 'prop' ? (
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
           {record.prop_type === 'extra_draw'
-            ? '已自动补发 1 个待开启盲盒，可继续在库存中开启'
+            ? i18n.t('已自动补发 1 个待开启盲盒，可继续在库存中开启')
             : manualUseProp
               ? propActive
                 ? record.prop_type === 'consume_discount_10'
-                  ? '已启用，全部现有官方分组通用，累计 15 分钟并可暂停'
+                  ? i18n.t('已启用，全部现有官方分组通用，累计 15 分钟并可暂停')
                   : record.prop_type === 'monthly_pass_multiplier'
-                    ? '套餐权益已启用，仅实际扣月卡额度时生效'
-                    : '已启用，仅官方渠道可用，持续 24 小时'
+                    ? i18n.t('套餐权益已启用，仅实际扣月卡额度时生效')
+                    : i18n.t('已启用，仅官方渠道可用，持续 24 小时')
                 : propAvailable
                   ? record.prop_type === 'consume_discount_10'
-                    ? '点击启用后累计可用 15 分钟，可暂停，在原有官方分组直接生效'
+                    ? i18n.t(
+                        '点击启用后累计可用 15 分钟，可暂停，在原有官方分组直接生效'
+                      )
                     : record.prop_type === 'monthly_pass_multiplier'
-                      ? '点击启用套餐权益，无需切换分组'
-                      : '点击启用后持续 24 小时，仅官方渠道生效'
-                  : '该道具已失效'
+                      ? i18n.t('点击启用套餐权益，无需切换分组')
+                      : i18n.t('点击启用后持续 24 小时，仅官方渠道生效')
+                  : i18n.t('该道具已失效')
               : record.prop_status === 'used'
-                ? '已用于最近一次符合条件的订单'
+                ? i18n.t('已用于最近一次符合条件的订单')
                 : record.prop_status === 'reserved'
-                  ? '已锁定到待支付订单，支付完成后自动使用'
-                  : '下次满足条件时自动抵扣一次'}
+                  ? i18n.t('已锁定到待支付订单，支付完成后自动使用')
+                  : i18n.t('下次满足条件时自动抵扣一次')}
         </div>
       ) : record.reward_type === 'claude_quota' ||
         record.reward_type === 'quota' ? (
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
-          已进入统一额度账户，永久有效
+          <Trans i18nKey={'已进入统一额度账户，永久有效'} />
         </div>
       ) : null}
       {record.lucky_number ? (
@@ -293,14 +306,18 @@ function PrizeRevealCard(props: {
         >
           <div className='flex items-center gap-2'>
             <Hash className='text-primary size-4' aria-hidden='true' />
-            <span className='text-muted-foreground text-xs'>今日幸运号</span>
+            <span className='text-muted-foreground text-xs'>
+              <Trans i18nKey={'今日幸运号'} />
+            </span>
             <span className='text-foreground font-mono text-lg font-semibold tracking-widest tabular-nums'>
               {record.lucky_number}
             </span>
           </div>
           <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
             <CalendarClock className='size-3.5' aria-hidden='true' />
-            仅参与 {record.lucky_draw_date || '今日'} 开奖，次日失效
+            <Trans i18nKey={'仅参与'} />{' '}
+            {record.lucky_draw_date || i18n.t('今日')}{' '}
+            <Trans i18nKey={'开奖，次日失效'} />
           </div>
         </motion.div>
       ) : null}

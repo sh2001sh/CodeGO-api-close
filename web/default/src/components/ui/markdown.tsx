@@ -53,7 +53,7 @@ export function Markdown(props: MarkdownProps) {
         rehypePlugins={props.allowHtml === false ? undefined : [rehypeRaw]}
         components={{
           // 自定义组件渲染（可选）
-          a: ({ node, ...props }) => (
+          a: ({ node, ref, ...props }) => (
             <a {...props} target='_blank' rel='noopener noreferrer' />
           ),
         }}

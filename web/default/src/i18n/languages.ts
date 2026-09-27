@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const INTERFACE_LANGUAGE_OPTIONS = [
   { code: 'zh', label: '简体中文' },
+  { code: 'zh-TW', label: '繁體中文' },
   { code: 'en', label: 'English' },
   { code: 'fr', label: 'Français' },
   { code: 'ru', label: 'Русский' },
@@ -33,16 +34,21 @@ export function normalizeInterfaceLanguage(value?: string | null): string {
   if (!value) return 'en'
 
   const normalized = value.trim().replace(/_/g, '-').toLowerCase()
+  if (/^zh-(tw|hk|mo|hant)(-|$)/.test(normalized)) return 'zh-TW'
   if (normalized.startsWith('zh')) return 'zh'
 
-  return INTERFACE_LANGUAGE_OPTIONS.some((lang) => lang.code === normalized)
-    ? normalized
+  const primaryLanguage = normalized.split('-')[0]
+  return INTERFACE_LANGUAGE_OPTIONS.some(
+    (lang) => lang.code === primaryLanguage
+  )
+    ? primaryLanguage
     : 'en'
 }
 
 export function toIntlLocale(value?: string | null): string | undefined {
   const normalized = normalizeInterfaceLanguage(value)
   if (normalized === 'zh') return 'zh-CN'
+  if (normalized === 'zh-TW') return 'zh-TW'
   try {
     return Intl.getCanonicalLocales(normalized)[0] || normalized
   } catch {

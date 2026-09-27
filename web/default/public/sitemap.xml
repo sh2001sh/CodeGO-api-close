@@ -21,6 +21,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://codegoai.com/docs</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://codegoai.com/pricing</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>

@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18n from '@/i18n/config'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 /**
@@ -23,19 +25,15 @@ import { cn } from '@/lib/utils'
  * 与主页的手绘轨道线条同语言；reduced-motion 时静态展示描边字形。
  */
 export function CodeGoLoader(props: { className?: string }) {
+  useTranslation()
   return (
     <svg
       viewBox='0 0 118 26'
       className={cn('codego-loader', props.className)}
       role='status'
-      aria-label='CodeGo 加载中'
+      aria-label={i18n.t('CodeGo 加载中')}
     >
-      <text
-        x='1'
-        y='20'
-        className='codego-loader-text'
-        textLength='116'
-      >
+      <text x='1' y='20' className='codego-loader-text' textLength='116'>
         CodeGo
       </text>
     </svg>

@@ -37,7 +37,6 @@ import {
   User,
   UserPlus,
   Users,
-  UsersRound,
   Wallet,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -57,7 +56,7 @@ export function buildSidebarData(t: TFunction): SidebarData {
     navGroups: [
       {
         id: 'use',
-        title: t('使用'),
+        title: t('Usage'),
         items: [
           {
             title: t('Overview'),
@@ -75,7 +74,7 @@ export function buildSidebarData(t: TFunction): SidebarData {
             icon: ScrollText,
           },
           {
-            title: t('调试'),
+            title: t('Debug'),
             url: '/playground',
             icon: FlaskConical,
           },
@@ -83,7 +82,7 @@ export function buildSidebarData(t: TFunction): SidebarData {
       },
       {
         id: 'assets',
-        title: t('资产'),
+        title: t('Assets'),
         items: [
           {
             title: t('Wallet'),
@@ -104,7 +103,7 @@ export function buildSidebarData(t: TFunction): SidebarData {
       },
       {
         id: 'personal',
-        title: t('个人'),
+        title: t('Personal'),
         items: [
           {
             title: t('Profile'),
@@ -115,10 +114,10 @@ export function buildSidebarData(t: TFunction): SidebarData {
       },
       {
         id: 'more',
-        title: t('更多'),
+        title: t('More'),
         items: [
           {
-            title: t('更多'),
+            title: t('More'),
             icon: UserPlus,
             items: [
               {
@@ -127,22 +126,12 @@ export function buildSidebarData(t: TFunction): SidebarData {
                 icon: Clover,
               },
               {
-                title: t('Community resources'),
-                url: '/community-resources',
-                icon: Users,
-              },
-              {
                 title: t('Invites'),
                 url: '/invite-rewards',
                 icon: UserPlus,
               },
               {
-                title: t('Collective benefit plan'),
-                url: '/group-buy',
-                icon: UsersRound,
-              },
-              {
-                title: '电子发票',
+                title: t('Electronic invoices'),
                 url: '/invoices',
                 icon: ReceiptText,
               },

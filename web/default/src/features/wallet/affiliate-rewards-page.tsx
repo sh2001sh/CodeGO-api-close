@@ -19,9 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo, useState, type ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
 import { Copy, Gift, RotateCcw, Sparkles, Users, Wallet } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatNumber, formatTimestampToDate } from '@/lib/format'
 import { MOTION_TRANSITION } from '@/lib/motion'
@@ -204,19 +205,23 @@ export function AffiliateRewardsPage() {
   return (
     <SectionPageLayout kicker='C·05 · INVITES'>
       <SiteSeo
-        title='邀请与刷新'
-        description='分享邀请链接，获得套餐额度刷新机会并查看奖励记录。'
+        title={i18n.t('邀请与刷新')}
+        description={i18n.t(
+          '分享邀请链接，获得套餐额度刷新机会并查看奖励记录。'
+        )}
         canonicalPath='/invite-rewards'
         robots='noindex,follow'
       />
-      <SectionPageLayout.Title>邀请与刷新</SectionPageLayout.Title>
+      <SectionPageLayout.Title>
+        <Trans i18nKey={'邀请与刷新'} />
+      </SectionPageLayout.Title>
       <SectionPageLayout.Actions>
         <Button variant='outline' render={<Link to='/packages' />}>
-          套餐
+          <Trans i18nKey={'套餐'} />
         </Button>
         <Button render={<Link to='/wallet' />}>
           <Wallet data-icon='inline-start' />
-          钱包
+          <Trans i18nKey={'钱包'} />
         </Button>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
@@ -229,40 +234,44 @@ export function AffiliateRewardsPage() {
             <Card className='overflow-hidden py-0'>
               <CardContent className='bg-card grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]'>
                 <div className='min-w-0'>
-                  <div className='app-section-kicker'>邀请与刷新</div>
+                  <div className='app-section-kicker'>
+                    <Trans i18nKey={'邀请与刷新'} />
+                  </div>
                   <div className='border-border bg-background/80 text-foreground mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold'>
                     <Sparkles className='h-3.5 w-3.5' />
-                    邀请人首购月卡奖励：1 次额度刷新机会
+                    <Trans i18nKey={'邀请人首购月卡奖励：1 次额度刷新机会'} />
                   </div>
                   <div className='mt-2 text-2xl font-semibold tracking-tight sm:text-3xl'>
-                    邀请新用户首购月卡，给你 1 次额度刷新机会
+                    <Trans
+                      i18nKey={'邀请新用户首购月卡，给你 1 次额度刷新机会'}
+                    />
                   </div>
                   <div className='mt-4 grid gap-3 sm:grid-cols-3'>
                     <div className='app-subtle-panel px-4 py-4'>
                       <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
                         <Users className='text-primary h-4 w-4' />
-                        1. 分享专属链接
+                        <Trans i18nKey={'1. 分享专属链接'} />
                       </div>
                       <div className='text-muted-foreground mt-1 text-xs'>
-                        仅统计专属链接注册
+                        <Trans i18nKey={'仅统计专属链接注册'} />
                       </div>
                     </div>
                     <div className='app-subtle-panel px-4 py-4'>
                       <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
                         <Gift className='text-primary h-4 w-4' />
-                        2. 好友首购月卡
+                        <Trans i18nKey={'2. 好友首购月卡'} />
                       </div>
                       <div className='text-muted-foreground mt-1 text-xs'>
-                        首购月卡触发奖励
+                        <Trans i18nKey={'首购月卡触发奖励'} />
                       </div>
                     </div>
                     <div className='app-subtle-panel px-4 py-4'>
                       <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
                         <RotateCcw className='text-primary h-4 w-4' />
-                        3. 获得刷新机会
+                        <Trans i18nKey={'3. 获得刷新机会'} />
                       </div>
                       <div className='text-muted-foreground mt-1 text-xs'>
-                        每月最多使用 1 次
+                        <Trans i18nKey={'每月最多使用 1 次'} />
                       </div>
                     </div>
                   </div>
@@ -312,12 +321,28 @@ export function AffiliateRewardsPage() {
                 <div className='app-page-shell p-4'>
                   <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
                     <Sparkles className='text-warning h-4 w-4' />
-                    关键规则
+                    <Trans i18nKey={'关键规则'} />
                   </div>
                   <div className='text-muted-foreground mt-2 space-y-2 text-sm leading-6'>
-                    <p>1. 刷新只影响当前排序第 1 个生效订阅。</p>
-                    <p>2. 会清空已用额度与周期已用值，但不会延长到期时间。</p>
-                    <p>3. 刷新机会可累计保留，每个自然月最多使用 1 次。</p>
+                    <p>
+                      <Trans
+                        i18nKey={'1. 刷新只影响当前排序第 1 个生效订阅。'}
+                      />
+                    </p>
+                    <p>
+                      <Trans
+                        i18nKey={
+                          '2. 会清空已用额度与周期已用值，但不会延长到期时间。'
+                        }
+                      />
+                    </p>
+                    <p>
+                      <Trans
+                        i18nKey={
+                          '3. 刷新机会可累计保留，每个自然月最多使用 1 次。'
+                        }
+                      />
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -339,30 +364,30 @@ export function AffiliateRewardsPage() {
               viewport={{ once: true, margin: '-40px' }}
             >
               <StatCard
-                title='已邀请人数'
+                title={i18n.t('已邀请人数')}
                 value={formatNumber(overview?.invited_count ?? 0)}
-                hint='通过你的链接完成注册的用户数'
+                hint={i18n.t('通过你的链接完成注册的用户数')}
                 icon={Users}
                 iconClass='bg-muted text-muted-foreground'
               />
               <StatCard
-                title='月卡首购完成'
+                title={i18n.t('月卡首购完成')}
                 value={formatNumber(overview?.successful_purchase_invites ?? 0)}
-                hint='已经为你触发刷新机会的人数'
+                hint={i18n.t('已经为你触发刷新机会的人数')}
                 icon={Sparkles}
                 iconClass='bg-primary/10 text-primary'
               />
               <StatCard
-                title='可刷新次数'
+                title={i18n.t('可刷新次数')}
                 value={formatNumber(resetOpportunity.available_count)}
-                hint='当前还能使用的刷新机会'
+                hint={i18n.t('当前还能使用的刷新机会')}
                 icon={RotateCcw}
                 iconClass='bg-success/10 text-success'
               />
               <StatCard
-                title='本月状态'
+                title={i18n.t('本月状态')}
                 value={resetStatus}
-                hint='每个自然月最多刷新 1 次'
+                hint={i18n.t('每个自然月最多刷新 1 次')}
                 icon={Wallet}
                 iconClass='bg-muted text-muted-foreground'
               />
@@ -378,9 +403,15 @@ export function AffiliateRewardsPage() {
           >
             <Card className='py-0'>
               <CardHeader>
-                <CardTitle>邀请明细</CardTitle>
+                <CardTitle>
+                  <Trans i18nKey={'邀请明细'} />
+                </CardTitle>
                 <CardDescription>
-                  查看每位被邀请人的月卡首购状态，以及对应的刷新机会发放情况。
+                  <Trans
+                    i18nKey={
+                      '查看每位被邀请人的月卡首购状态，以及对应的刷新机会发放情况。'
+                    }
+                  />
                 </CardDescription>
               </CardHeader>
               <CardContent className='pb-4'>
@@ -392,17 +423,27 @@ export function AffiliateRewardsPage() {
                   </div>
                 ) : inviteeRows.length === 0 ? (
                   <div className='text-muted-foreground rounded-xl border border-dashed px-4 py-10 text-center text-sm'>
-                    还没有拉新记录。先复制邀请链接发给新用户。
+                    <Trans
+                      i18nKey={'还没有拉新记录。先复制邀请链接发给新用户。'}
+                    />
                   </div>
                 ) : (
                   <div className='overflow-hidden rounded-xl border'>
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>用户</TableHead>
-                          <TableHead>注册时间</TableHead>
-                          <TableHead>月卡首购</TableHead>
-                          <TableHead>刷新机会</TableHead>
+                          <TableHead>
+                            <Trans i18nKey={'用户'} />
+                          </TableHead>
+                          <TableHead>
+                            <Trans i18nKey={'注册时间'} />
+                          </TableHead>
+                          <TableHead>
+                            <Trans i18nKey={'月卡首购'} />
+                          </TableHead>
+                          <TableHead>
+                            <Trans i18nKey={'刷新机会'} />
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -426,16 +467,16 @@ export function AffiliateRewardsPage() {
                             <TableCell>
                               <StatusBadge
                                 completed={invitee.month_card_purchased}
-                                doneText='已购买'
-                                todoText='未购买'
+                                doneText={i18n.t('已购买')}
+                                todoText={i18n.t('未购买')}
                               />
                             </TableCell>
                             <TableCell>
                               <div className='flex flex-col gap-1'>
                                 <StatusBadge
                                   completed={invitee.reset_opportunity_earned}
-                                  doneText='已发放'
-                                  todoText='未发放'
+                                  doneText={i18n.t('已发放')}
+                                  todoText={i18n.t('未发放')}
                                 />
                                 {invitee.reset_opportunity_earned_at ? (
                                   <span className='text-muted-foreground text-xs'>
@@ -457,14 +498,20 @@ export function AffiliateRewardsPage() {
 
             <div className='flex flex-col gap-4'>
               <div className='overview-glass-card rounded-2xl p-5'>
-                <div className='text-base font-semibold'>立即刷新</div>
+                <div className='text-base font-semibold'>
+                  <Trans i18nKey={'立即刷新'} />
+                </div>
                 <div className='text-muted-foreground mt-1 text-sm leading-6'>
-                  使用刷新机会清空当前订阅的已用额度。本月已刷新或暂无机会时不可用。
+                  <Trans
+                    i18nKey={
+                      '使用刷新机会清空当前订阅的已用额度。本月已刷新或暂无机会时不可用。'
+                    }
+                  />
                 </div>
                 <div className='mt-4 grid gap-2 sm:grid-cols-2'>
                   <div className='overview-soft-card px-3 py-3'>
                     <div className='text-muted-foreground text-[11px] font-medium tracking-wide uppercase'>
-                      可用次数
+                      <Trans i18nKey={'可用次数'} />
                     </div>
                     <div className='mt-1.5 text-2xl font-semibold tabular-nums'>
                       {resetOpportunity.available_count}
@@ -472,7 +519,7 @@ export function AffiliateRewardsPage() {
                   </div>
                   <div className='overview-soft-card px-3 py-3'>
                     <div className='text-muted-foreground text-[11px] font-medium tracking-wide uppercase'>
-                      本月状态
+                      <Trans i18nKey={'本月状态'} />
                     </div>
                     <div
                       className={cn(
@@ -492,41 +539,53 @@ export function AffiliateRewardsPage() {
                     onClick={() => void handleUseResetOpportunity()}
                     disabled={usingResetOpportunity || !canUseResetOpportunity}
                   >
-                    立即刷新当前订阅额度
+                    <Trans i18nKey={'立即刷新当前订阅额度'} />
                   </Button>
                   <Button
                     variant='outline'
                     className='w-full'
                     render={<Link to='/wallet' />}
                   >
-                    去钱包查看当前订阅
+                    <Trans i18nKey={'去钱包查看当前订阅'} />
                   </Button>
                 </div>
               </div>
 
               <div className='overview-glass-card rounded-2xl p-5'>
-                <div className='text-base font-semibold'>你会刷新什么</div>
+                <div className='text-base font-semibold'>
+                  <Trans i18nKey={'你会刷新什么'} />
+                </div>
                 <div className='text-muted-foreground mt-1 text-sm leading-6'>
-                  刷新只影响当前排序第 1 个生效订阅，具体排序可在钱包页调整。
+                  <Trans
+                    i18nKey={
+                      '刷新只影响当前排序第 1 个生效订阅，具体排序可在钱包页调整。'
+                    }
+                  />
                 </div>
                 <ul className='text-muted-foreground mt-3 space-y-2 text-sm leading-6'>
                   <li className='flex items-start gap-2'>
                     <span className='bg-foreground/10 text-foreground mt-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold'>
                       1
                     </span>
-                    清空当前订阅的已用总额度。
+                    <Trans i18nKey={'清空当前订阅的已用总额度。'} />
                   </li>
                   <li className='flex items-start gap-2'>
                     <span className='bg-foreground/10 text-foreground mt-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold'>
                       2
                     </span>
-                    如果有周期额度，也会一起清空周期已用值。
+                    <Trans
+                      i18nKey={'如果有周期额度，也会一起清空周期已用值。'}
+                    />
                   </li>
                   <li className='flex items-start gap-2'>
                     <span className='bg-foreground/10 text-foreground mt-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold'>
                       3
                     </span>
-                    不延长套餐到期时间，不增加总额度，不改变权益组。
+                    <Trans
+                      i18nKey={
+                        '不延长套餐到期时间，不增加总额度，不改变权益组。'
+                      }
+                    />
                   </li>
                 </ul>
               </div>

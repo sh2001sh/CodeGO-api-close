@@ -1,4 +1,6 @@
 import { Link } from '@tanstack/react-router'
+import i18n from '@/i18n/config'
+import { useTranslation, Trans } from 'react-i18next'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
 import {
@@ -101,10 +103,7 @@ function TopicSurface(props: {
   return (
     <section
       id={props.id}
-      className={[
-        'app-page-shell p-6',
-        props.className,
-      ]
+      className={['app-page-shell p-6', props.className]
         .filter(Boolean)
         .join(' ')}
     >
@@ -134,9 +133,7 @@ function TopicNavCard(props: {
 
   return (
     <Link to={props.href} className={className}>
-      <div className='text-foreground text-sm font-semibold'>
-        {props.title}
-      </div>
+      <div className='text-foreground text-sm font-semibold'>{props.title}</div>
     </Link>
   )
 }
@@ -149,9 +146,7 @@ function TopicSlugCard(props: {
 }) {
   const content = (
     <>
-      <div className='text-foreground text-sm font-semibold'>
-        {props.title}
-      </div>
+      <div className='text-foreground text-sm font-semibold'>{props.title}</div>
     </>
   )
 
@@ -159,7 +154,7 @@ function TopicSlugCard(props: {
     return (
       <a
         href={props.anchorHref}
-        className='block rounded-xl border border-transparent px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-muted'
+        className='hover:border-primary/25 hover:bg-muted block rounded-xl border border-transparent px-4 py-3 transition-all duration-200 hover:-translate-y-0.5'
       >
         {content}
       </a>
@@ -170,7 +165,7 @@ function TopicSlugCard(props: {
     <Link
       to='/topics/$slug'
       params={{ slug: props.slug }}
-      className='block rounded-xl border border-transparent px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-muted'
+      className='hover:border-primary/25 hover:bg-muted block rounded-xl border border-transparent px-4 py-3 transition-all duration-200 hover:-translate-y-0.5'
     >
       {content}
     </Link>
@@ -218,10 +213,16 @@ function TopicHero(props: {
   )
 }
 
-function SectionHeading(props: { kicker: string; title: string; description?: string }) {
+function SectionHeading(props: {
+  kicker: string
+  title: string
+  description?: string
+}) {
   return (
     <div>
-      <div className='text-primary text-[12px] font-semibold'>{props.kicker}</div>
+      <div className='text-primary text-[12px] font-semibold'>
+        {props.kicker}
+      </div>
       <h2 className='text-foreground mt-3 text-[1.85rem] font-semibold tracking-[-0.02em]'>
         {props.title}
       </h2>
@@ -238,7 +239,9 @@ function TopicSidebar(props: {
   return (
     <aside className='hidden xl:block'>
       <TopicSurface className='sticky top-[86px] p-[18px]'>
-        <div className='text-primary text-[12px] font-semibold'>页内导航</div>
+        <div className='text-primary text-[12px] font-semibold'>
+          <Trans i18nKey={'页内导航'} />
+        </div>
         <div className='text-foreground mt-3 text-base font-semibold'>
           {props.navTitle}
         </div>
@@ -258,6 +261,7 @@ function TopicRightRail(props: { children: React.ReactNode }) {
 }
 
 export function SearchPage(props: { slug: string }) {
+  useTranslation()
   const page = getSearchPageBySlug(props.slug)
 
   if (!page) {
@@ -266,36 +270,51 @@ export function SearchPage(props: { slug: string }) {
         <div className='xl:col-start-2'>
           <TopicHero
             eyebrow='Topic / Missing'
-            title='未找到对应专题'
-            description='该专题可能不存在，或者当前链接已经变更。你可以先回到专题页总入口，或者直接查看模型与教程。'
+            title={i18n.t('未找到对应专题')}
+            description={i18n.t(
+              '该专题可能不存在，或者当前链接已经变更。你可以先回到专题页总入口，或者直接查看模型与教程。'
+            )}
           />
           <div className='mt-5 grid gap-4 md:grid-cols-3'>
             <TopicSurface>
-              <SectionHeading kicker='入口' title='返回专题目录' />
+              <SectionHeading
+                kicker={i18n.t('入口')}
+                title={i18n.t('返回专题目录')}
+              />
               <div className='mt-4'>
                 <TopicSlugCard
-                  title='专题页总入口'
-                  description='先回到专题页总入口重新选择主题。'
+                  title={i18n.t('专题页总入口')}
+                  description={i18n.t('先回到专题页总入口重新选择主题。')}
                   slug='codex-api'
                 />
               </div>
             </TopicSurface>
             <TopicSurface>
-              <SectionHeading kicker='模型' title='查看模型' />
+              <SectionHeading
+                kicker={i18n.t('模型')}
+                title={i18n.t('查看模型')}
+              />
               <div className='mt-4'>
                 <TopicNavCard
-                  title='查看模型'
-                  description='继续浏览免费模型、Claude、GPT 与相关价格结构。'
+                  title={i18n.t('查看模型')}
+                  description={i18n.t(
+                    '继续浏览免费模型、Claude、GPT 与相关价格结构。'
+                  )}
                   href='/pricing'
                 />
               </div>
             </TopicSurface>
             <TopicSurface>
-              <SectionHeading kicker='教程' title='查看教程' />
+              <SectionHeading
+                kicker={i18n.t('教程')}
+                title={i18n.t('查看教程')}
+              />
               <div className='mt-4'>
                 <TopicNavCard
-                  title='查看教程'
-                  description='从平台说明、模型选择到配置步骤继续往下看。'
+                  title={i18n.t('查看教程')}
+                  description={i18n.t(
+                    '从平台说明、模型选择到配置步骤继续往下看。'
+                  )}
                   href='/guide'
                 />
               </div>
@@ -375,12 +394,14 @@ export function SearchPage(props: { slug: string }) {
       <TopicPageFrame>
         <TopicSidebar
           navTitle={page.title}
-          navDescription='先按章节理解关键词，再决定下一步去模型页还是教程页。'
+          navDescription={i18n.t(
+            '先按章节理解关键词，再决定下一步去模型页还是教程页。'
+          )}
           navItems={
             <>
               <TopicNavCard
-                title='总览'
-                description='快速理解这个专题词的用途和阅读顺序。'
+                title={i18n.t('总览')}
+                description={i18n.t('快速理解这个专题词的用途和阅读顺序。')}
                 href='#overview'
                 external
               />
@@ -395,7 +416,7 @@ export function SearchPage(props: { slug: string }) {
               ))}
               <TopicNavCard
                 title='FAQ'
-                description='集中看常见问题与对应判断方式。'
+                description={i18n.t('集中看常见问题与对应判断方式。')}
                 href='#faq'
                 external
               />
@@ -403,7 +424,9 @@ export function SearchPage(props: { slug: string }) {
           }
           extraItems={
             <>
-              <div className='text-primary text-[12px] font-semibold'>相关专题</div>
+              <div className='text-primary text-[12px] font-semibold'>
+                <Trans i18nKey={'相关专题'} />
+              </div>
               <div className='mt-3 space-y-2'>
                 {relatedPages.slice(0, 4).map((item) => (
                   <TopicSlugCard
@@ -428,40 +451,45 @@ export function SearchPage(props: { slug: string }) {
 
           <TopicSurface id='overview'>
             <SectionHeading
-              kicker='阅读方式'
-              title='这是专题页，并非只给搜索引擎看的占位页'
-              description='这一页会先解释“为什么有人会搜这个词”，再把模型、价格路径、教程入口和常见判断逻辑整理清楚。你可以先看总览，再按目录直接跳到最关心的章节。'
+              kicker={i18n.t('阅读方式')}
+              title={i18n.t('这是专题页，并非只给搜索引擎看的占位页')}
+              description={i18n.t(
+                '这一页会先解释“为什么有人会搜这个词”，再把模型、价格路径、教程入口和常见判断逻辑整理清楚。你可以先看总览，再按目录直接跳到最关心的章节。'
+              )}
             />
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>01</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
-                  先判断你要解决什么问题
+                  <Trans i18nKey={'先判断你要解决什么问题'} />
                 </div>
               </div>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>02</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
-                  再看这个词和 Code Go 的关系
+                  <Trans i18nKey={'再看这个词和 Code Go 的关系'} />
                 </div>
               </div>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>03</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
-                  最后回到模型页或教程页
+                  <Trans i18nKey={'最后回到模型页或教程页'} />
                 </div>
               </div>
             </div>
           </TopicSurface>
 
           <TopicSurface>
-            <SectionHeading kicker='章节导航' title='按章节快速进入' />
+            <SectionHeading
+              kicker={i18n.t('章节导航')}
+              title={i18n.t('按章节快速进入')}
+            />
             <div className='mt-5 grid gap-4 md:grid-cols-2'>
               {sections.map((section, index) => (
                 <a
                   key={section.heading}
                   href={`#section-${index + 1}`}
-                  className='app-subtle-panel px-5 py-4 transition-colors hover:border-primary/25'
+                  className='app-subtle-panel hover:border-primary/25 px-5 py-4 transition-colors'
                 >
                   <div className='text-primary text-[12px] font-semibold'>
                     {String(index + 1).padStart(2, '0')}
@@ -494,13 +522,10 @@ export function SearchPage(props: { slug: string }) {
           ))}
 
           <TopicSurface id='faq'>
-            <SectionHeading kicker='常见问题' title='FAQ' />
+            <SectionHeading kicker={i18n.t('常见问题')} title='FAQ' />
             <div className='mt-5 space-y-3'>
               {faqItems.map((item) => (
-                <div
-                  key={item.question}
-                  className='app-subtle-panel px-5 py-5'
-                >
+                <div key={item.question} className='app-subtle-panel px-5 py-5'>
                   <div className='text-foreground text-base font-semibold'>
                     {item.question}
                   </div>
@@ -515,28 +540,34 @@ export function SearchPage(props: { slug: string }) {
 
         <TopicRightRail>
           <TopicSurface>
-            <div className='text-primary text-[12px] font-semibold'>快速入口</div>
+            <div className='text-primary text-[12px] font-semibold'>
+              <Trans i18nKey={'快速入口'} />
+            </div>
             <div className='mt-4 space-y-3'>
               <TopicNavCard
-                title='查看模型'
-                description='先看免费模型、Claude、GPT 与当前可用分组。'
+                title={i18n.t('查看模型')}
+                description={i18n.t(
+                  '先看免费模型、Claude、GPT 与当前可用分组。'
+                )}
                 href='/pricing'
               />
               <TopicNavCard
-                title='查看教程'
-                description='从配置、接入到长期使用路径继续往下看。'
+                title={i18n.t('查看教程')}
+                description={i18n.t('从配置、接入到长期使用路径继续往下看。')}
                 href='/guide'
               />
               <TopicNavCard
-                title='回到专题目录'
-                description='继续切换到其它相关专题与教程入口。'
+                title={i18n.t('回到专题目录')}
+                description={i18n.t('继续切换到其它相关专题与教程入口。')}
                 href='/topics'
               />
             </div>
           </TopicSurface>
 
           <TopicSurface>
-            <div className='text-primary text-[12px] font-semibold'>相关专题</div>
+            <div className='text-primary text-[12px] font-semibold'>
+              <Trans i18nKey={'相关专题'} />
+            </div>
             <div className='mt-4 space-y-3'>
               {relatedPages.map((item) => (
                 <TopicSlugCard
@@ -555,6 +586,7 @@ export function SearchPage(props: { slug: string }) {
 }
 
 export function SearchTopicsIndex() {
+  useTranslation()
   const groupedTopics = topicGroups
     .map((group) => ({
       ...group,
@@ -569,7 +601,9 @@ export function SearchTopicsIndex() {
       <SiteSeo
         title={TOPICS_INDEX_TITLE}
         description={TOPICS_INDEX_DESCRIPTION}
-        keywords='Codex API, Claude Code API, Codex中转, Claude中转, AI API 中转, 教程, 配置, 排障, Code Go'
+        keywords={i18n.t(
+          'Codex API, Claude Code API, Codex中转, Claude中转, AI API 中转, 教程, 配置, 排障, Code Go'
+        )}
         canonicalPath='/topics'
         ogType='website'
       />
@@ -577,18 +611,18 @@ export function SearchTopicsIndex() {
       <TopicPageFrame>
         <TopicSidebar
           navTitle='Topics Index'
-          navDescription='按搜索意图看专题，不要先陷进零散关键词。'
+          navDescription={i18n.t('按搜索意图看专题，不要先陷进零散关键词。')}
           navItems={
             <>
               <TopicNavCard
-                title='总览'
-                description='先理解专题页存在的目的和阅读顺序。'
+                title={i18n.t('总览')}
+                description={i18n.t('先理解专题页存在的目的和阅读顺序。')}
                 href='#overview'
                 external
               />
               <TopicNavCard
-                title='进入路径'
-                description='先判断要看模型、教程还是比较与排障。'
+                title={i18n.t('进入路径')}
+                description={i18n.t('先判断要看模型、教程还是比较与排障。')}
                 href='#path'
                 external
               />
@@ -605,7 +639,9 @@ export function SearchTopicsIndex() {
           }
           extraItems={
             <>
-              <div className='text-primary text-[12px] font-semibold'>热门专题</div>
+              <div className='text-primary text-[12px] font-semibold'>
+                <Trans i18nKey={'热门专题'} />
+              </div>
               <div className='mt-3 space-y-2'>
                 {hotTopics.map((item) => (
                   <TopicSlugCard
@@ -623,33 +659,39 @@ export function SearchTopicsIndex() {
         <div className='space-y-5 xl:col-start-2'>
           <TopicHero
             eyebrow='Topic / Index'
-            title='Codex API、Claude Code API、Codex 中转、Claude 中转专题页'
-            description='这是 Code Go 的专题页总入口。适合从搜索直接进入的用户先看清关键词含义、适用场景、教程入口和模型选择路径，再决定下一步去模型页还是教程页。'
+            title={i18n.t(
+              'Codex API、Claude Code API、Codex 中转、Claude 中转专题页'
+            )}
+            description={i18n.t(
+              '这是 Code Go 的专题页总入口。适合从搜索直接进入的用户先看清关键词含义、适用场景、教程入口和模型选择路径，再决定下一步去模型页还是教程页。'
+            )}
           />
 
           <TopicSurface id='overview'>
             <SectionHeading
-              kicker='总览'
-              title='先把词义、模型和下一步路径理顺'
-              description='这个入口页的目标并非堆满 SEO 关键词，而是让从搜索直接进入的用户先看懂：这些词各自代表什么、适合去哪一页继续看，以及怎么最快完成配置与选择。'
+              kicker={i18n.t('总览')}
+              title={i18n.t('先把词义、模型和下一步路径理顺')}
+              description={i18n.t(
+                '这个入口页的目标并非堆满 SEO 关键词，而是让从搜索直接进入的用户先看懂：这些词各自代表什么、适合去哪一页继续看，以及怎么最快完成配置与选择。'
+              )}
             />
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>01</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
-                  先看核心入口专题
+                  <Trans i18nKey={'先看核心入口专题'} />
                 </div>
               </div>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>02</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
-                  再按教程或排障分流
+                  <Trans i18nKey={'再按教程或排障分流'} />
                 </div>
               </div>
               <div className='app-subtle-panel p-5'>
                 <div className='text-primary text-[12px] font-semibold'>03</div>
                 <div className='text-foreground mt-3 text-base font-semibold'>
-                  最后回到模型页或教程页
+                  <Trans i18nKey={'最后回到模型页或教程页'} />
                 </div>
               </div>
             </div>
@@ -657,35 +699,35 @@ export function SearchTopicsIndex() {
 
           <TopicSurface id='path'>
             <SectionHeading
-              kicker='进入路径'
-              title='按搜索意图进入，而并非逐个点开试'
+              kicker={i18n.t('进入路径')}
+              title={i18n.t('按搜索意图进入，而并非逐个点开试')}
             />
             <div className='mt-5 grid gap-4 md:grid-cols-3'>
               <a
                 href='#group-1'
-                className='app-subtle-panel px-5 py-4 transition-colors hover:border-primary/25'
+                className='app-subtle-panel hover:border-primary/25 px-5 py-4 transition-colors'
               >
                 <div className='text-primary text-[12px] font-semibold'>01</div>
                 <div className='text-foreground mt-2 text-sm font-semibold'>
-                  核心入口
+                  <Trans i18nKey={'核心入口'} />
                 </div>
               </a>
               <a
                 href='#group-2'
-                className='app-subtle-panel px-5 py-4 transition-colors hover:border-primary/25'
+                className='app-subtle-panel hover:border-primary/25 px-5 py-4 transition-colors'
               >
                 <div className='text-primary text-[12px] font-semibold'>02</div>
                 <div className='text-foreground mt-2 text-sm font-semibold'>
-                  接入教程
+                  <Trans i18nKey={'接入教程'} />
                 </div>
               </a>
               <a
                 href='#group-3'
-                className='app-subtle-panel px-5 py-4 transition-colors hover:border-primary/25'
+                className='app-subtle-panel hover:border-primary/25 px-5 py-4 transition-colors'
               >
                 <div className='text-primary text-[12px] font-semibold'>03</div>
                 <div className='text-foreground mt-2 text-sm font-semibold'>
-                  比较与排障
+                  <Trans i18nKey={'比较与排障'} />
                 </div>
               </a>
             </div>
@@ -704,7 +746,7 @@ export function SearchTopicsIndex() {
                     key={item.slug}
                     to='/topics/$slug'
                     params={{ slug: item.slug }}
-                    className='app-subtle-panel block p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25'
+                    className='app-subtle-panel hover:border-primary/25 block p-5 transition-all duration-200 hover:-translate-y-0.5'
                   >
                     <div className='text-foreground text-base font-semibold'>
                       {item.title}
@@ -718,28 +760,34 @@ export function SearchTopicsIndex() {
 
         <TopicRightRail>
           <TopicSurface>
-            <div className='text-primary text-[12px] font-semibold'>快速入口</div>
+            <div className='text-primary text-[12px] font-semibold'>
+              <Trans i18nKey={'快速入口'} />
+            </div>
             <div className='mt-4 space-y-3'>
               <TopicNavCard
-                title='查看模型'
-                description='先看免费模型、Claude、GPT 与当前模型分组。'
+                title={i18n.t('查看模型')}
+                description={i18n.t(
+                  '先看免费模型、Claude、GPT 与当前模型分组。'
+                )}
                 href='/pricing'
               />
               <TopicNavCard
-                title='使用教程'
-                description='从接入、配置到使用路径继续往下看。'
+                title={i18n.t('使用教程')}
+                description={i18n.t('从接入、配置到使用路径继续往下看。')}
                 href='/guide'
               />
               <TopicNavCard
-                title='回到首页'
-                description='查看平台入口概览、导航与主要能力说明。'
+                title={i18n.t('回到首页')}
+                description={i18n.t('查看平台入口概览、导航与主要能力说明。')}
                 href='/'
               />
             </div>
           </TopicSurface>
 
           <TopicSurface>
-            <div className='text-primary text-[12px] font-semibold'>热门专题</div>
+            <div className='text-primary text-[12px] font-semibold'>
+              <Trans i18nKey={'热门专题'} />
+            </div>
             <div className='mt-4 space-y-3'>
               {hotTopics.map((item) => (
                 <TopicSlugCard

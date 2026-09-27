@@ -17,7 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import i18n from '@/i18n/config'
 import { motion } from 'motion/react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { ReelItem } from './blind-box-reel-data'
 
@@ -80,6 +82,7 @@ export function BlindBoxReel(props: {
   reduced?: boolean
   onComplete?: () => void
 }) {
+  useTranslation()
   const reduced = Boolean(props.reduced)
   const animation = useReelAnimation({
     reduced,
@@ -103,7 +106,11 @@ export function BlindBoxReel(props: {
   const winnerOffset = WINNER_INDEX * CELL_WIDTH + CELL_WIDTH / 2
 
   return (
-    <div className='relative overflow-hidden' role='img' aria-label='开盒动画'>
+    <div
+      className='relative overflow-hidden'
+      role='img'
+      aria-label={i18n.t('开盒动画')}
+    >
       <ReelMarker />
       <ReelEdgeFade />
 

@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import {
   FlaskConical,
   Gift,
@@ -7,6 +8,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -87,6 +89,7 @@ function BalanceBoxHeader(props: {
   mode: ActionMode
   onModeChange: (mode: ActionMode) => void
 }) {
+  useTranslation()
   const inventoryCount = props.balance?.inventory_count || 0
   return (
     <div className='relative overflow-hidden border-b px-4 py-5 sm:px-6 sm:py-6'>
@@ -105,11 +108,15 @@ function BalanceBoxHeader(props: {
           <div className='flex items-center gap-2.5'>
             <span aria-hidden className='bg-primary block h-2 w-2' />
             <span className='codego-kicker'>
-              统一盲盒 · {(props.balance?.price_usd || 2.5).toFixed(2)} / 个
+              <Trans i18nKey={'统一盲盒 ·'} />{' '}
+              {(props.balance?.price_usd || 2.5).toFixed(2)}{' '}
+              <Trans i18nKey={'/ 个'} />
             </span>
           </div>
           <h2 className='text-foreground mt-3 text-2xl leading-[1.06] font-semibold text-balance sm:text-3xl'>
-            {inventoryCount > 0 ? `${inventoryCount} 个盲盒待开启` : '统一盲盒'}
+            {inventoryCount > 0
+              ? i18n.t('{{param0}} 个盲盒待开启', { param0: inventoryCount })
+              : i18n.t('统一盲盒')}
           </h2>
           <BalanceBoxHeaderMetrics balance={props.balance} />
         </div>
@@ -127,18 +134,19 @@ function BalanceBoxHeader(props: {
 }
 
 function BalanceBoxHeaderMetrics(props: { balance?: BalanceBlindBoxOverview }) {
+  useTranslation()
   return (
     <div className='codego-fact-row mt-6 grid max-w-md grid-cols-3'>
       <BalanceBoxMetric
-        label='库存'
+        label={i18n.t('库存')}
         value={`${props.balance?.inventory_count || 0} 个`}
       />
       <BalanceBoxMetric
-        label='今日购买'
+        label={i18n.t('今日购买')}
         value={`${props.balance?.purchased_today || 0}/${props.balance?.daily_purchase_limit || 10}`}
       />
       <BalanceBoxMetric
-        label='统一额度'
+        label={i18n.t('统一额度')}
         value={`${(props.balance?.balance_usd || 0).toFixed(2)}`}
       />
     </div>
@@ -162,7 +170,9 @@ function BalanceBoxOpenActions(props: {
   if (props.inventoryCount <= 0) {
     return (
       <div className='space-y-3'>
-        <div className='codego-stat-label'>库存操作</div>
+        <div className='codego-stat-label'>
+          <Trans i18nKey={'库存操作'} />
+        </div>
         <div className='grid grid-cols-3 gap-1.5'>
           {ops.map((op) => (
             <InventoryOpButton
@@ -184,7 +194,9 @@ function BalanceBoxOpenActions(props: {
   const openAllCount = Math.min(100, props.inventoryCount)
   return (
     <div className='space-y-3'>
-      <div className='codego-stat-label'>直接开启</div>
+      <div className='codego-stat-label'>
+        <Trans i18nKey={'直接开启'} />
+      </div>
       <div className='grid grid-cols-2 gap-2'>
         <Button
           className='h-11 flex-1 px-2.5'
@@ -196,7 +208,7 @@ function BalanceBoxOpenActions(props: {
           ) : (
             <PackageOpen className='size-4' />
           )}
-          开启 1 个
+          <Trans i18nKey={'开启 1 个'} />
         </Button>
         <Button
           variant='outline'
@@ -204,11 +216,11 @@ function BalanceBoxOpenActions(props: {
           disabled={props.busy}
           onClick={() => props.onOpenCount(openAllCount)}
         >
-          全部 {openAllCount} 个
+          <Trans i18nKey={'全部'} /> {openAllCount} <Trans i18nKey={'个'} />
         </Button>
       </div>
       <div className='codego-stat-label border-border/60 border-t pt-3'>
-        库存操作
+        <Trans i18nKey={'库存操作'} />
       </div>
       <div className='grid grid-cols-3 gap-1.5'>
         {ops.map((op) => (
@@ -284,10 +296,11 @@ function BalanceBoxSecondaryPanel(props: BalanceBoxPanelViewProps) {
 }
 
 function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {
+  useTranslation()
   return (
     <div className='space-y-2'>
       <label className='text-sm font-medium' htmlFor='balance-box-recipient'>
-        接收方公开 ID
+        <Trans i18nKey={'接收方公开 ID'} />
       </label>
       <div className='flex gap-2'>
         <Input
@@ -297,7 +310,7 @@ function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {
           onChange={(event) =>
             props.onRecipientIdChange(event.target.value.toUpperCase())
           }
-          placeholder='例如 A1B2C3'
+          placeholder={i18n.t('例如 A1B2C3')}
           className='font-mono uppercase'
         />
         <Button
@@ -305,19 +318,23 @@ function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {
           size='icon'
           onClick={props.onLookup}
           disabled={props.busy}
-          title='查找用户'
+          title={i18n.t('查找用户')}
         >
           <Search className='size-4' />
         </Button>
       </div>
       {props.recipient ? (
         <div className='border-border bg-muted/40 rounded-md border px-3 py-2 text-sm'>
-          接收方：{props.recipient.display_name_masked} ·{' '}
-          {props.recipient.external_id}
+          <Trans i18nKey={'接收方：'} />
+          {props.recipient.display_name_masked} · {props.recipient.external_id}
         </div>
       ) : null}
       <p className='text-muted-foreground text-xs leading-5'>
-        赠送不可撤销，盲盒可被接收方继续转赠。封存奖励不会因所有权变化而重新抽取。
+        <Trans
+          i18nKey={
+            '赠送不可撤销，盲盒可被接收方继续转赠。封存奖励不会因所有权变化而重新抽取。'
+          }
+        />
       </p>
     </div>
   )

@@ -190,6 +190,28 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sawCompactionOutput.Store(true)
 		}
 		textOutput := isResponsesTextDelta(streamResponse)
+		// Capture provider usage before writing anything downstream. A client
+		// disconnect while flushing the final event must not discard exact usage.
+		if streamResponse.Response != nil && streamResponse.Response.Usage != nil {
+			providerUsage := streamResponse.Response.Usage
+			usage.PromptTokens = providerUsage.InputTokens
+			usage.CompletionTokens = providerUsage.OutputTokens
+			usage.TotalTokens = providerUsage.TotalTokens
+			if providerUsage.InputTokensDetails != nil {
+				usage.PromptTokensDetails.CachedTokens = providerUsage.InputTokensDetails.CachedTokens
+				usage.PromptTokensDetails.CachedCreationTokens = providerUsage.InputTokensDetails.GetCachedCreationTokens()
+			}
+		}
+		if streamResponse.Type == "response.incomplete" && streamResponse.Response != nil && streamResponse.Response.Usage != nil {
+			sawResponseCompleted.Store(true)
+			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+				sr.Stop(err)
+				return
+			}
+			c.Set(string(constant.ContextKeyResponsesTerminalSent), true)
+			sr.Done()
+			return
+		}
 		if isResponsesFailureEvent(streamResponse) {
 			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
 			terminalFailure = responsesFailureError(streamResponse)

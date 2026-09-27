@@ -228,6 +228,12 @@ func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int64, ide
 	if err != nil {
 		return err
 	}
+	var existing billingschema.BillingLedgerEntry
+	existingErr := tx.Where("account_id = ? AND idempotency_key = ?", account.AccountID, idempotencyKey).First(&existing).Error
+	if existingErr != nil && !errors.Is(existingErr, gorm.ErrRecordNotFound) {
+		return existingErr
+	}
+	alreadyCredited := existingErr == nil
 	entry, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID:      account.AccountID,
 		Amount:         amount,
@@ -240,6 +246,9 @@ func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int64, ide
 	})
 	if err != nil {
 		return err
+	}
+	if alreadyCredited {
+		return nil
 	}
 	if err := recordFundingLotTx(tx, account.AccountID, amount, idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
 		return err
@@ -361,8 +370,16 @@ func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, idempotencyK
 	if err != nil {
 		return err
 	}
-	if err := reconcileAccountBalanceTx(tx, account, userID, legacyBalance); err != nil {
-		return err
+	var existing billingschema.BillingLedgerEntry
+	existingErr := tx.Where("account_id = ? AND idempotency_key = ?", account.AccountID, idempotencyKey).First(&existing).Error
+	if existingErr != nil && !errors.Is(existingErr, gorm.ErrRecordNotFound) {
+		return existingErr
+	}
+	alreadyCredited := existingErr == nil
+	if !alreadyCredited {
+		if err := reconcileAccountBalanceTx(tx, account, userID, legacyBalance); err != nil {
+			return err
+		}
 	}
 	entry, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID:      account.AccountID,
@@ -376,6 +393,9 @@ func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, idempotencyK
 	})
 	if err != nil {
 		return err
+	}
+	if alreadyCredited {
+		return nil
 	}
 	if err := recordFundingLotTx(tx, account.AccountID, amount, idempotencyKey, reasonCode, entry.ReferenceType, entry.ReferenceID); err != nil {
 		return err

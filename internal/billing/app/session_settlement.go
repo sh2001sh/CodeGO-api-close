@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
+	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 )
 
@@ -41,6 +42,11 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	if !s.relayInfo.IsPlayground {
 		tokenErr = AdjustTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, tokenDelta)
 		if tokenErr != nil {
+			if errors.Is(tokenErr, identitystore.ErrTokenQuotaInsufficient) {
+				if exhaustErr := ExhaustTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey); exhaustErr != nil {
+					platformobservability.SysLog(fmt.Sprintf("error exhausting token quota after settlement shortfall: %s", exhaustErr.Error()))
+				}
+			}
 			platformobservability.SysLog(fmt.Sprintf(
 				"error adjusting token quota after funding settled (userId=%d, tokenId=%d, delta=%d): %s",
 				s.relayInfo.UserId, s.relayInfo.TokenId, tokenDelta, tokenErr.Error(),

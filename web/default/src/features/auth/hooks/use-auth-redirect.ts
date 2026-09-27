@@ -127,8 +127,13 @@ export function useAuthRedirect() {
   /**
    * Redirect to login page
    */
-  const redirectToLogin = () => {
-    navigate({ to: '/sign-in', replace: true })
+  const redirectToLogin = (target?: string) => {
+    const path = normalizeAuthRedirect(target)
+    if (path.startsWith('/api/')) {
+      window.location.assign(path)
+      return
+    }
+    navigate({ to: path, replace: true })
   }
 
   /**

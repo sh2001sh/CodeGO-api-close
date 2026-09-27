@@ -576,7 +576,7 @@ func reclaimPostgresBatchTx(tx *gorm.DB, filter ReleaseFilter, remaining int64, 
 		Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
 	table := marketplaceschema.Settlement{}.TableName()
 	statement := fmt.Sprintf(`
-WITH locked AS MATERIALIZED (?),
+WITH locked AS (?),
 amounts AS (
 	SELECT id, owner_user_id, owner_net_amount, reclaimed_amount,
 		CASE WHEN CAST(? AS BIGINT) <= 0 THEN owner_net_amount - reclaimed_amount

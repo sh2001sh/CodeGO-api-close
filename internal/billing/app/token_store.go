@@ -132,6 +132,22 @@ func AdjustTokenQuota(tokenID int, tokenKey string, delta int) error {
 	return nil
 }
 
+// ExhaustTokenQuota consumes the remaining token quota after a request has
+// already been charged more than the token could cover.
+func ExhaustTokenQuota(tokenID int, tokenKey string) error {
+	if tokenID <= 0 {
+		return nil
+	}
+	var token identityschema.Token
+	if err := platformdb.DB.Select("id", "remain_quota").Where("id = ?", tokenID).First(&token).Error; err != nil {
+		return err
+	}
+	if token.RemainQuota <= 0 {
+		return nil
+	}
+	return AdjustTokenQuota(tokenID, tokenKey, token.RemainQuota)
+}
+
 func getLedgerBackedTokenQuota(token *identityschema.Token) (int, error) {
 	if token == nil || token.Id <= 0 {
 		return 0, errors.New("invalid token")

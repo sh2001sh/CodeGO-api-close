@@ -17,6 +17,7 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"sync"
 )
 
@@ -101,7 +102,7 @@ func RedeemCode(userID int, key string) (*RedemptionResult, error) {
 
 	platformruntime.RandomSleep()
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(redemptionKeyColumn()+" = ?", key).First(&redemption).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(redemptionKeyColumn()+" = ?", key).First(&redemption).Error; err != nil {
 			return commercedomain.ErrRedemptionInvalid
 		}
 		if redemption.Status == constant.RedemptionCodeStatusUsed {

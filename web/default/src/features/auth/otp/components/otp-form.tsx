@@ -49,7 +49,7 @@ import {
   BACKUP_CODE_LENGTH,
 } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
-import { saveUserId } from '@/features/auth/lib/storage'
+import { consumeAuthRedirect, saveUserId } from '@/features/auth/lib/storage'
 import {
   isValidOTP,
   isValidBackupCode,
@@ -115,7 +115,7 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
       }
 
       toast.success(t('Signed in'))
-      redirectToLogin() // This will redirect to dashboard via the redirect logic
+      redirectToLogin(consumeAuthRedirect())
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('2FA verification error:', error)

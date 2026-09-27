@@ -265,6 +265,13 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	if cyberPolicyErr != nil {
 		return nil, cyberPolicyErr
 	}
+	if len(streamItems) == 0 {
+		return nil, types.NewOpenAIError(
+			fmt.Errorf("upstream returned an empty stream"),
+			types.ErrorCodeBadResponseBody,
+			http.StatusBadGateway,
+		)
+	}
 
 	if streamUsage, found := extractLastValidStreamUsage(streamItems); found {
 		usage = streamUsage
@@ -297,6 +304,16 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	if !containStreamUsage {
 		usage = tokenx.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		usage.CompletionTokens += toolCount * 7
+	} else if usage.CompletionTokens == 0 && responseTextBuilder.Len() > 0 {
+		// Some OpenAI-compatible providers return a final usage frame with valid
+		// input tokens but a zero output count even after streaming visible text.
+		// Preserve the upstream input/cache fields and only backfill the output
+		// count from the response that was actually observed.
+		usage.CompletionTokens = tokenx.EstimateTokenByModel(info.UpstreamModelName, responseTextBuilder.String())
+		usage.OutputTokens = usage.CompletionTokens
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+		usage.UsageSource = "local_completion_fallback"
+		httpctx.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 	}
 
 	applyUsagePostProcessing(info, usage, platformtext.StringToByteSlice(lastStreamData))

@@ -112,7 +112,7 @@ func ReserveAdditionalSubscriptionQuota(requestID string, subscriptionID int, mo
 		}
 		_, err = billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
 			AccountID: account.AccountID, RequestID: requestID, ReservedAmount: amount,
-			IdempotencyKey: fmt.Sprintf("subscription:%s:reserve-extra:%d", requestID, amount),
+			IdempotencyKey: fmt.Sprintf("subscription:%s:reserve-extra:%d", requestID, sub.AmountUsed),
 			ExpiresAt:      subscriptionReservationExpiry(),
 		})
 		return err

@@ -16,6 +16,7 @@ import (
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"net/url"
 	"strings"
 )
@@ -84,7 +85,7 @@ func TransferAffiliateQuotaToBalance(userID int, quota int) error {
 	var updatedUser *identityschema.User
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		user := &identityschema.User{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").First(user, userID).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(user, userID).Error; err != nil {
 			return err
 		}
 		if user.AffQuota < quota {

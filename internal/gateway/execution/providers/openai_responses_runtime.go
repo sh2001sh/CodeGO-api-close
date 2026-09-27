@@ -254,6 +254,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				}
 			}
 		case "response.reasoning_summary_text.delta":
+			if streamResp.Delta != "" {
+				sr.MarkProgress()
+			}
 			if !sendReasoningSummaryDelta(streamResp.Delta) {
 				sr.Stop(streamErr)
 				return
@@ -264,6 +267,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 		case "response.output_text.delta":
 			if streamResp.Delta != "" {
+				sr.MarkProgress()
 				gatewaystream.MarkSemanticCommitted(c)
 				if !sendStartIfNeeded() {
 					sr.Stop(streamErr)
@@ -331,6 +335,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				return
 			}
 		case "response.function_call_arguments.delta":
+			if streamResp.Delta != "" {
+				sr.MarkProgress()
+			}
 			itemID := strings.TrimSpace(streamResp.ItemID)
 			callID := toolCallCanonicalIDByItemID[itemID]
 			if callID == "" {
@@ -345,6 +352,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				return
 			}
 		case "response.custom_tool_call_input.delta":
+			if streamResp.Delta != "" {
+				sr.MarkProgress()
+			}
 			// Custom tool input is wrapped as {"input": ...} once the item is done.
 			// Emitting raw freeform fragments here would create invalid Chat JSON.
 		case "response.completed", "response.incomplete":

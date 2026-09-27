@@ -57,6 +57,7 @@ import { LegalConsent } from '@/features/auth/components/legal-consent'
 import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { loginFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
+import { saveAuthRedirect } from '@/features/auth/lib/storage'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import type { AuthFormProps } from '@/features/auth/types'
@@ -153,6 +154,7 @@ export function UserAuthForm({
 
       if (res.success) {
         if (res.data?.require_2fa) {
+          saveAuthRedirect(redirectTo)
           redirectTo2FA()
           return
         }

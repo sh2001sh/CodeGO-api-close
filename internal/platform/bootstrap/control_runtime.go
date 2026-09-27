@@ -1,8 +1,6 @@
 package bootstrap
 
 import (
-	"context"
-
 	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -20,7 +18,6 @@ func startControlBackgroundTasks() {
 	marketplacesettlement.RegisterReleaseHook(billingapp.CreditMarketplaceOwnerEarningsTx)
 	marketplacesettlement.RegisterReclaimHook(billingapp.ReclaimMarketplaceOwnerEarningsTx)
 	marketplacesettlement.RegisterForfeitHook(billingapp.ForfeitMarketplacePendingEarningsTx)
-	marketplacesettlement.StartReleaseWorker(context.Background())
 
 	startOptionSyncLoop()
 

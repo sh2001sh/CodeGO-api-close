@@ -1,6 +1,7 @@
 package settlement
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -60,6 +61,51 @@ func TestRecordAndReleaseSettlementAreIdempotent(t *testing.T) {
 	require.NoError(t, db.First(&pendingSnapshot, "account_id = ?", item.PendingAccountID).Error)
 	require.Zero(t, pendingSnapshot.AvailableBalance)
 	require.Equal(t, int64(95), pendingSnapshot.ConsumedTotal)
+}
+
+func TestReleaseDueContinuesAfterOneSettlementFails(t *testing.T) {
+	db := openSettlementTestDB(t)
+	now := time.Now().UTC()
+	require.NoError(t, Record(RecordParams{RequestID: "fails", GroupID: "group", OwnerUserID: 10, ConsumerUserID: 20, SettlementGrossAmount: 100}))
+	require.NoError(t, Record(RecordParams{RequestID: "succeeds", GroupID: "group", OwnerUserID: 11, ConsumerUserID: 20, SettlementGrossAmount: 100}))
+	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Where("request_id = ?", "fails").Update("available_at", now.Add(-2*time.Minute)).Error)
+	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Where("request_id = ?", "succeeds").Update("available_at", now.Add(-time.Minute)).Error)
+	RegisterReleaseHook(func(_ *gorm.DB, userID int, _ int64, _, _ string) error {
+		if userID == 10 {
+			return errors.New("injected release failure")
+		}
+		return nil
+	})
+	t.Cleanup(func() { RegisterReleaseHook(nil) })
+
+	err := ReleaseDue(10)
+	require.ErrorContains(t, err, "1 of 2 marketplace settlements failed")
+
+	var failed, succeeded marketplaceschema.Settlement
+	require.NoError(t, db.First(&failed, "request_id = ?", "fails").Error)
+	require.NoError(t, db.First(&succeeded, "request_id = ?", "succeeds").Error)
+	require.Equal(t, statusPending, failed.Status)
+	require.Equal(t, statusReleased, succeeded.Status)
+}
+
+func TestReleaseOneDoesNotReleaseSettlementAfterStatusChanged(t *testing.T) {
+	db := openSettlementTestDB(t)
+	item := marketplaceschema.Settlement{
+		ID: "forfeited", RequestID: "forfeited", GroupID: "group", OwnerUserID: 10,
+		OwnerNetAmount: 95, Status: statusForfeited, AvailableAt: time.Now().UTC().Add(-time.Minute),
+	}
+	require.NoError(t, db.Create(&item).Error)
+	called := false
+	RegisterReleaseHook(func(_ *gorm.DB, _ int, _ int64, _, _ string) error {
+		called = true
+		return nil
+	})
+	t.Cleanup(func() { RegisterReleaseHook(nil) })
+
+	require.NoError(t, releaseOne(item.ID))
+	require.False(t, called)
+	require.NoError(t, db.First(&item, "id = ?", item.ID).Error)
+	require.Equal(t, statusForfeited, item.Status)
 }
 
 func TestRecordSelfConsumptionStillChargesCommission(t *testing.T) {

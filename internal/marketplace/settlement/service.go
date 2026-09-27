@@ -25,6 +25,11 @@ const (
 	statusReleased  = "released"
 	statusReclaimed = "reclaimed"
 	statusForfeited = "forfeited"
+
+	releaseBatchSize   = 1000
+	releaseConcurrency = 8
+	releaseIdleDelay   = 5 * time.Second
+	releaseErrorDelay  = time.Second
 )
 
 type RecordParams struct {
@@ -150,16 +155,30 @@ func Record(params RecordParams) error {
 func StartReleaseWorker(ctx context.Context) {
 	workerOnce.Do(func() {
 		go func() {
-			ticker := time.NewTicker(time.Minute)
-			defer ticker.Stop()
 			for {
-				if err := ReleaseDue(200); err != nil {
+				selected, err := releaseDue(ctx, releaseBatchSize, releaseConcurrency)
+				if err != nil {
 					platformobservability.SysError("release marketplace settlement: " + err.Error())
 				}
+
+				delay := time.Duration(0)
+				switch {
+				case err != nil:
+					delay = releaseErrorDelay
+				case selected < releaseBatchSize:
+					delay = releaseIdleDelay
+				}
+				if delay == 0 {
+					continue
+				}
+				timer := time.NewTimer(delay)
 				select {
 				case <-ctx.Done():
+					if !timer.Stop() {
+						<-timer.C
+					}
 					return
-				case <-ticker.C:
+				case <-timer.C:
 				}
 			}
 		}()
@@ -194,22 +213,71 @@ func StartReclaimWorker(ctx context.Context) {
 }
 
 func ReleaseDue(limit int) error {
+	_, err := releaseDue(context.Background(), limit, releaseConcurrency)
+	return err
+}
+
+func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 	if releaseHook == nil {
-		return errors.New("marketplace settlement release hook is not registered")
+		return 0, errors.New("marketplace settlement release hook is not registered")
 	}
 	if limit <= 0 {
 		limit = 100
 	}
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	// SQLite's in-memory test database is connection-local and does not support
+	// concurrent writers. Production PostgreSQL keeps the bounded concurrency.
+	if !platformdb.UsingPostgreSQL {
+		concurrency = 1
+	}
 	var settlements []marketplaceschema.Settlement
-	if err := platformdb.DB.Where("status = ? AND available_at <= ?", statusPending, time.Now().UTC()).Order("available_at asc").Limit(limit).Find(&settlements).Error; err != nil {
-		return err
+	if err := platformdb.DB.WithContext(ctx).Select("id").
+		Where("status = ? AND available_at <= ?", statusPending, time.Now().UTC()).
+		Order("available_at asc").Limit(limit).Find(&settlements).Error; err != nil {
+		return 0, err
+	}
+	if len(settlements) == 0 {
+		return 0, nil
+	}
+	concurrency = min(concurrency, len(settlements))
+	jobs := make(chan string)
+	var workers sync.WaitGroup
+	var errorMu sync.Mutex
+	var firstError error
+	errorCount := 0
+	for range concurrency {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for settlementID := range jobs {
+				if err := releaseOne(settlementID); err != nil {
+					errorMu.Lock()
+					errorCount++
+					if firstError == nil {
+						firstError = fmt.Errorf("settlement %s: %w", settlementID, err)
+					}
+					errorMu.Unlock()
+				}
+			}
+		}()
 	}
 	for index := range settlements {
-		if err := releaseOne(settlements[index].ID); err != nil {
-			return err
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			workers.Wait()
+			return len(settlements), ctx.Err()
+		case jobs <- settlements[index].ID:
 		}
 	}
-	return nil
+	close(jobs)
+	workers.Wait()
+	if firstError != nil {
+		return len(settlements), fmt.Errorf("%d of %d marketplace settlements failed to release; first error: %w", errorCount, len(settlements), firstError)
+	}
+	return len(settlements), nil
 }
 
 // ReleasePending releases pending owner earnings selected by an administrator.
@@ -684,7 +752,7 @@ func releaseOne(settlementID string) error {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, "id = ?", settlementID).Error; err != nil {
 			return err
 		}
-		if item.Status == statusReleased {
+		if item.Status != statusPending {
 			return nil
 		}
 		reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{

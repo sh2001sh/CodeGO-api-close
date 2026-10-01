@@ -1,0 +1,12 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.playwright-cli/
+output/playwright/
+.*-task.md
+.*-handoff.md
+.*-followup.md
+.*-needs.md
+.market-api-needed.md
+.webapp-integration.md

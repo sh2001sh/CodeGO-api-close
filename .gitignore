@@ -55,3 +55,26 @@ web/default/e2e/
 .test
 token_estimator_test.go
 skills-lock.json
+
+# Backend logs (already committed, cleaning up)
+.backend-*.log
+.frontend-*.log
+.tmp-*.log
+backend-*.log
+frontend-*.log
+ctrl.*.log
+
+# Binaries
+control-api*.exe
+gateway-api.exe
+db-migrate.exe
+ledger-*.exe
+group-buy-*.exe
+workflow-worker.exe
+v2-verify.exe
+
+# Databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal

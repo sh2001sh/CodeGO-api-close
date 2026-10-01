@@ -1,0 +1,143 @@
+name: CodeGo v3 verification
+
+on:
+  pull_request:
+    paths:
+      - 'v3/**'
+      - 'web/app/**'
+      - '.github/workflows/v3-verify.yml'
+  push:
+    paths:
+      - 'v3/**'
+      - 'web/app/**'
+      - '.github/workflows/v3-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: v3/go.mod
+          cache-dependency-path: v3/go.sum
+      - name: Download modules
+        working-directory: v3
+        run: go mod download
+      - name: Verify module boundaries, unit, lint, race and database behavior
+        run: bash v3/scripts/verify.sh boundaries test lint race integration pgtest atlas
+      - name: Check generation
+        run: |
+          bash v3/scripts/generate.sh
+          git diff --exit-code -- v3/api
+      - name: Build binaries
+        working-directory: v3
+        run: go build ./cmd/gateway ./cmd/control ./cmd/worker ./cmd/migrate
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        working-directory: web/app
+        run: bun install --frozen-lockfile
+      - name: Verify types, tests and asset budget
+        working-directory: web/app
+        run: |
+          bun run typecheck
+          bun run check:api
+          bun run test
+          bun run build
+          bun run check:size
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codego-v3-web
+          path: web/app/dist
+
+  images:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        service: [gateway, control, worker, migrate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: v3/Dockerfile
+          build-args: SERVICE=${{ matrix.service }}
+          push: false
+          tags: codego-v3:${{ matrix.service }}
+
+  acceptance:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      V3_REAL_URL: http://localhost:18083
+      V3_REAL_OIDC_CLIENT_ID: codego-v3-ci-community
+      V3_REAL_OIDC_REDIRECT_URI: http://localhost:18083/community-callback
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Prepare isolated test credentials
+        run: |
+          python3 - <<'PY'
+          import base64, os, secrets, subprocess
+          values = {
+              'V3_TEST_PG_PASSWORD': secrets.token_urlsafe(24),
+              'V3_SECRET_KEY': base64.b64encode(secrets.token_bytes(32)).decode(),
+              'V3_SESSION_SECRET': base64.b64encode(secrets.token_bytes(32)).decode(),
+              'OIDC_ISSUER': os.environ['V3_REAL_URL'],
+              'OIDC_CLIENT_ID': os.environ['V3_REAL_OIDC_CLIENT_ID'],
+              'OIDC_CLIENT_SECRET': secrets.token_urlsafe(32),
+              'OIDC_REDIRECT_URI': os.environ['V3_REAL_OIDC_REDIRECT_URI'],
+              'OIDC_SIGNING_PRIVATE_KEY_BASE64': base64.b64encode(subprocess.check_output(
+                  ['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048'],
+                  stderr=subprocess.DEVNULL)).decode(),
+          }
+          fd = os.open('/tmp/codego-v3-ci.env', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(fd, 'w') as f:
+              f.write(''.join(f'{key}={value}\n' for key, value in values.items()))
+          PY
+      - name: Build and start all services
+        run: |
+          docker compose --env-file /tmp/codego-v3-ci.env -f v3/deploy/compose.test.yaml -p codego-v3-ci up --build -d
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:18083/healthz >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Verify real API, exact settlements and failure recovery
+        run: python3 v3/scripts/acceptance-stack.py --project codego-v3-ci
+      - name: Install browser tests
+        working-directory: web/app
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+      - name: Verify desktop and mobile pages against the test deployment
+        working-directory: web/app
+        run: bun run test:e2e --workers=2
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: codego-v3-browser-failures
+          path: web/app/test-results
+      - name: Show test service logs on failure
+        if: failure()
+        run: docker compose --env-file /tmp/codego-v3-ci.env -f v3/deploy/compose.test.yaml -p codego-v3-ci logs --tail=100 gateway control worker
+      - name: Stop isolated test services
+        if: always()
+        run: |
+          docker compose --env-file /tmp/codego-v3-ci.env -f v3/deploy/compose.test.yaml -p codego-v3-ci down --volumes
+          rm -f /tmp/codego-v3-ci.env

@@ -1,0 +1,56 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - depguard
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  settings:
+    depguard:
+      rules:
+        v3-boundaries:
+          files:
+            - $all
+          deny:
+            # Every v2 package needs an explicit ban, internal/ included: a nested
+            # module that requires and replaces its parent module CAN import the
+            # parent's internal/ packages (verified 2026-10-01). The bare module
+            # path is listed so a root-package import is caught too; prefixes
+            # cannot be used because github.com/sh2001sh/new-api/ also matches v3.
+            - pkg: github.com/sh2001sh/new-api$
+              desc: v3 must not depend on v2
+            - pkg: github.com/sh2001sh/new-api/internal
+              desc: v3 must not depend on v2
+            - pkg: github.com/sh2001sh/new-api/cmd
+              desc: v3 must not depend on v2
+            - pkg: github.com/sh2001sh/new-api/dto
+              desc: v3 must not depend on v2
+            - pkg: github.com/sh2001sh/new-api/types
+              desc: v3 must not depend on v2
+            - pkg: github.com/sh2001sh/new-api/constant
+              desc: v3 must not depend on v2
+            - pkg: github.com/sh2001sh/new-api/setting
+              desc: v3 must not depend on v2
+            - pkg: github.com/sh2001sh/new-api/i18n
+              desc: v3 must not depend on v2
+            - pkg: github.com/gin-gonic/gin
+              desc: v3 uses net/http (plan §2)
+            - pkg: gorm.io
+              desc: v3 uses pgx with handwritten SQL
+            - pkg: github.com/go-redis/redis
+              desc: use github.com/redis/go-redis/v9
+        shared-packages:
+          files:
+            - "**/v3/pkg/**"
+          deny:
+            - pkg: github.com/sh2001sh/new-api/v3/internal
+              desc: pkg/ is infrastructure and must not depend on business modules
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

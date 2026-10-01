@@ -1,0 +1,1 @@
+[{ "name": "entry JavaScript", "path": "dist/static/js/*.js", "limit": "300 KB", "gzip": true }]

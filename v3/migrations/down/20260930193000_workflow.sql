@@ -1,0 +1,1 @@
+DROP SCHEMA v3_workflow CASCADE;

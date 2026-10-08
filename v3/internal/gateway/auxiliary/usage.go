@@ -26,8 +26,16 @@ func parseUsage(body []byte) *gateway.Usage {
 	if out == nil {
 		return nil
 	}
+	out.ServiceTier = responseServiceTier(root)
 	countResponseToolCalls(out, root)
 	return out
+}
+
+func responseServiceTier(root gjson.Result) string {
+	if tier := root.Get("service_tier").Str; tier != "" {
+		return tier
+	}
+	return root.Get("response.service_tier").Str
 }
 
 // parseGeminiUsageMetadata converts a native Gemini usageMetadata object into
@@ -106,7 +114,7 @@ func countResponseToolCalls(out *gateway.Usage, root gjson.Result) {
 }
 
 func estimate(req *gateway.Request, in Input, output []byte) gateway.Usage {
-	u := gateway.Usage{PromptTokens: int64(len(req.Body)+3) / 4, Estimated: true}
+	u := gateway.Usage{PromptTokens: int64(len(req.Body)+3) / 4, Estimated: true, ServiceTier: responseServiceTier(gjson.ParseBytes(output))}
 	switch in.Operation {
 	case Images, ImageEdits, GeminiImages:
 		count := int64(len(gjson.GetBytes(output, "data").Array()))

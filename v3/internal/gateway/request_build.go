@@ -23,7 +23,7 @@ func BuildProviderRequest(ctx context.Context, provider Provider, req *Request, 
 		settings := maps.Clone(target.Settings)
 		delete(settings, "system_prompt")
 		delete(settings, "system_prompt_override")
-		prepared.Body, err = applyOverrideSettings(req.Body, settings, req.Protocol == ProtocolAnthropic)
+		prepared.Body, err = applyOverrideSettings(req.Body, settings, req.Protocol == ProtocolAnthropic, req)
 		if err != nil {
 			return nil, invalidOverride("invalid_channel_settings")
 		}
@@ -42,7 +42,7 @@ func BuildProviderRequest(ctx context.Context, provider Provider, req *Request, 
 		return nil, err
 	}
 	closeRequestBody(out)
-	resetOverrideBody(out, req.Body)
+	SetRequestBody(out, req.Body)
 	return out, nil
 }
 

@@ -142,6 +142,9 @@ func (h *Handler) drainBackgroundSubmitStream(ctx context.Context, job *Backgrou
 			}
 			return err
 		}
+		if event.ServiceTier != "" {
+			job.Usage.ServiceTier = event.ServiceTier
+		}
 		if event.Usage != nil {
 			backgroundApplyUsage(job, *event.Usage)
 		}

@@ -21,6 +21,24 @@ var ErrUnsupportedMode = errors.New("pricing: unsupported price mode")
 const perMillion = 1_000_000
 const multiplierScale = 1_000_000
 
+// FastModeRule is written only to an admitted private copy of a catalog price.
+const FastModeRule = "codego_fast_mode"
+
+// ServiceTierMultiplier uses the frozen admission when the upstream omits its
+// tier. An explicit downgrade releases the premium reservation at settlement.
+func ServiceTierMultiplier(p catalog.Price, usage gateway.Usage) int64 {
+	fast, _ := p.Rules[FastModeRule].(bool)
+	if !fast {
+		return 1
+	}
+	switch usage.ServiceTier {
+	case "default", "flex", "scale", "standard":
+		return 1
+	default:
+		return 2
+	}
+}
+
 // RequestInput freezes all request-dependent expression inputs at admission.
 // Now must be the original request timestamp when time functions are used.
 type RequestInput struct {
@@ -94,6 +112,9 @@ func PriceForRequestPPM(usage gateway.Usage, p catalog.Price, multiplierPPM int6
 	// v2 tool surcharges are absolute published prices; group discounts apply
 	// to the model charge only. Add before rounding to avoid double rounding.
 	amount.Add(amount, tools)
+	if ServiceTierMultiplier(p, usage) == 2 {
+		amount.Mul(amount, big.NewRat(2, 1))
+	}
 	quantum, err := MoneyQuantum(p)
 	if err != nil {
 		return 0, err

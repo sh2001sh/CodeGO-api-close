@@ -113,6 +113,7 @@ func (s *Settler) finalizeCall(req *gateway.Request, out gateway.Outcome, h *hol
 			FieldUserID, i(req.Principal.UserID, 10), FieldKeyID, i(req.Principal.KeyID, 10),
 			FieldModel, req.Model, FieldChannelID, i(channel, 10), FieldCredentialID, i(cred, 10),
 			FieldTerminal, out.Terminal.String(),
+			"service_tier", out.Usage.ServiceTier, "service_tier_multiplier", i(pricingServiceTierMultiplier(h, out), 10),
 			FieldPromptTokens, i(out.Usage.PromptTokens, 10), FieldOutputTokens, i(out.Usage.CompletionTokens, 10),
 			FieldCachedTokens, i(out.Usage.CachedTokens, 10), FieldEstimated, estimated,
 			FieldCacheWriteTokens, i(out.Usage.CacheWriteTokens, 10), FieldCacheWrite1hTokens, i(out.Usage.CacheWrite1hTokens, 10),

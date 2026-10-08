@@ -70,12 +70,13 @@ const (
 
 // Event is one decoded upstream event. Payload is valid until the next Next.
 type Event struct {
-	Kind      EventKind
-	Name      string // native SSE event name; empty for data-only protocols
-	Payload   []byte
-	Usage     *Usage
-	Err       *UpstreamError
-	TextBytes int // generated text in this event, for the local usage estimate
+	ServiceTier string // response metadata, including events without token usage
+	Kind        EventKind
+	Name        string // native SSE event name; empty for data-only protocols
+	Payload     []byte
+	Usage       *Usage
+	Err         *UpstreamError
+	TextBytes   int // generated text in this event, for the local usage estimate
 }
 
 // EventStream is a pull iterator over upstream events. Next returns io.EOF

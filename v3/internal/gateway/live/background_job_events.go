@@ -151,6 +151,9 @@ func applyBackgroundSnapshot(job *BackgroundJob, req *gateway.Request, snapshot 
 		return
 	}
 	job.Snapshot = []byte(snapshot.Raw)
+	if tier := snapshot.Get("service_tier").Str; tier != "" {
+		job.Usage.ServiceTier = tier
+	}
 	status := snapshot.Get("status").Str
 	if status == "queued" || status == "in_progress" || backgroundTerminal(status) {
 		job.Status = status
@@ -237,6 +240,9 @@ func backgroundOutputBytes(output gjson.Result) int64 {
 
 func backgroundApplyUsage(job *BackgroundJob, usage gateway.Usage) {
 	previous := job.Usage
+	if usage.ServiceTier == "" {
+		usage.ServiceTier = previous.ServiceTier
+	}
 	if usage.Estimated && job.UsageReported {
 		tools := usage.ToolCalls
 		usage = previous

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -37,14 +38,19 @@ func parseRequest(w http.ResponseWriter, r *http.Request, maxBytes int64, req *R
 	if !gjson.ValidBytes(body) {
 		return errBadBody
 	}
-	root := gjson.ParseBytes(body)
-	if !root.IsObject() {
+	if bytes.TrimSpace(body)[0] != '{' {
 		return errBadBody
 	}
-	if clientErr := parseRequestModelAndProtocol(r, root, req); clientErr != nil {
+	if clientErr := parseRequestModelAndProtocol(r, body, req); clientErr != nil {
 		return clientErr
 	}
 	req.Body = body
+	// Freeze the small routing/pricing flag once. Re-reading an absent tier in
+	// each pipeline stage would repeatedly scan a megabyte-long input.
+	req.hasParsedBody = true
+	if tier := gjson.GetBytes(body, "service_tier").Str; tier == "fast" || tier == "priority" {
+		req.parsedServiceTier = tier
+	}
 	populateRequestHeaders(r, req)
 	return nil
 }
@@ -52,7 +58,7 @@ func parseRequest(w http.ResponseWriter, r *http.Request, maxBytes int64, req *R
 // parseRequestModelAndProtocol resolves the wire protocol from the request
 // path and, for Gemini's path-encoded action, extracts the model and stream
 // flag from the action instead of the body.
-func parseRequestModelAndProtocol(r *http.Request, root gjson.Result, req *Request) *clientError {
+func parseRequestModelAndProtocol(r *http.Request, body []byte, req *Request) *clientError {
 	req.Protocol = ProtocolOpenAIChat
 	switch r.URL.Path {
 	case "/v1/responses":
@@ -71,12 +77,14 @@ func parseRequestModelAndProtocol(r *http.Request, root gjson.Result, req *Reque
 		}
 	}
 	if req.Protocol != ProtocolGemini {
-		model := root.Get("model")
+		// GetBytes copies only the selected small value. ParseBytes would copy
+		// the whole input and let model.Str retain it for the entire stream.
+		model := gjson.GetBytes(body, "model")
 		if model.Type != gjson.String || model.Str == "" {
 			return errBadBody
 		}
 		req.Model = model.Str
-		req.Stream = root.Get("stream").Bool()
+		req.Stream = gjson.GetBytes(body, "stream").Bool()
 	}
 	return nil
 }

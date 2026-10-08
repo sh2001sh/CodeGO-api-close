@@ -86,15 +86,15 @@ func applyOverrideBody(out *http.Request, req *Request, target Target, context m
 		return nil
 	}
 
-	body, err := readOverrideBody(out)
+	body, err := ReadRequestBody(out)
 	if err != nil {
 		return invalidOverride("upstream_body_unreadable")
 	}
-	if !gjson.ValidBytes(body) || !gjson.ParseBytes(body).IsObject() {
+	if !gjson.ValidBytes(body) || bytes.TrimSpace(body)[0] != '{' {
 		return invalidOverride("param_override_requires_json_object")
 	}
 	anthropic := out.Header.Get("Anthropic-Version") != "" || (out.URL != nil && strings.HasSuffix(out.URL.Path, "/messages"))
-	body, err = applyOverrideSettings(body, target.Settings, anthropic)
+	body, err = applyOverrideSettings(body, target.Settings, anthropic, req)
 	if err != nil {
 		return invalidOverride("invalid_channel_settings")
 	}
@@ -106,10 +106,14 @@ func applyOverrideBody(out *http.Request, req *Request, target Target, context m
 		}
 		return invalidOverride("invalid_param_override")
 	}
+	body, err = applyFastServiceTier(body, req, anthropic)
+	if err != nil {
+		return err
+	}
 	if err := out.Body.Close(); err != nil {
 		return invalidOverride("upstream_body_unreadable")
 	}
-	resetOverrideBody(out, body)
+	SetRequestBody(out, body)
 	return nil
 }
 
@@ -149,7 +153,12 @@ func invalidOverride(code string) *UpstreamError {
 	return &UpstreamError{Status: http.StatusBadRequest, Type: "invalid_request_error", Code: code, Message: "channel request override could not be applied"}
 }
 
-func readOverrideBody(out *http.Request) ([]byte, error) {
+// ReadRequestBody borrows immutable bytes from native builders. Other providers
+// keep the checked reader fallback; a borrowed body must never be edited in place.
+func ReadRequestBody(out *http.Request) ([]byte, error) {
+	if body, ok := out.Body.(*requestBody); ok {
+		return body.data, nil
+	}
 	if out.GetBody != nil {
 		copyBody, err := out.GetBody()
 		if err != nil {
@@ -161,15 +170,24 @@ func readOverrideBody(out *http.Request) ([]byte, error) {
 	}
 	body, err := io.ReadAll(out.Body)
 	closeErr := out.Body.Close()
-	resetOverrideBody(out, body)
+	SetRequestBody(out, body)
 	return body, errors.Join(err, closeErr)
 }
 
-func resetOverrideBody(out *http.Request, body []byte) {
-	out.Body = io.NopCloser(bytes.NewReader(body))
+type requestBody struct {
+	*bytes.Reader
+	data []byte
+}
+
+func (*requestBody) Close() error { return nil }
+
+// SetRequestBody retains immutable bytes and creates independent replay readers,
+// preserving ContentLength and GetBody without copying a large request.
+func SetRequestBody(out *http.Request, body []byte) {
+	out.Body = &requestBody{Reader: bytes.NewReader(body), data: body}
 	out.ContentLength = int64(len(body))
 	out.Header.Del("Content-Length")
-	out.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
+	out.GetBody = func() (io.ReadCloser, error) { return &requestBody{Reader: bytes.NewReader(body), data: body}, nil }
 }
 
 func buildOverrideContext(req *Request, target Target, out *http.Request) map[string]any {

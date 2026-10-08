@@ -56,6 +56,7 @@ func (p Provider) BuildRequest(ctx context.Context, req *gateway.Request, t gate
 	if err != nil {
 		return nil, err
 	}
+	gateway.SetRequestBody(httpReq, body)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+t.Secret)
 	if req.Stream {
@@ -86,6 +87,7 @@ type stream struct {
 	buffer          []gateway.Event
 	queue           []gateway.Event
 	bufferBytes     int
+	serviceTier     string
 }
 
 var doneMarker = []byte("[DONE]")
@@ -113,8 +115,15 @@ func (s *stream) nextRaw() (gateway.Event, error) {
 	if !gjson.ValidBytes(data) || !gjson.ParseBytes(data).IsObject() {
 		return gateway.Event{}, errors.New("openai: invalid stream JSON")
 	}
+	if tier := gjson.GetBytes(data, "service_tier").Str; tier != "" {
+		s.serviceTier = tier
+	}
 	if e := parseError(data); e != nil {
-		return gateway.Event{Kind: gateway.EventError, Err: e, Usage: optionalUsage(data)}, nil
+		usage := optionalUsage(data)
+		if usage != nil {
+			usage.ServiceTier = s.serviceTier
+		}
+		return gateway.Event{Kind: gateway.EventError, Err: e, Usage: usage, ServiceTier: s.serviceTier}, nil
 	}
 	for _, choice := range gjson.GetBytes(data, "choices").Array() {
 		finish := choice.Get("finish_reason")
@@ -127,9 +136,10 @@ func (s *stream) nextRaw() (gateway.Event, error) {
 	}
 
 	res := gjson.GetManyBytes(data, "usage", "choices.#")
-	out := gateway.Event{Kind: gateway.EventData, Payload: data, TextBytes: generatedBytes(data, "delta")}
+	out := gateway.Event{Kind: gateway.EventData, Payload: data, ServiceTier: s.serviceTier, TextBytes: generatedBytes(data, "delta")}
 	if res[0].IsObject() {
 		out.Usage = parseUsage(res[0])
+		out.Usage.ServiceTier = s.serviceTier
 		if res[1].Int() == 0 && !s.forwardUsage {
 			out.Kind = gateway.EventUsage // usage-only chunk the client did not ask for
 		}
@@ -158,17 +168,18 @@ func (s *single) Next() (gateway.Event, error) {
 		return gateway.Event{}, errors.New("openai: invalid or oversized JSON response")
 	}
 	if e := parseError(data); e != nil {
-		return gateway.Event{Kind: gateway.EventError, Err: e, Usage: optionalUsage(data)}, nil
+		return gateway.Event{Kind: gateway.EventError, Err: e, Usage: optionalUsage(data), ServiceTier: gjson.GetBytes(data, "service_tier").Str}, nil
 	}
-	out := gateway.Event{Kind: gateway.EventData, Payload: data, TextBytes: generatedBytes(data, "message")}
+	out := gateway.Event{Kind: gateway.EventData, Payload: data, ServiceTier: gjson.GetBytes(data, "service_tier").Str, TextBytes: generatedBytes(data, "message")}
 	if usage := gjson.GetBytes(data, "usage"); usage.IsObject() {
 		out.Usage = parseUsage(usage)
+		out.Usage.ServiceTier = out.ServiceTier
 	}
 	if !meaningfulChoices(data, "message") {
 		if out.Usage != nil {
-			return gateway.Event{Kind: gateway.EventUsage, Usage: out.Usage}, nil
+			return gateway.Event{Kind: gateway.EventUsage, Usage: out.Usage, ServiceTier: out.ServiceTier}, nil
 		}
-		return gateway.Event{Kind: gateway.EventDone}, nil
+		return gateway.Event{Kind: gateway.EventDone, ServiceTier: out.ServiceTier}, nil
 	}
 	return out, nil
 }
@@ -177,7 +188,9 @@ func (s *single) Close() error { return s.body.Close() }
 
 func optionalUsage(data []byte) *gateway.Usage {
 	if usage := gjson.GetBytes(data, "usage"); usage.IsObject() {
-		return parseUsage(usage)
+		out := parseUsage(usage)
+		out.ServiceTier = gjson.GetBytes(data, "service_tier").Str
+		return out
 	}
 	return nil
 }

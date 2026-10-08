@@ -118,12 +118,17 @@ func (r *sseRelay) flush() bool {
 func (r *sseRelay) classifyPayload(payload string, root gjson.Result) bool {
 	r.done = r.done || payload == "[DONE]" || root.Get("type").String() == "response.completed"
 	invalidUsage := false
+	tier := r.usage.ServiceTier
+	if reported := responseServiceTier(root); reported != "" {
+		tier = reported
+	}
 	if value := parseUsage([]byte(payload)); value != nil {
 		invalidUsage = !validUsage(*value)
 		if !invalidUsage {
 			r.usage = *value
 		}
 	}
+	r.usage.ServiceTier = tier
 	isError := invalidUsage || r.name == "error" || root.Get("type").String() == "error" || root.Get("error").IsObject()
 	if isError {
 		r.eventErr = failure(502, "upstream_stream_error", "upstream stream reported an error")

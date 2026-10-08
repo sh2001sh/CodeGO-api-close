@@ -24,6 +24,7 @@ func (h *Handler) finalizeBackgroundJob(parent context.Context, job *BackgroundJ
 	}
 	estimate := gateway.Usage{PromptTokens: (int64(len(job.Body)) + 3) / 4, CompletionTokens: (job.GeneratedBytes + 3) / 4, Estimated: true}
 	observation := gateway.Observation{Delivered: job.Delivered, Estimate: estimate, ClientCanceled: job.Status == "cancelled", TimedOut: job.Error == "upstream_timeout"}
+	observation.ServiceTier = job.Usage.ServiceTier
 	if job.UsageReported || len(job.Usage.ToolCalls) > 0 {
 		observation.Usage = &job.Usage
 	}

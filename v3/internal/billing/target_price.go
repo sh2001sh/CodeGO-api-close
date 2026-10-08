@@ -70,6 +70,7 @@ func (s *Settler) freezeUncompiledPrice(req *gateway.Request, snap *catalog.Snap
 		target = req.Targets[0]
 	}
 	price, err = freezeVideoPrice(req, price, target)
+	price = freezeFastModePrice(req, price)
 	return nil, price, multiplier, err
 }
 
@@ -121,6 +122,7 @@ func (s *Settler) freezeOneTargetPrice(req *gateway.Request, snap *catalog.Snaps
 	if err != nil {
 		return targetPrice{}, fmt.Errorf("%w: video parameters: %v", gateway.ErrBillingUnavailable, err)
 	}
+	price = freezeFastModePrice(req, price)
 	if err := pricing.Validate(price); err != nil {
 		return targetPrice{}, fmt.Errorf("%w: target price: %v", gateway.ErrBillingUnavailable, err)
 	}

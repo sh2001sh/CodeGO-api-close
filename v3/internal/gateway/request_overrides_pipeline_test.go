@@ -92,7 +92,7 @@ func TestOverridePipelineNativeBodyAndFinalization(t *testing.T) {
 				Settings: map[string]any{"system_prompt": "policy"}, HeaderOverride: map[string]string{"X-Policy": "applied"},
 				ParamOverride: map[string]any{"temperature": 0, "native_policy": "applied"}}
 			h := fixtureGateway(t, upstream.URL, target, bridge.Provider{Chat: inspector})
-			body := `{"model":"alias","max_tokens":16,"temperature":0.8,"service_tier":"priority","messages":[{"role":"user","content":"hello"}]}`
+			body := `{"model":"alias","max_tokens":16,"temperature":0.8,"service_tier":"auto","messages":[{"role":"user","content":"hello"}]}`
 			// Source-field filtering may prepare a clone before conversion, while
 			// finalization must still receive the exact frozen client bytes.
 			inspector.originalBody = body

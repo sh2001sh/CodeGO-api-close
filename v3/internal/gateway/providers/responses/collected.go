@@ -45,7 +45,7 @@ func (s *collected) Next() (gateway.Event, error) {
 		if !response.IsObject() {
 			return gateway.Event{}, io.ErrUnexpectedEOF
 		}
-		return gateway.Event{Kind: gateway.EventData, Payload: []byte(response.Raw), Usage: ev.Usage, TextBytes: outputTextBytes(response.Get("output"))}, nil
+		return gateway.Event{Kind: gateway.EventData, Payload: []byte(response.Raw), Usage: ev.Usage, ServiceTier: ev.ServiceTier, TextBytes: outputTextBytes(response.Get("output"))}, nil
 	}
 }
 

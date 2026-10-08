@@ -104,10 +104,17 @@ func chatMessage(root gjson.Result) (map[string]any, bool, *gateway.UpstreamErro
 }
 
 func (s *chatStream) envelope(object string, choices any) map[string]any {
-	return map[string]any{"id": s.id, "object": object, "created": s.created, "model": s.model, "choices": choices}
+	out := map[string]any{"id": s.id, "object": object, "created": s.created, "model": s.model, "choices": choices}
+	if s.serviceTier != "" {
+		out["service_tier"] = s.serviceTier
+	}
+	return out
 }
 
 func (s *chatStream) updateMetadata(root gjson.Result) {
+	if tier := root.Get("service_tier").Str; tier != "" {
+		s.serviceTier = tier
+	}
 	if s.started {
 		return
 	}
@@ -126,7 +133,7 @@ func (s *chatStream) complete(ev gateway.Event, root gjson.Result) gateway.Event
 	s.updateMetadata(root)
 	message, tools, failure := chatMessage(root)
 	if failure != nil {
-		return gateway.Event{Kind: gateway.EventError, Err: failure, Usage: ev.Usage}
+		return gateway.Event{Kind: gateway.EventError, Err: failure, Usage: ev.Usage, ServiceTier: ev.ServiceTier}
 	}
 	out := s.envelope("chat.completion", []any{map[string]any{"index": 0, "message": message, "finish_reason": chatFinish(root, tools)}})
 	if usage := chatUsage(root.Get("usage"), ev.Usage); usage != nil {

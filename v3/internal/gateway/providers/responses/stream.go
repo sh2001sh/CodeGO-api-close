@@ -26,6 +26,7 @@ type stream struct {
 	done        bool
 	sawEvent    bool
 	tools       toolMeter
+	serviceTier string
 }
 
 func (s *stream) Next() (gateway.Event, error) {
@@ -97,7 +98,14 @@ func (s *stream) parseFrame(wire sse.Event) (ev gateway.Event, terminal, semanti
 	}
 	ev = gateway.Event{Kind: gateway.EventData, Name: name, Payload: wire.Data}
 	response := root.Get("response")
+	if tier := response.Get("service_tier").Str; tier != "" {
+		s.serviceTier = tier
+	}
+	ev.ServiceTier = s.serviceTier
 	ev.Usage = s.tools.apply(root, parseUsage(response.Get("usage")))
+	if ev.Usage != nil {
+		ev.Usage.ServiceTier = s.serviceTier
+	}
 	if failure = responseError(response); failure == nil {
 		failure = responseError(root)
 	}
@@ -116,7 +124,7 @@ func (s *stream) parseFrame(wire sse.Event) (ev gateway.Event, terminal, semanti
 	terminal = name == "response.completed" || name == "response.incomplete"
 	if terminal && !s.semantic && !semantic && !hasOutput(response.Get("output")) {
 		s.buffer = nil
-		return gateway.Event{Kind: gateway.EventError, Err: emptyError(), Usage: ev.Usage}, false, false, true, nil
+		return gateway.Event{Kind: gateway.EventError, Err: emptyError(), Usage: ev.Usage, ServiceTier: ev.ServiceTier}, false, false, true, nil
 	}
 	if terminal && !s.semantic {
 		ev.TextBytes = outputTextBytes(response.Get("output"))

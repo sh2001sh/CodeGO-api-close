@@ -182,6 +182,9 @@ loop:
 			return g.cut(upCtx, req, cs, f, textBytes)
 		}
 		req.sample.Add(ev)
+		if ev.ServiceTier != "" {
+			f.serviceTier = ev.ServiceTier
+		}
 		switch ev.Kind {
 		case EventError:
 			return relayError(req, cs, ev, f, textBytes)

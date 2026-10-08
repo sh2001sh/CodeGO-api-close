@@ -13,6 +13,7 @@ import (
 type chatStream struct {
 	source                  gateway.EventStream
 	id, model               string
+	serviceTier             string
 	created                 int64
 	streaming, includeUsage bool
 	started, ended          bool
@@ -66,7 +67,7 @@ func (s *chatStream) Next() (gateway.Event, error) {
 		}
 		root, failure := parseBody(ev.Payload)
 		if failure != nil {
-			return gateway.Event{Kind: gateway.EventError, Err: failure, Usage: ev.Usage}, nil
+			return gateway.Event{Kind: gateway.EventError, Err: failure, Usage: ev.Usage, ServiceTier: ev.ServiceTier}, nil
 		}
 		if ev.Name == "" {
 			if !s.streaming {
@@ -83,7 +84,7 @@ func (s *chatStream) Next() (gateway.Event, error) {
 		if failure != nil {
 			s.queue = nil
 			s.ended = true
-			return gateway.Event{Kind: gateway.EventError, Err: failure, Usage: ev.Usage}, nil
+			return gateway.Event{Kind: gateway.EventError, Err: failure, Usage: ev.Usage, ServiceTier: ev.ServiceTier}, nil
 		}
 	}
 }
@@ -123,8 +124,8 @@ func (s *chatStream) convert(ev gateway.Event, root gjson.Result) *gateway.Upstr
 			return chatOutputError()
 		}
 	}
-	if ev.Usage != nil {
-		s.queue = append(s.queue, gateway.Event{Kind: gateway.EventUsage, Usage: ev.Usage})
+	if ev.Usage != nil || ev.ServiceTier != "" {
+		s.queue = append(s.queue, gateway.Event{Kind: gateway.EventUsage, Usage: ev.Usage, ServiceTier: ev.ServiceTier})
 	}
 	return nil
 }
@@ -173,9 +174,10 @@ func (s *chatStream) finish(ev gateway.Event, root gjson.Result) *gateway.Upstre
 	}
 	finish := s.chunk(map[string]any{}, chatFinish(root, len(s.tools) > 0), 0)
 	finish.Usage = ev.Usage
+	finish.ServiceTier = ev.ServiceTier
 	s.queue = append(s.queue, finish)
 	if ev.Usage != nil {
-		usage := gateway.Event{Kind: gateway.EventUsage, Usage: ev.Usage}
+		usage := gateway.Event{Kind: gateway.EventUsage, Usage: ev.Usage, ServiceTier: ev.ServiceTier}
 		if s.includeUsage {
 			usage.Kind = gateway.EventData
 			out := s.envelope("chat.completion.chunk", []any{})

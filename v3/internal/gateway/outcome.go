@@ -84,18 +84,22 @@ func decide(f finish) Outcome {
 	default:
 		out.Charge = false // nothing reached the client and nothing was reported
 	}
+	if f.serviceTier != "" {
+		out.Usage.ServiceTier = f.serviceTier
+	}
 	return out
 }
 
 // finish is the raw observation of one attempt, fed to decide.
 type finish struct {
-	ttft       time.Duration // first upstream data event, separate from full relay duration
-	generation time.Duration // streaming output window, measured before finalization
-	delivered  bool
-	usage      *Usage // upstream-reported
-	estimate   Usage  // local estimate of what was delivered
-	err        *UpstreamError
-	empty      bool // HTTP 200 but no data event before the stream ended
-	clientGone bool
-	timedOut   bool
+	serviceTier string
+	ttft        time.Duration // first upstream data event, separate from full relay duration
+	generation  time.Duration // streaming output window, measured before finalization
+	delivered   bool
+	usage       *Usage // upstream-reported
+	estimate    Usage  // local estimate of what was delivered
+	err         *UpstreamError
+	empty       bool // HTTP 200 but no data event before the stream ended
+	clientGone  bool
+	timedOut    bool
 }

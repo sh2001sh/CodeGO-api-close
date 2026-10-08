@@ -149,6 +149,9 @@ func (h *Handler) readResponseStream(ctx context.Context, conn *websocket.Conn, 
 			usage := *event.Usage
 			observed.Usage = &usage
 		}
+		if event.ServiceTier != "" {
+			observed.ServiceTier = event.ServiceTier
+		}
 		if event.Kind == gateway.EventError {
 			observed.Err = event.Err
 			if observed.Err == nil {

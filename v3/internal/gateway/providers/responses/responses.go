@@ -49,6 +49,7 @@ func (Provider) BuildRequest(ctx context.Context, req *gateway.Request, target g
 	if err != nil {
 		return nil, err
 	}
+	gateway.SetRequestBody(httpReq, body)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+target.Secret)
 	if req.Stream {
@@ -98,13 +99,17 @@ func (s *single) Next() (gateway.Event, error) {
 		return gateway.Event{Kind: gateway.EventError, Err: failure}, nil
 	}
 	u := s.tools.apply(root, parseUsage(root.Get("usage")))
+	tier := root.Get("service_tier").Str
+	if u != nil {
+		u.ServiceTier = tier
+	}
 	if failure = responseError(root); failure != nil {
-		return gateway.Event{Kind: gateway.EventError, Err: failure, Usage: u}, nil
+		return gateway.Event{Kind: gateway.EventError, Err: failure, Usage: u, ServiceTier: tier}, nil
 	}
 	if !hasOutput(root.Get("output")) {
-		return gateway.Event{Kind: gateway.EventError, Err: emptyError(), Usage: u}, nil
+		return gateway.Event{Kind: gateway.EventError, Err: emptyError(), Usage: u, ServiceTier: tier}, nil
 	}
-	return gateway.Event{Kind: gateway.EventData, Payload: body, Usage: u, TextBytes: outputTextBytes(root.Get("output"))}, nil
+	return gateway.Event{Kind: gateway.EventData, Payload: body, Usage: u, ServiceTier: tier, TextBytes: outputTextBytes(root.Get("output"))}, nil
 }
 
 func (s *single) Close() error { return s.body.Close() }

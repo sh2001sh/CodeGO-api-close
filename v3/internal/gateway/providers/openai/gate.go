@@ -47,8 +47,8 @@ func (s *stream) Next() (gateway.Event, error) {
 		ev.Payload = bytes.Clone(ev.Payload)
 		s.buffer = append(s.buffer, ev)
 		s.bufferBytes += len(ev.Payload)
-		if ev.Usage != nil {
-			return gateway.Event{Kind: gateway.EventUsage, Usage: ev.Usage}, nil
+		if ev.Usage != nil || ev.ServiceTier != "" {
+			return gateway.Event{Kind: gateway.EventUsage, Usage: ev.Usage, ServiceTier: ev.ServiceTier}, nil
 		}
 	}
 }

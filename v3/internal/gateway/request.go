@@ -74,6 +74,7 @@ type CredentialFingerprint struct {
 
 // Usage is token accounting for one request.
 type Usage struct {
+	ServiceTier         string // upstream-reported tier; empty means not reported
 	PromptTokens        int64
 	CompletionTokens    int64
 	CachedTokens        int64
@@ -97,13 +98,15 @@ type Request struct {
 	Received time.Time
 	Timeline metrics.Timeline
 
-	Protocol       Protocol
-	Path           string            // original client endpoint for override conditions
-	Body           []byte            // original client body; providers rewrite only what they must
-	PricingHeaders map[string]string // frozen non-secret headers for expression rules
-	Model          string
-	Stream         bool
-	ClientHeaders  map[string]string // explicit protocol allowlist, never auth headers
+	Protocol          Protocol
+	Path              string            // original client endpoint for override conditions
+	Body              []byte            // original client body; providers rewrite only what they must
+	PricingHeaders    map[string]string // frozen non-secret headers for expression rules
+	Model             string
+	Stream            bool
+	ClientHeaders     map[string]string // explicit protocol allowlist, never auth headers
+	parsedServiceTier string            // original opt-in, frozen before routing and billing
+	hasParsedBody     bool
 
 	Principal     Principal
 	Targets       []Target // ordered RoutePlan; retries walk it, never re-plan

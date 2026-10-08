@@ -24,7 +24,7 @@ func overrideSettingBool(settings map[string]any, key string) (bool, error) {
 // These are the actual v2 ChannelOtherSettings switches, rather than invented
 // fields such as disable_thinking. Param operations run after this filtering,
 // so administrators can explicitly restore a field as in v2.
-func applyOverrideSettings(data []byte, settings map[string]any, anthropic bool) ([]byte, error) {
+func applyOverrideSettings(data []byte, settings map[string]any, anthropic bool, req *Request) ([]byte, error) {
 	passThrough, err := overrideSettingBool(settings, "pass_through_body_enabled")
 	if err != nil {
 		return nil, err
@@ -33,12 +33,25 @@ func applyOverrideSettings(data []byte, settings map[string]any, anthropic bool)
 		return data, nil
 	}
 	if !passThrough {
+		// Collect only top-level names in one scan. Looking up each absent
+		// policy field separately would rescan the entire long input.
+		present := make(map[string]bool)
+		gjson.GetBytes(data, "@keys").ForEach(func(_, key gjson.Result) bool {
+			present[key.Str] = true
+			return true
+		})
 		for field, setting := range map[string]string{"service_tier": "allow_service_tier", "inference_geo": "allow_inference_geo", "speed": "allow_speed", "safety_identifier": "allow_safety_identifier", "stream_options.include_obfuscation": "allow_include_obfuscation"} {
 			allowed, err := overrideSettingBool(settings, setting)
 			if err != nil {
 				return nil, err
 			}
-			if !allowed {
+			exists := present[field]
+			if field == "stream_options.include_obfuscation" {
+				exists = present["stream_options"] && gjson.GetBytes(data, field).Exists()
+			}
+			// Fast was explicitly admitted and priced. Filtering then restoring
+			// it would copy a long input twice without changing its meaning.
+			if !allowed && exists && (field != "service_tier" || FastServiceTier(req) == "") {
 				data, err = sjson.DeleteBytes(data, field)
 				if err != nil {
 					return nil, err
@@ -49,16 +62,18 @@ func applyOverrideSettings(data []byte, settings map[string]any, anthropic bool)
 		if err != nil {
 			return nil, err
 		}
-		if disabled {
+		if disabled && present["store"] {
 			data, err = sjson.DeleteBytes(data, "store")
 			if err != nil {
 				return nil, err
 			}
 		}
-		if streamOptions := gjson.GetBytes(data, "stream_options"); streamOptions.IsObject() && len(streamOptions.Map()) == 0 {
-			data, err = sjson.DeleteBytes(data, "stream_options")
-			if err != nil {
-				return nil, err
+		if present["stream_options"] {
+			if streamOptions := gjson.GetBytes(data, "stream_options"); streamOptions.IsObject() && len(streamOptions.Map()) == 0 {
+				data, err = sjson.DeleteBytes(data, "stream_options")
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

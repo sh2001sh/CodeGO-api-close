@@ -47,21 +47,13 @@ func (Provider) BuildRequest(ctx context.Context, req *gateway.Request, target g
 	if err != nil {
 		return nil, err
 	}
-	var body map[string]json.RawMessage
-	if err := json.NewDecoder(out.Body).Decode(&body); err != nil || body == nil {
+	body, err := gateway.ReadRequestBody(out)
+	if err != nil {
 		_ = out.Body.Close()
-		return nil, &gateway.UpstreamError{Status: http.StatusBadRequest, Type: "invalid_request_error", Code: "invalid_request",
-			Message: "codex: body must be a JSON object"}
+		return nil, err
 	}
 	_ = out.Body.Close()
-	body["store"] = json.RawMessage("false")
-	if instructions, ok := body["instructions"]; !ok || string(instructions) == "null" {
-		body["instructions"] = json.RawMessage(`""`)
-	}
-	for _, field := range []string{"max_output_tokens", "max_tokens", "temperature", "top_p", "frequency_penalty", "presence_penalty"} {
-		delete(body, field)
-	}
-	data, err := json.Marshal(body)
+	data, err := codexRequestBody(body, req.Model, target.UpstreamModel)
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +61,7 @@ func (Provider) BuildRequest(ctx context.Context, req *gateway.Request, target g
 	if err != nil {
 		return nil, err
 	}
+	gateway.SetRequestBody(out, data)
 	out.Header.Set("Authorization", "Bearer "+key.AccessToken)
 	out.Header.Set("Chatgpt-Account-Id", key.AccountID)
 	out.Header.Set("Openai-Beta", "responses=experimental")

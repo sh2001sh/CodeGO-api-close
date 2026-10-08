@@ -62,6 +62,28 @@ func TestCodexRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
+func TestCodexFastModeSurvivesDefaultChannelFiltering(t *testing.T) {
+	for _, tier := range []string{"fast", "priority"} {
+		req := &gateway.Request{Protocol: gateway.ProtocolResponses, Model: "model", Body: []byte(`{"model":"model","input":"hi","service_tier":"` + tier + `"}`)}
+		target := gateway.Target{Provider: "codex", BaseURL: "https://chatgpt.example", Secret: `{"access_token":"test","account_id":"a"}`}
+		out, err := (codex.Provider{}).BuildRequest(context.Background(), req, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := gateway.ApplyUpstreamRequest(out, req, target); err != nil {
+			t.Fatal(err)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(out.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		_ = out.Body.Close()
+		if body["service_tier"] != tier {
+			t.Fatalf("Fast mode was filtered: tier=%s body=%v", tier, body)
+		}
+	}
+}
+
 func TestCodexChatDelegatesResponsesConversion(t *testing.T) {
 	req := &gateway.Request{Protocol: gateway.ProtocolOpenAIChat, Model: "public", Body: []byte(`{"model":"public","messages":[{"role":"user","content":"hello"}],"max_tokens":30}`)}
 	out, err := (codex.Provider{}).BuildRequest(context.Background(), req, gateway.Target{BaseURL: "https://chatgpt.example", UpstreamModel: "actual", Secret: `{"access_token":"test","account_id":"a"}`})

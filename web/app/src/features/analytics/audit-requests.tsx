@@ -146,7 +146,11 @@ export function AuditRequestsTab(props: { isAdmin?: boolean }) {
           { label: '状态', render: (row) => <Status value={row.status} /> },
           { label: '重试次数', render: (row) => displayInt(row.retry_count), numeric: true },
           { label: '尝试次数', render: (row) => displayInt(row.attempts_count), numeric: true },
-          { label: '可计费', render: (row) => (row.billable ? t('是') : t('否')) },
+          {
+            label: '可计费',
+            render: (row) =>
+              row.status === 'historical_unknown' ? t('未知') : row.billable ? t('是') : t('否'),
+          },
         ]}
       />
       <div className="filters section">
@@ -169,6 +173,11 @@ export function AuditRequestsTab(props: { isAdmin?: boolean }) {
       >
         {selected && (
           <div className="form-stack">
+            {selected.status === 'historical_unknown' && (
+              <Callout tone="info" title="历史结果未知">
+                {t('历史记录缺少最终响应状态，请以用量日志和账单明细核对实际扣费。')}
+              </Callout>
+            )}
             <dl className="kv">
               <dt>{t('追踪 ID')}</dt>
               <dd className="mono">{selected.trace_id}</dd>
@@ -185,7 +194,11 @@ export function AuditRequestsTab(props: { isAdmin?: boolean }) {
               <dt>{t('开始时间')}</dt>
               <dd>{date(selected.started_at)}</dd>
               <dt>{t('结束时间')}</dt>
-              <dd>{date(selected.completed_at)}</dd>
+              <dd>
+                {selected.completed_at?.startsWith('0001-01-01')
+                  ? '—'
+                  : date(selected.completed_at)}
+              </dd>
             </dl>
             <h3>{t('重试时间线')}</h3>
             <AttemptsTimeline requestID={selected.request_id} />

@@ -1,4 +1,6 @@
 {
+  "历史结果未知": "Résultat historique inconnu",
+  "历史记录缺少最终响应状态，请以用量日志和账单明细核对实际扣费。": "Le statut final de la réponse manque dans cet historique. Vérifiez le montant réellement facturé dans les journaux d’utilisation et le détail de facturation.",
   "对话": "Conversation",
   "当前禁止全部模型；填写模型名以开放访问。": "Tous les modèles sont actuellement bloqués. Saisissez leurs noms pour autoriser l’accès.",
   "当前禁止全部网络；填写网段以开放访问。": "Tous les réseaux sont actuellement bloqués. Saisissez des blocs CIDR pour autoriser l’accès.",
@@ -2682,5 +2684,8 @@
   "实际扣款": "Débit réel",
   "逐次模拟结果": "Résultats par tirage simulé",
   "复制当前剩余奖池和本人保底进度进行模拟；不扣款、不占库存或限购次数，不改变正式保底。": "Copie du fonds restant et de vos compteurs. Aucun débit, stock ou quota consommé, aucune modification de la garantie réelle.",
-  "每次模拟重新复制当前状态；模拟结果不预测或保证正式开奖。套餐奖励另按规格展示。": "Chaque simulation recopie l’état actuel. Elle ne prédit ni ne garantit les vrais tirages. Les forfaits gardent leurs conditions distinctes."
+  "每次模拟重新复制当前状态；模拟结果不预测或保证正式开奖。套餐奖励另按规格展示。": "Chaque simulation recopie l’état actuel. Elle ne prédit ni ne garantit les vrais tirages. Les forfaits gardent leurs conditions distinctes.",
+  "支付渠道": "Prestataire de paiement",
+  "支付宝": "Alipay",
+  "微信支付": "WeChat Pay"
 }

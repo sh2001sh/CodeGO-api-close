@@ -69,6 +69,9 @@ const messages: Record<string, string> = {
   事件类型: 'Event type',
   全部: 'All',
   未知: 'Unknown',
+  历史结果未知: 'Historical outcome unknown',
+  '历史记录缺少最终响应状态，请以用量日志和账单明细核对实际扣费。':
+    'The historical record has no final response status. Check usage logs and billing history for the actual charge.',
   充值: 'Top-up',
   消费: 'Consume',
   管理: 'Manage',

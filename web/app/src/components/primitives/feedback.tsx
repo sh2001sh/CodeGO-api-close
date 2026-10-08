@@ -127,9 +127,10 @@ export function statusTone(value: string): Tone | 'neutral' {
 export function Status(props: { value: string }) {
   const { t } = useTranslation()
   const value = String(props.value ?? '')
+  const label = value === 'historical_unknown' ? '历史结果未知' : value
   return (
     <span className="status" data-state={value} data-tone={statusTone(value)}>
-      {t(value) || '—'}
+      {t(label) || '—'}
     </span>
   )
 }

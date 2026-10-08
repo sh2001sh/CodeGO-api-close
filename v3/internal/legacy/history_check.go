@@ -202,11 +202,12 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 	}
 	for _, c := range checks {
 		var err error
-		if c.name == "logs" {
+		switch c.name {
+		case "logs":
 			err = walkHistoryLogs(ctx, d.source, d.sources[c.name], c.visit)
-		} else if c.name == "request_attempt_audits" {
+		case "request_attempt_audits":
 			err = walkHistoryAttempts(ctx, d.source, d.sources[c.name], d.sources["request_audits"], c.visit)
-		} else {
+		default:
 			err = walkHistory(ctx, d.source, d.sources[c.name], func(raw json.RawMessage) error { return c.visit(raw, false) })
 		}
 		if err != nil {

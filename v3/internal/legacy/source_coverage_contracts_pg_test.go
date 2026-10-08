@@ -180,35 +180,65 @@ func TestArchivedExecutionEvidenceClassifiesParentsOnceAndSpillsBoundedly(t *tes
 	if err = json.Unmarshal(planJSON, &plan); err != nil {
 		t.Fatal(err)
 	}
-	var parents, antiJoins, spills int
-	var inspect func(map[string]any)
-	inspect = func(node map[string]any) {
+	var parents, antiJoins, parentReads, spills int
+	childReads := map[string]int{}
+	var inspect func(map[string]any) bool
+	inspect = func(node map[string]any) bool {
+		spilled := false
 		if node["Relation Name"] == "request_executions" {
 			parents++
 			if node["Actual Loops"] != float64(1) || node["Actual Rows"] != float64(40001) {
 				t.Fatalf("parent classification repeated: %v", node)
 			}
 		}
-		if node["Node Type"] == "Hash Join" && node["Join Type"] == "Anti" {
-			antiJoins++
+		if name, ok := node["Relation Name"].(string); ok && (name == "execution_attempts" || name == "route_plans" || name == "usage_evidence") {
+			childReads[name]++
+			if node["Actual Loops"] != float64(1) || node["Actual Rows"] != float64(40002) {
+				t.Fatalf("child evidence scan repeated: %v", node)
+			}
+		}
+		if node["Node Type"] == "CTE Scan" && node["CTE Name"] == "archived_execution_parents" {
+			parentReads++
+			if node["Actual Loops"] != float64(1) || node["Actual Rows"] != float64(40001) {
+				t.Fatalf("classified parents reread per child: %v", node)
+			}
 		}
 		if node["Node Type"] == "Hash" {
 			if node["Hash Batches"].(float64) > 1 {
 				spills++
+				spilled = true
 			}
 			if node["Peak Memory Usage"].(float64) > 1024 {
 				t.Fatalf("hash work exceeded 1 MiB at work_mem=64 KiB: %v", node)
 			}
 		}
-		if children, ok := node["Plans"].([]any); ok {
-			for _, child := range children {
-				inspect(child.(map[string]any))
+		if node["Node Type"] == "Sort" {
+			if node["Sort Space Type"] == "Disk" {
+				spills++
+				spilled = true
+			} else if node["Sort Space Used"].(float64) > 1024 {
+				t.Fatalf("sort work exceeded 1 MiB at work_mem=64 KiB: %v", node)
 			}
 		}
+		if children, ok := node["Plans"].([]any); ok {
+			for _, child := range children {
+				spilled = inspect(child.(map[string]any)) || spilled
+			}
+		}
+		if node["Join Type"] == "Anti" {
+			antiJoins++
+			// PG15 can prefer external merge sorts at low work_mem while PG17
+			// chooses batched hashes. Both must reuse the parent proof once and
+			// spill bounded working sets, rather than rescan it per child.
+			if (node["Node Type"] != "Hash Join" && node["Node Type"] != "Merge Join") || node["Actual Loops"] != float64(1) || !spilled {
+				t.Fatalf("anti join lacks bounded, single-pass evidence: %v", node)
+			}
+		}
+		return spilled
 	}
 	inspect(plan[0]["Plan"].(map[string]any))
-	if parents != 1 || antiJoins != 3 || spills != 3 {
-		t.Fatalf("bounded reuse plan parents=%d anti_joins=%d spilled_hashes=%d", parents, antiJoins, spills)
+	if parents != 1 || antiJoins != 3 || parentReads != 3 || spills < 3 || childReads["execution_attempts"] != 1 || childReads["route_plans"] != 1 || childReads["usage_evidence"] != 1 {
+		t.Fatalf("bounded reuse plan parents=%d anti_joins=%d parent_reads=%d spills=%d child_reads=%v plan=%s", parents, antiJoins, parentReads, spills, childReads, planJSON)
 	}
 }
 

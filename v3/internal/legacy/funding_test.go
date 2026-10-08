@@ -73,12 +73,13 @@ func TestFundingMissingNativeAccountRules(t *testing.T) {
 		if (err != nil) != tc.fail || p.values["account_id"] != nil {
 			t.Fatalf("table=%s missing account behavior changed: %+v %v", tc.name, p.values, err)
 		}
-		if tc.name == "funding_lots" {
+		switch tc.name {
+		case "funding_lots":
 			p.remaining = 0
 			if err := resolveFundingAccount(nil, &p); err != nil {
 				t.Fatalf("empty historical lot must allow missing native account: %v", err)
 			}
-		} else if tc.name == "wallet_reward_holds" {
+		case "wallet_reward_holds":
 			p.remaining = 0
 			if err := resolveFundingAccount(nil, &p); err == nil {
 				t.Fatal("fully consumed reward hold must still require its native wallet")

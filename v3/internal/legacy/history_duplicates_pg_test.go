@@ -5,7 +5,6 @@ package legacy
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -146,7 +145,7 @@ func TestHistoryUsageRequestIDFallback(t *testing.T) {
 		want      string
 	}{{"original", false, "original"}, {"original", true, "original:v2-log:42"}, {"", false, "v2-log:42"}, {"", true, "v2-log:42"}} {
 		if got := historyUsageRequestID(historyLog{ID: 42, RequestID: test.request}, test.duplicate); got != test.want {
-			t.Fatal(fmt.Sprintf("request=%s duplicate=%v got=%s want=%s", test.request, test.duplicate, got, test.want))
+			t.Fatalf("request=%s duplicate=%v got=%s want=%s", test.request, test.duplicate, got, test.want)
 		}
 	}
 	// Decoding preserves the original record; the duplicate flag is not

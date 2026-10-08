@@ -80,9 +80,10 @@ func (d *channelMarketData) inspectStreamed(ctx context.Context) error {
 		// A SQL aggregate spills within PostgreSQL's work_mem limit. A Go
 		// uniqueness map would retain a key for every historical settlement.
 		keys := [][]string{{"id"}}
-		if table == "settlements" {
+		switch table {
+		case "settlements":
 			keys = append(keys, []string{"request_id"})
-		} else if table == "pelican_artifacts" {
+		case "pelican_artifacts":
 			keys = [][]string{{"group_id", "model"}}
 		}
 		for _, fields := range keys {

@@ -101,7 +101,7 @@ step_integration() {
   mapfile -t packages <<< "$selected"
   docker network create "$net" >/dev/null
   NETWORKS+=("$net")
-  docker run -d --rm --name "$pg" --network "$net" \
+  docker run -d --rm --shm-size=256m --name "$pg" --network "$net" \
     -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test postgres:15-alpine postgres -p 55497 >/dev/null
   CONTAINERS+=("$pg")
   docker run -d --rm --name "$rd" --network "$net" redis:7-alpine \

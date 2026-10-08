@@ -20,13 +20,14 @@ type Purchase struct {
 	Total     credits.Micro `json:"total_micro"`
 }
 type OpenRecord struct {
-	BatchID   int64     `json:"batch_id,omitempty"`
-	ID        int64     `json:"id"`
-	ItemID    int64     `json:"item_id"`
-	Reward    Reward    `json:"reward"`
-	PropID    int64     `json:"prop_id,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	Guarantee string    `json:"guarantee_type"`
+	BatchID          int64         `json:"batch_id,omitempty"`
+	ID               int64         `json:"id"`
+	ItemID           int64         `json:"item_id"`
+	Reward           Reward        `json:"reward"`
+	PropID           int64         `json:"prop_id,omitempty"`
+	CreatedAt        time.Time     `json:"created_at"`
+	Guarantee        string        `json:"guarantee_type"`
+	GuaranteeCredits credits.Micro `json:"guarantee_credits_micro,omitempty"`
 }
 
 func (s *Service) PurchaseBoxes(ctx context.Context, userID int64, requestID string, poolID int64, count int) (Purchase, error) {

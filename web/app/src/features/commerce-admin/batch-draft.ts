@@ -5,12 +5,18 @@ export function newBoxBatch(): BoxBatch {
   return {
     id: 0,
     revision: 0,
-    name: '',
-    purpose: 'consumption',
+    name: '2.5 credits 盲盒',
+    purpose: 'paid_random',
     state: 'draft',
-    price_micro: 0,
+    price_micro: 2500000,
     base_credits_micro: 0,
-    budget_micro: 0,
+    budget_micro: 51700000000,
+    pity_policy: {
+      small_after: 10,
+      small_minimum_micro: 2500000,
+      big_after: 50,
+      big_minimum_micro: 5000000,
+    },
     required_budget_micro: 0,
     spent_budget_micro: 0,
     remaining_budget_micro: 0,
@@ -20,7 +26,21 @@ export function newBoxBatch(): BoxBatch {
     ancillary_cost_ppm: 30000,
     contribution_share_ppm: 100000,
     costs_confirmed: false,
-    rewards: [newBatchReward()],
+    rewards: [
+      [1500000, 3500],
+      [2500000, 5000],
+      [3000000, 1000],
+      [5000000, 400],
+      [10000000, 80],
+      [50000000, 15],
+      [100000000, 4],
+      [250000000, 1],
+    ].map(([amount, quantity]) => ({
+      ...newBatchReward(),
+      title: `${String(amount / 1000000)} credits`,
+      amount_micro: amount,
+      quantity,
+    })),
   }
 }
 
@@ -49,6 +69,11 @@ export function validateBatchDraft(batch: BoxBatch): void {
     throw new Error('消费贡献预算比例不得超过 10%')
   if (boxInteger(batch.ancillary_cost_ppm) > 1000000n) throw new Error('附加成本比例不得超过 100%')
   if (
+    batch.purpose === 'paid_random' &&
+    (boxInteger(batch.price_micro) <= 0n || boxInteger(batch.base_credits_micro) !== 0n)
+  )
+    throw new Error('付费随机盲盒须设置正数售价，基础额度须为 0')
+  if (
     batch.purpose === 'credits' &&
     (boxInteger(batch.price_micro) <= 0n ||
       boxInteger(batch.base_credits_micro) < boxInteger(batch.price_micro))
@@ -75,4 +100,6 @@ export function validateBatchDraft(batch: BoxBatch): void {
       throw new Error('请选择有效的固定额度套餐')
   }
   if (boxInteger(batch.budget_micro) <= 0n) throw new Error('准备金预算必须大于零')
+  if (boxInteger(batch.price_micro) * quantity > 9223372036854775807n)
+    throw new Error('金额超出允许范围')
 }

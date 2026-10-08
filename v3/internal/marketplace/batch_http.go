@@ -1,8 +1,26 @@
 package marketplace
 
-import "net/http"
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+)
 
 func (s *Service) registerBatchRoutes(register registerFunc) {
+	register("POST /api/blind-box/batches/{id}/simulate", false, func(w http.ResponseWriter, r *http.Request, user int64) {
+		var in struct {
+			Count int `json:"count"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&in) != nil || !errors.Is(decoder.Decode(new(any)), io.EOF) {
+			reply(w, nil, ErrInvalidInput)
+			return
+		}
+		out, err := s.SimulateBatch(r.Context(), user, pathID(r), in.Count)
+		reply(w, out, err)
+	})
 	register("GET /api/blind-box/batches", false, func(w http.ResponseWriter, r *http.Request, user int64) {
 		out, err := s.BatchOverview(r.Context(), user)
 		reply(w, out, err)

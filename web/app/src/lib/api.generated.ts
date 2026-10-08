@@ -6722,6 +6722,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/blind-box/batches/{id}/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Simulate the current remaining pool and personal pity state without modifying assets, limits or official counters */
+        post: operations["postApiBlindBoxBatchesIdSimulate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8716,6 +8733,8 @@ export interface components {
             guarantee_type: string;
             /** Format: int64 */
             batch_id?: number | string | bigint;
+            /** Format: int64 */
+            guarantee_credits_micro?: number | string | bigint;
         };
         MarketplaceOverview: {
             /** Format: int64 */
@@ -11294,7 +11313,7 @@ export interface components {
             remaining_probability: number;
             plan_snapshot?: components["schemas"]["Plan"];
         };
-        /** @description Finite uniformly sampled no-replacement batch. All amounts are integer micro-credits (1 credit=1000000), not fiat. Draft preview freezes server-side fixed-credit standard_v2 plan specs. Publishing reserves the complete base+reward face-value liability from administrator wallet. Published terms immutable. New credits permanently API-only, no transfer/refund/product purchase. Consumption qualification matures seven days after verified paid usage with known costs and net positive contribution; allocation <=10% after procurement, seller, ancillary and reserved referral expenses. Global once-only contribution attribution. No automatic enabled campaigns. */
+        /** @description Finite uniformly sampled no-replacement batch. All amounts are integer micro-credits (1 credit=1000000), not fiat. Draft preview freezes server-side fixed-credit standard_v2 plan specs. Publishing reserves the complete base+reward face-value liability from administrator wallet. Published terms immutable. New credits permanently API-only, no transfer/refund/product purchase. Consumption qualification matures seven days after verified paid usage with known costs and net positive contribution; allocation <=10% after procurement, seller, ancillary and reserved referral expenses. Global once-only contribution attribution. No automatic enabled campaigns. paid_random draws one prize for the disclosed wallet-credit price, with zero base credits; rewards may be below the price. Existing credits batches retain base>=price. New default is 2.5 credits, not CNY. Prize credits cannot purchase boxes. New paid_random batches freeze 10/50 consecutive-miss top-ups to price/2*price. Reserve includes worst-case top-ups for every prize; record credits and odds remain the unmodified finite base pool. Daily paid purchase cap is ten per user in Asia/Shanghai; simulation changes no assets or official counters. */
         BlindBoxBatch: {
             /** Format: int64 */
             id: number | string | bigint;
@@ -11324,13 +11343,14 @@ export interface components {
             contribution_share_ppm: number | string | bigint;
             name: string;
             /** @enum {string} */
-            purpose: "consumption" | "credits";
+            purpose: "consumption" | "credits" | "paid_random";
             /** @enum {string} */
             state: "draft" | "published" | "paused" | "exhausted";
             costs_confirmed: boolean;
             rewards: components["schemas"]["BlindBoxBatchReward"][];
             /** Format: date-time */
             published_at?: string;
+            pity_policy?: components["schemas"]["BlindBoxBatchPityPolicy"];
         };
         BlindBoxBatchEntitlement: {
             /** Format: int64 */
@@ -11347,6 +11367,10 @@ export interface components {
         BlindBoxBatchOverview: {
             batches: components["schemas"]["BlindBoxBatch"][];
             entitlements: components["schemas"]["BlindBoxBatchEntitlement"][];
+            daily_purchase_limit?: number;
+            /** Format: int64 */
+            daily_purchased?: number | string | bigint;
+            pity?: components["schemas"]["MarketplacePityState"];
         };
         BlindBoxBatchDrawResult: {
             /** Format: int64 */
@@ -11356,6 +11380,7 @@ export interface components {
             /** Format: int64 */
             charged_micro: number | string | bigint;
             records: components["schemas"]["MarketplaceOpenRecord"][];
+            pity?: components["schemas"]["MarketplacePityState"];
         };
         BlindBoxBatchStateInput: {
             request_id: string;
@@ -11404,6 +11429,18 @@ export interface components {
         GroupFavoriteSave: {
             group_id: string;
             favorite: boolean;
+        };
+        /** @description Frozen shortfall top-up policy. Counters are consecutive draws below the corresponding credit threshold, shared across new paid_random batches. Legacy pity remains separate. */
+        BlindBoxBatchPityPolicy: {
+            small_after: number;
+            big_after: number;
+            /** Format: int64 */
+            small_minimum_micro: number | string | bigint;
+            /** Format: int64 */
+            big_minimum_micro: number | string | bigint;
+        };
+        BlindBoxBatchSimulationInput: {
+            count: number;
         };
     };
     responses: {
@@ -30863,6 +30900,44 @@ export interface operations {
             503: components["responses"]["Failure"];
         };
     };
+    postApiBlindBoxBatchesIdSimulate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlindBoxBatchSimulationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BlindBoxBatchDrawResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
 }
 
 export const integerRequestFields: Readonly<Record<string, readonly (readonly string[])[]>> = {
@@ -33131,6 +33206,14 @@ export const integerRequestFields: Readonly<Record<string, readonly (readonly st
       "*",
       "plan_snapshot",
       "fuel_credit_step"
+    ],
+    [
+      "pity_policy",
+      "small_minimum_micro"
+    ],
+    [
+      "pity_policy",
+      "big_minimum_micro"
     ]
   ],
   "POST:/api/blind-box/admin/batches/{id}/publish": [

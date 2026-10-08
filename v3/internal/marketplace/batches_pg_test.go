@@ -21,6 +21,9 @@ func seedBatch(t *testing.T, f *fixture, purpose string, rewards []BatchReward) 
 	if purpose == "credits" {
 		b.Price, b.BaseCredits = 100, 100
 	}
+	if purpose == "paid_random" {
+		b.Price = 100
+	}
 	b, err := f.s.SaveBatch(testContext, 1, b)
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +89,7 @@ func TestBlindBatchFiniteBudgetProbabilityAndReplay(t *testing.T) {
 
 func TestBlindBatchLastPrizeConcurrencyAndInjectedRollback(t *testing.T) {
 	f := newFixture(t)
-	b := seedBatch(t, f, "credits", []BatchReward{{ID: "only", Title: "only", Kind: "credits", Amount: 500, Quantity: 1}})
+	b := seedBatch(t, f, "paid_random", []BatchReward{{ID: "only", Title: "only", Kind: "credits", Amount: 500, Quantity: 1}})
 	f.s.money = failRewards{base: f.poster}
 	if _, err := f.s.DrawBatch(testContext, 2, b.ID, "rollback", 1); err == nil {
 		t.Fatal("injected failure accepted")

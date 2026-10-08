@@ -87,6 +87,9 @@ func (a *domainAdapter) GetApiBlindBoxBatches(w http.ResponseWriter, r *http.Req
 func (a *domainAdapter) PostApiBlindBoxBatchesIdDraw(w http.ResponseWriter, r *http.Request, id int64) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) PostApiBlindBoxBatchesIdSimulate(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiBlindBoxEpayNotify(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }

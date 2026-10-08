@@ -22,26 +22,27 @@ type BatchReward struct {
 	PlanSnapshot         json.RawMessage `json:"plan_snapshot,omitempty"`
 }
 type Batch struct {
-	ID                   int64         `json:"id"`
-	Revision             int64         `json:"revision"`
-	Name                 string        `json:"name"`
-	Purpose              string        `json:"purpose"`
-	State                string        `json:"state"`
-	Price                credits.Micro `json:"price_micro"`
-	BaseCredits          credits.Micro `json:"base_credits_micro"`
-	Budget               credits.Micro `json:"budget_micro"`
-	RequiredBudget       credits.Micro `json:"required_budget_micro"`
-	SpentBudget          credits.Micro `json:"spent_budget_micro"`
-	RemainingBudget      credits.Micro `json:"remaining_budget_micro"`
-	TotalCount           int64         `json:"total_count"`
-	RemainingCount       int64         `json:"remaining_count"`
-	EntitledCount        int64         `json:"entitled_count"`
-	AncillaryCostPPM     int64         `json:"ancillary_cost_ppm"`
-	ContributionSharePPM int64         `json:"contribution_share_ppm"`
-	CostsConfirmed       bool          `json:"costs_confirmed"`
-	Rewards              []BatchReward `json:"rewards"`
-	PublishedAt          *time.Time    `json:"published_at,omitempty"`
-	EscrowAccountID      int64         `json:"-"`
+	ID                   int64           `json:"id"`
+	Revision             int64           `json:"revision"`
+	Name                 string          `json:"name"`
+	Purpose              string          `json:"purpose"`
+	State                string          `json:"state"`
+	Price                credits.Micro   `json:"price_micro"`
+	BaseCredits          credits.Micro   `json:"base_credits_micro"`
+	Budget               credits.Micro   `json:"budget_micro"`
+	RequiredBudget       credits.Micro   `json:"required_budget_micro"`
+	SpentBudget          credits.Micro   `json:"spent_budget_micro"`
+	RemainingBudget      credits.Micro   `json:"remaining_budget_micro"`
+	TotalCount           int64           `json:"total_count"`
+	RemainingCount       int64           `json:"remaining_count"`
+	EntitledCount        int64           `json:"entitled_count"`
+	AncillaryCostPPM     int64           `json:"ancillary_cost_ppm"`
+	ContributionSharePPM int64           `json:"contribution_share_ppm"`
+	CostsConfirmed       bool            `json:"costs_confirmed"`
+	Rewards              []BatchReward   `json:"rewards"`
+	PityPolicy           BatchPityPolicy `json:"pity_policy"`
+	PublishedAt          *time.Time      `json:"published_at,omitempty"`
+	EscrowAccountID      int64           `json:"-"`
 }
 type BatchEntitlement struct {
 	ID             int64     `json:"id"`
@@ -51,14 +52,18 @@ type BatchEntitlement struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 type BatchOverview struct {
-	Batches      []Batch            `json:"batches"`
-	Entitlements []BatchEntitlement `json:"entitlements"`
+	Batches            []Batch            `json:"batches"`
+	Entitlements       []BatchEntitlement `json:"entitlements"`
+	DailyPurchaseLimit int                `json:"daily_purchase_limit"`
+	DailyPurchased     int64              `json:"daily_purchased"`
+	Pity               PityState          `json:"pity"`
 }
 type BatchDrawResult struct {
 	BatchID     int64         `json:"batch_id"`
 	BaseCredits credits.Micro `json:"base_credits_micro"`
 	Charged     credits.Micro `json:"charged_micro"`
 	Records     []OpenRecord  `json:"records"`
+	Pity        PityState     `json:"pity"`
 }
 
 func validateBatch(b Batch) error {
@@ -72,6 +77,10 @@ func validateBatch(b Batch) error {
 		}
 	case "credits":
 		if b.Price <= 0 || b.BaseCredits < b.Price {
+			return ErrInvalidInput
+		}
+	case "paid_random":
+		if b.Price <= 0 || b.Price > credits.Micro(math.MaxInt64/2) || b.BaseCredits != 0 {
 			return ErrInvalidInput
 		}
 	default:
@@ -110,13 +119,31 @@ func batchAmounts(b *Batch) error {
 			return credits.ErrOverflow
 		}
 		var err error
-		liability, err = liability.Add(r.Amount * credits.Micro(r.Quantity))
+		perReward := r.Amount
+		if b.Purpose == "paid_random" {
+			if b.Price <= 0 || b.Price > credits.Micro(math.MaxInt64/2) {
+				return credits.ErrOverflow
+			}
+			floor := b.Price * 2
+			if r.Kind == "subscription" {
+				perReward, err = perReward.Add(floor)
+				if err != nil {
+					return err
+				}
+			} else if perReward < floor {
+				perReward = floor
+			}
+		}
+		if perReward > credits.Micro(math.MaxInt64/r.Quantity) {
+			return credits.ErrOverflow
+		}
+		liability, err = liability.Add(perReward * credits.Micro(r.Quantity))
 		if err != nil {
 			return err
 		}
 		total += r.Quantity
 	}
-	if total <= 0 || b.BaseCredits > credits.Micro(math.MaxInt64/total) {
+	if total <= 0 || b.BaseCredits > credits.Micro(math.MaxInt64/total) || b.Price > credits.Micro(math.MaxInt64/total) {
 		return credits.ErrOverflow
 	}
 	var err error

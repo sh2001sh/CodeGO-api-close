@@ -11,12 +11,12 @@ import (
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
 
-const batchColumns = `id,revision,name,purpose,state,price_micro,base_credits_micro,budget_micro,required_budget_micro,spent_budget_micro,total_count,remaining_count,entitled_count,ancillary_cost_ppm,contribution_share_ppm,costs_confirmed,rewards,published_at,coalesce(escrow_account_id,0)`
+const batchColumns = `id,revision,name,purpose,state,price_micro,base_credits_micro,budget_micro,required_budget_micro,spent_budget_micro,total_count,remaining_count,entitled_count,ancillary_cost_ppm,contribution_share_ppm,costs_confirmed,rewards,published_at,coalesce(escrow_account_id,0),pity_policy`
 
 func scanBatch(row pgx.Row) (Batch, error) {
 	var b Batch
-	var rewards []byte
-	err := row.Scan(&b.ID, &b.Revision, &b.Name, &b.Purpose, &b.State, &b.Price, &b.BaseCredits, &b.Budget, &b.RequiredBudget, &b.SpentBudget, &b.TotalCount, &b.RemainingCount, &b.EntitledCount, &b.AncillaryCostPPM, &b.ContributionSharePPM, &b.CostsConfirmed, &rewards, &b.PublishedAt, &b.EscrowAccountID)
+	var rewards, policy []byte
+	err := row.Scan(&b.ID, &b.Revision, &b.Name, &b.Purpose, &b.State, &b.Price, &b.BaseCredits, &b.Budget, &b.RequiredBudget, &b.SpentBudget, &b.TotalCount, &b.RemainingCount, &b.EntitledCount, &b.AncillaryCostPPM, &b.ContributionSharePPM, &b.CostsConfirmed, &rewards, &b.PublishedAt, &b.EscrowAccountID, &policy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return b, ErrNotFound
 	}
@@ -25,6 +25,12 @@ func scanBatch(row pgx.Row) (Batch, error) {
 	}
 	if err = json.Unmarshal(rewards, &b.Rewards); err != nil {
 		return b, err
+	}
+	if err = json.Unmarshal(policy, &b.PityPolicy); err != nil {
+		return b, err
+	}
+	if b.Purpose == "paid_random" && b.PityPolicy != batchPityPolicy(b.Price) {
+		return b, ErrConflict
 	}
 	return b, batchAmounts(&b)
 }
@@ -69,7 +75,20 @@ func (s *Service) BatchOverview(ctx context.Context, user int64) (BatchOverview,
 		}
 		out.Entitlements = append(out.Entitlements, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		out.DailyPurchaseLimit = paidRandomDailyLimit
+		var err error
+		out.DailyPurchased, err = s.batchDailyPurchasedTx(ctx, tx, user)
+		if err != nil {
+			return err
+		}
+		out.Pity, err = readBatchPityTx(ctx, tx, user)
+		return err
+	})
+	return out, err
 }
 
 func (s *Service) freezeBatchRewardsTx(ctx context.Context, tx pgx.Tx, b *Batch) error {
@@ -124,6 +143,10 @@ func (s *Service) SaveBatch(ctx context.Context, actor int64, in Batch) (Batch, 
 			return ErrConflict
 		}
 		b = in
+		b.PityPolicy = BatchPityPolicy{}
+		if b.Purpose == "paid_random" {
+			b.PityPolicy = batchPityPolicy(b.Price)
+		}
 		b.State = "draft"
 		b.Revision = in.Revision + 1
 		b.SpentBudget, b.EntitledCount, b.EscrowAccountID = 0, 0, 0
@@ -138,10 +161,17 @@ func (s *Service) SaveBatch(ctx context.Context, actor int64, in Batch) (Batch, 
 		if err != nil {
 			return err
 		}
-		if b.ID == 0 {
-			return tx.QueryRow(ctx, `INSERT INTO v3_marketplace.blind_box_batches(name,purpose,price_micro,base_credits_micro,budget_micro,required_budget_micro,total_count,remaining_count,ancillary_cost_ppm,contribution_share_ppm,costs_confirmed,rewards) VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11) RETURNING id`, b.Name, b.Purpose, b.Price, b.BaseCredits, b.Budget, b.RequiredBudget, b.TotalCount, b.AncillaryCostPPM, b.ContributionSharePPM, b.CostsConfirmed, payload).Scan(&b.ID)
+		policy := []byte(`{}`)
+		if b.Purpose == "paid_random" {
+			policy, err = json.Marshal(b.PityPolicy)
+			if err != nil {
+				return err
+			}
 		}
-		_, err = tx.Exec(ctx, `UPDATE v3_marketplace.blind_box_batches SET revision=$2,name=$3,purpose=$4,price_micro=$5,base_credits_micro=$6,budget_micro=$7,required_budget_micro=$8,total_count=$9,remaining_count=$9,ancillary_cost_ppm=$10,contribution_share_ppm=$11,costs_confirmed=$12,rewards=$13,updated_at=$14 WHERE id=$1`, b.ID, b.Revision, b.Name, b.Purpose, b.Price, b.BaseCredits, b.Budget, b.RequiredBudget, b.TotalCount, b.AncillaryCostPPM, b.ContributionSharePPM, b.CostsConfirmed, payload, s.cfg.Now())
+		if b.ID == 0 {
+			return tx.QueryRow(ctx, `INSERT INTO v3_marketplace.blind_box_batches(name,purpose,price_micro,base_credits_micro,budget_micro,required_budget_micro,total_count,remaining_count,ancillary_cost_ppm,contribution_share_ppm,costs_confirmed,rewards,pity_policy) VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11,$12) RETURNING id`, b.Name, b.Purpose, b.Price, b.BaseCredits, b.Budget, b.RequiredBudget, b.TotalCount, b.AncillaryCostPPM, b.ContributionSharePPM, b.CostsConfirmed, payload, policy).Scan(&b.ID)
+		}
+		_, err = tx.Exec(ctx, `UPDATE v3_marketplace.blind_box_batches SET revision=$2,name=$3,purpose=$4,price_micro=$5,base_credits_micro=$6,budget_micro=$7,required_budget_micro=$8,total_count=$9,remaining_count=$9,ancillary_cost_ppm=$10,contribution_share_ppm=$11,costs_confirmed=$12,rewards=$13,updated_at=$14,pity_policy=$15 WHERE id=$1`, b.ID, b.Revision, b.Name, b.Purpose, b.Price, b.BaseCredits, b.Budget, b.RequiredBudget, b.TotalCount, b.AncillaryCostPPM, b.ContributionSharePPM, b.CostsConfirmed, payload, s.cfg.Now(), policy)
 		return err
 	})
 	return b, err

@@ -68,7 +68,15 @@ export function orderedLegacyInventory(items: readonly LegacyBoxInventory[]): Le
 
 /** Full-face reserve preview; service cost assumptions never reduce the promise. */
 export function batchReservePreview(
-  batch: Pick<BoxBatch, 'base_credits_micro' | 'rewards' | 'ancillary_cost_ppm'>,
+  batch: Pick<
+    BoxBatch,
+    | 'base_credits_micro'
+    | 'rewards'
+    | 'ancillary_cost_ppm'
+    | 'purpose'
+    | 'price_micro'
+    | 'pity_policy'
+  >,
 ):
   | {
       count: bigint
@@ -84,7 +92,15 @@ export function batchReservePreview(
       const amount =
         reward.kind === 'subscription' ? reward.plan_snapshot?.credits : reward.amount_micro
       if (amount === undefined) return undefined
-      required += boxInteger(amount) * quantity
+      let liability = boxInteger(amount)
+      if (batch.purpose === 'paid_random') {
+        const floor = boxInteger(
+          batch.pity_policy?.big_minimum_micro ?? boxInteger(batch.price_micro) * 2n,
+        )
+        liability =
+          reward.kind === 'subscription' ? liability + floor : liability > floor ? liability : floor
+      }
+      required += liability * quantity
       count += quantity
     }
     required += boxInteger(batch.base_credits_micro) * count
@@ -100,6 +116,21 @@ export function batchRewardTotal(rewards: readonly BoxBatchReward[], remaining: 
     (sum, row) => sum + boxInteger(remaining ? row.remaining : row.quantity),
     0n,
   )
+}
+
+/** Full-use nominal mean. Remaining odds change after each no-replacement draw. */
+export function batchAverageCredits(batch: BoxBatch, remaining: boolean): bigint | undefined {
+  let count = 0n
+  let total = 0n
+  for (const reward of batch.rewards) {
+    const quantity = boxInteger(remaining ? reward.remaining : reward.quantity)
+    const amount =
+      reward.kind === 'subscription' ? reward.plan_snapshot?.credits : reward.amount_micro
+    if (amount === undefined) return undefined
+    count += quantity
+    total += (boxInteger(batch.base_credits_micro) + boxInteger(amount)) * quantity
+  }
+  return count > 0n ? total / count : undefined
 }
 
 export function boxPlanSnapshot(value: unknown): PlanSnapshot | undefined {

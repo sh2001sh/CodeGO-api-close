@@ -47,6 +47,7 @@ export function BoxHistory() {
                 row.reward.kind === 'credits' ? credits(row.reward.amount_micro) : '—',
             },
             { label: '开启时间', render: (row) => date(row.created_at) },
+            { label: '保底补足', render: (row) => credits(row.guarantee_credits_micro ?? 0) },
           ]}
         />
       )}

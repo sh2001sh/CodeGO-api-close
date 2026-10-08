@@ -151,4 +151,42 @@ export default {
     'If a request times out or its result is unclear, retry the same batch. The original request ID survives a page refresh to prevent duplicate charges.',
   '额度仅限本人 API 消费，不可转赠、退款或购买商品；附加奖励随机，购买即揭晓。':
     'Credits are for your own API usage only and cannot be gifted, refunded or used for product purchases. Additional rewards are random and revealed on purchase.',
+  付费盲盒: 'Paid blind boxes',
+  '新建 2.5 credits 盲盒': 'New 2.5-credit box',
+  盲盒奖池: 'Blind-box prize pools',
+  基础奖池初始平均额度: 'Initial average reward credits',
+  基础奖池当前平均额度: 'Current average reward credits',
+  '付费随机盲盒须设置正数售价，基础额度须为 0':
+    'Paid random boxes require a positive price and zero base credits',
+  '每盒随机获得一份奖励，没有额外基础额度。奖励不可再买盲盒；每批按固定数量、不放回开奖。':
+    'Each box draws one random reward, with no extra base credits. Rewards cannot buy more boxes. Each batch contains fixed quantities drawn without replacement.',
+  '每盒随机获得一份奖励，奖励可能低于售价；仅限本人 API 消费，不能再买盲盒、转赠或退款。购买即揭晓。':
+    'Each box grants a random reward that may be below its price. Rewards are for your own API usage only and cannot buy more boxes, be transferred or refunded. Purchase reveals the result.',
+  '平均额度不是单次承诺，也不是现金回报；套餐期限和范围按冻结规格执行。':
+    'Average credits are neither a promise for each draw nor a cash return. Plan duration and eligibility follow the frozen terms.',
+  保底补足: 'Pity top-up',
+  今日已购: 'Purchased today',
+  今日限购已满: 'Daily purchase limit reached',
+  '北京时间每日限购 10 个，跨付费奖池合并计数，次日零点恢复。':
+    'Limited to 10 paid boxes per day in Beijing time, shared across paid pools. Resets at midnight.',
+  '连续 {misses} 次低于 {amount}，下次不足时补足到该额度。':
+    'After {misses} consecutive draws below {amount}, the next draw is topped up to that amount if needed.',
+  '达到对应额度重置进度；大保底达标同时重置小保底。进度跨天、跨新版批次保留，套餐不按永久消费额度重置。':
+    'Meeting a threshold resets its counter; meeting the large threshold resets both. Progress survives days and new batches. Plans do not count as permanent API credits.',
+  '上述概率与平均额度仅针对基础奖池；保底补足另计，不保证单次盈利。':
+    'These odds and averages describe only the base pool. Pity top-ups are additional and do not guarantee a gain on each draw.',
+  '保底补足也计入准备金；套餐不能替代永久额度保底。发布后保底规则冻结，统计包含实际补足。':
+    'Reserves include pity top-ups. Plans cannot replace permanent-credit guarantees. Published pity terms are frozen, and statistics include actual top-ups.',
+  模拟抽盒: 'Simulate boxes',
+  模拟次数: 'Simulation count',
+  开始模拟: 'Start simulation',
+  '模拟结果（未到账）': 'Simulation results (not credited)',
+  模拟购买金额: 'Simulated purchase amount',
+  额度奖励合计: 'Total reward credits',
+  实际扣款: 'Actual charge',
+  逐次模拟结果: 'Results for each simulated draw',
+  '复制当前剩余奖池和本人保底进度进行模拟；不扣款、不占库存或限购次数，不改变正式保底。':
+    'Simulation copies the current remaining pool and your pity counters. No charges, inventory or purchase slots are consumed, and official pity stays unchanged.',
+  '每次模拟重新复制当前状态；模拟结果不预测或保证正式开奖。套餐奖励另按规格展示。':
+    'Each simulation starts from a fresh copy of current state. Results neither predict nor guarantee real draws. Plan prizes retain their separate terms.',
 }

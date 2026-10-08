@@ -9,6 +9,7 @@ import { Button, ErrorMessage, Loading, confirmAction } from '../../components/u
 import type { BoxBatch, BoxBatchDraw, BoxBatchOverview } from './batch-contract'
 import {
   batchRewardTotal,
+  batchAverageCredits,
   canDrawBatch,
   entitlementCount,
   persistentBoxOperations,
@@ -17,6 +18,7 @@ import {
 import { date } from '../../lib/format'
 import { weightPercentage } from './presentation'
 import { BoxPlanSpecification } from './plan-specification'
+import { BoxBatchSimulator } from './batch-simulator'
 
 export const boxBatchesOptions = () =>
   resourceOptions<BoxBatchOverview>('box-batches', (signal) =>
@@ -63,7 +65,12 @@ export function BoxBatchOffers({ pending: otherPending }: { pending: boolean }) 
     try {
       accepted = await confirmAction({
         title: `${t('确认购买并揭晓')} · ${credits(batch.price_micro)}`,
-        description: `${t('确定获得')} ${credits(batch.base_credits_micro)}。${t('额度仅限本人 API 消费，不可转赠、退款或购买商品；附加奖励随机，购买即揭晓。')}`,
+        description:
+          batch.purpose === 'paid_random'
+            ? t(
+                '每盒随机获得一份奖励，奖励可能低于售价；仅限本人 API 消费，不能再买盲盒、转赠或退款。购买即揭晓。',
+              )
+            : `${t('确定获得')} ${credits(batch.base_credits_micro)}。${t('额度仅限本人 API 消费，不可转赠、退款或购买商品；附加奖励随机，购买即揭晓。')}`,
         confirmLabel: '购买并揭晓',
       })
       if (accepted) {
@@ -81,7 +88,7 @@ export function BoxBatchOffers({ pending: otherPending }: { pending: boolean }) 
     <section className="section box-batch-offers" aria-labelledby="box-batches-heading">
       <div className="box-section-heading">
         <div>
-          <h2 id="box-batches-heading">{t('消费回馈与额度回馈')}</h2>
+          <h2 id="box-batches-heading">{t('盲盒奖池')}</h2>
           <p className="muted">
             {t('每批奖品数量固定，不放回抽取；初始概率和当前剩余概率公开展示。')}
           </p>
@@ -116,6 +123,11 @@ export function BoxBatchOffers({ pending: otherPending }: { pending: boolean }) 
                 <strong>{record.reward.title}</strong>
                 {record.reward.kind === 'credits' && <> · {credits(record.reward.amount_micro)}</>}
               </p>
+              {BigInt(record.guarantee_credits_micro ?? 0) > 0n && (
+                <p>
+                  {t('保底补足')} · {credits(record.guarantee_credits_micro)}
+                </p>
+              )}
               {record.reward.kind === 'subscription' && (
                 <>
                   <BoxPlanSpecification snapshot={boxPlanSnapshot(record.reward.plan_snapshot)} />
@@ -128,7 +140,13 @@ export function BoxBatchOffers({ pending: otherPending }: { pending: boolean }) 
           ))}
           <p className="muted">
             {t('本次扣款')} · {credits(result.charged_micro)}。
-            {t('消费额度已到账，仅限本人 API 消费。')}
+            {(BigInt(result.base_credits_micro) > 0n ||
+              result.records.some(
+                (record) =>
+                  record.reward.kind === 'credits' ||
+                  BigInt(record.guarantee_credits_micro ?? 0) > 0n,
+              )) &&
+              t('消费额度已到账，仅限本人 API 消费。')}
           </p>
         </section>
       )}
@@ -138,23 +156,37 @@ export function BoxBatchOffers({ pending: otherPending }: { pending: boolean }) 
           <p className="muted">{t('旧库存和道具继续在下方按原规则使用。')}</p>
         </div>
       )}
-      {(['consumption', 'credits'] as const).map((purpose) => {
+      {(['paid_random', 'consumption', 'credits'] as const).map((purpose) => {
         const matching = batches.filter((batch) => batch.purpose === purpose)
         if (!matching.length) return null
         return (
           <div key={purpose} className="box-batch-purpose">
-            <h3>{t(purpose === 'consumption' ? '消费回馈' : '额度回馈')}</h3>
+            <h3>
+              {t(
+                purpose === 'paid_random'
+                  ? '付费盲盒'
+                  : purpose === 'consumption'
+                    ? '消费回馈'
+                    : '额度回馈',
+              )}
+            </h3>
             <p className="muted">
               {t(
-                purpose === 'consumption'
-                  ? '凭符合规则的真实付费 API 消费资格免费领取；奖励消费不会重复产生资格。'
-                  : '使用钱包购买确定消费额度，并获得一份随机附加奖励。',
+                purpose === 'paid_random'
+                  ? '每盒随机获得一份奖励，没有额外基础额度。奖励不可再买盲盒；每批按固定数量、不放回开奖。'
+                  : purpose === 'consumption'
+                    ? '凭符合规则的真实付费 API 消费资格免费领取；奖励消费不会重复产生资格。'
+                    : '使用钱包购买确定消费额度，并获得一份随机附加奖励。',
               )}
             </p>
             {matching.map((batch) => {
               const available = entitlementCount(batch, entitlements)
               const recoverable = !!operations().pending(`batch:${batch.id}:1`)
-              const allowed = canDrawBatch(batch, available) || recoverable
+              const dailyLimit = query.data?.daily_purchase_limit ?? 10
+              const dailyPurchased = BigInt(query.data?.daily_purchased ?? 0)
+              const quotaAvailable =
+                purpose === 'consumption' || dailyPurchased < BigInt(dailyLimit)
+              const allowed = (canDrawBatch(batch, available) && quotaAvailable) || recoverable
               const initialTotal = batchRewardTotal(batch.rewards, false)
               const remainingTotal = batchRewardTotal(batch.rewards, true)
               return (
@@ -167,7 +199,7 @@ export function BoxBatchOffers({ pending: otherPending }: { pending: boolean }) 
                         {String(batch.remaining_count)} / {String(batch.total_count)}
                       </p>
                       <div className="box-batch-reward-head" aria-hidden="true">
-                        <span>{t('附加奖励')}</span>
+                        <span>{t(purpose === 'paid_random' ? '奖励' : '附加奖励')}</span>
                         <span>{t('初始 / 当前概率')}</span>
                       </div>
                       <ul className="box-reward-list">
@@ -200,12 +232,67 @@ export function BoxBatchOffers({ pending: otherPending }: { pending: boolean }) 
                         {t(purpose === 'consumption' ? '免费领取' : '钱包扣款')}
                       </p>
                       <p className="box-price">{credits(batch.price_micro)}</p>
+                      {purpose === 'paid_random' && (
+                        <>
+                          <p>
+                            {t('基础奖池初始平均额度')} ·{' '}
+                            {credits(batchAverageCredits(batch, false))}
+                          </p>
+                          <p>
+                            {t('基础奖池当前平均额度')} ·{' '}
+                            {credits(batchAverageCredits(batch, true))}
+                          </p>
+                          <p className="muted">
+                            {t('上述概率与平均额度仅针对基础奖池；保底补足另计，不保证单次盈利。')}
+                          </p>
+                          {batch.pity_policy && (
+                            <div className="box-guarantees">
+                              <h4>{t('保底规则与进度')}</h4>
+                              <p>
+                                {t('小保底')} · {query.data?.pity?.small_progress ?? '—'} /{' '}
+                                {batch.pity_policy.small_after}
+                              </p>
+                              <p>
+                                {t('连续 {misses} 次低于 {amount}，下次不足时补足到该额度。', {
+                                  misses: batch.pity_policy.small_after - 1,
+                                  amount: credits(batch.pity_policy.small_minimum_micro),
+                                })}
+                              </p>
+                              <p>
+                                {t('大保底')} · {query.data?.pity?.big_progress ?? '—'} /{' '}
+                                {batch.pity_policy.big_after}
+                              </p>
+                              <p>
+                                {t('连续 {misses} 次低于 {amount}，下次不足时补足到该额度。', {
+                                  misses: batch.pity_policy.big_after - 1,
+                                  amount: credits(batch.pity_policy.big_minimum_micro),
+                                })}
+                              </p>
+                              <p className="muted">
+                                {t(
+                                  '达到对应额度重置进度；大保底达标同时重置小保底。进度跨天、跨新版批次保留，套餐不按永久消费额度重置。',
+                                )}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
                       {purpose === 'credits' && (
                         <p>
                           <strong>{t('确定消费额度')}</strong>
                           <br />
                           {credits(batch.base_credits_micro)}
                         </p>
+                      )}
+                      {purpose !== 'consumption' && (
+                        <>
+                          <p>
+                            {t('今日已购')} · {dailyPurchased.toString()} / {dailyLimit}
+                          </p>
+                          <p className="muted">
+                            {t('北京时间每日限购 10 个，跨付费奖池合并计数，次日零点恢复。')}
+                          </p>
+                        </>
                       )}
                       {purpose === 'consumption' && (
                         <>
@@ -248,9 +335,12 @@ export function BoxBatchOffers({ pending: otherPending }: { pending: boolean }) 
                               ? '奖品已领完'
                               : purpose === 'consumption'
                                 ? '领取并揭晓'
-                                : '购买并揭晓',
+                                : !quotaAvailable
+                                  ? '今日限购已满'
+                                  : '购买并揭晓',
                         )}
                       </Button>
+                      {purpose === 'paid_random' && <BoxBatchSimulator batch={batch} />}
                     </aside>
                   </div>
                 </article>

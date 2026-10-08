@@ -143,7 +143,7 @@ func (s *Service) History(ctx context.Context, userID, before int64, limit int) 
 	if before <= 0 {
 		before = 9223372036854775807
 	}
-	rows, err := s.pool.Query(ctx, `SELECT r.id,coalesce(r.item_id,0),r.reward,coalesce(p.id,0),r.created_at,r.guarantee_type,coalesce(r.batch_id,0) FROM v3_marketplace.blind_box_open_records r LEFT JOIN v3_marketplace.blind_box_props p ON p.open_record_id=r.id WHERE r.user_id=$1 AND r.id<$2 ORDER BY r.id DESC LIMIT $3`, userID, before, limit)
+	rows, err := s.pool.Query(ctx, `SELECT r.id,coalesce(r.item_id,0),r.reward,coalesce(p.id,0),r.created_at,r.guarantee_type,coalesce(r.batch_id,0),r.guarantee_credits_micro FROM v3_marketplace.blind_box_open_records r LEFT JOIN v3_marketplace.blind_box_props p ON p.open_record_id=r.id WHERE r.user_id=$1 AND r.id<$2 ORDER BY r.id DESC LIMIT $3`, userID, before, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (s *Service) History(ctx context.Context, userID, before int64, limit int) 
 	for rows.Next() {
 		var r OpenRecord
 		var payload []byte
-		if err := rows.Scan(&r.ID, &r.ItemID, &payload, &r.PropID, &r.CreatedAt, &r.Guarantee, &r.BatchID); err != nil {
+		if err := rows.Scan(&r.ID, &r.ItemID, &payload, &r.PropID, &r.CreatedAt, &r.Guarantee, &r.BatchID, &r.GuaranteeCredits); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(payload, &r.Reward); err != nil {

@@ -43497,6 +43497,97 @@
           }
         }
       }
+    },
+    "/api/blind-box/batches/{id}/simulate": {
+      "post": {
+        "operationId": "postApiBlindBoxBatchesIdSimulate",
+        "tags": [
+          "blind-box"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BlindBoxBatchDrawResult"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlindBoxBatchSimulationInput"
+              }
+            }
+          }
+        },
+        "summary": "Simulate the current remaining pool and personal pity state without modifying assets, limits or official counters"
+      }
     }
   },
   "components": {
@@ -50583,6 +50674,11 @@
             "type": "integer",
             "format": "int64",
             "x-omitempty": true
+          },
+          "guarantee_credits_micro": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         },
         "required": [
@@ -59606,7 +59702,8 @@
             "type": "string",
             "enum": [
               "consumption",
-              "credits"
+              "credits",
+              "paid_random"
             ]
           },
           "state": {
@@ -59631,6 +59728,9 @@
             "type": "string",
             "format": "date-time",
             "x-omitempty": true
+          },
+          "pity_policy": {
+            "$ref": "#/components/schemas/BlindBoxBatchPityPolicy"
           }
         },
         "required": [
@@ -59654,7 +59754,7 @@
           "rewards"
         ],
         "additionalProperties": false,
-        "description": "Finite uniformly sampled no-replacement batch. All amounts are integer micro-credits (1 credit=1000000), not fiat. Draft preview freezes server-side fixed-credit standard_v2 plan specs. Publishing reserves the complete base+reward face-value liability from administrator wallet. Published terms immutable. New credits permanently API-only, no transfer/refund/product purchase. Consumption qualification matures seven days after verified paid usage with known costs and net positive contribution; allocation <=10% after procurement, seller, ancillary and reserved referral expenses. Global once-only contribution attribution. No automatic enabled campaigns."
+        "description": "Finite uniformly sampled no-replacement batch. All amounts are integer micro-credits (1 credit=1000000), not fiat. Draft preview freezes server-side fixed-credit standard_v2 plan specs. Publishing reserves the complete base+reward face-value liability from administrator wallet. Published terms immutable. New credits permanently API-only, no transfer/refund/product purchase. Consumption qualification matures seven days after verified paid usage with known costs and net positive contribution; allocation <=10% after procurement, seller, ancillary and reserved referral expenses. Global once-only contribution attribution. No automatic enabled campaigns. paid_random draws one prize for the disclosed wallet-credit price, with zero base credits; rewards may be below the price. Existing credits batches retain base>=price. New default is 2.5 credits, not CNY. Prize credits cannot purchase boxes. New paid_random batches freeze 10/50 consecutive-miss top-ups to price/2*price. Reserve includes worst-case top-ups for every prize; record credits and odds remain the unmodified finite base pool. Daily paid purchase cap is ten per user in Asia/Shanghai; simulation changes no assets or official counters."
       },
       "BlindBoxBatchEntitlement": {
         "type": "object",
@@ -59705,6 +59805,16 @@
             "items": {
               "$ref": "#/components/schemas/BlindBoxBatchEntitlement"
             }
+          },
+          "daily_purchase_limit": {
+            "type": "integer"
+          },
+          "daily_purchased": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pity": {
+            "$ref": "#/components/schemas/MarketplacePityState"
           }
         },
         "required": [
@@ -59733,6 +59843,9 @@
             "items": {
               "$ref": "#/components/schemas/MarketplaceOpenRecord"
             }
+          },
+          "pity": {
+            "$ref": "#/components/schemas/MarketplacePityState"
           }
         },
         "required": [
@@ -59899,6 +60012,49 @@
           "favorite"
         ],
         "additionalProperties": false
+      },
+      "BlindBoxBatchPityPolicy": {
+        "type": "object",
+        "required": [
+          "small_after",
+          "small_minimum_micro",
+          "big_after",
+          "big_minimum_micro"
+        ],
+        "properties": {
+          "small_after": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "big_after": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "small_minimum_micro": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "big_minimum_micro": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "description": "Frozen shortfall top-up policy. Counters are consecutive draws below the corresponding credit threshold, shared across new paid_random batches. Legacy pity remains separate."
+      },
+      "BlindBoxBatchSimulationInput": {
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
       }
     },
     "responses": {

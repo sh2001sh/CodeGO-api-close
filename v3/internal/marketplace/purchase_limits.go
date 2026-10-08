@@ -22,6 +22,24 @@ func (s *Service) checkPurchaseLimitsTx(ctx context.Context, tx pgx.Tx, userID i
 	if userID <= 0 || count < 1 || p.DailyLimit < 0 || p.MonthlyLimit < 0 {
 		return ErrInvalidInput
 	}
+	// After a paid batch purchase, legacy checkout must share the same ceiling
+	// so switching checkout paths cannot turn today's ten boxes into twenty.
+	// Legacy-only users retain the configured limits of their existing pools.
+	now := s.cfg.Now().In(time.FixedZone("Asia/Shanghai", 8*60*60))
+	batchDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	var hasPaidBatch bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_marketplace.blind_box_open_records r JOIN v3_marketplace.blind_box_batches b ON b.id=r.batch_id WHERE r.user_id=$1 AND b.price_micro>0 AND r.created_at>=$2 AND r.created_at<$3)`, userID, batchDay, batchDay.AddDate(0, 0, 1)).Scan(&hasPaidBatch); err != nil {
+		return err
+	}
+	if hasPaidBatch {
+		purchased, err := s.batchDailyPurchasedTx(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		if purchased > paidRandomDailyLimit || int64(count) > paidRandomDailyLimit-purchased {
+			return ErrDailyLimit
+		}
+	}
 	if p.DailyLimit == 0 && p.MonthlyLimit == 0 {
 		return nil
 	}

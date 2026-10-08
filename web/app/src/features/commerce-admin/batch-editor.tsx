@@ -9,6 +9,7 @@ import { DataTable } from '../../components/data-table'
 import type { BoxBatch, BoxBatchReward, BoxBatchStats } from '../blind-box/batch-contract'
 import {
   batchReservePreview,
+  batchAverageCredits,
   boxInteger,
   persistentBoxOperations,
 } from '../blind-box/batch-presentation'
@@ -134,7 +135,25 @@ export function BoxBatchEditor() {
   }
   const preview = previewBatch ? batchReservePreview(previewBatch) : undefined
   const editField = (field: keyof BoxBatch, value: string | boolean) =>
-    setEditing((current) => current && { ...current, [field]: value })
+    setEditing(
+      (current) =>
+        current && {
+          ...current,
+          [field]: value,
+          ...(field === 'price_micro' &&
+          current.purpose === 'paid_random' &&
+          typeof value === 'string'
+            ? {
+                pity_policy: {
+                  small_after: 10,
+                  big_after: 50,
+                  small_minimum_micro: value,
+                  big_minimum_micro: (BigInt(value) * 2n).toString(),
+                },
+              }
+            : {}),
+        },
+    )
   const editReward = (index: number, field: keyof BoxBatchReward, value: string) =>
     setEditing(
       (current) =>
@@ -185,7 +204,7 @@ export function BoxBatchEditor() {
             setEditing(newBoxBatch())
           }}
         >
-          {t('新建回馈批次')}
+          {t('新建 2.5 credits 盲盒')}
         </Button>
       </div>
       <p className="muted">
@@ -215,7 +234,14 @@ export function BoxBatchEditor() {
           },
           {
             label: '类型',
-            render: (row) => t(row.purpose === 'consumption' ? '消费回馈' : '额度回馈'),
+            render: (row) =>
+              t(
+                row.purpose === 'paid_random'
+                  ? '付费盲盒'
+                  : row.purpose === 'consumption'
+                    ? '消费回馈'
+                    : '额度回馈',
+              ),
           },
           { label: '状态', render: (row) => t(batchStateLabel(row.state)) },
           {
@@ -459,18 +485,14 @@ function BatchForm(props: {
       </label>
       <label className="field" htmlFor="batch-purpose">
         <span>{t('回馈类型')}</span>
-        <select
-          id="batch-purpose"
-          disabled={pending || immutable}
-          value={batch.purpose}
-          onChange={(event) => props.onEdit('purpose', event.target.value)}
-        >
+        <select id="batch-purpose" disabled value={batch.purpose}>
+          <option value="paid_random">{t('付费盲盒')}</option>
           <option value="consumption">{t('消费回馈')}</option>
           <option value="credits">{t('额度回馈')}</option>
         </select>
       </label>
       {field('price', '钱包扣款（credits）')}
-      {field('base', '确定消费额度（credits）')}
+      {batch.purpose !== 'paid_random' && field('base', '确定消费额度（credits）')}
       {field('budget', '准备金预算（credits）')}
       {props.rateFields}
       <p className="muted full-width">
@@ -478,6 +500,13 @@ function BatchForm(props: {
           'credits 是消费额度，不是人民币。1 credit = 1,000,000 micro-credits。免费回馈的价格和基础额度须为 0。',
         )}
       </p>
+      {batch.purpose === 'paid_random' && (
+        <p className="muted full-width">
+          {t(
+            '保底补足也计入准备金；套餐不能替代永久额度保底。发布后保底规则冻结，统计包含实际补足。',
+          )}
+        </p>
+      )}
       <div className="full-width">
         <h4>{t('固定数量奖池')}</h4>
         {batch.rewards.map((reward, index) => (
@@ -606,6 +635,10 @@ function BatchForm(props: {
           <div>
             <dt>{t('全部权益兑现的准备金')}</dt>
             <dd>{preview ? credits(preview.required) : '—'}</dd>
+          </div>
+          <div>
+            <dt>{t('基础奖池初始平均额度')}</dt>
+            <dd>{credits(batchAverageCredits(batch, false))}</dd>
           </div>
           <div>
             <dt>{t('服务端核定准备金')}</dt>

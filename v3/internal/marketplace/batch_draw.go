@@ -42,6 +42,26 @@ func (s *Service) DrawBatch(ctx context.Context, user, batch int64, request stri
 		if b.RemainingCount < int64(count) {
 			return ErrInventory
 		}
+		if b.Price > 0 {
+			purchased, err := s.batchDailyPurchasedTx(ctx, tx, user)
+			if err != nil {
+				return err
+			}
+			if purchased > paidRandomDailyLimit || int64(count) > paidRandomDailyLimit-purchased {
+				return ErrDailyLimit
+			}
+		}
+		if b.Purpose == "paid_random" {
+			out.Pity, err = lockBatchPityTx(ctx, tx, user)
+			if err != nil {
+				return err
+			}
+		} else {
+			out.Pity, err = readBatchPityTx(ctx, tx, user)
+			if err != nil {
+				return err
+			}
+		}
 		if b.Purpose == "consumption" {
 			tag, err := tx.Exec(ctx, `UPDATE v3_marketplace.blind_box_batch_entitlements SET available_count=available_count-$3 WHERE batch_id=$1 AND user_id=$2 AND available_count>=$3`, batch, user, count)
 			if err != nil {
@@ -66,7 +86,7 @@ func (s *Service) DrawBatch(ctx context.Context, user, batch int64, request stri
 		}
 		out.BatchID = batch
 		out.Records = make([]OpenRecord, 0, count)
-		// Multiplication cannot exceed the published full-batch liability.
+		// Publication validates full-batch purchase and liability multiplication.
 		out.Charged = b.Price * credits.Micro(count)
 		out.BaseCredits = b.BaseCredits * credits.Micro(count)
 		meta := map[string]any{"batch_id": batch, "non_transferable": true, "non_refundable": true}
@@ -82,38 +102,26 @@ func (s *Service) DrawBatch(ctx context.Context, user, batch int64, request stri
 		}
 		var liability credits.Micro
 		for i := 0; i < count; i++ {
-			n, err := s.cfg.Draw(b.RemainingCount)
+			record, err := drawBatchRecord(&b, &out.Pity, s.cfg.Draw)
 			if err != nil {
 				return err
 			}
-			if n < 0 || n >= b.RemainingCount {
-				return ErrInvalidInput
-			}
-			selected := -1
-			for j := range b.Rewards {
-				if n < b.Rewards[j].Remaining {
-					selected = j
-					break
-				}
-				n -= b.Rewards[j].Remaining
-			}
-			if selected < 0 {
-				return ErrConflict
-			}
-			r := &b.Rewards[selected]
-			r.Remaining--
-			b.RemainingCount--
+			r := record.Reward
 			liability, err = liability.Add(r.Amount)
 			if err != nil {
 				return err
 			}
-			record := OpenRecord{BatchID: batch, CreatedAt: s.cfg.Now(), Guarantee: "none", Reward: Reward{Kind: r.Kind, Title: r.Title, Amount: r.Amount, PlanID: r.PlanID, Weight: 1, WalletType: "api_only", PlanSnapshot: r.PlanSnapshot}}
+			liability, err = liability.Add(record.GuaranteeCredits)
+			if err != nil {
+				return err
+			}
+			record.CreatedAt = s.cfg.Now()
 			payload, err := json.Marshal(record.Reward)
 			if err != nil {
 				return err
 			}
 			recordKey := fmt.Sprintf("batch:%s:%d", request, i)
-			if err = tx.QueryRow(ctx, `INSERT INTO v3_marketplace.blind_box_open_records(user_id,request_id,reward,created_at,guarantee_type,batch_id,pool_type,reward_wallet_type) VALUES($1,$2,$3,$4,'none',$5,'batch','api_only') RETURNING id`, user, recordKey, payload, record.CreatedAt, batch).Scan(&record.ID); err != nil {
+			if err = tx.QueryRow(ctx, `INSERT INTO v3_marketplace.blind_box_open_records(user_id,request_id,reward,created_at,guarantee_type,batch_id,pool_type,reward_wallet_type,guarantee_credits_micro) VALUES($1,$2,$3,$4,$6,$5,'batch','api_only',$7) RETURNING id`, user, recordKey, payload, record.CreatedAt, batch, record.Guarantee, record.GuaranteeCredits).Scan(&record.ID); err != nil {
 				return err
 			}
 			grantKey := operation("batch", user, request, i)
@@ -126,6 +134,11 @@ func (s *Service) DrawBatch(ctx context.Context, user, batch int64, request stri
 					return ErrConflict
 				}
 				if err = tx.QueryRow(ctx, `INSERT INTO v3_marketplace.blind_box_props(user_id,open_record_id,kind,title,plan_id,plan_snapshot) VALUES($1,$2,'subscription',$3,$4,$5) RETURNING id`, user, record.ID, r.Title, r.PlanID, r.PlanSnapshot).Scan(&record.PropID); err != nil {
+					return err
+				}
+			}
+			if record.GuaranteeCredits > 0 {
+				if _, err = s.money.PostTx(ctx, tx, billing.Entry{AccountID: account, Amount: record.GuaranteeCredits, Kind: "reward", OperationID: grantKey + ":guarantee", Reason: "blind_box_batch_reward", Metadata: meta}); err != nil {
 					return err
 				}
 			}
@@ -156,6 +169,11 @@ func (s *Service) DrawBatch(ctx context.Context, user, batch int64, request stri
 		}
 		if _, err = tx.Exec(ctx, `UPDATE v3_marketplace.blind_box_batches SET state=$2,remaining_count=$3,entitled_count=$4,spent_budget_micro=$5,rewards=$6,updated_at=$7 WHERE id=$1`, batch, b.State, b.RemainingCount, b.EntitledCount, b.SpentBudget, payload, s.cfg.Now()); err != nil {
 			return err
+		}
+		if b.Purpose == "paid_random" {
+			if _, err = tx.Exec(ctx, `UPDATE v3_marketplace.blind_box_batch_pity SET opened=$2,small_progress=$3,big_progress=$4 WHERE user_id=$1`, user, out.Pity.Opened, out.Pity.SmallProgress, out.Pity.BigProgress); err != nil {
+				return err
+			}
 		}
 		return remember(ctx, tx, user, "batch-draw", request, input, out)
 	})

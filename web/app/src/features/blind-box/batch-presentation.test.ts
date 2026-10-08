@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BoxBatch, BoxBatchReward, BoxEntitlement } from './batch-contract'
 import {
   batchReservePreview,
+  batchAverageCredits,
   boxInteger,
   boxPlanSnapshot,
   canDrawBatch,
@@ -27,6 +28,9 @@ const batch = (updates: Partial<BoxBatch> = {}): BoxBatch => ({
   ...newBoxBatch(),
   id: '9007199254740993',
   name: 'Test',
+  purpose: 'consumption',
+  price_micro: 0,
+  base_credits_micro: 0,
   rewards: [reward()],
   state: 'published',
   budget_micro: 999999999,
@@ -36,6 +40,31 @@ const batch = (updates: Partial<BoxBatch> = {}): BoxBatch => ({
 })
 
 describe('finite batch financial and retry boundaries', () => {
+  it('prices the default random box at 2.5 credits with fully reserved jackpots and no extra base', () => {
+    const draft = newBoxBatch()
+    expect(draft.purpose).toBe('paid_random')
+    expect(draft.price_micro).toBe(2500000)
+    expect(draft.base_credits_micro).toBe(0)
+    expect(draft.costs_confirmed).toBe(false)
+    expect(() => validateBatchDraft(draft)).not.toThrow()
+    expect(batchReservePreview(draft)).toEqual({ count: 10000n, required: 51700000000n })
+    expect(batchAverageCredits(draft, false)).toBe(2495000n)
+    const live = { ...draft, rewards: draft.rewards.map((r) => ({ ...r, remaining: r.quantity })) }
+    expect(batchAverageCredits(live, true)).toBe(2495000n)
+    live.rewards.at(-1)!.remaining = 0
+    expect(batchAverageCredits(live, true)).toBe(2470247n)
+    expect(batchAverageCredits(draft, true)).toBeUndefined()
+    const sameOrHigher = draft.rewards
+      .filter((r) => boxInteger(r.amount_micro) >= boxInteger(draft.price_micro))
+      .reduce((total, r) => total + boxInteger(r.quantity), 0n)
+    expect(sameOrHigher).toBe(6500n)
+    expect(draft.rewards.at(-1)?.amount_micro).toBe(250000000)
+    expect(() => validateBatchDraft({ ...draft, base_credits_micro: 1 })).toThrow('基础额度')
+    expect(() => validateBatchDraft({ ...draft, price_micro: 0 })).toThrow('售价')
+    expect(() => validateBatchDraft({ ...draft, price_micro: '9223372036854775807' })).toThrow(
+      '金额',
+    )
+  })
   it('retains request identities across reloads, isolates users and creates a new identity only after success', () => {
     const values = new Map<string, string>()
     const storage = {

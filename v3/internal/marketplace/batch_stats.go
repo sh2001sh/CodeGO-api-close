@@ -34,7 +34,7 @@ func (s *Service) BatchStats(ctx context.Context, id int64) (BatchStatistics, er
 		}
 		out.DrawCount = b.TotalCount - b.RemainingCount
 		out.BaseCredits = b.BaseCredits * credits.Micro(out.DrawCount)
-		if err = tx.QueryRow(ctx, `SELECT coalesce(sum((r.reward->>'amount_micro')::numeric) FILTER(WHERE r.reward->>'kind'='credits'),0)::bigint,count(*) FILTER(WHERE r.reward->>'kind'='subscription'),count(*) FILTER(WHERE r.reward->>'kind'='subscription' AND p.status='used') FROM v3_marketplace.blind_box_open_records r LEFT JOIN v3_marketplace.blind_box_props p ON p.open_record_id=r.id WHERE r.batch_id=$1`, id).Scan(&out.RewardCredits, &out.SubscriptionAwardedCount, &out.SubscriptionActivatedCount); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT (coalesce(sum((r.reward->>'amount_micro')::numeric) FILTER(WHERE r.reward->>'kind'='credits'),0)+coalesce(sum(r.guarantee_credits_micro::numeric),0))::bigint,count(*) FILTER(WHERE r.reward->>'kind'='subscription'),count(*) FILTER(WHERE r.reward->>'kind'='subscription' AND p.status='used') FROM v3_marketplace.blind_box_open_records r LEFT JOIN v3_marketplace.blind_box_props p ON p.open_record_id=r.id WHERE r.batch_id=$1`, id).Scan(&out.RewardCredits, &out.SubscriptionAwardedCount, &out.SubscriptionActivatedCount); err != nil {
 			return err
 		}
 		return tx.QueryRow(ctx, `WITH wallet AS (

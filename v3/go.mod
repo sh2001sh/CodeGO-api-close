@@ -1,6 +1,6 @@
 module github.com/sh2001sh/new-api/v3
 
-go 1.26.0
+go 1.26.8
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.3
@@ -9,7 +9,7 @@ require (
 	github.com/oapi-codegen/runtime v1.2.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/go-redis/v9 v9.22.0
-	github.com/refraction-networking/utls v1.6.7
+	github.com/refraction-networking/utls v1.8.2
 	github.com/riverqueue/river v0.47.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.47.0
 	github.com/riverqueue/river/rivertype v0.47.0
@@ -19,7 +19,6 @@ require (
 require (
 	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
-	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/go-text/typesetting v0.3.3
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/go-webauthn/x v0.3.0 // indirect
@@ -31,7 +30,7 @@ require (
 	github.com/riverqueue/river/rivershared v0.47.0 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/image v0.23.0
+	golang.org/x/image v0.45.0
 )
 
 require (

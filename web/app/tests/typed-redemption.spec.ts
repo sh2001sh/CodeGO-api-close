@@ -82,7 +82,9 @@ test('blind-box redemption reports quantity and opens the refreshed inventory', 
     }),
   )
   await page.goto('/blind-box')
-  await expect(page.locator('.balance-ledger dd')).toHaveText('2')
+  await expect(
+    page.getByRole('region', { name: '我的盲盒', exact: true }).getByText('2', { exact: true }),
+  ).toBeVisible()
   // On narrow viewports the console navigation lives in a drawer.
   const openNav = page.getByRole('button', { name: '打开导航', exact: true })
   if (await openNav.isVisible()) await openNav.click()
@@ -96,7 +98,9 @@ test('blind-box redemption reports quantity and opens the refreshed inventory', 
   await expect(page.getByText('已兑换 0 credits', { exact: true })).toHaveCount(0)
   await page.getByRole('link', { name: '查看盲盒', exact: true }).click()
   await expect(page.getByRole('heading', { name: '盲盒', exact: true, level: 1 })).toBeVisible()
-  await expect(page.locator('.balance-ledger dd')).toHaveText('5')
+  await expect(
+    page.getByRole('region', { name: '我的盲盒', exact: true }).getByText('5', { exact: true }),
+  ).toBeVisible()
 })
 
 test('administrator issues a subscription code with exact plan ID and zero monetary credits', async ({

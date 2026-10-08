@@ -54,6 +54,7 @@ const degradedGroup = {
 
 test.describe('status page', () => {
   test('renders the overall banner and per-group probe rows', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-09-30T09:01:00Z'))
     await page.route('**/api/status', (route) =>
       route.fulfill({
         json: { success: true, data: { version: '3.0.0', credits_per_unit: 1000000 } },

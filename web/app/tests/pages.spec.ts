@@ -130,10 +130,10 @@ test('blind-box retry reuses the operation identifier after a server failure', a
   const confirm = () =>
     page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
   await page.goto('/blind-box')
-  await page.getByRole('button', { name: '购买', exact: true }).click()
+  await page.getByRole('button', { name: '购买一个', exact: true }).click()
   await confirm()
   await expect(page.getByRole('alert')).toHaveText('账本服务暂时不可用')
-  await page.getByRole('button', { name: '购买', exact: true }).click()
+  await page.getByRole('button', { name: '购买一个', exact: true }).click()
   await confirm()
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(identifiers).toHaveLength(2)

@@ -161,6 +161,7 @@ test('blind-box pool editor saves exact micro credits and reward payload', async
         }),
   )
   await page.goto('/admin/blind-box')
+  await page.getByRole('tab', { name: '旧版池配置', exact: true }).click()
   await page.getByRole('button', { name: '编辑', exact: true }).click()
   await page.getByLabel('单个购买价格 credits', { exact: true }).fill('2')
   await page.getByRole('button', { name: '保存盲盒池', exact: true }).click()
@@ -192,6 +193,7 @@ test('disabled blind-box pools remain selectable and can be re-enabled without c
     }),
   )
   await page.goto('/admin/blind-box')
+  await page.getByRole('tab', { name: '旧版池配置', exact: true }).click()
   await expect(page.getByRole('cell', { name: '日常盲盒' })).toBeVisible()
   await page.getByRole('button', { name: '编辑', exact: true }).click()
   await page.getByLabel('启用此池').check()
@@ -215,7 +217,9 @@ test('invalid blind-box JSON blocks saving and server errors keep the draft edit
     return route.fulfill({ status: 503, json: { success: false, message: '保存暂不可用' } })
   })
   await page.goto('/admin/blind-box')
+  await page.getByRole('tab', { name: '旧版池配置', exact: true }).click()
   await page.getByRole('button', { name: '编辑', exact: true }).click()
+  await page.getByRole('button', { name: '编辑完整奖励 JSON', exact: true }).click()
   const rewardJSON = page.getByRole('textbox', { name: '奖励配置 JSON', exact: true })
   const original = await rewardJSON.inputValue()
   await rewardJSON.fill('[')

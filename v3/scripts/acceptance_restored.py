@@ -105,6 +105,17 @@ def verify_restored(request, check, sql, root, other, suffix, origin):
     # Seed an imported opportunity in the selected isolated fixture, then use
     # the actual account-rotation handler and verify monthly replay denial.
     sql(f"INSERT INTO v3_commerce.subscription_reset_opportunity_accounts(user_id,available_total,earned_total) VALUES({other_user},2,2)")
+    # A grant commits its balance outbox before the worker delivers it to
+    # Redis. Rotation deliberately refuses outstanding delivery; wait for
+    # this account's actual convergence rather than racing the worker.
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        pending = sql(f"SELECT count(*) FROM v3_billing.balance_outbox o JOIN v3_commerce.subscriptions s ON s.account_id=o.account_id WHERE s.id={int(granted['id'])}")
+        if pending == "0":
+            break
+        time.sleep(.1)
+    else:
+        raise AssertionError("granted subscription balance was not delivered before reset")
     reset = check("reset reward rotates real subscription funding", request("/api/subscription/self/reset-opportunity/use", "POST", {}, token=other_token))["data"]
     assert reset["reset_opportunity"]["available_count"] == 1
     check("second reset in same month refused", request("/api/subscription/self/reset-opportunity/use", "POST", {}, token=other_token), 409)

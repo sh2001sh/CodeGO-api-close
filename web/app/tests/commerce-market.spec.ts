@@ -89,6 +89,7 @@ test('market selection binds an owned key to the chosen group', async ({ page })
 
 test('owner multiplier sends the selected channel and exact user ID', async ({ page }) => {
   await page.goto('/my-channels')
+  await page.getByRole('tab', { name: '渠道与访问', exact: true }).click()
   await page.getByRole('button', { name: '访问管理', exact: true }).click()
   await page.getByLabel('用户 ID', { exact: true }).fill('9223372036854775807')
   await page.getByLabel('专属倍率', { exact: true }).fill('0.75')

@@ -1,4 +1,4 @@
-h1:6UeOQK35yQldv4hca9HihLCKTmRiAN3iZKxpOsvOENk=
+h1:wPr2i6kiXrO4uoHR/3k9VoRmpbdlyvaHooe1dDL1m1A=
 20260930193000_workflow.sql h1:B6ydcTeFjdBrB/TEsbAbYBQbuSwtj6S7QgLm1c2DSgU=
 20261001000001_platform.sql h1:mGuj9NKaRMKYYu2in4anJFqn/eud8jtDaR41a1D5Dz8=
 20261001000002_identity.sql h1:pzNUPn6jGgoT9Xgw4KCk2SZeDNR4sHjxW+pZ4pgRQuE=
@@ -69,3 +69,4 @@ h1:6UeOQK35yQldv4hca9HihLCKTmRiAN3iZKxpOsvOENk=
 20261008000102_blind_box_batches.sql h1:gj1XsTsDNv02ItjrUVd5YPn/3cmRJUpHoUdW96cU6Hs=
 20261008000103_group_favorites.sql h1:ipZpkBHX54Lkn7kkKtUazrQSLU0CeaOk3yhv75XPNBA=
 20261008000104_blind_box_paid_random.sql h1:vGtJs36JdTcZkWKj6PhwbxPtftSQ2WrYcqGwkASFjAo=
+20261009000105_channelmarket_exact_factor.sql h1:e423Pt3YjtmTerofBJijjo9EEQrQIS3glSFZHGmem5Q=

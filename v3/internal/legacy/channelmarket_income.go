@@ -208,8 +208,7 @@ func (d *channelMarketData) projectSettlement(r cmRow) (cmRecord, error) {
 	if reclaimed > net {
 		b.err = errors.New("reclaimed amount exceeds owner net")
 	}
-	b.factor(r, "multiplier", "multiplier_ppm", false)
-	b.factor(r, "subscription_multiplier", "subscription_multiplier_ppm", true)
+	b.settlementFactors(r)
 	b.times(r, "available_at", "released_at", "reclaimed_at", "forfeited_at", "created_at")
 	if r.text("id") == "" || r.text("request_id") == "" {
 		b.err = errors.New("settlement ID and request ID required")

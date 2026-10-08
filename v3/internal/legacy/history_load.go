@@ -192,7 +192,7 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 			d.recordIssue(Issue{"user_oauth_binding", b.ID, "missing_provider", "binding references a missing custom OAuth provider"})
 		}
 	}
-	if d.counts["request_attempt_audits"] > 0 {
+	if sources["request_attempt_audits"] != "" {
 		if sources["request_audits"] == "" {
 			d.recordIssue(Issue{"request_attempt_audit", 0, "missing_request_audits", "request attempt history requires its parent request audits"})
 		} else {

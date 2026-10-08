@@ -125,3 +125,34 @@ func TestHistoryOrphanAttemptsArchivedExactlyWithoutInventedParents(t *testing.T
 		t.Fatalf("invalid orphan was accepted: %+v", report)
 	}
 }
+
+func TestHistoryEmptyAttemptTableStillRequiresParentTable(t *testing.T) {
+	source, target, crypto := importTestDB(t)
+	ctx := context.Background()
+	if _, err := source.Exec(ctx, `CREATE SCHEMA gateway;
+	 CREATE TABLE gateway.request_attempt_audits (attempt_id text PRIMARY KEY, request_id text)`); err != nil {
+		t.Fatal(err)
+	}
+	read, err := source.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = read.Rollback(ctx) }()
+	sources, err := discoverSources(ctx, read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := loadHistory(ctx, read, sources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := Report{}
+	history.validate(&report)
+	if len(report.Issues) != 1 || report.Issues[0].Code != "missing_request_audits" {
+		t.Fatalf("preview did not reject incomplete history schema: %+v", report)
+	}
+	importer := NewImporter(source, target, crypto)
+	if err := pgx.BeginFunc(ctx, target, func(out pgx.Tx) error { return importer.importHistory(ctx, out, history) }); err == nil {
+		t.Fatal("incomplete history schema accepted during apply")
+	}
+}

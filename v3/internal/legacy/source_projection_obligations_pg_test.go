@@ -18,10 +18,15 @@ func seedUnknownObligation(t *testing.T, source *pgxpool.Pool) {
 	seedProjectionDrain(t, source)
 	_, err := source.Exec(context.Background(), `DELETE FROM migration_source.logs WHERE request_id='rejected-request';
 	 UPDATE migration_source.tokens SET unlimited_quota=false;
+	 ALTER TABLE billing.balance_snapshots ADD COLUMN granted_total bigint DEFAULT 0;
+	 ALTER TABLE billing.balance_snapshots ADD COLUMN consumed_total bigint DEFAULT 0;
+	 ALTER TABLE billing.balance_snapshots ADD COLUMN refunded_total bigint DEFAULT 0;
 	 INSERT INTO billing.accounts VALUES('token-11','token',11,'token','quota');
-	 INSERT INTO billing.balance_snapshots VALUES('token-11',100,0);
+	 INSERT INTO billing.balance_snapshots VALUES('token-11',100,0,105,5,0);
 	 INSERT INTO billing.ledger_entries(entry_id,account_id,reference_type,reference_id,entry_type,direction,amount,balance_after,idempotency_key,metadata)
-	 VALUES('unlinked-token-adjustment','token-11','token','11','adjustment','debit',5,100,'token-adjust:old-operation','{}');`)
+	 VALUES('token-bootstrap','token-11','token','11','grant_credit','credit',105,105,'mirror-bootstrap:token:11','{}');
+	 INSERT INTO billing.ledger_entries(entry_id,account_id,reference_type,reference_id,entry_type,direction,amount,balance_after,idempotency_key,metadata)
+	 VALUES('unlinked-token-adjustment','token-11','token','11','settle_debit','debit',5,100,'token-adjust:old-operation','{}');`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +77,7 @@ func TestProjectionUnknownNoObligationPreservesExistingKeyBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	if r, err := m.Import(ctx, true); err == nil || r.Applied {
-		t.Fatal("unlinked token projection drift admitted")
+		t.Fatal("immutable token ledger/snapshot inconsistency admitted")
 	}
 }
 

@@ -47,6 +47,9 @@ func validateSourceState(ctx context.Context, source pgx.Tx, sources map[string]
 	if sources["accounts"] == "" {
 		return nil
 	}
+	if err := validateKeyBudgetMirrors(ctx, source, sources, report); err != nil {
+		return err
+	}
 	keyMap := map[int64]sourceKey{}
 	for _, row := range keys {
 		key, _, _, err := decodeKey(row)
@@ -92,11 +95,9 @@ func validateSourceState(ctx context.Context, source pgx.Tx, sources map[string]
 			issue("unmapped_active_account", "nonzero account has no native funding mapping")
 		}
 		if owner == "token" && kind == "token" {
-			key, exists := keyMap[id]
+			_, exists := keyMap[id]
 			if !exists {
 				issue("missing_token_account_owner", "canonical key account references an absent API key")
-			} else if !key.Unlimited && *balance != key.RemainUnits {
-				issue("key_budget_projection_mismatch", "canonical key budget differs from source key projection")
 			}
 		}
 	}

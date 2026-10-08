@@ -270,6 +270,13 @@ func (r *SourceDrainReport) collectPendingBackground(ctx context.Context, tx pgx
 
 func (r *SourceDrainReport) collectProjectionEvidence(ctx context.Context, tx pgx.Tx, sources map[string]string) error {
 	var assertions strings.Builder
+	mirrors, err := keyBudgetMirrorSQL(ctx, tx, sources)
+	if err != nil {
+		return err
+	}
+	if mirrors != "" {
+		assertions.WriteString("IF EXISTS(SELECT 1 FROM (" + mirrors + ") key_mirror WHERE NOT proven) THEN RAISE EXCEPTION 'canonical_post_drain_failed'; END IF;\n")
+	}
 	background := backgroundSourceTable(sources, "responses_background_jobs")
 	if background != "" {
 		assertions.WriteString("IF EXISTS(SELECT 1 FROM " + background + " WHERE COALESCE(status,'') NOT IN ('completed','failed','cancelled')) THEN RAISE EXCEPTION 'canonical_post_drain_failed'; END IF;\n")

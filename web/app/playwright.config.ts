@@ -13,9 +13,12 @@ export default defineConfig({
   webServer: process.env.V3_REAL_URL
     ? undefined
     : {
-        command: 'node node_modules/@rsbuild/core/bin/rsbuild.js dev',
+        // CI serves the frontend job's exact artifact; local runs build it first.
+        command: process.env.CI
+          ? 'node node_modules/@rsbuild/core/bin/rsbuild.js preview'
+          : 'node node_modules/@rsbuild/core/bin/rsbuild.js build && node node_modules/@rsbuild/core/bin/rsbuild.js preview',
         url: 'http://127.0.0.1:3100/sign-in',
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: false,
         timeout: 60_000,
       },
 })

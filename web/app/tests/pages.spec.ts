@@ -124,7 +124,12 @@ test('blind-box retry reuses the operation identifier after a server failure', a
     await route.fulfill(
       identifiers.length === 1
         ? { status: 503, json: { success: false, message: '账本服务暂时不可用' } }
-        : { json: { success: true, data: { id: 1 } } },
+        : {
+            json: {
+              success: true,
+              data: { id: 1, quantity: 1, unit_price_micro: 1000000, total_micro: 1000000 },
+            },
+          },
     )
   })
   const confirm = () =>
@@ -134,7 +139,12 @@ test('blind-box retry reuses the operation identifier after a server failure', a
   await confirm()
   await expect(page.getByRole('alert')).toHaveText('账本服务暂时不可用')
   await page.getByRole('button', { name: '购买一个', exact: true }).click()
+  const retried = page.waitForRequest('**/api/blind-box/inventory/purchase')
   await confirm()
+  await retried
+  await expect(
+    page.getByRole('status').filter({ hasText: '购买成功，已加入未开启库存' }),
+  ).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(identifiers).toHaveLength(2)
   expect(identifiers[0]).toBe(identifiers[1])

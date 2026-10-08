@@ -26,6 +26,9 @@ export const keysOptions = () =>
     api.GET('/api/token/', { signal }).then((result) => unwrap(result)),
   )
 export const walletOptions = () =>
-  resourceOptions('wallet', (signal) =>
-    api.GET('/api/wallet', { signal }).then((result) => unwrap(result)),
-  )
+  // Route loaders and the top-bar balance share this request. A transient
+  // observer unmount must not cancel the promise still awaited by a loader.
+  queryOptions({
+    queryKey: ['wallet'],
+    queryFn: () => api.GET('/api/wallet').then((result) => unwrap(result)),
+  })

@@ -44,6 +44,30 @@ for (const target of ['//evil.test', '/%2f/evil.test', '/%5cevil.test', 'https:/
     await expect(page.getByRole('heading', { name: '仪表板', exact: true })).toBeVisible()
   })
 
+test('dashboard login survives a slow wallet request while the shell mounts', async ({ page }) => {
+  await page.route('**/api/wallet', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await route.fallback()
+  })
+  await page.goto('/sign-in?returnTo=%2F%252f%2Fevil.test')
+  await page.getByLabel('用户名', { exact: true }).fill('operator')
+  await page.getByLabel('密码', { exact: true }).fill('test-password')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '仪表板', exact: true })).toBeVisible()
+})
+
+test('dashboard reports an actual wallet failure instead of hiding it', async ({ page }) => {
+  await page.route('**/api/wallet', (route) =>
+    route.fulfill({
+      status: 503,
+      json: { success: false, message: '钱包服务暂时不可用' },
+    }),
+  )
+  await page.goto('/dashboard')
+  await expect(page.getByRole('heading', { name: '页面暂时不可用', exact: true })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveText('钱包服务暂时不可用')
+})
+
 test('the pre-cut callback forwards only selected fields as a browser navigation', async ({
   page,
   baseURL,

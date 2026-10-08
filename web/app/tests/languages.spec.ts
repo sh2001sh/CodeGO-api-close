@@ -98,13 +98,16 @@ test('a failed language download keeps the current interface and reports an erro
   page,
 }) => {
   await fixtureAPI(page)
-  await page.route('**/*ar_json*.js', (route) => route.abort())
   await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  // Fail the next language import after the page has loaded. Production
+  // chunks use hashed names, so this must not rely on a dev module filename.
+  await page.route('**/static/js/async/*.js', (route) => route.abort())
   await selectLanguage(page, 'العربية')
   await expect(page.getByRole('alert').filter({ hasText: '语言加载失败，请重试。' })).toBeVisible()
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
-  await page.unroute('**/*ar_json*.js')
+  await page.unroute('**/static/js/async/*.js')
   await selectLanguage(page, 'العربية')
   await expect(page.locator('html')).toHaveAttribute('lang', 'ar')
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')

@@ -2,12 +2,13 @@ package legacy
 
 import "math/big"
 
-// Once-only v2 conversion audits stay in the source backup. Their amounts are
-// original evidence, not operational credits, and never block a current wallet.
+// Completed v2 wallet conversions and once-only migration audits stay in the
+// source backup. Original amounts are evidence, not a new operational grant.
 var entitlementAuditExclusions = map[string][]string{
 	"unified_credit_user_migrations":        {"legacy_gpt_quota", "converted_unified_quota", "subscription_unified_quota"},
 	"subscription_tier_settlements":         {"amount_total", "amount_used", "unused_amount", "settlement_quota"},
 	"unified_credit_group_ratio_migrations": nil,
+	"wallet_quota_conversions":              {"source_quota", "target_quota", "standard_quota_before", "standard_quota_after", "claude_quota_before", "claude_quota_after"},
 }
 
 func (d *entitlementsData) reportExcludedAudits(report *Report) {

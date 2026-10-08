@@ -82,78 +82,15 @@ func (d *channelMarketData) loadAccountBalances(ctx context.Context, source pgx.
 
 func (d *channelMarketData) prepareIncome() {
 	for _, r := range d.rows["settlements"] {
-		b := cmBuild()
-		b.texts(r, "id", "request_id", "billing_source", "status", "group_id")
-		group, err := d.group(r.text("group_id"))
+		record, err := d.projectSettlement(r)
+		if err == nil {
+			err = d.addPendingSettlement(record)
+		}
 		if err != nil {
-			b.err = err
-		} else {
-			c, e := d.channel(group.text("channel_id"))
-			if e != nil {
-				b.err = e
-			} else {
-				b.put("channel_id", c.catalogID)
-				if c.owner != cmInt(r, "owner_user_id") {
-					b.err = errors.New("settlement owner differs from channel owner")
-				}
-			}
+			d.issue("settlements", r, err)
+			continue
 		}
-		owner := b.integer(r, "owner_user_id", "owner_user_id")
-		consumer := b.integer(r, "consumer_user_id", "consumer_user_id")
-		if err := d.user(owner); err != nil {
-			b.err = err
-		}
-		if err := d.user(consumer); err != nil {
-			b.err = err
-		}
-		b.money(r, "consumer_amount", "consumer_micro")
-		gross := b.money(r, "settlement_gross_amount", "gross_micro")
-		commission := b.money(r, "platform_commission", "commission_micro")
-		fee := b.money(r, "transaction_fee", "fee_micro")
-		net := b.money(r, "owner_net_amount", "net_micro")
-		reclaimed := b.money(r, "reclaimed_amount", "reclaimed_micro")
-		if commission > math.MaxInt64-fee || commission+fee > math.MaxInt64-net {
-			b.err = errors.New("settlement component sum overflows")
-		} else {
-			// Earlier v2 settlements predate settlement_gross_amount; exact
-			// components are the authoritative gross value for those rows.
-			if gross == 0 {
-				gross = commission + fee + net
-				b.put("gross_micro", gross)
-			}
-			if gross != commission+fee+net {
-				b.err = errors.New("settlement gross differs from exact component sum")
-			}
-		}
-		if reclaimed > net {
-			b.err = errors.New("reclaimed amount exceeds owner net")
-		}
-		b.factor(r, "multiplier", "multiplier_ppm", false)
-		b.factor(r, "subscription_multiplier", "subscription_multiplier_ppm", true)
-		b.times(r, "available_at", "released_at", "reclaimed_at", "forfeited_at", "created_at")
-		if r.text("id") == "" || r.text("request_id") == "" {
-			b.err = errors.New("settlement ID and request ID required")
-		}
-		status := r.text("status")
-		switch status {
-		case "pending":
-			if reclaimed != 0 {
-				b.err = errors.New("pending settlement has reclaimed amount")
-			}
-			if d.pending[owner] > math.MaxInt64-net {
-				b.err = errors.New("pending owner income sum overflows")
-			} else {
-				d.pending[owner] += net
-			}
-		case "released", "forfeited":
-		case "reclaimed":
-			if reclaimed != net {
-				b.err = errors.New("fully reclaimed settlement amount differs from owner net")
-			}
-		default:
-			b.err = fmt.Errorf("unknown settlement status %s", status)
-		}
-		d.record("v3_channelmarket.settlements", []string{"id"}, b, r)
+		d.records = append(d.records, record)
 	}
 	for _, r := range d.rows["income_reclaims"] {
 		b := cmBuild()
@@ -222,4 +159,75 @@ func (d *channelMarketData) prepareIncome() {
 		}
 		d.record("v3_channelmarket.income_reclaims", []string{"id"}, b, r)
 	}
+}
+
+func (d *channelMarketData) projectSettlement(r cmRow) (cmRecord, error) {
+	b := cmBuild()
+	b.texts(r, "id", "request_id", "billing_source", "status", "group_id")
+	group, err := d.group(r.text("group_id"))
+	if err != nil {
+		b.err = err
+	} else {
+		c, e := d.channel(group.text("channel_id"))
+		if e != nil {
+			b.err = e
+		} else {
+			b.put("channel_id", c.catalogID)
+			if c.owner != cmInt(r, "owner_user_id") {
+				b.err = errors.New("settlement owner differs from channel owner")
+			}
+		}
+	}
+	owner := b.integer(r, "owner_user_id", "owner_user_id")
+	consumer := b.integer(r, "consumer_user_id", "consumer_user_id")
+	if err := d.user(owner); err != nil {
+		b.err = err
+	}
+	if err := d.user(consumer); err != nil {
+		b.err = err
+	}
+	b.money(r, "consumer_amount", "consumer_micro")
+	gross := b.money(r, "settlement_gross_amount", "gross_micro")
+	commission := b.money(r, "platform_commission", "commission_micro")
+	fee := b.money(r, "transaction_fee", "fee_micro")
+	net := b.money(r, "owner_net_amount", "net_micro")
+	reclaimed := b.money(r, "reclaimed_amount", "reclaimed_micro")
+	if commission > math.MaxInt64-fee || commission+fee > math.MaxInt64-net {
+		b.err = errors.New("settlement component sum overflows")
+	} else {
+		// Earlier v2 settlements predate settlement_gross_amount; exact
+		// components are the authoritative gross value for those rows.
+		if gross == 0 {
+			gross = commission + fee + net
+			b.put("gross_micro", gross)
+		}
+		if gross != commission+fee+net {
+			b.err = errors.New("settlement gross differs from exact component sum")
+		}
+	}
+	if reclaimed > net {
+		b.err = errors.New("reclaimed amount exceeds owner net")
+	}
+	b.factor(r, "multiplier", "multiplier_ppm", false)
+	b.factor(r, "subscription_multiplier", "subscription_multiplier_ppm", true)
+	b.times(r, "available_at", "released_at", "reclaimed_at", "forfeited_at", "created_at")
+	if r.text("id") == "" || r.text("request_id") == "" {
+		b.err = errors.New("settlement ID and request ID required")
+	}
+	status := r.text("status")
+	switch status {
+	case "pending":
+		if reclaimed != 0 {
+			b.err = errors.New("pending settlement has reclaimed amount")
+		}
+
+	case "released", "forfeited":
+	case "reclaimed":
+		if reclaimed != net {
+			b.err = errors.New("fully reclaimed settlement amount differs from owner net")
+		}
+	default:
+		b.err = fmt.Errorf("unknown settlement status %s", status)
+	}
+	return cmRecord{table: "v3_channelmarket.settlements", keys: []string{"id"}, values: b.values}, b.err
 }

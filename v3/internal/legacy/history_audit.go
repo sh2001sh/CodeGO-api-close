@@ -74,14 +74,20 @@ func decodeHistoryLog(raw json.RawMessage) (historyLog, error) {
 }
 
 func (m *Importer) importHistoryLogs(ctx context.Context, target pgx.Tx, d *historyData) error {
-	return walkHistory(ctx, d.source, d.sources["logs"], func(raw json.RawMessage) error {
+	mappings, err := historyAccountTargets(ctx, target)
+	if err != nil {
+		return err
+	}
+	events := historyImportBatch(ctx, target, "v3_audit", "events", "id")
+	usage := historyImportBatch(ctx, target, "v3_billing", "usage_logs", "created_at", "id")
+	err = walkHistoryLogs(ctx, d.source, d.sources["logs"], func(raw json.RawMessage, duplicate bool) error {
 		l, err := decodeHistoryLog(raw)
 		if err != nil {
 			return err
 		}
 		columns := []string{"id", "user_id", "created_at", "event_type", "content", "username", "token_name", "model", "amount", "prompt_tokens", "completion_tokens", "duration_seconds", "is_stream", "channel_id", "key_id", "group_name", "ip", "request_id", "upstream_request_id", "metadata"}
 		values := []any{l.ID, l.UserID, historyDate(l.CreatedAt), l.Type, l.Content, l.Username, l.TokenName, l.Model, l.Amount, l.PromptTokens, l.CompletionTokens, l.DurationSeconds, l.IsStream, l.ChannelID, l.KeyID, l.Group, l.IP, l.RequestID, l.UpstreamRequestID, l.Metadata}
-		if err = insertHistoryExact(ctx, target, "v3_audit", "events", "id", columns, values); err != nil {
+		if err = events.add(historyFields(columns, values)); err != nil {
 			return fmt.Errorf("legacy: import log %d: %w", l.ID, err)
 		}
 		// Consumption is projected to the same native table as new traffic. All
@@ -89,31 +95,25 @@ func (m *Importer) importHistoryLogs(ctx context.Context, target pgx.Tx, d *hist
 		if l.Type != 2 {
 			return nil
 		}
-		var account int64
-		if err = target.QueryRow(ctx, `SELECT id FROM v3_billing.accounts WHERE owner_type='user' AND owner_id=$1 AND kind='wallet'`, l.UserID).Scan(&account); err != nil {
+		account, exists := mappings[historyAccountKey{"user", l.UserID, "wallet"}]
+		if !exists {
 			return fmt.Errorf("legacy: usage log %d has no target user wallet", l.ID)
 		}
-		requestID := historyUsageRequestID(d, l)
-		var identical bool
-		err = target.QueryRow(ctx, `INSERT INTO v3_billing.usage_logs AS u
-			(id,created_at,account_id,user_id,key_id,channel_id,amount,prompt_tokens,completion_tokens,cached_tokens,request_id,model,terminal)
-			OVERRIDING SYSTEM VALUE VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'completed')
-			ON CONFLICT(created_at,id) DO UPDATE SET request_id=u.request_id
-			RETURNING u.account_id=$3 AND u.user_id=$4 AND u.key_id=$5 AND u.channel_id=$6 AND u.amount=$7 AND u.prompt_tokens=$8 AND u.completion_tokens=$9 AND u.cached_tokens=$10 AND u.request_id=$11 AND u.model=$12`,
-			l.ID, historyDate(l.CreatedAt), account, l.UserID, l.KeyID, l.ChannelID, l.Amount, l.PromptTokens, l.CompletionTokens, l.CachedTokens, requestID, l.Model).Scan(&identical)
-		if err != nil {
-			return fmt.Errorf("legacy: import usage log %d: %w", l.ID, err)
-		}
-		if !identical {
-			return fmt.Errorf("legacy: usage log %d target conflict", l.ID)
-		}
-		return nil
+		requestID := historyUsageRequestID(l, duplicate)
+		return usage.add(map[string]any{"id": l.ID, "created_at": historyDate(l.CreatedAt), "account_id": account, "user_id": l.UserID, "key_id": l.KeyID, "channel_id": l.ChannelID, "amount": l.Amount, "prompt_tokens": l.PromptTokens, "completion_tokens": l.CompletionTokens, "cached_tokens": l.CachedTokens, "request_id": requestID, "model": l.Model, "terminal": "completed"})
 	})
+	if err != nil {
+		return err
+	}
+	if err = events.finish(); err != nil {
+		return err
+	}
+	return usage.finish()
 }
 
-func historyUsageRequestID(d *historyData, l historyLog) string {
-	if qualified := d.usageRequestIDs[l.ID]; qualified != "" {
-		return qualified
+func historyUsageRequestID(l historyLog, duplicate bool) string {
+	if duplicate && l.RequestID != "" {
+		return fmt.Sprintf("%s:v2-log:%d", l.RequestID, l.ID)
 	}
 	if l.RequestID != "" {
 		return l.RequestID

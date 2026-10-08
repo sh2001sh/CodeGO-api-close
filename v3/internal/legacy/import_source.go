@@ -131,7 +131,9 @@ func inspectSource(ctx context.Context, tx pgx.Tx, sources map[string]string) (*
 	if err != nil {
 		return nil, r, err
 	}
-	funding.validate(&r)
+	if err := funding.validateContext(ctx, &r); err != nil {
+		return nil, r, err
+	}
 	entitlements, err := loadEntitlements(ctx, tx, sources)
 	if err != nil {
 		return nil, r, err

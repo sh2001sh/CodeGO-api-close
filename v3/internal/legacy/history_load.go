@@ -22,12 +22,11 @@ type historyData struct {
 	bindings        []historyBinding
 	counts          map[string]int64
 	amounts         map[string]*big.Int
-	usageRequestIDs map[int64]string
 	issues          []Issue
 }
 
 func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) (*historyData, error) {
-	d := &historyData{source: source, sources: sources, accounts: map[string]historyAccount{}, retiredAccounts: map[string]bool{}, counts: map[string]int64{}, amounts: map[string]*big.Int{}, usageRequestIDs: map[int64]string{}}
+	d := &historyData{source: source, sources: sources, accounts: map[string]historyAccount{}, retiredAccounts: map[string]bool{}, counts: map[string]int64{}, amounts: map[string]*big.Int{}}
 	users := map[int64]bool{}
 	if err := walkHistory(ctx, source, sources["users"], func(raw json.RawMessage) error {
 		var u struct {
@@ -157,17 +156,29 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 		{"request_attempt_audits", sources["request_attempt_audits"], func(raw json.RawMessage) error { _, err := decodeHistoryAttemptAudit(raw); return err }},
 	}
 	for _, load := range loads {
-		err := walkHistory(ctx, source, load.table, func(raw json.RawMessage) error {
+		visit := func(raw json.RawMessage) error {
 			d.counts[load.name]++
 			if err := load.decode(raw); err != nil {
 				var row struct {
 					ID int64 `json:"id"`
 				}
 				_ = json.Unmarshal(raw, &row)
-				d.issues = append(d.issues, Issue{load.name, row.ID, "invalid_history", err.Error()})
+				d.recordIssue(Issue{load.name, row.ID, "invalid_history", err.Error()})
 			}
 			return nil
-		})
+		}
+		var err error
+		if load.name == "logs" {
+			d.counts["usage_request_ids_disambiguated"] = 0
+			err = walkHistoryLogs(ctx, source, load.table, func(raw json.RawMessage, duplicate bool) error {
+				if duplicate {
+					d.counts["usage_request_ids_disambiguated"]++
+				}
+				return visit(raw)
+			})
+		} else {
+			err = walkHistory(ctx, source, load.table, visit)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -178,47 +189,34 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 	}
 	for _, b := range d.bindings {
 		if !providerIDs[b.ProviderID] {
-			d.issues = append(d.issues, Issue{"user_oauth_binding", b.ID, "missing_provider", "binding references a missing custom OAuth provider"})
+			d.recordIssue(Issue{"user_oauth_binding", b.ID, "missing_provider", "binding references a missing custom OAuth provider"})
 		}
 	}
 	if d.counts["request_attempt_audits"] > 0 {
 		if sources["request_audits"] == "" {
-			d.issues = append(d.issues, Issue{"request_attempt_audit", 0, "missing_request_audits", "request attempt history requires its parent request audits"})
+			d.recordIssue(Issue{"request_attempt_audit", 0, "missing_request_audits", "request attempt history requires its parent request audits"})
 		} else {
 			var orphans int64
 			if err := source.QueryRow(ctx, `SELECT count(*) FROM `+sources["request_attempt_audits"]+` a LEFT JOIN `+sources["request_audits"]+` r ON r.request_id=a.request_id WHERE r.request_id IS NULL`).Scan(&orphans); err != nil {
 				return nil, err
 			}
 			if orphans > 0 {
-				d.issues = append(d.issues, Issue{"request_attempt_audit", 0, "missing_request_audit", fmt.Sprintf("%d request attempt rows have no parent request audit", orphans)})
+				d.recordIssue(Issue{"request_attempt_audit", 0, "missing_request_audit", fmt.Sprintf("%d request attempt rows have no parent request audit", orphans)})
 			}
 		}
-	}
-	if sources["logs"] != "" {
-		rows, err := source.Query(ctx, `SELECT l.id,l.request_id FROM `+sources["logs"]+` l JOIN
-		 (SELECT created_at,request_id,user_id FROM `+sources["logs"]+` WHERE type=2 AND request_id<>''
-		 GROUP BY created_at,request_id,user_id HAVING count(*)>1) repeated
-		 ON l.created_at=repeated.created_at AND l.request_id=repeated.request_id AND l.user_id=repeated.user_id WHERE l.type=2`)
-		if err != nil {
-			return nil, err
-		}
-		for rows.Next() {
-			var id int64
-			var request string
-			if err = rows.Scan(&id, &request); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			d.usageRequestIDs[id] = fmt.Sprintf("%s:v2-log:%d", request, id)
-		}
-		if err = rows.Err(); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		rows.Close()
-		d.counts["usage_request_ids_disambiguated"] = int64(len(d.usageRequestIDs))
 	}
 	return d, nil
+}
+
+// Keep one representative issue per source/code, with exact occurrence counts.
+// Bad rows still reject the entire import; corrupt large histories cannot fill
+// memory with millions of equivalent diagnostic records.
+func (d *historyData) recordIssue(issue Issue) {
+	key := "invalid_rows." + issue.Entity + "." + issue.Code
+	d.counts[key]++
+	if d.counts[key] == 1 {
+		d.issues = append(d.issues, issue)
+	}
 }
 
 func (d *historyData) validate(report *Report) {

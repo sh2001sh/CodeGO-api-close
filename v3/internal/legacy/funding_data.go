@@ -14,6 +14,8 @@ import (
 var fundingSourceNames = []string{"funding_source_policies", "funding_lots", "funding_allocations", "request_economics", "wallet_reward_holds"}
 
 type fundingData struct {
+	source   pgx.Tx
+	sources  map[string]string
 	rows     map[string][]commerceRow
 	accounts map[string]historyAccount
 	users    map[int64]sourceUser
@@ -29,43 +31,60 @@ func fundingSource(sources map[string]string, name string) string {
 }
 
 func loadFunding(ctx context.Context, source pgx.Tx, sources map[string]string) (*fundingData, error) {
-	d := &fundingData{rows: map[string][]commerceRow{}, accounts: map[string]historyAccount{}, users: map[int64]sourceUser{}, queues: map[string]int64{}}
-	for _, name := range fundingSourceNames {
-		rows, err := loadRows(ctx, source, fundingSource(sources, name))
-		if err != nil {
-			return nil, fmt.Errorf("legacy: load funding table %s: %w", name, err)
-		}
-		for _, raw := range rows {
-			row := commerceRow{}
-			if err = json.Unmarshal(raw, &row); err != nil {
-				return nil, fmt.Errorf("legacy: invalid funding row in %s", name)
-			}
-			d.rows[name] = append(d.rows[name], row)
-		}
-	}
-	rows, err := loadRows(ctx, source, sources["accounts"])
-	if err != nil {
-		return nil, err
-	}
-	for _, raw := range rows {
+	// Keep the source snapshot alive, but never materialize funding tables.
+	// Only the much smaller owner/account indexes are needed for projections.
+	d := &fundingData{source: source, sources: sources, accounts: map[string]historyAccount{}, users: map[int64]sourceUser{}, queues: map[string]int64{}}
+	err := walkHistory(ctx, source, sources["accounts"], func(raw json.RawMessage) error {
 		var account historyAccount
-		if err = json.Unmarshal(raw, &account); err != nil {
-			return nil, fmt.Errorf("legacy: invalid funding account")
+		if err := json.Unmarshal(raw, &account); err != nil {
+			return fmt.Errorf("legacy: invalid funding account: %w", err)
 		}
 		d.accounts[account.ID] = account
-	}
-	rows, err = loadRows(ctx, source, sources["users"])
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	for _, raw := range rows {
+	err = walkHistory(ctx, source, sources["users"], func(raw json.RawMessage) error {
 		var user sourceUser
-		if err = json.Unmarshal(raw, &user); err != nil {
-			return nil, fmt.Errorf("legacy: invalid funding owner")
+		if err := json.Unmarshal(raw, &user); err != nil {
+			return fmt.Errorf("legacy: invalid funding owner: %w", err)
 		}
 		d.users[user.ID] = user
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return d, d.inspectDrains(ctx, source, sources)
+}
+
+func (d *fundingData) walk(ctx context.Context, name string, visit func(commerceRow) error) error {
+	if d.source == nil {
+		for _, row := range d.rows[name] {
+			if err := visit(row); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walkHistory(ctx, d.source, fundingSource(d.sources, name), func(raw json.RawMessage) error {
+		var row commerceRow
+		if err := json.Unmarshal(raw, &row); err != nil {
+			return fmt.Errorf("legacy: invalid funding row in %s: %w", name, err)
+		}
+		return visit(row)
+	})
+}
+
+func (d *fundingData) retiredAccountIDs() []string {
+	ids := make([]string, 0)
+	for id, account := range d.accounts {
+		if retiredAccountKind(account.Kind) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func (d *fundingData) inspectDrains(ctx context.Context, source pgx.Tx, sources map[string]string) error {
@@ -102,14 +121,8 @@ func (d *fundingData) inspectDrains(ctx context.Context, source pgx.Tx, sources 
 		rows.Close()
 	}
 	if table := sources["balance_snapshots"]; table != "" {
-		retired := make([]string, 0)
-		for id, account := range d.accounts {
-			if retiredAccountKind(account.Kind) {
-				retired = append(retired, id)
-			}
-		}
 		var outstanding int64
-		if err := source.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE reserved_balance<>0 AND account_id<>ALL($1::text[])", retired).Scan(&outstanding); err != nil {
+		if err := source.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE reserved_balance<>0 AND account_id<>ALL($1::text[])", d.retiredAccountIDs()).Scan(&outstanding); err != nil {
 			return err
 		}
 		if outstanding > 0 {

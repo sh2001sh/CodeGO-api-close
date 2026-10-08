@@ -34,7 +34,8 @@ func validateSourceState(ctx context.Context, source pgx.Tx, sources map[string]
 			continue
 		}
 		var pending int64
-		if err := source.QueryRow(ctx, `SELECT count(*) FROM `+table+` t WHERE coalesce(to_jsonb(t)->>$1,'')<>ALL($2::text[])`, guard.field, guard.terminal).Scan(&pending); err != nil {
+		field := pgx.Identifier{guard.field}.Sanitize()
+		if err := source.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE coalesce(`+field+`,'')<>ALL($1::text[])`, guard.terminal).Scan(&pending); err != nil {
 			return fmt.Errorf("legacy: inspect in-flight %s: %w", guard.name, err)
 		}
 		report.Counts["in_flight:"+guard.alias] = pending

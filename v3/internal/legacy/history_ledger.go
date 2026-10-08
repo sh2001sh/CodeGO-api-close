@@ -78,25 +78,28 @@ func decodeHistoryEntry(raw json.RawMessage) (historyEntry, error) {
 // Current monetary subscriptions may be closed, but their financial history
 // stays queryable without posting money again. Retired points remain in v2.
 func (m *Importer) importHistoryLedger(ctx context.Context, target pgx.Tx, d *historyData) error {
+	mappings, err := historyAccountTargets(ctx, target)
+	if err != nil {
+		return err
+	}
+	accounts := historyImportBatch(ctx, target, "v3_billing", "historical_accounts", "source_account_id")
 	for _, a := range d.accounts {
 		var mapped *int64
 		owner, kind := historicalAccountMapping(a)
-		if kind != "" {
-			var id int64
-			err := target.QueryRow(ctx, `SELECT id FROM v3_billing.accounts WHERE owner_type=$1 AND owner_id=$2 AND kind=$3`, owner, a.OwnerID, kind).Scan(&id)
-			if err == nil {
-				mapped = &id
-			} else if err != pgx.ErrNoRows {
-				return err
-			}
+		if id, exists := mappings[historyAccountKey{owner, a.OwnerID, kind}]; exists {
+			mapped = &id
 		}
 		columns := []string{"source_account_id", "account_id", "owner_type", "owner_id", "account_type", "unit", "status", "version", "metadata", "created_at", "updated_at"}
 		values := []any{a.ID, mapped, a.OwnerType, a.OwnerID, a.Kind, a.Unit, a.Status, a.Version, historyMetadata(a.Metadata), historyDate(a.CreatedAt), historyDate(a.UpdatedAt)}
-		if err := insertHistoryExact(ctx, target, "v3_billing", "historical_accounts", "source_account_id", columns, values); err != nil {
+		if err := accounts.add(historyFields(columns, values)); err != nil {
 			return fmt.Errorf("legacy: historical account import: %w", err)
 		}
 	}
-	return walkHistory(ctx, d.source, d.sources["ledger_entries"], func(raw json.RawMessage) error {
+	if err = accounts.finish(); err != nil {
+		return err
+	}
+	entries := historyImportBatch(ctx, target, "v3_billing", "historical_entries", "entry_id")
+	err = walkHistory(ctx, d.source, d.sources["ledger_entries"], func(raw json.RawMessage) error {
 		if d.retiredHistoryEntry(raw) {
 			return nil
 		}
@@ -106,8 +109,12 @@ func (m *Importer) importHistoryLedger(ctx context.Context, target pgx.Tx, d *hi
 		}
 		columns := []string{"entry_id", "source_account_id", "reference_type", "reference_id", "entry_type", "direction", "amount", "balance_after", "idempotency_key", "reason_code", "reason_detail", "operator_type", "operator_id", "metadata", "created_at"}
 		values := []any{e.ID, e.AccountID, e.ReferenceType, e.ReferenceID, e.EntryType, e.Direction, e.Amount, e.BalanceAfter, e.IdempotencyKey, e.ReasonCode, e.ReasonDetail, e.OperatorType, e.OperatorID, e.Metadata, historyDate(e.CreatedAt)}
-		return insertHistoryExact(ctx, target, "v3_billing", "historical_entries", "entry_id", columns, values)
+		return entries.add(historyFields(columns, values))
 	})
+	if err != nil {
+		return err
+	}
+	return entries.finish()
 }
 
 func historicalAccountMapping(a historyAccount) (string, string) {

@@ -1,11 +1,118 @@
 package legacy
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestFundingBatchesBoundedAndPropagateFailures(t *testing.T) {
+	d := fundingUnitFixture(t)
+	base := d.rows["funding_lots"][0]
+	d.rows["funding_lots"] = nil
+	for i := 0; i < exactBulkRows*2+7; i++ {
+		row := commerceRow{}
+		for key, raw := range base {
+			row[key] = raw
+		}
+		row["lot_id"] = json.RawMessage(fmt.Sprintf(`"lot-%d"`, i))
+		row["idempotency_key"] = json.RawMessage(fmt.Sprintf(`"credit-%d"`, i))
+		d.rows["funding_lots"] = append(d.rows["funding_lots"], row)
+	}
+	accounts := map[fundingAccountKey]int64{{"user", "wallet", 7}: 901}
+	var sizes []int
+	total := 0
+	err := d.batches(context.Background(), "funding_lots", accounts, func(key string, rows []map[string]any) error {
+		if key != "lot_id" || len(rows) > exactBulkRows {
+			t.Fatalf("invalid batch key=%s size=%d", key, len(rows))
+		}
+		for _, row := range rows {
+			if row["account_id"] != int64(901) || row["original_amount"] != int64(200) {
+				t.Fatalf("batch account/amount changed: %+v", row)
+			}
+		}
+		sizes = append(sizes, len(rows))
+		total += len(rows)
+		return nil
+	})
+	if err != nil || total != exactBulkRows*2+7 || fmt.Sprint(sizes) != fmt.Sprint([]int{exactBulkRows, exactBulkRows, 7}) {
+		t.Fatalf("sizes=%v total=%d error=%v", sizes, total, err)
+	}
+	want := errors.New("batch rejected")
+	calls := 0
+	err = d.batches(context.Background(), "funding_lots", accounts, func(string, []map[string]any) error {
+		calls++
+		return want
+	})
+	if !errors.Is(err, want) || calls != 1 {
+		t.Fatalf("batch failure swallowed or continued: %v calls=%d", err, calls)
+	}
+}
+
+func TestFundingMissingNativeAccountRules(t *testing.T) {
+	d := fundingUnitFixture(t)
+	for _, tc := range []struct {
+		name string
+		row  commerceRow
+		fail bool
+	}{
+		{"funding_lots", d.rows["funding_lots"][0], true},
+		{"funding_allocations", d.rows["funding_allocations"][0], false},
+		{"wallet_reward_holds", d.rows["wallet_reward_holds"][0], true},
+	} {
+		p, err := d.projectFunding(tc.name, tc.row)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = resolveFundingAccount(nil, &p)
+		if (err != nil) != tc.fail || p.values["account_id"] != nil {
+			t.Fatalf("table=%s missing account behavior changed: %+v %v", tc.name, p.values, err)
+		}
+		if tc.name == "funding_lots" {
+			p.remaining = 0
+			if err := resolveFundingAccount(nil, &p); err != nil {
+				t.Fatalf("empty historical lot must allow missing native account: %v", err)
+			}
+		} else if tc.name == "wallet_reward_holds" {
+			p.remaining = 0
+			if err := resolveFundingAccount(nil, &p); err == nil {
+				t.Fatal("fully consumed reward hold must still require its native wallet")
+			}
+		}
+	}
+}
+
+func TestFundingBatchBytesFlushOversizedRowIndividually(t *testing.T) {
+	d := fundingUnitFixture(t)
+	base := d.rows["funding_lots"][0]
+	d.rows["funding_lots"] = nil
+	for i, length := range []int{1, exactBulkBytes + 1, 1} {
+		row := commerceRow{}
+		for key, raw := range base {
+			row[key] = raw
+		}
+		row["lot_id"] = json.RawMessage(fmt.Sprintf(`"bytes-lot-%d"`, i))
+		encoded, err := json.Marshal(strings.Repeat("x", length))
+		if err != nil {
+			t.Fatal(err)
+		}
+		row["reference_id"] = encoded
+		d.rows["funding_lots"] = append(d.rows["funding_lots"], row)
+	}
+	var sizes []int
+	err := d.batches(context.Background(), "funding_lots", map[fundingAccountKey]int64{{"user", "wallet", 7}: 901}, func(_ string, rows []map[string]any) error {
+		sizes = append(sizes, len(rows))
+		return nil
+	})
+	if err != nil || fmt.Sprint(sizes) != "[1 1 1]" {
+		t.Fatalf("oversized row retained unrelated projections: %v %v", sizes, err)
+	}
+}
 
 func fundingTestRow(t *testing.T, value string) commerceRow {
 	t.Helper()

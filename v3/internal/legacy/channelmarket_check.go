@@ -45,6 +45,42 @@ func (m *Importer) checkChannelMarket(ctx context.Context, target pgx.Tx, data *
 		}
 		report.Counts["check:channelmarket"]++
 	}
+	for _, table := range channelMarketSourceTables {
+		if !cmStreamedTable(table) || data.streamTables[table] == "" {
+			continue
+		}
+		native := "v3_channelmarket." + table
+		expectedCounts[native] = 0
+		emitted := false
+		if err := data.streamBatches(ctx, table, func(records []cmRecord) error {
+			values := make([]map[string]any, len(records))
+			for i, record := range records {
+				fields, err := cmCheckFields(record)
+				if err != nil {
+					return err
+				}
+				values[i] = fields
+			}
+			matches, err := checkExactBulk(ctx, target, "v3_channelmarket", table, records[0].keys, values)
+			if err != nil {
+				return err
+			}
+			for i, match := range matches {
+				if !match {
+					report.Counts["mismatched:"+native]++
+					if !emitted {
+						issue(native, 0, "missing row or changed native projection for source key "+fmt.Sprint(records[i].values[records[i].keys[0]]))
+						emitted = true
+					}
+				}
+			}
+			expectedCounts[native] += int64(len(records))
+			report.Counts["check:channelmarket"] += int64(len(records))
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
 	for table, want := range expectedCounts {
 		var actual int64
 		if err := target.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&actual); err != nil {

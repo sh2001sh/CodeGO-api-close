@@ -18,6 +18,9 @@ func (d *channelMarketData) validate(report *Report) {
 	for table, rows := range d.rows {
 		report.Counts["marketplace_"+table] = int64(len(rows))
 	}
+	for table, count := range d.streamCounts {
+		report.Counts["marketplace_"+table] = count
+	}
 	for owner, amount := range d.pending {
 		report.Amounts["marketplace_pending:"+strconv.FormatInt(owner, 10)] = strconv.FormatInt(amount, 10)
 	}

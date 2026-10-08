@@ -32,7 +32,7 @@ func TestChannelMarketSeparateDatabasesIdempotentAndRuntimeReadable(t *testing.T
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = tx.Rollback(ctx) }()
+		t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 		d, err := loadChannelMarket(ctx, tx, sources)
 		if err != nil {
 			t.Fatal(err)
@@ -177,7 +177,7 @@ func TestChannelMarketSourceCipherAndPendingMismatch(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = tx.Rollback(ctx) }()
+		t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 		data, err := loadChannelMarket(ctx, tx, sources)
 		if err != nil {
 			t.Fatal(err)

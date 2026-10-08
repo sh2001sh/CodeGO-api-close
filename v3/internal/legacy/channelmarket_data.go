@@ -27,6 +27,9 @@ type cmChannel struct {
 	newCatalog       bool
 }
 type channelMarketData struct {
+	source          pgx.Tx
+	streamTables    map[string]string
+	streamCounts    map[string]int64
 	rows            map[string][]cmRow
 	channels        map[string]*cmChannel
 	groups          map[string]cmRow
@@ -45,8 +48,12 @@ type cmKeyBinding struct {
 }
 
 func loadChannelMarket(ctx context.Context, source pgx.Tx, sources map[string]string) (*channelMarketData, error) {
-	d := &channelMarketData{rows: map[string][]cmRow{}, channels: map[string]*cmChannel{}, groups: map[string]cmRow{}, users: map[int64]bool{}, internal: map[int64]cmRow{}, pending: map[int64]int64{}}
+	d := &channelMarketData{source: source, streamTables: map[string]string{}, streamCounts: map[string]int64{}, rows: map[string][]cmRow{}, channels: map[string]*cmChannel{}, groups: map[string]cmRow{}, users: map[int64]bool{}, internal: map[int64]cmRow{}, pending: map[int64]int64{}}
 	for _, table := range channelMarketSourceTables {
+		if cmStreamedTable(table) {
+			d.streamTables[table] = sources["marketplace_"+table]
+			continue
+		}
 		rows, err := loadRows(ctx, source, sources["marketplace_"+table])
 		if err != nil {
 			return nil, err
@@ -107,6 +114,9 @@ func loadChannelMarket(ctx context.Context, source pgx.Tx, sources map[string]st
 		d.keyBindings = append(d.keyBindings, cmKeyBinding{ID: id, UserID: owner, Group: row.text("group")})
 	}
 	d.prepare(os.Getenv("V3_MIGRATION_SOURCE_CRYPTO_SECRET"))
+	if err := d.inspectStreamed(ctx); err != nil {
+		return nil, err
+	}
 	if err := d.loadAccountBalances(ctx, source, sources); err != nil {
 		return nil, err
 	}

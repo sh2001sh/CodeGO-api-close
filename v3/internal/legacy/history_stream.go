@@ -30,6 +30,37 @@ func walkHistory(ctx context.Context, source pgx.Tx, table string, visit func(js
 	return rows.Err()
 }
 
+// Duplicate usage request IDs are qualified only within the same timestamp and
+// user, matching the target usage uniqueness constraint. PostgreSQL can spill
+// the grouping/join to disk; no per-log duplicate map lives in the importer.
+// Original JSON is kept separate from the derived flag to avoid modifying or
+// shadowing any source field, including the audit event's original request ID.
+func walkHistoryLogs(ctx context.Context, source pgx.Tx, table string, visit func(json.RawMessage, bool) error) error {
+	if table == "" {
+		return nil
+	}
+	rows, err := source.Query(ctx, `SELECT to_jsonb(l),COALESCE(l.type=2 AND repeated.request_id IS NOT NULL,false)
+	 FROM `+table+` l LEFT JOIN
+	 (SELECT created_at,request_id,user_id FROM `+table+` WHERE type=2 AND request_id<>''
+	 GROUP BY created_at,request_id,user_id HAVING count(*)>1) repeated
+	 ON l.created_at=repeated.created_at AND l.request_id=repeated.request_id AND l.user_id=repeated.user_id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw json.RawMessage
+		var duplicate bool
+		if err = rows.Scan(&raw, &duplicate); err != nil {
+			return err
+		}
+		if err = visit(raw, duplicate); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 // GORM timestamps are timestamptz, while old log timestamps are Unix seconds.
 type historyTime struct{ time.Time }
 

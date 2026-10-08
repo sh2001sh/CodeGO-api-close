@@ -72,10 +72,13 @@ func validateKnownSources(ctx context.Context, source pgx.Tx, sources map[string
 	for _, name := range []string{"schema_migrations", "platform_schema_migrations", "atlas_schema_revisions", "goose_db_version"} {
 		mark(name)
 	}
+	if err := validateArchivedSourceContracts(ctx, source, sources, known, report); err != nil {
+		return err
+	}
 	// These are read projections, not authoritative entitlements or money.
 	// Native permissions and aggregates rebuild from channels, logs and ledger.
 	for _, name := range strings.Fields(`abilities perf_metrics channel_perf_metrics channel_latency_histograms
-		channel_consumer_metrics channel_consumer_identities user_usage_daily channel_usage_daily usage_daily_cursors billing_account_views`) {
+		channel_consumer_metrics channel_consumer_identities user_usage_daily channel_usage_daily usage_daily_cursors billing_account_views quota_data`) {
 		for _, alias := range []string{name, "readmodel_" + name} {
 			if table := sources[alias]; table != "" && !known[table] {
 				var count int64

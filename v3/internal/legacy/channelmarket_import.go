@@ -86,6 +86,20 @@ func (m *Importer) importChannelMarket(ctx context.Context, target pgx.Tx, data 
 			return err
 		}
 	}
+	for _, table := range channelMarketSourceTables {
+		if !cmStreamedTable(table) {
+			continue
+		}
+		if err := data.streamBatches(ctx, table, func(records []cmRecord) error {
+			values := make([]map[string]any, len(records))
+			for i, record := range records {
+				values[i] = record.values
+			}
+			return insertExactBulk(ctx, target, "v3_channelmarket", table, records[0].keys, values)
+		}); err != nil {
+			return err
+		}
+	}
 	for owner, amount := range data.pending {
 		if err := opening(ctx, target, "user", owner, "marketplace_pending", amount); err != nil {
 			return err

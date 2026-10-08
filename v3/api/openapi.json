@@ -9059,7 +9059,7 @@
         "tags": [
           "commerce"
         ],
-        "description": "Download an already issued Hong Kong commercial invoice for the session user's own paid order. Administrators retain own scope. Exact PDF bytes, actual issue time, purchaser and seller details are frozen by initial self-service issuance. Unpaid, non-positive, refunded or refund-pending orders are rejected on every read. Returns 428 when purchaser details must first be submitted through POST. Reading has no side effects.",
+        "description": "Download the current immutable invoice for the session user’s own positive paid or refunded purchase, or a specific saved document via number. Pending and confirmed refunds do not block saved PDF downloads. Returns 428 if no invoice has been issued. Administrators retain own scope. No financial or document writes.",
         "security": [
           {
             "sessionCookie": []
@@ -9078,6 +9078,16 @@
               "minLength": 1,
               "maxLength": 256
             }
+          },
+          {
+            "in": "query",
+            "name": "number",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "description": "A saved invoice revision or credit-note number belonging to this order."
           }
         ],
         "responses": {
@@ -9137,7 +9147,7 @@
         "tags": [
           "commerce"
         ],
-        "description": "Self-service issue and download of a paid purchase's commercial invoice, without manual review. Freeze purchaser name/address, the configured InvoiceSellerAddress, actual issue time, order details and PDF in one durable document per order. An identical replay returns the existing PDF; changed purchaser details return 409. The seller address must be configured; no profile name or location fallback is used. Ownership, positive paid amount and refund checks apply on every call. Does not change the profile, payment or ledger.",
+        "description": "Issue the first commercial invoice for the session user’s own positive paid/refunded purchase, or replay current identical purchaser details. Buyer/seller details, payment references, issue time and exact PDF are frozen. Changed purchaser details require an explicit correction. Missing seller address returns 503. Does not alter payment, refund or ledger.",
         "security": [
           {
             "sessionCookie": []
@@ -33618,7 +33628,9 @@
             "$ref": "#/components/responses/Failure"
           }
         },
-        "parameters": []
+        "parameters": [],
+        "deprecated": true,
+        "description": "Legacy model favorites; current console uses group favorites."
       },
       "put": {
         "operationId": "putApiModelsFavorites",
@@ -33693,7 +33705,9 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Legacy model favorites; current console uses group favorites."
       }
     },
     "/api/models/favorites/": {
@@ -33760,7 +33774,9 @@
             "$ref": "#/components/responses/Failure"
           }
         },
-        "parameters": []
+        "parameters": [],
+        "deprecated": true,
+        "description": "Legacy model favorites; current console uses group favorites."
       },
       "put": {
         "operationId": "putApiModelsFavoritesSlashAlias",
@@ -33835,7 +33851,9 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Legacy model favorites; current console uses group favorites."
       }
     },
     "/api/ratio_sync/channels": {
@@ -42460,6 +42478,1025 @@
           }
         }
       }
+    },
+    "/api/commerce/orders/{trade_no}/invoice/corrections": {
+      "post": {
+        "operationId": "postApiCommerceOrdersTrade_NoInvoiceCorrections",
+        "tags": [
+          "commerce"
+        ],
+        "description": "Explicit append-only correction of purchaser details on an unrefunded paid purchase. Requires current previous_number, reason and stable request_id; exact retries preserve bytes even after subsequent corrections. Original and superseded PDFs remain downloadable. No financial effects.",
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trade_no",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderInvoiceCorrectionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Issued or identically replayed invoice as raw PDF. Does not use the JSON success/data envelope.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "attachment; filename=\"CG-2026-000000000001.pdf\""
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "428": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/api/commerce/orders/{trade_no}/credit-note": {
+      "post": {
+        "operationId": "postApiCommerceOrdersTrade_NoCreditNote",
+        "tags": [
+          "commerce"
+        ],
+        "description": "Create or replay an immutable credit note for confirmed persisted refund increments only. No client amounts accepted. Processing/failed refunds yield 409; no original invoice yields 428. Reads cumulative refund facts without duplicating overlapping sources. Does not invoke a provider, refund money or change ledger.",
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trade_no",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Issued or identically replayed invoice as raw PDF. Does not use the JSON success/data envelope.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "attachment; filename=\"CG-2026-000000000001.pdf\""
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "428": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/api/commerce/orders/{trade_no}/invoice/documents": {
+      "get": {
+        "operationId": "getApiCommerceOrdersTrade_NoInvoiceDocuments",
+        "tags": [
+          "commerce"
+        ],
+        "description": "Read only the owned order’s saved invoices, revisions and credit notes. Paginated newest-first; historical bytes are immutable. Does not create documents.",
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trade_no",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owned immutable document history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrderInvoiceDocumentPage"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/api/blind-box/batches": {
+      "get": {
+        "operationId": "getApiBlindBoxBatches",
+        "tags": [
+          "blind-box"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BlindBoxBatchOverview"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/api/blind-box/batches/{id}/draw": {
+      "post": {
+        "operationId": "postApiBlindBoxBatchesIdDraw",
+        "tags": [
+          "blind-box"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BlindBoxBatchDrawResult"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlindBoxBatchDrawInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/blind-box/admin/batches": {
+      "get": {
+        "operationId": "getApiBlindBoxAdminBatches",
+        "tags": [
+          "blind-box"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BlindBoxBatch"
+                      }
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "description": "Administrator session required. "
+      },
+      "put": {
+        "operationId": "putApiBlindBoxAdminBatches",
+        "tags": [
+          "blind-box"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BlindBoxBatch"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlindBoxBatch"
+              }
+            }
+          }
+        },
+        "description": "Administrator session required. "
+      }
+    },
+    "/api/blind-box/admin/batches/{id}/publish": {
+      "post": {
+        "operationId": "postApiBlindBoxAdminBatchesIdPublish",
+        "tags": [
+          "blind-box"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BlindBoxBatch"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlindBoxBatchStateInput"
+              }
+            }
+          }
+        },
+        "description": "Administrator session required. Publication debits the full fulfillment reserve; revision and request ID required. "
+      }
+    },
+    "/api/blind-box/admin/batches/{id}/pause": {
+      "post": {
+        "operationId": "postApiBlindBoxAdminBatchesIdPause",
+        "tags": [
+          "blind-box"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BlindBoxBatch"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlindBoxBatchStateInput"
+              }
+            }
+          }
+        },
+        "description": "Administrator session required. "
+      }
+    },
+    "/api/blind-box/admin/batches/{id}/stats": {
+      "get": {
+        "operationId": "getApiBlindBoxAdminBatchesIdStats",
+        "tags": [
+          "blind-box"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "sessionBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BlindBoxBatchStatistics"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "description": "Administrator session required. "
+      }
+    },
+    "/api/marketplace/group-favorites": {
+      "get": {
+        "operationId": "getGroupFavorites",
+        "tags": [
+          "marketplace"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GroupFavorite"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/ChannelMarketPagination"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 24
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_ids",
+            "description": "Optional comma-separated canonical IDs; at most 100, for current market-page bookmark states.",
+            "schema": {
+              "type": "string",
+              "maxLength": 12900
+            }
+          }
+        ],
+        "summary": "List own group favorites"
+      },
+      "put": {
+        "operationId": "putGroupFavorite",
+        "tags": [
+          "marketplace"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/GroupFavoriteSave"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "401": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "403": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "404": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "409": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "429": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          },
+          "503": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "parameters": [],
+        "summary": "Set own favorite; adding requires current access",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupFavoriteSave"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -42483,6 +43520,16 @@
             "minLength": 1,
             "maxLength": 600,
             "description": "Actual purchaser address including street/unit, city, region and country. Newlines are accepted; leading/trailing whitespace is trimmed. Frozen at issuance."
+          },
+          "buyer_country": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier."
+          },
+          "buyer_tax_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier."
           }
         }
       },
@@ -43272,12 +44319,23 @@
           "count": {
             "type": "integer",
             "format": "int64"
+          },
+          "pool_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "x-omitempty": true
+          },
+          "draw_current_pool": {
+            "type": "boolean",
+            "x-omitempty": true
           }
         },
         "required": [
           "request_id"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Legacy inventory opening; optional pool_id selects a pool, omitted keeps legacy idempotency semantics. Eligible items open by earliest expiry then ID."
       },
       "BoxPurchaseInput": {
         "type": "object",
@@ -49520,6 +50578,11 @@
           },
           "guarantee_type": {
             "type": "string"
+          },
+          "batch_id": {
+            "type": "integer",
+            "format": "int64",
+            "x-omitempty": true
           }
         },
         "required": [
@@ -49564,6 +50627,12 @@
           },
           "zero_hour": {
             "$ref": "#/components/schemas/MarketplaceZeroHourOverview"
+          },
+          "inventory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlindBoxInventoryGroup"
+            }
           }
         },
         "required": [
@@ -49572,7 +50641,8 @@
           "props",
           "pity",
           "pity_states",
-          "zero_hour"
+          "zero_hour",
+          "inventory"
         ],
         "additionalProperties": false
       },
@@ -49754,6 +50824,10 @@
           "used_discount_micro": {
             "type": "integer",
             "format": "int64"
+          },
+          "plan_snapshot": {
+            "$ref": "#/components/schemas/Plan",
+            "x-omitempty": true
           }
         },
         "required": [
@@ -49865,6 +50939,10 @@
           },
           "wallet_type": {
             "type": "string",
+            "x-omitempty": true
+          },
+          "plan_snapshot": {
+            "$ref": "#/components/schemas/Plan",
             "x-omitempty": true
           }
         },
@@ -58225,6 +59303,602 @@
             "minimum": 0
           }
         }
+      },
+      "OrderInvoiceCorrectionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "buyer_name",
+          "buyer_address",
+          "previous_number",
+          "request_id",
+          "reason"
+        ],
+        "properties": {
+          "buyer_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Actual individual full name or company full name; no Mainland tax identifier is required. Leading/trailing whitespace is trimmed. Frozen at issuance."
+          },
+          "buyer_address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600,
+            "description": "Actual purchaser address including street/unit, city, region and country. Newlines are accepted; leading/trailing whitespace is trimmed. Frozen at issuance."
+          },
+          "buyer_country": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier."
+          },
+          "buyer_tax_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier."
+          },
+          "previous_number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Expected current invoice number; stale corrections return 409."
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Stable operation ID. Identical retries replay the exact saved correction; reusing it for different details returns 409."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Reason retained in the correction history."
+          }
+        }
+      },
+      "OrderInvoiceDocumentRecord": {
+        "type": "object",
+        "required": [
+          "number",
+          "related_number",
+          "reason",
+          "currency",
+          "buyer_name",
+          "buyer_address",
+          "buyer_country",
+          "buyer_tax_id",
+          "document_type",
+          "status",
+          "revision",
+          "amount_minor",
+          "issued_at"
+        ],
+        "properties": {
+          "number": {
+            "type": "string"
+          },
+          "related_number": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "buyer_name": {
+            "type": "string"
+          },
+          "buyer_address": {
+            "type": "string"
+          },
+          "buyer_country": {
+            "type": "string"
+          },
+          "buyer_tax_id": {
+            "type": "string"
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "invoice",
+              "credit_note"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "superseded",
+              "issued"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "issued_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OrderInvoiceDocumentPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderInvoiceDocumentRecord"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "page_size": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BlindBoxInventoryGroup": {
+        "type": "object",
+        "properties": {
+          "pool_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pool_name": {
+            "type": "string"
+          },
+          "available_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "draw_current_pool": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "x-omitempty": true
+          }
+        },
+        "required": [
+          "pool_id",
+          "pool_name",
+          "available_count",
+          "draw_current_pool"
+        ],
+        "additionalProperties": false
+      },
+      "BlindBoxBatchReward": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "credits",
+              "subscription"
+            ]
+          },
+          "amount_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "plan_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "remaining": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "initial_probability": {
+            "type": "number"
+          },
+          "remaining_probability": {
+            "type": "number"
+          },
+          "plan_snapshot": {
+            "$ref": "#/components/schemas/Plan",
+            "x-omitempty": true
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "amount_micro",
+          "plan_id",
+          "quantity",
+          "remaining",
+          "initial_probability",
+          "remaining_probability"
+        ],
+        "additionalProperties": false
+      },
+      "BlindBoxBatch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "price_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "base_credits_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "budget_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "required_budget_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "spent_budget_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "remaining_budget_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "remaining_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "entitled_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ancillary_cost_ppm": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contribution_share_ppm": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "consumption",
+              "credits"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "paused",
+              "exhausted"
+            ]
+          },
+          "costs_confirmed": {
+            "type": "boolean"
+          },
+          "rewards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlindBoxBatchReward"
+            }
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "x-omitempty": true
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "price_micro",
+          "base_credits_micro",
+          "budget_micro",
+          "required_budget_micro",
+          "spent_budget_micro",
+          "remaining_budget_micro",
+          "total_count",
+          "remaining_count",
+          "entitled_count",
+          "ancillary_cost_ppm",
+          "contribution_share_ppm",
+          "name",
+          "purpose",
+          "state",
+          "costs_confirmed",
+          "rewards"
+        ],
+        "additionalProperties": false,
+        "description": "Finite uniformly sampled no-replacement batch. All amounts are integer micro-credits (1 credit=1000000), not fiat. Draft preview freezes server-side fixed-credit standard_v2 plan specs. Publishing reserves the complete base+reward face-value liability from administrator wallet. Published terms immutable. New credits permanently API-only, no transfer/refund/product purchase. Consumption qualification matures seven days after verified paid usage with known costs and net positive contribution; allocation <=10% after procurement, seller, ancillary and reserved referral expenses. Global once-only contribution attribution. No automatic enabled campaigns."
+      },
+      "BlindBoxBatchEntitlement": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "batch_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "settled_paid_consumption"
+            ]
+          },
+          "available_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "batch_id",
+          "source",
+          "available_count",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "BlindBoxBatchOverview": {
+        "type": "object",
+        "properties": {
+          "batches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlindBoxBatch"
+            }
+          },
+          "entitlements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlindBoxBatchEntitlement"
+            }
+          }
+        },
+        "required": [
+          "batches",
+          "entitlements"
+        ],
+        "additionalProperties": false
+      },
+      "BlindBoxBatchDrawResult": {
+        "type": "object",
+        "properties": {
+          "batch_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "base_credits_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "charged_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketplaceOpenRecord"
+            }
+          }
+        },
+        "required": [
+          "batch_id",
+          "base_credits_micro",
+          "charged_micro",
+          "records"
+        ],
+        "additionalProperties": false
+      },
+      "BlindBoxBatchStateInput": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "request_id",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "BlindBoxBatchDrawInput": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "additionalProperties": false
+      },
+      "BlindBoxBatchStatistics": {
+        "type": "object",
+        "properties": {
+          "draw_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "base_credits_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reward_credits_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "subscription_awarded_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "subscription_activated_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "api_used_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reserved_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "spent_micro": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "remaining_micro": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "draw_count",
+          "base_credits_micro",
+          "reward_credits_micro",
+          "subscription_awarded_count",
+          "subscription_activated_count",
+          "api_used_micro",
+          "reserved_micro",
+          "spent_micro",
+          "remaining_micro"
+        ],
+        "additionalProperties": false
+      },
+      "GroupFavorite": {
+        "type": "object",
+        "description": "Own bookmark; metadata is hidden when current group access is unavailable.",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "id": {
+            "type": "string",
+            "description": "Original public numeric group ID."
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "public_slug": {
+            "type": "string"
+          },
+          "system_display_name": {
+            "type": "string"
+          },
+          "declared_models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "multiplier": {
+            "type": "number",
+            "format": "double",
+            "x-go-type": "json.Number"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "group_id",
+          "id",
+          "available",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "GroupFavoriteSave": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "favorite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id",
+          "favorite"
+        ],
+        "additionalProperties": false
       }
     },
     "responses": {

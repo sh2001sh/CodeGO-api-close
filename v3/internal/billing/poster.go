@@ -30,6 +30,8 @@ type PostResult struct {
 
 var ErrPostConflict = errors.New("billing: operation ID reused with different entry")
 
+var ErrAPICreditsPurchaseLocked = errors.New("ledger: API-only credits cannot fund purchases")
+
 // Poster is the only business-facing entry point for topups, redemptions,
 // subscriptions, refunds and marketplace transfers. Implementations commit the
 // ledger and a durable hot-balance update together.

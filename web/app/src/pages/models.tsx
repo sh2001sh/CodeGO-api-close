@@ -1,11 +1,9 @@
 import { useMemo } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { Search } from 'lucide-react'
 import { useTranslation } from '../lib/i18n'
-import { modelFavoritesOptions, publicModelsOptions, vendorOf } from '../lib/public-catalog'
-import { api, unwrap } from '../lib/api'
-import { sessionOptions } from '../lib/queries'
+import { publicModelsOptions, vendorOf } from '../lib/public-catalog'
 import { ModelGroupPrice } from '../features/public/model-group-price'
 import { Badge, CopyButton, EmptyState, ErrorMessage, Loading, Button } from '../components/ui'
 
@@ -13,15 +11,7 @@ export default function ModelsPage() {
   const { t } = useTranslation()
   const search = useSearch({ from: '/_site/models' })
   const navigate = useNavigate({ from: '/models' })
-  const client = useQueryClient()
   const catalog = useQuery(publicModelsOptions())
-  const session = useQuery({ ...sessionOptions(), throwOnError: false })
-  const favorites = useQuery({ ...modelFavoritesOptions(), enabled: Boolean(session.data) })
-  const save = useMutation({
-    mutationFn: (body: { model_id: string; favorite: boolean }) =>
-      api.PUT('/api/models/favorites/', { body }).then(unwrap),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['model-favorites'] }),
-  })
   const models = useMemo(
     () =>
       (catalog.data ?? []).map((model) => ({
@@ -86,7 +76,7 @@ export default function ModelsPage() {
               onChange={(event) => setSearch({ q: event.target.value || undefined })}
             />
           </label>
-          <ErrorMessage error={catalog.error ?? favorites.error ?? save.error} />
+          <ErrorMessage error={catalog.error} />
           {catalog.isError && (
             <Button variant="secondary" onClick={() => void catalog.refetch()}>
               {t('重试')}
@@ -111,28 +101,6 @@ export default function ModelsPage() {
                         <div className="model-row-title">
                           <code className="mono">{model.name}</code>
                           <CopyButton value={model.name} label="复制模型名" />
-                          {model.model_id && session.data && (
-                            <Button
-                              variant="quiet"
-                              disabled={save.isPending || favorites.isPending || favorites.isError}
-                              onClick={() =>
-                                save.mutate({
-                                  model_id: String(model.model_id),
-                                  favorite: !favorites.data?.model_ids.some(
-                                    (id) => String(id) === String(model.model_id),
-                                  ),
-                                })
-                              }
-                            >
-                              {t(
-                                favorites.data?.model_ids.some(
-                                  (id) => String(id) === String(model.model_id),
-                                )
-                                  ? '取消收藏'
-                                  : '添加收藏',
-                              )}
-                            </Button>
-                          )}
                         </div>
                         <div className="model-row-meta">
                           <Badge>{t(model.vendor)}</Badge>

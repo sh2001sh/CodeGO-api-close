@@ -12,18 +12,19 @@ import (
 )
 
 type Prop struct {
-	ID                int64      `json:"id"`
-	Kind              string     `json:"kind"`
-	Title             string     `json:"title"`
-	Status            string     `json:"status"`
-	MultiplierPPM     int64      `json:"multiplier_ppm"`
-	RemainingSeconds  int64      `json:"remaining_seconds"`
-	PlanID            *int64     `json:"plan_id,omitempty"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
-	PropType          string     `json:"prop_type"`
-	DiscountRatePPM   int64      `json:"discount_rate_ppm"`
-	MaxDiscountMicro  int64      `json:"max_discount_micro"`
-	UsedDiscountMicro int64      `json:"used_discount_micro"`
+	PlanSnapshot      json.RawMessage `json:"plan_snapshot,omitempty"`
+	ID                int64           `json:"id"`
+	Kind              string          `json:"kind"`
+	Title             string          `json:"title"`
+	Status            string          `json:"status"`
+	MultiplierPPM     int64           `json:"multiplier_ppm"`
+	RemainingSeconds  int64           `json:"remaining_seconds"`
+	PlanID            *int64          `json:"plan_id,omitempty"`
+	ExpiresAt         *time.Time      `json:"expires_at,omitempty"`
+	PropType          string          `json:"prop_type"`
+	DiscountRatePPM   int64           `json:"discount_rate_ppm"`
+	MaxDiscountMicro  int64           `json:"max_discount_micro"`
+	UsedDiscountMicro int64           `json:"used_discount_micro"`
 }
 
 func legacyUnlimitedProp(propType string) bool {
@@ -83,7 +84,7 @@ func (s *Service) changeProp(ctx context.Context, userID, propID int64, pause bo
 // loadLockedPropTx locks and loads the user's prop row by id.
 func loadLockedPropTx(ctx context.Context, tx pgx.Tx, userID, propID int64) (Prop, error) {
 	var p Prop
-	err := tx.QueryRow(ctx, `SELECT id,kind,title,status,coalesce(multiplier_ppm,1000000),remaining_seconds,plan_id,expires_at,prop_type,discount_rate_ppm,max_discount_micro,used_discount_micro FROM v3_marketplace.blind_box_props WHERE id=$1 AND user_id=$2 FOR UPDATE`, propID, userID).Scan(&p.ID, &p.Kind, &p.Title, &p.Status, &p.MultiplierPPM, &p.RemainingSeconds, &p.PlanID, &p.ExpiresAt, &p.PropType, &p.DiscountRatePPM, &p.MaxDiscountMicro, &p.UsedDiscountMicro)
+	err := tx.QueryRow(ctx, `SELECT id,kind,title,status,coalesce(multiplier_ppm,1000000),remaining_seconds,plan_id,expires_at,prop_type,discount_rate_ppm,max_discount_micro,used_discount_micro,NULLIF(plan_snapshot,'{}'::jsonb) FROM v3_marketplace.blind_box_props WHERE id=$1 AND user_id=$2 FOR UPDATE`, propID, userID).Scan(&p.ID, &p.Kind, &p.Title, &p.Status, &p.MultiplierPPM, &p.RemainingSeconds, &p.PlanID, &p.ExpiresAt, &p.PropType, &p.DiscountRatePPM, &p.MaxDiscountMicro, &p.UsedDiscountMicro, &p.PlanSnapshot)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrNotFound
 	}
@@ -141,7 +142,18 @@ func (s *Service) activatePropStateTx(ctx context.Context, tx pgx.Tx, userID, pr
 		if s.subscriptions == nil || p.PlanID == nil {
 			return false, ErrUnavailable
 		}
-		if err := s.subscriptions.GrantRewardTx(ctx, tx, userID, *p.PlanID, fmt.Sprintf("blind-box:prop:%d", propID)); err != nil {
+		operationID := fmt.Sprintf("blind-box:prop:%d", propID)
+		var err error
+		if len(p.PlanSnapshot) > 0 {
+			port, ok := s.subscriptions.(FrozenSubscriptions)
+			if !ok {
+				return false, ErrUnavailable
+			}
+			err = port.GrantFrozenRewardTx(ctx, tx, userID, p.PlanSnapshot, operationID)
+		} else {
+			err = s.subscriptions.GrantRewardTx(ctx, tx, userID, *p.PlanID, operationID)
+		}
+		if err != nil {
 			return false, err
 		}
 		p.Status = "used"

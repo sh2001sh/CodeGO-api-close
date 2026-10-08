@@ -108,7 +108,12 @@ export function SelectField(
 }
 
 export function TextAreaField(
-  props: FieldBase & { defaultValue?: string; placeholder?: string; rows?: number },
+  props: FieldBase & {
+    defaultValue?: string
+    placeholder?: string
+    rows?: number
+    maxLength?: number
+  },
 ) {
   const { t } = useTranslation()
   return (
@@ -121,6 +126,7 @@ export function TextAreaField(
         defaultValue={props.defaultValue}
         placeholder={props.placeholder && t(props.placeholder)}
         rows={props.rows ?? 4}
+        maxLength={props.maxLength}
         aria-invalid={props.error ? true : undefined}
         aria-describedby={describedBy(props)}
       />

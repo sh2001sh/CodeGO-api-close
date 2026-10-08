@@ -45,6 +45,21 @@ func (a *domainAdapter) GetApiBillingFundingEconomics(w http.ResponseWriter, r *
 func (a *domainAdapter) GetApiBillingHistory(w http.ResponseWriter, r *http.Request, params GetApiBillingHistoryParams) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetApiBlindBoxAdminBatches(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiBlindBoxAdminBatches(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiBlindBoxAdminBatchesIdPause(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiBlindBoxAdminBatchesIdPublish(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiBlindBoxAdminBatchesIdStats(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) ListBlindBoxAdminPools(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
@@ -64,6 +79,12 @@ func (a *domainAdapter) PostApiBlindBoxAdminUsersIdRevoke(w http.ResponseWriter,
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiBlindBoxAmount(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiBlindBoxBatches(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiBlindBoxBatchesIdDraw(w http.ResponseWriter, r *http.Request, id int64) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiBlindBoxEpayNotify(w http.ResponseWriter, r *http.Request) {
@@ -331,13 +352,22 @@ func (a *domainAdapter) GetApiCommerceOrdersTradeNo(w http.ResponseWriter, r *ht
 func (a *domainAdapter) PostApiCommerceOrdersTradeNoCancel(w http.ResponseWriter, r *http.Request, tradeNo string) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) PostApiCommerceOrdersTradeNoCreditNote(w http.ResponseWriter, r *http.Request, tradeNo string) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiCommerceOrdersTradeNoDiscount(w http.ResponseWriter, r *http.Request, tradeNo string) {
 	a.next.ServeHTTP(w, r)
 }
-func (a *domainAdapter) GetApiCommerceOrdersTradeNoInvoice(w http.ResponseWriter, r *http.Request, tradeNo string) {
+func (a *domainAdapter) GetApiCommerceOrdersTradeNoInvoice(w http.ResponseWriter, r *http.Request, tradeNo string, params GetApiCommerceOrdersTradeNoInvoiceParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiCommerceOrdersTradeNoInvoice(w http.ResponseWriter, r *http.Request, tradeNo string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiCommerceOrdersTradeNoInvoiceCorrections(w http.ResponseWriter, r *http.Request, tradeNo string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiCommerceOrdersTradeNoInvoiceDocuments(w http.ResponseWriter, r *http.Request, tradeNo string, params GetApiCommerceOrdersTradeNoInvoiceDocumentsParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiCommerceProviders(w http.ResponseWriter, r *http.Request) {
@@ -744,6 +774,12 @@ func (a *domainAdapter) PostApiMarketplaceChannelsIdVerificationPause(w http.Res
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiMarketplaceChannelsIdVerify(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetGroupFavorites(w http.ResponseWriter, r *http.Request, params GetGroupFavoritesParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutGroupFavorite(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiMarketplaceGroupStatus(w http.ResponseWriter, r *http.Request) {

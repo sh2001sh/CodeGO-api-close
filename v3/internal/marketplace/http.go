@@ -6,6 +6,9 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+
+	"github.com/sh2001sh/new-api/v3/internal/billing"
+	"github.com/sh2001sh/new-api/v3/internal/gateway"
 )
 
 // Authenticate is injected by cmd/control; the domain does not own sessions.
@@ -37,6 +40,7 @@ func (s *Service) Handler(auth Authenticate) http.Handler {
 	s.registerGroupBuyRoutes(register)
 	s.registerBlindBoxRoutes(register)
 	s.registerBlindBoxCompat(register)
+	s.registerBatchRoutes(register)
 	return mux
 }
 
@@ -89,8 +93,10 @@ func (s *Service) registerBlindBoxRoutes(register registerFunc) {
 	})
 	register("POST /api/blind-box/inventory/open", false, func(w http.ResponseWriter, r *http.Request, id int64) {
 		var in struct {
-			RequestID string `json:"request_id"`
-			Count     int    `json:"count"`
+			RequestID       string `json:"request_id"`
+			Count           int    `json:"count"`
+			PoolID          int64  `json:"pool_id"`
+			DrawCurrentPool *bool  `json:"draw_current_pool"`
 		}
 		if !decode(w, r, &in) {
 			return
@@ -98,7 +104,7 @@ func (s *Service) registerBlindBoxRoutes(register registerFunc) {
 		if in.Count == 0 {
 			in.Count = 1
 		}
-		o, e := s.OpenBoxes(r.Context(), id, in.RequestID, in.Count)
+		o, e := s.OpenBoxesFromInventory(r.Context(), id, in.RequestID, in.Count, in.PoolID, in.DrawCurrentPool)
 		reply(w, o, e)
 	})
 	register("POST /api/blind-box/props/{id}/use", false, func(w http.ResponseWriter, r *http.Request, id int64) {
@@ -165,7 +171,7 @@ func reply(w http.ResponseWriter, data any, err error) {
 			status = http.StatusBadRequest
 		case errors.Is(err, ErrNotFound):
 			status = http.StatusNotFound
-		case errors.Is(err, ErrConflict), errors.Is(err, ErrInventory):
+		case errors.Is(err, ErrConflict), errors.Is(err, ErrInventory), errors.Is(err, billing.ErrAPICreditsPurchaseLocked), errors.Is(err, gateway.ErrInsufficientCredits):
 			status = http.StatusConflict
 		case errors.Is(err, ErrDailyLimit), errors.Is(err, ErrMonthlyLimit), errors.Is(err, ErrOpenLimit):
 			status = http.StatusTooManyRequests

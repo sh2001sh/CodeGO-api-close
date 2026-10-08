@@ -15,13 +15,14 @@ import (
 )
 
 var (
-	ErrInvoiceDetailsRequired = errors.New("commerce: invoice purchaser details required")
-	ErrInvoiceDetailsConflict = errors.New("commerce: invoice purchaser details already fixed")
-	ErrInvoiceSellerMissing   = errors.New("commerce: invoice seller address unavailable")
+	ErrInvoiceDetailsRequired       = errors.New("commerce: invoice purchaser details required")
+	ErrInvoiceDetailsConflict       = errors.New("commerce: invoice purchaser details already fixed")
+	ErrInvoiceSellerMissing         = errors.New("commerce: invoice seller address unavailable")
+	ErrInvoiceCharactersUnsupported = errors.New("commerce: invoice text contains unsupported characters")
 )
 
-// OrderInvoice is a durable paid-order document, independent of later profile,
-// catalog or seller-setting changes. Refund eligibility is checked on every call.
+// OrderInvoice is an immutable payment document. Corrections and refunds create
+// linked documents; ownership is checked on every download.
 type OrderInvoice struct {
 	Number string
 	PDF    []byte
@@ -30,10 +31,15 @@ type OrderInvoice struct {
 type IssueOrderInvoiceInput struct {
 	BuyerName    string `json:"buyer_name"`
 	BuyerAddress string `json:"buyer_address"`
+	BuyerCountry string `json:"buyer_country,omitempty"`
+	BuyerTaxID   string `json:"buyer_tax_id,omitempty"`
 }
 
 type orderInvoiceData struct {
 	number, buyer, buyerAddress, sellerAddress, description, trade, provider, currency, amount string
+	sellerBRN, paymentReference, website, buyerCountry, buyerTaxID                             string
+	documentType, relatedNumber, correctionReason                                              string
+	details                                                                                    []string
 	paid, issued                                                                               time.Time
 }
 
@@ -42,14 +48,26 @@ func (s *Service) DownloadOrderInvoice(ctx context.Context, userID int64, trade 
 }
 
 // IssueOrderInvoice serializes against the order lock also used by refunds.
-// Identical retries return the exact saved PDF; buyer edits require a new order.
+// Identical retries return the exact saved PDF; buyer edits require an explicit correction.
 func (s *Service) IssueOrderInvoice(ctx context.Context, userID int64, trade string, input IssueOrderInvoiceInput) (OrderInvoice, error) {
-	input.BuyerName, input.BuyerAddress = strings.TrimSpace(input.BuyerName), strings.TrimSpace(input.BuyerAddress)
-	input.BuyerAddress = strings.ReplaceAll(input.BuyerAddress, "\r\n", "\n")
-	if !invoiceTextValid(input.BuyerName, 200, false) || !invoiceTextValid(input.BuyerAddress, 600, true) {
+	input = normalizeInvoiceInput(input)
+	if !validInvoiceInput(input) {
 		return OrderInvoice{}, ErrInvalid
 	}
 	return s.orderInvoiceDocument(ctx, userID, trade, &input)
+}
+
+func normalizeInvoiceInput(input IssueOrderInvoiceInput) IssueOrderInvoiceInput {
+	input.BuyerName = strings.TrimSpace(input.BuyerName)
+	input.BuyerAddress = strings.ReplaceAll(strings.TrimSpace(input.BuyerAddress), "\r\n", "\n")
+	input.BuyerCountry, input.BuyerTaxID = strings.TrimSpace(input.BuyerCountry), strings.TrimSpace(input.BuyerTaxID)
+	return input
+}
+
+func validInvoiceInput(input IssueOrderInvoiceInput) bool {
+	return invoiceTextValid(input.BuyerName, 200, false) && invoiceTextValid(input.BuyerAddress, 600, true) &&
+		(input.BuyerCountry == "" || invoiceTextValid(input.BuyerCountry, 100, false)) &&
+		(input.BuyerTaxID == "" || invoiceTextValid(input.BuyerTaxID, 64, false))
 }
 
 func invoiceTextValid(value string, limit int, multiline bool) bool {
@@ -75,24 +93,13 @@ func (s *Service) orderInvoiceDocument(ctx context.Context, userID int64, trade 
 	if err != nil {
 		return OrderInvoice{}, err
 	}
-	if o.State != "paid" || o.PaidAt == nil || o.AmountMinor <= 0 {
+	if (o.State != "paid" && o.State != "refunded") || o.PaidAt == nil || o.AmountMinor <= 0 {
 		return OrderInvoice{}, ErrStateConflict
 	}
-	var refunded bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_commerce.provider_refund_progress WHERE order_id=$1)
-		OR EXISTS(SELECT 1 FROM v3_commerce.user_refunds WHERE order_id=$1 AND status<>'failed')`, o.ID).Scan(&refunded)
-	if err != nil {
-		return OrderInvoice{}, err
-	}
-	if refunded {
-		return OrderInvoice{}, ErrStateConflict
-	}
-	var result OrderInvoice
-	var name, address string
-	err = tx.QueryRow(ctx, `SELECT number,pdf,buyer_name,buyer_address FROM v3_commerce.order_invoice_documents WHERE order_id=$1`, o.ID).
-		Scan(&result.Number, &result.PDF, &name, &address)
+	stored, err := loadLatestOrderInvoice(ctx, tx, o.ID)
+	result := stored.OrderInvoice
 	if err == nil {
-		if input != nil && (name != input.BuyerName || address != input.BuyerAddress) {
+		if input != nil && stored.input != *input {
 			return OrderInvoice{}, ErrInvoiceDetailsConflict
 		}
 	} else if errors.Is(err, pgx.ErrNoRows) {
@@ -142,9 +149,23 @@ func (s *Service) insertOrderInvoice(ctx context.Context, tx pgx.Tx, o Order, in
 	data := orderInvoiceData{number: number, buyer: input.BuyerName, buyerAddress: input.BuyerAddress,
 		sellerAddress: strings.TrimSpace(address), description: description, trade: o.TradeNo, provider: o.Provider,
 		currency: strings.ToUpper(o.Currency), amount: formatCurrencyMinor(o.AmountMinor, o.Currency), issued: issued, paid: paid}
-	pdf := renderOrderInvoice(data)
-	snapshot, err := json.Marshal(map[string]any{"seller_name": "CodeGo AI Limited", "seller_name_zh": "码高智能有限公司",
-		"description": description, "trade_no": o.TradeNo, "provider": o.Provider, "amount_minor": o.AmountMinor, "currency": o.Currency, "paid_at": paid})
+	data.sellerBRN, data.documentType = "81318858", "invoice"
+	data.buyerCountry, data.buyerTaxID = input.BuyerCountry, input.BuyerTaxID
+	if o.ProviderReference != nil {
+		data.paymentReference = *o.ProviderReference
+	}
+	data.details = orderInvoiceDetails(o)
+	pdf, err := renderOrderInvoice(data)
+	if err != nil {
+		if errors.Is(err, ErrInvalid) {
+			err = errors.Join(ErrInvoiceCharactersUnsupported, err)
+		}
+		return OrderInvoice{}, err
+	}
+	snapshot, err := json.Marshal(map[string]any{"seller_name": "CodeGo AI Limited", "seller_name_zh": "碼高智能有限公司",
+		"seller_brn": data.sellerBRN, "description": description, "trade_no": o.TradeNo, "provider": o.Provider,
+		"payment_reference": data.paymentReference, "amount_minor": o.AmountMinor, "currency": o.Currency, "paid_at": paid,
+		"buyer_country": input.BuyerCountry, "buyer_tax_id": input.BuyerTaxID, "details": data.details})
 	if err != nil {
 		return OrderInvoice{}, err
 	}
@@ -165,13 +186,23 @@ func (h *handler) orderInvoice(w http.ResponseWriter, r *http.Request, a Actor) 
 		}
 		document, err = h.s.IssueOrderInvoice(r.Context(), a.UserID, r.PathValue("trade_no"), input)
 	} else {
-		document, err = h.s.DownloadOrderInvoice(r.Context(), a.UserID, r.PathValue("trade_no"))
+		if number := r.URL.Query().Get("number"); number != "" {
+			document, err = h.s.DownloadOrderInvoiceNumber(r.Context(), a.UserID, r.PathValue("trade_no"), number)
+		} else {
+			document, err = h.s.DownloadOrderInvoice(r.Context(), a.UserID, r.PathValue("trade_no"))
+		}
 	}
+	h.respondOrderInvoice(w, document, err)
+}
+
+func (h *handler) respondOrderInvoice(w http.ResponseWriter, document OrderInvoice, err error) {
 	switch {
+	case errors.Is(err, ErrInvoiceCharactersUnsupported):
+		writeFailure(w, http.StatusBadRequest, "发票信息包含暂不支持的字符，请移除表情或特殊符号后重试")
 	case errors.Is(err, ErrInvoiceDetailsRequired):
 		writeFailure(w, http.StatusPreconditionRequired, "请先填写发票抬头和购买方地址")
 	case errors.Is(err, ErrInvoiceDetailsConflict):
-		writeFailure(w, http.StatusConflict, "发票已开具，抬头和地址不可更改")
+		writeFailure(w, http.StatusConflict, "发票已开具，请通过更正流程更新买方信息")
 	case errors.Is(err, ErrInvoiceSellerMissing):
 		writeFailure(w, http.StatusServiceUnavailable, "开票主体地址未配置，请联系平台")
 	case err != nil:

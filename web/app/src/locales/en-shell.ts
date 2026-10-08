@@ -1,5 +1,19 @@
 // English strings for the app shell, navigation, dashboard and public site.
 const shell: Record<string, string> = {
+  分组收藏: 'Favorite groups',
+  '保存常用分组，随时查看模型与价格，再进入市场选择路由。':
+    'Save frequently used groups, review their models and prices, and choose a route in the market.',
+  浏览渠道市场: 'Browse channel market',
+  已取消分组收藏: 'Group removed from favorites',
+  尚未收藏分组: 'No favorite groups yet',
+  '在渠道市场点击收藏分组，之后可在这里快速找到。':
+    'Select Favorite group in the channel market to find it here later.',
+  '已收藏 {count} 个分组': '{count} favorite groups',
+  暂不可访问的分组: 'Group currently unavailable',
+  暂不可访问: 'Currently unavailable',
+  分组收藏分页: 'Favorite groups pagination',
+  '第 {page} 页，共 {total} 个分组': 'Page {page}, {total} groups in total',
+  收藏分组: 'Favorite group',
   对话: 'Chat',
   消息通知: 'Notifications',
   '当前禁止全部模型；填写模型名以开放访问。':

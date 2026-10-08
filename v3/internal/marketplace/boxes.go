@@ -20,6 +20,7 @@ type Purchase struct {
 	Total     credits.Micro `json:"total_micro"`
 }
 type OpenRecord struct {
+	BatchID   int64     `json:"batch_id,omitempty"`
 	ID        int64     `json:"id"`
 	ItemID    int64     `json:"item_id"`
 	Reward    Reward    `json:"reward"`

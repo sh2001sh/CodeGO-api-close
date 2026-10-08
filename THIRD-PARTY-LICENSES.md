@@ -6,6 +6,14 @@ It is an engineering compliance artifact and should be kept with Docker images, 
 Scope: direct dependencies from `go.mod`, `web/default/package.json`, and `electron/package.json`.
 Transitive dependencies should be audited before a final external release.
 
+The v3 invoice renderer additionally distributes `github.com/go-text/typesetting`
+v0.3.3 (Unlicense OR BSD-3-Clause; Copyright 2021 The go-text authors),
+`golang.org/x/image` v0.23.0 (BSD-3-Clause), and Noto Sans CJK / Noto Sans Arabic
+font sources (SIL OFL-1.1). Their full license notices are retained in
+`v3/licenses/` and `v3/internal/commerce/invoicefonts/OFL.txt`, and copied into
+backend images under `/licenses/`. Font source provenance is documented in
+`v3/internal/commerce/invoicefonts/README.md`; PDFs contain only used glyph subsets.
+
 ## Dependency Inventory
 
 | Area        | Scope       | Ecosystem | Dependency                                            | Version                              | License                                            |

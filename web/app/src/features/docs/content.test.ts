@@ -74,6 +74,15 @@ describe('documentation discovery', () => {
 })
 
 describe('copyable API examples', () => {
+  it('opts into Fast only in the explicit Fast example', () => {
+    const sample = docSample('responses-fast', 'curl', 'https://codego.example', 'current-model')
+    const body = JSON.parse(sample.split("<<'CODEGO_JSON'\n")[1].split('\nCODEGO_JSON')[0])
+    expect(body).toEqual({ model: 'current-model', input: 'Hello', service_tier: 'fast' })
+    expect(sample).toContain('/v1/responses')
+    expect(docSample('responses', 'curl', 'https://codego.example', 'current-model')).not.toContain(
+      'service_tier',
+    )
+  })
   it('uses an available model instead of an obsolete fixed ID and never inserts a key', () => {
     for (const language of ['curl', 'python', 'node'] as const) {
       const sample = docSample('quickstart', language, 'https://codego.example', 'current-model')

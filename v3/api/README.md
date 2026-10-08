@@ -1,5 +1,22 @@
 # Control API contract
 
+The v3 model gateway accepts Codex Fast mode through `service_tier: "fast"`
+or its legacy alias `"priority"` on Responses, Chat Completions and Responses
+compact requests. Codex clients can set `service_tier = "fast"` or use `/fast`
+when supported. The selected upstream must implement Fast; latency is not guaranteed.
+Fast is preserved after channel filtering and parameter overrides, and the gateway
+rejects overrides that silently opt an ordinary request into Fast.
+
+Fast pricing is 2× the ordinary charge, including cached-token and tool charges,
+before final monetary rounding. Funding rules and existing card entitlements
+remain applicable. Admission freezes this decision in the existing price snapshot,
+including durable background tasks, and reserves at Fast pricing. JSON, SSE,
+Responses WebSocket and background responses use the upstream's reported tier:
+an explicit `default`, `flex`, `scale` or `standard` settles at 1×; an omitted
+tier retains the requested 2× rate. An unsolicited Fast response to an ordinary
+request does not add a premium. Billing events record `service_tier` and
+`service_tier_multiplier`; failures before output release the reservation.
+
 `openapi.json` defines the control API paths, monetary units, request bodies,
 responses and security schemes. It is served at `GET /api/openapi.json`.
 `types.gen.go`, `server.gen.go` and `dispatch.gen.go` are generated artifacts.
@@ -160,13 +177,32 @@ and frozen multipliers without modifying balances or attribution.
 `POST /api/commerce/orders/{trade_no}/invoice` self-service issues a commercial
 invoice using the purchaser's real `buyer_name` and `buyer_address`. It requires
 the configured `InvoiceSellerAddress`; profile aliases and generic locations are
-not substituted. One durable document per owned paid order freezes actual issue
-time, purchaser/seller/order information and the exact PDF. Identical retries
-return that document; changed purchaser details return 409. GET downloads the
-existing PDF, or returns 428 to request first-issue details. Both return raw PDF
-attachments and recheck ownership, payment and refunds on every call. No manual
-review, profile mutation or payment/ledger mutation occurs. Historical manual
-invoice requests remain readable through their existing endpoints.
+not substituted. Optional `buyer_country` (100 characters) and `buyer_tax_id`
+(64 characters) are retained when provided. The seller is CodeGo AI Limited,
+Hong Kong business registration number 81318858. The first document freezes
+actual issue time, purchaser/seller/order information, payment provider reference
+and exact PDF. Identical retries return the current document; changed purchaser
+details require `POST /invoice/corrections` with `previous_number`, `reason` and
+a stable `request_id`. Exact correction retries replay their saved bytes even
+after subsequent revisions. Stale versions or reused IDs with different data
+return 409. Corrections are unavailable while a refund is processing or confirmed.
+Original and superseded PDFs are never replaced.
+
+`GET /invoice` downloads the current PDF, or returns 428 to request first-issue
+details. `GET /invoice?number=...` downloads a specific saved invoice or credit
+note. Pending/confirmed refunds do not block these saved documents.
+`GET /invoice/documents?page=1&page_size=50` lists owned documents only, up to
+100 per page. `POST /credit-note` creates or replays a credit note from confirmed
+persisted refund increments; no refund amounts are accepted from the client.
+Overlapping refund sources are not added together, and processing/failed refunds
+do not generate notes. All PDF operations return raw attachments with private
+no-store headers and require an owned positive paid/refunded purchase. No manual
+review, profile mutation, provider refund call or ledger mutation occurs.
+Historical manual invoice requests remain readable through their existing endpoints.
+New PDFs contain offline embedded glyph subsets and Arabic shaping. Existing
+saved PDFs retain their original bytes. Electronic Hong Kong commercial invoices
+generally do not need a company chop; receiving institutions may impose their
+own reimbursement requirements.
 Audit event and request lists use bounded cursor pagination and accept either
 a session or a read-only API key. Keys remain scoped to their owner and key
 even when their account has an administrator role. Attempts enforce ownership
@@ -180,3 +216,13 @@ provider configuration and captured payloads preserve their original precision.
 Optional nullable domain fields carry `x-omitempty: true` when their Go JSON
 tags omit empty values. This preserves absent fields on a generated DTO round
 trip; oapi-codegen otherwise emits null for some optional nullable fields.
+
+`GET /api/marketplace/group-favorites` lists the session user's saved market
+groups with pagination (`page_size` up to 100). Optional `group_ids` filters up
+to 100 canonical internal group IDs, for checking the current market page.
+`PUT` accepts `{ "group_id": "...", "favorite": true|false }`; repeated saves
+and removals are idempotent. The numeric public `id` is display-only. Adding a
+favorite enforces market visibility, lifecycle and blocking rules. Revoked
+access leaves a removable bookmark without the group's name, models or price.
+Model favorites are deprecated; their historical records are retained but are
+not converted to groups because a model does not identify one market group.

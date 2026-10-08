@@ -20,6 +20,7 @@ require (
 	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
+	github.com/go-text/typesetting v0.3.3
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/go-webauthn/x v0.3.0 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
@@ -30,6 +31,7 @@ require (
 	github.com/riverqueue/river/rivershared v0.47.0 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	golang.org/x/image v0.23.0
 )
 
 require (

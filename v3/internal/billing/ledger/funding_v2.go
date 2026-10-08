@@ -20,6 +20,10 @@ import (
 // metadata additionally requires non_transferable=true, non_refundable=true.
 func fundingEntryPolicy(e billing.Entry) (ppm *int64, nonTransferable, nonRefundable bool, err error) {
 	source := fundingSource(e)
+	if source == "blind_box_batch_base" || source == "blind_box_batch_reward" {
+		zero := int64(0)
+		return &zero, true, true, nil
+	}
 	if source == "referral_reward" {
 		zero := int64(0)
 		return &zero, true, true, nil
@@ -125,7 +129,10 @@ const (
 	fundingOwnerSpend fundingSpendMode = iota
 	fundingPeerTransfer
 	fundingRefund
+	fundingProductPurchase
 )
+
+var ErrWalletAPICreditsPurchaseLocked = billing.ErrAPICreditsPurchaseLocked
 
 // RefundableBalanceTx excludes permanently restricted reward provenance.
 // Order-specific refund eligibility remains the responsibility of commerce.

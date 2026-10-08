@@ -100,12 +100,6 @@ export const consoleNav: readonly NavGroup[] = [
         icon: SearchCheck,
         keywords: 'audit requests attempts samples 审计 请求 重试 样本',
       },
-      {
-        to: '/model-favorites',
-        label: '模型收藏',
-        icon: Star,
-        keywords: 'models favorites 模型 收藏',
-      },
     ],
   },
   {
@@ -154,6 +148,12 @@ export const consoleNav: readonly NavGroup[] = [
         label: '渠道市场',
         icon: Store,
         keywords: 'market marketplace group 分组 市场 倍率',
+      },
+      {
+        to: '/group-favorites',
+        label: '分组收藏',
+        icon: Star,
+        keywords: 'groups favorites bookmarks 分组 收藏 渠道',
       },
       { to: '/blind-box', label: '盲盒', icon: Gift, keywords: 'blind box 盲盒 抽卡' },
     ],

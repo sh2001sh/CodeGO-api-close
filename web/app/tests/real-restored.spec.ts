@@ -93,7 +93,7 @@ test('real restored TOTP backup replay, retained desktop API revoke and reward p
 
   for (const [path, title] of [
     ['/referral-rewards', '邀请奖励'],
-    ['/model-favorites', '模型收藏'],
+    ['/group-favorites', '分组收藏'],
   ]) {
     await page.goto(path)
     await expect(page.getByRole('heading', { name: title, exact: true, level: 1 })).toBeVisible()

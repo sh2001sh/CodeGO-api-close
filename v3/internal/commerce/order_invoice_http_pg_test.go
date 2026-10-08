@@ -63,7 +63,12 @@ func TestOrderInvoiceHTTPPostAndGetEnforceOwnershipAndPaymentState(t *testing.T)
 	if err := s.ConfirmRefund(ctx, "test", o.TradeNo, "invoice-http-refund"); err != nil {
 		t.Fatal(err)
 	}
-	checkDenied(http.StatusConflict) // saved PDFs also blocked after refund
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		replay := call(method)
+		if replay.Code != http.StatusOK || !bytes.Equal(issued.Body.Bytes(), replay.Body.Bytes()) {
+			t.Fatalf("%s refund blocked original PDF", method)
+		}
+	}
 }
 
 func TestOrderInvoiceRacingDifferentPurchasersAndMultilineAddress(t *testing.T) {

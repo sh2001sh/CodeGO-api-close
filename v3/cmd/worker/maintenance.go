@@ -13,15 +13,16 @@ import (
 // sample_cleanup is scheduled only when an audit retention is configured.
 func maintenance(deps *boot.Deps, s *services, cfg workerConfig) (map[string]func(context.Context) error, map[string]time.Duration) {
 	periods := map[string]time.Duration{
-		"reservation_sweep":     30 * time.Second,
-		"reconcile":             cfg.reconcileEvery,
-		"usage_partitions":      24 * time.Hour,
-		"commerce_expire":       time.Minute,
-		"marketplace_expire":    time.Minute,
-		"channel_market":        time.Minute,
-		"workflow":              10 * time.Second,
-		"lucky_reward_recovery": time.Minute,
-		"referral_rewards":      time.Minute,
+		"reservation_sweep":       30 * time.Second,
+		"reconcile":               cfg.reconcileEvery,
+		"usage_partitions":        24 * time.Hour,
+		"commerce_expire":         time.Minute,
+		"marketplace_expire":      time.Minute,
+		"channel_market":          time.Minute,
+		"workflow":                10 * time.Second,
+		"lucky_reward_recovery":   time.Minute,
+		"referral_rewards":        time.Minute,
+		"blind_box_contributions": time.Minute,
 	}
 	if cfg.retentionDays > 0 {
 		periods["sample_cleanup"] = 24 * time.Hour
@@ -43,6 +44,10 @@ func maintenance(deps *boot.Deps, s *services, cfg workerConfig) (map[string]fun
 			return err
 		},
 		"marketplace_expire": s.marketplaceMaintenance,
+		"blind_box_contributions": func(ctx context.Context) error {
+			_, err := s.market.AccrueBatchEntitlements(ctx, 100)
+			return err
+		},
 		"channel_market": func(ctx context.Context) error {
 			return channelMarketMaintenance(ctx, s.channelMarket)
 		},

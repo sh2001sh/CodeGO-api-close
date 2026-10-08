@@ -10,6 +10,7 @@ import { DataTable } from '../../components/data-table'
 import { Button, ErrorMessage, Loading, Pagination, Status } from '../../components/ui'
 import { downloadOrderInvoice, type InvoiceBuyer } from './download-invoice'
 import { InvoiceBuyerDialog } from './invoice-buyer-dialog'
+import { InvoiceDocuments } from './invoice-documents'
 
 function HistoricalInvoiceRequests() {
   const { t } = useTranslation()
@@ -66,6 +67,7 @@ export function OrderInvoices() {
   const [cursors, setCursors] = useState<string[]>([])
   const [issueTrade, setIssueTrade] = useState<string | null>(null)
   const [draft, setDraft] = useState<InvoiceBuyer | undefined>()
+  const [historyTrade, setHistoryTrade] = useState<string | null>(null)
   const list = useQuery(
     resourceOptions(
       'invoice-orders',
@@ -94,11 +96,14 @@ export function OrderInvoices() {
     <>
       <div className="section">
         <h2>{t('商业发票')}</h2>
+        <p className="muted">CodeGo AI Limited · 碼高智能有限公司 · {t('香港')}</p>
         <p className="muted">
-          CodeGo AI Limited · {t('码高智能有限公司')} · {t('香港')}
+          {t(
+            '已支付订单可自助开具发票。更正保留历史版本，退款后仍可下载原票及已确认退款的贷项单。',
+          )}
         </p>
         <p className="muted">
-          {t('已支付订单可自助开具商业发票。未支付、退款中或已退款的订单不可开具或下载。')}
+          BRN 81318858 · {t('香港商业发票通常无需盖章；具体报销要求以接收机构为准。')}
         </p>
         <p className="muted">{t('境外报销要求可能不同，请向报销机构确认。')}</p>
       </div>
@@ -113,7 +118,12 @@ export function OrderInvoices() {
       {list.isFetching && <Loading />}
       <DataTable
         caption="已支付订单发票"
-        rows={orders.filter((order) => order.state === 'paid' && BigInt(order.amount_minor) > 0n)}
+        rows={orders.filter(
+          (order) =>
+            (order.state === 'paid' || order.state === 'refunded') &&
+            !!order.paid_at &&
+            BigInt(order.amount_minor) > 0n,
+        )}
         rowKey={(row) => row.id}
         empty="本页暂无已支付订单"
         columns={[
@@ -142,18 +152,27 @@ export function OrderInvoices() {
           {
             label: '发票',
             render: (row) => (
-              <Button
-                variant="quiet"
-                disabled={download.isPending}
-                onClick={() => download.mutate({ trade: row.trade_no })}
-              >
-                <Download size={15} aria-hidden />
-                {t(
-                  download.isPending && download.variables?.trade === row.trade_no
-                    ? '下载中…'
-                    : '下载 PDF',
-                )}
-              </Button>
+              <div className="row-actions">
+                <Button
+                  variant="quiet"
+                  disabled={download.isPending}
+                  onClick={() => download.mutate({ trade: row.trade_no })}
+                >
+                  <Download size={15} aria-hidden />
+                  {t(
+                    download.isPending && download.variables?.trade === row.trade_no
+                      ? '下载中…'
+                      : '下载 PDF',
+                  )}
+                </Button>
+                <Button
+                  variant="quiet"
+                  disabled={download.isPending}
+                  onClick={() => setHistoryTrade(row.trade_no)}
+                >
+                  {t('发票记录')}
+                </Button>
+              </div>
             ),
           },
         ]}
@@ -175,6 +194,13 @@ export function OrderInvoices() {
         </Button>
       </div>
       <HistoricalInvoiceRequests />
+      {historyTrade && (
+        <InvoiceDocuments
+          key={historyTrade}
+          trade={historyTrade}
+          onClose={() => setHistoryTrade(null)}
+        />
+      )}
       <InvoiceBuyerDialog
         trade={issueTrade}
         draft={draft}

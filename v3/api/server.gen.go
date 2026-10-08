@@ -58,6 +58,21 @@ type ServerInterface interface {
 	// (GET /api/billing/history)
 	GetApiBillingHistory(w http.ResponseWriter, r *http.Request, params GetApiBillingHistoryParams)
 
+	// (GET /api/blind-box/admin/batches)
+	GetApiBlindBoxAdminBatches(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /api/blind-box/admin/batches)
+	PutApiBlindBoxAdminBatches(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/blind-box/admin/batches/{id}/pause)
+	PostApiBlindBoxAdminBatchesIdPause(w http.ResponseWriter, r *http.Request, id int64)
+
+	// (POST /api/blind-box/admin/batches/{id}/publish)
+	PostApiBlindBoxAdminBatchesIdPublish(w http.ResponseWriter, r *http.Request, id int64)
+
+	// (GET /api/blind-box/admin/batches/{id}/stats)
+	GetApiBlindBoxAdminBatchesIdStats(w http.ResponseWriter, r *http.Request, id int64)
+
 	// (GET /api/blind-box/admin/pools)
 	ListBlindBoxAdminPools(w http.ResponseWriter, r *http.Request)
 
@@ -78,6 +93,12 @@ type ServerInterface interface {
 
 	// (POST /api/blind-box/amount)
 	PostApiBlindBoxAmount(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/blind-box/batches)
+	GetApiBlindBoxBatches(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/blind-box/batches/{id}/draw)
+	PostApiBlindBoxBatchesIdDraw(w http.ResponseWriter, r *http.Request, id int64)
 
 	// (GET /api/blind-box/epay/notify)
 	GetApiBlindBoxEpayNotify(w http.ResponseWriter, r *http.Request)
@@ -346,14 +367,23 @@ type ServerInterface interface {
 	// (POST /api/commerce/orders/{trade_no}/cancel)
 	PostApiCommerceOrdersTradeNoCancel(w http.ResponseWriter, r *http.Request, tradeNo string)
 
+	// (POST /api/commerce/orders/{trade_no}/credit-note)
+	PostApiCommerceOrdersTradeNoCreditNote(w http.ResponseWriter, r *http.Request, tradeNo string)
+
 	// (GET /api/commerce/orders/{trade_no}/discount)
 	GetApiCommerceOrdersTradeNoDiscount(w http.ResponseWriter, r *http.Request, tradeNo string)
 
 	// (GET /api/commerce/orders/{trade_no}/invoice)
-	GetApiCommerceOrdersTradeNoInvoice(w http.ResponseWriter, r *http.Request, tradeNo string)
+	GetApiCommerceOrdersTradeNoInvoice(w http.ResponseWriter, r *http.Request, tradeNo string, params GetApiCommerceOrdersTradeNoInvoiceParams)
 
 	// (POST /api/commerce/orders/{trade_no}/invoice)
 	PostApiCommerceOrdersTradeNoInvoice(w http.ResponseWriter, r *http.Request, tradeNo string)
+
+	// (POST /api/commerce/orders/{trade_no}/invoice/corrections)
+	PostApiCommerceOrdersTradeNoInvoiceCorrections(w http.ResponseWriter, r *http.Request, tradeNo string)
+
+	// (GET /api/commerce/orders/{trade_no}/invoice/documents)
+	GetApiCommerceOrdersTradeNoInvoiceDocuments(w http.ResponseWriter, r *http.Request, tradeNo string, params GetApiCommerceOrdersTradeNoInvoiceDocumentsParams)
 
 	// (GET /api/commerce/providers)
 	GetApiCommerceProviders(w http.ResponseWriter, r *http.Request)
@@ -762,6 +792,12 @@ type ServerInterface interface {
 
 	// (POST /api/marketplace/channels/{id}/verify)
 	PostApiMarketplaceChannelsIdVerify(w http.ResponseWriter, r *http.Request, id string)
+	// List own group favorites
+	// (GET /api/marketplace/group-favorites)
+	GetGroupFavorites(w http.ResponseWriter, r *http.Request, params GetGroupFavoritesParams)
+	// Set own favorite; adding requires current access
+	// (PUT /api/marketplace/group-favorites)
+	PutGroupFavorite(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/marketplace/group-status)
 	GetApiMarketplaceGroupStatus(w http.ResponseWriter, r *http.Request)
@@ -2598,6 +2634,149 @@ func (siw *ServerInterfaceWrapper) GetApiBillingHistory(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// GetApiBlindBoxAdminBatches operation middleware
+func (siw *ServerInterfaceWrapper) GetApiBlindBoxAdminBatches(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetApiBlindBoxAdminBatches(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutApiBlindBoxAdminBatches operation middleware
+func (siw *ServerInterfaceWrapper) PutApiBlindBoxAdminBatches(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutApiBlindBoxAdminBatches(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostApiBlindBoxAdminBatchesIdPause operation middleware
+func (siw *ServerInterfaceWrapper) PostApiBlindBoxAdminBatchesIdPause(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostApiBlindBoxAdminBatchesIdPause(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostApiBlindBoxAdminBatchesIdPublish operation middleware
+func (siw *ServerInterfaceWrapper) PostApiBlindBoxAdminBatchesIdPublish(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostApiBlindBoxAdminBatchesIdPublish(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetApiBlindBoxAdminBatchesIdStats operation middleware
+func (siw *ServerInterfaceWrapper) GetApiBlindBoxAdminBatchesIdStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetApiBlindBoxAdminBatchesIdStats(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListBlindBoxAdminPools operation middleware
 func (siw *ServerInterfaceWrapper) ListBlindBoxAdminPools(w http.ResponseWriter, r *http.Request) {
 
@@ -2859,6 +3038,61 @@ func (siw *ServerInterfaceWrapper) PostApiBlindBoxAmount(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostApiBlindBoxAmount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetApiBlindBoxBatches operation middleware
+func (siw *ServerInterfaceWrapper) GetApiBlindBoxBatches(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetApiBlindBoxBatches(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostApiBlindBoxBatchesIdDraw operation middleware
+func (siw *ServerInterfaceWrapper) PostApiBlindBoxBatchesIdDraw(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostApiBlindBoxBatchesIdDraw(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5648,6 +5882,39 @@ func (siw *ServerInterfaceWrapper) PostApiCommerceOrdersTradeNoCancel(w http.Res
 	handler.ServeHTTP(w, r)
 }
 
+// PostApiCommerceOrdersTradeNoCreditNote operation middleware
+func (siw *ServerInterfaceWrapper) PostApiCommerceOrdersTradeNoCreditNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "trade_no" -------------
+	var tradeNo string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "trade_no", r.PathValue("trade_no"), &tradeNo, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "trade_no", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostApiCommerceOrdersTradeNoCreditNote(w, r, tradeNo)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetApiCommerceOrdersTradeNoDiscount operation middleware
 func (siw *ServerInterfaceWrapper) GetApiCommerceOrdersTradeNoDiscount(w http.ResponseWriter, r *http.Request) {
 
@@ -5703,8 +5970,19 @@ func (siw *ServerInterfaceWrapper) GetApiCommerceOrdersTradeNoInvoice(w http.Res
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetApiCommerceOrdersTradeNoInvoiceParams
+
+	// ------------- Optional query parameter "number" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "number", r.URL.Query(), &params.Number)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "number", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetApiCommerceOrdersTradeNoInvoice(w, r, tradeNo)
+		siw.Handler.GetApiCommerceOrdersTradeNoInvoice(w, r, tradeNo, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5738,6 +6016,91 @@ func (siw *ServerInterfaceWrapper) PostApiCommerceOrdersTradeNoInvoice(w http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostApiCommerceOrdersTradeNoInvoice(w, r, tradeNo)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostApiCommerceOrdersTradeNoInvoiceCorrections operation middleware
+func (siw *ServerInterfaceWrapper) PostApiCommerceOrdersTradeNoInvoiceCorrections(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "trade_no" -------------
+	var tradeNo string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "trade_no", r.PathValue("trade_no"), &tradeNo, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "trade_no", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostApiCommerceOrdersTradeNoInvoiceCorrections(w, r, tradeNo)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetApiCommerceOrdersTradeNoInvoiceDocuments operation middleware
+func (siw *ServerInterfaceWrapper) GetApiCommerceOrdersTradeNoInvoiceDocuments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "trade_no" -------------
+	var tradeNo string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "trade_no", r.PathValue("trade_no"), &tradeNo, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "trade_no", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetApiCommerceOrdersTradeNoInvoiceDocumentsParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page_size" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page_size", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_size", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetApiCommerceOrdersTradeNoInvoiceDocuments(w, r, tradeNo, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11336,6 +11699,79 @@ func (siw *ServerInterfaceWrapper) PostApiMarketplaceChannelsIdVerify(w http.Res
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostApiMarketplaceChannelsIdVerify(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetGroupFavorites operation middleware
+func (siw *ServerInterfaceWrapper) GetGroupFavorites(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetGroupFavoritesParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page_size" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page_size", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_size", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "group_ids" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "group_ids", r.URL.Query(), &params.GroupIds)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "group_ids", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetGroupFavorites(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutGroupFavorite operation middleware
+func (siw *ServerInterfaceWrapper) PutGroupFavorite(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionCookieScopes, []string{})
+
+	ctx = context.WithValue(ctx, SessionBearerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutGroupFavorite(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20187,6 +20623,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/billing/entries", wrapper.GetApiBillingEntries)
 	m.HandleFunc("GET "+options.BaseURL+"/api/billing/funding-economics", wrapper.GetApiBillingFundingEconomics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/billing/history", wrapper.GetApiBillingHistory)
+	m.HandleFunc("GET "+options.BaseURL+"/api/blind-box/admin/batches", wrapper.GetApiBlindBoxAdminBatches)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/blind-box/admin/batches", wrapper.PutApiBlindBoxAdminBatches)
+	m.HandleFunc("POST "+options.BaseURL+"/api/blind-box/admin/batches/{id}/pause", wrapper.PostApiBlindBoxAdminBatchesIdPause)
+	m.HandleFunc("POST "+options.BaseURL+"/api/blind-box/admin/batches/{id}/publish", wrapper.PostApiBlindBoxAdminBatchesIdPublish)
+	m.HandleFunc("GET "+options.BaseURL+"/api/blind-box/admin/batches/{id}/stats", wrapper.GetApiBlindBoxAdminBatchesIdStats)
 	m.HandleFunc("GET "+options.BaseURL+"/api/blind-box/admin/pools", wrapper.ListBlindBoxAdminPools)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/blind-box/admin/pools", wrapper.PutApiBlindBoxAdminPools)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/blind-box/admin/users/{id}/grants", wrapper.DeleteApiBlindBoxAdminUsersIdGrants)
@@ -20194,6 +20635,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/blind-box/admin/users/{id}/overview", wrapper.GetApiBlindBoxAdminUsersIdOverview)
 	m.HandleFunc("POST "+options.BaseURL+"/api/blind-box/admin/users/{id}/revoke", wrapper.PostApiBlindBoxAdminUsersIdRevoke)
 	m.HandleFunc("POST "+options.BaseURL+"/api/blind-box/amount", wrapper.PostApiBlindBoxAmount)
+	m.HandleFunc("GET "+options.BaseURL+"/api/blind-box/batches", wrapper.GetApiBlindBoxBatches)
+	m.HandleFunc("POST "+options.BaseURL+"/api/blind-box/batches/{id}/draw", wrapper.PostApiBlindBoxBatchesIdDraw)
 	m.HandleFunc("GET "+options.BaseURL+"/api/blind-box/epay/notify", wrapper.GetApiBlindBoxEpayNotify)
 	m.HandleFunc("POST "+options.BaseURL+"/api/blind-box/epay/notify", wrapper.PostApiBlindBoxEpayNotify)
 	m.HandleFunc("GET "+options.BaseURL+"/api/blind-box/epay/return", wrapper.GetApiBlindBoxEpayReturn)
@@ -20283,9 +20726,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/api/commerce/orders", wrapper.PostApiCommerceOrders)
 	m.HandleFunc("GET "+options.BaseURL+"/api/commerce/orders/{trade_no}", wrapper.GetApiCommerceOrdersTradeNo)
 	m.HandleFunc("POST "+options.BaseURL+"/api/commerce/orders/{trade_no}/cancel", wrapper.PostApiCommerceOrdersTradeNoCancel)
+	m.HandleFunc("POST "+options.BaseURL+"/api/commerce/orders/{trade_no}/credit-note", wrapper.PostApiCommerceOrdersTradeNoCreditNote)
 	m.HandleFunc("GET "+options.BaseURL+"/api/commerce/orders/{trade_no}/discount", wrapper.GetApiCommerceOrdersTradeNoDiscount)
 	m.HandleFunc("GET "+options.BaseURL+"/api/commerce/orders/{trade_no}/invoice", wrapper.GetApiCommerceOrdersTradeNoInvoice)
 	m.HandleFunc("POST "+options.BaseURL+"/api/commerce/orders/{trade_no}/invoice", wrapper.PostApiCommerceOrdersTradeNoInvoice)
+	m.HandleFunc("POST "+options.BaseURL+"/api/commerce/orders/{trade_no}/invoice/corrections", wrapper.PostApiCommerceOrdersTradeNoInvoiceCorrections)
+	m.HandleFunc("GET "+options.BaseURL+"/api/commerce/orders/{trade_no}/invoice/documents", wrapper.GetApiCommerceOrdersTradeNoInvoiceDocuments)
 	m.HandleFunc("GET "+options.BaseURL+"/api/commerce/providers", wrapper.GetApiCommerceProviders)
 	m.HandleFunc("POST "+options.BaseURL+"/api/commerce/redemptions/redeem", wrapper.PostApiCommerceRedemptionsRedeem)
 	m.HandleFunc("POST "+options.BaseURL+"/api/commerce/webhooks/{provider}", wrapper.PostApiCommerceWebhooksProvider)
@@ -20422,6 +20868,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/marketplace/channels/{id}/user-usage/{userId}/time-series", wrapper.GetApiMarketplaceChannelsIdUserUsageUserIdTimeSeries)
 	m.HandleFunc("POST "+options.BaseURL+"/api/marketplace/channels/{id}/verification/pause", wrapper.PostApiMarketplaceChannelsIdVerificationPause)
 	m.HandleFunc("POST "+options.BaseURL+"/api/marketplace/channels/{id}/verify", wrapper.PostApiMarketplaceChannelsIdVerify)
+	m.HandleFunc("GET "+options.BaseURL+"/api/marketplace/group-favorites", wrapper.GetGroupFavorites)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/marketplace/group-favorites", wrapper.PutGroupFavorite)
 	m.HandleFunc("GET "+options.BaseURL+"/api/marketplace/group-status", wrapper.GetApiMarketplaceGroupStatus)
 	m.HandleFunc("GET "+options.BaseURL+"/api/marketplace/groups", wrapper.GetApiMarketplaceGroups)
 	m.HandleFunc("POST "+options.BaseURL+"/api/marketplace/groups/{id}/bargain-requests", wrapper.PostApiMarketplaceGroupsIdBargainRequests)

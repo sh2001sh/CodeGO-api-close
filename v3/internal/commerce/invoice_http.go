@@ -9,6 +9,9 @@ import (
 func (h *handler) registerInvoices(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/commerce/orders/{trade_no}/invoice", h.authorized(false, h.orderInvoice))
 	mux.HandleFunc("POST /api/commerce/orders/{trade_no}/invoice", h.authorized(false, h.orderInvoice))
+	mux.HandleFunc("POST /api/commerce/orders/{trade_no}/invoice/corrections", h.authorized(false, h.orderInvoiceCorrection))
+	mux.HandleFunc("GET /api/commerce/orders/{trade_no}/invoice/documents", h.authorized(false, h.orderInvoiceDocuments))
+	mux.HandleFunc("POST /api/commerce/orders/{trade_no}/credit-note", h.authorized(false, h.orderCreditNote))
 	mux.HandleFunc("GET /api/invoices/eligible-orders", h.authorized(false, h.invoiceEligible))
 	mux.HandleFunc("GET /api/invoices/requests", h.authorized(false, h.invoiceRequests))
 	mux.HandleFunc("POST /api/invoices/requests", h.authorized(false, h.invoiceCreate))

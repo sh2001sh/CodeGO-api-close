@@ -10,6 +10,8 @@ import { DataTable } from '../../components/data-table'
 import { Button, ErrorMessage, Field, Loading, Status } from '../../components/ui'
 import { decimalCredits } from '../commerce/amounts'
 import { newPoolRewards, newStandardPolicy, parsePoolConfig, poolConfigJSON } from './pool-draft'
+import { PoolRewardFields } from './pool-reward-fields'
+import '../blind-box/blind-box.css'
 
 type Pool = Schema['MarketplacePool']
 
@@ -185,17 +187,7 @@ export function PoolEditor() {
               '高级配置使用完整 JSON。金额单位为 micro-credits；权重保持精确整数。修改前请核对原有奖励、金额区间、道具上限和保底规则。',
             )}
           </p>
-          <label className="field full-width" htmlFor="pool-rewards">
-            <span>{t('奖励配置 JSON')}</span>
-            <textarea
-              id="pool-rewards"
-              name="pool-rewards"
-              rows={14}
-              required
-              spellCheck={false}
-              defaultValue={poolConfigJSON(current?.rewards ?? newPoolRewards)}
-            />
-          </label>
+          <PoolRewardFields initial={current?.rewards ?? newPoolRewards} />
           <label className="field full-width" htmlFor="pool-guarantees">
             <span>{t('保底配置 JSON')}</span>
             <textarea

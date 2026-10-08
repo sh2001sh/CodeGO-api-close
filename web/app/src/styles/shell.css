@@ -734,6 +734,11 @@
     min-height: 44px;
   }
 }
+@media (max-width: 720px) {
+  .topbar .balance-chip {
+    display: none;
+  }
+}
 @media (max-width: 640px) {
   /* Account actions remain in the public drawer; keep room for search, community and preferences. */
   .site > .topbar .topbar-actions > .button {

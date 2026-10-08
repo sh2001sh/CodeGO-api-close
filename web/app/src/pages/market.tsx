@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { ArrowRight, Search, Server, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Search, Server, ShieldCheck, Star } from 'lucide-react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
 import { resourceOptions, keysOptions, sessionOptions } from '../lib/queries'
 import {
   groupPageOptions,
   groupDetailOptions,
+  groupFavoritesOptions,
   type MarketBrowseFilters,
   type PublicCatalogModel,
 } from '../lib/public-catalog'
@@ -132,6 +133,22 @@ export default function MarketPage() {
   const keysQuery = useQuery({ ...keysOptions(), enabled: signedIn })
   const noticesQuery = useQuery({ ...noticeOptions(), enabled: signedIn })
   const groups = groupsQuery.data?.groups ?? []
+  const visibleFavoriteIDs = [
+    ...new Set([
+      ...groups.map((group) => group.group_id),
+      ...(selectedQuery.data ? [selectedQuery.data.group_id] : []),
+    ]),
+  ].sort()
+  const favoritesQuery = useQuery({
+    ...groupFavoritesOptions(1, 100, visibleFavoriteIDs),
+    enabled: signedIn && visibleFavoriteIDs.length > 0,
+  })
+  const favoriteIDs = new Set(favoritesQuery.data?.items.map((group) => group.group_id))
+  const favorite = useMutation({
+    mutationFn: (body: { group_id: string; favorite: boolean }) =>
+      api.PUT('/api/marketplace/group-favorites', { body }).then(unwrap),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['group-favorites'] }),
+  })
   const keys = keysQuery.data ?? []
   const notices = noticesQuery.data ?? []
   const selected = selectedQuery.error ? undefined : selectedQuery.data
@@ -311,7 +328,9 @@ export default function MarketPage() {
           invite.error ??
           bargain.error ??
           feedback.error ??
-          read.error
+          read.error ??
+          (signedIn ? favoritesQuery.error : null) ??
+          favorite.error
         }
       />
       {newSecret && (
@@ -609,22 +628,51 @@ export default function MarketPage() {
                           <span>{t('计费倍率')}</span>
                           <strong>{String(group.multiplier)}×</strong>
                         </div>
-                        <Button
-                          variant={selected?.group_id === group.group_id ? 'secondary' : 'primary'}
-                          aria-expanded={selected?.group_id === group.group_id}
-                          aria-controls={`market-detail-${group.group_id}`}
-                          onClick={() => {
-                            void navigate({
-                              search: {
-                                ...routeSearch,
-                                group: selected?.group_id === group.group_id ? undefined : group.id,
-                              },
-                            })
-                            setMessage('')
-                          }}
-                        >
-                          {t(selected?.group_id === group.group_id ? '收起' : '选择渠道')}
-                        </Button>
+                        <div className="market-listing-actions">
+                          {signedIn && (
+                            <Button
+                              variant="quiet"
+                              aria-pressed={favoriteIDs.has(group.group_id)}
+                              disabled={
+                                favorite.isPending ||
+                                favoritesQuery.isPending ||
+                                favoritesQuery.isError
+                              }
+                              onClick={() =>
+                                favorite.mutate({
+                                  group_id: group.group_id,
+                                  favorite: !favoriteIDs.has(group.group_id),
+                                })
+                              }
+                            >
+                              <Star
+                                size={16}
+                                aria-hidden
+                                fill={favoriteIDs.has(group.group_id) ? 'currentColor' : 'none'}
+                              />
+                              {t(favoriteIDs.has(group.group_id) ? '已收藏' : '收藏分组')}
+                            </Button>
+                          )}
+                          <Button
+                            variant={
+                              selected?.group_id === group.group_id ? 'secondary' : 'primary'
+                            }
+                            aria-expanded={selected?.group_id === group.group_id}
+                            aria-controls={`market-detail-${group.group_id}`}
+                            onClick={() => {
+                              void navigate({
+                                search: {
+                                  ...routeSearch,
+                                  group:
+                                    selected?.group_id === group.group_id ? undefined : group.id,
+                                },
+                              })
+                              setMessage('')
+                            }}
+                          >
+                            {t(selected?.group_id === group.group_id ? '收起' : '选择渠道')}
+                          </Button>
+                        </div>
                       </div>
                       <MarketQuality
                         group={group}

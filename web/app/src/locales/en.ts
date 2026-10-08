@@ -4,6 +4,7 @@ import areaPlayground from './en-playground'
 import areaCatalogAdmin from './en-catalog-admin'
 import areaPublic from './en-public'
 import areaCommerceAdmin from './en-commerce-admin'
+import blindBoxBatches from './en-blind-box-batches'
 import shell from './en-shell'
 import marketWorkspace from './en-market-workspace'
 import marketShops from './en-market-shops'
@@ -405,4 +406,5 @@ export default {
   ...legacyUI,
   ...marketConfidence,
   ...optimizationMessages,
+  ...blindBoxBatches,
 }

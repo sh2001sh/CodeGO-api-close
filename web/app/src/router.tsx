@@ -314,10 +314,17 @@ const desktopDevices = createRoute({
     throw redirect({ to: '/profile' })
   },
 })
-const modelFavorites = createRoute({
+const groupFavorites = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/group-favorites',
+  component: lazyRouteComponent(() => import('./pages/group-favorites')),
+})
+const retiredModelFavorites = createRoute({
   getParentRoute: () => authenticated,
   path: '/model-favorites',
-  component: lazyRouteComponent(() => import('./pages/model-favorites')),
+  beforeLoad: () => {
+    throw redirect({ to: '/group-favorites', replace: true })
+  },
 })
 const referralRewards = createRoute({
   getParentRoute: () => authenticated,
@@ -561,7 +568,8 @@ const routeTree = root.addChildren([
     profile,
     desktopAuthorize,
     desktopDevices,
-    modelFavorites,
+    groupFavorites,
+    retiredModelFavorites,
     referralRewards,
     myChannels,
     transfers,

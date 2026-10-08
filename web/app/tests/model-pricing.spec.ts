@@ -87,38 +87,6 @@ test('public quotations show token, cache and media units without treating missi
   expect(width.document).toBeLessThanOrEqual(width.viewport)
 })
 
-test('ordinary users can discover a model, favorite it, and see its name in their favorites', async ({
-  page,
-}) => {
-  let ids: string[] = []
-  await page.route('**/api/models/favorites/', async (route) => {
-    if (route.request().method() === 'PUT') {
-      const body = route.request().postDataJSON()
-      expect(String(body.model_id)).toBe('17')
-      ids = body.favorite ? ['17'] : []
-    }
-    await route.fulfill({
-      json: {
-        success: true,
-        data: { model_ids: ids, models: ids.map((id) => ({ id, model_name: 'gpt-example' })) },
-      },
-    })
-  })
-  await page.goto('/models')
-  const row = page
-    .locator('.model-row')
-    .filter({ has: page.getByText('gpt-example', { exact: true }) })
-  await row.getByRole('button', { name: '添加收藏', exact: true }).click()
-  await expect(row.getByRole('button', { name: '取消收藏', exact: true })).toBeVisible()
-  await page.goto('/model-favorites')
-  await expect(page.getByRole('cell', { name: 'gpt-example', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '取消收藏', exact: true }).click()
-  await expect(page.getByText('尚未收藏模型。', { exact: true })).toBeVisible()
-  await page.getByLabel('选择模型', { exact: true }).selectOption('17')
-  await page.getByRole('button', { name: '添加收藏', exact: true }).click()
-  await expect(page.getByRole('cell', { name: 'gpt-example', exact: true })).toBeVisible()
-})
-
 test('a public catalog failure has an explicit retry and does not invent zero prices', async ({
   page,
 }) => {

@@ -3,9 +3,11 @@ import { credits, date } from '../../lib/format'
 import { useTranslation } from '../../lib/i18n'
 import { DataTable } from '../../components/data-table'
 import { Button, Status, confirmAction } from '../../components/ui'
+import { BoxPlanSpecification } from './plan-specification'
+import { boxPlanSnapshot } from './batch-presentation'
 
 export function RetainedBoxProps(props: {
-  items: readonly Schema['MarketplaceProp'][]
+  items: readonly (Schema['MarketplaceProp'] & { plan_snapshot?: unknown })[]
   pending: boolean
   onAction: (input: { id: Schema['MarketplaceProp']['id']; action: 'pause' | 'use' }) => void
   onConvert: (id: Schema['MarketplaceProp']['id']) => void
@@ -25,6 +27,8 @@ export function RetainedBoxProps(props: {
           {
             label: '权益',
             render: (row) => {
+              if (row.kind === 'subscription' && row.plan_snapshot)
+                return <BoxPlanSpecification snapshot={boxPlanSnapshot(row.plan_snapshot)} />
               if (row.kind === 'multiplier')
                 return `${Number(row.multiplier_ppm) / 1_000_000}× · ${(Number(row.remaining_seconds) / 3600).toFixed(1)} ${t('小时')}`
               if (row.kind === 'topup_discount' || row.kind === 'subscription_discount')
@@ -68,7 +72,7 @@ export function RetainedBoxProps(props: {
                   disabled={props.pending || (!canUse && !canPause)}
                   onClick={() => props.onAction({ id: row.id, action: canPause ? 'pause' : 'use' })}
                 >
-                  {t(canPause ? '暂停' : '使用')}
+                  {t(canPause ? '暂停' : row.plan_snapshot ? '激活套餐' : '使用')}
                 </Button>
               )
             },

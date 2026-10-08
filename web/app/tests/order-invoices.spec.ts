@@ -68,13 +68,15 @@ test('paid orders download PDF with exact amounts, own scope and no manual reque
     })
   })
   const table = page.getByRole('region', { name: '已支付订单发票', exact: true })
-  await expect(table.getByRole('cell', { name: 'HKD 92,233,720,368,547,758.07' })).toBeVisible()
-  await expect(table.getByRole('button', { name: '下载 PDF' })).toHaveCount(1)
+  await expect(
+    table.getByRole('cell', { name: 'HKD 92,233,720,368,547,758.07' }).first(),
+  ).toBeVisible()
+  await expect(table.getByRole('button', { name: '下载 PDF' })).toHaveCount(2)
   await expect(table.getByText('unpaid-order')).toHaveCount(0)
-  await expect(table.getByText('refunded-order')).toHaveCount(0)
+  await expect(table.getByText('refunded-order')).toBeVisible()
   await expect(table.getByText('free-order')).toHaveCount(0)
   const downloaded = page.waitForEvent('download')
-  await table.getByRole('button', { name: '下载 PDF' }).click()
+  await table.getByRole('button', { name: '下载 PDF' }).first().click()
   const download = await downloaded
   expect(download.suggestedFilename()).toBe('CG-2026-000000000001.pdf')
   expect(await readFile((await download.path())!)).toEqual(pdf)
@@ -90,9 +92,18 @@ test('refund rejection remains visible and allows retry without a false download
   )
   const downloads: string[] = []
   page.on('download', (download) => downloads.push(download.suggestedFilename()))
-  await page.getByRole('button', { name: '下载 PDF' }).click()
+  await page
+    .getByRole('region', { name: '已支付订单发票', exact: true })
+    .getByRole('button', { name: '下载 PDF' })
+    .first()
+    .click()
   await expect(page.getByRole('alert')).toHaveText('订单状态冲突')
-  await expect(page.getByRole('button', { name: '下载 PDF' })).toBeEnabled()
+  await expect(
+    page
+      .getByRole('region', { name: '已支付订单发票', exact: true })
+      .getByRole('button', { name: '下载 PDF' })
+      .first(),
+  ).toBeEnabled()
   expect(downloads).toEqual([])
 })
 
@@ -113,7 +124,11 @@ test('expired download session refreshes once and then downloads', async ({ page
     )
   })
   const downloaded = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载 PDF' }).click()
+  await page
+    .getByRole('region', { name: '已支付订单发票', exact: true })
+    .getByRole('button', { name: '下载 PDF' })
+    .first()
+    .click()
   await downloaded
   expect(attempts).toBe(2)
   expect(refreshes).toBe(1)
@@ -133,7 +148,11 @@ test('invoice deep links open the invoice tab and reject JSON success masqueradi
   )
   const downloads: string[] = []
   page.on('download', (download) => downloads.push(download.suggestedFilename()))
-  await page.getByRole('button', { name: '下载 PDF' }).click()
+  await page
+    .getByRole('region', { name: '已支付订单发票', exact: true })
+    .getByRole('button', { name: '下载 PDF' })
+    .first()
+    .click()
   await expect(page.getByRole('alert')).toHaveText('服务器未返回有效的 PDF 发票')
   expect(downloads).toEqual([])
 })
@@ -207,11 +226,15 @@ test('first self-service issue requires real purchaser details and subsequent do
           },
     )
   })
-  await page.getByRole('button', { name: '下载 PDF' }).click()
+  await page
+    .getByRole('region', { name: '已支付订单发票', exact: true })
+    .getByRole('button', { name: '下载 PDF' })
+    .first()
+    .click()
   const dialog = page.getByRole('dialog', { name: '开具商业发票' })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByLabel('发票抬头', { exact: true })).toHaveValue('')
-  await expect(dialog.getByLabel(/税号/)).toHaveCount(0)
+  await expect(dialog.getByLabel('购买方税号（可选）', { exact: true })).toBeVisible()
   await dialog.getByLabel('发票抬头', { exact: true }).fill('  Hong Kong Buyer Limited  ')
   await dialog
     .getByLabel('购买方地址', { exact: true })
@@ -226,7 +249,11 @@ test('first self-service issue requires real purchaser details and subsequent do
   })
   await expect(dialog).toHaveCount(0)
   const downloadedAgain = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载 PDF' }).click()
+  await page
+    .getByRole('region', { name: '已支付订单发票', exact: true })
+    .getByRole('button', { name: '下载 PDF' })
+    .first()
+    .click()
   const second = await downloadedAgain
   expect(await readFile((await second.path())!)).toEqual(pdf)
   expect(issuedCount).toBe(1)
@@ -245,7 +272,11 @@ test('blank purchaser details are rejected locally without issuing an invoice', 
       json: { success: false, message: '请先填写发票抬头和购买方地址' },
     })
   })
-  await page.getByRole('button', { name: '下载 PDF' }).click()
+  await page
+    .getByRole('region', { name: '已支付订单发票', exact: true })
+    .getByRole('button', { name: '下载 PDF' })
+    .first()
+    .click()
   const dialog = page.getByRole('dialog', { name: '开具商业发票' })
   await dialog.getByLabel('发票抬头', { exact: true }).fill('   ')
   await dialog.getByLabel('购买方地址', { exact: true }).fill('   ')
@@ -274,7 +305,11 @@ for (const [status, message] of [
     )
     const downloads: string[] = []
     page.on('download', (download) => downloads.push(download.suggestedFilename()))
-    await page.getByRole('button', { name: '下载 PDF' }).click()
+    await page
+      .getByRole('region', { name: '已支付订单发票', exact: true })
+      .getByRole('button', { name: '下载 PDF' })
+      .first()
+      .click()
     const dialog = page.getByRole('dialog', { name: '开具商业发票' })
     await dialog.getByLabel('发票抬头', { exact: true }).fill('Test Buyer')
     await dialog.getByLabel('购买方地址', { exact: true }).fill('Test purchaser address, Hong Kong')
@@ -285,3 +320,132 @@ for (const [status, message] of [
     expect(downloads).toEqual([])
   })
 }
+
+const invoiceRecord = {
+  number: 'CG-2026-000000000001',
+  document_type: 'invoice',
+  revision: 1,
+  status: 'current',
+  related_number: '',
+  reason: '',
+  issued_at: '2026-10-08T04:00:00Z',
+  amount_minor: order.amount_minor,
+  currency: 'hkd',
+  buyer_name: 'Original Buyer',
+  buyer_address: 'Original address, Hong Kong',
+  buyer_country: 'Hong Kong',
+  buyer_tax_id: '',
+}
+
+test('document history loads on demand, correction retries preserve operation ID and old PDFs remain available', async ({
+  page,
+}, testInfo) => {
+  await invoiceFixture(page)
+  let historyReads = 0
+  let corrected = false
+  const submitted: Record<string, unknown>[] = []
+  const correctedNumber = 'CG-2026-000000000001-R2'
+  const originalPDF = Buffer.from('%PDF-1.4\nOriginal immutable invoice\n%%EOF\n')
+  const correctedPDF = Buffer.from('%PDF-1.4\nCorrected invoice\n%%EOF\n')
+  await page.route('**/api/commerce/orders/paid-order/invoice/documents?*', (route) => {
+    historyReads++
+    const items = corrected
+      ? [
+          {
+            ...invoiceRecord,
+            number: correctedNumber,
+            revision: 2,
+            buyer_name: 'Corrected Buyer',
+            related_number: invoiceRecord.number,
+            reason: 'Correct company name',
+          },
+          { ...invoiceRecord, status: 'superseded' },
+        ]
+      : [invoiceRecord]
+    return route.fulfill({
+      json: { success: true, data: { items, total: items.length, page: 1, page_size: 20 } },
+    })
+  })
+  await page.route('**/api/commerce/orders/paid-order/invoice/corrections', (route) => {
+    submitted.push(route.request().postDataJSON())
+    if (submitted.length === 1)
+      return route.fulfill({ status: 503, json: { success: false, message: '临时开票错误' } })
+    corrected = true
+    return route.fulfill({
+      contentType: 'application/pdf',
+      body: correctedPDF,
+      headers: { 'Content-Disposition': `attachment; filename="${correctedNumber}.pdf"` },
+    })
+  })
+  await page.route('**/api/commerce/orders/paid-order/invoice?number=*', (route) => {
+    expect(new URL(route.request().url()).searchParams.get('number')).toBe(invoiceRecord.number)
+    expect(route.request().method()).toBe('GET')
+    return route.fulfill({
+      contentType: 'application/pdf',
+      body: originalPDF,
+      headers: { 'Content-Disposition': `attachment; filename="${invoiceRecord.number}.pdf"` },
+    })
+  })
+  expect(historyReads).toBe(0)
+  await page
+    .getByRole('region', { name: '已支付订单发票', exact: true })
+    .getByRole('button', { name: '发票记录', exact: true })
+    .first()
+    .click()
+  const history = page.getByRole('dialog', { name: '发票记录', exact: true })
+  await expect(history.getByText('当前发票', { exact: true })).toBeVisible()
+  await history.getByRole('button', { name: '更正购买方资料', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '更正购买方资料', exact: true })
+  await expect(dialog.getByLabel('发票抬头', { exact: true })).toHaveValue('Original Buyer')
+  await dialog.getByLabel('发票抬头', { exact: true }).fill('Corrected Buyer')
+  await dialog.getByLabel('更正原因', { exact: true }).fill('Correct company name')
+  await dialog.getByRole('button', { name: '更正并下载', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('临时开票错误')
+  await expect(dialog.getByLabel('发票抬头', { exact: true })).toHaveValue('Corrected Buyer')
+  const secondDownload = page.waitForEvent('download')
+  await dialog.getByRole('button', { name: '更正并下载', exact: true }).click()
+  expect((await secondDownload).suggestedFilename()).toBe(`${correctedNumber}.pdf`)
+  expect(submitted).toHaveLength(2)
+  expect(submitted[0]).toEqual(submitted[1])
+  expect(submitted[0].previous_number).toBe(invoiceRecord.number)
+  expect(submitted[0].request_id).toMatch(/^[a-f0-9-]{36}$/)
+  await expect(dialog).toHaveCount(0)
+  await expect(history.getByText('已被更正', { exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('invoice-history.png'), fullPage: true })
+  const oldDownload = page.waitForEvent('download')
+  await history
+    .getByRole('article')
+    .filter({ hasText: '已被更正' })
+    .getByRole('button', { name: '下载 PDF', exact: true })
+    .click()
+  expect(await readFile((await (await oldDownload).path())!)).toEqual(originalPDF)
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('Corrected Buyer')
+})
+
+test('refund note uses POST with no supplied money and shows unconfirmed-refund rejection', async ({
+  page,
+}) => {
+  await invoiceFixture(page)
+  await page.route('**/api/commerce/orders/refunded-order/invoice/documents?*', (route) =>
+    route.fulfill({
+      json: { success: true, data: { items: [invoiceRecord], total: 1, page: 1, page_size: 20 } },
+    }),
+  )
+  let attempts = 0
+  await page.route('**/api/commerce/orders/refunded-order/credit-note', (route) => {
+    attempts++
+    expect(route.request().method()).toBe('POST')
+    expect(route.request().postData()).toBe(null)
+    return route.fulfill({ status: 409, json: { success: false, message: '暂无已确认退款' } })
+  })
+  await page
+    .getByRole('row')
+    .filter({ has: page.getByText('refunded-order', { exact: true }) })
+    .getByRole('button', { name: '发票记录' })
+    .click()
+  const history = page.getByRole('dialog', { name: '发票记录', exact: true })
+  await history.getByRole('button', { name: '下载退款贷项单' }).click()
+  await expect(history.getByRole('alert')).toHaveText('暂无已确认退款')
+  await expect(history.getByRole('button', { name: '下载退款贷项单' })).toBeEnabled()
+  expect(attempts).toBe(1)
+})

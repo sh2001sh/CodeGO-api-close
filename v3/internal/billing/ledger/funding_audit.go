@@ -30,6 +30,9 @@ func fundingID(parts ...string) string {
 }
 
 func fundingSource(e billing.Entry) string {
+	if (e.Reason == "blind_box_batch_base" || e.Reason == "blind_box_batch_reward") && e.Kind == "reward" {
+		return e.Reason
+	}
 	if source, _ := e.Metadata["source"].(string); source == "referral_reward" || source == "subscription_conversion" {
 		return source
 	}
@@ -95,11 +98,13 @@ func recordFundingEntryTx(ctx context.Context, tx pgx.Tx, e billing.Entry, befor
 		mode = fundingPeerTransfer
 	} else if e.Kind == "refund" {
 		mode = fundingRefund
+	} else if e.Kind != "usage" && e.Kind != "adjustment" {
+		mode = fundingProductPurchase
 	}
 	if err := allocateFundingModeTx(ctx, tx, e.AccountID, request, -e.Amount, before, now, mode, fundingTopupRefundTrade(e)); err != nil {
 		return err
 	}
-	if mode == fundingOwnerSpend {
+	if mode == fundingOwnerSpend || mode == fundingProductPurchase {
 		return consumeWalletRewardHoldsTx(ctx, tx, e.AccountID, -e.Amount)
 	}
 	return nil
@@ -234,6 +239,9 @@ func consumeFundingModeLotsTx(ctx context.Context, tx pgx.Tx, account int64, req
 		if mode == fundingPeerTransfer && lot.nonTransferable || mode == fundingRefund && lot.nonRefundable {
 			continue
 		}
+		if mode == fundingProductPurchase && (lot.source == "blind_box_batch_base" || lot.source == "blind_box_batch_reward") {
+			continue
+		}
 		available := lot.remaining
 		if mode == fundingPeerTransfer && lot.source == "blind_box" {
 			protected := min(available, int64(legacyLocked))
@@ -260,6 +268,9 @@ func consumeFundingModeLotsTx(ctx context.Context, tx pgx.Tx, account int64, req
 		}
 		if mode == fundingRefund {
 			return ErrWalletRewardRefundLocked
+		}
+		if mode == fundingProductPurchase {
+			return ErrWalletAPICreditsPurchaseLocked
 		}
 		return fmt.Errorf("ledger: funding allocation shortfall %d of %d", remaining, amount)
 	}

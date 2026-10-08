@@ -26,6 +26,8 @@ func (s *Service) Register(mux *http.ServeMux, auth Authenticate) {
 		"GET /api/marketplace/groups/{slug}/model-status": s.httpGroup, "GET /api/marketplace/multiplier-trends": s.httpTrends,
 	}
 	private := map[string]endpoint{
+		"GET /api/marketplace/group-favorites":                               s.httpGroupFavorites,
+		"PUT /api/marketplace/group-favorites":                               s.httpSaveGroupFavorite,
 		"GET /api/marketplace/route-pools/group-options":                     s.httpPoolGroupOptions,
 		"GET /api/marketplace/shop/mine":                                     s.httpMyShop,
 		"PATCH /api/marketplace/shop/mine":                                   s.httpUpdateShop,

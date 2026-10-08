@@ -1,5 +1,25 @@
 // English strings owned by the commerce-admin workstream (key = Chinese source text).
 const messages: Record<string, string> = {
+  奖励配置: 'Reward configuration',
+  返回逐项编辑: 'Back to row editor',
+  '编辑完整奖励 JSON': 'Edit full reward JSON',
+  '逐项编辑余额和套餐奖励；金额以 micro-credits 保存，1 credit = 1,000,000 micro-credits。旧道具的完整字段保留在高级配置中。':
+    'Edit credit and plan rewards by row. Amounts are stored in micro-credits: 1 credit = 1,000,000 micro-credits. Advanced configuration preserves all legacy item fields.',
+  '权重（精确整数）': 'Weight (exact integer)',
+  历史奖励: 'Legacy reward',
+  '固定额度（micro-credits）': 'Fixed credits (micro-credits)',
+  区间奖励设置: 'Reward range settings',
+  '固定额度大于 0 时使用固定额度；固定额度为 0 时按原区间规则抽取。':
+    'A positive fixed amount takes precedence. With a fixed amount of zero, the original range rules apply.',
+  '最低额度（micro-credits）': 'Minimum credits (micro-credits)',
+  '最高额度（micro-credits）': 'Maximum credits (micro-credits)',
+  '区间步长（micro-credits）': 'Range step (micro-credits)',
+  '此历史奖励保留原规格；请使用完整奖励 JSON 修改专有字段。':
+    'This legacy reward retains its original specification. Edit its specific fields in the full reward JSON.',
+  '发票信息包含暂不支持的字符，请移除表情或特殊符号后重试':
+    'Invoice details contain unsupported characters. Remove emoji or special symbols and try again.',
+  '发票已开具，请通过更正流程更新买方信息':
+    'The invoice has already been issued. Use the correction process to update buyer details.',
   '配置盲盒池概率与限购，并为单个用户发放或撤销盲盒。':
     'Configure blind box pool odds and purchase limits, and grant or revoke boxes for individual users.',
   说明: 'Note',
@@ -89,5 +109,34 @@ const messages: Record<string, string> = {
   'credits（兼容购买）': 'credits (compatible purchase)',
   'standard（新版标准池）': 'standard (new standard pool)',
   '输入用户 ID 查询': 'Enter a user ID to look up',
+  下载退款贷项单: 'Download refund credit note',
+  关联单据: 'Related document',
+  '原票和历史版本永久保留。退款确认后可下载关联贷项单，不会再次执行退款。':
+    'The original invoice and past versions are permanently retained. After a refund is confirmed, you can download its credit note without processing another refund.',
+  发票记录: 'Invoice history',
+  '国家或地区（可选）': 'Country or region (optional)',
+  '填写真实购买方资料。更正将生成新版本，原发票保留。':
+    'Enter accurate buyer details. A correction creates a new version while preserving the original invoice.',
+  '尚未开具发票，请先从账单下载入口填写购买方资料':
+    'No invoice has been issued yet. Enter buyer details using the invoice download option in billing.',
+  '已支付订单可自助开具发票。更正保留历史版本，退款后仍可下载原票及已确认退款的贷项单。':
+    'You can issue invoices for paid orders yourself. Corrections preserve past versions; after a refund, the original invoice and credit notes for confirmed refunds remain available.',
+  已被更正: 'Superseded',
+  开具时间: 'Issued at',
+  当前发票: 'Current invoice',
+  '当前发票不可更正，请刷新记录': 'The current invoice cannot be corrected. Refresh the history.',
+  '按报销机构要求填写，并非香港增值税号码':
+    'Enter this if required by your reimbursement organization. This is not a Hong Kong VAT number.',
+  更正原因: 'Reason for correction',
+  更正并下载: 'Correct and download',
+  更正购买方资料: 'Correct buyer details',
+  订单单据记录: 'Order document history',
+  请检查购买方资料及更正原因: 'Check the buyer details and reason for correction',
+  '购买方税号（可选）': 'Buyer tax ID (optional)',
+  '贷项单仅根据已确认退款生成；退款中或失败时不可开具。':
+    'Credit notes are generated only for confirmed refunds. Pending or failed refunds are not eligible.',
+  退款贷项单: 'Refund credit note',
+  '香港商业发票通常无需盖章；具体报销要求以接收机构为准。':
+    "Hong Kong commercial invoices generally do not require a stamp. Check the receiving organization's reimbursement requirements.",
 }
 export default messages

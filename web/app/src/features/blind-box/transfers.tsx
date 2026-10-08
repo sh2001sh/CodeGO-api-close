@@ -15,7 +15,9 @@ export function BoxTransfers(props: {
   const [error, setError] = useState<Error | null>(null)
   const [confirming, setConfirming] = useState(false)
   const transferable = props.items.filter(
-    (item) => item.status === 'available' || item.status === 'paused',
+    (item) =>
+      (item.status === 'available' || item.status === 'paused') &&
+      !('plan_snapshot' in item && item.plan_snapshot),
   )
   const review = async (
     recipient: string,

@@ -22,6 +22,44 @@ type openItemRow struct {
 }
 
 func (s *Service) OpenBoxes(ctx context.Context, userID int64, requestID string, count int) ([]OpenRecord, error) {
+	return s.openBoxes(ctx, userID, requestID, count, 0, nil, count)
+}
+
+// OpenBoxesFromPool selects the user's available inventory from one pool.
+// Omitting the pool retains the original integer operation fingerprint so old
+// requests can still be replayed after the inventory chooser is introduced.
+func (s *Service) OpenBoxesFromPool(ctx context.Context, userID int64, requestID string, count int, poolID int64) ([]OpenRecord, error) {
+	if poolID < 0 {
+		return nil, ErrInvalidInput
+	}
+	if poolID == 0 {
+		return s.OpenBoxes(ctx, userID, requestID, count)
+	}
+	input := struct {
+		Count  int
+		PoolID int64
+	}{count, poolID}
+	return s.openBoxes(ctx, userID, requestID, count, poolID, nil, input)
+}
+
+// OpenBoxesFromInventory distinguishes stored and dynamic inventory in the
+// same historical pool without changing older operation fingerprints.
+func (s *Service) OpenBoxesFromInventory(ctx context.Context, userID int64, requestID string, count int, poolID int64, drawCurrent *bool) ([]OpenRecord, error) {
+	if drawCurrent == nil {
+		return s.OpenBoxesFromPool(ctx, userID, requestID, count, poolID)
+	}
+	if poolID <= 0 {
+		return nil, ErrInvalidInput
+	}
+	input := struct {
+		Count       int
+		PoolID      int64
+		DrawCurrent bool
+	}{count, poolID, *drawCurrent}
+	return s.openBoxes(ctx, userID, requestID, count, poolID, drawCurrent, input)
+}
+
+func (s *Service) openBoxes(ctx context.Context, userID int64, requestID string, count int, poolID int64, drawCurrent *bool, input any) ([]OpenRecord, error) {
 	var records []OpenRecord
 	if err := validRequest(userID, requestID, count); err != nil {
 		return nil, err
@@ -34,14 +72,14 @@ func (s *Service) OpenBoxes(ctx context.Context, userID int64, requestID string,
 		if err := lockUser(ctx, tx, userID); err != nil {
 			return err
 		}
-		found, err := replay(ctx, tx, userID, "open", requestID, count, &records)
+		found, err := replay(ctx, tx, userID, "open", requestID, input, &records)
 		if err != nil || found {
 			return err
 		}
 		if err := s.EnsureExternalInventoryTx(ctx, tx, userID); err != nil {
 			return err
 		}
-		items, err := s.fetchOpenableItemsTx(ctx, tx, userID, count)
+		items, err := s.fetchOpenableItemsTx(ctx, tx, userID, count, poolID, drawCurrent)
 		if err != nil {
 			return err
 		}
@@ -65,15 +103,19 @@ func (s *Service) OpenBoxes(ctx context.Context, userID int64, requestID string,
 				return err
 			}
 		}
-		return remember(ctx, tx, userID, "open", requestID, count, records)
+		return remember(ctx, tx, userID, "open", requestID, input, records)
 	})
 	return records, err
 }
 
 // fetchOpenableItemsTx locks and loads exactly `count` available inventory
-// items for userID, ordered by id. Returns ErrInventory if fewer are found.
-func (s *Service) fetchOpenableItemsTx(ctx context.Context, tx pgx.Tx, userID int64, count int) ([]openItemRow, error) {
-	rows, err := tx.Query(ctx, `SELECT i.id,i.purchase_id,i.pool_id,i.rewards,i.guarantees,i.frozen_reward,i.draw_current_pool,i.guarantee_type,b.scope,(NOT p.is_grant AND (p.external_order_id IS NULL OR o.source='purchase' AND o.amount_minor>0)) FROM v3_marketplace.blind_box_items i JOIN v3_marketplace.blind_box_purchases p ON p.id=i.purchase_id JOIN v3_marketplace.blind_box_pools b ON b.id=i.pool_id LEFT JOIN v3_marketplace.blind_box_orders o ON o.id=p.external_order_id WHERE i.owner_user_id=$1 AND i.status='available' AND p.status='completed' AND (i.expires_at IS NULL OR i.expires_at>$3) AND (p.external_order_id IS NULL OR o.status IN('success','completed') AND (o.expires_at IS NULL OR o.expires_at>$3)) ORDER BY i.id LIMIT $2 FOR UPDATE OF i`, userID, count, s.cfg.Now())
+// items for userID, earliest expiry first. Returns ErrInventory if fewer are found.
+func (s *Service) fetchOpenableItemsTx(ctx context.Context, tx pgx.Tx, userID int64, count int, poolID int64, drawCurrent *bool) ([]openItemRow, error) {
+	rows, err := tx.Query(ctx, `SELECT i.id,i.purchase_id,i.pool_id,i.rewards,i.guarantees,i.frozen_reward,i.draw_current_pool,i.guarantee_type,b.scope,(NOT p.is_grant AND (p.external_order_id IS NULL OR o.source='purchase' AND o.amount_minor>0))`+
+		openableInventoryFrom+openableInventoryWhere+`
+ AND ($4::bigint=0 OR i.pool_id=$4)
+ AND ($5::boolean IS NULL OR i.draw_current_pool=$5)
+ ORDER BY LEAST(i.expires_at,o.expires_at) NULLS LAST,i.id LIMIT $3 FOR UPDATE OF i`, userID, s.cfg.Now(), count, poolID, drawCurrent)
 	if err != nil {
 		return nil, err
 	}

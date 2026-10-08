@@ -21,8 +21,8 @@ func TestOrderInvoicePDFPreservesExactAmountChineseAndSafeText(t *testing.T) {
 		provider: "test)\n/JS (unsafe", currency: "USD", amount: "92233720368547758.07",
 		paid:   time.Date(2026, 10, 3, 15, 40, 0, 0, time.FixedZone("HKT", 28800)),
 		issued: time.Date(2026, 10, 4, 16, 50, 0, 0, time.FixedZone("HKT", 28800))}
-	pdf := renderOrderInvoice(data)
-	for _, value := range []string{"%PDF-1.4", "CG-2026-000000000001", "USD 92233720368547758.07", "CodeGo AI Limited", "VAT / GST", "03 Oct 2026 15:40 HKT", "04 Oct 2026 16:50 HKT", "UNIT PRICE", invoiceUTF16(data.buyerAddress), invoiceUTF16("张三 (Buyer)\\"), invoiceUTF16("码高智能有限公司")} {
+	pdf := mustRenderOrderInvoice(t, data)
+	for _, value := range []string{"%PDF-1.4", "CG-2026-000000000001", "USD 92233720368547758.07", "CodeGo AI Limited", "VAT / GST", "03 Oct 2026 15:40 HKT", "04 Oct 2026 16:50 HKT", "UNIT PRICE", invoiceUTF16(data.buyerAddress), invoiceUTF16("张三 (Buyer)\\"), invoiceUTF16("碼高智能有限公司")} {
 		if !bytes.Contains(pdf, []byte(value)) {
 			t.Fatalf("PDF omitted %q", value)
 		}
@@ -30,7 +30,7 @@ func TestOrderInvoicePDFPreservesExactAmountChineseAndSafeText(t *testing.T) {
 	if bytes.Contains(pdf, []byte("test)\n/JS")) || !bytes.Contains(pdf, []byte(`test\) /JS \(unsafe`)) {
 		t.Fatal("PDF string injection was not escaped")
 	}
-	if !bytes.Equal(pdf, renderOrderInvoice(data)) {
+	if !bytes.Equal(pdf, mustRenderOrderInvoice(t, data)) {
 		t.Fatal("an unchanged order must produce a stable invoice")
 	}
 	// Optional local visual review output never writes personal test data by default.
@@ -44,7 +44,7 @@ func TestOrderInvoicePDFPreservesExactAmountChineseAndSafeText(t *testing.T) {
 func TestOrderInvoiceLongAddressesPaginateWithoutLosingPurchaserData(t *testing.T) {
 	data := orderInvoiceData{buyer: strings.Repeat("客", 200), buyerAddress: strings.Repeat("址", 599) + "末",
 		sellerAddress: strings.Repeat("店", 599) + "终", currency: "USD", amount: "92233720368547758.07"}
-	pdf := renderOrderInvoice(data)
+	pdf := mustRenderOrderInvoice(t, data)
 	if !bytes.Contains(pdf, []byte("/Count 2")) || !bytes.Contains(pdf, []byte(invoiceUTF16("末"))) || !bytes.Contains(pdf, []byte(invoiceUTF16("终"))) {
 		t.Fatal("long addresses must be complete and paginated")
 	}
@@ -74,7 +74,7 @@ func TestOrderInvoiceIssuanceRequiresRealNameAndAddress(t *testing.T) {
 }
 
 func TestOrderInvoicePDFOffsetsAndStreamLength(t *testing.T) {
-	pdf := renderOrderInvoice(orderInvoiceData{currency: "JPY", amount: "12345"})
+	pdf := mustRenderOrderInvoice(t, orderInvoiceData{currency: "JPY", amount: "12345"})
 	source := string(pdf)
 	xrefStart := strings.LastIndex(source, "startxref\n")
 	if xrefStart < 0 {
@@ -107,11 +107,7 @@ func TestOrderInvoicePDFOffsetsAndStreamLength(t *testing.T) {
 	}
 }
 
-func TestOrderInvoiceWrappingPreservesUnicodeAndBounds(t *testing.T) {
-	wrapped := invoiceWrap("客户"+strings.Repeat("a", 200)+"\n注入", 24, 2)
-	if len(wrapped) != 2 || !strings.HasSuffix(wrapped[1], "…") || strings.Contains(strings.Join(wrapped, ""), "\n") {
-		t.Fatalf("unbounded invoice text: %+v", wrapped)
-	}
+func TestOrderInvoiceUnicodeEncoding(t *testing.T) {
 	decoded, err := hex.DecodeString(invoiceUTF16("码高"))
 	if err != nil || len(decoded) != 4 {
 		t.Fatalf("Chinese text encoding: %x %v", decoded, err)

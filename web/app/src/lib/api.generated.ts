@@ -1305,10 +1305,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Download an already issued Hong Kong commercial invoice for the session user's own paid order. Administrators retain own scope. Exact PDF bytes, actual issue time, purchaser and seller details are frozen by initial self-service issuance. Unpaid, non-positive, refunded or refund-pending orders are rejected on every read. Returns 428 when purchaser details must first be submitted through POST. Reading has no side effects. */
+        /** @description Download the current immutable invoice for the session user’s own positive paid or refunded purchase, or a specific saved document via number. Pending and confirmed refunds do not block saved PDF downloads. Returns 428 if no invoice has been issued. Administrators retain own scope. No financial or document writes. */
         get: operations["getApiCommerceOrdersTrade_NoInvoice"];
         put?: never;
-        /** @description Self-service issue and download of a paid purchase's commercial invoice, without manual review. Freeze purchaser name/address, the configured InvoiceSellerAddress, actual issue time, order details and PDF in one durable document per order. An identical replay returns the existing PDF; changed purchaser details return 409. The seller address must be configured; no profile name or location fallback is used. Ownership, positive paid amount and refund checks apply on every call. Does not change the profile, payment or ledger. */
+        /** @description Issue the first commercial invoice for the session user’s own positive paid/refunded purchase, or replay current identical purchaser details. Buyer/seller details, payment references, issue time and exact PDF are frozen. Changed purchaser details require an explicit correction. Missing seller address returns 503. Does not alter payment, refund or ledger. */
         post: operations["postApiCommerceOrdersTrade_NoInvoice"];
         delete?: never;
         options?: never;
@@ -4993,7 +4993,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @deprecated
+         * @description Legacy model favorites; current console uses group favorites.
+         */
         get: operations["getApiModelsFavorites"];
+        /**
+         * @deprecated
+         * @description Legacy model favorites; current console uses group favorites.
+         */
         put: operations["putApiModelsFavorites"];
         post?: never;
         delete?: never;
@@ -5009,7 +5017,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @deprecated
+         * @description Legacy model favorites; current console uses group favorites.
+         */
         get: operations["getApiModelsFavoritesSlashAlias"];
+        /**
+         * @deprecated
+         * @description Legacy model favorites; current console uses group favorites.
+         */
         put: operations["putApiModelsFavoritesSlashAlias"];
         post?: never;
         delete?: never;
@@ -6536,6 +6552,176 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/commerce/orders/{trade_no}/invoice/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Explicit append-only correction of purchaser details on an unrefunded paid purchase. Requires current previous_number, reason and stable request_id; exact retries preserve bytes even after subsequent corrections. Original and superseded PDFs remain downloadable. No financial effects. */
+        post: operations["postApiCommerceOrdersTrade_NoInvoiceCorrections"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commerce/orders/{trade_no}/credit-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Create or replay an immutable credit note for confirmed persisted refund increments only. No client amounts accepted. Processing/failed refunds yield 409; no original invoice yields 428. Reads cumulative refund facts without duplicating overlapping sources. Does not invoke a provider, refund money or change ledger. */
+        post: operations["postApiCommerceOrdersTrade_NoCreditNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commerce/orders/{trade_no}/invoice/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Read only the owned order’s saved invoices, revisions and credit notes. Paginated newest-first; historical bytes are immutable. Does not create documents. */
+        get: operations["getApiCommerceOrdersTrade_NoInvoiceDocuments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/blind-box/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiBlindBoxBatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/blind-box/batches/{id}/draw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiBlindBoxBatchesIdDraw"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/blind-box/admin/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Administrator session required. */
+        get: operations["getApiBlindBoxAdminBatches"];
+        /** @description Administrator session required. */
+        put: operations["putApiBlindBoxAdminBatches"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/blind-box/admin/batches/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Administrator session required. Publication debits the full fulfillment reserve; revision and request ID required. */
+        post: operations["postApiBlindBoxAdminBatchesIdPublish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/blind-box/admin/batches/{id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Administrator session required. */
+        post: operations["postApiBlindBoxAdminBatchesIdPause"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/blind-box/admin/batches/{id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Administrator session required. */
+        get: operations["getApiBlindBoxAdminBatchesIdStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/group-favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List own group favorites */
+        get: operations["getGroupFavorites"];
+        /** Set own favorite; adding requires current access */
+        put: operations["putGroupFavorite"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6545,6 +6731,10 @@ export interface components {
             buyer_name: string;
             /** @description Actual purchaser address including street/unit, city, region and country. Newlines are accepted; leading/trailing whitespace is trimmed. Frozen at issuance. */
             buyer_address: string;
+            /** @description Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier. */
+            buyer_country?: string;
+            /** @description Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier. */
+            buyer_tax_id?: string;
         };
         AdjustmentInput: {
             /** Format: int64 */
@@ -6772,10 +6962,14 @@ export interface components {
             quantity?: number | null;
             reason?: string;
         } | unknown | unknown;
+        /** @description Legacy inventory opening; optional pool_id selects a pool, omitted keeps legacy idempotency semantics. Eligible items open by earliest expiry then ID. */
         BoxOpenInput: {
             request_id: string;
             /** Format: int64 */
             count?: number | string | bigint;
+            /** Format: int64 */
+            pool_id?: number | string | bigint;
+            draw_current_pool?: boolean;
         };
         BoxPurchaseInput: {
             request_id: string;
@@ -8520,6 +8714,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             guarantee_type: string;
+            /** Format: int64 */
+            batch_id?: number | string | bigint;
         };
         MarketplaceOverview: {
             /** Format: int64 */
@@ -8531,6 +8727,7 @@ export interface components {
                 [key: string]: components["schemas"]["MarketplacePityState"];
             } | null;
             zero_hour: components["schemas"]["MarketplaceZeroHourOverview"];
+            inventory: components["schemas"]["BlindBoxInventoryGroup"][];
         };
         MarketplacePityState: {
             /** Format: int64 */
@@ -8589,6 +8786,7 @@ export interface components {
             max_discount_micro: number | string | bigint;
             /** Format: int64 */
             used_discount_micro: number | string | bigint;
+            plan_snapshot?: components["schemas"]["Plan"];
         };
         MarketplacePurchase: {
             /** Format: int64 */
@@ -8626,6 +8824,7 @@ export interface components {
             legacy_reward_type?: string;
             reward_tier?: string;
             wallet_type?: string;
+            plan_snapshot?: components["schemas"]["Plan"];
         };
         MarketplaceSimulationInput: {
             /** Format: int64 */
@@ -11022,6 +11221,189 @@ export interface components {
             page: number;
             page_size: number;
             total: number;
+        };
+        OrderInvoiceCorrectionInput: {
+            /** @description Actual individual full name or company full name; no Mainland tax identifier is required. Leading/trailing whitespace is trimmed. Frozen at issuance. */
+            buyer_name: string;
+            /** @description Actual purchaser address including street/unit, city, region and country. Newlines are accepted; leading/trailing whitespace is trimmed. Frozen at issuance. */
+            buyer_address: string;
+            /** @description Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier. */
+            buyer_country?: string;
+            /** @description Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier. */
+            buyer_tax_id?: string;
+            /** @description Expected current invoice number; stale corrections return 409. */
+            previous_number: string;
+            /** @description Stable operation ID. Identical retries replay the exact saved correction; reusing it for different details returns 409. */
+            request_id: string;
+            /** @description Reason retained in the correction history. */
+            reason: string;
+        };
+        OrderInvoiceDocumentRecord: {
+            number: string;
+            related_number: string;
+            reason: string;
+            currency: string;
+            buyer_name: string;
+            buyer_address: string;
+            buyer_country: string;
+            buyer_tax_id: string;
+            /** @enum {string} */
+            document_type: "invoice" | "credit_note";
+            /** @enum {string} */
+            status: "current" | "superseded" | "issued";
+            /** Format: int64 */
+            revision: number | string | bigint;
+            /** Format: int64 */
+            amount_minor: number | string | bigint;
+            /** Format: date-time */
+            issued_at: string;
+        };
+        OrderInvoiceDocumentPage: {
+            items: components["schemas"]["OrderInvoiceDocumentRecord"][];
+            /** Format: int64 */
+            total: number | string | bigint;
+            /** Format: int64 */
+            page: number | string | bigint;
+            /** Format: int64 */
+            page_size: number | string | bigint;
+        };
+        BlindBoxInventoryGroup: {
+            /** Format: int64 */
+            pool_id: number | string | bigint;
+            pool_name: string;
+            /** Format: int64 */
+            available_count: number | string | bigint;
+            draw_current_pool: boolean;
+            /** Format: date-time */
+            expires_at?: string;
+        };
+        BlindBoxBatchReward: {
+            id: string;
+            title: string;
+            /** @enum {string} */
+            kind: "credits" | "subscription";
+            /** Format: int64 */
+            amount_micro: number | string | bigint;
+            /** Format: int64 */
+            plan_id: number | string | bigint;
+            /** Format: int64 */
+            quantity: number | string | bigint;
+            /** Format: int64 */
+            remaining: number | string | bigint;
+            initial_probability: number;
+            remaining_probability: number;
+            plan_snapshot?: components["schemas"]["Plan"];
+        };
+        /** @description Finite uniformly sampled no-replacement batch. All amounts are integer micro-credits (1 credit=1000000), not fiat. Draft preview freezes server-side fixed-credit standard_v2 plan specs. Publishing reserves the complete base+reward face-value liability from administrator wallet. Published terms immutable. New credits permanently API-only, no transfer/refund/product purchase. Consumption qualification matures seven days after verified paid usage with known costs and net positive contribution; allocation <=10% after procurement, seller, ancillary and reserved referral expenses. Global once-only contribution attribution. No automatic enabled campaigns. */
+        BlindBoxBatch: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            /** Format: int64 */
+            revision: number | string | bigint;
+            /** Format: int64 */
+            price_micro: number | string | bigint;
+            /** Format: int64 */
+            base_credits_micro: number | string | bigint;
+            /** Format: int64 */
+            budget_micro: number | string | bigint;
+            /** Format: int64 */
+            required_budget_micro: number | string | bigint;
+            /** Format: int64 */
+            spent_budget_micro: number | string | bigint;
+            /** Format: int64 */
+            remaining_budget_micro: number | string | bigint;
+            /** Format: int64 */
+            total_count: number | string | bigint;
+            /** Format: int64 */
+            remaining_count: number | string | bigint;
+            /** Format: int64 */
+            entitled_count: number | string | bigint;
+            /** Format: int64 */
+            ancillary_cost_ppm: number | string | bigint;
+            /** Format: int64 */
+            contribution_share_ppm: number | string | bigint;
+            name: string;
+            /** @enum {string} */
+            purpose: "consumption" | "credits";
+            /** @enum {string} */
+            state: "draft" | "published" | "paused" | "exhausted";
+            costs_confirmed: boolean;
+            rewards: components["schemas"]["BlindBoxBatchReward"][];
+            /** Format: date-time */
+            published_at?: string;
+        };
+        BlindBoxBatchEntitlement: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            /** Format: int64 */
+            batch_id: number | string | bigint;
+            /** @enum {string} */
+            source: "settled_paid_consumption";
+            /** Format: int64 */
+            available_count: number | string | bigint;
+            /** Format: date-time */
+            created_at: string;
+        };
+        BlindBoxBatchOverview: {
+            batches: components["schemas"]["BlindBoxBatch"][];
+            entitlements: components["schemas"]["BlindBoxBatchEntitlement"][];
+        };
+        BlindBoxBatchDrawResult: {
+            /** Format: int64 */
+            batch_id: number | string | bigint;
+            /** Format: int64 */
+            base_credits_micro: number | string | bigint;
+            /** Format: int64 */
+            charged_micro: number | string | bigint;
+            records: components["schemas"]["MarketplaceOpenRecord"][];
+        };
+        BlindBoxBatchStateInput: {
+            request_id: string;
+            /** Format: int64 */
+            revision: number | string | bigint;
+        };
+        BlindBoxBatchDrawInput: {
+            request_id: string;
+            /** Format: int64 */
+            count?: number | string | bigint;
+        };
+        BlindBoxBatchStatistics: {
+            /** Format: int64 */
+            draw_count: number | string | bigint;
+            /** Format: int64 */
+            base_credits_micro: number | string | bigint;
+            /** Format: int64 */
+            reward_credits_micro: number | string | bigint;
+            /** Format: int64 */
+            subscription_awarded_count: number | string | bigint;
+            /** Format: int64 */
+            subscription_activated_count: number | string | bigint;
+            /** Format: int64 */
+            api_used_micro: number | string | bigint;
+            /** Format: int64 */
+            reserved_micro: number | string | bigint;
+            /** Format: int64 */
+            spent_micro: number | string | bigint;
+            /** Format: int64 */
+            remaining_micro: number | string | bigint;
+        };
+        /** @description Own bookmark; metadata is hidden when current group access is unavailable. */
+        GroupFavorite: {
+            group_id: string;
+            /** @description Original public numeric group ID. */
+            id: string;
+            available: boolean;
+            public_slug?: string;
+            system_display_name?: string;
+            declared_models?: string[];
+            /** Format: double */
+            multiplier?: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        GroupFavoriteSave: {
+            group_id: string;
+            favorite: boolean;
         };
     };
     responses: {
@@ -15038,7 +15420,10 @@ export interface operations {
     };
     getApiCommerceOrdersTrade_NoInvoice: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A saved invoice revision or credit-note number belonging to this order. */
+                number?: string;
+            };
             header?: never;
             path: {
                 trade_no: string;
@@ -30045,6 +30430,439 @@ export interface operations {
             503: components["responses"]["Failure"];
         };
     };
+    postApiCommerceOrdersTrade_NoInvoiceCorrections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trade_no: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderInvoiceCorrectionInput"];
+            };
+        };
+        responses: {
+            /** @description Issued or identically replayed invoice as raw PDF. Does not use the JSON success/data envelope. */
+            200: {
+                headers: {
+                    /** @example attachment; filename="CG-2026-000000000001.pdf" */
+                    "Content-Disposition"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            428: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiCommerceOrdersTrade_NoCreditNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trade_no: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Issued or identically replayed invoice as raw PDF. Does not use the JSON success/data envelope. */
+            200: {
+                headers: {
+                    /** @example attachment; filename="CG-2026-000000000001.pdf" */
+                    "Content-Disposition"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            428: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiCommerceOrdersTrade_NoInvoiceDocuments: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                trade_no: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owned immutable document history. */
+            200: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["OrderInvoiceDocumentPage"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiBlindBoxBatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BlindBoxBatchOverview"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiBlindBoxBatchesIdDraw: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlindBoxBatchDrawInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BlindBoxBatchDrawResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiBlindBoxAdminBatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BlindBoxBatch"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiBlindBoxAdminBatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlindBoxBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BlindBoxBatch"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiBlindBoxAdminBatchesIdPublish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlindBoxBatchStateInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BlindBoxBatch"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiBlindBoxAdminBatchesIdPause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlindBoxBatchStateInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BlindBoxBatch"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiBlindBoxAdminBatchesIdStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BlindBoxBatchStatistics"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getGroupFavorites: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                /** @description Optional comma-separated canonical IDs; at most 100, for current market-page bookmark states. */
+                group_ids?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["GroupFavorite"][];
+                        pagination: components["schemas"]["ChannelMarketPagination"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putGroupFavorite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupFavoriteSave"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["GroupFavoriteSave"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
 }
 
 export const integerRequestFields: Readonly<Record<string, readonly (readonly string[])[]>> = {
@@ -30134,6 +30952,103 @@ export const integerRequestFields: Readonly<Record<string, readonly (readonly st
       "max_discount_micro"
     ],
     [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "model_limits",
+      "*"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "id"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "price_minor"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "credits"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "period_seconds"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_lifetime_seconds"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "period_credits"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "reset_custom_seconds"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "custom_seconds"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus2_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus3_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus5_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "fuel_unit_price_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "fuel_min_credits"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "fuel_credit_step"
+    ],
+    [
       "guarantees",
       "first",
       "*",
@@ -30195,6 +31110,119 @@ export const integerRequestFields: Readonly<Record<string, readonly (readonly st
     ],
     [
       "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "model_limits",
+      "*"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "id"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "price_minor"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "credits"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "period_seconds"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "group_buy_lifetime_seconds"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "period_credits"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "reset_custom_seconds"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "custom_seconds"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus2_micro"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus3_micro"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus5_micro"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "fuel_unit_price_micro"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "fuel_min_credits"
+    ],
+    [
+      "guarantees",
+      "first",
+      "*",
+      "plan_snapshot",
+      "fuel_credit_step"
+    ],
+    [
+      "guarantees",
       "small",
       "*",
       "weight"
@@ -30255,6 +31283,119 @@ export const integerRequestFields: Readonly<Record<string, readonly (readonly st
     ],
     [
       "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "model_limits",
+      "*"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "id"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "price_minor"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "credits"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "period_seconds"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "group_buy_lifetime_seconds"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "period_credits"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "reset_custom_seconds"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "custom_seconds"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus2_micro"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus3_micro"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus5_micro"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "fuel_unit_price_micro"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "fuel_min_credits"
+    ],
+    [
+      "guarantees",
+      "small",
+      "*",
+      "plan_snapshot",
+      "fuel_credit_step"
+    ],
+    [
+      "guarantees",
       "big",
       "*",
       "weight"
@@ -30312,6 +31453,119 @@ export const integerRequestFields: Readonly<Record<string, readonly (readonly st
       "big",
       "*",
       "max_discount_micro"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "model_limits",
+      "*"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "id"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "price_minor"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "credits"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "period_seconds"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "group_buy_lifetime_seconds"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "period_credits"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "reset_custom_seconds"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "custom_seconds"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus2_micro"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus3_micro"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus5_micro"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "fuel_unit_price_micro"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "fuel_min_credits"
+    ],
+    [
+      "guarantees",
+      "big",
+      "*",
+      "plan_snapshot",
+      "fuel_credit_step"
     ],
     [
       "guarantees",
@@ -30350,6 +31604,9 @@ export const integerRequestFields: Readonly<Record<string, readonly (readonly st
   "POST:/api/blind-box/inventory/open": [
     [
       "count"
+    ],
+    [
+      "pool_id"
     ]
   ],
   "POST:/api/blind-box/inventory/purchase": [
@@ -31711,6 +32968,179 @@ export const integerRequestFields: Readonly<Record<string, readonly (readonly st
       "models",
       "*",
       "max_output_tokens"
+    ]
+  ],
+  "POST:/api/blind-box/batches/{id}/draw": [
+    [
+      "count"
+    ]
+  ],
+  "PUT:/api/blind-box/admin/batches": [
+    [
+      "id"
+    ],
+    [
+      "revision"
+    ],
+    [
+      "price_micro"
+    ],
+    [
+      "base_credits_micro"
+    ],
+    [
+      "budget_micro"
+    ],
+    [
+      "required_budget_micro"
+    ],
+    [
+      "spent_budget_micro"
+    ],
+    [
+      "remaining_budget_micro"
+    ],
+    [
+      "total_count"
+    ],
+    [
+      "remaining_count"
+    ],
+    [
+      "entitled_count"
+    ],
+    [
+      "ancillary_cost_ppm"
+    ],
+    [
+      "contribution_share_ppm"
+    ],
+    [
+      "rewards",
+      "*",
+      "amount_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_id"
+    ],
+    [
+      "rewards",
+      "*",
+      "quantity"
+    ],
+    [
+      "rewards",
+      "*",
+      "remaining"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "model_limits",
+      "*"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "id"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "price_minor"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "credits"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "period_seconds"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_lifetime_seconds"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "period_credits"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "reset_custom_seconds"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "custom_seconds"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus2_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus3_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "group_buy_bonus5_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "fuel_unit_price_micro"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "fuel_min_credits"
+    ],
+    [
+      "rewards",
+      "*",
+      "plan_snapshot",
+      "fuel_credit_step"
+    ]
+  ],
+  "POST:/api/blind-box/admin/batches/{id}/publish": [
+    [
+      "revision"
+    ]
+  ],
+  "POST:/api/blind-box/admin/batches/{id}/pause": [
+    [
+      "revision"
     ]
   ]
 };

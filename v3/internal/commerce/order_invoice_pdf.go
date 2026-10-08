@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf16"
 )
 
@@ -50,163 +49,200 @@ h f
 Q
 `
 
-// Invoices use PDF's built-in fonts and paginate long validated addresses.
-// Chinese text uses the standard Adobe-GB1 CJK font instead of lossy ASCII.
-func renderOrderInvoice(v orderInvoiceData) []byte {
+// Invoices are deterministic documents with offline multilingual glyph subsets.
+// Every validated purchaser field is printed in full and may continue on a new page.
+func renderOrderInvoice(v orderInvoiceData) ([]byte, error) {
+	fonts := newInvoiceFontRenderer()
+	values := []string{v.number, v.buyer, v.buyerAddress, v.sellerAddress, v.description, v.trade, v.provider,
+		v.currency, v.amount, v.sellerBRN, v.paymentReference, v.website, v.buyerCountry, v.buyerTaxID,
+		v.relatedNumber, v.correctionReason}
+	values = append(values, v.details...)
+	for _, value := range values {
+		if err := fonts.validate(value); err != nil {
+			return nil, err
+		}
+	}
 	var stream strings.Builder
 	var pages []string
-	text := func(font string, size, x, y float64, value string) {
-		if font == "CJK" {
-			fmt.Fprintf(&stream, "BT /%s %.1f Tf %.1f %.1f Td <%s> Tj ET\n", font, size, x, y, invoiceUTF16(value))
+	text := func(face string, size, x, y float64, value string) {
+		if face == "CJK" {
+			fonts.text(&stream, size, x, y, value)
 			return
 		}
-		fmt.Fprintf(&stream, "BT /%s %.1f Tf %.1f %.1f Td (%s) Tj ET\n", font, size, x, y, invoicePDFLiteral(value))
+		fmt.Fprintf(&stream, "BT /%s %.1f Tf %.1f %.1f Td (%s) Tj ET\n", face, size, x, y, invoicePDFLiteral(value))
 	}
 	line := func(y float64) {
 		fmt.Fprintf(&stream, "0.88 0.88 0.87 RG 0.6 w 44 %.1f m 551 %.1f l S\n", y, y)
 	}
-	stream.WriteString("0.13 0.14 0.15 rg\n")
-	stream.WriteString(invoiceLogoVector)
-	text("Bold", 18, 87, 779, "CodeGo AI")
-	text("Bold", 25, 400, 779, "INVOICE")
-	text("Regular", 10, 44, 746, "CodeGo AI Limited")
-	text("CJK", 10, 44, 729, "码高智能有限公司")
-	stream.WriteString("0.93 0.95 0.93 rg 483 739 68 21 re f\n0.24 0.35 0.27 rg\n")
-	text("Bold", 9, 503, 746, "PAID")
-	stream.WriteString("0.13 0.14 0.15 rg\n")
-	text("Regular", 9, 339, 725, "Invoice no.")
-	text("Mono", 10, 339, 709, v.number)
+	credit := v.documentType == "credit_note"
+	title, badge := "INVOICE", "PAID"
+	if credit {
+		title, badge = "CREDIT NOTE", "REFUNDED"
+	}
+	brn := v.sellerBRN
+	if brn == "" {
+		brn = "81318858"
+	}
 	hkt := time.FixedZone("HKT", 28800)
-	text("Regular", 9, 44, 701, "Issue date: "+v.issued.In(hkt).Format("02 Jan 2006 15:04 HKT"))
-	text("Regular", 9, 339, 686, "Transaction date (Hong Kong time)")
-	text("Regular", 10, 339, 670, v.paid.In(hkt).Format("02 Jan 2006 15:04 HKT"))
-	y := 646.0
-	// Addresses are never ellipsized. The validated 600-rune maximum fits in
-	// eleven full-width lines even when every character is Chinese.
-	for _, value := range invoiceWrap(v.sellerAddress, 112, 20) {
-		text("CJK", 9, 44, y, value)
-		y -= 12
-	}
-	y -= 12
-	line(y)
-	y -= 25
-	text("Bold", 9, 44, y, "BILLED TO")
-	y -= 21
-	for _, value := range invoiceWrap(v.buyer, 92, 10) {
-		text("CJK", 11, 44, y, value)
-		y -= 15
-	}
-	for _, value := range invoiceWrap(v.buyerAddress, 112, 20) {
-		text("CJK", 9, 44, y, value)
-		y -= 12
-	}
-	y -= 12
-	text("Regular", 8, 44, y, "Payment reference / "+invoiceASCII(v.provider))
-	y -= 13
-	for _, value := range invoiceWrap(v.trade, 112, 10) {
-		text("CJK", 9, 44, y, value)
-		y -= 12
-	}
-	y -= 18
-	if y < 337 {
-		text("Regular", 9, 44, y, "Items and totals continue on page 2.")
-		text("Regular", 8, 44, 58, "CodeGo AI Limited / Hong Kong")
-		text("Regular", 8, 512, 58, "1 / 2")
-		pages = append(pages, stream.String())
-		stream.Reset()
+	y := 0.0
+	newPage := func() {
 		stream.WriteString("0.13 0.14 0.15 rg\n")
 		stream.WriteString(invoiceLogoVector)
 		text("Bold", 18, 87, 779, "CodeGo AI")
-		text("Bold", 25, 400, 779, "INVOICE")
-		text("Mono", 10, 44, 746, v.number)
-		line(725)
-		y = 697
+		titleSize := 25.0
+		if credit {
+			titleSize = 21
+		}
+		text("Bold", titleSize, 551-float64(len(title))*titleSize*0.58, 779, title)
+		text("Regular", 10, 44, 746, "CodeGo AI Limited")
+		text("CJK", 10, 44, 729, "碼高智能有限公司")
+		text("Regular", 9, 44, 710, "Business Registration No.: "+brn)
+		stream.WriteString("0.93 0.95 0.93 rg 461 739 90 21 re f\n0.24 0.35 0.27 rg\n")
+		text("Bold", 9, 472, 746, badge)
+		stream.WriteString("0.13 0.14 0.15 rg\n")
+		text("Regular", 9, 339, 725, "Document no.")
+		text("Mono", 9, 339, 709, v.number)
+		text("Regular", 8, 44, 689, "Issue date: "+v.issued.In(hkt).Format("02 Jan 2006 15:04 HKT"))
+		dateLabel := "Payment date (Hong Kong time)"
+		if credit {
+			dateLabel = "Refund confirmed date (Hong Kong time)"
+		}
+		text("Regular", 8, 339, 689, dateLabel)
+		text("Regular", 9, 339, 674, v.paid.In(hkt).Format("02 Jan 2006 15:04 HKT"))
+		line(656)
+		y = 630
 	}
+	ensure := func(height float64) {
+		if y-height < 135 {
+			pages = append(pages, stream.String())
+			stream.Reset()
+			newPage()
+		}
+	}
+	block := func(value string, size, width, gap float64) {
+		for _, row := range fonts.wrap(value, size, width) {
+			ensure(gap)
+			text("CJK", size, 44, y, row)
+			y -= gap
+		}
+	}
+	label := func(value string) {
+		ensure(35)
+		text("Bold", 9, 44, y, value)
+		y -= 20
+	}
+	newPage()
+	label("ISSUED BY")
+	block(v.sellerAddress, 9, 507, 13)
+	if v.website != "" {
+		block(v.website, 9, 507, 13)
+	}
+	y -= 15
+	label("BILLED TO")
+	block(v.buyer, 11, 507, 16)
+	block(v.buyerAddress, 9, 507, 13)
+	if v.buyerCountry != "" {
+		block("Country / region: "+v.buyerCountry, 9, 507, 13)
+	}
+	if v.buyerTaxID != "" {
+		block("Buyer tax / registration no.: "+v.buyerTaxID, 9, 507, 13)
+	}
+	y -= 15
+	label("PAYMENT AND DOCUMENT REFERENCES")
+	// The station's trade number and payment processor's transaction number
+	// are distinct. Neither is truncated or incorrectly labelled as the other.
+	block("Order reference: "+v.trade, 9, 507, 13)
+	ensure(13)
+	text("Regular", 9, 44, y, "Payment provider: "+v.provider)
+	y -= 13
+	if v.paymentReference != "" {
+		block("Provider transaction: "+v.paymentReference, 9, 507, 13)
+	}
+	if v.relatedNumber != "" {
+		block("Related invoice: "+v.relatedNumber, 9, 507, 13)
+	}
+	if v.correctionReason != "" {
+		block("Reason: "+v.correctionReason, 9, 507, 13)
+	}
+	y -= 20
+	ensure(95)
 	fmt.Fprintf(&stream, "0.96 0.96 0.95 rg 44 %.1f 507 29 re f\n0.13 0.14 0.15 rg\n", y-9)
 	text("Bold", 9, 56, y+2, "DESCRIPTION")
 	text("Bold", 9, 270, y+2, "QTY")
 	text("Bold", 9, 348, y+2, "UNIT PRICE")
 	text("Bold", 9, 491, y+2, "AMOUNT")
 	y -= 30
-	for i, value := range invoiceWrap(v.description, 38, 3) {
-		text("CJK", 10, 56, y-float64(i)*15, value)
-	}
-	text("Regular", 10, 280, y, "1")
 	amount := v.currency + " " + v.amount
 	priceSize := 8.0
 	if len(amount) > 22 {
 		priceSize = 7.5
 	}
+	text("Regular", 10, 280, y, "1")
 	text("Mono", priceSize, 418-float64(len(amount))*priceSize*0.6, y, amount)
 	text("Mono", priceSize, 540-float64(len(amount))*priceSize*0.6, y, amount)
-	y -= 46
+	for _, row := range fonts.wrap(v.description, 10, 202) {
+		ensure(15)
+		text("CJK", 10, 56, y, row)
+		y -= 15
+	}
+	y -= 12
+	for _, detail := range v.details {
+		block(detail, 9, 507, 13)
+	}
+	y -= 16
+	ensure(141)
 	line(y)
 	y -= 24
-	text("Regular", 10, 345, y, "Subtotal")
+	text("Regular", 10, 339, y, "Subtotal")
 	text("Mono", 10, 551-float64(len(amount))*6, y, amount)
 	y -= 24
-	text("Regular", 9, 345, y, "VAT / GST")
-	text("Regular", 9, 491, y, "Not charged")
+	text("Regular", 9, 339, y, "VAT / GST")
+	text("Regular", 8, 426, y, "Not charged on this order")
 	y -= 17
 	line(y)
 	y -= 23
-	text("Bold", 12, 345, y, "Total paid")
+	totalLabel := "Total paid"
+	if credit {
+		totalLabel = "Total credited"
+	}
+	text("Bold", 12, 339, y, totalLabel)
 	y -= 26
 	text("Mono", 12, 551-float64(len(amount))*7.2, y, amount)
-	y -= 27
-	text("Regular", 10, 345, y, "Balance due")
-	text("Mono", 10, 551-float64(len(v.currency+" 0"))*6, y, v.currency+" 0")
-	text("Regular", 8, 44, 88, "Commercial invoice. Reimbursement requirements may differ by jurisdiction.")
-	text("Regular", 8, 44, 74, "Electronically issued from the paid order. No VAT or GST charged.")
-	text("Regular", 8, 44, 58, "CodeGo AI Limited / Hong Kong")
-	pageNumber := "1 / 1"
-	if len(pages) != 0 {
-		pageNumber = "2 / 2"
+	if !credit {
+		y -= 27
+		text("Regular", 10, 339, y, "Balance due")
+		text("Mono", 10, 551-float64(len(v.currency+" 0"))*6, y, v.currency+" 0")
 	}
-	text("Regular", 8, 512, 58, pageNumber)
-	return invoicePDF(append(pages, stream.String())...)
+	pages = append(pages, stream.String())
+	for i := range pages {
+		stream.Reset()
+		text("Regular", 8, 44, 88, "Hong Kong commercial document. Reimbursement rules depend on your jurisdiction.")
+		text("Regular", 8, 44, 74, "Electronically issued. Valid without a signature or company chop.")
+		text("Regular", 8, 44, 58, "CodeGo AI Limited / Hong Kong / BRN "+brn)
+		text("Regular", 8, 512, 58, fmt.Sprintf("%d / %d", i+1, len(pages)))
+		pages[i] += stream.String()
+	}
+	return invoicePDFWithFonts(fonts, pages...), nil
 }
 
-func invoicePDF(contents ...string) []byte {
-	content := contents[0]
+func invoicePDFWithFonts(fonts *invoiceFontRenderer, contents ...string) []byte {
 	objects := []string{
-		`<< /Type /Catalog /Pages 2 0 R >>`,
-		`<< /Type /Pages /Kids [3 0 R] /Count 1 >>`,
-		`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /Regular 4 0 R /Bold 5 0 R /Mono 6 0 R /CJK 7 0 R >> >> /Contents 10 0 R >>`,
+		`<< /Type /Catalog /Pages 2 0 R >>`, "",
 		`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`,
 		`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>`,
 		`<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>`,
-		`<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [8 0 R] /ToUnicode 11 0 R >>`,
-		`<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /FontDescriptor 9 0 R /DW 1000 /W [1 95 500] >>`,
-		`<< /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [-25 -254 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 80 >>`,
-		fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(content), content),
 	}
-	const unicodeMap = `/CIDInit /ProcSet findresource begin
-12 dict begin
-begincmap
-/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
-/CMapName /CodeGo-UTF16 def
-/CMapType 2 def
-1 begincodespacerange
-<0000> <FFFF>
-endcodespacerange
-1 beginbfrange
-<0000> <FFFF> <0000>
-endbfrange
-endcmap
-CMapName currentdict /CMap defineresource pop
-end
-end
-`
-	objects = append(objects, fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(unicodeMap), unicodeMap))
-	kids := "3 0 R"
-	for _, next := range contents[1:] {
+	resources := "/Regular 3 0 R /Bold 4 0 R /Mono 5 0 R "
+	if fonts != nil {
+		resources += fonts.appendFonts(&objects)
+	}
+	var kids strings.Builder
+	for _, content := range contents {
 		pageID, streamID := len(objects)+1, len(objects)+2
-		kids += fmt.Sprintf(" %d 0 R", pageID)
-		objects = append(objects, fmt.Sprintf(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /Regular 4 0 R /Bold 5 0 R /Mono 6 0 R /CJK 7 0 R >> >> /Contents %d 0 R >>`, streamID),
-			fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(next), next))
+		fmt.Fprintf(&kids, "%d 0 R ", pageID)
+		objects = append(objects, fmt.Sprintf(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << %s >> >> /Contents %d 0 R >>`, resources, streamID), invoiceStream(content))
 	}
-	objects[1] = fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids, len(contents))
+	objects[1] = fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids.String(), len(contents))
 	var pdf bytes.Buffer
 	pdf.WriteString("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
 	offsets := make([]int, len(objects))
@@ -242,38 +278,4 @@ func invoiceUTF16(value string) string {
 		raw = append(raw, byte(r>>8), byte(r))
 	}
 	return hex.EncodeToString(raw)
-}
-
-func invoiceWrap(value string, width, maxLines int) []string {
-	value = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
-		}
-		return r
-	}, value)
-	var lines []string
-	var line strings.Builder
-	units := 0
-	for _, r := range value {
-		next := 1
-		if r > 127 {
-			next = 2
-		}
-		if units+next > width {
-			lines = append(lines, line.String())
-			line.Reset()
-			units = 0
-			if len(lines) == maxLines {
-				last := []rune(lines[maxLines-1])
-				lines[maxLines-1] = string(last[:len(last)-1]) + "…"
-				return lines
-			}
-		}
-		line.WriteRune(r)
-		units += next
-	}
-	if line.Len() > 0 {
-		lines = append(lines, line.String())
-	}
-	return lines
 }

@@ -1,0 +1,66 @@
+.invoice-documents-actions {
+  margin-block: var(--space-4);
+}
+
+.invoice-document-list {
+  margin-block: var(--space-4);
+  min-inline-size: 0;
+}
+
+.invoice-document-record {
+  padding-block: var(--space-4);
+  border-block-start: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.invoice-document-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.invoice-document-heading strong {
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.invoice-document-details {
+  margin-block: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.invoice-document-details > div {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.3fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.invoice-document-details dt {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.invoice-document-details dd {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.invoice-document-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.invoice-document-record button,
+.invoice-documents-actions button {
+  min-block-size: 44px;
+}
+
+@media (max-width: 480px) {
+  .invoice-document-details > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}

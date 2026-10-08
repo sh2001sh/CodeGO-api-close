@@ -8,6 +8,7 @@ import (
 )
 
 type Overview struct {
+	Inventory      []InventoryGroup    `json:"inventory"`
 	AvailableCount int64               `json:"available_count"`
 	Pools          []Pool              `json:"pools"`
 	Props          []Prop              `json:"props"`
@@ -29,10 +30,14 @@ func (s *Service) Overview(ctx context.Context, userID int64) (Overview, error) 
 	}); err != nil {
 		return result, err
 	}
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM v3_marketplace.blind_box_items i JOIN v3_marketplace.blind_box_purchases p ON p.id=i.purchase_id LEFT JOIN v3_marketplace.blind_box_orders o ON o.id=p.external_order_id WHERE i.owner_user_id=$1 AND i.status='available' AND p.status='completed' AND (i.expires_at IS NULL OR i.expires_at>$2) AND (p.external_order_id IS NULL OR o.status IN('success','completed') AND (o.expires_at IS NULL OR o.expires_at>$2))`, userID, s.cfg.Now()).Scan(&result.AvailableCount); err != nil {
+	var err error
+	result.Inventory, err = s.loadInventoryGroups(ctx, userID)
+	if err != nil {
 		return result, err
 	}
-	var err error
+	for _, group := range result.Inventory {
+		result.AvailableCount += group.AvailableCount
+	}
 	result.ZeroHour, err = s.ZeroHourOverview(ctx, userID)
 	if err != nil {
 		return result, err
@@ -112,7 +117,7 @@ func (s *Service) loadEnabledPools(ctx context.Context) ([]Pool, error) {
 
 // loadUserProps loads every blind-box prop owned by userID, newest first.
 func (s *Service) loadUserProps(ctx context.Context, userID int64) ([]Prop, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id,kind,title,CASE WHEN status='active' AND expires_at<=$2 THEN 'expired' ELSE status END,coalesce(multiplier_ppm,1000000),remaining_seconds,plan_id,expires_at,prop_type,discount_rate_ppm,max_discount_micro,used_discount_micro FROM v3_marketplace.blind_box_props WHERE user_id=$1 ORDER BY id DESC`, userID, s.cfg.Now())
+	rows, err := s.pool.Query(ctx, `SELECT id,kind,title,CASE WHEN status='active' AND expires_at<=$2 THEN 'expired' ELSE status END,coalesce(multiplier_ppm,1000000),remaining_seconds,plan_id,expires_at,prop_type,discount_rate_ppm,max_discount_micro,used_discount_micro,NULLIF(plan_snapshot,'{}'::jsonb) FROM v3_marketplace.blind_box_props WHERE user_id=$1 ORDER BY id DESC`, userID, s.cfg.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +125,7 @@ func (s *Service) loadUserProps(ctx context.Context, userID int64) ([]Prop, erro
 	props := make([]Prop, 0)
 	for rows.Next() {
 		var p Prop
-		if err := rows.Scan(&p.ID, &p.Kind, &p.Title, &p.Status, &p.MultiplierPPM, &p.RemainingSeconds, &p.PlanID, &p.ExpiresAt, &p.PropType, &p.DiscountRatePPM, &p.MaxDiscountMicro, &p.UsedDiscountMicro); err != nil {
+		if err := rows.Scan(&p.ID, &p.Kind, &p.Title, &p.Status, &p.MultiplierPPM, &p.RemainingSeconds, &p.PlanID, &p.ExpiresAt, &p.PropType, &p.DiscountRatePPM, &p.MaxDiscountMicro, &p.UsedDiscountMicro, &p.PlanSnapshot); err != nil {
 			return nil, err
 		}
 		props = append(props, p)
@@ -138,7 +143,7 @@ func (s *Service) History(ctx context.Context, userID, before int64, limit int) 
 	if before <= 0 {
 		before = 9223372036854775807
 	}
-	rows, err := s.pool.Query(ctx, `SELECT r.id,coalesce(r.item_id,0),r.reward,coalesce(p.id,0),r.created_at,r.guarantee_type FROM v3_marketplace.blind_box_open_records r LEFT JOIN v3_marketplace.blind_box_props p ON p.open_record_id=r.id WHERE r.user_id=$1 AND r.id<$2 ORDER BY r.id DESC LIMIT $3`, userID, before, limit)
+	rows, err := s.pool.Query(ctx, `SELECT r.id,coalesce(r.item_id,0),r.reward,coalesce(p.id,0),r.created_at,r.guarantee_type,coalesce(r.batch_id,0) FROM v3_marketplace.blind_box_open_records r LEFT JOIN v3_marketplace.blind_box_props p ON p.open_record_id=r.id WHERE r.user_id=$1 AND r.id<$2 ORDER BY r.id DESC LIMIT $3`, userID, before, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +152,7 @@ func (s *Service) History(ctx context.Context, userID, before int64, limit int) 
 	for rows.Next() {
 		var r OpenRecord
 		var payload []byte
-		if err := rows.Scan(&r.ID, &r.ItemID, &payload, &r.PropID, &r.CreatedAt, &r.Guarantee); err != nil {
+		if err := rows.Scan(&r.ID, &r.ItemID, &payload, &r.PropID, &r.CreatedAt, &r.Guarantee, &r.BatchID); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(payload, &r.Reward); err != nil {

@@ -1,28 +1,30 @@
 package marketplace
 
 import (
+	"encoding/json"
 	"math"
 
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
 
 type Reward struct {
-	Kind             string        `json:"kind"`
-	Title            string        `json:"title"`
-	Weight           int64         `json:"weight"`
-	Amount           credits.Micro `json:"amount_micro"`
-	Minimum          credits.Micro `json:"minimum_micro,omitempty"`
-	Maximum          credits.Micro `json:"maximum_micro,omitempty"`
-	Step             credits.Micro `json:"step_micro,omitempty"`
-	MultiplierPPM    int64         `json:"multiplier_ppm"`
-	DurationSeconds  int64         `json:"duration_seconds"`
-	PlanID           int64         `json:"plan_id"`
-	PropType         string        `json:"prop_type,omitempty"`
-	DiscountRatePPM  int64         `json:"discount_rate_ppm,omitempty"`
-	MaxDiscountMicro credits.Micro `json:"max_discount_micro,omitempty"`
-	LegacyRewardType string        `json:"legacy_reward_type,omitempty"`
-	RewardTier       string        `json:"reward_tier,omitempty"`
-	WalletType       string        `json:"wallet_type,omitempty"`
+	PlanSnapshot     json.RawMessage `json:"plan_snapshot,omitempty"`
+	Kind             string          `json:"kind"`
+	Title            string          `json:"title"`
+	Weight           int64           `json:"weight"`
+	Amount           credits.Micro   `json:"amount_micro"`
+	Minimum          credits.Micro   `json:"minimum_micro,omitempty"`
+	Maximum          credits.Micro   `json:"maximum_micro,omitempty"`
+	Step             credits.Micro   `json:"step_micro,omitempty"`
+	MultiplierPPM    int64           `json:"multiplier_ppm"`
+	DurationSeconds  int64           `json:"duration_seconds"`
+	PlanID           int64           `json:"plan_id"`
+	PropType         string          `json:"prop_type,omitempty"`
+	DiscountRatePPM  int64           `json:"discount_rate_ppm,omitempty"`
+	MaxDiscountMicro credits.Micro   `json:"max_discount_micro,omitempty"`
+	LegacyRewardType string          `json:"legacy_reward_type,omitempty"`
+	RewardTier       string          `json:"reward_tier,omitempty"`
+	WalletType       string          `json:"wallet_type,omitempty"`
 }
 
 type Pool struct {

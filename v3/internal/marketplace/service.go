@@ -5,6 +5,7 @@ package marketplace
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"math/big"
 	"time"
@@ -55,6 +56,12 @@ type GroupBonusBudgets interface {
 }
 type Subscriptions interface {
 	GrantRewardTx(context.Context, pgx.Tx, int64, int64, string) error
+}
+
+// FrozenSubscriptions retains the complete promise of a published batch.
+type FrozenSubscriptions interface {
+	FreezeRewardPlanTx(context.Context, pgx.Tx, int64) (json.RawMessage, error)
+	GrantFrozenRewardTx(context.Context, pgx.Tx, int64, json.RawMessage, string) error
 }
 
 type Config struct {

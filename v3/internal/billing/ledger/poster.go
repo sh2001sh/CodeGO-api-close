@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
+	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 	"github.com/sh2001sh/new-api/v3/pkg/redisx"
 )
@@ -145,7 +146,7 @@ func applyPostedBalance(e billing.Entry, current credits.Micro, result *billing.
 	}
 	result.Version++
 	if e.Amount < 0 && result.Balance < 0 && e.Kind != "adjustment" && e.Kind != "subscription_expire" {
-		return errors.New("ledger: insufficient credits")
+		return gateway.ErrInsufficientCredits
 	}
 	return nil
 }

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { fixtureAPI } from './fixtures'
+import { marketGroups } from './market-fixture'
 
 const publicGroup = {
   id: '349',
@@ -60,10 +61,11 @@ test('administrators browse the buyer market and can open the separate channel w
 test('market filtering, empty results and ordering use the actual returned groups', async ({
   page,
 }) => {
-  await page.route('**/api/marketplace/key-group-options', (route) =>
-    route.fulfill({ json: { success: true, data: [publicGroup, privateGroup] } }),
-  )
+  await marketGroups(page, [publicGroup, privateGroup])
   await page.goto('/channel-market')
+  await expect(page.getByRole('heading', { name: '渠道市场', exact: true })).toBeVisible()
+  const filters = page.getByRole('button', { name: '筛选与排序', exact: true })
+  if (await filters.isVisible()) await filters.click()
   await page.getByRole('combobox', { name: '排序', exact: true }).selectOption('multiplier')
   await expect(page.locator('.market-listing h2').first()).toHaveText('受邀私有渠道')
   await page.getByRole('combobox', { name: '渠道范围', exact: true }).selectOption('public')
@@ -74,6 +76,7 @@ test('market filtering, empty results and ordering use the actual returned group
   await page.getByRole('button', { name: '清除筛选', exact: true }).click()
   await expect(page.locator('.market-listing')).toHaveCount(2)
   await page.getByLabel('搜索渠道或模型', { exact: true }).fill('claude-sonnet-4')
+  await expect(page.locator('.market-listing')).toHaveCount(1)
   await expect(page.locator('.market-listing h2')).toHaveText('受邀私有渠道')
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
     false,

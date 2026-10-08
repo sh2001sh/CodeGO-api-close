@@ -13,9 +13,19 @@ export const publicModelsOptions = () =>
     api.GET('/api/public/models', { signal }).then(unwrap),
   )
 
-export const modelFavoritesOptions = () =>
-  resourceOptions('model-favorites', (signal) =>
-    api.GET('/api/models/favorites/', { signal }).then(unwrap),
+export const groupFavoritesOptions = (page = 1, pageSize = 24, groupIDs: string[] = []) =>
+  resourceOptions(
+    'group-favorites',
+    async (signal) => {
+      const result = await api.GET('/api/marketplace/group-favorites', {
+        params: {
+          query: { page, page_size: pageSize, group_ids: groupIDs.join(',') || undefined },
+        },
+        signal,
+      })
+      return { items: unwrap(result), pagination: result.data!.pagination }
+    },
+    [page, pageSize, groupIDs.join(',')],
   )
 
 export type PublicModel = {

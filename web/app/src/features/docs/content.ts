@@ -11,7 +11,10 @@ export type DocBlock =
   | { kind: 'paragraph'; text: Text }
   | { kind: 'list'; items: Text[]; ordered?: boolean }
   | { kind: 'note'; text: Text }
-  | { kind: 'code'; sample: 'quickstart' | 'models' | 'responses' | 'embeddings' }
+  | {
+      kind: 'code'
+      sample: 'quickstart' | 'models' | 'responses' | 'responses-fast' | 'embeddings'
+    }
   | { kind: 'table'; headers: Text[]; rows: Text[][] }
   | { kind: 'links'; items: { href: string; label: Text }[] }
 export type DocArticle = {
@@ -268,12 +271,27 @@ export const docArticles: readonly DocArticle[] = [
         ],
       },
       {
+        id: 'fast-mode',
+        title: text('Codex Fast 模式与双倍计费', 'Codex Fast mode and double billing'),
+        blocks: [
+          p(
+            '在支持 Fast 的模型与渠道上，Responses 或 Chat Completions 请求可设置 service_tier: "fast"；旧名称 "priority" 含义相同。Codex 客户端可在配置中设置 service_tier = "fast"，支持此功能的版本也可使用 /fast。Fast 是否可用取决于上游，开启后不承诺固定速度。',
+            'For a model and channel supporting Fast, set service_tier: "fast" in Responses or Chat Completions requests. The legacy name "priority" has the same meaning. In Codex, configure service_tier = "fast", or use /fast in versions supporting the toggle. Availability depends on the upstream and does not guarantee a fixed speed.',
+          ),
+          p(
+            'Fast 按同一模型、分组和用量的普通费用乘以 2，缓存仍先按缓存价格计算，工具费用也包含在双倍计费中。余额、新旧套餐及已有倍率卡继续遵循各自原有规则，再应用 Fast 费用；模型页展示的是普通价格。预扣按 Fast 费用估算，上游明确返回普通 service_tier 时按普通费用结算并释放多预扣部分；未返回模式时按请求的 Fast 费用结算。输出前失败不扣费，输出后中断按已消耗用量结算。',
+            'Fast costs twice the ordinary charge for the same model, group and usage. Cached tokens retain their cache price before doubling; tool charges are also doubled. Wallet funds, current and legacy plans, and existing multiplier cards retain their funding and discount rules. Model pages show ordinary prices. Reservation estimates use Fast pricing. An explicit ordinary upstream service_tier settles at ordinary pricing and releases the excess hold; an omitted tier settles at the requested Fast price. Failures before output are not charged; interruptions after output settle consumed usage.',
+          ),
+          { kind: 'code', sample: 'responses-fast' },
+        ],
+      },
+      {
         id: 'receipts',
         title: text('发票与争议', 'Invoices and disputes'),
         blocks: [
           p(
-            '已完成且可开票的购买可在钱包账单明细下载发票。发票对应支付购买，不代表每条模型请求均单独开票。核对买方名称与购买记录，并通过支持入口报告错误；退款条件见退款规则。',
-            'Eligible completed purchases offer invoice downloads in wallet billing details. Invoices document purchases and do not imply a separate invoice for every model request. Check buyer details against the purchase and report errors through support; refund conditions are in the refund policy.',
+            '已支付购买可在账单的发票页自助开票，填写真实姓名或公司全称及地址，国家和购买方税号可选。CodeGo AI Limited 的香港商业登记号码为 81318858。发票对应购买，不是每次模型调用。香港商业发票通常无需盖章，报销要求以接收机构为准。在发票记录中更正购买方资料会生成新版本并保留原票；退款中或已确认退款后不可更正。已确认退款可下载关联贷项单，原票仍可下载，下载单据不会执行退款。退款条件见退款规则。',
+            'Paid purchases offer self-service invoices in Billing → Invoices. Enter a real individual or company name and address; country and buyer tax ID are optional. CodeGo AI Limited’s Hong Kong business registration number is 81318858. Invoices document purchases rather than each model call. Hong Kong commercial invoices generally do not need a company chop; receiving institutions set reimbursement requirements. Correct buyer details through invoice history to create a linked revision while retaining the original. Corrections are unavailable during or after confirmed refunds. Confirmed refunds provide linked credit notes, original invoices remain downloadable, and downloading a document does not refund money. See the refund policy for eligibility.',
           ),
           links([
             ['/refund-policy', '退款规则', 'Refund policy'],
@@ -753,6 +771,13 @@ export const docArticles: readonly DocArticle[] = [
             'Responses uses model and input, with a request and event structure different from chat/completions. Use eligible models and groups, starting with simple text. The endpoint’s existence does not guarantee every OpenAI built-in tool, stored state or background task is available.',
           ),
           { kind: 'code', sample: 'responses' },
+          links([
+            [
+              '/docs?article=billing',
+              'Codex Fast 模式与双倍计费',
+              'Codex Fast mode and double billing',
+            ],
+          ]),
         ],
       },
       {

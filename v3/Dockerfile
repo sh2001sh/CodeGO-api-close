@@ -15,6 +15,8 @@ RUN apk add --no-cache ca-certificates tzdata && \
     mkdir -p /data/wal /data/files /data/logs && chown -R codego:codego /data && chmod 700 /data/logs
 COPY --from=build /out/server /app/server
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/
+COPY v3/licenses/ /licenses/v3/
+COPY v3/internal/commerce/invoicefonts/OFL.txt /licenses/invoice-fonts-OFL.txt
 USER codego
 WORKDIR /data
 ENTRYPOINT ["/app/server"]

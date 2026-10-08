@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useMutation, useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
 import type { Schema } from '../lib/types'
 import { resourceOptions } from '../lib/queries'
@@ -12,6 +12,9 @@ import { BoxRewardList } from '../features/blind-box/reward-list'
 import { RetainedBoxProps } from '../features/blind-box/retained-props'
 import { BoxTransfers } from '../features/blind-box/transfers'
 import { boxOperationIDs, enabledPools, rewardTotal } from '../features/blind-box/presentation'
+import { BoxBatchOffers } from '../features/blind-box/batch-offers'
+import { orderedLegacyInventory } from '../features/blind-box/batch-presentation'
+import type { LegacyBoxInventory } from '../features/blind-box/batch-contract'
 import '../features/blind-box/blind-box.css'
 
 type Opened = Schema['MarketplaceOpenRecord']
@@ -23,17 +26,30 @@ export default function BlindBoxPage() {
     resourceOptions('boxes', (signal) => api.GET('/api/blind-box/self', { signal }).then(unwrap)),
   )
   const operations = useRef(boxOperationIDs())
+  const inventoryQuery = useQuery(
+    resourceOptions<Schema['MarketplaceOverview'] & { inventory?: LegacyBoxInventory[] }>(
+      'box-inventory',
+      (signal) => api.GET('/api/blind-box/inventory/overview', { signal }).then(unwrap),
+    ),
+  )
+  const [inventoryPoolID, setInventoryPoolID] = useState('')
   const [selectedID, setSelectedID] = useState('')
   const [opened, setOpened] = useState<Opened[]>([])
   const [notice, setNotice] = useState('')
   const [confirming, setConfirming] = useState(false)
   const pools = enabledPools(data.pools)
   const selected = pools.find((pool) => String(pool.id) === selectedID) ?? pools[0]
-  const hasInventory = BigInt(data.available_count) > 0n
+  const inventory = orderedLegacyInventory(inventoryQuery.data?.inventory ?? [])
+  const inventoryPools = inventory
+  const inventoryKey = (item: LegacyBoxInventory) => `${item.pool_id}:${item.draw_current_pool}`
+  const selectedInventory =
+    inventoryPools.find((item) => inventoryKey(item) === inventoryPoolID) ?? inventoryPools[0]
+  const hasInventory = BigInt(inventoryQuery.data?.available_count ?? data.available_count) > 0n
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['boxes'] })
     void queryClient.invalidateQueries({ queryKey: ['wallet'] })
     void queryClient.invalidateQueries({ queryKey: ['box-history'] })
+    void queryClient.invalidateQueries({ queryKey: ['box-inventory'] })
   }
   const begin = () => setNotice('')
   const buy = useMutation({
@@ -55,18 +71,23 @@ export default function BlindBoxPage() {
     },
   })
   const open = useMutation({
-    mutationFn: () =>
+    mutationFn: (item?: LegacyBoxInventory) =>
       api
         .POST('/api/blind-box/inventory/open', {
-          body: { request_id: operations.current.forPayload('open'), count: 1 },
+          body: {
+            request_id: operations.current.forPayload(`open:${item ? inventoryKey(item) : ''}`),
+            pool_id: item?.pool_id,
+            draw_current_pool: item?.draw_current_pool,
+            count: 1,
+          },
         })
         .then(unwrap),
     onMutate: () => {
       begin()
       setOpened([])
     },
-    onSuccess: (result) => {
-      operations.current.complete('open')
+    onSuccess: (result, item) => {
+      operations.current.complete(`open:${item ? inventoryKey(item) : ''}`)
       setOpened(result)
       refresh()
     },
@@ -160,24 +181,69 @@ export default function BlindBoxPage() {
     <div className="blind-box-page">
       <PageHeader
         title="盲盒"
-        description="先了解奖池和规则，再选择是否购买。已有盲盒与道具保留原权益。"
+        description="公开每批奖品、剩余概率和消费限制。旧版盲盒、道具和保底继续按原承诺使用。"
       />
+      <BoxBatchOffers pending={pending} />
+      <h2>{t('旧版盲盒与库存')}</h2>
+      <ErrorMessage error={inventoryQuery.error} />
+      {inventoryQuery.isError && (
+        <Button variant="quiet" onClick={() => void inventoryQuery.refetch()}>
+          {t('重试')}
+        </Button>
+      )}
       <section className="box-inventory section" aria-labelledby="box-inventory-heading">
         <div>
           <h2 id="box-inventory-heading">{t('我的盲盒')}</h2>
           <p className="box-inventory-count">
-            <strong>{String(data.available_count)}</strong> <span>{t('未开启')}</span>
+            <strong>{String(inventoryQuery.data?.available_count ?? data.available_count)}</strong>{' '}
+            <span>{t('未开启')}</span>
           </p>
+          {inventoryPools.length > 0 && (
+            <div className="field">
+              <label htmlFor="legacy-box-inventory">{t('选择旧库存奖池')}</label>
+              <select
+                id="legacy-box-inventory"
+                disabled={pending}
+                value={selectedInventory ? inventoryKey(selectedInventory) : ''}
+                onChange={(event) => setInventoryPoolID(event.target.value)}
+              >
+                {inventoryPools.map((item) => (
+                  <option key={inventoryKey(item)} value={inventoryKey(item)}>
+                    {item.pool_name} · #{String(item.pool_id)} ·{' '}
+                    {t(item.draw_current_pool ? '原动态规则' : '原冻结权益')}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {inventory
+            .filter(
+              (item) => selectedInventory && inventoryKey(item) === inventoryKey(selectedInventory),
+            )
+            .map((item) => (
+              <p
+                className="muted"
+                key={`${item.pool_id}:${item.draw_current_pool}:${item.expires_at}`}
+              >
+                {t(item.draw_current_pool ? '原动态规则' : '购买时冻结规则')} ·{' '}
+                {String(item.available_count)} {t('个')} · {t('到期时间')} {date(item.expires_at)}
+              </p>
+            ))}
+          {inventory.length > 0 && (
+            <p className="muted">
+              {t('开启所选奖池最早到期的库存，动态与冻结库存各按原规则履约。')}
+            </p>
+          )}
           <p className="muted">
             {t('开启已有盲盒不会再次扣除购买费用，奖励按该盲盒对应规则发放。')}
           </p>
         </div>
         <Button
-          disabled={pending || !hasInventory}
+          disabled={pending || !hasInventory || inventoryQuery.isPending || inventoryQuery.isError}
           loading={open.isPending}
           onClick={() => {
             resetErrors()
-            open.mutate()
+            open.mutate(selectedInventory)
           }}
         >
           {t(open.isPending ? '正在开启' : '开启一个')}

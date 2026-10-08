@@ -120,7 +120,7 @@ func (s *Service) GiftProp(ctx context.Context, sender, recipient, propID int64,
 		if err != nil || found {
 			return err
 		}
-		tag, err := tx.Exec(ctx, `UPDATE v3_marketplace.blind_box_props SET user_id=$3,updated_at=$4 WHERE id=$1 AND user_id=$2 AND status='available'`, propID, sender, recipient, s.cfg.Now())
+		tag, err := tx.Exec(ctx, `UPDATE v3_marketplace.blind_box_props SET user_id=$3,updated_at=$4 WHERE id=$1 AND user_id=$2 AND status='available' AND plan_snapshot='{}'::jsonb`, propID, sender, recipient, s.cfg.Now())
 		if err != nil {
 			return err
 		}

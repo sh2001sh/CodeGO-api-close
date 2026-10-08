@@ -75,18 +75,22 @@ func TestOrderInvoiceRefundsAndPartialRefunds(t *testing.T) {
 	if err := s.Fulfill(ctx, "test", payment(o)); err != nil {
 		t.Fatal(err)
 	}
+	original, err := s.IssueOrderInvoice(ctx, 1, o.TradeNo, purchaser())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := s.ConfirmRefund(ctx, "test", o.TradeNo, "invoice-refund"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DownloadOrderInvoice(ctx, 1, o.TradeNo); !errors.Is(err, commerce.ErrStateConflict) {
-		t.Fatalf("refunded invoice: %v", err)
+	if saved, err := s.DownloadOrderInvoice(ctx, 1, o.TradeNo); err != nil || !bytes.Equal(saved.PDF, original.PDF) {
+		t.Fatalf("refunded original invoice changed or blocked: %v", err)
 	}
-	// A partial refund retains paid order state but must still refuse the original total.
+	// A paid state with confirmed refund progress still retains the original document.
 	if _, err := pool.Exec(ctx, `UPDATE v3_commerce.orders SET state='paid' WHERE id=$1`, o.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DownloadOrderInvoice(ctx, 1, o.TradeNo); !errors.Is(err, commerce.ErrStateConflict) {
-		t.Fatalf("partial refunded invoice: %v", err)
+	if saved, err := s.DownloadOrderInvoice(ctx, 1, o.TradeNo); err != nil || !bytes.Equal(saved.PDF, original.PDF) {
+		t.Fatalf("partially refunded original invoice changed or blocked: %v", err)
 	}
 }
 
@@ -118,10 +122,10 @@ func TestOrderInvoiceFrozenPlanDescriptionAndPendingRefund(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DownloadOrderInvoice(ctx, 1, o.TradeNo); !errors.Is(err, commerce.ErrStateConflict) {
+	if _, err := s.DownloadOrderInvoice(ctx, 1, o.TradeNo); err != nil {
 		t.Fatalf("pending refund invoice: %v", err)
 	}
-	if _, err := s.IssueOrderInvoice(ctx, 1, o.TradeNo, purchaser()); !errors.Is(err, commerce.ErrStateConflict) {
+	if _, err := s.IssueOrderInvoice(ctx, 1, o.TradeNo, purchaser()); err != nil {
 		t.Fatalf("pending refund invoice replay: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE v3_commerce.user_refunds SET status='failed' WHERE refund_no='invoice-pending'`); err != nil {

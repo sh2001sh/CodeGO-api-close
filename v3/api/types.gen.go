@@ -22,6 +22,31 @@ const (
 	SessionCookieScopes      = "sessionCookie.Scopes"
 )
 
+// Defines values for BlindBoxBatchPurpose.
+const (
+	BlindBoxBatchPurposeConsumption BlindBoxBatchPurpose = "consumption"
+	BlindBoxBatchPurposeCredits     BlindBoxBatchPurpose = "credits"
+)
+
+// Defines values for BlindBoxBatchState.
+const (
+	Draft     BlindBoxBatchState = "draft"
+	Exhausted BlindBoxBatchState = "exhausted"
+	Paused    BlindBoxBatchState = "paused"
+	Published BlindBoxBatchState = "published"
+)
+
+// Defines values for BlindBoxBatchEntitlementSource.
+const (
+	SettledPaidConsumption BlindBoxBatchEntitlementSource = "settled_paid_consumption"
+)
+
+// Defines values for BlindBoxBatchRewardKind.
+const (
+	BlindBoxBatchRewardKindCredits      BlindBoxBatchRewardKind = "credits"
+	BlindBoxBatchRewardKindSubscription BlindBoxBatchRewardKind = "subscription"
+)
+
 // Defines values for CatalogMetadataSyncInputOverwriteFields.
 const (
 	CatalogMetadataSyncInputOverwriteFieldsDescription CatalogMetadataSyncInputOverwriteFields = "description"
@@ -320,6 +345,19 @@ const (
 const (
 	OrderPolicyVersionLegacy     OrderPolicyVersion = "legacy"
 	OrderPolicyVersionStandardV2 OrderPolicyVersion = "standard_v2"
+)
+
+// Defines values for OrderInvoiceDocumentRecordDocumentType.
+const (
+	CreditNote OrderInvoiceDocumentRecordDocumentType = "credit_note"
+	Invoice    OrderInvoiceDocumentRecordDocumentType = "invoice"
+)
+
+// Defines values for OrderInvoiceDocumentRecordStatus.
+const (
+	Current    OrderInvoiceDocumentRecordStatus = "current"
+	Issued     OrderInvoiceDocumentRecordStatus = "issued"
+	Superseded OrderInvoiceDocumentRecordStatus = "superseded"
 )
 
 // Defines values for PlanPolicyVersion.
@@ -1137,6 +1175,112 @@ type BindSubscriptionInput struct {
 	UserId    *int64  `json:"user_id,omitempty"`
 }
 
+// BlindBoxBatch Finite uniformly sampled no-replacement batch. All amounts are integer micro-credits (1 credit=1000000), not fiat. Draft preview freezes server-side fixed-credit standard_v2 plan specs. Publishing reserves the complete base+reward face-value liability from administrator wallet. Published terms immutable. New credits permanently API-only, no transfer/refund/product purchase. Consumption qualification matures seven days after verified paid usage with known costs and net positive contribution; allocation <=10% after procurement, seller, ancillary and reserved referral expenses. Global once-only contribution attribution. No automatic enabled campaigns.
+type BlindBoxBatch struct {
+	AncillaryCostPpm     int64                 `json:"ancillary_cost_ppm"`
+	BaseCreditsMicro     int64                 `json:"base_credits_micro"`
+	BudgetMicro          int64                 `json:"budget_micro"`
+	ContributionSharePpm int64                 `json:"contribution_share_ppm"`
+	CostsConfirmed       bool                  `json:"costs_confirmed"`
+	EntitledCount        int64                 `json:"entitled_count"`
+	Id                   int64                 `json:"id"`
+	Name                 string                `json:"name"`
+	PriceMicro           int64                 `json:"price_micro"`
+	PublishedAt          *time.Time            `json:"published_at,omitempty"`
+	Purpose              BlindBoxBatchPurpose  `json:"purpose"`
+	RemainingBudgetMicro int64                 `json:"remaining_budget_micro"`
+	RemainingCount       int64                 `json:"remaining_count"`
+	RequiredBudgetMicro  int64                 `json:"required_budget_micro"`
+	Revision             int64                 `json:"revision"`
+	Rewards              []BlindBoxBatchReward `json:"rewards"`
+	SpentBudgetMicro     int64                 `json:"spent_budget_micro"`
+	State                BlindBoxBatchState    `json:"state"`
+	TotalCount           int64                 `json:"total_count"`
+}
+
+// BlindBoxBatchPurpose defines model for BlindBoxBatch.Purpose.
+type BlindBoxBatchPurpose string
+
+// BlindBoxBatchState defines model for BlindBoxBatch.State.
+type BlindBoxBatchState string
+
+// BlindBoxBatchDrawInput defines model for BlindBoxBatchDrawInput.
+type BlindBoxBatchDrawInput struct {
+	Count     *int64 `json:"count,omitempty"`
+	RequestId string `json:"request_id"`
+}
+
+// BlindBoxBatchDrawResult defines model for BlindBoxBatchDrawResult.
+type BlindBoxBatchDrawResult struct {
+	BaseCreditsMicro int64                   `json:"base_credits_micro"`
+	BatchId          int64                   `json:"batch_id"`
+	ChargedMicro     int64                   `json:"charged_micro"`
+	Records          []MarketplaceOpenRecord `json:"records"`
+}
+
+// BlindBoxBatchEntitlement defines model for BlindBoxBatchEntitlement.
+type BlindBoxBatchEntitlement struct {
+	AvailableCount int64                          `json:"available_count"`
+	BatchId        int64                          `json:"batch_id"`
+	CreatedAt      time.Time                      `json:"created_at"`
+	Id             int64                          `json:"id"`
+	Source         BlindBoxBatchEntitlementSource `json:"source"`
+}
+
+// BlindBoxBatchEntitlementSource defines model for BlindBoxBatchEntitlement.Source.
+type BlindBoxBatchEntitlementSource string
+
+// BlindBoxBatchOverview defines model for BlindBoxBatchOverview.
+type BlindBoxBatchOverview struct {
+	Batches      []BlindBoxBatch            `json:"batches"`
+	Entitlements []BlindBoxBatchEntitlement `json:"entitlements"`
+}
+
+// BlindBoxBatchReward defines model for BlindBoxBatchReward.
+type BlindBoxBatchReward struct {
+	AmountMicro          int64                   `json:"amount_micro"`
+	Id                   string                  `json:"id"`
+	InitialProbability   float32                 `json:"initial_probability"`
+	Kind                 BlindBoxBatchRewardKind `json:"kind"`
+	PlanId               int64                   `json:"plan_id"`
+	PlanSnapshot         *Plan                   `json:"plan_snapshot,omitempty"`
+	Quantity             int64                   `json:"quantity"`
+	Remaining            int64                   `json:"remaining"`
+	RemainingProbability float32                 `json:"remaining_probability"`
+	Title                string                  `json:"title"`
+}
+
+// BlindBoxBatchRewardKind defines model for BlindBoxBatchReward.Kind.
+type BlindBoxBatchRewardKind string
+
+// BlindBoxBatchStateInput defines model for BlindBoxBatchStateInput.
+type BlindBoxBatchStateInput struct {
+	RequestId string `json:"request_id"`
+	Revision  int64  `json:"revision"`
+}
+
+// BlindBoxBatchStatistics defines model for BlindBoxBatchStatistics.
+type BlindBoxBatchStatistics struct {
+	ApiUsedMicro               int64 `json:"api_used_micro"`
+	BaseCreditsMicro           int64 `json:"base_credits_micro"`
+	DrawCount                  int64 `json:"draw_count"`
+	RemainingMicro             int64 `json:"remaining_micro"`
+	ReservedMicro              int64 `json:"reserved_micro"`
+	RewardCreditsMicro         int64 `json:"reward_credits_micro"`
+	SpentMicro                 int64 `json:"spent_micro"`
+	SubscriptionActivatedCount int64 `json:"subscription_activated_count"`
+	SubscriptionAwardedCount   int64 `json:"subscription_awarded_count"`
+}
+
+// BlindBoxInventoryGroup defines model for BlindBoxInventoryGroup.
+type BlindBoxInventoryGroup struct {
+	AvailableCount  int64      `json:"available_count"`
+	DrawCurrentPool bool       `json:"draw_current_pool"`
+	ExpiresAt       *time.Time `json:"expires_at,omitempty"`
+	PoolId          int64      `json:"pool_id"`
+	PoolName        string     `json:"pool_name"`
+}
+
 // BoundCardActivationInput defines model for BoundCardActivationInput.
 type BoundCardActivationInput struct {
 	RequestId string `json:"request_id"`
@@ -1183,10 +1327,12 @@ type BoxGrantInput0 = interface{}
 // BoxGrantInput1 defines model for .
 type BoxGrantInput1 = interface{}
 
-// BoxOpenInput defines model for BoxOpenInput.
+// BoxOpenInput Legacy inventory opening; optional pool_id selects a pool, omitted keeps legacy idempotency semantics. Eligible items open by earliest expiry then ID.
 type BoxOpenInput struct {
-	Count     *int64 `json:"count,omitempty"`
-	RequestId string `json:"request_id"`
+	Count           *int64 `json:"count,omitempty"`
+	DrawCurrentPool *bool  `json:"draw_current_pool,omitempty"`
+	PoolId          *int64 `json:"pool_id,omitempty"`
+	RequestId       string `json:"request_id"`
 }
 
 // BoxPurchaseInput defines model for BoxPurchaseInput.
@@ -3573,6 +3719,26 @@ type GroupCreateInput struct {
 	OrderId int64 `json:"order_id"`
 }
 
+// GroupFavorite Own bookmark; metadata is hidden when current group access is unavailable.
+type GroupFavorite struct {
+	Available      bool      `json:"available"`
+	CreatedAt      time.Time `json:"created_at"`
+	DeclaredModels *[]string `json:"declared_models,omitempty"`
+	GroupId        string    `json:"group_id"`
+
+	// Id Original public numeric group ID.
+	Id                string       `json:"id"`
+	Multiplier        *json.Number `json:"multiplier,omitempty"`
+	PublicSlug        *string      `json:"public_slug,omitempty"`
+	SystemDisplayName *string      `json:"system_display_name,omitempty"`
+}
+
+// GroupFavoriteSave defines model for GroupFavoriteSave.
+type GroupFavoriteSave struct {
+	Favorite bool   `json:"favorite"`
+	GroupId  string `json:"group_id"`
+}
+
 // GroupJoinInput defines model for GroupJoinInput.
 type GroupJoinInput struct {
 	GroupBuyId int64 `json:"group_buy_id"`
@@ -3958,6 +4124,7 @@ type MarketplaceGuarantees struct {
 
 // MarketplaceOpenRecord defines model for MarketplaceOpenRecord.
 type MarketplaceOpenRecord struct {
+	BatchId       *int64            `json:"batch_id,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
 	GuaranteeType string            `json:"guarantee_type"`
 	Id            int64             `json:"id"`
@@ -3969,6 +4136,7 @@ type MarketplaceOpenRecord struct {
 // MarketplaceOverview defines model for MarketplaceOverview.
 type MarketplaceOverview struct {
 	AvailableCount int64                            `json:"available_count"`
+	Inventory      []BlindBoxInventoryGroup         `json:"inventory"`
 	Pity           MarketplacePityState             `json:"pity"`
 	PityStates     *map[string]MarketplacePityState `json:"pity_states"`
 	Pools          *[]MarketplacePool               `json:"pools"`
@@ -4022,6 +4190,7 @@ type MarketplaceProp struct {
 	MaxDiscountMicro  int64      `json:"max_discount_micro"`
 	MultiplierPpm     int64      `json:"multiplier_ppm"`
 	PlanId            *int64     `json:"plan_id,omitempty"`
+	PlanSnapshot      *Plan      `json:"plan_snapshot,omitempty"`
 	PropType          string     `json:"prop_type"`
 	RemainingSeconds  int64      `json:"remaining_seconds"`
 	Status            string     `json:"status"`
@@ -4049,6 +4218,7 @@ type MarketplaceReward struct {
 	MinimumMicro     *int64  `json:"minimum_micro,omitempty"`
 	MultiplierPpm    int64   `json:"multiplier_ppm"`
 	PlanId           int64   `json:"plan_id"`
+	PlanSnapshot     *Plan   `json:"plan_snapshot,omitempty"`
 	PropType         *string `json:"prop_type,omitempty"`
 	RewardTier       *string `json:"reward_tier,omitempty"`
 	StepMicro        *int64  `json:"step_micro,omitempty"`
@@ -4285,9 +4455,70 @@ type OrderInvoiceBuyerInput struct {
 	// BuyerAddress Actual purchaser address including street/unit, city, region and country. Newlines are accepted; leading/trailing whitespace is trimmed. Frozen at issuance.
 	BuyerAddress string `json:"buyer_address"`
 
+	// BuyerCountry Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier.
+	BuyerCountry *string `json:"buyer_country,omitempty"`
+
 	// BuyerName Actual individual full name or company full name; no Mainland tax identifier is required. Leading/trailing whitespace is trimmed. Frozen at issuance.
 	BuyerName string `json:"buyer_name"`
+
+	// BuyerTaxId Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier.
+	BuyerTaxId *string `json:"buyer_tax_id,omitempty"`
 }
+
+// OrderInvoiceCorrectionInput defines model for OrderInvoiceCorrectionInput.
+type OrderInvoiceCorrectionInput struct {
+	// BuyerAddress Actual purchaser address including street/unit, city, region and country. Newlines are accepted; leading/trailing whitespace is trimmed. Frozen at issuance.
+	BuyerAddress string `json:"buyer_address"`
+
+	// BuyerCountry Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier.
+	BuyerCountry *string `json:"buyer_country,omitempty"`
+
+	// BuyerName Actual individual full name or company full name; no Mainland tax identifier is required. Leading/trailing whitespace is trimmed. Frozen at issuance.
+	BuyerName string `json:"buyer_name"`
+
+	// BuyerTaxId Optional purchaser country/region or tax identification. Frozen in the issued document; no required Mainland tax identifier.
+	BuyerTaxId *string `json:"buyer_tax_id,omitempty"`
+
+	// PreviousNumber Expected current invoice number; stale corrections return 409.
+	PreviousNumber string `json:"previous_number"`
+
+	// Reason Reason retained in the correction history.
+	Reason string `json:"reason"`
+
+	// RequestId Stable operation ID. Identical retries replay the exact saved correction; reusing it for different details returns 409.
+	RequestId string `json:"request_id"`
+}
+
+// OrderInvoiceDocumentPage defines model for OrderInvoiceDocumentPage.
+type OrderInvoiceDocumentPage struct {
+	Items    []OrderInvoiceDocumentRecord `json:"items"`
+	Page     int64                        `json:"page"`
+	PageSize int64                        `json:"page_size"`
+	Total    int64                        `json:"total"`
+}
+
+// OrderInvoiceDocumentRecord defines model for OrderInvoiceDocumentRecord.
+type OrderInvoiceDocumentRecord struct {
+	AmountMinor   int64                                  `json:"amount_minor"`
+	BuyerAddress  string                                 `json:"buyer_address"`
+	BuyerCountry  string                                 `json:"buyer_country"`
+	BuyerName     string                                 `json:"buyer_name"`
+	BuyerTaxId    string                                 `json:"buyer_tax_id"`
+	Currency      string                                 `json:"currency"`
+	DocumentType  OrderInvoiceDocumentRecordDocumentType `json:"document_type"`
+	IssuedAt      time.Time                              `json:"issued_at"`
+	Number        string                                 `json:"number"`
+	Reason        string                                 `json:"reason"`
+	RelatedNumber string                                 `json:"related_number"`
+	Revision      int64                                  `json:"revision"`
+	Status        OrderInvoiceDocumentRecordStatus       `json:"status"`
+}
+
+// OrderInvoiceDocumentRecordDocumentType defines model for OrderInvoiceDocumentRecord.DocumentType.
+type OrderInvoiceDocumentRecordDocumentType string
+
+// OrderInvoiceDocumentRecordStatus defines model for OrderInvoiceDocumentRecord.Status.
+type OrderInvoiceDocumentRecordStatus string
 
 // PackagePaymentReview defines model for PackagePaymentReview.
 type PackagePaymentReview struct {
@@ -5651,6 +5882,18 @@ type GetApiCommerceOrdersParams struct {
 	Limit  *int   `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetApiCommerceOrdersTradeNoInvoiceParams defines parameters for GetApiCommerceOrdersTradeNoInvoice.
+type GetApiCommerceOrdersTradeNoInvoiceParams struct {
+	// Number A saved invoice revision or credit-note number belonging to this order.
+	Number *string `form:"number,omitempty" json:"number,omitempty"`
+}
+
+// GetApiCommerceOrdersTradeNoInvoiceDocumentsParams defines parameters for GetApiCommerceOrdersTradeNoInvoiceDocuments.
+type GetApiCommerceOrdersTradeNoInvoiceDocumentsParams struct {
+	Page     *int `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int `form:"page_size,omitempty" json:"page_size,omitempty"`
+}
+
 // PostApiCommerceWebhooksProviderFormdataBody defines parameters for PostApiCommerceWebhooksProvider.
 type PostApiCommerceWebhooksProviderFormdataBody struct {
 }
@@ -6072,6 +6315,15 @@ type GetApiMarketplaceChannelsMineUserUsageParams struct {
 // GetApiMarketplaceChannelsIdUserUsageUserIdTimeSeriesParams defines parameters for GetApiMarketplaceChannelsIdUserUsageUserIdTimeSeries.
 type GetApiMarketplaceChannelsIdUserUsageUserIdTimeSeriesParams struct {
 	RangeHours *int `form:"range_hours,omitempty" json:"range_hours,omitempty"`
+}
+
+// GetGroupFavoritesParams defines parameters for GetGroupFavorites.
+type GetGroupFavoritesParams struct {
+	Page     *int `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *int `form:"page_size,omitempty" json:"page_size,omitempty"`
+
+	// GroupIds Optional comma-separated canonical IDs; at most 100, for current market-page bookmark states.
+	GroupIds *string `form:"group_ids,omitempty" json:"group_ids,omitempty"`
 }
 
 // GetApiMarketplaceGroupsParams defines parameters for GetApiMarketplaceGroups.
@@ -6893,6 +7145,15 @@ type GetApiWalletTransfersParams struct {
 // PostApiBillingAdjustmentsJSONRequestBody defines body for PostApiBillingAdjustments for application/json ContentType.
 type PostApiBillingAdjustmentsJSONRequestBody = AdjustmentInput
 
+// PutApiBlindBoxAdminBatchesJSONRequestBody defines body for PutApiBlindBoxAdminBatches for application/json ContentType.
+type PutApiBlindBoxAdminBatchesJSONRequestBody = BlindBoxBatch
+
+// PostApiBlindBoxAdminBatchesIdPauseJSONRequestBody defines body for PostApiBlindBoxAdminBatchesIdPause for application/json ContentType.
+type PostApiBlindBoxAdminBatchesIdPauseJSONRequestBody = BlindBoxBatchStateInput
+
+// PostApiBlindBoxAdminBatchesIdPublishJSONRequestBody defines body for PostApiBlindBoxAdminBatchesIdPublish for application/json ContentType.
+type PostApiBlindBoxAdminBatchesIdPublishJSONRequestBody = BlindBoxBatchStateInput
+
 // PutApiBlindBoxAdminPoolsJSONRequestBody defines body for PutApiBlindBoxAdminPools for application/json ContentType.
 type PutApiBlindBoxAdminPoolsJSONRequestBody = MarketplacePoolInput
 
@@ -6907,6 +7168,9 @@ type PostApiBlindBoxAdminUsersIdRevokeJSONRequestBody = BoxGrantInput
 
 // PostApiBlindBoxAmountJSONRequestBody defines body for PostApiBlindBoxAmount for application/json ContentType.
 type PostApiBlindBoxAmountJSONRequestBody = CashBoxInput
+
+// PostApiBlindBoxBatchesIdDrawJSONRequestBody defines body for PostApiBlindBoxBatchesIdDraw for application/json ContentType.
+type PostApiBlindBoxBatchesIdDrawJSONRequestBody = BlindBoxBatchDrawInput
 
 // PostApiBlindBoxEpayNotifyFormdataRequestBody defines body for PostApiBlindBoxEpayNotify for application/x-www-form-urlencoded ContentType.
 type PostApiBlindBoxEpayNotifyFormdataRequestBody PostApiBlindBoxEpayNotifyFormdataBody
@@ -7015,6 +7279,9 @@ type PostApiCommerceOrdersJSONRequestBody = CreateOrderInput
 
 // PostApiCommerceOrdersTradeNoInvoiceJSONRequestBody defines body for PostApiCommerceOrdersTradeNoInvoice for application/json ContentType.
 type PostApiCommerceOrdersTradeNoInvoiceJSONRequestBody = OrderInvoiceBuyerInput
+
+// PostApiCommerceOrdersTradeNoInvoiceCorrectionsJSONRequestBody defines body for PostApiCommerceOrdersTradeNoInvoiceCorrections for application/json ContentType.
+type PostApiCommerceOrdersTradeNoInvoiceCorrectionsJSONRequestBody = OrderInvoiceCorrectionInput
 
 // PostApiCommerceRedemptionsRedeemJSONRequestBody defines body for PostApiCommerceRedemptionsRedeem for application/json ContentType.
 type PostApiCommerceRedemptionsRedeemJSONRequestBody = RedeemInput
@@ -7159,6 +7426,9 @@ type PostApiMarketplaceChannelsIdUserBlockJSONRequestBody = ChannelMarketBlockIn
 
 // PostApiMarketplaceChannelsIdUserMultiplierJSONRequestBody defines body for PostApiMarketplaceChannelsIdUserMultiplier for application/json ContentType.
 type PostApiMarketplaceChannelsIdUserMultiplierJSONRequestBody = ChannelMarketUserMultiplierInput
+
+// PutGroupFavoriteJSONRequestBody defines body for PutGroupFavorite for application/json ContentType.
+type PutGroupFavoriteJSONRequestBody = GroupFavoriteSave
 
 // PostApiMarketplaceGroupsIdBargainRequestsJSONRequestBody defines body for PostApiMarketplaceGroupsIdBargainRequests for application/json ContentType.
 type PostApiMarketplaceGroupsIdBargainRequestsJSONRequestBody = ChannelMarketBargainInput
